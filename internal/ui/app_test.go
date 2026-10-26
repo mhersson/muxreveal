@@ -9,20 +9,38 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+
+	"github.com/mhersson/muxreveal/internal/core"
 )
 
-func newTestApp(t *testing.T) *App {
+func testLogger() *slog.Logger {
+	return slog.New(slog.NewTextHandler(io.Discard, nil))
+}
+
+func newThemedApp(t *testing.T, name string) *App {
 	t.Helper()
-	app, err := New(Options{Logger: slog.New(slog.NewTextHandler(io.Discard, nil))})
+	app, err := New(Options{Logger: testLogger(), Store: core.NewStore(core.State{Theme: name})})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
 	return app
 }
 
+func newTestApp(t *testing.T) *App {
+	t.Helper()
+	return newThemedApp(t, "catppuccin-mocha")
+}
+
 func TestNewRequiresLogger(t *testing.T) {
-	if _, err := New(Options{}); err == nil {
+	store := core.NewStore(core.State{Theme: "catppuccin-mocha"})
+	if _, err := New(Options{Store: store}); err == nil {
 		t.Error("New() without a logger succeeded, want an error")
+	}
+}
+
+func TestNewRequiresStore(t *testing.T) {
+	if _, err := New(Options{Logger: testLogger()}); err == nil {
+		t.Error("New() without a store succeeded, want an error")
 	}
 }
 
