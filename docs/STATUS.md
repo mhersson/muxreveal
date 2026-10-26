@@ -172,18 +172,6 @@ Spike harness (no effect on the numbers; fixed after the final review):
 
 Build M1's terminal layer on `tuios.dev/vt` v0.3.1 (pure Go) behind the `VT` interface, with the host code listed under API fit. Keep `charmbracelet/x/vt` as the fallback, but note that it is only performance-equal: on x/vt, Claude Code loses Kitty keyboard (shift+enter), OSC 52 and OSC 133, and it stops using synchronized output (with or without `TMUX` in its environment). Do not reuse the spike's legacy key port as is (see API fit).
 
-### Proposed DESIGN.md edits
-
-Proposals only; DESIGN.md is unchanged.
-
-1. **Terminal layer, rendering:** replace "The compositor draws only dirty rows of visible panes" with "Each pane keeps a per-row string cache; a dirty pane re-renders its rows from cells to strings, and the frame is rebuilt only when a cached row changed. The rebuilt frame is still one string that Bubble Tea re-parses and diffs in full; only the cell-to-string step is per row. tuios has no damage API, so row-change detection is ours."
-2. **Terminal layer, idle:** replace "no fixed tick, zero CPU at idle" with "our code has no fixed tick; Bubble Tea v2's own 60 FPS ticker remains, so idle CPU is near zero (about 0.35 % of one core with six idle panes), not zero."
-3. **Terminal layer, sync output:** add "tuios's own sync hold reads the wall clock, so MuxReveal tracks mode 2026 from the emulator's mode callbacks and applies its own 1 s hold on an injectable clock."
-4. **Terminal layer, input:** add "tuios encodes Kitty and modifyOtherKeys keys; the legacy encoding is ours: an xterm-style encoder with the `CSI 1;<mod>X` modifier forms, nothing sent for a key it cannot encode, and repeat events encoded like presses. Paste goes through tuios `SanitizePaste`." Do not port the spike's x/vt-derived encoder as is: it lacks all three (see API fit).
-5. **Terminal layer, child environment:** add "Agent PTYs get `TERM=xterm-256color` and `COLORTERM=truecolor`, and never inherit `TMUX` or `TMUX_PANE`, because MuxReveal is their terminal."
-6. **Tech stack, VT emulation row:** after "fallback `charmbracelet/x/vt`", add "(same speed, but no Kitty keyboard, Kitty graphics, OSC 52 or OSC 133, and Claude Code does not use synchronized output on it; checked live with and without `TMUX` in Claude's environment)".
-7. **Risks, frame-rate row:** add to the mitigation "Measured in the spike: 6 busy panes at p99 5 ms; 83-92 % of summed frame time is Bubble Tea's presenter, about half of it re-parsing the view string and half diffing cells and generating escapes. If M1's chrome pushes p99 toward the budget, draw pane cells directly instead of through a string (Bubble Tea v2.1's `View.Content` is a string, so this needs a cell-level path); that saves roughly half of present, not most of the frame time."
-
 ## Next
 
 M0 Skeleton: module layout from DESIGN.md, config, theme engine with the four Catppuccin flavors, command palette, empty app shell (TH-1, TH-2, UX-1, UX-2).
@@ -200,6 +188,7 @@ M0 Skeleton: module layout from DESIGN.md, config, theme engine with the four Ca
 | 2026-10-26 | Go 1.26 on `tuios.dev/vt` instead of Rust on `ghostty-vt` | A proven Go emulator removes the reason for Rust; Go is the main language |
 | 2026-10-26 | Use only the emulator from TUIOS, not `pkg/tuios` | `pkg/tuios` is pre-1.0 and can't host our own panes as tiles |
 | 2026-10-26 | GO on `tuios.dev/vt` v0.3.1 (pure Go) for the terminal layer; `charmbracelet/x/vt` stays the fallback | Passes every gate line at 6 panes (bench p99 5.0 ms, interactive CPU 10.2 %, no rendering bugs, builds on go1.26.0); x/vt is no faster (4.7 ms, 10.4 %) and lacks Kitty keyboard and the sync output Claude Code uses |
+| 2026-10-26 | Adopt the VT spike findings into DESIGN.md: per-row string cache, near-zero idle CPU, own sync hold, own legacy key encoder, pane PTY environment, x/vt fallback gaps, cell-level render path as the lever | Measured in the spike; M1 builds on them |
 
 ## Later
 

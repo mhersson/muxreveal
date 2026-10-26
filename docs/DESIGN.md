@@ -1,4 +1,4 @@
-# MuxReveal v1 — Requirements & Architecture
+# MuxReveal v1 - Requirements & Architecture
 
 As of 2026-10-26.
 
@@ -193,7 +193,7 @@ Go 1.26 (required by `tuios.dev/vt`). The reason for Rust was a proven VT emulat
 | Concern | Choice | Why |
 | --- | --- | --- |
 | TUI | Bubble Tea v2 + Lip Gloss v2 + Bubbles v2 | Cell-based renderer, mature input handling; TUIOS proves it can host many busy panes |
-| VT emulation | `tuios.dev/vt`; fallback `charmbracelet/x/vt` | Emulator TUIOS runs agent panes on daily: scrollback, Kitty graphics and keyboard protocol, OSC 133. Wrapped behind our `VT` interface |
+| VT emulation | `tuios.dev/vt`; fallback `charmbracelet/x/vt` | Emulator TUIOS runs agent panes on daily: scrollback, Kitty graphics and keyboard protocol, OSC 133. Wrapped behind our `VT` interface. The fallback is as fast but has no Kitty keyboard, Kitty graphics, OSC 52 or OSC 133, and Claude Code does not use synchronized output on it (checked live with and without `TMUX` in Claude's environment). |
 | PTY | `github.com/creack/pty` | Standard Go PTY package; macOS and Linux |
 | Git | `git` CLI (plumbing and porcelain v2, `-z` output) | Keeps the user's credential helpers, hooks and config; fast enough; one code path for reads and writes |
 | Diff | `git diff --histogram` parsed with `bluekeyes/go-gitdiff`; word spans with `sergi/go-diff` | Same hunks as git; intra-line highlighting on top |
@@ -214,9 +214,12 @@ Go 1.26 (required by `tuios.dev/vt`). The reason for Rust was a proven VT emulat
 ### Terminal layer
 
 - `internal/term` defines a small `VT` interface: write bytes, resize, read the cell grid and cursor, scrollback access, title and mode queries, Kitty image events. Only the adapter imports `tuios.dev/vt`.
-- Each pane runs one goroutine reading its PTY into the emulator, then sends a "pane dirty" message to Bubble Tea. Rendering is event driven: no fixed tick, zero CPU at idle.
-- The compositor draws only dirty rows of visible panes and honors synchronized output (mode 2026).
+- Each pane runs one goroutine reading its PTY into the emulator, then sends a "pane dirty" message to Bubble Tea. Rendering is event driven: our code has no fixed tick. Bubble Tea v2's own 60 FPS ticker remains, so idle CPU is near zero (about 0.35 % of one core with six idle panes), not zero.
+- Each pane keeps a per-row string cache; a dirty pane re-renders its rows from cells to strings, and the frame is rebuilt only when a cached row changed. The rebuilt frame is still one string that Bubble Tea re-parses and diffs in full; only the cell-to-string step is per row. tuios has no damage API, so row-change detection is ours.
+- The compositor honors synchronized output (mode 2026). tuios's own sync hold reads the wall clock, so MuxReveal tracks mode 2026 from the emulator's mode callbacks and applies its own 1 s hold on an injectable clock.
 - Kitty graphics from MuxReveal's own views (markdown images) and from agents are placed by the compositor, which knows every cell's position. Agent image passthrough is v2.
+- tuios encodes Kitty and modifyOtherKeys keys; the legacy encoding is ours: an xterm-style encoder with the `CSI 1;<mod>X` modifier forms, nothing sent for a key it cannot encode, and repeat events encoded like presses. Paste goes through tuios `SanitizePaste`.
+- Every pane PTY, agent or shell, gets `TERM=xterm-256color` and `COLORTERM=truecolor` and never inherits `TMUX` or `TMUX_PANE`, because MuxReveal is its terminal.
 
 ### Claude Code integration via hooks
 
@@ -414,7 +417,7 @@ The biggest risk is terminal-layer correctness and performance, so the spike and
 | --- | --- | --- |
 | `tuios.dev/vt` is young or changes its API | Broken builds, emulator bugs | Pin the version, keep it behind the `VT` interface, keep `charmbracelet/x/vt` as a tested fallback |
 | Published module lacks features TUIOS has internally | More work in M1 | The spike checks this first; port missing pieces under MIT with attribution |
-| Frame rate with 4–8 busy Claude panes in Bubble Tea | Laggy, unusable | Event-driven rendering, dirty rows only, synchronized output; benchmark is the spike and M1 gate |
+| Frame rate with 4–8 busy Claude panes in Bubble Tea | Laggy, unusable | Event-driven rendering, per-row string cache, synchronized output; benchmark is the spike and M1 gate. Measured in the spike: 6 busy panes at p99 5 ms; 83-92 % of summed frame time is Bubble Tea's presenter, about half re-parsing the view string and half diffing cells and generating escapes. If M1's chrome pushes p99 toward the budget, draw pane cells directly instead of through a string (Bubble Tea v2.1's `View.Content` is a string, so this needs a cell-level path); that saves roughly half of present, not most of the frame time. |
 | Claude Code changes `--settings`, hook payloads or resume behavior | Resume or turns break | Everything lives in the harness adapter; a weekly CI job runs against the latest `claude` |
 | `--resume` fails for a session | Lost context on restore | Fresh `claude` with a visible notice (PR-4) |
 | Kitty graphics differences between Ghostty and Kitty | Broken or ghost images | Test both from M3; detect support at startup; disable images under tmux or over SSH |
