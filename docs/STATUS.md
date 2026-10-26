@@ -2,13 +2,27 @@
 
 Update this file at the end of every session: tick what's done, set the next step, and log decisions.
 
-## Current milestone: Spike - VT
+## Current milestone: M0 Skeleton
 
-Goal: prove that `tuios.dev/vt` + Bubble Tea v2 can host several busy Claude Code panes smoothly, before any real package depends on it. Work in `spikes/vt` only; this code may be thrown away.
+Goal: the app shell the later milestones build on: module layout from DESIGN.md, config, the theme engine with all four Catppuccin flavors, named commands with the leader key and which-key hints, and the command palette. Covers TH-1, TH-2, UX-1, UX-2.
+
+- [ ] Module layout from DESIGN.md, with the packages M0 needs
+- [ ] Config loading (`config.toml`)
+- [ ] Theme engine with Catppuccin Latte, Frappé, Macchiato and Mocha (TH-1)
+- [ ] Syntax highlighting themed from the same palette (TH-2)
+- [ ] Every action a named command; leader key with a which-key hint popup (UX-1)
+- [ ] Command palette with fuzzy search over all commands (UX-2)
+- [ ] Empty app shell
+
+Gate: the app launches and switches themes live.
+
+## Spike - VT (done)
+
+Goal: prove that `tuios.dev/vt` + Bubble Tea v2 can host several busy Claude Code panes smoothly, before any real package depends on it. The spike code is kept on a local branch and is not on GitHub; M1 ports what it needs from it.
 
 - [x] Read the `tuios.dev/vt` docs and source: list which features it exposes (scrollback, Kitty graphics, Kitty keyboard protocol, OSC 133, synchronized output, mouse modes) and which backend it uses (pure Go or ghostty)
 - [x] Open two PTYs with `creack/pty`, each running `claude`, feeding a `tuios.dev/vt` emulator per pane
-- [x] Render both side by side with Bubble Tea v2, with resize handling and event-driven redraws (no fixed tick). Resize handling needed a fix after the final review: a resize blanked every pane until it wrote again; now a same-size resize is skipped and a resized pane re-renders at once (tested on both backends).
+- [x] Render both side by side with Bubble Tea v2, with resize handling and event-driven redraws (no fixed tick). On a window resize, a same-size resize is skipped and a resized pane re-renders at once, so an idle pane keeps its screen (tested on both backends).
 - [x] Forward keys to the focused pane, including Kitty keyboard protocol and bracketed paste (checked live on tuios, where Claude turns on Kitty flags 5 and modifyOtherKeys 2 at startup: Left went through tuios's `EncodeKeyCSIu`, letters and Backspace fell through to the legacy encoder; bracketed paste checked live; the legacy encoder's cursor, function-key and modifier paths are unit-tested only; a pass through a Kitty-protocol terminal is in Later)
 - [x] Measure frame time and CPU with both panes busy (e.g. both generating long output), then with four and six panes; also idle CPU
 - [x] Run the same harness with `charmbracelet/x/vt` for comparison
@@ -44,7 +58,7 @@ Gate: a go/no-go on `tuios.dev/vt` vs `charmbracelet/x/vt`, with numbers.
 - **Mixed configuration** (realistic, not gating): panes alternate `pane-1.rec` (spinner) and `pane-2.rec` (streaming), same start, length and stagger.
 - Interactive runs replay the gate configuration with `-start 86s -warmup 5s -duration 30s`, so they measure the same recording windows as the bench (1,127,049 bytes fed in both).
 
-#### Capabilities (`vtspike caps`)
+#### Capabilities (spike caps probe)
 
 | Capability | tuios (pure-Go) | x/vt |
 |---|---|---|
@@ -74,8 +88,8 @@ Mapped cleanly on both: write, resize, size, `CellAt` (both return ultraviolet `
 
 Needed host code:
 
-- **Legacy keys:** tuios `EncodePaneKey` returns "" unless Kitty flags or modifyOtherKeys are on, and its `EncodeKeyCSIu` returns "" for unmodified text, Enter, Tab and Backspace, so the adapter falls back to a legacy encoder ported from x/vt (MIT, listed in `THIRD_PARTY.md`, about 140 lines). Claude pushes Kitty flags 5 and modifyOtherKeys 2 (`ESC[<u ESC[>5u ESC[>4;2m`) at 0.53 s in both recordings and keeps them on to the end (two pops of at most 0.15 s around the trust prompt, each re-pushed; last re-push at 473.29 s in `pane-1.rec`), so for Claude on tuios the port only sends text, Enter, Tab and Backspace.
-- **The legacy port is not fit for M1 as is** (`spikes/vt/term/legacykey.go`): ctrl, shift or meta with an arrow, Home/End, PgUp/PgDn or a function key returns "" and sends nothing (alt only gets an ESC prefix), where xterm sends `CSI 1;<mod>X`; a key without text it has no entry for, such as F13 and up or Begin, sends `string(Code)`, a private-use rune (x/vt's own encoder has the same F13 bug); and a key with `IsRepeat` set skips every table, so a held arrow sends a private-use rune too.
+- **Legacy keys:** tuios `EncodePaneKey` returns "" unless Kitty flags or modifyOtherKeys are on, and its `EncodeKeyCSIu` returns "" for unmodified text, Enter, Tab and Backspace, so the adapter falls back to a legacy encoder ported from x/vt (MIT, about 140 lines). Claude pushes Kitty flags 5 and modifyOtherKeys 2 (`ESC[<u ESC[>5u ESC[>4;2m`) at 0.53 s in both recordings and keeps them on to the end (two pops of at most 0.15 s around the trust prompt, each re-pushed; last re-push at 473.29 s in `pane-1.rec`), so for Claude on tuios the port only sends text, Enter, Tab and Backspace.
+- **The legacy port is not fit for M1 as is** (the spike's x/vt-derived legacy encoder): ctrl, shift or meta with an arrow, Home/End, PgUp/PgDn or a function key returns "" and sends nothing (alt only gets an ESC prefix), where xterm sends `CSI 1;<mod>X`; a key without text it has no entry for, such as F13 and up or Begin, sends `string(Code)`, a private-use rune (x/vt's own encoder has the same F13 bug); and a key with `IsRepeat` set skips every table, so a held arrow sends a private-use rune too.
 - **Paste:** tuios offers `SanitizePaste` and `BracketedPasteEnabled`; the host wraps the text. x/vt's `Paste` wraps but does not sanitise.
 - **Sync hold:** tuios's `IsSyncActive` and `SyncUpdate` expire on the wall clock, so the host tracks DEC 2026 from the mode callbacks and applies its own 1 s hold on an injectable clock.
 - **Damage:** tuios has no damage API, so a dirty pane re-renders every row into a per-row string cache and only changed rows count. x/vt reports touched rows, but the adapter must treat an alt-screen switch or resize as all dirty and clear the list itself.
@@ -101,7 +115,7 @@ Bench (mixed configuration, not gating), **bench: feed+update+view+present**, me
 | 4 | 555 | 3.20 ms | 3.0 | 3.15 ms | 2.6 |
 | 6 | 796 | 4.69 ms | 5.8 | 3.89 ms | 5.2 |
 
-Interactive (gate configuration, 6 panes, real time in a 240x64 tmux session, 30 s window, one run per backend), **interactive: update+view**; CPU is the whole `vtspike` process as a share of one core, including Bubble Tea's flush:
+Interactive (gate configuration, 6 panes, real time in a 240x64 tmux session, 30 s window, one run per backend), **interactive: update+view**; CPU is the whole spike process as a share of one core, including Bubble Tea's flush:
 
 | Backend | Frames | p50 | p95 | p99 | max | CPU % |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -140,9 +154,9 @@ The p99 columns are medians of 3 runs. The share is not derived from them: it is
 - **What the diff can catch:** tuios.dev/vt's NOTICE says it started as a copy of `charmbracelet/x/vt` and that its parser is a modified copy of the `x/ansi` parser; both use ultraviolet cells and width tables. "0 mismatches at 3249 checkpoints" therefore cannot catch a bug tuios inherited. The independent evidence is the two tmux final-screen comparisons (text only) and the visual captures; references at more checkpoints are in Later.
 - **Live captures:** the two backends' 6-pane interactive captures at the 30 s mark are byte-identical apart from the status label. No stale rows; wide characters (emoji in Claude's status line) keep the pane borders aligned. The live captures of the trust prompt, input box, streaming reply and spinner are clean.
 - **Blocking rendering bugs: none** on either backend.
-- **OSC 8 on x/vt:** an earlier observation said x/vt dropped the trust prompt's "Security guide" link. It does not. Claude sends `ESC ] 8 ; id=zaxmda ; https://... BEL`, x/vt splits the payload into exactly three parts and keeps the link, the `-e` captures of both backends carry the identical OSC 8 sequence, and the replay diff shows no link mismatch.
-- **Claude does not use synchronized output on x/vt** (live, no tokens: a trust-prompt redraw forced with Down then Up, never answered). At startup Claude sends XTVERSION, a Kitty keyboard query, OSC 7501 and DA1. tuios answers XTVERSION and Kitty, Claude then asks DECRQM 2026 and wraps each redraw in `?2026h`/`?2026l` (2 brackets). x/vt answers only DA1; Claude never asks about 2026 and sends the same redraw bytes unbracketed (0 brackets). The first probes ran with `TMUX` set; re-run after the harness started stripping it (79x31, same Down then Up, full-stream counts), the result is unchanged: tuios 2 brackets after a DECRQM 2026 query, x/vt 0 brackets and no DECRQM 2026 query. So on x/vt the host cannot hold half-drawn frames. The replays cannot show this because they replay tuios-recorded bytes. Whether it visibly tears during streaming on x/vt is untested.
-- **Agent environment:** the recordings, the idle `claude` runs and the first probes were made with `TMUX` inherited from the outer tmux, so Claude believed it ran inside tmux: it wrapped its OSC 11 query in tmux passthrough and drew in 256 colours (neither recording holds a truecolor SGR). Without `TMUX`, Claude sends OSC 11 plainly, draws in truecolor and, on tuios, also queries Kitty graphics; a tuios control run with `TMUX` set reproduces the old behaviour. The replays therefore exercised Claude's 256-colour output, not its truecolor output (truecolor itself is covered by the caps probe). The harness now strips `TMUX` and `TMUX_PANE` from pane environments; MuxReveal is the agent's terminal, so M1 must not pass them to agent PTYs either.
+- **OSC 8 on x/vt:** x/vt keeps the trust prompt's "Security guide" link. Claude sends `ESC ] 8 ; id=zaxmda ; https://... BEL`, x/vt splits the payload into exactly three parts and keeps the link, the `-e` captures of both backends carry the identical OSC 8 sequence, and the replay diff shows no link mismatch.
+- **Claude does not use synchronized output on x/vt** (live, no tokens: a trust-prompt redraw forced with Down then Up, never answered). At startup Claude sends XTVERSION, a Kitty keyboard query, OSC 7501 and DA1. tuios answers XTVERSION and Kitty, Claude then asks DECRQM 2026 and wraps each redraw in `?2026h`/`?2026l` (2 brackets). x/vt answers only DA1; Claude never asks about 2026 and sends the same redraw bytes unbracketed (0 brackets). With and without `TMUX` in Claude's environment (79x31, same Down then Up, full-stream counts): tuios 2 brackets after a DECRQM 2026 query, x/vt 0 brackets and no DECRQM 2026 query. So on x/vt the host cannot hold half-drawn frames. The replays cannot show this because they replay tuios-recorded bytes. Whether it visibly tears during streaming on x/vt is untested.
+- **Agent environment:** the recordings, the idle `claude` runs and the first probes were made with `TMUX` inherited from the outer tmux, so Claude believed it ran inside tmux: it wrapped its OSC 11 query in tmux passthrough and drew in 256 colours (neither recording holds a truecolor SGR). Without `TMUX`, Claude sends OSC 11 plainly, draws in truecolor and, on tuios, also queries Kitty graphics; a tuios control run with `TMUX` set reproduces the old behaviour. The replays therefore exercised Claude's 256-colour output, not its truecolor output (truecolor itself is covered by the caps probe). The spike harness strips `TMUX` and `TMUX_PANE` from pane environments; MuxReveal is the agent's terminal, so M1 must not pass them to agent PTYs either.
 
 #### Library issues found
 
@@ -162,11 +176,11 @@ x/vt v0.1.0:
 - The key encoder sends nothing for shift+enter (Claude's newline key) and a private-use rune for unmapped keys such as F13 (the spike's legacy port inherits the F13 bug; see API fit).
 - OSC 8 is dropped when the URL contains `;` (the handler requires exactly three `;`-separated parts). Claude's links do not hit this.
 
-Spike harness (no effect on the numbers; fixed after the final review):
+Spike harness bugs, fixed in the spike code (no effect on the numbers):
 
-- `run` read `pty.Getsize` as (width, height), but it returns (rows, cols). Until Bubble Tea's first resize message the layout was transposed, and PTY children started at the transposed size too (the first probes' recordings say 64x239). Replay panes have a fixed size and the stats report 240x64. `run -record` now requires `-pane-size`: the recording format stores only the initial size and has no resize records, which matters if M1 reuses it for VT fixtures.
-- A window resize blanked every pane's row cache and nothing re-rendered it, so an idle or exited pane lost its screen until it wrote again. A same-size resize is now skipped and a resized pane re-renders at once.
-- Pane children inherited `TMUX` and `TMUX_PANE` (see Agent environment); now stripped.
+- `run` read `pty.Getsize` as (width, height), but it returns (rows, cols). Until Bubble Tea's first resize message the layout was transposed, and PTY children started at the transposed size too (the first probes' recordings say 64x239). Replay panes have a fixed size and the stats report 240x64. The spike's recorder requires an explicit pane size: the recording format stores only the initial size and has no resize records, which matters if M1 reuses it for VT fixtures.
+- A window resize blanked every pane's row cache and nothing re-rendered it, so an idle or exited pane lost its screen until it wrote again. A same-size resize is skipped and a resized pane re-renders at once.
+- Pane children inherited `TMUX` and `TMUX_PANE` (see Agent environment); the spike harness strips them.
 
 #### Recommendation
 
@@ -186,11 +200,11 @@ Proposals only; DESIGN.md is unchanged.
 
 ## Next
 
-M0 Skeleton: module layout from DESIGN.md, config, theme engine with the four Catppuccin flavors, command palette, empty app shell (TH-1, TH-2, UX-1, UX-2).
+M1 Terminal core: PTYs, the `tuios.dev/vt` adapter, compositor, splits, shell panes, copy mode, mouse and clipboard, hook socket, state badges, persistence and resume (AG-1 to AG-5, AG-7, AG-8 interface, PR-1 to PR-4, UX-4 to UX-6). It builds on the spike findings above.
 
 ## Done
 
-- Spike - VT: GO on `tuios.dev/vt` v0.3.1, findings above (branch `spike/vt`).
+- Spike - VT: GO on `tuios.dev/vt` v0.3.1; findings in the Spike - VT section above. The spike code is on a local branch, not on GitHub.
 
 ## Decisions log
 
