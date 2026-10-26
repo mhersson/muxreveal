@@ -15,7 +15,7 @@ M1 ships as three plans, one PR each.
 Live shell and `claude` panes in splits, with focus, resize, zoom and close, full key and paste forwarding, and a replay bench. Covers AG-1, AG-2, AG-3, AG-7.
 
 - [x] VT adapter on `tuios.dev/vt`
-- [ ] Key encoder and paste
+- [x] Key encoder and paste
 - [ ] PTY processes and pane environment
 - [ ] Layout state, actions and geometry
 - [ ] Live panes with row cache and sync hold

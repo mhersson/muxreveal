@@ -29,6 +29,7 @@ type VT interface {
 	KeyModes() KeyModes                    // for EncodeKey
 	BracketedPaste() bool                  // DECSET 2004
 	SendBytes(b []byte)                    // raw bytes queued on the reply stream, ordered with query replies
+	SendKey(k uv.KeyPressEvent)            // EncodeKey with the current KeyModes; unencodable keys send nothing
 	Close() error                          // idempotent: emulator Close, then wait for the drain
 }
 
@@ -72,6 +73,12 @@ func (t *tuiosVT) WorkingDir() string          { return t.cwd }
 func (t *tuiosVT) FocusReporting() bool        { return t.em.FocusReportingEnabled() }
 func (t *tuiosVT) BracketedPaste() bool        { return t.em.BracketedPasteEnabled() }
 func (t *tuiosVT) SendBytes(b []byte)          { t.em.WriteResponse(b) }
+
+func (t *tuiosVT) SendKey(k uv.KeyPressEvent) {
+	if b := EncodeKey(k, t.KeyModes()); b != nil {
+		t.SendBytes(b)
+	}
+}
 
 func (t *tuiosVT) Cursor() (uv.Position, bool) {
 	return t.em.CursorPosition(), !t.em.IsCursorHidden()
