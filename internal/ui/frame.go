@@ -1,7 +1,6 @@
 package ui
 
 import (
-	"path/filepath"
 	"slices"
 	"strings"
 
@@ -12,47 +11,55 @@ import (
 	"github.com/mhersson/muxreveal/internal/core"
 )
 
-const (
-	separatorGlyph = "│"
-	zoomTag        = " zoom "
-)
-
 // bodyRect is the area above the status bar.
 func bodyRect(width, height int) core.Rect {
 	return core.Rect{W: width, H: height - 1}
 }
 
-// contentRect is a pane rect without its header row.
+// minFrame is the smallest body, in rows and columns, that has room for a frame.
+const minFrame = 3
+
+// innerRect is the body inside its frame: the left and right frame columns and
+// the bottom frame row are outside it. A body under minFrame has no inner rect.
+func innerRect(body core.Rect) core.Rect {
+	if body.W < minFrame || body.H < minFrame {
+		return core.Rect{}
+	}
+
+	return core.Rect{X: body.X + 1, Y: body.Y, W: body.W - 2, H: body.H - 1}
+}
+
+// contentRect is a pane rect without its top border row.
 func contentRect(r core.Rect) core.Rect {
 	return core.Rect{X: r.X, Y: r.Y + 1, W: r.W, H: r.H - 1}
 }
 
-// geometry is the pane rects (header row included) and the separators of one
-// View, computed once.
+// geometry is the pane rects (top border row included) of one View, computed
+// once.
 type geometry struct {
 	rects map[core.PaneID]core.Rect
-	seps  []core.Rect
 }
 
 // layoutRects returns each visible pane's rect. A zoomed pane is the only one
-// and fills the body.
+// and fills the inner rect.
 func (a *App) layoutRects() map[core.PaneID]core.Rect {
 	return a.geometry().rects
 }
 
 func (a *App) geometry() geometry {
 	st := a.store.State()
-	body := bodyRect(a.width, a.height)
-	if st.Tab().Zoomed {
-		if _, ok := st.Panes[st.Tab().Focus]; ok {
+	t := st.Tab()
+	inner := innerRect(bodyRect(a.width, a.height))
+	if t.Zoomed {
+		if _, ok := st.Panes[t.Focus]; ok {
 			g := geometry{rects: map[core.PaneID]core.Rect{}}
-			if body.W >= 1 && body.H >= 1 {
-				g.rects[st.Tab().Focus] = body
+			if inner.W >= 1 && inner.H >= 1 {
+				g.rects[t.Focus] = inner
 			}
 			return g
 		}
 	}
-	return geometry{rects: core.Rects(st.Tab().Layout, body), seps: core.Separators(st.Tab().Layout, body)}
+	return geometry{rects: core.Rects(t.Layout, inner)}
 }
 
 // segment is a run of cells already styled, starting at column x.
@@ -80,9 +87,21 @@ func (a *App) frameAt(g geometry) string {
 			rows[y] = append(rows[y], s)
 		}
 	}
+
+	grid := newBorderGrid(a.width, len(rows))
+	focus := st.Tab().Focus
+	for _, r := range g.rects {
+		grid.addBox(r, ownNone)
+	}
+	if r, ok := g.rects[focus]; ok {
+		grid.addBox(r, kindOwner(st.Panes[focus].Kind))
+	}
 	for id, r := range g.rects {
-		hdr := a.header(id, r, lk.styles)
-		add(r.Y, segment{r.X, r.W, hdr})
+		for _, s := range a.topBorder(grid, st, id, r, id == focus, lk.styles) {
+			add(r.Y, s)
+		}
+	}
+	for id, r := range g.rects {
 		c := contentRect(r)
 		var lines []string
 		fit := false
@@ -102,13 +121,7 @@ func (a *App) frameAt(g geometry) string {
 			add(c.Y+i, segment{c.X, c.W, text})
 		}
 	}
-	if !st.Tab().Zoomed {
-		for _, s := range g.seps {
-			for y := s.Y; y < s.Y+s.H; y++ {
-				add(y, segment{s.X, 1, lk.styles.separator.Render(separatorGlyph)})
-			}
-		}
-	}
+	grid.runs(lk.styles, add)
 
 	lines := make([]string, 0, a.height)
 	var sb strings.Builder
@@ -165,37 +178,6 @@ func fitWidth(s string, w int, body lipgloss.Style) string {
 		return ansi.Truncate(s, w, "")
 	}
 	return s + spaces(body, w-got)
-}
-
-// header draws the one-row pane header: " title · cwd" and, when zoomed, a
-// right-aligned zoom tag. The title is the guest's OSC title, else the kind.
-func (a *App) header(id core.PaneID, r core.Rect, st styles) string {
-	s := a.store.State()
-	meta := s.Panes[id]
-	title := "shell"
-	if meta.Kind == core.KindAgent {
-		title = "claude"
-	}
-	if p := a.panes[id]; p != nil {
-		if t := printable(p.title()); t != "" {
-			title = t
-		}
-	}
-	text := " " + title
-	if meta.Cwd != "" {
-		text += " · " + printable(filepath.Base(meta.Cwd))
-	}
-	style := st.paneHeader
-	if id == s.Tab().Focus {
-		style = st.paneHeaderFocus
-	}
-	tag := ""
-	if s.Tab().Zoomed && r.W > len(zoomTag) {
-		tag = zoomTag
-	}
-	text = ansi.Truncate(text, r.W-len(tag), "")
-	gap := r.W - lipgloss.Width(text) - len(tag)
-	return style.Render(text + strings.Repeat(" ", gap) + tag)
 }
 
 // printable drops control characters that guest or filesystem text may carry.

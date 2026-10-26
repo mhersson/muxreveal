@@ -29,6 +29,8 @@ type Options struct {
 	Cwd string
 	// RecordDir, when set, receives one recording per pane (diagnostics); empty means off.
 	RecordDir string
+	// Icons draws Nerd Font glyphs; false drops every one.
+	Icons bool
 }
 
 // App is the root Bubble Tea model.
@@ -61,6 +63,7 @@ type App struct {
 	getenv    func(string) string
 	cwd       string
 	recordDir string // empty unless recording
+	icons     bool   // draw Nerd Font glyphs
 	started   bool   // the first size message was handled; it opens the first pane only once
 	clock     clock  // the sync hold's time source
 	start     func(ctx context.Context, c term.Command, cols, rows int) (proc, error)
@@ -109,7 +112,7 @@ func New(opts Options) (*App, error) {
 	a := &App{
 		log: opts.Logger, store: opts.Store, reg: reg, keymap: km,
 		panes: map[core.PaneID]*pane{}, outerFocused: true,
-		getenv: getenv, cwd: cwd, recordDir: opts.RecordDir, clock: realClock{}, start: termStart,
+		getenv: getenv, cwd: cwd, recordDir: opts.RecordDir, icons: opts.Icons, clock: realClock{}, start: termStart,
 	}
 	if err := a.sync(); err != nil {
 		return nil, err

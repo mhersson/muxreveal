@@ -67,7 +67,7 @@ Fidelity limits of the replay: the recordings are 79x31, but the bench lays the 
 Tabs, each with its own split layout, focus and zoom, with new, rename, close, jump and cycle keys; framed panes with titles and Nerd Font icons; a workspace bar on the top row with the tabs and a tray (clock, agents, git, load); a restyled status bar, which-key, palette, confirm and rename. Covers AG-2, AG-9 and UX-1.
 
 - [x] Tabs in the core state
-- [ ] Framed panes with titles and icons
+- [x] Framed panes with titles and icons
 - [ ] Workspace bar tabs, per-tab layout and status bar
 - [ ] Tab commands, rename and close
 - [ ] Grouped which-key, palette restyle and bench check

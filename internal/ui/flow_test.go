@@ -89,6 +89,7 @@ func TestShellFlow(t *testing.T) {
 		Store:  core.NewStore(core.InitialState(core.Config{Theme: "catppuccin-mocha"})),
 		Getenv: shellGetenv,
 		Cwd:    t.TempDir(),
+		Icons:  true,
 	})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
@@ -128,7 +129,7 @@ func TestShellFlow(t *testing.T) {
 
 	tm.Send(keyLeader)
 	tm.Send(keyRune('v'))
-	waitFor(separatorGlyph)
+	waitFor("┬")
 
 	tm.Send(keyLeader)
 	tm.Send(keyRune('x'))

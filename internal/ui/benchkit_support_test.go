@@ -237,6 +237,7 @@ func newBenchApp(cfg benchConfig, clk clock) (*App, []core.PaneID, error) {
 		Store:  core.NewStore(core.InitialState(core.DefaultConfig())),
 		Getenv: func(string) string { return "" },
 		Cwd:    "/",
+		Icons:  true,
 	})
 	if err != nil {
 		return nil, nil, err

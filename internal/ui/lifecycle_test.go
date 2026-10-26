@@ -97,6 +97,7 @@ func lifeApp(t *testing.T) (*App, *starts) {
 		Store:  core.NewStore(core.InitialState(core.Config{Theme: "catppuccin-mocha"})),
 		Getenv: testGetenv,
 		Cwd:    testCwd,
+		Icons:  true,
 	})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
@@ -187,8 +188,8 @@ func TestStartupOpensShell(t *testing.T) {
 		t.Errorf("command = %v in %q, want %v in %q", c.Argv, c.Dir, want.Argv, testCwd)
 	}
 
-	if st.sizes[0] != [2]int{100, 28} {
-		t.Errorf("start size = %v, want [100 28]", st.sizes[0])
+	if st.sizes[0] != [2]int{98, 27} {
+		t.Errorf("start size = %v, want [98 27]", st.sizes[0])
 	}
 
 	s := a.store.State()
@@ -206,8 +207,8 @@ func TestStartupOpensShell(t *testing.T) {
 		t.Errorf("second size message started a process (starts = %d)", st.count())
 	}
 
-	if got := st.proc(0).resized(); len(got) == 0 || got[len(got)-1] != [2]int{120, 38} {
-		t.Errorf("resizes = %v, want the last to be [120 38]", got)
+	if got := st.proc(0).resized(); len(got) == 0 || got[len(got)-1] != [2]int{118, 37} {
+		t.Errorf("resizes = %v, want the last to be [118 37]", got)
 	}
 }
 
@@ -373,17 +374,17 @@ func TestFocusResizeZoom(t *testing.T) {
 		assertSizes(t, a)
 	}
 
-	// Resizes reach the process: p1 shrank to 44 columns and grew back to 49.
+	// Resizes reach the process: p1 shrank to 43 columns and grew back to 48.
 	var sawNarrow bool
 
 	for _, r := range st.proc(0).resized() {
-		if r[0] == 44 {
+		if r[0] == 43 {
 			sawNarrow = true
 		}
 	}
 
 	if !sawNarrow {
-		t.Errorf("p1 resizes = %v, want one with 44 columns", st.proc(0).resized())
+		t.Errorf("p1 resizes = %v, want one with 43 columns", st.proc(0).resized())
 	}
 }
 
@@ -395,8 +396,8 @@ func TestZoomedPanesKeepTheirSize(t *testing.T) {
 
 	chord(a, 'z')
 
-	if got := paneSize(t, a, "p2"); got != [2]int{100, 28} {
-		t.Errorf("zoomed pane size = %v, want [100 28]", got)
+	if got := paneSize(t, a, "p2"); got != [2]int{98, 27} {
+		t.Errorf("zoomed pane size = %v, want [98 27]", got)
 	}
 
 	if got := len(st.proc(0).resized()); got != before {

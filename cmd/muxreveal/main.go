@@ -94,6 +94,7 @@ func run(ctx context.Context, env core.Env, configPath, recordDir string) (err e
 		Store:  core.NewStore(core.InitialState(cfg)),
 		Getenv: os.Getenv,
 		Cwd:    cwd,
+		Icons:  cfg.IconsOn(),
 
 		RecordDir: recordDir,
 	})

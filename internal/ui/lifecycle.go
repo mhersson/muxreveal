@@ -65,8 +65,8 @@ func (a *App) openPane(kind core.PaneKind, split core.Split) tea.Cmd {
 
 	sim := core.NewStore(st)
 	if err := sim.Dispatch(act); err == nil {
-		body := bodyRect(a.width, a.height)
-		if r, ok := core.Rects(sim.State().Tab().Layout, body)[id]; ok {
+		area := innerRect(bodyRect(a.width, a.height))
+		if r, ok := core.Rects(sim.State().Tab().Layout, area)[id]; ok {
 			cols, rows = contentSize(r)
 		}
 	}
@@ -182,8 +182,9 @@ func (a *App) act(act core.Action) tea.Cmd {
 // zoom keep their size.
 func (a *App) relayout() tea.Cmd {
 	st := a.store.State()
-	_, focused := st.Panes[st.Tab().Focus]
-	zoomed := st.Tab().Zoomed && focused
+	t := st.Tab()
+	_, focused := st.Panes[t.Focus]
+	zoomed := t.Zoomed && focused
 	rects := a.geometry().rects
 
 	var cmds []tea.Cmd

@@ -17,6 +17,13 @@ const DefaultTheme = "catppuccin-mocha"
 // Config is the user's config.toml.
 type Config struct {
 	Theme string `toml:"theme"`
+	// Icons is a pointer so an absent key (nil) can mean true.
+	Icons *bool `toml:"icons"`
+}
+
+// IconsOn reports whether Nerd Font glyphs are drawn; the default is on.
+func (c Config) IconsOn() bool {
+	return c.Icons == nil || *c.Icons
 }
 
 // DefaultConfig returns the config used for keys the file does not set.
