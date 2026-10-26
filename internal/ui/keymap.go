@@ -15,9 +15,13 @@ type keymap struct {
 // defaultKeymap returns the built-in bindings.
 func defaultKeymap() keymap {
 	return keymap{
-		leader:   "ctrl+space",
-		delay:    300 * time.Millisecond,
-		bindings: []binding{{key: "q", command: "app.quit"}},
+		leader: "ctrl+space",
+		delay:  300 * time.Millisecond,
+		bindings: []binding{
+			{key: ":", command: "palette.open"},
+			{key: "t", command: "theme.pick"},
+			{key: "q", command: "app.quit"},
+		},
 	}
 }
 

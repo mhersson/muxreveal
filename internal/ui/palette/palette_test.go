@@ -327,3 +327,28 @@ func TestPaletteGolden(t *testing.T) {
 	m, _ := typeText(newModel(t), "th")
 	golden.RequireEqual(t, []byte(m.View(60)))
 }
+
+func TestMultibyteTitle(t *testing.T) {
+	th := mustTheme(t, "catppuccin-mocha")
+	m := New("Commands", []Item{
+		{ID: "a", Title: "Theme: Catppuccin Latte"},
+		{ID: "b", Title: "Theme: Catppuccin Frappé"},
+	}, th)
+	for _, r := range "frap" {
+		m, _ = press(m, tea.KeyPressMsg{Code: r, Text: string(r)})
+	}
+	const width = 40
+	view := m.View(width)
+	if !strings.Contains(ansi.Strip(view), "Frappé") {
+		t.Errorf("stripped view lacks Frappé:\n%s", ansi.Strip(view))
+	}
+	for i, l := range strings.Split(view, "\n") {
+		if got := lipgloss.Width(l); got > width {
+			t.Errorf("line %d width = %d, want at most %d", i, got, width)
+		}
+	}
+	hit := lipgloss.NewStyle().Background(th.UI.Selection).Foreground(th.UI.Match).Bold(true)
+	if want := hit.Render("Frap"); !strings.Contains(view, want) {
+		t.Errorf("view lacks the highlighted run %q:\n%q", want, view)
+	}
+}

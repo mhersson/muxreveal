@@ -235,7 +235,7 @@ func TestWhichKeySizes(t *testing.T) {
 			plain := ansi.Strip(content)
 			switch sz[0] {
 			case 100, 40:
-				if !strings.Contains(plain, "╭─ ctrl+space") || !strings.Contains(plain, "│ q  Quit MuxReveal │") {
+				if !strings.Contains(plain, "╭─ ctrl+space") || !strings.Contains(plain, "│ q  Quit MuxReveal       │") {
 					t.Errorf("popup not drawn:\n%s", plain)
 				}
 			case 20:

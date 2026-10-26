@@ -79,7 +79,7 @@ func inputStyles(t theme.Theme) textinput.Styles {
 	}
 }
 
-// Init is part of the embedded-component convention; the palette has no startup work.
+// Init has no startup work; the parent model drives the palette.
 func (m Model) Init() tea.Cmd { return nil }
 
 // SetTheme recolours the palette.

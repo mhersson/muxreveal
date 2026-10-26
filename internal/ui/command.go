@@ -54,6 +54,14 @@ func (r *registry) all() []command {
 
 func defaultCommands() []command {
 	cmds := []command{{
+		id:    "palette.open",
+		title: "Open command palette",
+		run:   func(a *App) tea.Cmd { a.openCommandPalette(); return nil },
+	}, {
+		id:    "theme.pick",
+		title: "Pick theme",
+		run:   func(a *App) tea.Cmd { a.openThemePicker(); return nil },
+	}, {
 		id:    "app.quit",
 		title: "Quit MuxReveal",
 		run:   func(*App) tea.Cmd { return tea.Quit },

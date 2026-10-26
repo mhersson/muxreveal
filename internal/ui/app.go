@@ -10,6 +10,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/mhersson/muxreveal/internal/core"
+	"github.com/mhersson/muxreveal/internal/ui/palette"
 	"github.com/mhersson/muxreveal/internal/ui/theme"
 )
 
@@ -36,6 +37,9 @@ type App struct {
 	theme  theme.Theme
 	styles styles
 	sample []string
+
+	overlay *overlay
+	preview *look // theme picker preview; nil unless previewing
 }
 
 // New returns the root model. It fails when the store's theme is unknown.
@@ -69,11 +73,11 @@ func (a *App) sync() error {
 	if err != nil {
 		return err
 	}
-	sample, err := highlight(welcomeSample, "go", th)
+	lk, err := newLook(th)
 	if err != nil {
-		return fmt.Errorf("highlight welcome sample: %w", err)
+		return err
 	}
-	a.theme, a.styles, a.sample = th, newStyles(th), sample
+	a.theme, a.styles, a.sample = lk.theme, lk.styles, lk.sample
 	return nil
 }
 
@@ -110,9 +114,23 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.width, a.height = msg.Width, msg.Height
 		a.log.Debug("window size", "width", msg.Width, "height", msg.Height)
 	case tea.KeyPressMsg:
+		if a.overlay != nil {
+			return a, a.updateOverlay(msg)
+		}
 		return a, a.handleKey(msg.String())
+	case palette.ChosenMsg:
+		return a, a.chosen(msg.ID)
+	case palette.ClosedMsg:
+		a.closeOverlay()
+	case palette.HighlightMsg:
+		a.highlighted(msg.ID)
 	case whichKeyMsg:
 		a.popup = a.pending && msg.seq == a.seq
+	default:
+		// Paste and the input's own messages belong to the open palette.
+		if a.overlay != nil {
+			return a, a.updateOverlay(msg)
+		}
 	}
 	return a, nil
 }
@@ -167,13 +185,17 @@ func (a *App) View() tea.View {
 	for i, h := range hints {
 		full[i] = hint{key: a.keymap.leader + " " + h.key, title: h.title}
 	}
-	content := shell(a.width, a.height, a.theme, a.styles, a.sample, full, bar)
+	lk := a.current()
+	content := shell(a.width, a.height, a.theme, lk.styles, lk.sample, full, bar)
 	if a.popup {
-		content = overlayWhichKey(content, a.width, a.height, a.keymap.leader, hints, a.styles)
+		content = overlayWhichKey(content, a.width, a.height, a.keymap.leader, hints, lk.styles)
+	}
+	if a.overlay != nil {
+		content = overlayOver(content, a.width, a.height, a.overlay.pal)
 	}
 	v := tea.NewView(content)
 	v.AltScreen = true
-	v.BackgroundColor = a.theme.UI.Bg
-	v.ForegroundColor = a.theme.UI.Fg
+	v.BackgroundColor = lk.theme.UI.Bg
+	v.ForegroundColor = lk.theme.UI.Fg
 	return v
 }

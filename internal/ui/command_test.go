@@ -53,16 +53,23 @@ func TestRegistry(t *testing.T) {
 
 func TestDefaultCommands(t *testing.T) {
 	cmds := defaultCommands()
-	if len(cmds) != 1+len(theme.All()) {
-		t.Fatalf("defaultCommands() has %d commands, want %d", len(cmds), 1+len(theme.All()))
+	fixed := []struct{ id, title string }{
+		{"palette.open", "Open command palette"},
+		{"theme.pick", "Pick theme"},
+		{"app.quit", "Quit MuxReveal"},
 	}
-	if cmds[0].id != "app.quit" || cmds[0].title != "Quit MuxReveal" {
-		t.Errorf("first command = %q %q, want app.quit Quit MuxReveal", cmds[0].id, cmds[0].title)
+	if len(cmds) != len(fixed)+len(theme.All()) {
+		t.Fatalf("defaultCommands() has %d commands, want %d", len(cmds), len(fixed)+len(theme.All()))
+	}
+	for i, f := range fixed {
+		if cmds[i].id != f.id || cmds[i].title != f.title {
+			t.Errorf("command %d = %q %q, want %s %s", i, cmds[i].id, cmds[i].title, f.id, f.title)
+		}
 	}
 	for i, th := range theme.All() {
-		c := cmds[1+i]
+		c := cmds[len(fixed)+i]
 		if c.id != "theme.set."+th.Name || c.title != "Theme: "+th.Title {
-			t.Errorf("command %d = %q %q, want theme.set.%s Theme: %s", 1+i, c.id, c.title, th.Name, th.Title)
+			t.Errorf("command %d = %q %q, want theme.set.%s Theme: %s", len(fixed)+i, c.id, c.title, th.Name, th.Title)
 		}
 	}
 }
