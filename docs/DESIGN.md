@@ -40,6 +40,7 @@ IDs are referenced by milestones, commits and PRs. Priority: **P0** blocks v1, *
 | AG-6 | Desktop notification when an agent becomes blocked or finishes | P1 |
 | AG-7 | Plain shell panes (non-agent), the default for splits; typing `claude` in one adopts it as an agent through the PATH shim | P0 |
 | AG-8 | Harness adapter interface so other agents (Codex, opencode) can be added | P0 (interface), P2 (adapters) |
+| AG-9 | Tabs: each with its own split layout, focus and zoom; new, rename, close, jump and cycle; the tabs shown in the workspace bar | P0 |
 
 ### Persistence and resume
 
@@ -235,6 +236,134 @@ Go 1.27 (`tuios.dev/vt` needs 1.26 or later). The reason for Rust was a proven V
 - `leader x` closes the focused pane at once; for an agent pane it first asks in a confirm overlay (`y` or `enter` confirms, `n` or `esc` cancels). `leader q` quits and asks first when any agent pane is open. A pane whose process exits closes without asking, and so does an open confirm about it. The confirm owns every key while it is open.
 - The cwd a pane shows and its splits inherit is the last OSC 7 path the pane reported, else on Linux the `/proc` cwd of the terminal's foreground process group, else the cwd the pane started in. It is looked up off the UI loop, at most every 500 ms per pane.
 
+### Visual design
+
+The chrome is framed: every pane sits inside one connected grid of rounded borders with its title in its top border. A workspace bar runs along the top row and a status bar along the bottom row. Colours come only from theme roles. Icons are single-cell Nerd Font glyphs (see Glyphs); `icons = false` drops every one of them, the segment edges included, while box drawing, block elements and braille stay.
+
+#### Screen rows
+
+- Row 0 is the workspace bar and the last row is the status bar; the rows between are the body.
+- The body is framed. Panes are laid out in the inner rect `{X: 1, Y: 1, W: width-2, H: height-3}`: the outer frame takes column 0, the last column and the row above the status bar.
+- Pane rects keep the geometry of Panes and layout. The first row of a pane rect is its top border, which is its header row; its content is the rows below. A vertical split's one-column separator is the border its two children share. In a horizontal split, the lower child's top border separates it from the upper child.
+- The body needs at least 3 rows and 3 columns for its frame; a smaller body stays blank. Height 1 shows the status bar only; height 2 shows the workspace bar and the status bar. Every row is exactly the terminal width.
+- An empty tab shows the welcome card in the body, without frames.
+
+#### Frames
+
+- Lines are single-weight box drawing: `╭ ╮ ╰ ╯` at the outer corners, and `┬ ┴ ├ ┤ ┼` wherever borders meet, so the frames read as one connected grid.
+- Unfocused borders are `Border`. The focused pane's whole border, all four sides, is its kind colour (`Agent` for agents, `Shell` for shells) and wins in every cell it shares with a neighbour.
+- The title is set into the top border from the cell after the corner: `─`, space, kind icon (kind colour, bold), space, title, ` · ` (`Subtle`), cwd basename, space. Focused: the title in the kind colour and bold, the cwd in `Fg`. Unfocused: the title in `Muted`, the cwd in `Subtle`. The title is the guest's OSC title, else `claude` or `shell`.
+- Tags sit at the right end of the top border, ending one `─` before the corner, with one `─` between two tags: ` 󰊓 zoom ` (`Accent`, bold) on a zoomed pane, and from M1d the state badge (` <icon> working `, ` <icon> blocked `, ` <icon> idle ` in `Working`, `Blocked`, `Idle`, bold). The working icon is a braille spinner (`⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏`, about 8 frames a second) that animates only while the agent works, so idle CPU is unchanged; blocked is 󰀦 and idle is 󰗡.
+- When the title does not fit, the cwd goes first (it shows whole or not at all), then the title shrinks with `…`, and with three cells or fewer left the whole title goes. The tags stay; a tag that does not fit between the corners is left out.
+- A zoomed pane fills the inner rect inside its own frame.
+
+#### Workspace bar (row 0)
+
+Ground `Bar`.
+
+- **Tabs**, from column 0, one segment each: ` N icon name `. N is the 1-based position; the icon is 󰚩 when the tab holds an agent pane, else ; the name is the custom name, else the basename of the tab's focused pane's cwd, else `shell`.
+- Active segment: `Accent` background, text `OnAccent` and bold. Inactive: `Surface` background, the number `Muted` and bold, the icon and the name `Dim`. From M1d an inactive tab's icon takes the colour of its most urgent agent: blocked, then working, then idle.
+- One edge cell follows each segment:  (U+E0BC) in the segment's colour on the next segment's colour, or on `Bar` after the last segment. Between two inactive segments the edge is a thin  (U+E0BB) in `Bar` on `Surface`.
+- **Tray**, right-aligned to the last column, at least two cells from the tabs. One `Surface` region opens with  (U+E0BA, `Surface` on `Bar`); its modules are separated by  (`Bar` on `Surface`), and each reads ` icon value `. The clock closes the bar on its own `Clock` segment, opened by  (`Clock` on `Surface`, or on `Bar` when it is the only module): ` 󰥔 14:32 ` in `OnAccent`, bold.
+- Modules, left to right:
+  - **PR and CI** (M3; hidden until then) for the focused pane's branch: icon  (U+F407) in `Info`, the number (` #8`, `Fg`, bold), then the checks: 󰔟 and done/total (` 3/5`) in `Warning` while any check runs. M3 settles the passed and failed forms in the same slot.
+  - **Agents** (absent while no agent pane is open): one 󰚩 per agent pane across all tabs, in `Agent`. From M1d each robot takes its state colour (`Working`, `Blocked`, `Idle`), followed by ` 󰀦N` in `Blocked`, bold, when N agents are blocked.
+  - **Git** of the focused pane (absent outside a repo): icon  in `Git`, the branch in `Fg` (at most 18 cells, cut with `…`), then a space and the dirty marker  (U+F444) in `Warning` when there are changes.
+  - **Load:** icon 󰻠 in `Load`, a braille sparkline of the last 10 CPU samples (5 cells, two samples per cell, `Load`; a sample fills 1 to 4 dots of its braille column from the bottom, one per started quarter of CPU), the CPU share (` 12%`, `Fg`), then `  󰍛 9.8G` of memory in use (`Muted`).
+  - **Clock:** `HH:MM`, minute resolution.
+- **Narrow terminals** give way in this order: load, git, PR and CI leave the tray; inactive tab names shrink to ` N icon `, then to ` N ` (longest names first); the clock leaves; the active tab's name shrinks, to ` N icon ` and then ` N `; the agents leave. The active tab always stays visible: if the ` N ` segments still do not fit, the segments farthest from the active tab are left out.
+- With `icons = false`, segments are separated by one `Bar` cell, tray modules by `│` (`Bar` on `Surface`), and there are no edge cells. Text stands in for the module icons: the agents read `agents N` (`Fg`), the dirty marker is `*`, the load reads `cpu ` (`Muted`) before the sparkline and `  mem 9.8G` after the share, and the checks read `ci 3/5`.
+
+#### Status bar (last row)
+
+Ground `Bar`.
+
+- **Mode segment** at column 0, followed by  in its colour on `Bar` and one `Bar` cell. Its text is `OnAccent` and bold:
+  - ` 󰕮 MuxReveal ` on `Accent` normally;
+  - ` 󰌌 ctrl+space ` on `Warning` while the leader waits for a key (the configured leader's name);
+  - ` 󰑕 Rename tab ` on `Accent` while a tab is being renamed.
+- **Key legend** after it: `ctrl+space then` in `Subtle`, then pairs of a key (`Key`, bold) and an action (`Muted`), three cells apart: `: palette`, `c new tab`, `, rename`, `z zoom`, `q quit`. While the leader waits: `esc cancel`. While renaming: `enter save`, `esc cancel`, `empty automatic name`. Only the normal legend has the `ctrl+space then` lead-in. Pairs that do not fit are dropped from the end.
+- **Right side**, one cell from the edge: the notice (`Warning`, with 󰀪) while there is one, else the focused pane's cwd (`Muted`, with 󰉋). It takes at most the room left after the mode segment, the lead-in and 40 cells for the legend, cut with `…`; the legend stops two cells before it.
+
+#### Overlays
+
+Square-cornered boxes (`┌ ┐ └ ┘`) on `Panel`. Each title is set into the top border two cells from the corner. Overlays are clipped to the screen, never wrapped.
+
+- **Which-key.** Placed bottom-right, one cell from the right edge, with its bottom border on the row above the status bar. Border `BorderFocus`; title ` 󰌌 ctrl+space ` in `Accent`, bold.
+  - Two columns, split by a `Border` rule that joins the top and bottom borders (`┬`, `┴`). Panes is on the left. Tabs, a blank row, then App are on the right.
+  - Group heads `󰯌 Panes`, `󰓩 Tabs` and `󰒓 App` are `Accent` and bold, followed by a `Border` rule to the column's end.
+  - Rows: the key in `Key`, bold, padded to the column's widest key; two cells; the title in `Fg`.
+  - Directional commands collapse into one row each: `h j k l  Focus pane`, `H J K L  Resize pane`, `^h^j^k^l  Swap pane`, and `1-9  Jump to tab`.
+- **Palette and theme picker.** Centred, width min(64, width-4), top at a quarter of the height, border `BorderFocus`.
+  - Title: `  Commands ` (the theme picker: ` 󰏘 Theme `), in `Accent`, bold.
+  - Input row: `❯ ` in `Accent`, then the query.
+  - A divider row joined to both sides (`├`, `┤`).
+  - Result rows: the command's icon (`Muted`; `Accent` when selected), the title (`Fg`, matched runes in `Match` and bold), and the key hint right-aligned (`Key`, bold). The selected row is on `Selection` with a bold title.
+  - ` N of M ` (`Muted`) sits in the bottom border at the right.
+- **Confirm.** Centred, width min(46, width-2), seven rows tall, top at a third of the height, border `Error`.
+  - Title: ` 󰀪 <action> ` in `Error`, bold.
+  - Inside, two cells from the left border: a blank row, the question in `Fg` and bold, the detail in `Muted`, a blank row, then the answers.
+  - Answers: `[y] <action>    [n] Cancel`, with the brackets in `Subtle`, the keys in `Key` and bold, and the labels in `Fg`.
+- **Rename.** Edits the tab in place. The active tab's segment becomes a text input on `Bg` that grows with the text: ` N 󰑕 name` with the number `Accent` and bold, the text `Fg`, and the input's cursor. The status bar shows the rename mode and its legend.
+
+#### Theme roles
+
+Existing roles keep their colours. New roles:
+
+| Role | Catppuccin | Used for |
+| --- | --- | --- |
+| `Agent` | Mauve | agent frames, titles and icons; tray robots |
+| `Shell` | Blue | shell frames, titles and icons |
+| `Bar` | Crust | ground of the workspace bar and the status bar |
+| `Dim` | Subtext0 | inactive tab text |
+| `Clock` | Lavender | clock segment |
+| `Git` | Flamingo | git icon |
+| `Load` | Teal | load icon and sparkline |
+| `Working`, `Blocked`, `Idle` (M1d) | Peach, Red, Green | agent state badges, robots and tab icons |
+
+The PR and CI slot (M3) uses the existing `Info` role for its icon.
+
+#### Glyphs
+
+All single cell (Nerd Fonts v3 names):
+
+| Glyph | Name | Code point | Use |
+| --- | --- | --- | --- |
+| 󰚩 | nf-md-robot | U+F06A9 | agent panes, agent tabs, tray agents |
+|  | nf-oct-terminal | U+F489 | shell panes and tabs |
+| 󰕮 | nf-md-view_dashboard | U+F056E | MuxReveal mode segment |
+| 󰌌 | nf-md-keyboard | U+F030C | leader waiting |
+| 󰑕 | nf-md-rename_box | U+F0455 | rename mode, rename command |
+| 󰊓 | nf-md-fullscreen | U+F0293 | zoom tag, zoom command |
+| 󰥔 | nf-md-clock_outline | U+F0954 | clock |
+|  | nf-dev-git_branch | U+E725 | git |
+|  | nf-oct-dot_fill | U+F444 | uncommitted changes |
+| 󰻠 | nf-md-cpu_64_bit | U+F0EE0 | load |
+| 󰍛 | nf-md-memory | U+F035B | memory |
+| 󰉋 | nf-md-folder | U+F024B | focused pane's path |
+| 󰀪 | nf-md-alert_outline | U+F002A | notices, confirm title |
+| 󰯌 | nf-md-view_split_vertical | U+F0BCC | Panes group, split right |
+| 󰯋 | nf-md-view_split_horizontal | U+F0BCB | split below |
+| 󰓩 | nf-md-tab | U+F04E9 | Tabs group, next, previous and jump |
+| 󰝜 | nf-md-tab_plus | U+F075C | new tab |
+| 󰒓 | nf-md-cog | U+F0493 | App group |
+|  | nf-oct-command_palette | U+F4B5 | palette title and command |
+| 󰏘 | nf-md-palette | U+F03D8 | theme picker and theme commands |
+| 󰓾 | nf-md-target | U+F04FE | focus commands |
+| 󰘖 | nf-md-arrow_expand | U+F0616 | resize commands |
+| 󰓡 | nf-md-swap_horizontal | U+F04E1 | swap commands |
+| 󰅖 | nf-md-close | U+F0156 | close pane, close tab |
+| 󰈆 | nf-md-exit_to_app | U+F0206 | quit |
+|  | nf-ple-upper_left_triangle | U+E0BC | segment edge |
+|  | nf-ple-lower_right_triangle | U+E0BA | tray edge |
+|  | nf-ple-forwardslash_separator | U+E0BB | thin segment divider |
+| 󰀦, 󰗡 (M1d) | nf-md-alert, nf-md-check_circle_outline | U+F0026, U+F05E1 | blocked and idle badges |
+| , 󰔟 (M3) | nf-oct-git_pull_request, nf-md-timer_sand | U+F407, U+F051F | PR and CI slot |
+
+#### Command icons
+
+The palette shows each command's icon: `palette.open` , `theme.pick` and `theme.set.*` 󰏘, `agent.new` 󰚩, `pane.split.down` 󰯋, `pane.split.right` 󰯌, `pane.focus.*` 󰓾, `pane.resize.*` 󰘖, `pane.swap.*` 󰓡, `pane.zoom` 󰊓, `pane.close` and `tab.close` 󰅖, `tab.new` 󰝜, `tab.rename` 󰑕, `tab.next`, `tab.prev` and `tab.jump.*` 󰓩, `app.quit` 󰈆.
+
 ### Claude Code integration via hooks
 
 MuxReveal never edits the user's Claude settings. Each agent is launched with a generated settings file passed through `--settings`, plus `MUXREVEAL_PANE` and `MUXREVEAL_SOCK` in the PTY environment.
@@ -423,7 +552,7 @@ v1 ships in five milestones, preceded by a VT spike. Each ends on a gate you can
     - Gate: a written go/no-go with numbers.
 1. **M0 Skeleton.** Module layout, config, theme engine with all four Catppuccin flavors, command palette, empty app shell. Covers TH-1, TH-2, UX-1, UX-2.
     - Gate: the app launches and switches themes live.
-2. **M1 Terminal core.** PTYs, `tuios.dev/vt` adapter, compositor, splits, shell panes, copy mode, mouse and clipboard, hook socket, state badges, persistence and resume. Covers AG-1 to AG-5, AG-7, AG-8 (interface), PR-1 to PR-4, UX-4 to UX-6.
+2. **M1 Terminal core.** PTYs, `tuios.dev/vt` adapter, compositor, splits, tabs, shell panes, copy mode, mouse and clipboard, hook socket, state badges, persistence and resume. Covers AG-1 to AG-5, AG-7, AG-8 (interface), AG-9, PR-1 to PR-4, UX-4 to UX-6.
     - Gate: six busy Claude panes stay smooth at 60 fps, and a reboot brings back the same layout with every session resumed.
 3. **M2 Worktrees and agent diff.** Worktree discovery and creation, branch and turn modes, live updates, file tree, full-file toggle. Covers WT-1, WT-2, DF-1 to DF-6.
     - Gate: a saved file shows in the diff within 300 ms, and turn mode isolates the last turn's changes.

@@ -4,7 +4,7 @@ Update this file at the end of every session: tick what's done, set the next ste
 
 ## Current milestone: M1 Terminal core
 
-Goal: PTYs, the `tuios.dev/vt` adapter, compositor, splits, tabs, shell panes, copy mode, mouse and clipboard, hook socket, state badges, persistence and resume. Covers AG-1 to AG-5, AG-7, AG-8 (interface), PR-1 to PR-4, UX-4 to UX-6. It builds on the spike findings below.
+Goal: PTYs, the `tuios.dev/vt` adapter, compositor, splits, tabs, shell panes, copy mode, mouse and clipboard, hook socket, state badges, persistence and resume. Covers AG-1 to AG-5, AG-7, AG-8 (interface), AG-9, PR-1 to PR-4, UX-4 to UX-6. It builds on the spike findings below.
 
 Gate: six busy Claude panes stay smooth at 60 fps, and a reboot brings back the same layout with every session resumed.
 
@@ -64,7 +64,7 @@ Fidelity limits of the replay: the recordings are 79x31, but the bench lays the 
 
 ### M1b Tabs
 
-Tabs, each with its own split layout, focus and zoom, with new, rename, close, jump and cycle keys; framed panes with titles and Nerd Font icons; a workspace bar on the top row with the tabs and a tray (clock, agents, git, load); a restyled status bar, which-key, palette, confirm and rename. Covers AG-2 and UX-1.
+Tabs, each with its own split layout, focus and zoom, with new, rename, close, jump and cycle keys; framed panes with titles and Nerd Font icons; a workspace bar on the top row with the tabs and a tray (clock, agents, git, load); a restyled status bar, which-key, palette, confirm and rename. Covers AG-2, AG-9 and UX-1.
 
 - [ ] Tabs in the core state
 - [ ] Framed panes with titles and icons
