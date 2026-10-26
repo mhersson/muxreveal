@@ -16,7 +16,7 @@ Live shell and `claude` panes in splits, with focus, resize, zoom and close, ful
 
 - [x] VT adapter on `tuios.dev/vt`
 - [x] Key encoder and paste
-- [ ] PTY processes and pane environment
+- [x] PTY processes and pane environment
 - [ ] Layout state, actions and geometry
 - [ ] Live panes with row cache and sync hold
 - [ ] Compositor

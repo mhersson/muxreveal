@@ -11,9 +11,11 @@ require (
 	github.com/charmbracelet/x/ansi v0.11.9
 	github.com/charmbracelet/x/exp/golden v0.1.0
 	github.com/charmbracelet/x/exp/teatest/v2 v2.0.0-20261025003702-835ad0048169
+	github.com/creack/pty v1.1.24
 	github.com/pelletier/go-toml/v2 v2.4.3
 	github.com/sahilm/fuzzy v0.1.3
 	github.com/spf13/cobra v1.10.2
+	golang.org/x/sys v0.47.0
 	tuios.dev/vt v0.3.1
 )
 
@@ -36,6 +38,5 @@ require (
 	github.com/xo/terminfo v1.0.0 // indirect
 	go.mitchellh.com/libghostty v0.0.0-20260920220152-31b65cdc24cf // indirect
 	golang.org/x/sync v0.22.0 // indirect
-	golang.org/x/sys v0.47.0 // indirect
 	tuios.dev/progstatus v0.1.0 // indirect
 )
