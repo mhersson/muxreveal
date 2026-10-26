@@ -14,6 +14,7 @@ import (
 
 	"github.com/mhersson/muxreveal/internal/core"
 	"github.com/mhersson/muxreveal/internal/ui"
+	"github.com/mhersson/muxreveal/internal/ui/theme"
 )
 
 func main() {
@@ -63,6 +64,9 @@ func run(ctx context.Context, env core.Env, configPath string) (err error) {
 	if err != nil {
 		return err
 	}
+	if _, err := theme.ByName(cfg.Theme); err != nil {
+		return fmt.Errorf("config %s: %w", configPath, err)
+	}
 	f, err := openLog(core.StateDir(env))
 	if err != nil {
 		return err
@@ -74,7 +78,7 @@ func run(ctx context.Context, env core.Env, configPath string) (err error) {
 	}()
 
 	logger := slog.New(slog.NewTextHandler(f, nil))
-	app, err := ui.New(ui.Options{Logger: logger})
+	app, err := ui.New(ui.Options{Logger: logger, Store: core.NewStore(core.State(cfg))})
 	if err != nil {
 		return err
 	}

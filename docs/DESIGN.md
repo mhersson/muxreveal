@@ -316,7 +316,12 @@ The config file is `$XDG_CONFIG_HOME/muxreveal/config.toml` when `XDG_CONFIG_HOM
 - A missing file at the default path means the defaults. A `--config` path that does not exist is an error.
 - The file is strict: invalid TOML, unknown keys and values of the wrong type are errors.
 - MuxReveal prints a config error, naming the file, and exits with status 1 before it takes over the terminal.
+- `theme` is one of `catppuccin-latte`, `catppuccin-frappe`, `catppuccin-macchiato` or `catppuccin-mocha` (default). It sets the startup theme; a live switch lasts for the session. An unknown name is an error.
 - The log is `muxreveal.log` in the state dir (see Persisted state). At startup the previous run's log is kept as `muxreveal.log.1`, replacing any older one.
+
+```toml
+theme = "catppuccin-mocha"
+```
 
 ### Persisted state
 
@@ -345,6 +350,7 @@ Terminal panes pass every key through to the agent, so global actions sit behind
 
 | Key | Action |
 | --- | --- |
+| `q` | Quit |
 | `n` | New agent: pick or create a worktree, then spawn `claude` |
 | `s` / `v` | Split horizontal / vertical (shell in the same cwd; `split_default` in config can flip this) |
 | `h` `j` `k` `l` | Focus pane left, down, up, right |

@@ -21,8 +21,8 @@ design; propose an edit to DESIGN.md instead.
   "Later" list.
 - Start each task in plan mode: list the requirement IDs it covers, the packages
   and files you'll touch, and how you'll test it. Wait for approval.
-- Keep changes small: one requirement, or a coherent slice of one, per branch
-  and PR.
+- One branch and one PR per milestone plan; every task in it is its own reviewed
+  commit with its requirement IDs.
 - Commit messages: Conventional Commits with requirement IDs, e.g.
   `feat(git): turn snapshots via temp index (DF-2)`.
 - Never force-push to `main`. Never merge your own PR.
