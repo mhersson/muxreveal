@@ -4,7 +4,12 @@ import "errors"
 
 // State is the application state; only a Store changes it.
 type State struct {
-	Theme string
+	Theme  string
+	Layout *Node // nil when no pane is open
+	Panes  map[PaneID]Pane
+	Focus  PaneID // "" when no pane is open
+	Zoomed bool   // the focused pane fills the body
+	NextID int    // last pane number handed out
 }
 
 // Action is a state change applied through Store.Dispatch.
@@ -34,12 +39,12 @@ type Store struct {
 
 // NewStore returns a Store holding initial.
 func NewStore(initial State) *Store {
-	return &Store{state: initial}
+	return &Store{state: initial.clone()}
 }
 
 // Dispatch applies a. On error the state is unchanged.
 func (s *Store) Dispatch(a Action) error {
-	next := s.state
+	next := s.state.clone()
 	if err := a.apply(&next); err != nil {
 		return err
 	}
@@ -47,7 +52,7 @@ func (s *Store) Dispatch(a Action) error {
 	return nil
 }
 
-// State returns a copy of the current state.
+// State returns a deep copy of the current state.
 func (s *Store) State() State {
-	return s.state
+	return s.state.clone()
 }

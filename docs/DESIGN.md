@@ -221,6 +221,14 @@ Go 1.27 (`tuios.dev/vt` needs 1.26 or later). The reason for Rust was a proven V
 - tuios encodes Kitty and modifyOtherKeys keys; the legacy encoding is ours: an xterm-style encoder with the `CSI 1;<mod>X` modifier forms, nothing sent for a key it cannot encode, and repeat events encoded like presses. Paste goes through tuios `SanitizePaste`.
 - Every pane PTY, agent or shell, gets `TERM=xterm-256color` and `COLORTERM=truecolor` and never inherits `TMUX` or `TMUX_PANE`, because MuxReveal is its terminal.
 
+### Panes and layout
+
+- The layout is a binary tree in `internal/core`. A leaf is a pane; a split has two children, A (left or top) and B (right or bottom), and a `ratio`, the share of the space A takes. `vertical` splits put the children side by side with a one-column separator; `horizontal` splits stack them. Geometry is integer cells: A gets `floor((W-1)*ratio)` columns (vertical) or `floor(H*ratio)` rows (horizontal), B gets the rest. A side that gets less than one cell is omitted, so a tiny terminal drops panes instead of producing negative sizes.
+- Splits follow vim: `leader s` opens a shell below the focused pane (`horizontal`), `leader v` opens one to the right (`vertical`). The new pane is child B, takes half of the focused pane (ratio 0.5) and gets focus.
+- `h j k l` focus the nearest pane in that direction: least edge distance, then most overlap on the other axis, then top-most or left-most. There is no wrap. `H J K L` move the nearest divider on that axis by 0.05 of its split (`L` and `J` grow the left or top child), clamped to [0.1, 0.9].
+- `leader z` zooms the focused pane to fill the body. Opening a pane, closing a pane, or moving focus clears zoom; a focus move that has nowhere to go keeps it.
+- Closing a pane gives its space to its sibling. Closing the focused pane focuses the first leaf of that sibling; closing another pane keeps focus. Pane IDs are never reused within a session.
+
 ### Claude Code integration via hooks
 
 MuxReveal never edits the user's Claude settings. Each agent is launched with a generated settings file passed through `--settings`, plus `MUXREVEAL_PANE` and `MUXREVEAL_SOCK` in the PTY environment.
@@ -342,6 +350,8 @@ State lives in the platform state dir (`$XDG_STATE_HOME/muxreveal` on Linux, `~/
 }
 ```
 
+A layout node is either `{ "pane": id }` or a split: `split` is `"vertical"` (children side by side) or `"horizontal"` (children stacked), `ratio` is the first child's share, and `children` lists the first child (left or top) before the second.
+
 ## Keymap draft
 
 Terminal panes pass every key through to the agent, so global actions sit behind a leader key, `ctrl+space` by default, which few CLIs use. Review, PR and CI panes aren't terminals, so they take single keys directly. Pressing the leader and waiting 300 ms shows a which-key popup. Everything is remappable in `config.toml`.
@@ -352,7 +362,7 @@ Terminal panes pass every key through to the agent, so global actions sit behind
 | --- | --- |
 | `q` | Quit |
 | `n` | New agent: pick or create a worktree, then spawn `claude` |
-| `s` / `v` | Split horizontal / vertical (shell in the same cwd; `split_default` in config can flip this) |
+| `s` / `v` | Open a shell below / to the right of the focused pane (same cwd; `split_default` in config can flip this) |
 | `h` `j` `k` `l` | Focus pane left, down, up, right |
 | `H` `J` `K` `L` | Resize pane |
 | `z` | Zoom pane |

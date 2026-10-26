@@ -17,7 +17,7 @@ Live shell and `claude` panes in splits, with focus, resize, zoom and close, ful
 - [x] VT adapter on `tuios.dev/vt`
 - [x] Key encoder and paste
 - [x] PTY processes and pane environment
-- [ ] Layout state, actions and geometry
+- [x] Layout state, actions and geometry
 - [ ] Live panes with row cache and sync hold
 - [ ] Compositor
 - [ ] Input routing
@@ -237,5 +237,4 @@ Ideas and requests that came up outside the current milestone go here.
 - Live x/vt streaming check, only if x/vt ever becomes the backend: does Claude's unsynchronized output tear?
 - A cell-level render path that skips Bubble Tea's string re-parse (about half of present), if M1's frame cost grows.
 - Fidelity references outside the x/vt lineage: tmux `capture-pane -e` (styles included) at several checkpoints of each recording, not only the final screen.
-- Replace `core.State(cfg)` in `cmd/muxreveal/main.go` with a small `core.InitialState(cfg Config) State` when Config grows in M1.
 - The palette overlay scrolls by a fixed `MaxRows` and does not use the height left below its top, so on terminals shorter than about 15 rows the last commands are cut off.

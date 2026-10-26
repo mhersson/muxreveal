@@ -78,7 +78,7 @@ func run(ctx context.Context, env core.Env, configPath string) (err error) {
 	}()
 
 	logger := slog.New(slog.NewTextHandler(f, nil))
-	app, err := ui.New(ui.Options{Logger: logger, Store: core.NewStore(core.State(cfg))})
+	app, err := ui.New(ui.Options{Logger: logger, Store: core.NewStore(core.InitialState(cfg))})
 	if err != nil {
 		return err
 	}
