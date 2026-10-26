@@ -1,0 +1,81 @@
+# MuxReveal
+
+A Go TUI that hosts coding agents (Claude Code in v1) in live terminal panes, with live diffs, PR review, CI status, push, open PR and merge beside them. Terminal emulation comes from `tuios.dev/vt`; everything above it is ours.
+
+## Sources of truth
+
+- `docs/DESIGN.md`: requirements (IDs like AG-3, DF-2), architecture, packages, key designs, keymap, milestones. Read it before any change.
+- `docs/STATUS.md`: the current milestone, what's done, what's next, decisions made along the way. Read it at the start of every session and update it before you finish.
+
+If the code and DESIGN.md disagree, stop and ask. Don't silently change the design; propose an edit to DESIGN.md instead.
+
+## Workflow
+
+- Work only on the current milestone in STATUS.md. Anything else goes in its "Later" list.
+- Start each task in plan mode: list the requirement IDs it covers, the packages and files you'll touch, and how you'll test it. Wait for approval.
+- Keep changes small: one requirement, or a coherent slice of one, per branch and PR.
+- Commit messages: Conventional Commits with requirement IDs, e.g. `feat(git): turn snapshots via temp index (DF-2)`.
+- Never force-push to `main`. Never merge your own PR.
+
+## Commands
+
+```sh
+go build ./...
+gofmt -l . && goimports -l .     # must print nothing
+go vet ./...
+golangci-lint run
+go test -race ./...
+go run ./cmd/muxreveal           # run the app
+```
+
+All of formatting, vet, lint and tests must pass before a commit.
+
+## Layout
+
+| Package | Responsibility |
+| --- | --- |
+| `cmd/muxreveal` | Binary: CLI, `hook` subcommand, wiring |
+| `internal/core` | Event bus, state store, actions, config |
+| `internal/ui` | Compositor, layout tree, widgets, keymap, themes, image placement |
+| `internal/term` | PTY plus the `VT` interface; `tuios.dev/vt` adapter |
+| `internal/harness` | `Harness` interface; Claude Code adapter |
+| `internal/git` | Worktrees, turn snapshots, watcher, diff engine, highlighting |
+| `internal/github` | Auth via `go-gh`, GraphQL and REST client, poller, PR actions |
+| `internal/md` | Markdown to styled cells plus image references |
+| `internal/store` | `state.json` and SQLite persistence |
+| `spikes/` | Throwaway experiments; nothing outside `spikes/` imports them |
+
+Dependency rules:
+
+- Only `internal/ui` and `cmd/muxreveal` import Bubble Tea, Lip Gloss or Bubbles.
+- `internal/git`, `internal/github`, `internal/md` and `internal/store` have no UI imports and are testable on their own.
+- Only `internal/core` mutates app state. Services send events to it; the UI renders from it.
+- Only the adapter in `internal/term` imports `tuios.dev/vt`. Everything else uses the `VT` interface.
+
+## Code conventions
+
+- Go 1.26. Idiomatic Go: small interfaces defined where they're used, accept interfaces and return structs, no package-level mutable state.
+- Every blocking call takes a `context.Context` as its first argument. Git, diff, HTTP and file IO never run on the Bubble Tea update loop; they run as `tea.Cmd`s or goroutines that send messages back.
+- Errors: wrap with `fmt.Errorf("...: %w", err)`; sentinel errors with `errors.Is`. No `panic` outside `main` and tests.
+- Every goroutine has an owner and a shutdown path; no leaks on pane close.
+- Logging: `log/slog` to the log file in the state dir. Never print to stdout or stderr, since the TUI owns the terminal.
+- Colors come only from the theme. No hardcoded colors in widgets.
+- Every user action is a named command, so it's reachable from the keymap and the command palette (UX-1, UX-2).
+- Shell out to `git` with explicit arguments (never through `sh -c`), `-z` output where available, and `GIT_OPTIONAL_LOCKS=0` for reads.
+
+## Testing
+
+- New behavior needs a test. Prefer table-driven tests.
+- Rendering: golden files under `testdata/` (`-update` flag to regenerate); `teatest` for Bubble Tea flows.
+- Diff engine: golden-file tests for hunks, word spans and full-file view.
+- Git: tests run against temporary repos created in `t.TempDir()`, never the real repo.
+- GitHub: recorded fixtures with `httptest`; no network in unit tests. Live tests behind a build tag.
+- VT: feed recorded byte streams (including real Claude Code output) and assert on the screen grid.
+
+## Safety rules
+
+- Never modify the user's `~/.claude` settings. Agents get hooks only through a generated `--settings` file (see DESIGN.md).
+- Never touch the user's git index, stash or branches as a side effect. Turn snapshots use a temporary `GIT_INDEX_FILE` and `refs/muxreveal/*` only.
+- Write only to the platform state and cache dirs, worktrees MuxReveal created, and `.git/info/exclude`.
+- Merges always pass the reviewed head `sha`, and every approve or merge needs a confirm step in the UI.
+- Code ported from TUIOS (MIT) keeps its license header and is listed in `THIRD_PARTY.md`.
