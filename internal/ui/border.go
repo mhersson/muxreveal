@@ -104,7 +104,7 @@ func (g *borderGrid) runs(st styles, add func(y int, s segment)) {
 				sb.WriteString(borderGlyph(g.dirs[y*g.w+x]))
 				x++
 			}
-			add(y, segment{start, x - start, st.borderStyle(own).Render(sb.String())})
+			add(y, segment{start, x - start, st.borderRun(own, sb.String())})
 		}
 	}
 }

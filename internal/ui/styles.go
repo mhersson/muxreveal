@@ -32,6 +32,8 @@ type styles struct {
 	popupMuted, popupSubtle lipgloss.Style
 	// The confirm box: its Error border and title, bold question and bold keys.
 	confirmBorder, confirmTitle, confirmQuestion, confirmKey lipgloss.Style
+	// runs memoizes rendered border runs; it is shared by copies of the styles.
+	runs *runCache
 }
 
 func newStyles(t theme.Theme) styles {
@@ -67,7 +69,35 @@ func newStyles(t theme.Theme) styles {
 		confirmTitle:    onPanel.Foreground(ui.Error).Bold(true),
 		confirmQuestion: onPanel.Bold(true),
 		confirmKey:      onPanel.Foreground(ui.Key).Bold(true),
+		runs:            &runCache{},
 	}
+}
+
+// runKey identifies a rendered border run: the style owner and its glyphs.
+type runKey struct {
+	own    uint8
+	glyphs string
+}
+
+// runCache holds rendered border runs, which repeat on every frame. It is only
+// used on the update loop and is dropped whole when it passes runCacheMax.
+type runCache struct {
+	m map[runKey]string
+}
+
+const runCacheMax = 1024
+
+func (s styles) borderRun(own uint8, glyphs string) string {
+	k := runKey{own, glyphs}
+	if r, ok := s.runs.m[k]; ok {
+		return r
+	}
+	if s.runs.m == nil || len(s.runs.m) >= runCacheMax {
+		s.runs.m = make(map[runKey]string)
+	}
+	r := s.borderStyle(own).Render(glyphs)
+	s.runs.m[k] = r
+	return r
 }
 
 func (s styles) borderStyle(own uint8) lipgloss.Style {
