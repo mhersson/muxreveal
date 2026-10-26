@@ -4,13 +4,13 @@ Update this file at the end of every session: tick what's done, set the next ste
 
 ## Current milestone: M1 Terminal core
 
-Goal: PTYs, the `tuios.dev/vt` adapter, compositor, splits, shell panes, copy mode, mouse and clipboard, hook socket, state badges, persistence and resume. Covers AG-1 to AG-5, AG-7, AG-8 (interface), PR-1 to PR-4, UX-4 to UX-6. It builds on the spike findings below.
+Goal: PTYs, the `tuios.dev/vt` adapter, compositor, splits, tabs, shell panes, copy mode, mouse and clipboard, hook socket, state badges, persistence and resume. Covers AG-1 to AG-5, AG-7, AG-8 (interface), PR-1 to PR-4, UX-4 to UX-6. It builds on the spike findings below.
 
 Gate: six busy Claude panes stay smooth at 60 fps, and a reboot brings back the same layout with every session resumed.
 
-M1 ships as three plans, one PR each.
+M1 ships as four plans, one PR each.
 
-### M1a Panes
+### M1a Panes (done, PR #7)
 
 Live shell and `claude` panes in splits, with focus, resize, zoom, swap and close, full key and paste forwarding, and a replay bench. Covers AG-1, AG-2, AG-3, AG-7.
 
@@ -62,13 +62,26 @@ Inputs: `p2.rec` (136 s, file size 94,552 bytes) and `p3.rec` (117 s, file size 
 
 Fidelity limits of the replay: the recordings are 79x31, but the bench lays the panes out in the 240x64 grid, so they replay at 77-83 columns by 30-31 rows (119-120 columns by 62 rows at 2 panes, 30-31 rows at 4 panes). Recorded resizes are skipped; none fall inside any window.
 
-### M1b Copy, mouse and clipboard
+### M1b Tabs
 
-After M1a. Covers AG-4, UX-4, UX-5, UX-6.
+Tabs, each with its own split layout, focus and zoom, with new, rename, close, jump and cycle keys; framed panes with titles and Nerd Font icons; a workspace bar on the top row with the tabs and a tray (clock, agents, git, load); a restyled status bar, which-key, palette, confirm and rename. Covers AG-2 and UX-1.
 
-### M1c Agents and persistence
+- [ ] Tabs in the core state
+- [ ] Framed panes with titles and icons
+- [ ] Workspace bar tabs, per-tab layout and status bar
+- [ ] Tab commands, rename and close
+- [ ] Grouped which-key, palette restyle and bench check
+- [ ] Tray modules
 
-After M1a. Covers AG-5, AG-7 shim, AG-8, PR-1 to PR-4.
+Gate: hidden tabs keep their panes running at their own size, the six-pane bench p99 stays at most 8 ms and idle CPU at most 1 % of one core with the tray on.
+
+### M1c Copy, mouse and clipboard
+
+Part 1 (new files only) is done on its own branch and runs alongside M1b; Part 2 rebases onto `main` after M1b merges. Covers AG-4, UX-4, UX-5, UX-6.
+
+### M1d Agents and persistence
+
+After M1b and M1c. Saves the tabs and adds the AG-5 state badges to pane frames and tabs. Covers AG-5, AG-7 shim, AG-8, PR-1 to PR-4.
 
 ## Spike - VT (done)
 
@@ -242,7 +255,7 @@ Build M1's terminal layer on `tuios.dev/vt` v0.3.1 (pure Go) behind the `VT` int
 
 ## Next
 
-M1b Copy, mouse and clipboard and M1c Agents and persistence, in parallel after M1a merges.
+M1b Tabs on `feat/m1b-tabs`. Then M1c Part 2 (Copy, mouse and clipboard) after M1b merges, then M1d Agents and persistence.
 
 ## Done
 
@@ -260,7 +273,8 @@ M1b Copy, mouse and clipboard and M1c Agents and persistence, in parallel after 
 | 2026-10-26 | Adopt the VT spike findings into DESIGN.md: per-row string cache, near-zero idle CPU, own sync hold, own legacy key encoder, pane PTY environment, x/vt fallback gaps, cell-level render path as the lever | Measured in the spike; M1 builds on them |
 | 2026-10-26 | Target Go 1.27.3 (go.mod `go 1.27.3`) | Latest Go release; the local toolchain, golangci-lint and goimports are built with it; `tuios.dev/vt` needs only 1.26 |
 | 2026-10-26 | Every key without the leader goes to the focused pane, `ctrl+c` included; `ctrl+space q` still runs `app.quit` | Terminal panes need every key, `ctrl+c` for the agent above all |
-| 2026-10-26 | M1 ships as three plans and PRs: Panes, then Copy/mouse/clipboard and Agents/persistence in parallel | Keeps each PR reviewable and uses both workers |
+| 2026-10-26 | M1 ships as several plans and PRs, Panes first, with two workers running plans in parallel where their files do not overlap | Keeps each PR reviewable and uses both workers |
+| 2026-10-26 | Tabs join M1 as M1b; copy/mouse/clipboard becomes M1c, agents and persistence M1d | Tabs change the state shape that persistence saves |
 
 ## Later
 
