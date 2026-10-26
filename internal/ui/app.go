@@ -68,7 +68,9 @@ type App struct {
 	recordDir string // empty unless recording
 	icons     bool   // draw Nerd Font glyphs
 	started   bool   // the first size message was handled; it opens the first pane only once
-	clock     clock  // the sync hold's time source
+	clock     clock  // the sync hold's and the tray's time source
+	tray      trayState
+	load      loadSampler // nil on platforms without a load reading
 	start     func(ctx context.Context, c term.Command, cols, rows int) (proc, error)
 
 	// ctx is the lifetime of the pane processes; Close cancels it.
@@ -116,7 +118,9 @@ func New(opts Options) (*App, error) {
 		log: opts.Logger, store: opts.Store, reg: reg, keymap: km,
 		panes: map[core.PaneID]*pane{}, outerFocused: true,
 		getenv: getenv, cwd: cwd, recordDir: opts.RecordDir, icons: opts.Icons, clock: realClock{}, start: termStart,
+		load: newSysLoad(),
 	}
+	a.tray.gitRun = runGit
 	if err := a.sync(); err != nil {
 		return nil, err
 	}
@@ -156,6 +160,9 @@ func (a *App) dispatch(act core.Action) error {
 	st := a.store.State()
 	a.dropGoneTab(st)
 	a.reportFocusChange(prev.Focus, st.Tab().Focus)
+	if cmd := a.syncGit(); cmd != nil {
+		a.later = append(a.later, cmd)
+	}
 	if st.Tab().ID != prev.ID {
 		a.renderStale(st)
 	}
@@ -186,7 +193,7 @@ func (a *App) dropGoneTab(st core.State) {
 
 // Init implements tea.Model.
 func (a *App) Init() tea.Cmd {
-	return nil
+	return a.initTray()
 }
 
 // Update implements tea.Model.
@@ -251,6 +258,14 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.onCwd(msg)
 	case paneCwdDueMsg:
 		return a, a.onCwdDue(msg.id)
+	case clockMsg:
+		return a, a.onClock(msg)
+	case gitTickMsg:
+		return a, a.onGitTick()
+	case gitMsg:
+		return a, a.onGit(msg)
+	case loadMsg:
+		return a, a.onLoad(msg)
 	case palette.ChosenMsg:
 		return a, a.chosen(msg.ID)
 	case palette.ClosedMsg:

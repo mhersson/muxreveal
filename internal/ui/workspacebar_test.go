@@ -114,25 +114,28 @@ func TestWorkspaceBar(t *testing.T) {
 		sel   int
 		icons bool
 		want  string // the bar without styling, before the right padding
+		tray  string // the tray without styling; the bar ends with it
 	}{
 		{
 			"one tab", []tabSpec{{core.KindShell, "/w/proj", ""}}, 0, true,
-			" 1 " + shellIcon + " proj " + edgeSolid,
+			" 1 " + shellIcon + " proj " + edgeSolid, "",
 		},
 		{
 			"three tabs, active in the middle",
 			[]tabSpec{{core.KindShell, "/w/a", "api"}, {core.KindAgent, "/w/web", ""}, {core.KindShell, "", ""}}, 1, true,
 			" 1 " + shellIcon + " api " + edgeSolid + " 2 " + agent + " web " + edgeSolid + " 3 " + shellIcon + " shell " + edgeSolid,
+			trayOpen + " " + agent + " ",
 		},
 		{
 			"inactive neighbours get a thin edge",
 			[]tabSpec{{core.KindShell, "/w/a", "one"}, {core.KindShell, "/w/b", "two"}, {core.KindShell, "/w/c", "three"}}, 2, true,
-			" 1 " + shellIcon + " one " + edgeThin + " 2 " + shellIcon + " two " + edgeSolid + " 3 " + shellIcon + " three " + edgeSolid,
+			" 1 " + shellIcon + " one " + edgeThin + " 2 " + shellIcon + " two " + edgeSolid + " 3 " + shellIcon + " three " + edgeSolid, "",
 		},
 		{
 			"icons off",
 			[]tabSpec{{core.KindShell, "/w/a", "one"}, {core.KindAgent, "/w/b", "two"}}, 0, false,
 			" 1 one   2 two ",
+			" agents 1 ",
 		},
 	}
 
@@ -149,7 +152,8 @@ func TestWorkspaceBar(t *testing.T) {
 				t.Errorf("width = %d, want 60", got)
 			}
 
-			if want := tt.want + strings.Repeat(" ", 60-lipgloss.Width(tt.want)); plain != want {
+			pad := 60 - lipgloss.Width(tt.want) - lipgloss.Width(tt.tray)
+			if want := tt.want + strings.Repeat(" ", pad) + tt.tray; plain != want {
 				t.Errorf("bar = %q, want %q", plain, want)
 			}
 		})

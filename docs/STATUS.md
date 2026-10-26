@@ -59,6 +59,8 @@ Caveat (a one-off scratch measurement, not a gate run): the bench builds one `Vi
 
 Idle: six shell panes each running `sleep 3600`, 240x64 in a private tmux, 30 s after a 5 s warm-up, `/proc/<pid>/stat` utime+stime: **0.30 %** of one core.
 
+Idle, re-checked with the tabs and the tray (clock, agents, git and load sampling): same setup, **0.53 %** of one core.
+
 Inputs: `p2.rec` (136 s, file size 94,552 bytes) and `p3.rec` (117 s, file size 204,497 bytes) are new recordings of two live `claude` panes (Claude Code 2.1.310, no `TMUX` in its environment, text-only prompts), recorded at 79x31 in a 159x33 tmux; both carry `38;2;` truecolor SGRs. `pane-2.rec` is the spike's recording.
 
 Fidelity limits of the replay: the recordings are 79x31, but the bench lays the panes out in the 240x64 grid, so they replay at 77-83 columns by 30-31 rows (119-120 columns by 62 rows at 2 panes, 30-31 rows at 4 panes). Recorded resizes are skipped; none fall inside any window.
@@ -72,7 +74,7 @@ Tabs, each with its own split layout, focus and zoom, with new, rename, close, j
 - [x] Workspace bar tabs, per-tab layout and status bar
 - [x] Tab commands, rename and close
 - [x] Grouped which-key, palette restyle and bench check
-- [ ] Tray modules
+- [x] Tray modules
 
 Gate: hidden tabs keep their panes running at their own size, the six-pane bench p99 stays at most 8 ms and idle CPU at most 1 % of one core with the tray on.
 
@@ -291,3 +293,5 @@ Ideas and requests that came up outside the current milestone go here.
 - Pass the guest's cursor shape (DECSCUSR) through to the outer terminal; panes show the default cursor today.
 - The palette overlay scrolls by a fixed `MaxRows` and does not use the height left below its top, so on terminals shorter than about 15 rows the last commands are cut off.
 - On a terminal whose Backspace sends 0x08 (or Enter sends 0x0a) without the Kitty keyboard protocol, leader then Backspace swaps left (and leader then that Enter swaps down); Ghostty and Kitty are unaffected.
+- Check the macOS tray memory figure on the operator's Mac: it subtracts only free pages, so file cache may count as used.
+- Rename on an automatically named tab starts blank; consider the automatic name as a Muted placeholder.

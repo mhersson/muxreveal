@@ -11,6 +11,11 @@ const (
 	iconAlert  = "\U000F002A" // nf-md-alert_outline
 	iconFolder = "\U000F024B" // nf-md-folder
 	iconRename = "\U000F0455" // nf-md-rename_box
+	iconClock  = "\U000F0954" // nf-md-clock_outline
+	iconGit    = "\uE725"     // nf-dev-git_branch
+	iconDirty  = "\uF444"     // nf-oct-dot_fill
+	iconLoad   = "\U000F0EE0" // nf-md-cpu_64_bit
+	iconMem    = "\U000F035B" // nf-md-memory
 
 	iconPanes     = "\U000F0BCC" // nf-md-view_split_vertical
 	iconSplitDown = "\U000F0BCB" // nf-md-view_split_horizontal

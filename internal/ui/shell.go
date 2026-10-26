@@ -115,18 +115,17 @@ func (a *App) statusBar(width int, st core.State) string {
 		m = statusMode{bg: ui.Warning, icon: iconLeader, text: a.keymap.leader}
 	}
 
-	modeBg := m.bg
 	label := " "
 	if a.icons {
 		label += m.icon + " "
 	}
 
 	label += m.text + " "
-	mode := paint(ui.OnAccent, modeBg, true).Render(label)
+	mode := paint(ui.OnAccent, m.bg, true).Render(label)
 	modeW := ansi.StringWidth(label)
 
 	if a.icons {
-		mode += paint(modeBg, ui.Bar, false).Render(edgeSolid)
+		mode += paint(m.bg, ui.Bar, false).Render(edgeSolid)
 		modeW++
 	}
 

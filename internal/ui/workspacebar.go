@@ -258,9 +258,6 @@ func (a *App) tabInfos() []tabInfo {
 	return out
 }
 
-// trayModules lists the modules the tray offers, left to right.
-func (a *App) trayModules() []trayModule { return nil }
-
 // workspaceBar draws row 0: the tab segments and the tray, exactly width cells.
 func (a *App) workspaceBar(width int) string {
 	return renderBar(a.tabInfos(), a.store.State().Active, a.trayModules(), width, a.icons, a.current().theme.UI)
