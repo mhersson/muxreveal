@@ -80,3 +80,26 @@ func TestRootRejectsUnknownTheme(t *testing.T) {
 		t.Errorf("state dir has %d entries, want none", len(entries))
 	}
 }
+
+func TestRecordFlagIsHidden(t *testing.T) {
+	cmd := newRootCmd()
+
+	f := cmd.Flags().Lookup("record")
+	if f == nil || !f.Hidden {
+		t.Fatalf("record flag = %+v, want a hidden flag", f)
+	}
+
+	var help strings.Builder
+
+	cmd.SetOut(&help)
+	cmd.SetErr(&help)
+	cmd.SetArgs([]string{"--help"})
+
+	if err := cmd.ExecuteContext(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+
+	if strings.Contains(help.String(), "--record") {
+		t.Fatalf("help lists the hidden flag:\n%s", help.String())
+	}
+}

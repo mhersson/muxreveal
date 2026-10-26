@@ -41,6 +41,7 @@ type pane struct {
 	id    core.PaneID
 	proc  proc
 	clock clock
+	tap   *tap // nil unless recording; closed after the read loop
 
 	dirty  chan struct{} // cap 1: at most one outstanding notification
 	exited chan struct{} // closed when the read loop ends
@@ -63,8 +64,14 @@ type pane struct {
 	closeErr   error
 }
 
+// paneOption configures newPane.
+type paneOption func(*pane)
+
+// withTap records the pane's output and resizes.
+func withTap(t *tap) paneOption { return func(p *pane) { p.tap = t } }
+
 // newPane starts the emulator, renders every row once and starts the read loop.
-func newPane(id core.PaneID, p proc, cols, rows int, c clock) *pane {
+func newPane(id core.PaneID, p proc, cols, rows int, c clock, opts ...paneOption) *pane {
 	pn := &pane{
 		id:     id,
 		proc:   p,
@@ -73,6 +80,10 @@ func newPane(id core.PaneID, p proc, cols, rows int, c clock) *pane {
 		exited: make(chan struct{}),
 		vt:     term.NewVT(cols, rows, p),
 		rows:   make([]string, rows),
+	}
+
+	for _, o := range opts {
+		o(pn)
 	}
 
 	for y := range pn.rows {
@@ -92,6 +103,7 @@ func (p *pane) readLoop() {
 	for {
 		n, err := p.proc.Read(buf)
 		if n > 0 {
+			p.tap.data(buf[:n])
 			p.feed(buf[:n])
 		}
 
@@ -192,6 +204,7 @@ func (p *pane) resize(cols, rows int) bool {
 	}
 
 	p.vt.Resize(cols, rows)
+	p.tap.resize(cols, rows)
 	// A dead child cannot take a resize; its exit is reported by wait.
 	_ = p.proc.Resize(cols, rows)
 
@@ -307,6 +320,10 @@ func (p *pane) close() error {
 		p.mu.Unlock()
 
 		p.wg.Wait()
+
+		if terr := p.tap.close(); err == nil {
+			err = terr
+		}
 
 		p.mu.Lock()
 		defer p.mu.Unlock()

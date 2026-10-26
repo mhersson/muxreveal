@@ -22,9 +22,43 @@ Live shell and `claude` panes in splits, with focus, resize, zoom and close, ful
 - [x] Compositor
 - [x] Input routing
 - [x] Pane commands and lifecycle
-- [ ] Replay bench and gate
+- [x] Replay bench and gate
 
 Gate: the app hosts shell and `claude` panes in splits, and the replay bench shows six busy Claude panes inside the frame budget.
+
+#### M1a gate results
+
+Gate: six-pane bench p99 <= 8 ms and idle CPU <= 1 % of one core. **Both met.** The bench gate rests on runs a, b and c; in b and c every pane's window lies in a busy stretch, and a is the spike's gate configuration (see below); the mixed run is supplementary.
+
+Bench: the real `App` with replay panes on a virtual clock at 60 FPS, 240x64, median of 3 runs, feed + update + view + present per drawn frame (`go test -tags bench ./internal/ui -run 'TestBench$'` with `MUXREVEAL_BENCH_RECORDINGS`, `_START`, `_LENGTH`, `_STAGGER`). Pane i replays [start + i x stagger, + length). Each row is the run whose p99 is the median of the 3. The component p99s are per-component and do not sum to the frame p99.
+
+| Run | Recording | Start | Length | Stagger |
+| --- | --- | --- | --- | --- |
+| a | spike `pane-2.rec` (its gate window, like-for-like with the spike) | 91 s | 30 s | 5 s |
+| b | new `p3.rec` | 72 s | 7 s | 0.5 s |
+| c | new `p2.rec` | 45 s | 4 s | 0.5 s |
+
+| Run | Panes | Frames | Bytes fed | p50 | p95 | p99 | max | CPU % | feed / update+view / present p99 | GCs |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| a | 2 | 238 | 386,215 | 2.38 ms | 4.86 ms | 5.83 ms | 6.11 ms | 2.3 | 0.11 / 1.31 / 5.10 ms | 6 |
+| a | 4 | 420 | 781,212 | 2.32 ms | 4.67 ms | 5.58 ms | 7.66 ms | 3.8 | 0.13 / 0.94 / 4.45 ms | 8 |
+| a | 6 | 593 | 1,127,049 | 2.35 ms | 4.84 ms | **6.06 ms** | 7.89 ms | 5.6 | 0.18 / 1.14 / 4.64 ms | 13 |
+| b | 2 | 61 | 111,141 | 2.35 ms | 2.95 ms | 4.59 ms | 4.59 ms | 2.1 | 0.07 / 0.69 / 3.93 ms | 1 |
+| b | 4 | 104 | 225,640 | 2.19 ms | 2.83 ms | 4.59 ms | 5.62 ms | 3.5 | 0.09 / 0.72 / 3.86 ms | 2 |
+| b | 6 | 128 | 330,780 | 2.37 ms | 4.74 ms | **5.47 ms** | 5.50 ms | 4.9 | 0.13 / 0.99 / 4.37 ms | 3 |
+| c | 2 | 44 | 91,262 | 3.24 ms | 5.12 ms | 5.68 ms | 5.68 ms | 3.8 | 0.18 / 1.40 / 5.08 ms | 1 |
+| c | 4 | 80 | 188,627 | 2.21 ms | 4.89 ms | 5.67 ms | 5.67 ms | 6.0 | 0.27 / 1.10 / 4.30 ms | 1 |
+| c | 6 | 107 | 284,741 | 2.55 ms | 5.56 ms | **6.51 ms** | 6.74 ms | 8.5 | 0.24 / 1.21 / 5.00 ms | 2 |
+
+Busy rule (the spike's): a second is busy when its bytes exceed 25 % of that recording's peak per-second rate. By it `p2.rec` (peak 14,633 B/s at 49 s) is busy 45-51 s (7 s) and `p3.rec` (peak 13,582 B/s at 42 s) is busy 36-43 s (8 s) and 72-82 s (11 s), so Claude's text answers are short bursts and runs b (pane 6 at 74.5-81.5 s) and c (pane 6 at 47.5-51.5 s) are short truecolor windows with every pane inside a busy stretch. `pane-2.rec` (peak 12,591 B/s at 134 s) is busy 93-135 s and 140-145 s. Run a is the spike's gate configuration: the sustained 30 s reply, in 256 colour (no truecolor SGRs), with windows [91 + 5i, 121 + 5i) s. Two exceptions: pane 0 starts with a 91-93 s spinner lead-in, and panes 4 and 5 cross the quiet 136-140 s. Run a is like-for-like with the spike's gate (593 frames, 1,127,049 bytes at six panes; spike p99 5.04 ms on the headless model, 6.06 ms here through the real `App`). Present is again the cost centre. GC pause totals stay under 1 ms per run.
+
+Supplementary, mixed (partly idle: recordings `p2`, `p3`, `pane-2` in turn, start 37 s, length 10 s, stagger 0.5 s, the pooled-busiest window; some panes sit at a spinner or idle in it): 2 panes 94 frames, p99 7.01 ms; 4 panes 208 frames, p99 4.89 ms; 6 panes 270 frames, 215,690 bytes, p99 5.52 ms, CPU 7.4 %.
+
+Idle: six shell panes each running `sleep 3600`, 240x64 in a private tmux, 30 s after a 5 s warm-up, `/proc/<pid>/stat` utime+stime: **0.30 %** of one core.
+
+Inputs: `p2.rec` (136 s, file size 94,552 bytes) and `p3.rec` (117 s, file size 204,497 bytes) are new recordings of two live `claude` panes (Claude Code 2.1.310, no `TMUX` in its environment, text-only prompts), recorded at 79x31 in a 159x33 tmux; both carry `38;2;` truecolor SGRs. `pane-2.rec` is the spike's recording.
+
+Fidelity limits of the replay: the recordings are 79x31, but the bench lays the panes out in the 240x64 grid, so they replay at 77-83 columns by 30-31 rows (119-120 columns by 62 rows at 2 panes, 30-31 rows at 4 panes). Recorded resizes are skipped; none fall inside any window.
 
 ### M1b Copy, mouse and clipboard
 
@@ -237,4 +271,5 @@ Ideas and requests that came up outside the current milestone go here.
 - Live x/vt streaming check, only if x/vt ever becomes the backend: does Claude's unsynchronized output tear?
 - A cell-level render path that skips Bubble Tea's string re-parse (about half of present), if M1's frame cost grows.
 - Fidelity references outside the x/vt lineage: tmux `capture-pane -e` (styles included) at several checkpoints of each recording, not only the final screen.
+- Pass the guest's cursor shape (DECSCUSR) through to the outer terminal; panes show the default cursor today.
 - The palette overlay scrolls by a fixed `MaxRows` and does not use the height left below its top, so on terminals shorter than about 15 rows the last commands are cut off.

@@ -329,6 +329,7 @@ The config file is `$XDG_CONFIG_HOME/muxreveal/config.toml` when `XDG_CONFIG_HOM
 - The file is strict: invalid TOML, unknown keys and values of the wrong type are errors.
 - MuxReveal prints a config error, naming the file, and exits with status 1 before it takes over the terminal.
 - `theme` is one of `catppuccin-latte`, `catppuccin-frappe`, `catppuccin-macchiato` or `catppuccin-mocha` (default). It sets the startup theme; a live switch lasts for the session. An unknown name is an error.
+- The hidden `--record <dir>` flag (diagnostics, not shown in `--help`) writes each pane's PTY output and resizes to `<dir>/<pane id>.rec`. It creates the directory with mode 0700 and each file with mode 0600, never overwrites an existing file, and logs and stops recording a pane on a write error. The files hold everything the guest printed. They exist for replay bench inputs and VT fixtures.
 - The log is `muxreveal.log` in the state dir (see Persisted state). At startup the previous run's log is kept as `muxreveal.log.1`, replacing any older one.
 
 ```toml

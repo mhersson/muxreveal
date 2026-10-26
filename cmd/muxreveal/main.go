@@ -33,7 +33,7 @@ func main() {
 
 func newRootCmd() *cobra.Command {
 	env, envErr := core.DefaultEnv()
-	var configPath string
+	var configPath, recordDir string
 	cmd := &cobra.Command{
 		Use:           "muxreveal",
 		Short:         "Coding agents in terminal panes, with their diffs and pull requests beside them",
@@ -50,7 +50,7 @@ func newRootCmd() *cobra.Command {
 					return fmt.Errorf("config: %w", err)
 				}
 			}
-			return run(cmd.Context(), env, configPath)
+			return run(cmd.Context(), env, configPath, recordDir)
 		},
 	}
 	defaultConfig := ""
@@ -58,12 +58,15 @@ func newRootCmd() *cobra.Command {
 		defaultConfig = core.ConfigPath(env)
 	}
 	cmd.Flags().StringVar(&configPath, "config", defaultConfig, "config file")
+	cmd.Flags().StringVar(&recordDir, "record", "", "write each pane's terminal output to a recording in this directory")
+	// Diagnostics for bench inputs and VT fixtures, not a user feature.
+	_ = cmd.Flags().MarkHidden("record")
 	return cmd
 }
 
 // run loads the config and opens the log before the TUI takes over the
 // terminal, so their errors can still be printed.
-func run(ctx context.Context, env core.Env, configPath string) (err error) {
+func run(ctx context.Context, env core.Env, configPath, recordDir string) (err error) {
 	cfg, err := core.LoadConfig(configPath)
 	if err != nil {
 		return err
@@ -91,6 +94,8 @@ func run(ctx context.Context, env core.Env, configPath string) (err error) {
 		Store:  core.NewStore(core.InitialState(cfg)),
 		Getenv: os.Getenv,
 		Cwd:    cwd,
+
+		RecordDir: recordDir,
 	})
 	if err != nil {
 		return err

@@ -22,32 +22,6 @@ var t0 = time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 
 const testDeadline = 5 * time.Second
 
-type fakeClock struct {
-	mu sync.Mutex
-	t  time.Time
-}
-
-func (c *fakeClock) Now() time.Time {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	return c.t
-}
-
-func (c *fakeClock) Set(t time.Time) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	c.t = t
-}
-
-func (c *fakeClock) Advance(d time.Duration) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	c.t = c.t.Add(d)
-}
-
 // fakeProc feeds the pane from an io.Pipe and records what the pane writes.
 type fakeProc struct {
 	out  *io.PipeReader

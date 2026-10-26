@@ -88,7 +88,20 @@ func (a *App) openPane(kind core.PaneKind, split core.Split) tea.Cmd {
 
 	a.log.Debug("pane started", "pane", id, "kind", kind, "took", time.Since(began))
 
-	pn := newPane(id, p, cols, rows, a.clock)
+	var opts []paneOption
+
+	if a.recordDir != "" {
+		tp, err := openTap(a.log, a.recordDir, id, cols, rows, a.clock.Now)
+		if err != nil {
+			// A recording problem never blocks the pane.
+			a.log.Warn("recording disabled for pane", "pane", id, "err", err)
+			a.notice = fmt.Sprintf("recording is off for %s: %v", id, err)
+		} else {
+			opts = append(opts, withTap(tp))
+		}
+	}
+
+	pn := newPane(id, p, cols, rows, a.clock, opts...)
 	a.panes[id] = pn
 
 	if err := a.dispatch(act); err != nil {

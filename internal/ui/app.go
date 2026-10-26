@@ -27,6 +27,8 @@ type Options struct {
 	Getenv func(string) string
 	// Cwd is the launch directory, where the first pane starts; empty means os.Getwd.
 	Cwd string
+	// RecordDir, when set, receives one recording per pane (diagnostics); empty means off.
+	RecordDir string
 }
 
 // App is the root Bubble Tea model.
@@ -54,11 +56,12 @@ type App struct {
 	panes        map[core.PaneID]*pane // runtime panes, keyed like State.Panes
 	outerFocused bool                  // the outer terminal has focus; true until a BlurMsg
 
-	getenv  func(string) string
-	cwd     string
-	started bool  // the first size message was handled; it opens the first pane only once
-	clock   clock // the sync hold's time source
-	start   func(ctx context.Context, c term.Command, cols, rows int) (proc, error)
+	getenv    func(string) string
+	cwd       string
+	recordDir string // empty unless recording
+	started   bool   // the first size message was handled; it opens the first pane only once
+	clock     clock  // the sync hold's time source
+	start     func(ctx context.Context, c term.Command, cols, rows int) (proc, error)
 
 	// ctx is the lifetime of the pane processes; Close cancels it.
 	ctx     context.Context
@@ -86,6 +89,11 @@ func New(opts Options) (*App, error) {
 		}
 		cwd = wd
 	}
+	if opts.RecordDir != "" {
+		if err := os.MkdirAll(opts.RecordDir, recordDirMode); err != nil {
+			return nil, fmt.Errorf("ui: recording directory: %w", err)
+		}
+	}
 	reg, err := newRegistry(defaultCommands())
 	if err != nil {
 		return nil, fmt.Errorf("build command registry: %w", err)
@@ -99,7 +107,7 @@ func New(opts Options) (*App, error) {
 	a := &App{
 		log: opts.Logger, store: opts.Store, reg: reg, keymap: km,
 		panes: map[core.PaneID]*pane{}, outerFocused: true,
-		getenv: getenv, cwd: cwd, clock: realClock{}, start: termStart,
+		getenv: getenv, cwd: cwd, recordDir: opts.RecordDir, clock: realClock{}, start: termStart,
 	}
 	if err := a.sync(); err != nil {
 		return nil, err
