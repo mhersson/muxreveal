@@ -116,13 +116,15 @@ Idle (CPU % of one core, 30 s window after 5 s warmup, one run per backend):
 
 #### Where frame time goes
 
-| Panes | tuios feed / render / present p99 | x/vt feed / render / present p99 | Present share (tuios, x/vt) |
+| Panes | tuios feed / render / present p99 | x/vt feed / render / present p99 | Present share of summed frame time (tuios, x/vt) |
 | --- | --- | --- | --- |
-| 2 | 0.15 / 0.33 / 2.04 ms | 0.30 / 0.15 / 1.90 ms | 86 %, 83 % |
-| 4 | 0.15 / 0.38 / 3.30 ms | 0.28 / 0.21 / 2.83 ms | 90 %, 88 % |
-| 6 | 0.16 / 0.41 / 4.53 ms | 0.43 / 0.25 / 4.14 ms | 92 %, 91 % |
+| 2 | 0.15 / 0.33 / 2.04 ms | 0.30 / 0.15 / 1.90 ms | 85.5 %, 82.7 % |
+| 4 | 0.15 / 0.38 / 3.30 ms | 0.28 / 0.21 / 2.83 ms | 90.1 %, 87.9 % |
+| 6 | 0.16 / 0.41 / 4.53 ms | 0.43 / 0.25 / 4.14 ms | 92.0 %, 90.7 % |
 
-- **Present** (Bubble Tea's path: parse the whole view string into a cell buffer, diff it, write) is 83-92 % of bench frame time in the gate configuration (85-95 % in the mixed one). Bubble Tea v2.1's `View.Content` is a string, so every changed frame is re-parsed in full.
+The p99 columns are medians of 3 runs. The share is not derived from them: it is present's time summed over every drawn frame of a run divided by the summed frame time (feed + render + present) of that run, then the median of 3 runs, taken from the `Total` fields of the bench JSON (`bench.md` does not print them).
+
+- **Present** (Bubble Tea's path: parse the whole view string into a cell buffer, diff it, write) takes 83-92 % of summed frame time in the gate configuration, and 85-95 % in the mixed one by the same method. Bubble Tea v2.1's `View.Content` is a string, so every changed frame is re-parsed in full.
 - **Render** (pane rows to strings, compose): x/vt's touched rows save about 0.15 ms p99 at 6 panes. tuios re-renders all 31 rows of a dirty pane.
 - **Feed** (emulator parse): tuios parses 2-3x faster than x/vt.
 - The emulator choice moves less than 0.4 ms of a 5 ms p99. Bubble Tea's string renderer is the cost centre.
@@ -174,7 +176,7 @@ Proposals only; DESIGN.md is unchanged.
 4. **Terminal layer, input:** add "tuios encodes Kitty and modifyOtherKeys keys; the legacy encoding is ours (ported from x/vt, MIT). Paste goes through tuios `SanitizePaste`."
 5. **Terminal layer, child environment:** add "Agent PTYs get `TERM=xterm-256color` and `COLORTERM=truecolor`, and never inherit `TMUX` or `TMUX_PANE`, because MuxReveal is their terminal."
 6. **Tech stack, VT emulation row:** after "fallback `charmbracelet/x/vt`", add "(same speed, but no Kitty keyboard, Kitty graphics, OSC 52 or OSC 133, and Claude Code does not use synchronized output on it)".
-7. **Risks, frame-rate row:** add to the mitigation "Measured in the spike: 6 busy panes at p99 5 ms; about 90 % of frame time is Bubble Tea re-parsing the view string. If M1's chrome pushes p99 toward the budget, draw pane cells directly instead of through a string (Bubble Tea v2.1's `View.Content` is a string, so this needs a cell-level path)."
+7. **Risks, frame-rate row:** add to the mitigation "Measured in the spike: 6 busy panes at p99 5 ms; 83-92 % of summed frame time is Bubble Tea re-parsing the view string. If M1's chrome pushes p99 toward the budget, draw pane cells directly instead of through a string (Bubble Tea v2.1's `View.Content` is a string, so this needs a cell-level path)."
 
 ## Next
 
