@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/url"
 	"os"
+	"slices"
 	"sync"
 
 	uv "github.com/charmbracelet/ultraviolet"
@@ -24,16 +25,23 @@ type VT interface {
 	CellAt(x, y int) *uv.Cell // nil outside the grid
 	Cursor() (pos uv.Position, visible bool)
 	ScrollbackLen() int
-	SyncState() (open bool, serial uint64) // raw DEC 2026; serial bumps on each closed-to-open edge
-	Title() string                         // last OSC 0/2 title
-	WorkingDir() string                    // last OSC 7 path (file URL decoded to a path), "" if none
-	FocusReporting() bool                  // DECSET 1004
-	KeyModes() KeyModes                    // for EncodeKey
-	BracketedPaste() bool                  // DECSET 2004
-	SetDefaultColors(fg, bg color.Color)   // answers OSC 10 and 11 queries; mode 2031 guests get a notice on change
-	SendBytes(b []byte)                    // raw bytes queued on the reply stream, ordered with query replies
-	SendKey(k uv.KeyPressEvent)            // EncodeKey with the current KeyModes; unencodable keys send nothing
-	Close() error                          // idempotent: emulator Close, then wait for the drain
+	ScrollbackLine(i int) []uv.Cell // copy of history line i (0 oldest); nil out of range
+	ScrollbackWrapped(i int) bool   // history line i soft-wraps into i+1
+	RowWrapped(y int) bool          // live row y soft-wraps into y+1
+	AltScreen() bool
+	MouseTracking() bool                                    // guest enabled any of mouse modes 9, 1000, 1001, 1002, 1003
+	SendMouse(ev uv.MouseEvent)                             // encoded per the guest's modes onto the reply stream; nothing when tracking is off
+	SetClipboardHandler(fn func(selection, content string)) // guest OSC 52 writes; runs on the goroutine calling Write under the pane lock, so it must only enqueue
+	SyncState() (open bool, serial uint64)                  // raw DEC 2026; serial bumps on each closed-to-open edge
+	Title() string                                          // last OSC 0/2 title
+	WorkingDir() string                                     // last OSC 7 path (file URL decoded to a path), "" if none
+	FocusReporting() bool                                   // DECSET 1004
+	KeyModes() KeyModes                                     // for EncodeKey
+	BracketedPaste() bool                                   // DECSET 2004
+	SetDefaultColors(fg, bg color.Color)                    // answers OSC 10 and 11 queries; mode 2031 guests get a notice on change
+	SendBytes(b []byte)                                     // raw bytes queued on the reply stream, ordered with query replies
+	SendKey(k uv.KeyPressEvent)                             // EncodeKey with the current KeyModes; unencodable keys send nothing
+	Close() error                                           // idempotent: emulator Close, then wait for the drain
 }
 
 // KeyModes are the guest's keyboard modes that change how keys are encoded.
@@ -48,7 +56,27 @@ func NewVT(cols, rows int, reply io.Writer) VT {
 	host, _ := os.Hostname()
 	t := &tuiosVT{em: tvt.NewWithScrollback(cols, rows, ScrollbackLines), host: host}
 	// SetCallbacks replaces the whole set, so add callbacks here.
-	t.em.SetCallbacks(tvt.Callbacks{
+	t.applyCallbacks()
+	t.drain = startDrain(t.em, reply)
+
+	return t
+}
+
+type tuiosVT struct {
+	em        tvt.Terminal
+	clipboard func(selection, content string)
+	sync      syncTracker
+	drain     *drain
+	title     string
+	cwd       string
+	host      string // local hostname; OSC 7 from any other host is ignored
+}
+
+// applyCallbacks installs the whole callback set; SetCallbacks replaces it, so
+// every callback is listed here. ClipboardQuery stays unset: guests cannot read
+// the clipboard.
+func (t *tuiosVT) applyCallbacks() {
+	cb := tvt.Callbacks{
 		EnableMode:  t.sync.enable,
 		DisableMode: t.sync.disable,
 		Title:       func(s string) { t.title = s },
@@ -57,21 +85,39 @@ func NewVT(cols, rows int, reply io.Writer) VT {
 				t.cwd = path
 			}
 		},
-	})
-	t.drain = startDrain(t.em, reply)
+	}
+	if t.clipboard != nil {
+		cb.ClipboardSet = t.clipboard
+	}
 
-	return t
+	t.em.SetCallbacks(cb)
 }
 
-type tuiosVT struct {
-	em    tvt.Terminal
-	sync  syncTracker
-	drain *drain
-	title string
-	cwd   string
-	host  string // local hostname; OSC 7 from any other host is ignored
+func (t *tuiosVT) SetClipboardHandler(fn func(selection, content string)) {
+	t.clipboard = fn
+	t.applyCallbacks()
 }
 
+func (t *tuiosVT) ScrollbackLine(i int) []uv.Cell {
+	// The emulator may return a slice it caches.
+	return slices.Clone(t.em.ScrollbackLine(i))
+}
+
+func (t *tuiosVT) ScrollbackWrapped(i int) bool {
+	wrapped, known := t.em.ScrollbackSoftWrapped(i)
+
+	return wrapped && known
+}
+
+func (t *tuiosVT) RowWrapped(y int) bool {
+	wrapped, known := t.em.RowSoftWrapped(y)
+
+	return wrapped && known
+}
+
+func (t *tuiosVT) AltScreen() bool             { return t.em.IsAltScreen() }
+func (t *tuiosVT) MouseTracking() bool         { return t.em.HasMouseMode() }
+func (t *tuiosVT) SendMouse(ev uv.MouseEvent)  { t.em.SendMouse(ev) }
 func (t *tuiosVT) Write(p []byte) (int, error) { return t.em.Write(p) }
 func (t *tuiosVT) Resize(cols, rows int)       { t.em.Resize(cols, rows) }
 func (t *tuiosVT) Size() (cols, rows int)      { return t.em.Width(), t.em.Height() }
