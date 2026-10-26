@@ -21,7 +21,7 @@ Live shell and `claude` panes in splits, with focus, resize, zoom and close, ful
 - [x] Live panes with row cache and sync hold
 - [x] Compositor
 - [x] Input routing
-- [ ] Pane commands and lifecycle
+- [x] Pane commands and lifecycle
 - [ ] Replay bench and gate
 
 Gate: the app hosts shell and `claude` panes in splits, and the replay bench shows six busy Claude panes inside the frame budget.

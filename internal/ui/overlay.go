@@ -141,14 +141,22 @@ func (a *App) highlighted(id string) {
 	a.overlay.pal.SetTheme(th)
 }
 
-// overlayOver draws the overlay over base, centred horizontally with its top
+// overlayOver draws the palette over base, centred horizontally with its top
 // at a quarter of the height. It is clipped to the body rows, never wrapped.
 func overlayOver(base string, width, height int, pal palette.Model) string {
 	if width < 2 || height < 2 {
 		return base
 	}
 	pw := min(maxOverlayWidth, width)
-	lines := strings.Split(pal.View(pw), "\n")
+	return overlayLines(base, width, height, strings.Split(pal.View(pw), "\n"), pw)
+}
+
+// overlayLines draws lines pw cells wide over base, centred horizontally with
+// the top at a quarter of the height, clipped to the body rows.
+func overlayLines(base string, width, height int, lines []string, pw int) string {
+	if width < 2 || height < 2 {
+		return base
+	}
 	y := height / 4
 	if room := height - 1 - y; len(lines) > room {
 		lines = lines[:max(room, 0)]

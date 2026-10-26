@@ -231,7 +231,7 @@ func TestCursorViewOutsideContent(t *testing.T) {
 	a, procs := framedApp(t, 100, 30, shellSpec("/a", ""))
 	// The pane is still 100 wide when the layout shrinks to 40: the cursor is clipped.
 	feedAndWait(t, a.panes["p1"], procs["p1"], "\x1b[3;60Hx")
-	sized(t, a, 40, 30)
+	a.width = 40
 
 	if cur := a.cursorView(); cur != nil {
 		t.Errorf("cursorView() = %+v for a cursor outside the content rect, want nil", cur)

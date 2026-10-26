@@ -56,6 +56,19 @@ func TestDefaultCommands(t *testing.T) {
 	fixed := []struct{ id, title string }{
 		{"palette.open", "Open command palette"},
 		{"theme.pick", "Pick theme"},
+		{"agent.new", "New agent pane"},
+		{"pane.split.down", "Split: shell below"},
+		{"pane.split.right", "Split: shell right"},
+		{"pane.focus.left", "Focus left"},
+		{"pane.focus.down", "Focus down"},
+		{"pane.focus.up", "Focus up"},
+		{"pane.focus.right", "Focus right"},
+		{"pane.resize.left", "Resize left"},
+		{"pane.resize.down", "Resize down"},
+		{"pane.resize.up", "Resize up"},
+		{"pane.resize.right", "Resize right"},
+		{"pane.zoom", "Zoom pane"},
+		{"pane.close", "Close pane"},
 		{"app.quit", "Quit MuxReveal"},
 	}
 	if len(cmds) != len(fixed)+len(theme.All()) {

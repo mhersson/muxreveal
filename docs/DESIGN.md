@@ -228,6 +228,10 @@ Go 1.27 (`tuios.dev/vt` needs 1.26 or later). The reason for Rust was a proven V
 - `h j k l` focus the nearest pane in that direction: least edge distance, then most overlap on the other axis, then top-most or left-most. There is no wrap. `H J K L` move the nearest divider on that axis by 0.05 of its split (`L` and `J` grow the left or top child), clamped to [0.1, 0.9].
 - `leader z` zooms the focused pane to fill the body. Opening a pane, closing a pane, or moving focus clears zoom; a focus move that has nowhere to go keeps it.
 - Closing a pane gives its space to its sibling. Closing the focused pane focuses the first leaf of that sibling; closing another pane keeps focus. Pane IDs are never reused within a session.
+- MuxReveal starts with one shell pane in the launch directory. Closing the last pane shows the welcome card; it never quits by itself.
+- Shell panes run `$SHELL -l`. `leader n` opens an agent pane to the right of the focused pane, in its cwd, running `$SHELL -l -i -c 'claude; exec "$SHELL" -l'`, so leaving Claude leaves a shell in the pane. `$SHELL` falls back to `/bin/sh`.
+- `leader x` closes the focused pane at once; for an agent pane it first asks in a confirm overlay (`y` or `enter` confirms, `n` or `esc` cancels). `leader q` quits and asks first when any agent pane is open. A pane whose process exits closes without asking, and so does an open confirm about it. The confirm owns every key while it is open.
+- The cwd a pane shows and its splits inherit is the last OSC 7 path the pane reported, else on Linux the `/proc` cwd of the terminal's foreground process group, else the cwd the pane started in. It is looked up off the UI loop, at most every 500 ms per pane.
 
 ### Claude Code integration via hooks
 
@@ -362,7 +366,7 @@ Terminal panes pass every key through to the agent, so global actions sit behind
 | --- | --- |
 | `ctrl+space` | Send ctrl+space to the pane |
 | `q` | Quit |
-| `n` | New agent: pick or create a worktree, then spawn `claude` |
+| `n` | New agent pane in the focused pane's cwd (worktree picker from M2) |
 | `s` / `v` | Open a shell below / to the right of the focused pane (same cwd; `split_default` in config can flip this) |
 | `h` `j` `k` `l` | Focus pane left, down, up, right |
 | `H` `J` `K` `L` | Resize pane |

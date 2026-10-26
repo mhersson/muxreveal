@@ -46,6 +46,12 @@ type pane struct {
 	exited chan struct{} // closed when the read loop ends
 	wg     sync.WaitGroup
 
+	// Update-goroutine state, outside mu.
+	holdArmed bool      // a holdTick is outstanding
+	cwdAt     time.Time // start of the last cwd lookup
+	cwdBusy   bool      // a lookup is running
+	cwdWait   bool      // a deferred lookup is scheduled
+
 	mu         sync.Mutex
 	vt         term.VT
 	rows       []string
@@ -119,8 +125,9 @@ func (p *pane) feed(b []byte) {
 	}
 }
 
-// wait blocks until the pane has output or its output ended. The App re-arms
-// it after every message. Pending output is reported before the exit.
+// wait blocks until the pane has output or its process ended (output EOF or
+// the process being reaped, whichever comes first). The App re-arms it after
+// every dirty message. Pending output is reported before the exit.
 func (p *pane) wait() tea.Cmd {
 	return func() tea.Msg {
 		select {
@@ -133,6 +140,8 @@ func (p *pane) wait() tea.Cmd {
 		case <-p.dirty:
 			return paneDirtyMsg{id: p.id}
 		case <-p.exited:
+			return paneExitedMsg{id: p.id}
+		case <-p.proc.Done():
 			return paneExitedMsg{id: p.id}
 		}
 	}
@@ -228,11 +237,17 @@ func (p *pane) title() string {
 	return p.vt.Title()
 }
 
-// workingDir prefers the guest's OSC 7 report, then the process's own cwd.
+// workingDir prefers the guest's OSC 7 report, then the process's own cwd. A
+// closed pane has none.
 func (p *pane) workingDir() string {
 	p.mu.Lock()
 	d := p.vt.WorkingDir()
+	closed := p.closed
 	p.mu.Unlock()
+
+	if closed {
+		return ""
+	}
 
 	if d != "" {
 		return d

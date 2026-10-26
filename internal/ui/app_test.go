@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -13,6 +15,7 @@ import (
 	"github.com/charmbracelet/x/exp/golden"
 
 	"github.com/mhersson/muxreveal/internal/core"
+	"github.com/mhersson/muxreveal/internal/term"
 )
 
 func testLogger() *slog.Logger {
@@ -24,6 +27,11 @@ func newThemedApp(t *testing.T, name string) *App {
 	app, err := New(Options{Logger: testLogger(), Store: core.NewStore(core.State{Theme: name})})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
+	}
+	// M0 tests assert the empty-layout shell, so the first size message must not open a pane.
+	app.started = true
+	app.start = func(context.Context, term.Command, int, int) (proc, error) {
+		return nil, errors.New("test app does not start processes")
 	}
 	return app
 }
@@ -111,7 +119,7 @@ func TestLeader(t *testing.T) {
 		{"leader then q quits", []tea.KeyPressMsg{keyLeader, keyRune('q')}, true, true, false, ""},
 		{"leader then esc", []tea.KeyPressMsg{keyLeader, keyEsc}, false, false, false, ""},
 		{"leader twice runs no command", []tea.KeyPressMsg{keyLeader, keyLeader}, false, false, false, ""},
-		{"leader then unbound", []tea.KeyPressMsg{keyLeader, keyRune('x')}, false, false, false, "ctrl+space x is not bound"},
+		{"leader then unbound", []tea.KeyPressMsg{keyLeader, keyRune('w')}, false, false, false, "ctrl+space w is not bound"},
 		{"leader alone", []tea.KeyPressMsg{keyLeader}, false, true, true, ""},
 		{"idle ctrl+c is not an app command", []tea.KeyPressMsg{{Code: 'c', Mod: tea.ModCtrl}}, false, false, false, ""},
 		{"ctrl+c while pending", []tea.KeyPressMsg{keyLeader, {Code: 'c', Mod: tea.ModCtrl}}, false, false, false, "ctrl+space ctrl+c is not bound"},
@@ -147,7 +155,7 @@ func TestLeader(t *testing.T) {
 func TestNoticeClearsOnNextKey(t *testing.T) {
 	a := newTestApp(t)
 	sized(t, a, 100, 30)
-	press(a, keyLeader, keyRune('x'))
+	press(a, keyLeader, keyRune('w'))
 	if a.notice == "" {
 		t.Fatal("no notice after an unbound key")
 	}
@@ -234,9 +242,14 @@ func TestWhichKeySizes(t *testing.T) {
 			}
 			plain := ansi.Strip(content)
 			switch sz[0] {
-			case 100, 40:
+			case 100:
 				if !strings.Contains(plain, "╭─ ctrl+space") || !strings.Contains(plain, "│ q  Quit MuxReveal       │") {
 					t.Errorf("popup not drawn:\n%s", plain)
+				}
+			case 40:
+				// The popup is taller than the body: its top rows show, the rest is clipped.
+				if !strings.Contains(plain, "╭─ ctrl+space") || !strings.Contains(plain, "│ :  Open command palette │") {
+					t.Errorf("popup top not drawn:\n%s", plain)
 				}
 			case 20:
 				if !strings.Contains(plain, "╭─ ctrl+space") || strings.Contains(plain, "╮") {

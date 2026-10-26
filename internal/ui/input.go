@@ -7,9 +7,12 @@ import (
 	"github.com/mhersson/muxreveal/internal/core"
 )
 
-// handleKey routes a key press: the open overlay first, then the leader state
+// handleKey routes a key press: an open confirm first, then the open overlay, then the leader state
 // machine, then the focused pane.
 func (a *App) handleKey(msg tea.KeyPressMsg) tea.Cmd {
+	if a.confirm != nil {
+		return a.handleConfirmKey(msg)
+	}
 	if a.overlay != nil {
 		return a.updateOverlay(msg)
 	}
@@ -21,8 +24,12 @@ func (a *App) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 	return nil
 }
 
-// handlePaste sends pasted text to the open overlay, else to the focused pane.
+// handlePaste sends pasted text to the open overlay, else to the focused pane;
+// an open confirm drops it.
 func (a *App) handlePaste(msg tea.PasteMsg) tea.Cmd {
+	if a.confirm != nil {
+		return nil
+	}
 	if a.overlay != nil {
 		return a.updateOverlay(msg)
 	}

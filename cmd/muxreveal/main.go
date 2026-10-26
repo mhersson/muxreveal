@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/spf13/cobra"
@@ -16,6 +17,9 @@ import (
 	"github.com/mhersson/muxreveal/internal/ui"
 	"github.com/mhersson/muxreveal/internal/ui/theme"
 )
+
+// closeTimeout bounds how long quitting waits for pane processes to end.
+const closeTimeout = 3 * time.Second
 
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -78,7 +82,16 @@ func run(ctx context.Context, env core.Env, configPath string) (err error) {
 	}()
 
 	logger := slog.New(slog.NewTextHandler(f, nil))
-	app, err := ui.New(ui.Options{Logger: logger, Store: core.NewStore(core.InitialState(cfg))})
+	cwd, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("launch directory: %w", err)
+	}
+	app, err := ui.New(ui.Options{
+		Logger: logger,
+		Store:  core.NewStore(core.InitialState(cfg)),
+		Getenv: os.Getenv,
+		Cwd:    cwd,
+	})
 	if err != nil {
 		return err
 	}
@@ -87,6 +100,12 @@ func run(ctx context.Context, env core.Env, configPath string) (err error) {
 	// ctx is the only signal handler, so SIGINT and SIGTERM both end the run
 	// cleanly instead of racing Bubble Tea's own handler.
 	_, err = tea.NewProgram(app, tea.WithContext(ctx), tea.WithoutSignalHandler()).Run()
+	// The context may be cancelled already, so the close gets its own deadline.
+	closeCtx, cancel := context.WithTimeout(context.Background(), closeTimeout)
+	defer cancel()
+	if cerr := app.Close(closeCtx); cerr != nil {
+		logger.Error("close panes", "err", cerr)
+	}
 	if err != nil && ctx.Err() == nil {
 		logger.Error("run", "err", err)
 		return fmt.Errorf("run: %w", err)

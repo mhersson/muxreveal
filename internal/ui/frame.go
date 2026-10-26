@@ -71,12 +71,7 @@ func (a *App) frameAt(g geometry) string {
 	bar := barState{leader: a.keymap.leader, pending: a.pending, notice: a.notice}
 	st := a.store.State()
 	if st.Layout == nil {
-		hints := a.hints()
-		full := make([]hint, len(hints))
-		for i, h := range hints {
-			full[i] = hint{key: a.keymap.leader + " " + h.key, title: h.title}
-		}
-		return shell(a.width, a.height, a.theme, lk.styles, lk.sample, full, bar)
+		return shell(a.width, a.height, a.theme, lk.styles, lk.sample, a.welcomeHints(), bar)
 	}
 
 	rows := make([][]segment, max(a.height-1, 0))
@@ -134,6 +129,21 @@ func (a *App) frameAt(g geometry) string {
 	}
 	lines = append(lines, statusBar(a.width, a.theme, lk.styles, bar))
 	return strings.Join(lines, "\n")
+}
+
+// welcomeHints lists the commands that make sense with no pane open, with
+// their full key sequences.
+func (a *App) welcomeHints() []hint {
+	ids := []string{"palette.open", "agent.new", "pane.split.down", "pane.split.right", "theme.pick", "app.quit"}
+	hints := make([]hint, 0, len(ids))
+	for _, id := range ids {
+		key, ok := a.keymap.keyFor(id)
+		c, found := a.reg.get(id)
+		if ok && found {
+			hints = append(hints, hint{key: key, title: c.title})
+		}
+	}
+	return hints
 }
 
 // spaces is n body-coloured blank cells.
@@ -199,11 +209,11 @@ func cleanTitle(t string) string {
 }
 
 // cursorView places the focused pane's cursor on screen; nil when the guest
-// hides it, it falls outside the pane, or an overlay or the which-key popup is open.
+// hides it, it falls outside the pane, or an overlay, a confirm or the which-key popup is open.
 func (a *App) cursorView() *tea.Cursor { return a.cursorAt(a.geometry()) }
 
 func (a *App) cursorAt(g geometry) *tea.Cursor {
-	if a.overlay != nil || a.popup {
+	if a.overlay != nil || a.popup || a.confirm != nil {
 		return nil
 	}
 	st := a.store.State()

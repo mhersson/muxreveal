@@ -53,6 +53,11 @@ func (r *registry) all() []command {
 }
 
 func defaultCommands() []command {
+	// In the order of the h j k l keys.
+	dirs := []struct {
+		name string
+		dir  core.Dir
+	}{{"left", core.Left}, {"down", core.Down}, {"up", core.Up}, {"right", core.Right}}
 	cmds := []command{{
 		id:    "palette.open",
 		title: "Open command palette",
@@ -62,10 +67,45 @@ func defaultCommands() []command {
 		title: "Pick theme",
 		run:   func(a *App) tea.Cmd { a.openThemePicker(); return nil },
 	}, {
+		id:    "agent.new",
+		title: "New agent pane",
+		run:   func(a *App) tea.Cmd { return a.openPane(core.KindAgent, core.SplitVertical) },
+	}, {
+		id:    "pane.split.down",
+		title: "Split: shell below",
+		run:   func(a *App) tea.Cmd { return a.openPane(core.KindShell, core.SplitHorizontal) },
+	}, {
+		id:    "pane.split.right",
+		title: "Split: shell right",
+		run:   func(a *App) tea.Cmd { return a.openPane(core.KindShell, core.SplitVertical) },
+	}}
+	for _, d := range dirs {
+		cmds = append(cmds, command{
+			id:    "pane.focus." + d.name,
+			title: "Focus " + d.name,
+			run:   func(a *App) tea.Cmd { return a.act(core.FocusDir{Dir: d.dir}) },
+		})
+	}
+	for _, d := range dirs {
+		cmds = append(cmds, command{
+			id:    "pane.resize." + d.name,
+			title: "Resize " + d.name,
+			run:   func(a *App) tea.Cmd { return a.act(core.ResizeDir{Dir: d.dir}) },
+		})
+	}
+	cmds = append(cmds, command{
+		id:    "pane.zoom",
+		title: "Zoom pane",
+		run:   func(a *App) tea.Cmd { return a.act(core.ToggleZoom{}) },
+	}, command{
+		id:    "pane.close",
+		title: "Close pane",
+		run:   (*App).closeFocused,
+	}, command{
 		id:    "app.quit",
 		title: "Quit MuxReveal",
-		run:   func(*App) tea.Cmd { return tea.Quit },
-	}}
+		run:   (*App).quit,
+	})
 	for _, th := range theme.All() {
 		cmds = append(cmds, command{
 			id:    "theme.set." + th.Name,

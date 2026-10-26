@@ -2,15 +2,19 @@
 package ui
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
+	"sync"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
 	uv "github.com/charmbracelet/ultraviolet"
 
 	"github.com/mhersson/muxreveal/internal/core"
+	"github.com/mhersson/muxreveal/internal/term"
 	"github.com/mhersson/muxreveal/internal/ui/palette"
 	"github.com/mhersson/muxreveal/internal/ui/theme"
 )
@@ -19,6 +23,10 @@ import (
 type Options struct {
 	Logger *slog.Logger
 	Store  *core.Store
+	// Getenv reads the environment for the pane shell ($SHELL); nil means os.Getenv.
+	Getenv func(string) string
+	// Cwd is the launch directory, where the first pane starts; empty means os.Getwd.
+	Cwd string
 }
 
 // App is the root Bubble Tea model.
@@ -40,10 +48,22 @@ type App struct {
 	sample []string
 
 	overlay *overlay
-	preview *look // theme picker preview; nil unless previewing
+	preview *look    // theme picker preview; nil unless previewing
+	confirm *confirm // yes/no question; owns every key while open
 
 	panes        map[core.PaneID]*pane // runtime panes, keyed like State.Panes
 	outerFocused bool                  // the outer terminal has focus; true until a BlurMsg
+
+	getenv  func(string) string
+	cwd     string
+	started bool  // the first size message was handled; it opens the first pane only once
+	clock   clock // the sync hold's time source
+	start   func(ctx context.Context, c term.Command, cols, rows int) (proc, error)
+
+	// ctx is the lifetime of the pane processes; Close cancels it.
+	ctx     context.Context
+	cancel  context.CancelFunc
+	closing sync.WaitGroup // pane closes running off the update loop
 }
 
 // New returns the root model. It fails when the store's theme is unknown.
@@ -53,6 +73,18 @@ func New(opts Options) (*App, error) {
 	}
 	if opts.Store == nil {
 		return nil, errors.New("ui: Options.Store is nil")
+	}
+	getenv := opts.Getenv
+	if getenv == nil {
+		getenv = os.Getenv
+	}
+	cwd := opts.Cwd
+	if cwd == "" {
+		wd, err := os.Getwd()
+		if err != nil {
+			return nil, fmt.Errorf("ui: launch directory: %w", err)
+		}
+		cwd = wd
 	}
 	reg, err := newRegistry(defaultCommands())
 	if err != nil {
@@ -64,10 +96,15 @@ func New(opts Options) (*App, error) {
 			return nil, fmt.Errorf("ui: binding %q names unknown command %q", b.key, b.command)
 		}
 	}
-	a := &App{log: opts.Logger, store: opts.Store, reg: reg, keymap: km, panes: map[core.PaneID]*pane{}, outerFocused: true}
+	a := &App{
+		log: opts.Logger, store: opts.Store, reg: reg, keymap: km,
+		panes: map[core.PaneID]*pane{}, outerFocused: true,
+		getenv: getenv, cwd: cwd, clock: realClock{}, start: termStart,
+	}
 	if err := a.sync(); err != nil {
 		return nil, err
 	}
+	a.ctx, a.cancel = context.WithCancel(context.Background())
 	return a, nil
 }
 
@@ -119,6 +156,15 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		a.width, a.height = msg.Width, msg.Height
 		a.log.Debug("window size", "width", msg.Width, "height", msg.Height)
+		var cmds []tea.Cmd
+		if !a.started {
+			a.started = true
+			if a.store.State().Layout == nil {
+				cmds = append(cmds, a.openPane(core.KindShell, core.SplitVertical))
+			}
+		}
+		cmds = append(cmds, a.relayout())
+		return a, tea.Batch(cmds...)
 	case tea.KeyPressMsg:
 		return a, a.handleKey(msg)
 	case tea.PasteMsg:
@@ -129,6 +175,16 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.BlurMsg:
 		a.outerFocused = false
 		a.sendToFocused(func(p *pane) { p.sendFocus(false) })
+	case paneDirtyMsg:
+		return a, a.onPaneDirty(msg.id)
+	case holdExpiredMsg:
+		return a, a.onHoldExpired(msg.id)
+	case paneExitedMsg:
+		return a, a.onPaneExited(msg.id)
+	case paneCwdMsg:
+		a.onCwd(msg)
+	case paneCwdDueMsg:
+		return a, a.onCwdDue(msg.id)
 	case palette.ChosenMsg:
 		return a, a.chosen(msg.ID)
 	case palette.ClosedMsg:
@@ -204,6 +260,9 @@ func (a *App) View() tea.View {
 	}
 	if a.overlay != nil {
 		content = overlayOver(content, a.width, a.height, a.overlay.pal)
+	}
+	if a.confirm != nil {
+		content = overlayConfirm(content, a.width, a.height, *a.confirm, lk.styles)
 	}
 	v := tea.NewView(content)
 	v.AltScreen = true
