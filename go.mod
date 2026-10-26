@@ -3,6 +3,7 @@ module github.com/mhersson/muxreveal
 go 1.27.3
 
 require (
+	charm.land/bubbles/v2 v2.2.1
 	charm.land/bubbletea/v2 v2.1.0
 	charm.land/lipgloss/v2 v2.0.6
 	github.com/alecthomas/chroma/v2 v2.27.0
@@ -10,10 +11,12 @@ require (
 	github.com/charmbracelet/x/exp/golden v0.1.0
 	github.com/charmbracelet/x/exp/teatest/v2 v2.0.0-20261025003702-835ad0048169
 	github.com/pelletier/go-toml/v2 v2.4.3
+	github.com/sahilm/fuzzy v0.1.3
 	github.com/spf13/cobra v1.10.2
 )
 
 require (
+	github.com/atotto/clipboard v0.1.4 // indirect
 	github.com/aymanbagabas/go-udiff v0.4.1 // indirect
 	github.com/charmbracelet/colorprofile v0.4.3 // indirect
 	github.com/charmbracelet/ultraviolet v0.0.0-20261008173134-6b8d4baf91b4 // indirect
