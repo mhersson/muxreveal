@@ -51,12 +51,21 @@ func (k keymap) lookup(key string) (string, bool) {
 	return "", false
 }
 
-// keyFor returns the full key sequence for a command, e.g. "ctrl+space q".
-func (k keymap) keyFor(command string) (string, bool) {
+// keyOf returns the key a command is bound to after the leader, e.g. "q".
+func (k keymap) keyOf(command string) (string, bool) {
 	for _, b := range k.bindings {
 		if b.command == command {
-			return k.leader + " " + b.key, true
+			return b.key, true
 		}
 	}
 	return "", false
+}
+
+// keyFor returns the full key sequence for a command, e.g. "ctrl+space q".
+func (k keymap) keyFor(command string) (string, bool) {
+	key, ok := k.keyOf(command)
+	if !ok {
+		return "", false
+	}
+	return k.leader + " " + key, true
 }

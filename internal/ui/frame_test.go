@@ -234,7 +234,7 @@ func TestFrameMinimumBody(t *testing.T) {
 		a, _ := framedApp(t, sz[0], sz[1], shellSpec("/a", "x"))
 
 		lines := strings.Split(ansi.Strip(a.View().Content), "\n")
-		for _, l := range lines[:len(lines)-1] {
+		for _, l := range lines[1 : len(lines)-1] {
 			if strings.TrimSpace(l) != "" {
 				t.Errorf("%v: body line %q, want blank", sz, l)
 			}
@@ -242,9 +242,9 @@ func TestFrameMinimumBody(t *testing.T) {
 	}
 }
 
-// topBorder is the first line of the frame without styling.
+// topBorder is the top row of the frame, under the workspace bar, without styling.
 func topBorder(a *App) string {
-	return ansi.Strip(strings.Split(a.View().Content, "\n")[0])
+	return ansi.Strip(strings.Split(a.View().Content, "\n")[1])
 }
 
 // fill pads prefix with border cells to w cells.
@@ -339,13 +339,13 @@ func TestTitleColours(t *testing.T) {
 			start := func(r core.Rect) int { return r.X + 1 + 1 + 2 } // after "─ icon "
 
 			// Focused p1: icon and title bold in the kind colour, cwd Fg.
-			assertCell(t, vt, start(p1)-2, 0, tt.kindC, true)
-			assertCell(t, vt, start(p1), 0, tt.kindC, true)
-			assertCell(t, vt, start(p1)+len(title)+3, 0, ui.Fg, false)
+			assertCell(t, vt, start(p1)-2, 1, tt.kindC, true)
+			assertCell(t, vt, start(p1), 1, tt.kindC, true)
+			assertCell(t, vt, start(p1)+len(title)+3, 1, ui.Fg, false)
 			// Unfocused p2: Muted title, Subtle cwd, the icon still in the kind colour.
-			assertCell(t, vt, start(p2)-2, 0, tt.kindC, true)
-			assertCell(t, vt, start(p2), 0, ui.Muted, false)
-			assertCell(t, vt, start(p2)+len(title)+3, 0, ui.Subtle, false)
+			assertCell(t, vt, start(p2)-2, 1, tt.kindC, true)
+			assertCell(t, vt, start(p2), 1, ui.Muted, false)
+			assertCell(t, vt, start(p2)+len(title)+3, 1, ui.Subtle, false)
 		})
 	}
 }
@@ -451,8 +451,8 @@ func TestCursorView(t *testing.T) {
 		t.Fatal("cursorView() = nil, want the focused pane's cursor")
 	}
 
-	if cur.X != 50+5 || cur.Y != 1+2 {
-		t.Errorf("cursor = (%d, %d), want (55, 3)", cur.X, cur.Y)
+	if cur.X != 50+5 || cur.Y != 2+2 {
+		t.Errorf("cursor = (%d, %d), want (55, 4)", cur.X, cur.Y)
 	}
 
 	if err := a.dispatch(core.ToggleZoom{}); err != nil {
@@ -460,8 +460,8 @@ func TestCursorView(t *testing.T) {
 	}
 
 	// Zoomed, p2 fills the inner rect, so the cursor is offset by the left frame column and the top border.
-	if cur := a.cursorView(); cur == nil || cur.X != 6 || cur.Y != 3 {
-		t.Errorf("zoomed cursor = %+v, want (6, 3)", cur)
+	if cur := a.cursorView(); cur == nil || cur.X != 6 || cur.Y != 4 {
+		t.Errorf("zoomed cursor = %+v, want (6, 4)", cur)
 	}
 
 	a.overlay = &overlay{}

@@ -11,9 +11,10 @@ import (
 	"github.com/mhersson/muxreveal/internal/core"
 )
 
-// bodyRect is the area above the status bar.
+// bodyRect is the area between the workspace bar on row 0 and the status bar
+// on the last row.
 func bodyRect(width, height int) core.Rect {
-	return core.Rect{W: width, H: height - 1}
+	return core.Rect{Y: 1, W: width, H: max(height-2, 0)}
 }
 
 // minFrame is the smallest body, in rows and columns, that has room for a frame.
@@ -48,18 +49,36 @@ func (a *App) layoutRects() map[core.PaneID]core.Rect {
 
 func (a *App) geometry() geometry {
 	st := a.store.State()
-	t := st.Tab()
+
+	return geometry{rects: a.layoutIn(st, st.Active)}
+}
+
+// tabRects lays tab i out in the inner rect with its own zoom: a zoomed tab's
+// focused pane gets the whole inner rect.
+func (a *App) tabRects(i int) map[core.PaneID]core.Rect {
+	return a.layoutIn(a.store.State(), i)
+}
+
+func (a *App) layoutIn(st core.State, i int) map[core.PaneID]core.Rect {
+	if i < 0 || i >= len(st.Tabs) {
+		return nil
+	}
+
+	t := st.Tabs[i]
 	inner := innerRect(bodyRect(a.width, a.height))
+
 	if t.Zoomed {
 		if _, ok := st.Panes[t.Focus]; ok {
-			g := geometry{rects: map[core.PaneID]core.Rect{}}
+			rects := map[core.PaneID]core.Rect{}
 			if inner.W >= 1 && inner.H >= 1 {
-				g.rects[t.Focus] = inner
+				rects[t.Focus] = inner
 			}
-			return g
+
+			return rects
 		}
 	}
-	return geometry{rects: core.Rects(t.Layout, inner)}
+
+	return core.Rects(t.Layout, inner)
 }
 
 // segment is a run of cells already styled, starting at column x.
@@ -68,80 +87,114 @@ type segment struct {
 	text string
 }
 
-// frameAt draws the body and the status bar: exactly height lines of exactly
-// width cells. An empty layout shows the welcome card.
+// frameAt draws the whole screen: the workspace bar, the body and the status
+// bar, exactly height lines of exactly width cells. Height 1 is the status bar
+// only and height 2 the two bars. An empty tab shows the welcome card.
 func (a *App) frameAt(g geometry) string {
 	if a.width <= 0 || a.height <= 0 {
 		return ""
 	}
+
 	lk := a.current()
-	bar := barState{leader: a.keymap.leader, pending: a.pending, notice: printable(a.notice)}
 	st := a.store.State()
-	if st.Tab().Layout == nil {
-		return shell(a.width, a.height, a.theme, lk.styles, lk.sample, a.welcomeHints(), bar)
+	lines := make([]string, 0, a.height)
+
+	if a.height >= 2 {
+		lines = append(lines, a.workspaceBar(a.width))
 	}
 
-	rows := make([][]segment, max(a.height-1, 0))
+	if bodyH := a.height - 2; bodyH > 0 {
+		if st.Tab().Layout == nil {
+			lines = append(lines, strings.Split(renderBody(a.width, bodyH, lk.styles, lk.sample, a.welcomeHints()), "\n")...)
+		} else {
+			lines = append(lines, a.frameBody(g, st, lk)...)
+		}
+	}
+
+	lines = append(lines, a.statusBar(a.width, st))
+
+	return strings.Join(lines, "\n")
+}
+
+// frameBody draws the body rows between the two bars: the frames, titles and
+// pane content.
+func (a *App) frameBody(g geometry, st core.State, lk look) []string {
+	rows := make([][]segment, a.height)
 	add := func(y int, s segment) {
 		if y >= 0 && y < len(rows) && s.w > 0 {
 			rows[y] = append(rows[y], s)
 		}
 	}
 
-	grid := newBorderGrid(a.width, len(rows))
+	grid := newBorderGrid(a.width, a.height)
 	focus := st.Tab().Focus
+
 	for _, r := range g.rects {
 		grid.addBox(r, ownNone)
 	}
+
 	if r, ok := g.rects[focus]; ok {
 		grid.addBox(r, kindOwner(st.Panes[focus].Kind))
 	}
+
 	for id, r := range g.rects {
 		for _, s := range a.topBorder(grid, st, id, r, id == focus, lk.styles) {
 			add(r.Y, s)
 		}
 	}
+
 	for id, r := range g.rects {
 		c := contentRect(r)
 		var lines []string
 		fit := false
+
 		if p := a.panes[id]; p != nil {
 			lines = p.lines()
 			cols, prows := p.size()
 			fit = cols != c.W || prows != c.H
 		}
+
 		for i := range c.H {
 			text := ""
 			if i < len(lines) {
 				text = lines[i]
 			}
+
 			if fit || i >= len(lines) {
 				text = fitWidth(text, c.W, lk.styles.body)
 			}
+
 			add(c.Y+i, segment{c.X, c.W, text})
 		}
 	}
+
 	grid.runs(lk.styles, add)
 
-	lines := make([]string, 0, a.height)
+	lines := make([]string, 0, a.height-2)
+
 	var sb strings.Builder
-	for _, segs := range rows {
+
+	for _, segs := range rows[1 : a.height-1] {
 		slices.SortFunc(segs, func(p, q segment) int { return p.x - q.x })
 		sb.Reset()
+
 		x := 0
+
 		for _, s := range segs {
 			if s.x < x {
 				continue
 			}
+
 			sb.WriteString(spaces(lk.styles.body, s.x-x))
 			sb.WriteString(s.text)
 			x = s.x + s.w
 		}
+
 		sb.WriteString(spaces(lk.styles.body, a.width-x))
 		lines = append(lines, sb.String())
 	}
-	lines = append(lines, statusBar(a.width, a.theme, lk.styles, bar))
-	return strings.Join(lines, "\n")
+
+	return lines
 }
 
 // welcomeHints lists the commands that make sense with no pane open, with

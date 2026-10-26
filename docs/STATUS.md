@@ -68,7 +68,7 @@ Tabs, each with its own split layout, focus and zoom, with new, rename, close, j
 
 - [x] Tabs in the core state
 - [x] Framed panes with titles and icons
-- [ ] Workspace bar tabs, per-tab layout and status bar
+- [x] Workspace bar tabs, per-tab layout and status bar
 - [ ] Tab commands, rename and close
 - [ ] Grouped which-key, palette restyle and bench check
 - [ ] Tray modules

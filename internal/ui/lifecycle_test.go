@@ -188,8 +188,8 @@ func TestStartupOpensShell(t *testing.T) {
 		t.Errorf("command = %v in %q, want %v in %q", c.Argv, c.Dir, want.Argv, testCwd)
 	}
 
-	if st.sizes[0] != [2]int{98, 27} {
-		t.Errorf("start size = %v, want [98 27]", st.sizes[0])
+	if st.sizes[0] != [2]int{98, 26} {
+		t.Errorf("start size = %v, want [98 26]", st.sizes[0])
 	}
 
 	s := a.store.State()
@@ -207,8 +207,8 @@ func TestStartupOpensShell(t *testing.T) {
 		t.Errorf("second size message started a process (starts = %d)", st.count())
 	}
 
-	if got := st.proc(0).resized(); len(got) == 0 || got[len(got)-1] != [2]int{118, 37} {
-		t.Errorf("resizes = %v, want the last to be [118 37]", got)
+	if got := st.proc(0).resized(); len(got) == 0 || got[len(got)-1] != [2]int{118, 36} {
+		t.Errorf("resizes = %v, want the last to be [118 36]", got)
 	}
 }
 
@@ -396,8 +396,8 @@ func TestZoomedPanesKeepTheirSize(t *testing.T) {
 
 	chord(a, 'z')
 
-	if got := paneSize(t, a, "p2"); got != [2]int{98, 27} {
-		t.Errorf("zoomed pane size = %v, want [98 27]", got)
+	if got := paneSize(t, a, "p2"); got != [2]int{98, 26} {
+		t.Errorf("zoomed pane size = %v, want [98 26]", got)
 	}
 
 	if got := len(st.proc(0).resized()); got != before {

@@ -1,11 +1,9 @@
 package ui
 
 import (
-	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/charmbracelet/x/ansi"
 
 	"github.com/mhersson/muxreveal/internal/ui/theme"
 )
@@ -107,8 +105,5 @@ func TestThemeCommands(t *testing.T) {
 	v := a.View()
 	if want := mustTheme(t, "catppuccin-latte").UI.Bg; v.BackgroundColor != want {
 		t.Errorf("BackgroundColor = %v, want %v", v.BackgroundColor, want)
-	}
-	if !strings.Contains(ansi.Strip(v.Content), "Catppuccin Latte") {
-		t.Error("view lacks the new theme title")
 	}
 }

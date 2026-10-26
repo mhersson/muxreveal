@@ -177,25 +177,33 @@ func (a *App) act(act core.Action) tea.Cmd {
 	return a.relayout()
 }
 
-// relayout resizes every pane to its content rect (at least 1x1; panes the
-// layout drops get 1x1) and renders the resized ones at once. Panes hidden by
-// zoom keep their size.
+// relayout resizes every pane to its content rect in its own tab's layout,
+// hidden tabs included, and renders the visible resized ones at once. A pane the
+// layout drops gets 1x1; panes hidden by their tab's zoom keep their size.
 func (a *App) relayout() tea.Cmd {
 	st := a.store.State()
-	t := st.Tab()
-	_, focused := st.Panes[t.Focus]
-	zoomed := t.Zoomed && focused
-	rects := a.geometry().rects
+	rects := make([]map[core.PaneID]core.Rect, len(st.Tabs))
+
+	for i := range st.Tabs {
+		rects[i] = a.layoutIn(st, i)
+	}
 
 	var cmds []tea.Cmd
 
 	for id, p := range a.panes {
+		i, ok := st.TabOf(id)
+		if !ok {
+			continue
+		}
+
 		cols, rows := 1, 1
 
-		if r, ok := rects[id]; ok {
+		if r, ok := rects[i][id]; ok {
 			cols, rows = contentSize(r)
-		} else if zoomed {
-			continue
+		} else if t := st.Tabs[i]; t.Zoomed {
+			if _, focused := st.Panes[t.Focus]; focused {
+				continue
+			}
 		}
 
 		if p.resize(cols, rows) {
@@ -206,9 +214,38 @@ func (a *App) relayout() tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
+// hiddenIn reports whether the pane belongs to a tab other than the active one.
+func hiddenIn(st core.State, id core.PaneID) bool {
+	i, ok := st.TabOf(id)
+
+	return ok && i != st.Active
+}
+
+// renderStale renders the panes of the active tab that changed while it was
+// hidden. The hold ticks it may arm run after the current update.
+func (a *App) renderStale(st core.State) {
+	for id, p := range a.panes {
+		if !p.stale || hiddenIn(st, id) {
+			continue
+		}
+
+		p.stale = false
+
+		if cmd := a.renderPane(p); cmd != nil {
+			a.later = append(a.later, cmd)
+		}
+	}
+}
+
 // renderPane renders p and, when a sync hold keeps it from drawing, arms one
-// tick for the hold's end.
+// tick for the hold's end. A pane in a hidden tab only notes that it is stale.
 func (a *App) renderPane(p *pane) tea.Cmd {
+	if st := a.store.State(); hiddenIn(st, p.id) {
+		p.stale = true
+
+		return nil
+	}
+
 	_, held := p.render()
 	if held.IsZero() || p.holdArmed {
 		return nil

@@ -1,6 +1,6 @@
+ 1 󰚩 other                             
 ╭─  shell · proj ─┬─  shell · other ─╮
 │left              │right              │
-│                  │                   │
 │                  │                   │
 │                  │                   │
 │                  ├─ 󰚩 claude · third ┤
@@ -9,4 +9,4 @@
 │                  │                   │
 │                  │                   │
 ╰──────────────────┴───────────────────╯
- MuxReveal  Catppuccin Mocha            
+ 󰕮 MuxReveal  ctrl+space then          

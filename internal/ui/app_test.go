@@ -128,7 +128,7 @@ func TestLeader(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			a := newTestApp(t)
-			sized(t, a, 100, 30)
+			sized(t, a, 140, 30)
 			cmd := press(a, tt.keys...)
 			if (cmd != nil) != tt.wantCmd {
 				t.Fatalf("last cmd non-nil = %v, want %v", cmd != nil, tt.wantCmd)

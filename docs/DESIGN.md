@@ -285,7 +285,7 @@ Ground `Bar`.
   - ` 󰌌 ctrl+space ` on `Warning` while the leader waits for a key (the configured leader's name);
   - ` 󰑕 Rename tab ` on `Accent` while a tab is being renamed.
 - **Key legend** after it: `ctrl+space then` in `Subtle`, then pairs of a key (`Key`, bold) and an action (`Muted`), three cells apart: `: palette`, `c new tab`, `, rename`, `z zoom`, `q quit`. While the leader waits: `esc cancel`. While renaming: `enter save`, `esc cancel`, `empty automatic name`. Only the normal legend has the `ctrl+space then` lead-in. Pairs that do not fit are dropped from the end.
-- **Right side**, one cell from the edge: the notice (`Warning`, with 󰀪) while there is one, else the focused pane's cwd (`Muted`, with 󰉋). It takes at most the room left after the mode segment, the lead-in and 40 cells for the legend, cut with `…`; the legend stops two cells before it.
+- **Right side**, one cell from the edge: the notice (`Warning`, with 󰀪) while there is one, else the focused pane's cwd (`Muted`, with 󰉋), with the home directory shown as `~`. The legend stops two cells before it. A notice takes the room it needs before the legend, whose pairs and then the lead-in give way; the cwd takes at most the room left after the mode segment, the lead-in and 40 cells for the legend, cut with `…`.
 
 #### Overlays
 

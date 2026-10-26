@@ -145,9 +145,6 @@ func TestThemePickerEscRestores(t *testing.T) {
 		if got := a.store.State().Theme; got != mocha.Name {
 			t.Errorf("after moving to %s: store theme = %q, want mocha", name, got)
 		}
-		if !strings.Contains(ansi.Strip(a.View().Content), mocha.Title) {
-			t.Errorf("after moving to %s: status bar lacks the committed title %q", name, mocha.Title)
-		}
 	}
 	pressRun(a, keyEsc)
 	if a.overlay != nil || a.preview != nil {

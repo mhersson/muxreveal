@@ -58,6 +58,7 @@ type App struct {
 	confirm                *confirm // yes/no question; owns every key while open
 
 	panes        map[core.PaneID]*pane // runtime panes, keyed like State.Panes
+	later        []tea.Cmd             // commands raised outside the update's return path; Update batches them
 	outerFocused bool                  // the outer terminal has focus; true until a BlurMsg
 
 	getenv    func(string) string
@@ -145,12 +146,16 @@ func (a *App) dispatch(act core.Action) error {
 			return err
 		}
 	}
-	before := a.store.State().Tab().Focus
+	prev := a.store.State().Tab()
 	if err := a.store.Dispatch(act); err != nil {
 		a.log.Error("dispatch action", "err", err)
 		return err
 	}
-	a.reportFocusChange(before, a.store.State().Tab().Focus)
+	st := a.store.State()
+	a.reportFocusChange(prev.Focus, st.Tab().Focus)
+	if st.Tab().ID != prev.ID {
+		a.renderStale(st)
+	}
 	if _, ok := act.(core.SetTheme); !ok {
 		return nil
 	}
@@ -170,6 +175,11 @@ func (a *App) Init() tea.Cmd {
 func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	m, cmd := a.update(msg)
 	a.syncPaneColors()
+
+	if len(a.later) > 0 {
+		cmd = tea.Batch(append(a.later, cmd)...)
+		a.later = nil
+	}
 
 	return m, cmd
 }

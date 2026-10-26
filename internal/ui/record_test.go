@@ -80,8 +80,8 @@ func TestRecordFlag(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if recs[0].Data != nil || recs[0].Cols != 38 || recs[0].Rows != 7 {
-		t.Fatalf("initial record = %+v, want a 38x7 resize", recs[0])
+	if recs[0].Data != nil || recs[0].Cols != 38 || recs[0].Rows != 6 {
+		t.Fatalf("initial record = %+v, want a 38x6 resize", recs[0])
 	}
 
 	vt := term.NewVT(recs[0].Cols, recs[0].Rows, io.Discard)
