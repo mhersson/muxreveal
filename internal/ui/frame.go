@@ -43,16 +43,16 @@ func (a *App) layoutRects() map[core.PaneID]core.Rect {
 func (a *App) geometry() geometry {
 	st := a.store.State()
 	body := bodyRect(a.width, a.height)
-	if st.Zoomed {
-		if _, ok := st.Panes[st.Focus]; ok {
+	if st.Tab().Zoomed {
+		if _, ok := st.Panes[st.Tab().Focus]; ok {
 			g := geometry{rects: map[core.PaneID]core.Rect{}}
 			if body.W >= 1 && body.H >= 1 {
-				g.rects[st.Focus] = body
+				g.rects[st.Tab().Focus] = body
 			}
 			return g
 		}
 	}
-	return geometry{rects: core.Rects(st.Layout, body), seps: core.Separators(st.Layout, body)}
+	return geometry{rects: core.Rects(st.Tab().Layout, body), seps: core.Separators(st.Tab().Layout, body)}
 }
 
 // segment is a run of cells already styled, starting at column x.
@@ -70,7 +70,7 @@ func (a *App) frameAt(g geometry) string {
 	lk := a.current()
 	bar := barState{leader: a.keymap.leader, pending: a.pending, notice: printable(a.notice)}
 	st := a.store.State()
-	if st.Layout == nil {
+	if st.Tab().Layout == nil {
 		return shell(a.width, a.height, a.theme, lk.styles, lk.sample, a.welcomeHints(), bar)
 	}
 
@@ -102,7 +102,7 @@ func (a *App) frameAt(g geometry) string {
 			add(c.Y+i, segment{c.X, c.W, text})
 		}
 	}
-	if !st.Zoomed {
+	if !st.Tab().Zoomed {
 		for _, s := range g.seps {
 			for y := s.Y; y < s.Y+s.H; y++ {
 				add(y, segment{s.X, 1, lk.styles.separator.Render(separatorGlyph)})
@@ -186,11 +186,11 @@ func (a *App) header(id core.PaneID, r core.Rect, st styles) string {
 		text += " · " + printable(filepath.Base(meta.Cwd))
 	}
 	style := st.paneHeader
-	if id == s.Focus {
+	if id == s.Tab().Focus {
 		style = st.paneHeaderFocus
 	}
 	tag := ""
-	if s.Zoomed && r.W > len(zoomTag) {
+	if s.Tab().Zoomed && r.W > len(zoomTag) {
 		tag = zoomTag
 	}
 	text = ansi.Truncate(text, r.W-len(tag), "")
@@ -217,8 +217,8 @@ func (a *App) cursorAt(g geometry) *tea.Cursor {
 		return nil
 	}
 	st := a.store.State()
-	p := a.panes[st.Focus]
-	r, ok := g.rects[st.Focus]
+	p := a.panes[st.Tab().Focus]
+	r, ok := g.rects[st.Tab().Focus]
 	if p == nil || !ok {
 		return nil
 	}

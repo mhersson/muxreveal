@@ -225,13 +225,14 @@ Go 1.27 (`tuios.dev/vt` needs 1.26 or later). The reason for Rust was a proven V
 
 ### Panes and layout
 
-- The layout is a binary tree in `internal/core`. A leaf is a pane; a split has two children, A (left or top) and B (right or bottom), and a `ratio`, the share of the space A takes. `vertical` splits put the children side by side with a one-column separator; `horizontal` splits stack them. Geometry is integer cells: A gets `floor((W-1)*ratio)` columns (vertical) or `floor(H*ratio)` rows (horizontal), B gets the rest. A side that gets less than one cell is omitted, so a tiny terminal drops panes instead of producing negative sizes.
+- Each tab has its own layout, focus and zoom; the rules below apply per tab. The layout is a binary tree in `internal/core`. A leaf is a pane; a split has two children, A (left or top) and B (right or bottom), and a `ratio`, the share of the space A takes. `vertical` splits put the children side by side with a one-column separator; `horizontal` splits stack them. Geometry is integer cells: A gets `floor((W-1)*ratio)` columns (vertical) or `floor(H*ratio)` rows (horizontal), B gets the rest. A side that gets less than one cell is omitted, so a tiny terminal drops panes instead of producing negative sizes.
 - Splits follow vim: `leader s` opens a shell below the focused pane (`horizontal`), `leader v` opens one to the right (`vertical`). The new pane is child B, takes half of the focused pane (ratio 0.5) and gets focus.
 - `h j k l` focus the nearest pane in that direction: least edge distance, then most overlap on the other axis, then top-most or left-most. There is no wrap. `H J K L` move the nearest divider on that axis by 0.05 of its split (`L` and `J` grow the left or top child), clamped to [0.1, 0.9].
 - `leader ctrl+h`, `ctrl+j`, `ctrl+k`, `ctrl+l` swap the focused pane with its neighbour in that direction, chosen as for focus. The tree keeps its shape and ratios, so each position keeps its size and the moved pane takes the size of the position it lands in. Focus stays on the moved pane. A swap clears zoom; one with no neighbour does nothing and keeps it.
 - `leader z` zooms the focused pane to fill the body. Opening a pane, closing a pane, or moving focus clears zoom; a focus move that has nowhere to go keeps it.
-- Closing a pane gives its space to its sibling. Closing the focused pane focuses the first leaf of that sibling; closing another pane keeps focus. Pane IDs are never reused within a session.
-- MuxReveal starts with one shell pane in the launch directory. Closing the last pane shows the welcome card; it never quits by itself.
+- Closing a pane gives its space to its sibling, in the pane's own tab even when that tab is hidden. Closing the focused pane focuses the first leaf of that sibling; closing another pane keeps focus. Pane and tab IDs (`p1`, `t1`, ...) are never reused within a session.
+- At least one tab always exists. Closing a tab's last pane removes the tab unless it is the only one, which stays and shows the welcome card. Closing the active tab activates the tab to its left, or the new first tab; closing a hidden tab keeps the active tab. Switching tabs changes only which tab is active; each tab keeps its focus and zoom.
+- MuxReveal starts with one shell pane in the launch directory, in the first tab. It never quits by itself.
 - Shell panes run `$SHELL -l`. `leader n` opens an agent pane to the right of the focused pane, in its cwd, running `$SHELL -l -i -c 'claude; exec "$SHELL" -l'`, so leaving Claude leaves a shell in the pane. `$SHELL` falls back to `/bin/sh`.
 - `leader x` closes the focused pane at once; for an agent pane it first asks in a confirm overlay (`y` or `enter` confirms, `n` or `esc` cancels). `leader q` quits and asks first when any agent pane is open. A pane whose process exits closes without asking, and so does an open confirm about it. The confirm owns every key while it is open.
 - The cwd a pane shows and its splits inherit is the last OSC 7 path the pane reported, else on Linux the `/proc` cwd of the terminal's foreground process group, else the cwd the pane started in. It is looked up off the UI loop, at most every 500 ms per pane.
@@ -474,7 +475,9 @@ State lives in the platform state dir (`$XDG_STATE_HOME/muxreveal` on Linux, `~/
 ```json
 {
   "version": 1,
-  "windows": [{
+  "active": 0,
+  "tabs": [{
+    "id": "t1",
     "name": "api",
     "focused": "p1",
     "layout": { "split": "vertical", "ratio": 0.55, "children": [ { "pane": "p1" }, { "pane": "p2" } ] }

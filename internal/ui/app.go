@@ -142,12 +142,12 @@ func (a *App) dispatch(act core.Action) error {
 			return err
 		}
 	}
-	before := a.store.State().Focus
+	before := a.store.State().Tab().Focus
 	if err := a.store.Dispatch(act); err != nil {
 		a.log.Error("dispatch action", "err", err)
 		return err
 	}
-	a.reportFocusChange(before, a.store.State().Focus)
+	a.reportFocusChange(before, a.store.State().Tab().Focus)
 	if _, ok := act.(core.SetTheme); !ok {
 		return nil
 	}
@@ -194,7 +194,7 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var cmds []tea.Cmd
 		if !a.started {
 			a.started = true
-			if a.store.State().Layout == nil {
+			if a.store.State().Tab().Layout == nil {
 				cmds = append(cmds, a.openPane(core.KindShell, core.SplitVertical))
 			}
 		}

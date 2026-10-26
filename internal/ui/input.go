@@ -40,7 +40,7 @@ func (a *App) handlePaste(msg tea.PasteMsg) tea.Cmd {
 
 // sendToFocused runs f on the focused pane; with none it does nothing.
 func (a *App) sendToFocused(f func(*pane)) {
-	if p, ok := a.panes[a.store.State().Focus]; ok {
+	if p, ok := a.panes[a.store.State().Tab().Focus]; ok {
 		f(p)
 	}
 }

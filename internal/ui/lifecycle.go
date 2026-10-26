@@ -53,7 +53,7 @@ func (a *App) openPane(kind core.PaneKind, split core.Split) tea.Cmd {
 	st := a.store.State()
 
 	cwd := a.cwd
-	if m, ok := st.Panes[st.Focus]; ok && m.Cwd != "" {
+	if m, ok := st.Panes[st.Tab().Focus]; ok && m.Cwd != "" {
 		cwd = m.Cwd
 	}
 
@@ -66,7 +66,7 @@ func (a *App) openPane(kind core.PaneKind, split core.Split) tea.Cmd {
 	sim := core.NewStore(st)
 	if err := sim.Dispatch(act); err == nil {
 		body := bodyRect(a.width, a.height)
-		if r, ok := core.Rects(sim.State().Layout, body)[id]; ok {
+		if r, ok := core.Rects(sim.State().Tab().Layout, body)[id]; ok {
 			cols, rows = contentSize(r)
 		}
 	}
@@ -182,8 +182,8 @@ func (a *App) act(act core.Action) tea.Cmd {
 // zoom keep their size.
 func (a *App) relayout() tea.Cmd {
 	st := a.store.State()
-	_, focused := st.Panes[st.Focus]
-	zoomed := st.Zoomed && focused
+	_, focused := st.Panes[st.Tab().Focus]
+	zoomed := st.Tab().Zoomed && focused
 	rects := a.geometry().rects
 
 	var cmds []tea.Cmd
@@ -319,7 +319,7 @@ func (a *App) hasAgents() bool {
 func (a *App) closeFocused() tea.Cmd {
 	st := a.store.State()
 
-	id := st.Focus
+	id := st.Tab().Focus
 	m, ok := st.Panes[id]
 
 	switch {
