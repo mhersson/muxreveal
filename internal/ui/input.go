@@ -25,7 +25,7 @@ func (a *App) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 }
 
 // handlePaste sends pasted text to the open overlay, else to the focused pane;
-// an open confirm drops it.
+// an open confirm drops it. A paste ends a pending leader sequence.
 func (a *App) handlePaste(msg tea.PasteMsg) tea.Cmd {
 	if a.confirm != nil {
 		return nil
@@ -33,6 +33,7 @@ func (a *App) handlePaste(msg tea.PasteMsg) tea.Cmd {
 	if a.overlay != nil {
 		return a.updateOverlay(msg)
 	}
+	a.pending, a.popup = false, false
 	a.sendToFocused(func(p *pane) { p.sendPaste(msg.Content) })
 	return nil
 }

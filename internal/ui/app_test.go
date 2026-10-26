@@ -274,3 +274,25 @@ func TestLeaderPendingGolden(t *testing.T) {
 	press(a, keyLeader)
 	golden.RequireEqual(t, []byte(a.View().Content))
 }
+
+func TestDispatchSyncsOnlyThemeChanges(t *testing.T) {
+	a := newTestApp(t)
+	sized(t, a, 100, 30)
+
+	chord(a, 'v')
+	a.sample = []string{"sentinel"}
+
+	chord(a, 'h')
+
+	if len(a.sample) != 1 || a.sample[0] != "sentinel" {
+		t.Fatal("a focus move re-highlighted the sample")
+	}
+
+	if err := a.dispatch(core.SetTheme{Name: "catppuccin-latte"}); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(a.sample) == 1 && a.sample[0] == "sentinel" {
+		t.Error("a theme change did not rebuild the sample")
+	}
+}

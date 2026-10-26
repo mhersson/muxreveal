@@ -54,6 +54,8 @@ Busy rule (the spike's): a second is busy when its bytes exceed 25 % of that rec
 
 Supplementary, mixed (partly idle: recordings `p2`, `p3`, `pane-2` in turn, start 37 s, length 10 s, stagger 0.5 s, the pooled-busiest window; some panes sit at a spinner or idle in it): 2 panes 94 frames, p99 7.01 ms; 4 panes 208 frames, p99 4.89 ms; 6 panes 270 frames, 215,690 bytes, p99 5.52 ms, CPU 7.4 %.
 
+Caveat (a one-off scratch measurement, not a gate run): the bench builds one `View` per 60 FPS step, while the app calls `View` after every message. On run a's workload (six panes, 240x64) update+view p99 was 1.18 ms with one `View` per step and 2.08 ms with a `View` per dirty message, which would put the six-pane frame p99 near 7 ms, still under 8 ms.
+
 Idle: six shell panes each running `sleep 3600`, 240x64 in a private tmux, 30 s after a 5 s warm-up, `/proc/<pid>/stat` utime+stime: **0.30 %** of one core.
 
 Inputs: `p2.rec` (136 s, file size 94,552 bytes) and `p3.rec` (117 s, file size 204,497 bytes) are new recordings of two live `claude` panes (Claude Code 2.1.310, no `TMUX` in its environment, text-only prompts), recorded at 79x31 in a 159x33 tmux; both carry `38;2;` truecolor SGRs. `pane-2.rec` is the spike's recording.

@@ -22,8 +22,8 @@ import (
 )
 
 // This file is the replay bench: the real App with panes fed from recordings
-// on a virtual clock. It is compiled into the package so its tests run in the
-// default gates; the gate run itself is in bench_test.go behind the bench tag.
+// on a virtual clock. It builds in every test run; the gate run itself is in
+// bench_test.go behind the bench tag.
 
 // maxBenchPanes is the largest grid runBench lays out (3x2).
 const maxBenchPanes = 6
@@ -441,28 +441,4 @@ func runBench(cfg benchConfig) (benchResult, error) {
 	res.CPUPercent = float64(total) / float64(cfg.Length) * 100
 
 	return res, nil
-}
-
-// median returns the median frame p99 and CPU percentage over repeated runs.
-func median(runs []benchResult) (p99 time.Duration, cpu float64) {
-	p99s := make([]time.Duration, len(runs))
-	cpus := make([]float64, len(runs))
-
-	for i, r := range runs {
-		p99s[i], cpus[i] = r.Frames.P99, r.CPUPercent
-	}
-
-	return middle(p99s), middle(cpus)
-}
-
-func middle[T time.Duration | float64](xs []T) T {
-	s := slices.Clone(xs)
-	slices.Sort(s)
-
-	n := len(s)
-	if n%2 == 1 {
-		return s[n/2]
-	}
-
-	return (s[n/2-1] + s[n/2]) / 2
 }

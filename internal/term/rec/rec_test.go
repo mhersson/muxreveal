@@ -243,3 +243,31 @@ func TestSynthRoundTrips(t *testing.T) {
 		t.Fatalf("round trip differs: got %d records, want %d", len(got), len(recs))
 	}
 }
+
+func TestRecAtStampsGivenTime(t *testing.T) {
+	var buf bytes.Buffer
+
+	t0 := time.Unix(100, 0)
+
+	w, err := NewWriter(&buf, 80, 24, func() time.Time { return t0 })
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := w.DataAt([]byte("x"), t0.Add(3*time.Second)); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := w.ResizeAt(10, 5, t0.Add(4*time.Second)); err != nil {
+		t.Fatal(err)
+	}
+
+	recs, err := Read(&buf)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(recs) != 3 || recs[1].At != 3*time.Second || recs[2].At != 4*time.Second {
+		t.Errorf("records = %+v, want stamps 3 s and 4 s", recs)
+	}
+}

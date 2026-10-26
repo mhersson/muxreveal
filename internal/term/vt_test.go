@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"image/color"
+	"os"
 	"runtime"
 	"sync"
 	"testing"
@@ -117,7 +118,7 @@ func TestTitleAndWorkingDir(t *testing.T) {
 		t.Fatal("title and working dir must start empty")
 	}
 
-	if _, err := v.Write([]byte("\x1b]2;build\x07\x1b]7;file://host/tmp/x%20y\x07")); err != nil {
+	if _, err := v.Write([]byte("\x1b]2;build\x07\x1b]7;file:///tmp/x%20y\x07")); err != nil {
 		t.Fatal(err)
 	}
 
@@ -127,6 +128,39 @@ func TestTitleAndWorkingDir(t *testing.T) {
 
 	if got := v.WorkingDir(); got != "/tmp/x y" {
 		t.Fatalf("WorkingDir = %q", got)
+	}
+}
+
+func TestWorkingDirIgnoresRemoteHosts(t *testing.T) {
+	local, err := os.Hostname()
+	if err != nil {
+		t.Skipf("no hostname: %v", err)
+	}
+
+	tests := []struct {
+		name string
+		osc  string
+		want string
+	}{
+		{"empty host", "file:///a", "/a"},
+		{"localhost", "file://localhost/b", "/b"},
+		{"local hostname", "file://" + local + "/c", "/c"},
+		{"remote host keeps the last path", "file://remote.example/d", "/c"},
+		{"bare path", "/e", "/e"},
+	}
+
+	v, _ := newTestVT(t, 10, 3)
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if _, err := v.Write([]byte("\x1b]7;" + tt.osc + "\x07")); err != nil {
+				t.Fatal(err)
+			}
+
+			if got := v.WorkingDir(); got != tt.want {
+				t.Errorf("WorkingDir = %q, want %q", got, tt.want)
+			}
+		})
 	}
 }
 

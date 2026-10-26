@@ -50,8 +50,10 @@ type App struct {
 	sample []string
 
 	overlay *overlay
-	preview *look    // theme picker preview; nil unless previewing
-	confirm *confirm // yes/no question; owns every key while open
+	preview *look // theme picker preview; nil unless previewing
+	// reportedFg and reportedBg are the colours last given to the panes.
+	reportedFg, reportedBg theme.Hex
+	confirm                *confirm // yes/no question; owns every key while open
 
 	panes        map[core.PaneID]*pane // runtime panes, keyed like State.Panes
 	outerFocused bool                  // the outer terminal has focus; true until a BlurMsg
@@ -130,9 +132,9 @@ func (a *App) sync() error {
 	return nil
 }
 
-// dispatch applies act to the store and re-syncs the cached theme. A theme
-// the theme package does not know is logged and rejected, leaving the store
-// and the view as they were.
+// dispatch applies act to the store and re-syncs the cached theme after a
+// theme change. A theme the theme package does not know is logged and
+// rejected, leaving the store and the view as they were.
 func (a *App) dispatch(act core.Action) error {
 	if st, ok := act.(core.SetTheme); ok {
 		if _, err := theme.ByName(st.Name); err != nil {
@@ -146,6 +148,9 @@ func (a *App) dispatch(act core.Action) error {
 		return err
 	}
 	a.reportFocusChange(before, a.store.State().Focus)
+	if _, ok := act.(core.SetTheme); !ok {
+		return nil
+	}
 	if err := a.sync(); err != nil {
 		a.log.Error("sync theme", "err", err)
 		return err
@@ -160,6 +165,28 @@ func (a *App) Init() tea.Cmd {
 
 // Update implements tea.Model.
 func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	m, cmd := a.update(msg)
+	a.syncPaneColors()
+
+	return m, cmd
+}
+
+// syncPaneColors tells every pane the current look's colours, including a
+// theme picker preview, so guests that query the background pick a matching palette.
+func (a *App) syncPaneColors() {
+	ui := a.current().theme.UI
+	if ui.Fg == a.reportedFg && ui.Bg == a.reportedBg {
+		return
+	}
+
+	a.reportedFg, a.reportedBg = ui.Fg, ui.Bg
+
+	for _, p := range a.panes {
+		p.setColors(ui.Fg, ui.Bg)
+	}
+}
+
+func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		a.width, a.height = msg.Width, msg.Height
@@ -210,11 +237,22 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return a, nil
 }
 
+// bindingKey names a key for keymap lookup. A shift-only key without text
+// resolves to its shifted character, so "H" and ":" match however the
+// terminal reports them.
+func bindingKey(msg tea.KeyPressMsg) string {
+	if msg.Text == "" && msg.Mod == tea.ModShift && msg.ShiftedCode != 0 {
+		return string(msg.ShiftedCode)
+	}
+
+	return msg.String()
+}
+
 // runLeader handles a key press in the leader state machine. It reports
 // whether the key was consumed; a key outside a pending sequence that is not
 // the leader is not.
 func (a *App) runLeader(msg tea.KeyPressMsg) (tea.Cmd, bool) {
-	key := msg.String()
+	key := bindingKey(msg)
 	if !a.pending {
 		if key != a.keymap.leader {
 			return nil, false
@@ -275,6 +313,8 @@ func (a *App) View() tea.View {
 	v := tea.NewView(content)
 	v.AltScreen = true
 	v.ReportFocus = true
+	// Modified keys arrive with their shifted character, which the legacy encoder needs.
+	v.KeyboardEnhancements.ReportAlternateKeys = true
 	v.Cursor = a.cursorAt(g)
 	v.BackgroundColor = lk.theme.UI.Bg
 	v.ForegroundColor = lk.theme.UI.Fg

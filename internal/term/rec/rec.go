@@ -53,22 +53,25 @@ func NewWriter(w io.Writer, cols, rows int, now func() time.Time) (*Writer, erro
 	}
 
 	rw := &Writer{w: w, now: now, start: now()}
-	if err := rw.resize(cols, rows, false); err != nil {
+	if err := rw.resize(cols, rows, false, time.Time{}); err != nil {
 		return nil, err
 	}
 
 	return rw, nil
 }
 
-// stamp returns the time since start, never going backwards. Callers hold mu.
-func (w *Writer) stamp() time.Duration {
-	w.last = max(w.now().Sub(w.start), w.last)
+// stamp returns the time of at since start, never going backwards. Callers hold mu.
+func (w *Writer) stamp(at time.Time) time.Duration {
+	w.last = max(at.Sub(w.start), w.last)
 
 	return w.last
 }
 
-// Data records output bytes.
-func (w *Writer) Data(b []byte) error {
+// Data records output bytes at the current time.
+func (w *Writer) Data(b []byte) error { return w.DataAt(b, w.now()) }
+
+// DataAt records output bytes that arrived at the given time.
+func (w *Writer) DataAt(b []byte, at time.Time) error {
 	if len(b) > MaxChunk {
 		return fmt.Errorf("chunk of %d bytes exceeds %d", len(b), MaxChunk)
 	}
@@ -78,7 +81,7 @@ func (w *Writer) Data(b []byte) error {
 
 	buf := make([]byte, 1+fixedLen+len(b))
 	buf[0] = typeData
-	binary.BigEndian.PutUint64(buf[1:], uint64(w.stamp()))
+	binary.BigEndian.PutUint64(buf[1:], uint64(w.stamp(at)))
 	binary.BigEndian.PutUint32(buf[9:], uint32(len(b)))
 	copy(buf[1+fixedLen:], b)
 
@@ -89,11 +92,14 @@ func (w *Writer) Data(b []byte) error {
 	return nil
 }
 
-// Resize records a new terminal size.
-func (w *Writer) Resize(cols, rows int) error { return w.resize(cols, rows, true) }
+// Resize records a new terminal size at the current time.
+func (w *Writer) Resize(cols, rows int) error { return w.ResizeAt(cols, rows, w.now()) }
 
-// resize writes a resize record; the initial one is stamped 0 without reading the clock.
-func (w *Writer) resize(cols, rows int, stamped bool) error {
+// ResizeAt records a new terminal size that took effect at the given time.
+func (w *Writer) ResizeAt(cols, rows int, at time.Time) error { return w.resize(cols, rows, true, at) }
+
+// resize writes a resize record; the initial one is stamped 0 and ignores at.
+func (w *Writer) resize(cols, rows int, stamped bool, at time.Time) error {
 	if cols <= 0 || rows <= 0 || cols > 0xffff || rows > 0xffff {
 		return fmt.Errorf("resize to %dx%d out of range", cols, rows)
 	}
@@ -105,7 +111,7 @@ func (w *Writer) resize(cols, rows int, stamped bool) error {
 
 	buf[0] = typeResize
 	if stamped {
-		binary.BigEndian.PutUint64(buf[1:], uint64(w.stamp()))
+		binary.BigEndian.PutUint64(buf[1:], uint64(w.stamp(at)))
 	}
 
 	binary.BigEndian.PutUint16(buf[9:], uint16(cols))

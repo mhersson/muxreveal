@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -145,6 +146,10 @@ func (f *failAfter) Write(b []byte) (int, error) {
 	return len(b), nil
 }
 
+type nopCloser struct{}
+
+func (nopCloser) Close() error { return nil }
+
 func TestRecordTapFailureStopsRecording(t *testing.T) {
 	var logs strings.Builder
 
@@ -157,25 +162,93 @@ func TestRecordTapFailureStopsRecording(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	tp := &tap{log: log, id: "p1", w: w}
+	tp := startTap(log, "p1", nopCloser{}, w, time.Now, 8)
 
 	tp.data([]byte("x"))
-
-	calls := fw.calls
-
 	tp.data([]byte("y"))
 	tp.resize(10, 10)
+
+	if err := tp.close(); err != nil {
+		t.Fatal(err)
+	}
 
 	if !tp.failed {
 		t.Fatal("tap kept recording after a write error")
 	}
 
-	if fw.calls != calls {
-		t.Errorf("writes after the failure = %d, want none", fw.calls-calls)
+	if fw.calls != 3 {
+		t.Errorf("writes = %d, want the header, the size and the one failing record", fw.calls)
 	}
 
 	if n := strings.Count(logs.String(), "recording stopped"); n != 1 {
 		t.Errorf("failure logged %d times, want once:\n%s", n, logs.String())
+	}
+}
+
+// blockedWriter passes the first pass writes, then holds every write until release closes.
+type blockedWriter struct {
+	pass    int
+	release chan struct{}
+	blocked chan struct{}
+	calls   int
+	once    sync.Once
+}
+
+func (b *blockedWriter) Write(p []byte) (int, error) {
+	b.calls++
+	if b.calls <= b.pass {
+		return len(p), nil
+	}
+
+	b.once.Do(func() { close(b.blocked) })
+	<-b.release
+
+	return len(p), nil
+}
+
+func TestRecordTapDropsWhenBehind(t *testing.T) {
+	var logs strings.Builder
+
+	log := slog.New(slog.NewTextHandler(&logs, nil))
+	// The header and the initial size pass; the first record blocks.
+	bw := &blockedWriter{pass: 2, release: make(chan struct{}), blocked: make(chan struct{})}
+
+	w, err := rec.NewWriter(bw, 20, 5, time.Now)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tp := startTap(log, "p1", nopCloser{}, w, time.Now, 2)
+
+	tp.data([]byte("a"))
+	<-bw.blocked
+
+	done := make(chan struct{})
+
+	go func() {
+		defer close(done)
+
+		for range 50 {
+			tp.data([]byte("b"))
+			tp.resize(10, 10)
+		}
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(testDeadline):
+		close(bw.release)
+		t.Fatal("enqueue blocked behind a stalled writer")
+	}
+
+	close(bw.release)
+
+	if err := tp.close(); err != nil {
+		t.Fatal(err)
+	}
+
+	if n := strings.Count(logs.String(), "falling behind"); n != 1 {
+		t.Errorf("overflow logged %d times, want once:\n%s", n, logs.String())
 	}
 }
 

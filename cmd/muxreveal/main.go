@@ -22,7 +22,7 @@ import (
 const closeTimeout = 3 * time.Second
 
 func main() {
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
 	err := newRootCmd().ExecuteContext(ctx)
 	stop()
 	if err != nil {
@@ -102,8 +102,8 @@ func run(ctx context.Context, env core.Env, configPath, recordDir string) (err e
 	}
 
 	logger.Info("start", "config", configPath, "theme", cfg.Theme)
-	// ctx is the only signal handler, so SIGINT and SIGTERM both end the run
-	// cleanly instead of racing Bubble Tea's own handler.
+	// ctx is the only signal handler, so SIGINT, SIGTERM and SIGHUP (a closed
+	// terminal) end the run cleanly instead of racing Bubble Tea's own handler.
 	_, err = tea.NewProgram(app, tea.WithContext(ctx), tea.WithoutSignalHandler()).Run()
 	// The context may be cancelled already, so the close gets its own deadline.
 	closeCtx, cancel := context.WithTimeout(context.Background(), closeTimeout)

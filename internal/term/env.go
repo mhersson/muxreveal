@@ -2,6 +2,7 @@ package term
 
 import (
 	"os"
+	"slices"
 	"strings"
 )
 
@@ -23,17 +24,31 @@ func PaneEnv(base []string) []string {
 
 // ShellCommand is a login shell in dir.
 func ShellCommand(env func(string) string, dir string) Command {
-	return Command{Argv: []string{shellPath(env), "-l"}, Dir: dir, Env: PaneEnv(os.Environ())}
+	sh := shellPath(env)
+
+	return Command{Argv: []string{sh, "-l"}, Dir: dir, Env: shellEnv(sh)}
 }
 
 // AgentCommand runs claude in an interactive login shell, then stays in a shell
 // when the agent exits.
 func AgentCommand(env func(string) string, dir string) Command {
+	sh := shellPath(env)
+
 	return Command{
-		Argv: []string{shellPath(env), "-l", "-i", "-c", `claude; exec "$SHELL" -l`},
+		Argv: []string{sh, "-l", "-i", "-c", `claude; exec "$SHELL" -l`},
 		Dir:  dir,
-		Env:  PaneEnv(os.Environ()),
+		Env:  shellEnv(sh),
 	}
+}
+
+// shellEnv is the pane environment with SHELL set to the resolved shell, so
+// the agent command's `exec "$SHELL"` works when SHELL was unset.
+func shellEnv(sh string) []string {
+	env := slices.DeleteFunc(PaneEnv(os.Environ()), func(kv string) bool {
+		return strings.HasPrefix(kv, "SHELL=")
+	})
+
+	return append(env, "SHELL="+sh)
 }
 
 func shellPath(env func(string) string) string {

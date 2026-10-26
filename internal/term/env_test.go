@@ -2,6 +2,7 @@ package term
 
 import (
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -73,7 +74,17 @@ func TestCommands(t *testing.T) {
 				t.Errorf("AgentCommand = %+v", ag)
 			}
 
+			wantShell := tt.shArg[0]
 			for _, c := range []Command{sh, ag} {
+				var shells []string
+				for _, kv := range c.Env {
+					if strings.HasPrefix(kv, "SHELL=") {
+						shells = append(shells, kv)
+					}
+				}
+				if !slices.Equal(shells, []string{"SHELL=" + wantShell}) {
+					t.Errorf("SHELL entries = %q, want only SHELL=%s", shells, wantShell)
+				}
 				if !slices.Contains(c.Env, "TERM=xterm-256color") {
 					t.Errorf("Env lacks TERM: %q", c.Env)
 				}

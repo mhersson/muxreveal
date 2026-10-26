@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"fmt"
+	"os"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -79,6 +80,16 @@ func (a *App) openPane(kind core.PaneKind, split core.Split) tea.Cmd {
 	began := time.Now()
 
 	p, err := a.start(a.ctx, c, cols, rows)
+	if err != nil && cwd != a.cwd && !usableDir(cwd) {
+		// The focused pane's directory is gone; the launch dir always works.
+		a.log.Warn("pane cwd unusable, using launch dir", "pane", id, "cwd", cwd, "err", err)
+		a.notice = fmt.Sprintf("%s is not available, started in %s", cwd, a.cwd)
+
+		c.Dir = a.cwd
+		act.Cwd = a.cwd
+		p, err = a.start(a.ctx, c, cols, rows)
+	}
+
 	if err != nil {
 		a.log.Error("start pane", "kind", kind, "err", err)
 		a.notice = fmt.Sprintf("cannot start %s: %v", kind, err)
@@ -88,7 +99,8 @@ func (a *App) openPane(kind core.PaneKind, split core.Split) tea.Cmd {
 
 	a.log.Debug("pane started", "pane", id, "kind", kind, "took", time.Since(began))
 
-	var opts []paneOption
+	ui := a.current().theme.UI
+	opts := []paneOption{withColors(ui.Fg, ui.Bg)}
 
 	if a.recordDir != "" {
 		tp, err := openTap(a.log, a.recordDir, id, cols, rows, a.clock.Now)
@@ -113,6 +125,14 @@ func (a *App) openPane(kind core.PaneKind, split core.Split) tea.Cmd {
 	}
 
 	return tea.Batch(pn.wait(), a.relayout())
+}
+
+// usableDir reports whether dir is an existing directory; exec reports a
+// missing one as a failed fork/exec, so the start error cannot say.
+func usableDir(dir string) bool {
+	fi, err := os.Stat(dir)
+
+	return err == nil && fi.IsDir()
 }
 
 // closePane removes a pane from the state and the registry at once and closes
@@ -333,8 +353,9 @@ func (a *App) quit() tea.Cmd {
 }
 
 // Close closes every pane, concurrently, and waits for closes already running.
-// ctx bounds the wait; when it ends first the app context is cancelled, which
-// SIGKILLs each remaining child's process group (term.Start's cancel hook).
+// ctx bounds the wait; when it ends first Close cancels the app context, and
+// exec's context watcher then SIGKILLs each remaining child's process group and
+// its terminal's foreground group, asynchronously after Close returns.
 // It is safe to call twice, and only after the program stopped running Update.
 func (a *App) Close(ctx context.Context) error {
 	for id, p := range a.panes {

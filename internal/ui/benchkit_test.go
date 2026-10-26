@@ -156,14 +156,3 @@ func TestSummaryNearestRank(t *testing.T) {
 		t.Fatal("empty summary is not the zero value")
 	}
 }
-
-func TestMedianOfRuns(t *testing.T) {
-	mk := func(p99 time.Duration, cpu float64) benchResult {
-		return benchResult{Frames: summary{P99: p99}, CPUPercent: cpu}
-	}
-
-	p99, cpu := median([]benchResult{mk(ms(3), 30), mk(ms(1), 10), mk(ms(2), 20)})
-	if p99 != ms(2) || cpu != 20 {
-		t.Fatalf("median = %v, %v; want 2ms, 20", p99, cpu)
-	}
-}

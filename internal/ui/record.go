@@ -1,7 +1,9 @@
 package ui
 
 import (
+	"bytes"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -18,20 +20,39 @@ const (
 	recordFileMode = 0o600
 )
 
-// tap writes one pane's PTY output and resizes to a recording file. A write
-// error is logged once and stops the recording; the pane is unaffected.
-type tap struct {
-	log  *slog.Logger
-	id   core.PaneID
-	file *os.File
+// tapQueueDepth bounds the records waiting for the writer; a slow disk drops
+// records instead of stalling the read loop or the update loop.
+const tapQueueDepth = 1024
 
-	mu     sync.Mutex
-	w      *rec.Writer
-	failed bool
-	closed bool
+// tapRecord is one queued record; data is nil for a resize.
+type tapRecord struct {
+	at         time.Time
+	data       []byte
+	cols, rows int
 }
 
-// openTap creates <dir>/<id>.rec; it never overwrites an existing recording.
+// tap writes one pane's PTY output and resizes to a recording file from its
+// own goroutine, so no file write runs on the update loop or under the pane
+// lock. A write error or a full queue is logged once and the pane is unaffected.
+type tap struct {
+	log   *slog.Logger
+	id    core.PaneID
+	file  io.Closer
+	now   func() time.Time
+	queue chan tapRecord
+	done  chan struct{}
+
+	mu      sync.Mutex // guards closed and the send on queue
+	closed  bool
+	dropped bool
+
+	w      *rec.Writer
+	failed bool // owned by the writer goroutine; read after done closes
+}
+
+// openTap creates <dir>/<id>.rec and writes its header; it never overwrites an
+// existing recording. The create and header stay synchronous with the pane
+// start, which already forks on the update loop.
 func openTap(log *slog.Logger, dir string, id core.PaneID, cols, rows int, now func() time.Time) (*tap, error) {
 	f, err := os.OpenFile(filepath.Join(dir, string(id)+".rec"), os.O_WRONLY|os.O_CREATE|os.O_EXCL, recordFileMode)
 	if err != nil {
@@ -45,49 +66,101 @@ func openTap(log *slog.Logger, dir string, id core.PaneID, cols, rows int, now f
 		return nil, fmt.Errorf("start recording: %w", err)
 	}
 
-	return &tap{log: log, id: id, file: f, w: w}, nil
+	return startTap(log, id, f, w, now, tapQueueDepth), nil
 }
 
+func startTap(log *slog.Logger, id core.PaneID, file io.Closer, w *rec.Writer, now func() time.Time, depth int) *tap {
+	t := &tap{
+		log:   log,
+		id:    id,
+		file:  file,
+		now:   now,
+		queue: make(chan tapRecord, depth),
+		done:  make(chan struct{}),
+		w:     w,
+	}
+
+	go t.run()
+
+	return t
+}
+
+func (t *tap) run() {
+	defer close(t.done)
+
+	for r := range t.queue {
+		if t.failed {
+			continue
+		}
+
+		var err error
+		if r.data != nil {
+			err = t.w.DataAt(r.data, r.at)
+		} else {
+			err = t.w.ResizeAt(r.cols, r.rows, r.at)
+		}
+
+		if err != nil {
+			t.failed = true
+			t.log.Warn("recording stopped", "pane", t.id, "err", err)
+		}
+	}
+}
+
+// data queues a copy of b; the caller reuses its buffer.
 func (t *tap) data(b []byte) {
-	t.write(func(w *rec.Writer) error { return w.Data(b) })
-}
-
-func (t *tap) resize(cols, rows int) {
-	t.write(func(w *rec.Writer) error { return w.Resize(cols, rows) })
-}
-
-func (t *tap) write(f func(*rec.Writer) error) {
 	if t == nil {
 		return
 	}
 
-	t.mu.Lock()
-	defer t.mu.Unlock()
+	t.enqueue(tapRecord{at: t.now(), data: bytes.Clone(b)})
+}
 
-	if t.failed || t.closed {
+func (t *tap) resize(cols, rows int) {
+	if t == nil {
 		return
 	}
 
-	if err := f(t.w); err != nil {
-		t.failed = true
-		t.log.Warn("recording stopped", "pane", t.id, "err", err)
+	t.enqueue(tapRecord{at: t.now(), cols: cols, rows: rows})
+}
+
+func (t *tap) enqueue(r tapRecord) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	if t.closed {
+		return
+	}
+
+	select {
+	case t.queue <- r:
+	default:
+		if !t.dropped {
+			t.dropped = true
+			t.log.Warn("recording is falling behind, dropping records", "pane", t.id)
+		}
 	}
 }
 
-// close ends the recording. The pane calls it after its read loop returned.
+// close drains the queue, waits for the writer and closes the file. The pane
+// calls it after its read loop returned.
 func (t *tap) close() error {
 	if t == nil {
 		return nil
 	}
 
 	t.mu.Lock()
-	defer t.mu.Unlock()
-
 	if t.closed {
+		t.mu.Unlock()
+
 		return nil
 	}
 
 	t.closed = true
+	close(t.queue)
+	t.mu.Unlock()
+
+	<-t.done
 
 	if err := t.file.Close(); err != nil {
 		return fmt.Errorf("close recording: %w", err)

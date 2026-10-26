@@ -3,6 +3,8 @@ package ui
 import (
 	"context"
 	"errors"
+	"fmt"
+	"io/fs"
 	"runtime"
 	"slices"
 	"strings"
@@ -1057,4 +1059,81 @@ func TestOrphanedExitClosesPane(t *testing.T) {
 	}
 
 	eventually2(t, 3*time.Second, "the orphan to be killed", func() bool { return gone(pid) })
+}
+
+// Bubble Tea reports shifted leader keys with their shifted character
+// whether or not the terminal sends text.
+func TestLeaderShiftedKeys(t *testing.T) {
+	shapes := []struct {
+		name string
+		key  tea.KeyPressMsg
+	}{
+		{"text", tea.KeyPressMsg{Code: 'h', ShiftedCode: 'H', Mod: tea.ModShift, Text: "H"}},
+		{"no text", tea.KeyPressMsg{Code: 'h', ShiftedCode: 'H', Mod: tea.ModShift}},
+	}
+
+	for _, tt := range shapes {
+		t.Run(tt.name, func(t *testing.T) {
+			a, _ := lifeAppSized(t, 100, 30)
+
+			chord(a, 'v')
+			chord(a, 'h')
+			press(a, keyLeader, tt.key)
+
+			if got := a.store.State().Layout.Ratio; got != 0.45 {
+				t.Errorf("ratio after ctrl+space H = %v, want 0.45 (notice %q)", got, a.notice)
+			}
+		})
+	}
+}
+
+func TestSplitFallsBackToLaunchDir(t *testing.T) {
+	a, st := lifeAppSized(t, 100, 30)
+
+	if err := a.dispatch(core.SetPaneCwd{ID: "p1", Cwd: "/gone"}); err != nil {
+		t.Fatal(err)
+	}
+
+	a.start = func(ctx context.Context, c term.Command, cols, rows int) (proc, error) {
+		if c.Dir == "/gone" {
+			return nil, fmt.Errorf("start sh: %w", &fs.PathError{Op: "fork/exec", Path: "/bin/sh", Err: syscall.ENOENT})
+		}
+
+		return st.start(ctx, c, cols, rows)
+	}
+
+	chord(a, 'v')
+
+	s := a.store.State()
+	if len(s.Panes) != 2 {
+		t.Fatalf("panes = %d, want 2", len(s.Panes))
+	}
+
+	if got := s.Panes[s.Focus].Cwd; got != testCwd {
+		t.Errorf("new pane cwd = %q, want the launch dir %q", got, testCwd)
+	}
+
+	if cmds := st.cmds; cmds[len(cmds)-1].Dir != testCwd {
+		t.Errorf("started in %q, want %q", cmds[len(cmds)-1].Dir, testCwd)
+	}
+
+	if !strings.Contains(a.notice, "/gone") {
+		t.Errorf("notice = %q, want it to name /gone", a.notice)
+	}
+}
+
+func TestSplitOtherStartErrorsAreNotRetried(t *testing.T) {
+	a, st := lifeAppSized(t, 100, 30)
+
+	if err := a.dispatch(core.SetPaneCwd{ID: "p1", Cwd: "/gone"}); err != nil {
+		t.Fatal(err)
+	}
+
+	st.err = errors.New("no ptys")
+
+	chord(a, 'v')
+
+	if len(a.store.State().Panes) != 1 || !strings.Contains(a.notice, "cannot start") {
+		t.Errorf("panes = %d, notice = %q", len(a.store.State().Panes), a.notice)
+	}
 }

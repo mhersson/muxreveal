@@ -416,7 +416,7 @@ func TestWorkingDirAndTitle(t *testing.T) {
 		t.Fatalf("workingDir = %q, want proc cwd", d)
 	}
 
-	feedAndWait(t, p, fp, "\x1b]7;file://host/from/osc\x07\x1b]2;my title\x07")
+	feedAndWait(t, p, fp, "\x1b]7;file:///from/osc\x07\x1b]2;my title\x07")
 
 	if d := p.workingDir(); d != "/from/osc" {
 		t.Fatalf("workingDir = %q, want OSC 7 path", d)

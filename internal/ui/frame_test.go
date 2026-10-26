@@ -105,7 +105,7 @@ func TestFrameGolden(t *testing.T) {
 	}
 }
 
-// Review Focus 2: a tiny terminal with many panes still draws a whole frame.
+// A tiny terminal with many panes still draws a whole frame.
 func TestFrameSizes(t *testing.T) {
 	for _, sz := range [][2]int{{100, 30}, {20, 5}, {1, 1}, {2, 2}} {
 		t.Run(fmt.Sprintf("%dx%d", sz[0], sz[1]), func(t *testing.T) {
@@ -154,6 +154,8 @@ func TestHeaderText(t *testing.T) {
 		{"agent default", core.KindAgent, "/home/u/proj", "", 40, " claude · proj"},
 		{"osc title wins", core.KindShell, "/home/u/proj", "\x1b]2;vim main.go\x07", 40, " vim main.go · proj"},
 		{"no cwd", core.KindShell, "", "", 40, " shell"},
+		{"cwd with newline", core.KindShell, "/home/u/a\nb", "", 40, " shell · ab"},
+		{"cwd with escape", core.KindShell, "/home/u/a\x1b[31mb", "", 40, " shell · a[31mb"},
 		{"truncated", core.KindShell, "/home/u/proj", "", 8, " shell ·"},
 	}
 
@@ -161,8 +163,14 @@ func TestHeaderText(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			a, _ := framedApp(t, tt.width, 6, paneSpec{kind: tt.kind, cwd: tt.cwd, split: core.SplitVertical, text: tt.text})
 
-			first := strings.Split(a.View().Content, "\n")[0]
-			if got := strings.TrimRight(ansi.Strip(first), " "); got != tt.want {
+			lines := strings.Split(a.View().Content, "\n")
+			if len(lines) != 6 {
+				t.Fatalf("frame has %d lines, want 6", len(lines))
+			}
+			if w := ansi.StringWidth(lines[0]); w != tt.width {
+				t.Errorf("header width = %d, want %d", w, tt.width)
+			}
+			if got := strings.TrimRight(ansi.Strip(lines[0]), " "); got != tt.want {
 				t.Errorf("header = %q, want %q", got, tt.want)
 			}
 		})
@@ -268,6 +276,22 @@ func TestHeaderWideTitleZoomWidth(t *testing.T) {
 		first := strings.Split(a.View().Content, "\n")[0]
 		if got := lipgloss.Width(first); got != w {
 			t.Errorf("width %d: header width %d: %q", w, got, ansi.Strip(first))
+		}
+	}
+}
+
+func TestNoticeDropsControlCharacters(t *testing.T) {
+	a, _ := framedApp(t, 40, 6, shellSpec("/home/u/proj", ""))
+	a.notice = "cannot start shell: chdir /a\nb\x1b[31m"
+
+	lines := strings.Split(a.View().Content, "\n")
+	if len(lines) != 6 {
+		t.Fatalf("frame has %d lines, want 6", len(lines))
+	}
+
+	for i, l := range lines {
+		if w := ansi.StringWidth(l); w != 40 {
+			t.Errorf("line %d width = %d, want 40", i, w)
 		}
 	}
 }

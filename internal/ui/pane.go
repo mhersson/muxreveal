@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"image/color"
 	"io"
 	"strings"
 	"sync"
@@ -69,6 +70,21 @@ type paneOption func(*pane)
 
 // withTap records the pane's output and resizes.
 func withTap(t *tap) paneOption { return func(p *pane) { p.tap = t } }
+
+// withColors sets the colours the guest's OSC 10 and 11 queries are answered with.
+func withColors(fg, bg color.Color) paneOption {
+	return func(p *pane) { p.vt.SetDefaultColors(fg, bg) }
+}
+
+// setColors changes them on a running pane.
+func (p *pane) setColors(fg, bg color.Color) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	if !p.closed {
+		p.vt.SetDefaultColors(fg, bg)
+	}
+}
 
 // newPane starts the emulator, renders every row once and starts the read loop.
 func newPane(id core.PaneID, p proc, cols, rows int, c clock, opts ...paneOption) *pane {

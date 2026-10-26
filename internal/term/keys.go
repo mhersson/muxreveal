@@ -224,8 +224,15 @@ func encodeBase(k uv.KeyPressEvent) []byte {
 		return []byte{0x1b}
 	}
 
+	// Kitty-protocol terminals send a modified key as its unshifted code with
+	// no text; the shifted character arrives as ShiftedCode.
+	char := k.Code
+	if k.Text == "" && k.Mod.Contains(uv.ModShift) && k.ShiftedCode != 0 {
+		char = k.ShiftedCode
+	}
+
 	if ctrl {
-		if c, ok := ctrlByte(k.Code); ok {
+		if c, ok := ctrlByte(char); ok {
 			return []byte{c}
 		}
 	}
@@ -236,14 +243,15 @@ func encodeBase(k uv.KeyPressEvent) []byte {
 
 	// A bare printable ASCII code (ctrl+1) sends the character; other codes
 	// without text have no encoding.
-	if k.Code >= 0x20 && k.Code < 0x7f {
-		return []byte{byte(k.Code)}
+	if char >= 0x20 && char < 0x7f {
+		return []byte{byte(char)}
 	}
 
 	return nil
 }
 
-// ctrlByte maps ctrl+letter, ctrl+space and ctrl+@[\]^_? to their C0 byte.
+// ctrlByte maps ctrl+letter, ctrl+space, ctrl+@[\]^_? and the xterm
+// ctrl+/ and ctrl+2..8 aliases to their C0 byte.
 func ctrlByte(c rune) (byte, bool) {
 	switch {
 	case c >= 'a' && c <= 'z':
@@ -254,8 +262,17 @@ func ctrlByte(c rune) (byte, bool) {
 		return 0, true
 	case c >= '[' && c <= '_':
 		return byte(c - '@'), true
-	case c == '?':
+	case c >= '{' && c <= '~':
+		// The shifted forms of [ \ ] ^; xterm clears the high bits.
+		return byte(c - '`'), true
+	case c == '?', c == '8':
 		return 0x7f, true
+	case c == '/', c == '7':
+		return 0x1f, true
+	case c == '2':
+		return 0, true
+	case c >= '3' && c <= '6':
+		return byte(c-'3') + 0x1b, true
 	}
 
 	return 0, false

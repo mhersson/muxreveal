@@ -2,8 +2,10 @@
 package term
 
 import (
+	"image/color"
 	"io"
 	"net/url"
+	"os"
 	"sync"
 
 	uv "github.com/charmbracelet/ultraviolet"
@@ -28,6 +30,7 @@ type VT interface {
 	FocusReporting() bool                  // DECSET 1004
 	KeyModes() KeyModes                    // for EncodeKey
 	BracketedPaste() bool                  // DECSET 2004
+	SetDefaultColors(fg, bg color.Color)   // answers OSC 10 and 11 queries; mode 2031 guests get a notice on change
 	SendBytes(b []byte)                    // raw bytes queued on the reply stream, ordered with query replies
 	SendKey(k uv.KeyPressEvent)            // EncodeKey with the current KeyModes; unencodable keys send nothing
 	Close() error                          // idempotent: emulator Close, then wait for the drain
@@ -42,13 +45,18 @@ type KeyModes struct {
 // NewVT starts an emulator and a goroutine that copies its replies (query
 // responses and SendBytes input) to reply. Close stops it.
 func NewVT(cols, rows int, reply io.Writer) VT {
-	t := &tuiosVT{em: tvt.NewWithScrollback(cols, rows, ScrollbackLines)}
+	host, _ := os.Hostname()
+	t := &tuiosVT{em: tvt.NewWithScrollback(cols, rows, ScrollbackLines), host: host}
 	// SetCallbacks replaces the whole set, so add callbacks here.
 	t.em.SetCallbacks(tvt.Callbacks{
-		EnableMode:       t.sync.enable,
-		DisableMode:      t.sync.disable,
-		Title:            func(s string) { t.title = s },
-		WorkingDirectory: func(s string) { t.cwd = fileURLPath(s) },
+		EnableMode:  t.sync.enable,
+		DisableMode: t.sync.disable,
+		Title:       func(s string) { t.title = s },
+		WorkingDirectory: func(s string) {
+			if path, ok := fileURLPath(s, t.host); ok {
+				t.cwd = path
+			}
+		},
 	})
 	t.drain = startDrain(t.em, reply)
 
@@ -61,6 +69,7 @@ type tuiosVT struct {
 	drain *drain
 	title string
 	cwd   string
+	host  string // local hostname; OSC 7 from any other host is ignored
 }
 
 func (t *tuiosVT) Write(p []byte) (int, error) { return t.em.Write(p) }
@@ -72,7 +81,10 @@ func (t *tuiosVT) Title() string               { return t.title }
 func (t *tuiosVT) WorkingDir() string          { return t.cwd }
 func (t *tuiosVT) FocusReporting() bool        { return t.em.FocusReportingEnabled() }
 func (t *tuiosVT) BracketedPaste() bool        { return t.em.BracketedPasteEnabled() }
-func (t *tuiosVT) SendBytes(b []byte)          { t.em.WriteResponse(b) }
+func (t *tuiosVT) SetDefaultColors(fg, bg color.Color) {
+	t.em.SetReportColors(fg, bg, [16]color.Color{})
+}
+func (t *tuiosVT) SendBytes(b []byte) { t.em.WriteResponse(b) }
 
 func (t *tuiosVT) SendKey(k uv.KeyPressEvent) {
 	if b := EncodeKey(k, t.KeyModes()); b != nil {
@@ -106,14 +118,21 @@ func (t *tuiosVT) Close() error {
 	return err
 }
 
-// fileURLPath decodes an OSC 7 file URL to a path; anything else passes through.
-func fileURLPath(s string) string {
+// fileURLPath decodes an OSC 7 file URL to a path; a bare path passes through.
+// It reports false for a URL on another host (a remote shell), whose path means
+// nothing here.
+func fileURLPath(s, localHost string) (string, bool) {
 	u, err := url.Parse(s)
 	if err != nil || u.Scheme != "file" {
-		return s
+		return s, true
 	}
 
-	return u.Path
+	switch u.Hostname() {
+	case "", "localhost", localHost:
+		return u.Path, true
+	}
+
+	return "", false
 }
 
 // syncTracker follows DEC mode 2026 from the emulator's mode callbacks, which

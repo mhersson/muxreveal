@@ -68,7 +68,7 @@ func (a *App) frameAt(g geometry) string {
 		return ""
 	}
 	lk := a.current()
-	bar := barState{leader: a.keymap.leader, pending: a.pending, notice: a.notice}
+	bar := barState{leader: a.keymap.leader, pending: a.pending, notice: printable(a.notice)}
 	st := a.store.State()
 	if st.Layout == nil {
 		return shell(a.width, a.height, a.theme, lk.styles, lk.sample, a.welcomeHints(), bar)
@@ -177,13 +177,13 @@ func (a *App) header(id core.PaneID, r core.Rect, st styles) string {
 		title = "claude"
 	}
 	if p := a.panes[id]; p != nil {
-		if t := cleanTitle(p.title()); t != "" {
+		if t := printable(p.title()); t != "" {
 			title = t
 		}
 	}
 	text := " " + title
 	if meta.Cwd != "" {
-		text += " · " + filepath.Base(meta.Cwd)
+		text += " · " + printable(filepath.Base(meta.Cwd))
 	}
 	style := st.paneHeader
 	if id == s.Focus {
@@ -198,8 +198,8 @@ func (a *App) header(id core.PaneID, r core.Rect, st styles) string {
 	return style.Render(text + strings.Repeat(" ", gap) + tag)
 }
 
-// cleanTitle drops control characters a guest may put in its title.
-func cleanTitle(t string) string {
+// printable drops control characters that guest or filesystem text may carry.
+func printable(t string) string {
 	return strings.Map(func(r rune) rune {
 		if r < 0x20 || r == 0x7f || (r >= 0x80 && r < 0xa0) {
 			return -1

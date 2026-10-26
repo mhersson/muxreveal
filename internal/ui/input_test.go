@@ -205,7 +205,90 @@ func TestViewRequestsFocusReports(t *testing.T) {
 	if !v.ReportFocus {
 		t.Error("ReportFocus = false")
 	}
+	if !v.KeyboardEnhancements.ReportAlternateKeys {
+		t.Error("ReportAlternateKeys = false")
+	}
 	if v.KeyboardEnhancements.ReportEventTypes {
 		t.Error("key releases requested")
 	}
+}
+
+func TestPasteEndsPendingLeader(t *testing.T) {
+	a, _, fp2 := twoPanes(t)
+	a.keymap.delay = 0
+	pressRun(a, keyLeader)
+	if !a.pending || !a.popup {
+		t.Fatalf("pending = %v, popup = %v, want both set", a.pending, a.popup)
+	}
+
+	a.Update(tea.PasteMsg{Content: "one"})
+	if a.pending || a.popup {
+		t.Errorf("pending = %v, popup = %v after paste", a.pending, a.popup)
+	}
+	if got := settled(t, a, "p2", fp2); got != "one" {
+		t.Errorf("paste = %q, want %q", got, "one")
+	}
+
+	press(a, keyRune('x'))
+	if len(a.panes) != 2 {
+		t.Errorf("x after the paste closed a pane; %d left", len(a.panes))
+	}
+}
+
+func TestPanesAnswerThemeColours(t *testing.T) {
+	const (
+		queryFg = "\x1b]10;?\x07"
+		queryBg = "\x1b]11;?\x07"
+	)
+
+	a, _, fp2 := twoPanes(t)
+	a.keymap.delay = 0
+	p2 := a.panes["p2"]
+	// The harness injects its panes after the first message, so forget what was reported.
+	a.reportedFg, a.reportedBg = "", ""
+	a.Update(nil)
+
+	// answers asks both questions and returns what the process got back.
+	answers := func() string {
+		before := len(fp2.sent())
+		feedAndWait(t, p2, fp2, queryFg+queryBg)
+		eventually(t, "both answers", func() bool {
+			return strings.Count(fp2.sent()[before:], "rgb:") == 2
+		})
+
+		return fp2.sent()[before:]
+	}
+	hasColours := func(got, fg, bg string) bool {
+		return strings.Contains(got, "]10;"+fg) && strings.Contains(got, "]11;"+bg)
+	}
+
+	if got := answers(); !hasColours(got, "rgb:cdcd/d6d6/f4f4", "rgb:1e1e/1e1e/2e2e") {
+		t.Errorf("mocha answers = %q", got)
+	}
+
+	// The picker's live preview already reports the highlighted theme.
+	pressRun(a, keyLeader, keyRune('t'), keyDown)
+	if got := answers(); !hasColours(got, "rgb:4c4c/4f4f/6969", "rgb:efef/f1f1/f5f5") {
+		t.Errorf("latte preview answers = %q", got)
+	}
+
+	pressRun(a, keyEsc)
+	if got := answers(); !hasColours(got, "rgb:cdcd/d6d6/f4f4", "rgb:1e1e/1e1e/2e2e") {
+		t.Errorf("answers after cancelling the preview = %q", got)
+	}
+
+	pressRun(a, keyLeader, keyRune('t'), keyDown, keyEnter)
+	if got := answers(); !hasColours(got, "rgb:4c4c/4f4f/6969", "rgb:efef/f1f1/f5f5") {
+		t.Errorf("latte answers = %q", got)
+	}
+}
+
+func TestNewPaneAnswersThemeColours(t *testing.T) {
+	a, st := lifeAppSized(t, 100, 30)
+
+	chord(a, 'v')
+
+	fp := st.proc(1)
+	feedAndWait(t, a.panes["p2"], fp, "\x1b]11;?\x07")
+	eventually(t, "answer", func() bool { return strings.Contains(fp.sent(), "]11;rgb:1e1e/1e1e/2e2e") })
 }
