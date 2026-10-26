@@ -114,7 +114,9 @@ func (s *State) removeTab(i int, keepName bool) {
 	}
 }
 
-// NewTab appends a tab whose first pane is a new pane and activates it.
+// NewTab appends a tab whose first pane is a new pane and activates it. An
+// empty active tab (only possible as the only tab) is filled instead, keeping
+// its ID and name.
 type NewTab struct {
 	Kind PaneKind
 	Cwd  string
@@ -127,13 +129,19 @@ func (a NewTab) apply(s *State) error {
 	s.normalize()
 	id := s.NewPaneID()
 	s.NextID++
-	s.NextTabID++
-	s.Tabs = append(s.Tabs, Tab{
-		ID:     TabID("t" + strconv.Itoa(s.NextTabID)),
-		Layout: &Node{Pane: id},
-		Focus:  id,
-	})
-	s.Active = len(s.Tabs) - 1
+	if t := s.cur(); t.Layout == nil {
+		t.Layout = &Node{Pane: id}
+		t.Focus = id
+		t.Zoomed = false
+	} else {
+		s.NextTabID++
+		s.Tabs = append(s.Tabs, Tab{
+			ID:     TabID("t" + strconv.Itoa(s.NextTabID)),
+			Layout: &Node{Pane: id},
+			Focus:  id,
+		})
+		s.Active = len(s.Tabs) - 1
+	}
 	// A conversion (S1016) ties NewTab's fields to Pane's.
 	s.Panes[id] = Pane(a)
 	return nil

@@ -27,6 +27,10 @@ type styles struct {
 	titleMuted, cwdFocus, cwdSubtle, dot, tagZoom lipgloss.Style
 	// popupBorder draws the popup frame on the panel colour.
 	popupBorder lipgloss.Style
+	// popupMuted and popupSubtle are secondary text on the panel colour.
+	popupMuted, popupSubtle lipgloss.Style
+	// The confirm box: its Error border and title, bold question and bold keys.
+	confirmBorder, confirmTitle, confirmQuestion, confirmKey lipgloss.Style
 }
 
 func newStyles(t theme.Theme) styles {
@@ -54,6 +58,13 @@ func newStyles(t theme.Theme) styles {
 		dot:         onBg.Foreground(ui.Subtle),
 		tagZoom:     onBg.Foreground(ui.Accent).Bold(true),
 		popupBorder: lipgloss.NewStyle().Background(ui.Panel).Foreground(ui.BorderFocus),
+		popupMuted:  onPanel.Foreground(ui.Muted),
+		popupSubtle: onPanel.Foreground(ui.Subtle),
+
+		confirmBorder:   onPanel.Foreground(ui.Error),
+		confirmTitle:    onPanel.Foreground(ui.Error).Bold(true),
+		confirmQuestion: onPanel.Bold(true),
+		confirmKey:      onPanel.Foreground(ui.Key).Bold(true),
 	}
 }
 

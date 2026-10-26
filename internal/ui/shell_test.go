@@ -164,7 +164,11 @@ func lastRow(a *App) string {
 
 func TestStatusBar(t *testing.T) {
 	mode := " " + iconApp + " MuxReveal " + edgeSolid + " "
-	legend := "ctrl+space then  : palette   z zoom   q quit"
+	// The legend up to and including each pair, as the width allows.
+	legend := "ctrl+space then  : palette   c new tab   , rename   z zoom   q quit"
+	toZoom := "ctrl+space then  : palette   c new tab   , rename   z zoom"
+	toRename := "ctrl+space then  : palette   c new tab   , rename"
+	toNewTab := "ctrl+space then  : palette   c new tab"
 
 	// pad fills the row to w cells; right is placed flush at the edge.
 	row := func(w int, left, right string) string {
@@ -183,20 +187,20 @@ func TestStatusBar(t *testing.T) {
 		{"leader waiting", func(a *App) { a.pending = true }, true, 100,
 			row(100, " "+iconLeader+" ctrl+space "+edgeSolid+" esc cancel", iconFolder+" /w/proj ")},
 		{"notice", func(a *App) { a.notice = "cannot start shell" }, true, 100,
-			row(100, mode+legend, iconAlert+" cannot start shell ")},
+			row(100, mode+toZoom, iconAlert+" cannot start shell ")},
 		{"notice with control characters", func(a *App) { a.notice = "a\nb\x1b[31m" }, true, 100,
 			row(100, mode+legend, iconAlert+" ab[31m ")},
 		{"long cwd is cut", func(a *App) {
 			a.panes = map[core.PaneID]*pane{}
 			a.store = core.NewStore(core.State{Theme: "catppuccin-mocha"})
 			_ = a.dispatch(core.OpenPane{Kind: core.KindShell, Cwd: "/a/very/long/path/to/some/project/dir", Split: core.SplitVertical})
-		}, true, 100, row(100, mode+legend, iconFolder+" /a/very/long/path/to/som…"+" ")},
-		{"pairs drop from the end", func(*App) {}, true, 50, row(50, mode+"ctrl+space then  : palette   z zoom", "")},
+		}, true, 100, row(100, mode+toRename, iconFolder+" /a/very/long/path/to/som…"+" ")},
+		{"pairs drop from the end", func(*App) {}, true, 53, row(53, mode+toNewTab, "")},
 		{"one pair left", func(*App) {}, true, 49, row(49, mode+"ctrl+space then  : palette", "")},
 		{"lead-in only", func(*App) {}, true, 40, row(40, mode+"ctrl+space then", "")},
 		{"mode only", func(*App) {}, true, 29, row(29, mode, "")},
-		{"no room for the right side", func(*App) {}, true, 76, row(76, mode+legend, "")},
-		{"just room for the right side", func(*App) {}, true, 77, row(77, mode+legend, iconFolder+" /…"+" ")},
+		{"no room for the right side", func(*App) {}, true, 76, row(76, mode+toZoom, "")},
+		{"just room for the right side", func(*App) {}, true, 77, row(77, mode+toRename, iconFolder+" /…"+" ")},
 	}
 
 	for _, tt := range tests {
@@ -226,7 +230,7 @@ func TestStatusBarRightRoom(t *testing.T) {
 		t.Errorf("status bar = %q, want it to end with %q", got, want)
 	}
 
-	if !strings.Contains(got, "z zoom   q quit") {
+	if !strings.Contains(got, "c new tab   , rename") {
 		t.Errorf("legend lost pairs to the cwd: %q", got)
 	}
 }
@@ -298,7 +302,7 @@ func TestStatusBarNoticePriority(t *testing.T) {
 	tests := []struct {
 		name, notice, left, right string
 	}{
-		{"pairs give way", "boom", "ctrl+space then  : palette   z zoom", iconAlert + " boom "},
+		{"pairs give way", "boom", "ctrl+space then  : palette", iconAlert + " boom "},
 		{"lead-in gives way", strings.Repeat("x", 30), "", iconAlert + " " + strings.Repeat("x", 30) + " "},
 		{"cut last", long, "", iconAlert + " " + strings.Repeat("n", 41) + "… "},
 	}

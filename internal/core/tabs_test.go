@@ -86,8 +86,34 @@ func TestNilTabsBehaveAsOneEmptyTab(t *testing.T) {
 		t.Errorf("OpenPane on nil tabs: %+v", got)
 	}
 	got = dispatch(t, State{}, NewTab{Kind: KindShell})
-	if !slices.Equal(tabIDs(got), []TabID{"t1", "t2"}) || got.Active != 1 {
+	if !slices.Equal(tabIDs(got), []TabID{"t1"}) || got.Active != 0 || got.Tab().Focus != "p1" {
 		t.Errorf("NewTab on nil tabs: %v active %d", tabIDs(got), got.Active)
+	}
+}
+
+func TestNewTabFillsEmptyTab(t *testing.T) {
+	empty := tabsOf(0, nil, nil)
+	empty.Tabs[0].Name = "work"
+
+	s := dispatch(t, empty, NewTab{Kind: KindAgent, Cwd: "/w"})
+	tab := s.Tab()
+	if !slices.Equal(tabIDs(s), []TabID{"t1"}) || s.Active != 0 {
+		t.Fatalf("tabs = %v active %d", tabIDs(s), s.Active)
+	}
+	if tab.Name != "work" || show(tab.Layout) != "p1" || tab.Focus != "p1" || tab.Zoomed {
+		t.Errorf("tab = %+v", tab)
+	}
+	if p := s.Panes["p1"]; p.Kind != KindAgent || p.Cwd != "/w" {
+		t.Errorf("pane = %+v", p)
+	}
+	if s.NextTabID != 1 {
+		t.Errorf("NextTabID = %d, want 1", s.NextTabID)
+	}
+
+	// The next new tab appends and IDs are not reused.
+	s = dispatch(t, s, NewTab{Kind: KindShell})
+	if !slices.Equal(tabIDs(s), []TabID{"t1", "t2"}) || s.Active != 1 {
+		t.Errorf("tabs = %v active %d", tabIDs(s), s.Active)
 	}
 }
 

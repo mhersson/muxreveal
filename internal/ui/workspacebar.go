@@ -34,9 +34,10 @@ type trayModule struct {
 
 // tabInfo is what the bar needs to know about a tab; name is already resolved.
 type tabInfo struct {
-	n     int // 1-based position
-	name  string
-	agent bool
+	n        int // 1-based position
+	name     string
+	agent    bool
+	renaming bool // the segment is a text input holding name
 }
 
 // tabLevel is how much of a tab segment shows.
@@ -249,6 +250,11 @@ func (a *App) tabInfos() []tabInfo {
 		out[i] = tabInfo{n: i + 1, name: name, agent: st.TabHasAgents(i)}
 	}
 
+	if a.prompt != nil && st.Tab().ID == a.prompt.tab {
+		out[st.Active].name = printable(a.prompt.input.Value())
+		out[st.Active].renaming = true
+	}
+
 	return out
 }
 
@@ -301,11 +307,7 @@ func renderTabs(p barPlan, tabs []tabInfo, active int, icons bool, ui theme.UI) 
 	for i, v := range p.tabs {
 		info := tabs[v.idx]
 		isActive := v.idx == active
-		bg := ui.Surface
-
-		if isActive {
-			bg = ui.Accent
-		}
+		bg := segmentBg(info, v.level, isActive, ui)
 
 		sb.WriteString(renderSegment(info, v.level, isActive, icons, ui))
 
@@ -322,22 +324,94 @@ func renderTabs(p barPlan, tabs []tabInfo, active int, icons bool, ui theme.UI) 
 			continue
 		}
 
-		nextActive := p.tabs[i+1].idx == active
+		next := p.tabs[i+1]
+		nextActive := next.idx == active
 
 		switch {
 		case !isActive && !nextActive:
 			sb.WriteString(paint(ui.Bar, ui.Surface, false).Render(edgeThin))
-		case nextActive:
-			sb.WriteString(paint(bg, ui.Accent, false).Render(edgeSolid))
 		default:
-			sb.WriteString(paint(bg, ui.Surface, false).Render(edgeSolid))
+			sb.WriteString(paint(bg, segmentBg(tabs[next.idx], next.level, nextActive, ui), false).Render(edgeSolid))
 		}
 	}
 
 	return sb.String()
 }
 
+// segmentBg is the background of a tab segment; a segment drawn as the rename input sits on Bg.
+func segmentBg(t tabInfo, level tabLevel, isActive bool, ui theme.UI) theme.Hex {
+	switch {
+	case isActive && t.renaming && level == levelFull:
+		return ui.Bg
+	case isActive:
+		return ui.Accent
+	}
+
+	return ui.Surface
+}
+
+// renameSegment draws the active tab as a text input: ` N icon name `, with the
+// trailing cell holding the cursor at the end of the text.
+func renameSegment(t tabInfo, icons bool, ui theme.UI) string {
+	text := paint(ui.Fg, ui.Bg, false)
+	accent := paint(ui.Accent, ui.Bg, true)
+	out := text.Render(" ") + accent.Render(strconv.Itoa(t.n)) + text.Render(" ")
+
+	if icons {
+		out += accent.Render(iconRename) + text.Render(" ")
+	}
+
+	return out + text.Render(t.name+" ")
+}
+
+// drawnWidth is the cells s takes in the bar, which draws only its printable text.
+func drawnWidth(s string) int { return ansi.StringWidth(printable(s)) }
+
+// renameCursorX is the column of the rename input's cursor in the bar. It is
+// false when no tab is being renamed or its segment is shortened.
+func (a *App) renameCursorX() (int, bool) {
+	tabs := a.tabInfos()
+	active := a.store.State().Active
+
+	if active >= len(tabs) || !tabs[active].renaming {
+		return 0, false
+	}
+
+	p := planBar(tabs, active, a.trayModules(), a.width, a.icons)
+	x := 0
+
+	for _, v := range p.tabs {
+		t := tabs[v.idx]
+		if v.idx != active {
+			x += segWidth(t, v.level, a.icons) + 1
+
+			continue
+		}
+
+		if v.level != levelFull {
+			return 0, false
+		}
+
+		// The leading space, the number, and with icons the icon and its space.
+		x += 1 + len(strconv.Itoa(t.n)) + 1
+		if a.icons {
+			x += 2
+		}
+
+		in := a.prompt.input
+		x += drawnWidth(string([]rune(in.Value())[:in.Position()]))
+
+		return x, x < a.width
+	}
+
+	return 0, false
+}
+
 func renderSegment(t tabInfo, level tabLevel, isActive, icons bool, ui theme.UI) string {
+	if isActive && t.renaming && level == levelFull {
+		return renameSegment(t, icons, ui)
+	}
+
 	icon := iconShell
 	if t.agent {
 		icon = iconAgent

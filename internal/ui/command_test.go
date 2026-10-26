@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
@@ -71,8 +72,16 @@ func TestDefaultCommands(t *testing.T) {
 		{"pane.swap.right", "Swap right"},
 		{"pane.zoom", "Zoom pane"},
 		{"pane.close", "Close pane"},
-		{"app.quit", "Quit MuxReveal"},
+		{"tab.new", "New tab"},
+		{"tab.rename", "Rename tab"},
+		{"tab.close", "Close tab"},
+		{"tab.next", "Next tab"},
+		{"tab.prev", "Previous tab"},
 	}
+	for n := 1; n <= 9; n++ {
+		fixed = append(fixed, struct{ id, title string }{fmt.Sprintf("tab.jump.%d", n), fmt.Sprintf("Jump to tab %d", n)})
+	}
+	fixed = append(fixed, struct{ id, title string }{"app.quit", "Quit MuxReveal"})
 	if len(cmds) != len(fixed)+len(theme.All()) {
 		t.Fatalf("defaultCommands() has %d commands, want %d", len(cmds), len(fixed)+len(theme.All()))
 	}

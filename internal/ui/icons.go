@@ -10,6 +10,7 @@ const (
 	iconLeader = "\U000F030C" // nf-md-keyboard
 	iconAlert  = "\U000F002A" // nf-md-alert_outline
 	iconFolder = "\U000F024B" // nf-md-folder
+	iconRename = "\U000F0455" // nf-md-rename_box
 )
 
 // Powerline edges and dividers.

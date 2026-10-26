@@ -148,16 +148,15 @@ func overlayOver(base string, width, height int, pal palette.Model) string {
 		return base
 	}
 	pw := min(maxOverlayWidth, width)
-	return overlayLines(base, width, height, strings.Split(pal.View(pw), "\n"), pw)
+	return overlayLines(base, width, height, height/4, strings.Split(pal.View(pw), "\n"), pw)
 }
 
 // overlayLines draws lines pw cells wide over base, centred horizontally with
-// the top at a quarter of the height, clipped to the body rows.
-func overlayLines(base string, width, height int, lines []string, pw int) string {
+// the top at row y, clipped to the body rows.
+func overlayLines(base string, width, height, y int, lines []string, pw int) string {
 	if width < 2 || height < 2 {
 		return base
 	}
-	y := height / 4
 	if room := height - 1 - y; len(lines) > room {
 		lines = lines[:max(room, 0)]
 	}

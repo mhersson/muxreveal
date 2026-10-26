@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -56,6 +58,7 @@ type App struct {
 	// reportedFg and reportedBg are the colours last given to the panes.
 	reportedFg, reportedBg theme.Hex
 	confirm                *confirm // yes/no question; owns every key while open
+	prompt                 *prompt  // text input; owns every key and paste while open
 
 	panes        map[core.PaneID]*pane // runtime panes, keyed like State.Panes
 	later        []tea.Cmd             // commands raised outside the update's return path; Update batches them
@@ -152,6 +155,7 @@ func (a *App) dispatch(act core.Action) error {
 		return err
 	}
 	st := a.store.State()
+	a.dropGoneTab(st)
 	a.reportFocusChange(prev.Focus, st.Tab().Focus)
 	if st.Tab().ID != prev.ID {
 		a.renderStale(st)
@@ -164,6 +168,21 @@ func (a *App) dispatch(act core.Action) error {
 		return err
 	}
 	return nil
+}
+
+// dropGoneTab closes a confirm or prompt about a tab that no longer exists.
+func (a *App) dropGoneTab(st core.State) {
+	has := func(id core.TabID) bool {
+		return slices.ContainsFunc(st.Tabs, func(t core.Tab) bool { return t.ID == id })
+	}
+
+	if a.confirm != nil && a.confirm.tab != "" && !has(a.confirm.tab) {
+		a.confirm = nil
+	}
+
+	if a.prompt != nil && !has(a.prompt.tab) {
+		a.prompt = nil
+	}
 }
 
 // Init implements tea.Model.
@@ -242,7 +261,10 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case whichKeyMsg:
 		a.popup = a.pending && msg.seq == a.seq
 	default:
-		// The input's own messages belong to the open palette.
+		// The input's own messages belong to the open prompt or palette.
+		if a.prompt != nil {
+			return a, a.updatePrompt(msg)
+		}
 		if a.overlay != nil {
 			return a, a.updateOverlay(msg)
 		}
@@ -296,11 +318,21 @@ func (a *App) runLeader(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 	return c.run(a), true
 }
 
-// hints lists the bound commands with their command titles.
+// hints lists the bound commands with their command titles; the tab jumps
+// share one row.
 func (a *App) hints() []hint {
 	hints := make([]hint, 0, len(a.keymap.bindings))
+	jumps := false
 	for _, b := range a.keymap.bindings {
-		if c, ok := a.reg.get(b.command); ok {
+		c, ok := a.reg.get(b.command)
+		switch {
+		case !ok:
+		case strings.HasPrefix(b.command, "tab.jump."):
+			if !jumps {
+				hints = append(hints, hint{key: "1-9", title: "Jump to tab"})
+			}
+			jumps = true
+		default:
 			hints = append(hints, hint{key: b.key, title: c.title})
 		}
 	}
@@ -321,7 +353,7 @@ func (a *App) View() tea.View {
 		content = overlayOver(content, a.width, a.height, a.overlay.pal)
 	}
 	if a.confirm != nil {
-		content = overlayConfirm(content, a.width, a.height, *a.confirm, lk.styles)
+		content = overlayConfirm(content, a.width, a.height, *a.confirm, a.icons, lk.styles)
 	}
 	v := tea.NewView(content)
 	v.AltScreen = true

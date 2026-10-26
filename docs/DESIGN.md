@@ -234,7 +234,7 @@ Go 1.27 (`tuios.dev/vt` needs 1.26 or later). The reason for Rust was a proven V
 - At least one tab always exists. Closing a tab's last pane removes the tab unless it is the only one, which stays and shows the welcome card. Closing the active tab activates the tab to its left, or the new first tab; closing a hidden tab keeps the active tab. Switching tabs changes only which tab is active; each tab keeps its focus and zoom.
 - MuxReveal starts with one shell pane in the launch directory, in the first tab. It never quits by itself.
 - Shell panes run `$SHELL -l`. `leader n` opens an agent pane to the right of the focused pane, in its cwd, running `$SHELL -l -i -c 'claude; exec "$SHELL" -l'`, so leaving Claude leaves a shell in the pane. `$SHELL` falls back to `/bin/sh`.
-- `leader x` closes the focused pane at once; for an agent pane it first asks in a confirm overlay (`y` or `enter` confirms, `n` or `esc` cancels). `leader q` quits and asks first when any agent pane is open. A pane whose process exits closes without asking, and so does an open confirm about it. The confirm owns every key while it is open.
+- `leader x` closes the focused pane at once; for an agent pane it first asks in a confirm overlay (`y` or `enter` confirms, `n` or `esc` cancels). `leader q` quits and asks first when any agent pane is open. `leader X` closes the active tab with all its panes, asking first when it holds an agent pane. A pane whose process exits closes without asking, and so does an open confirm about it or about its tab once the tab is gone. The confirm owns every key while it is open.
 - The cwd a pane shows and its splits inherit is the last OSC 7 path the pane reported, else on Linux the `/proc` cwd of the terminal's foreground process group, else the cwd the pane started in. It is looked up off the UI loop, at most every 500 ms per pane.
 
 ### Visual design
@@ -306,7 +306,7 @@ Square-cornered boxes (`┌ ┐ └ ┘`) on `Panel`. Each title is set into the
   - Title: ` 󰀪 <action> ` in `Error`, bold.
   - Inside, two cells from the left border: a blank row, the question in `Fg` and bold, the detail in `Muted`, a blank row, then the answers.
   - Answers: `[y] <action>    [n] Cancel`, with the brackets in `Subtle`, the keys in `Key` and bold, and the labels in `Fg`.
-- **Rename.** Edits the tab in place. The active tab's segment becomes a text input on `Bg` that grows with the text: ` N 󰑕 name` with the number `Accent` and bold, the text `Fg`, and the input's cursor. The status bar shows the rename mode and its legend.
+- **Rename.** Edits the tab in place. The active tab's segment becomes a text input on `Bg` of at most 32 characters that grows with the text: ` N 󰑕 name` with the number and the icon `Accent` and bold, the text `Fg`, the input's cursor, and one more `Bg` cell before the edge cell. The status bar shows the rename mode and its legend.
 
 #### Theme roles
 
@@ -519,7 +519,11 @@ Terminal panes pass every key through to the agent, so global actions sit behind
 | `[` | Copy mode |
 | `:` | Command palette |
 | `t` | Theme picker |
-| `1`–`9` | Jump to window |
+| `c` | New tab: a shell in the focused pane's cwd |
+| `,` | Rename the active tab in place (`enter` saves, `esc` cancels, empty restores the automatic name) |
+| `X` | Close the active tab (confirms when it has agent panes) |
+| `tab` / `shift+tab` | Next / previous tab, wrapping |
+| `1`–`9` | Jump to tab |
 
 ### Review pane (agent diff and PR diff)
 

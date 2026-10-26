@@ -244,10 +244,18 @@ func printable(t string) string {
 }
 
 // cursorView places the focused pane's cursor on screen; nil when the guest
-// hides it, it falls outside the pane, or an overlay, a confirm or the which-key popup is open.
+// hides it, it falls outside the pane, or an overlay, a confirm or the which-key
+// popup is open. A prompt moves the cursor into the workspace bar.
 func (a *App) cursorView() *tea.Cursor { return a.cursorAt(a.geometry()) }
 
 func (a *App) cursorAt(g geometry) *tea.Cursor {
+	if a.prompt != nil {
+		if x, ok := a.renameCursorX(); ok {
+			return tea.NewCursor(x, 0)
+		}
+
+		return nil
+	}
 	if a.overlay != nil || a.popup || a.confirm != nil {
 		return nil
 	}

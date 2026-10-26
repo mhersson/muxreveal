@@ -450,7 +450,7 @@ func TestCloseShellAndAgent(t *testing.T) {
 					t.Fatalf("panes before the answer = %d, want 2", got)
 				}
 
-				if v := ansi.Strip(a.View().Content); !strings.Contains(v, "y / n") {
+				if v := ansi.Strip(a.View().Content); !strings.Contains(v, "[y] Close pane") {
 					t.Errorf("view lacks the confirm prompt:\n%s", v)
 				}
 

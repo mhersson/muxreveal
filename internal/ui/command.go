@@ -3,6 +3,7 @@ package ui
 import (
 	"errors"
 	"fmt"
+	"strconv"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -109,6 +110,34 @@ func defaultCommands() []command {
 		title: "Close pane",
 		run:   (*App).closeFocused,
 	}, command{
+		id:    "tab.new",
+		title: "New tab",
+		run:   (*App).newTab,
+	}, command{
+		id:    "tab.rename",
+		title: "Rename tab",
+		run:   (*App).renameTab,
+	}, command{
+		id:    "tab.close",
+		title: "Close tab",
+		run:   (*App).closeTab,
+	}, command{
+		id:    "tab.next",
+		title: "Next tab",
+		run:   func(a *App) tea.Cmd { return a.act(core.CycleTab{Delta: 1}) },
+	}, command{
+		id:    "tab.prev",
+		title: "Previous tab",
+		run:   func(a *App) tea.Cmd { return a.act(core.CycleTab{Delta: -1}) },
+	})
+	for n := 1; n <= 9; n++ {
+		cmds = append(cmds, command{
+			id:    "tab.jump." + strconv.Itoa(n),
+			title: "Jump to tab " + strconv.Itoa(n),
+			run:   func(a *App) tea.Cmd { return a.act(core.SelectTab{Index: n - 1}) },
+		})
+	}
+	cmds = append(cmds, command{
 		id:    "app.quit",
 		title: "Quit MuxReveal",
 		run:   (*App).quit,

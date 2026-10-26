@@ -109,6 +109,8 @@ func (a *App) statusBar(width int, st core.State) string {
 	m := statusMode{bg: ui.Accent, icon: iconApp, text: "MuxReveal"}
 
 	switch {
+	case a.prompt != nil:
+		m = statusMode{bg: ui.Accent, icon: iconRename, text: "Rename tab"}
 	case a.pending:
 		m = statusMode{bg: ui.Warning, icon: iconLeader, text: a.keymap.leader}
 	}
@@ -138,7 +140,7 @@ func (a *App) statusBar(width int, st core.State) string {
 	lead := a.keymap.leader + " then"
 	leadW := 0
 
-	if !a.pending {
+	if !a.pending && a.prompt == nil {
 		leadW = ansi.StringWidth(lead) + 2
 	}
 
@@ -180,26 +182,34 @@ func (a *App) statusBar(width int, st core.State) string {
 			ansi.StringWidth(key) + 1 + ansi.StringWidth(action)
 	}
 
+	type legendPair struct{ key, label string }
+
+	var pairs []legendPair
+
+	sep := 0
+
 	switch {
+	case a.prompt != nil:
+		pairs = []legendPair{{"enter", "save"}, {"esc", "cancel"}, {"empty", "automatic name"}}
 	case a.pending:
-		s, w := pair("esc", "cancel")
-		put(0, s, w)
+		pairs = []legendPair{{"esc", "cancel"}}
 	case put(0, paint(ui.Subtle, ui.Bar, false).Render(lead), ansi.StringWidth(lead)):
-		sep := 2
+		sep = 2
 
 		for _, it := range legendItems() {
-			key, ok := a.keymap.keyOf(it.command)
-			if !ok {
-				continue
+			if key, ok := a.keymap.keyOf(it.command); ok {
+				pairs = append(pairs, legendPair{key, it.label})
 			}
-
-			s, w := pair(key, it.label)
-			if !put(sep, s, w) {
-				break
-			}
-
-			sep = legendGap
 		}
+	}
+
+	for _, p := range pairs {
+		s, w := pair(p.key, p.label)
+		if !put(sep, s, w) {
+			break
+		}
+
+		sep = legendGap
 	}
 
 	sb.WriteString(blanks(width - x - rightW))
