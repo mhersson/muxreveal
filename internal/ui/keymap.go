@@ -2,8 +2,9 @@ package ui
 
 import "time"
 
-// binding maps a key pressed after the leader to a command id.
-type binding struct{ key, command string }
+// binding maps a key pressed after the leader to a command id; group names
+// the which-key section it is listed under.
+type binding struct{ key, command, group string }
 
 // keymap binds keys pressed after the leader key to commands.
 type keymap struct {
@@ -18,40 +19,40 @@ func defaultKeymap() keymap {
 		leader: "ctrl+space",
 		delay:  300 * time.Millisecond,
 		bindings: []binding{
-			{key: ":", command: "palette.open"},
-			{key: "t", command: "theme.pick"},
-			{key: "n", command: "agent.new"},
-			{key: "s", command: "pane.split.down"},
-			{key: "v", command: "pane.split.right"},
-			{key: "h", command: "pane.focus.left"},
-			{key: "j", command: "pane.focus.down"},
-			{key: "k", command: "pane.focus.up"},
-			{key: "l", command: "pane.focus.right"},
-			{key: "H", command: "pane.resize.left"},
-			{key: "J", command: "pane.resize.down"},
-			{key: "K", command: "pane.resize.up"},
-			{key: "L", command: "pane.resize.right"},
-			{key: "ctrl+h", command: "pane.swap.left"},
-			{key: "ctrl+j", command: "pane.swap.down"},
-			{key: "ctrl+k", command: "pane.swap.up"},
-			{key: "ctrl+l", command: "pane.swap.right"},
-			{key: "z", command: "pane.zoom"},
-			{key: "x", command: "pane.close"},
-			{key: "c", command: "tab.new"},
-			{key: ",", command: "tab.rename"},
-			{key: "X", command: "tab.close"},
-			{key: "tab", command: "tab.next"},
-			{key: "shift+tab", command: "tab.prev"},
-			{key: "1", command: "tab.jump.1"},
-			{key: "2", command: "tab.jump.2"},
-			{key: "3", command: "tab.jump.3"},
-			{key: "4", command: "tab.jump.4"},
-			{key: "5", command: "tab.jump.5"},
-			{key: "6", command: "tab.jump.6"},
-			{key: "7", command: "tab.jump.7"},
-			{key: "8", command: "tab.jump.8"},
-			{key: "9", command: "tab.jump.9"},
-			{key: "q", command: "app.quit"},
+			{key: ":", command: "palette.open", group: "App"},
+			{key: "t", command: "theme.pick", group: "App"},
+			{key: "n", command: "agent.new", group: "Panes"},
+			{key: "s", command: "pane.split.down", group: "Panes"},
+			{key: "v", command: "pane.split.right", group: "Panes"},
+			{key: "h", command: "pane.focus.left", group: "Panes"},
+			{key: "j", command: "pane.focus.down", group: "Panes"},
+			{key: "k", command: "pane.focus.up", group: "Panes"},
+			{key: "l", command: "pane.focus.right", group: "Panes"},
+			{key: "H", command: "pane.resize.left", group: "Panes"},
+			{key: "J", command: "pane.resize.down", group: "Panes"},
+			{key: "K", command: "pane.resize.up", group: "Panes"},
+			{key: "L", command: "pane.resize.right", group: "Panes"},
+			{key: "ctrl+h", command: "pane.swap.left", group: "Panes"},
+			{key: "ctrl+j", command: "pane.swap.down", group: "Panes"},
+			{key: "ctrl+k", command: "pane.swap.up", group: "Panes"},
+			{key: "ctrl+l", command: "pane.swap.right", group: "Panes"},
+			{key: "z", command: "pane.zoom", group: "Panes"},
+			{key: "x", command: "pane.close", group: "Panes"},
+			{key: "c", command: "tab.new", group: "Tabs"},
+			{key: ",", command: "tab.rename", group: "Tabs"},
+			{key: "X", command: "tab.close", group: "Tabs"},
+			{key: "tab", command: "tab.next", group: "Tabs"},
+			{key: "shift+tab", command: "tab.prev", group: "Tabs"},
+			{key: "1", command: "tab.jump.1", group: "Tabs"},
+			{key: "2", command: "tab.jump.2", group: "Tabs"},
+			{key: "3", command: "tab.jump.3", group: "Tabs"},
+			{key: "4", command: "tab.jump.4", group: "Tabs"},
+			{key: "5", command: "tab.jump.5", group: "Tabs"},
+			{key: "6", command: "tab.jump.6", group: "Tabs"},
+			{key: "7", command: "tab.jump.7", group: "Tabs"},
+			{key: "8", command: "tab.jump.8", group: "Tabs"},
+			{key: "9", command: "tab.jump.9", group: "Tabs"},
+			{key: "q", command: "app.quit", group: "App"},
 		},
 	}
 }
@@ -82,4 +83,14 @@ func (k keymap) keyFor(command string) (string, bool) {
 		return "", false
 	}
 	return k.leader + " " + key, true
+}
+
+// groupOf returns the which-key group of the binding for a command.
+func (k keymap) groupOf(command string) string {
+	for _, b := range k.bindings {
+		if b.command == command {
+			return b.group
+		}
+	}
+	return ""
 }

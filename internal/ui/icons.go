@@ -11,6 +11,19 @@ const (
 	iconAlert  = "\U000F002A" // nf-md-alert_outline
 	iconFolder = "\U000F024B" // nf-md-folder
 	iconRename = "\U000F0455" // nf-md-rename_box
+
+	iconPanes     = "\U000F0BCC" // nf-md-view_split_vertical
+	iconSplitDown = "\U000F0BCB" // nf-md-view_split_horizontal
+	iconTabs      = "\U000F04E9" // nf-md-tab
+	iconTabNew    = "\U000F075C" // nf-md-tab_plus
+	iconCog       = "\U000F0493" // nf-md-cog
+	iconPalette   = "\uF4B5"     // nf-oct-command_palette
+	iconTheme     = "\U000F03D8" // nf-md-palette
+	iconFocus     = "\U000F04FE" // nf-md-target
+	iconResize    = "\U000F0616" // nf-md-arrow_expand
+	iconSwap      = "\U000F04E1" // nf-md-swap_horizontal
+	iconClose     = "\U000F0156" // nf-md-close
+	iconQuit      = "\U000F0206" // nf-md-exit_to_app
 )
 
 // Powerline edges and dividers.

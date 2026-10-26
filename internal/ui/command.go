@@ -14,8 +14,8 @@ import (
 // command is a named user action. Every action is a command so the keymap and
 // the command palette reach it the same way.
 type command struct {
-	id, title string
-	run       func(a *App) tea.Cmd
+	id, title, icon string
+	run             func(a *App) tea.Cmd
 }
 
 // registry holds commands by id and in registration order.
@@ -61,28 +61,34 @@ func defaultCommands() []command {
 	}{{"left", core.Left}, {"down", core.Down}, {"up", core.Up}, {"right", core.Right}}
 	cmds := []command{{
 		id:    "palette.open",
+		icon:  iconPalette,
 		title: "Open command palette",
 		run:   func(a *App) tea.Cmd { a.openCommandPalette(); return nil },
 	}, {
 		id:    "theme.pick",
+		icon:  iconTheme,
 		title: "Pick theme",
 		run:   func(a *App) tea.Cmd { a.openThemePicker(); return nil },
 	}, {
 		id:    "agent.new",
+		icon:  iconAgent,
 		title: "New agent pane",
 		run:   func(a *App) tea.Cmd { return a.openPane(core.KindAgent, core.SplitVertical) },
 	}, {
 		id:    "pane.split.down",
+		icon:  iconSplitDown,
 		title: "Split: shell below",
 		run:   func(a *App) tea.Cmd { return a.openPane(core.KindShell, core.SplitHorizontal) },
 	}, {
 		id:    "pane.split.right",
+		icon:  iconPanes,
 		title: "Split: shell right",
 		run:   func(a *App) tea.Cmd { return a.openPane(core.KindShell, core.SplitVertical) },
 	}}
 	for _, d := range dirs {
 		cmds = append(cmds, command{
 			id:    "pane.focus." + d.name,
+			icon:  iconFocus,
 			title: "Focus " + d.name,
 			run:   func(a *App) tea.Cmd { return a.act(core.FocusDir{Dir: d.dir}) },
 		})
@@ -90,6 +96,7 @@ func defaultCommands() []command {
 	for _, d := range dirs {
 		cmds = append(cmds, command{
 			id:    "pane.resize." + d.name,
+			icon:  iconResize,
 			title: "Resize " + d.name,
 			run:   func(a *App) tea.Cmd { return a.act(core.ResizeDir{Dir: d.dir}) },
 		})
@@ -97,54 +104,65 @@ func defaultCommands() []command {
 	for _, d := range dirs {
 		cmds = append(cmds, command{
 			id:    "pane.swap." + d.name,
+			icon:  iconSwap,
 			title: "Swap " + d.name,
 			run:   func(a *App) tea.Cmd { return a.act(core.SwapDir{Dir: d.dir}) },
 		})
 	}
 	cmds = append(cmds, command{
 		id:    "pane.zoom",
+		icon:  iconZoom,
 		title: "Zoom pane",
 		run:   func(a *App) tea.Cmd { return a.act(core.ToggleZoom{}) },
 	}, command{
 		id:    "pane.close",
+		icon:  iconClose,
 		title: "Close pane",
 		run:   (*App).closeFocused,
 	}, command{
 		id:    "tab.new",
+		icon:  iconTabNew,
 		title: "New tab",
 		run:   (*App).newTab,
 	}, command{
 		id:    "tab.rename",
+		icon:  iconRename,
 		title: "Rename tab",
 		run:   (*App).renameTab,
 	}, command{
 		id:    "tab.close",
+		icon:  iconClose,
 		title: "Close tab",
 		run:   (*App).closeTab,
 	}, command{
 		id:    "tab.next",
+		icon:  iconTabs,
 		title: "Next tab",
 		run:   func(a *App) tea.Cmd { return a.act(core.CycleTab{Delta: 1}) },
 	}, command{
 		id:    "tab.prev",
+		icon:  iconTabs,
 		title: "Previous tab",
 		run:   func(a *App) tea.Cmd { return a.act(core.CycleTab{Delta: -1}) },
 	})
 	for n := 1; n <= 9; n++ {
 		cmds = append(cmds, command{
 			id:    "tab.jump." + strconv.Itoa(n),
+			icon:  iconTabs,
 			title: "Jump to tab " + strconv.Itoa(n),
 			run:   func(a *App) tea.Cmd { return a.act(core.SelectTab{Index: n - 1}) },
 		})
 	}
 	cmds = append(cmds, command{
 		id:    "app.quit",
+		icon:  iconQuit,
 		title: "Quit MuxReveal",
 		run:   (*App).quit,
 	})
 	for _, th := range theme.All() {
 		cmds = append(cmds, command{
 			id:    "theme.set." + th.Name,
+			icon:  iconTheme,
 			title: "Theme: " + th.Title,
 			run: func(a *App) tea.Cmd {
 				// dispatch logs its own failures.

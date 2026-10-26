@@ -143,7 +143,7 @@ func TestOverlayFirst(t *testing.T) {
 	_, cmd := a.Update(tea.PasteMsg{Content: "quit"})
 	run(a, cmd)
 
-	if view := ansi.Strip(a.View().Content); !strings.Contains(view, "> aquit") {
+	if view := ansi.Strip(a.View().Content); !strings.Contains(view, "\u276f aquit") {
 		t.Errorf("query lacks the typed and pasted text:\n%s", view)
 	}
 	for id, fp := range map[core.PaneID]*fakeProc{"p1": fp1, "p2": fp2} {

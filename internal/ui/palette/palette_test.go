@@ -328,6 +328,93 @@ func TestPaletteGolden(t *testing.T) {
 	golden.RequireEqual(t, []byte(m.View(60)))
 }
 
+func TestPaletteIconsGolden(t *testing.T) {
+	m := New("\uF4B5 Commands", iconItems(), mustTheme(t, "catppuccin-mocha"))
+	m, _ = press(m, keyDown)
+	golden.RequireEqual(t, []byte(m.View(48)))
+}
+
+func iconItems() []Item {
+	return []Item{
+		{ID: "a", Title: "Zoom pane", Hint: "ctrl+space z", Icon: "\U000F0293"},
+		{ID: "b", Title: "Close pane", Hint: "ctrl+space x", Icon: "\U000F0156"},
+		{ID: "c", Title: "Quit", Icon: "\U000F0206"},
+	}
+}
+
+func TestViewFrame(t *testing.T) {
+	m := New("\U000F03D8 Theme", iconItems(), mustTheme(t, "catppuccin-mocha"))
+	m, _ = press(m, keyDown)
+	lines := strings.Split(ansi.Strip(m.View(40)), "\n")
+	if len(lines) != 3+3+1 {
+		t.Fatalf("view has %d lines, want 7:\n%s", len(lines), strings.Join(lines, "\n"))
+	}
+	wantTop := "\u250c\u2500 \U000F03D8 Theme "
+	if !strings.HasPrefix(lines[0], wantTop) || !strings.HasSuffix(lines[0], "\u2510") {
+		t.Errorf("top = %q, want prefix %q and a square corner", lines[0], wantTop)
+	}
+	if !strings.HasPrefix(lines[1], "\u2502 \u276f ") {
+		t.Errorf("input row = %q, want the \u276f prompt", lines[1])
+	}
+	if lines[2] != "\u251c"+strings.Repeat("\u2500", 38)+"\u2524" {
+		t.Errorf("divider = %q", lines[2])
+	}
+	if !strings.Contains(lines[3], " \U000F0293 Zoom pane") || !strings.HasSuffix(lines[3], "ctrl+space z \u2502") {
+		t.Errorf("row = %q, want icon, title and a right-aligned hint", lines[3])
+	}
+	if want := " 2 of 3 \u2500\u2518"; !strings.HasSuffix(lines[6], want) || !strings.HasPrefix(lines[6], "\u2514") {
+		t.Errorf("bottom = %q, want it to end with %q", lines[6], want)
+	}
+}
+
+func TestRowColours(t *testing.T) {
+	th := mustTheme(t, "catppuccin-mocha")
+	m := New("Commands", iconItems(), th)
+	m, _ = typeText(m, "zp")
+	view := m.View(40)
+	ui := th.UI
+	sel := lipgloss.NewStyle().Background(ui.Selection)
+	for name, want := range map[string]string{
+		"selected icon":  sel.Foreground(ui.Accent).Render("\U000F0293"),
+		"matched rune":   sel.Foreground(ui.Match).Bold(true).Render("Z"),
+		"selected title": sel.Foreground(ui.Fg).Bold(true).Render("oom "),
+		"hint":           sel.Foreground(ui.Key).Bold(true).Render("ctrl+space z"),
+	} {
+		if !strings.Contains(view, want) {
+			t.Errorf("%s is not drawn as %q:\n%q", name, want, view)
+		}
+	}
+	m = New("Commands", iconItems(), th)
+	m, _ = press(m, keyDown)
+	panel := lipgloss.NewStyle().Background(ui.Panel)
+	if want := panel.Foreground(ui.Muted).Render("\U000F0293"); !strings.Contains(m.View(40), want) {
+		t.Errorf("unselected icon is not Muted")
+	}
+}
+
+func TestCountTracksFilter(t *testing.T) {
+	m := New("Commands", iconItems(), mustTheme(t, "catppuccin-mocha"))
+	if v := ansi.Strip(m.View(40)); !strings.Contains(v, " 1 of 3 ") {
+		t.Errorf("unfiltered count missing:\n%s", v)
+	}
+	m, _ = typeText(m, "quit")
+	if v := ansi.Strip(m.View(40)); !strings.Contains(v, " 1 of 1 ") {
+		t.Errorf("filtered count missing:\n%s", v)
+	}
+	m, _ = typeText(m, "zzz")
+	if v := ansi.Strip(m.View(40)); !strings.Contains(v, " 0 of 0 ") {
+		t.Errorf("empty count missing:\n%s", v)
+	}
+}
+
+func TestNoIconsNoGap(t *testing.T) {
+	m := New("Commands", testItems(), mustTheme(t, "catppuccin-mocha"))
+	lines := strings.Split(ansi.Strip(m.View(40)), "\n")
+	if !strings.HasPrefix(lines[3], "\u2502 Theme: Catppuccin Latte") {
+		t.Errorf("row without an icon = %q, want the title right after one margin cell", lines[3])
+	}
+}
+
 func TestMultibyteTitle(t *testing.T) {
 	th := mustTheme(t, "catppuccin-mocha")
 	m := New("Commands", []Item{

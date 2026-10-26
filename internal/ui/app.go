@@ -8,7 +8,6 @@ import (
 	"log/slog"
 	"os"
 	"slices"
-	"strings"
 	"sync"
 	"time"
 
@@ -318,36 +317,14 @@ func (a *App) runLeader(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 	return c.run(a), true
 }
 
-// hints lists the bound commands with their command titles; the tab jumps
-// share one row.
-func (a *App) hints() []hint {
-	hints := make([]hint, 0, len(a.keymap.bindings))
-	jumps := false
-	for _, b := range a.keymap.bindings {
-		c, ok := a.reg.get(b.command)
-		switch {
-		case !ok:
-		case strings.HasPrefix(b.command, "tab.jump."):
-			if !jumps {
-				hints = append(hints, hint{key: "1-9", title: "Jump to tab"})
-			}
-			jumps = true
-		default:
-			hints = append(hints, hint{key: b.key, title: c.title})
-		}
-	}
-	return hints
-}
-
 // View implements tea.Model. The shell is empty until the first
 // WindowSizeMsg, so nothing is drawn at a guessed size.
 func (a *App) View() tea.View {
-	hints := a.hints()
 	lk := a.current()
 	g := a.geometry()
 	content := a.frameAt(g)
 	if a.popup {
-		content = overlayWhichKey(content, a.width, a.height, a.keymap.leader, hints, lk.styles)
+		content = overlayWhichKey(content, a.width, a.height, a.keymap.leader, a.hints(), a.icons, lk.styles)
 	}
 	if a.overlay != nil {
 		content = overlayOver(content, a.width, a.height, a.overlay.pal)

@@ -295,7 +295,7 @@ Square-cornered boxes (`┌ ┐ └ ┘`) on `Panel`. Each title is set into the
   - Two columns, split by a `Border` rule that joins the top and bottom borders (`┬`, `┴`). Panes is on the left. Tabs, a blank row, then App are on the right.
   - Group heads `󰯌 Panes`, `󰓩 Tabs` and `󰒓 App` are `Accent` and bold, followed by a `Border` rule to the column's end.
   - Rows: the key in `Key`, bold, padded to the column's widest key; two cells; the title in `Fg`.
-  - Directional commands collapse into one row each: `h j k l  Focus pane`, `H J K L  Resize pane`, `^h^j^k^l  Swap pane`, and `1-9  Jump to tab`.
+  - Directional commands collapse into one row each, their keys padded like any other row's: `h j k l` (Focus pane), `H J K L` (Resize pane), `^h^j^k^l` (Swap pane) and `1-9` (Jump to tab). The keys come from the bindings: a family collapses only when all its keys are bound (`1-9` only when they are consecutive); otherwise each bound key gets its own row.
 - **Palette and theme picker.** Centred, width min(64, width-4), top at a quarter of the height, border `BorderFocus`.
   - Title: `  Commands ` (the theme picker: ` 󰏘 Theme `), in `Accent`, bold.
   - Input row: `❯ ` in `Accent`, then the query.
@@ -496,7 +496,7 @@ A layout node is either `{ "pane": id }` or a split: `split` is `"vertical"` (ch
 
 ## Keymap draft
 
-Terminal panes pass every key through to the agent, so global actions sit behind a leader key, `ctrl+space` by default, which few CLIs use. Review, PR and CI panes aren't terminals, so they take single keys directly. Pressing the leader and waiting 300 ms shows a which-key popup. Everything is remappable in `config.toml`.
+Terminal panes pass every key through to the agent, so global actions sit behind a leader key, `ctrl+space` by default, which few CLIs use. Review, PR and CI panes aren't terminals, so they take single keys directly. Pressing the leader and waiting 300 ms shows a which-key popup that groups the bindings under Panes, Tabs and App. Everything is remappable in `config.toml`.
 
 ### Global (after leader)
 

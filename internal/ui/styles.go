@@ -18,7 +18,8 @@ type styles struct {
 	cardKey    lipgloss.Style
 	popup      lipgloss.Style
 	popupKey   lipgloss.Style
-	popupTitle lipgloss.Style
+	// popupHead is the accent bold title and group head; popupRule draws the divider lines.
+	popupHead, popupRule lipgloss.Style
 	// border draws unfocused frame lines; borderAgent and borderShell the
 	// focused pane's.
 	border, borderAgent, borderShell lipgloss.Style
@@ -45,8 +46,9 @@ func newStyles(t theme.Theme) styles {
 		cardFiller:  onPanel,
 		cardKey:     onPanel.Foreground(ui.Key),
 		popup:       onPanel,
-		popupKey:    onPanel.Foreground(ui.Key),
-		popupTitle:  onPanel.Foreground(ui.BorderFocus).Bold(true),
+		popupKey:    onPanel.Foreground(ui.Key).Bold(true),
+		popupHead:   onPanel.Foreground(ui.Accent).Bold(true),
+		popupRule:   onPanel.Foreground(ui.Border),
 		border:      onBg.Foreground(ui.Border),
 		borderAgent: onBg.Foreground(ui.Agent),
 		borderShell: onBg.Foreground(ui.Shell),

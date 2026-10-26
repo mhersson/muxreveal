@@ -49,6 +49,7 @@ Bench: the real `App` with replay panes on a virtual clock at 60 FPS, 240x64, me
 | c | 2 | 44 | 91,262 | 3.24 ms | 5.12 ms | 5.68 ms | 5.68 ms | 3.8 | 0.18 / 1.40 / 5.08 ms | 1 |
 | c | 4 | 80 | 188,627 | 2.21 ms | 4.89 ms | 5.67 ms | 5.67 ms | 6.0 | 0.27 / 1.10 / 4.30 ms | 1 |
 | c | 6 | 107 | 284,741 | 2.55 ms | 5.56 ms | **6.51 ms** | 6.74 ms | 8.5 | 0.24 / 1.21 / 5.00 ms | 2 |
+| a, tabs and frames re-check | 6 | 593 | 1,127,049 | 2.94 ms | 6.26 ms | **6.86 ms** | 8.10 ms | 7.4 | 0.21 / 2.16 / 4.56 ms | 22 |
 
 Busy rule (the spike's): a second is busy when its bytes exceed 25 % of that recording's peak per-second rate. By it `p2.rec` (peak 14,633 B/s at 49 s) is busy 45-51 s (7 s) and `p3.rec` (peak 13,582 B/s at 42 s) is busy 36-43 s (8 s) and 72-82 s (11 s), so Claude's text answers are short bursts and runs b (pane 6 at 74.5-81.5 s) and c (pane 6 at 47.5-51.5 s) are short truecolor windows with every pane inside a busy stretch. `pane-2.rec` (peak 12,591 B/s at 134 s) is busy 93-135 s and 140-145 s. Run a is the spike's gate configuration: the sustained 30 s reply, in 256 colour (no truecolor SGRs), with windows [91 + 5i, 121 + 5i) s. Two exceptions: pane 0 starts with a 91-93 s spinner lead-in, and panes 4 and 5 cross the quiet 136-140 s. Run a is like-for-like with the spike's gate (593 frames, 1,127,049 bytes at six panes; spike p99 5.04 ms on the headless model, 6.06 ms here through the real `App`). Present is again the cost centre. GC pause totals stay under 1 ms per run.
 
@@ -70,7 +71,7 @@ Tabs, each with its own split layout, focus and zoom, with new, rename, close, j
 - [x] Framed panes with titles and icons
 - [x] Workspace bar tabs, per-tab layout and status bar
 - [x] Tab commands, rename and close
-- [ ] Grouped which-key, palette restyle and bench check
+- [x] Grouped which-key, palette restyle and bench check
 - [ ] Tray modules
 
 Gate: hidden tabs keep their panes running at their own size, the six-pane bench p99 stays at most 8 ms and idle CPU at most 1 % of one core with the tray on.

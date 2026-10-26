@@ -1,8 +1,9 @@
-// Package palette is a fuzzy-filtered list in a bordered box, used for the
+// Package palette is a fuzzy-filtered list in a framed box, used for the
 // command palette and the theme picker.
 package palette
 
 import (
+	"strconv"
 	"strings"
 
 	"charm.land/bubbles/v2/textinput"
@@ -17,8 +18,9 @@ import (
 // MaxRows is the most item rows shown at once; the list scrolls past it.
 const MaxRows = 10
 
-// Item is one selectable row. Hint is shown right-aligned, e.g. a key binding.
-type Item struct{ ID, Title, Hint string }
+// Item is one selectable row. Hint is shown right-aligned, e.g. a key binding;
+// Icon is a single-cell glyph before the title, or empty.
+type Item struct{ ID, Title, Hint, Icon string }
 
 // ChosenMsg is sent when the user confirms the selected item.
 type ChosenMsg struct{ ID string }
@@ -44,6 +46,7 @@ type Model struct {
 	sel     int // index into matches, -1 when nothing matches
 	top     int // first visible row of matches
 	theme   theme.Theme
+	icons   bool // some item has an icon, so every row reserves its column
 }
 
 type titles []Item
@@ -51,14 +54,18 @@ type titles []Item
 func (t titles) String(i int) string { return t[i].Title }
 func (t titles) Len() int            { return len(t) }
 
-// New returns a palette listing items, with the first one selected.
+// New returns a palette listing items, with the first one selected. The title
+// is set into the top border.
 func New(title string, items []Item, t theme.Theme) Model {
 	in := textinput.New()
-	in.Prompt = "> "
+	in.Prompt = "❯ "
 	// A static cursor keeps View independent of blink timing.
 	in.SetStyles(inputStyles(t))
 	in.Focus()
 	m := Model{title: title, items: items, input: in, theme: t}
+	for _, it := range items {
+		m.icons = m.icons || it.Icon != ""
+	}
 	m.refilter()
 	return m
 }
@@ -222,22 +229,26 @@ func (m Model) View(width int) string {
 	inner := width - 2
 	panel := lipgloss.NewStyle().Background(ui.Panel).Foreground(ui.Fg)
 	border := lipgloss.NewStyle().Background(ui.Panel).Foreground(ui.BorderFocus)
-	b := lipgloss.RoundedBorder()
 
 	// fit clips content to the inner width and pads it with fill's background.
 	fit := func(content string, fill lipgloss.Style) string {
 		content = ansi.Truncate(content, inner, "")
 		pad := fill.Render(strings.Repeat(" ", max(0, inner-lipgloss.Width(content))))
-		return border.Render(b.Left) + content + pad + border.Render(b.Right)
+		return border.Render("│") + content + pad + border.Render("│")
 	}
 
-	lines := []string{border.Render(b.TopLeft + strings.Repeat(b.Top, inner) + b.TopRight)}
-	titleStyle := panel.Foreground(ui.Accent).Bold(true)
-	lines = append(lines, fit(panel.Render(" ")+titleStyle.Render(m.title), panel))
+	// The title starts two cells from the corner: the corner, one dash, then the title.
+	dash := min(1, inner)
+	title := ansi.Truncate(" "+m.title+" ", inner-dash, "")
+	top := border.Render("┌"+strings.Repeat("─", dash)) +
+		panel.Foreground(ui.Accent).Bold(true).Render(title) +
+		border.Render(strings.Repeat("─", inner-dash-lipgloss.Width(title))+"┐")
+	lines := []string{top}
 
 	in := m.input
 	in.SetWidth(max(1, inner-4))
 	lines = append(lines, fit(panel.Render(" ")+in.View(), panel))
+	lines = append(lines, border.Render("├"+strings.Repeat("─", inner)+"┤"))
 
 	if len(m.matches) == 0 {
 		lines = append(lines, fit(panel.Render(" ")+panel.Foreground(ui.Subtle).Render("No matches"), panel))
@@ -246,28 +257,51 @@ func (m Model) View(width int) string {
 	for i := m.top; i < end; i++ {
 		lines = append(lines, m.row(i, inner))
 	}
-	lines = append(lines, border.Render(b.BottomLeft+strings.Repeat(b.Bottom, inner)+b.BottomRight))
+
+	// The count ends one dash before the corner; it is left out when it does not fit.
+	count := " " + strconv.Itoa(max(m.sel+1, 0)) + " of " + strconv.Itoa(len(m.matches)) + " "
+	cw := lipgloss.Width(count)
+	if inner >= cw+1 {
+		lines = append(lines, border.Render("└"+strings.Repeat("─", inner-cw-1))+
+			panel.Foreground(ui.Muted).Render(count)+border.Render("─┘"))
+	} else {
+		lines = append(lines, border.Render("└"+strings.Repeat("─", inner)+"┘"))
+	}
 	for i, l := range lines {
 		lines[i] = ansi.Truncate(l, width, "")
 	}
 	return strings.Join(lines, "\n")
 }
 
-// row draws match i: title with matched runes emphasised, hint right-aligned.
+// row draws match i: icon, title with matched runes emphasised, and the hint
+// right-aligned.
 func (m Model) row(i, inner int) string {
 	ui := m.theme.UI
 	base := lipgloss.NewStyle().Background(ui.Panel).Foreground(ui.Fg)
-	if i == m.sel {
+	selected := i == m.sel
+	icon := base.Foreground(ui.Muted)
+	title := base
+	if selected {
 		base = base.Background(ui.Selection)
+		icon = base.Foreground(ui.Accent)
+		title = base.Bold(true)
 	}
 	hit := base.Foreground(ui.Match).Bold(true)
-	muted := base.Foreground(ui.Muted)
 	border := lipgloss.NewStyle().Background(ui.Panel).Foreground(ui.BorderFocus)
-	rb := lipgloss.RoundedBorder()
 
 	mt := m.matches[i]
 	it := m.items[mt.item]
 	avail := max(0, inner-2) // one cell of margin on each side
+
+	lead := ""
+	if m.icons {
+		lead = icon.Render(" ")
+		if it.Icon != "" {
+			lead = icon.Render(it.Icon)
+		}
+		lead += base.Render(" ")
+		avail = max(0, avail-2)
+	}
 
 	hint := it.Hint
 	if hint != "" && lipgloss.Width(it.Title)+1+lipgloss.Width(hint) > avail {
@@ -287,7 +321,7 @@ func (m Model) row(i, inner int) string {
 		if runHit {
 			sb.WriteString(hit.Render(run.String()))
 		} else {
-			sb.WriteString(base.Render(run.String()))
+			sb.WriteString(title.Render(run.String()))
 		}
 		run.Reset()
 	}
@@ -304,11 +338,12 @@ func (m Model) row(i, inner int) string {
 		run.WriteRune(r)
 	}
 	flush()
-	content := base.Render(" ") + sb.String()
+	content := base.Render(" ") + lead + sb.String()
 	if hint != "" {
-		content += base.Render(strings.Repeat(" ", avail-used-lipgloss.Width(hint))) + muted.Render(hint)
+		content += base.Render(strings.Repeat(" ", avail-used-lipgloss.Width(hint))) +
+			base.Foreground(ui.Key).Bold(true).Render(hint)
 	}
 	content = ansi.Truncate(content, inner, "")
 	pad := base.Render(strings.Repeat(" ", max(0, inner-lipgloss.Width(content))))
-	return border.Render(rb.Left) + content + pad + border.Render(rb.Right)
+	return border.Render("│") + content + pad + border.Render("│")
 }
