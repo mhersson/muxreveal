@@ -2,21 +2,37 @@
 
 Update this file at the end of every session: tick what's done, set the next step, and log decisions.
 
-## Current milestone: M0 Skeleton
+## Current milestone: M1 Terminal core
 
-Goal: the app shell the later milestones build on: module layout from DESIGN.md, config, the theme engine with all four Catppuccin flavors, named commands with the leader key and which-key hints, and the command palette. Covers TH-1, TH-2, UX-1, UX-2.
+Goal: PTYs, the `tuios.dev/vt` adapter, compositor, splits, shell panes, copy mode, mouse and clipboard, hook socket, state badges, persistence and resume. Covers AG-1 to AG-5, AG-7, AG-8 (interface), PR-1 to PR-4, UX-4 to UX-6. It builds on the spike findings below.
 
-- [x] Module layout from DESIGN.md, with the packages M0 needs
-- [x] Config loading (`config.toml`)
-- [x] Theme engine with Catppuccin Latte, Frappé, Macchiato and Mocha (TH-1)
-- [x] Syntax highlighting themed from the same palette (TH-2)
-- [x] Every action a named command; leader key with a which-key hint popup (UX-1)
-- [x] Command palette with fuzzy search over all commands (UX-2)
-- [x] Empty app shell
+Gate: six busy Claude panes stay smooth at 60 fps, and a reboot brings back the same layout with every session resumed.
 
-Gate: the app launches and switches themes live.
+M1 ships as three plans, one PR each.
 
-Gate check: launches; leader t switches Mocha to Latte live (tmux capture, 2026-10-26)
+### M1a Panes
+
+Live shell and `claude` panes in splits, with focus, resize, zoom and close, full key and paste forwarding, and a replay bench. Covers AG-1, AG-2, AG-3, AG-7.
+
+- [ ] VT adapter on `tuios.dev/vt`
+- [ ] Key encoder and paste
+- [ ] PTY processes and pane environment
+- [ ] Layout state, actions and geometry
+- [ ] Live panes with row cache and sync hold
+- [ ] Compositor
+- [ ] Input routing
+- [ ] Pane commands and lifecycle
+- [ ] Replay bench and gate
+
+Gate: the app hosts shell and `claude` panes in splits, and the replay bench shows six busy Claude panes inside the frame budget.
+
+### M1b Copy, mouse and clipboard
+
+After M1a. Covers AG-4, UX-4, UX-5, UX-6.
+
+### M1c Agents and persistence
+
+After M1a. Covers AG-5, AG-7 shim, AG-8, PR-1 to PR-4.
 
 ## Spike - VT (done)
 
@@ -190,11 +206,12 @@ Build M1's terminal layer on `tuios.dev/vt` v0.3.1 (pure Go) behind the `VT` int
 
 ## Next
 
-M1 Terminal core: PTYs, the `tuios.dev/vt` adapter, compositor, splits, shell panes, copy mode, mouse and clipboard, hook socket, state badges, persistence and resume (AG-1 to AG-5, AG-7, AG-8 interface, PR-1 to PR-4, UX-4 to UX-6). It builds on the spike findings above.
+M1b Copy, mouse and clipboard and M1c Agents and persistence, in parallel after M1a merges.
 
 ## Done
 
 - Spike - VT: GO on `tuios.dev/vt` v0.3.1; findings in the Spike - VT section above. The spike code is on a local branch, not on GitHub.
+- M0 Skeleton: app shell, config, Catppuccin themes, commands, which-key, palette and live theme picker (PRs #4, #5, #6)
 
 ## Decisions log
 
@@ -207,6 +224,7 @@ M1 Terminal core: PTYs, the `tuios.dev/vt` adapter, compositor, splits, shell pa
 | 2026-10-26 | Adopt the VT spike findings into DESIGN.md: per-row string cache, near-zero idle CPU, own sync hold, own legacy key encoder, pane PTY environment, x/vt fallback gaps, cell-level render path as the lever | Measured in the spike; M1 builds on them |
 | 2026-10-26 | Target Go 1.27.3 (go.mod `go 1.27.3`) | Latest Go release; the local toolchain, golangci-lint and goimports are built with it; `tuios.dev/vt` needs only 1.26 |
 | 2026-10-26 | `ctrl+c` does not quit; `ctrl+space q` runs `app.quit` | M1 panes need `ctrl+c` for the agent |
+| 2026-10-26 | M1 ships as three plans and PRs: Panes, then Copy/mouse/clipboard and Agents/persistence in parallel | Keeps each PR reviewable and uses both workers |
 
 ## Later
 
