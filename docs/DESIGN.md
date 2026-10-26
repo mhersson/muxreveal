@@ -163,7 +163,7 @@ The app core is the only thing that mutates state. Services post events to it; t
 
 **Module layout**
 
-One Go module, `github.com/<you>/muxreveal`.
+One Go module, `github.com/mhersson/muxreveal`.
 
 | Package | Responsibility |
 | --- | --- |
@@ -188,7 +188,7 @@ type Harness interface {
 
 ## Tech stack
 
-Go 1.26 (required by `tuios.dev/vt`). The reason for Rust was a proven VT emulator; `tuios.dev/vt` removes that reason, and Go is the team's main language.
+Go 1.27 (`tuios.dev/vt` needs 1.26 or later). The reason for Rust was a proven VT emulator; `tuios.dev/vt` removes that reason, and Go is the team's main language.
 
 | Concern | Choice | Why |
 | --- | --- | --- |
@@ -308,6 +308,15 @@ type FileDiff struct {
 - MuxReveal owns the whole screen, so it knows where every image cell sits. Images are sent once per id over the Kitty graphics protocol, then placed and deleted as panes scroll or re-layout.
 - Support is detected with a Kitty graphics query at startup. If it's missing, images render as `[image: alt]`.
 - Remote images, including GitHub user-attachments, are fetched with the host token and cached under the cache dir.
+
+### Config
+
+The config file is `$XDG_CONFIG_HOME/muxreveal/config.toml` when `XDG_CONFIG_HOME` is set to an absolute path, else `~/.config/muxreveal/config.toml`, the same on Linux and macOS. `--config <path>` overrides it.
+
+- A missing file at the default path means the defaults. A `--config` path that does not exist is an error.
+- The file is strict: invalid TOML, unknown keys and values of the wrong type are errors.
+- MuxReveal prints a config error, naming the file, and exits with status 1 before it takes over the terminal.
+- The log is `muxreveal.log` in the state dir (see Persisted state). At startup the previous run's log is kept as `muxreveal.log.1`, replacing any older one.
 
 ### Persisted state
 
@@ -432,7 +441,7 @@ The biggest risk is terminal-layer correctness and performance, so the spike and
 | Topic | Decision |
 | --- | --- |
 | Architecture | A-lite: own terminal layer, single process, no daemon until v2 |
-| Language | Go 1.26 |
+| Language | Go 1.27 |
 | Terminal emulator | `tuios.dev/vt` behind a `VT` interface; not the whole of TUIOS (`pkg/tuios` can't host our own panes as tiles) |
 | Leader key | `ctrl+space` |
 | Worktree root | `<repo>/.worktrees/<branch>`, managed through `.git/info/exclude`; sibling layout is a config option |
