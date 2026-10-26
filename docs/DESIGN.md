@@ -360,6 +360,7 @@ Terminal panes pass every key through to the agent, so global actions sit behind
 
 | Key | Action |
 | --- | --- |
+| `ctrl+space` | Send ctrl+space to the pane |
 | `q` | Quit |
 | `n` | New agent: pick or create a worktree, then spawn `claude` |
 | `s` / `v` | Open a shell below / to the right of the focused pane (same cwd; `split_default` in config can flip this) |

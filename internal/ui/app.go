@@ -8,6 +8,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	uv "github.com/charmbracelet/ultraviolet"
 
 	"github.com/mhersson/muxreveal/internal/core"
 	"github.com/mhersson/muxreveal/internal/ui/palette"
@@ -41,7 +42,8 @@ type App struct {
 	overlay *overlay
 	preview *look // theme picker preview; nil unless previewing
 
-	panes map[core.PaneID]*pane // runtime panes, keyed like State.Panes
+	panes        map[core.PaneID]*pane // runtime panes, keyed like State.Panes
+	outerFocused bool                  // the outer terminal has focus; true until a BlurMsg
 }
 
 // New returns the root model. It fails when the store's theme is unknown.
@@ -62,7 +64,7 @@ func New(opts Options) (*App, error) {
 			return nil, fmt.Errorf("ui: binding %q names unknown command %q", b.key, b.command)
 		}
 	}
-	a := &App{log: opts.Logger, store: opts.Store, reg: reg, keymap: km, panes: map[core.PaneID]*pane{}}
+	a := &App{log: opts.Logger, store: opts.Store, reg: reg, keymap: km, panes: map[core.PaneID]*pane{}, outerFocused: true}
 	if err := a.sync(); err != nil {
 		return nil, err
 	}
@@ -93,10 +95,12 @@ func (a *App) dispatch(act core.Action) error {
 			return err
 		}
 	}
+	before := a.store.State().Focus
 	if err := a.store.Dispatch(act); err != nil {
 		a.log.Error("dispatch action", "err", err)
 		return err
 	}
+	a.reportFocusChange(before, a.store.State().Focus)
 	if err := a.sync(); err != nil {
 		a.log.Error("sync theme", "err", err)
 		return err
@@ -116,10 +120,15 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.width, a.height = msg.Width, msg.Height
 		a.log.Debug("window size", "width", msg.Width, "height", msg.Height)
 	case tea.KeyPressMsg:
-		if a.overlay != nil {
-			return a, a.updateOverlay(msg)
-		}
-		return a, a.handleKey(msg.String())
+		return a, a.handleKey(msg)
+	case tea.PasteMsg:
+		return a, a.handlePaste(msg)
+	case tea.FocusMsg:
+		a.outerFocused = true
+		a.sendToFocused(func(p *pane) { p.sendFocus(true) })
+	case tea.BlurMsg:
+		a.outerFocused = false
+		a.sendToFocused(func(p *pane) { p.sendFocus(false) })
 	case palette.ChosenMsg:
 		return a, a.chosen(msg.ID)
 	case palette.ClosedMsg:
@@ -129,7 +138,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case whichKeyMsg:
 		a.popup = a.pending && msg.seq == a.seq
 	default:
-		// Paste and the input's own messages belong to the open palette.
+		// The input's own messages belong to the open palette.
 		if a.overlay != nil {
 			return a, a.updateOverlay(msg)
 		}
@@ -137,34 +146,39 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return a, nil
 }
 
-// handleKey routes a key press through the leader state machine. Outside the
-// leader sequence keys do nothing yet.
-func (a *App) handleKey(key string) tea.Cmd {
-	a.notice = ""
+// runLeader handles a key press in the leader state machine. It reports
+// whether the key was consumed; a key outside a pending sequence that is not
+// the leader is not.
+func (a *App) runLeader(msg tea.KeyPressMsg) (tea.Cmd, bool) {
+	key := msg.String()
 	if !a.pending {
 		if key != a.keymap.leader {
-			return nil
+			return nil, false
 		}
 		a.pending = true
 		a.seq++
 		seq := a.seq
-		return tea.Tick(a.keymap.delay, func(time.Time) tea.Msg { return whichKeyMsg{seq: seq} })
+		return tea.Tick(a.keymap.delay, func(time.Time) tea.Msg { return whichKeyMsg{seq: seq} }), true
 	}
 	a.pending, a.popup = false, false
-	if key == "esc" || key == a.keymap.leader {
-		return nil
+	if key == "esc" {
+		return nil, true
+	}
+	if key == a.keymap.leader {
+		a.sendToFocused(func(p *pane) { p.sendKey(uv.KeyPressEvent(msg)) })
+		return nil, true
 	}
 	id, ok := a.keymap.lookup(key)
 	if !ok {
 		a.notice = a.keymap.leader + " " + key + " is not bound"
-		return nil
+		return nil, true
 	}
 	c, ok := a.reg.get(id)
 	if !ok {
 		a.log.Error("bound command missing", "key", key, "command", id)
-		return nil
+		return nil, true
 	}
-	return c.run(a)
+	return c.run(a), true
 }
 
 // hints lists the bound commands with their command titles.
@@ -193,6 +207,7 @@ func (a *App) View() tea.View {
 	}
 	v := tea.NewView(content)
 	v.AltScreen = true
+	v.ReportFocus = true
 	v.Cursor = a.cursorAt(g)
 	v.BackgroundColor = lk.theme.UI.Bg
 	v.ForegroundColor = lk.theme.UI.Fg

@@ -20,7 +20,7 @@ Live shell and `claude` panes in splits, with focus, resize, zoom and close, ful
 - [x] Layout state, actions and geometry
 - [x] Live panes with row cache and sync hold
 - [x] Compositor
-- [ ] Input routing
+- [x] Input routing
 - [ ] Pane commands and lifecycle
 - [ ] Replay bench and gate
 
@@ -223,7 +223,7 @@ M1b Copy, mouse and clipboard and M1c Agents and persistence, in parallel after 
 | 2026-10-26 | GO on `tuios.dev/vt` v0.3.1 (pure Go) for the terminal layer; `charmbracelet/x/vt` stays the fallback | Passes every gate line at 6 panes (bench p99 5.0 ms, interactive CPU 10.2 %, no rendering bugs, builds on go1.26.0); x/vt is no faster (4.7 ms, 10.4 %) and lacks Kitty keyboard and the sync output Claude Code uses |
 | 2026-10-26 | Adopt the VT spike findings into DESIGN.md: per-row string cache, near-zero idle CPU, own sync hold, own legacy key encoder, pane PTY environment, x/vt fallback gaps, cell-level render path as the lever | Measured in the spike; M1 builds on them |
 | 2026-10-26 | Target Go 1.27.3 (go.mod `go 1.27.3`) | Latest Go release; the local toolchain, golangci-lint and goimports are built with it; `tuios.dev/vt` needs only 1.26 |
-| 2026-10-26 | `ctrl+c` does not quit; `ctrl+space q` runs `app.quit` | M1 panes need `ctrl+c` for the agent |
+| 2026-10-26 | Every key without the leader goes to the focused pane, `ctrl+c` included; `ctrl+space q` still runs `app.quit` | Terminal panes need every key, `ctrl+c` for the agent above all |
 | 2026-10-26 | M1 ships as three plans and PRs: Panes, then Copy/mouse/clipboard and Agents/persistence in parallel | Keeps each PR reviewable and uses both workers |
 
 ## Later

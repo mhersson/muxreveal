@@ -110,12 +110,12 @@ func TestLeader(t *testing.T) {
 	}{
 		{"leader then q quits", []tea.KeyPressMsg{keyLeader, keyRune('q')}, true, true, false, ""},
 		{"leader then esc", []tea.KeyPressMsg{keyLeader, keyEsc}, false, false, false, ""},
-		{"leader twice", []tea.KeyPressMsg{keyLeader, keyLeader}, false, false, false, ""},
+		{"leader twice runs no command", []tea.KeyPressMsg{keyLeader, keyLeader}, false, false, false, ""},
 		{"leader then unbound", []tea.KeyPressMsg{keyLeader, keyRune('x')}, false, false, false, "ctrl+space x is not bound"},
 		{"leader alone", []tea.KeyPressMsg{keyLeader}, false, true, true, ""},
-		{"ctrl+c does not quit", []tea.KeyPressMsg{{Code: 'c', Mod: tea.ModCtrl}}, false, false, false, ""},
+		{"idle ctrl+c is not an app command", []tea.KeyPressMsg{{Code: 'c', Mod: tea.ModCtrl}}, false, false, false, ""},
 		{"ctrl+c while pending", []tea.KeyPressMsg{keyLeader, {Code: 'c', Mod: tea.ModCtrl}}, false, false, false, "ctrl+space ctrl+c is not bound"},
-		{"idle q does nothing", []tea.KeyPressMsg{keyRune('q')}, false, false, false, ""},
+		{"idle q is not an app command", []tea.KeyPressMsg{keyRune('q')}, false, false, false, ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
