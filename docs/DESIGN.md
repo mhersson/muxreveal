@@ -350,6 +350,7 @@ Terminal panes pass every key through to the agent, so global actions sit behind
 
 | Key | Action |
 | --- | --- |
+| `q` | Quit |
 | `n` | New agent: pick or create a worktree, then spawn `claude` |
 | `s` / `v` | Split horizontal / vertical (shell in the same cwd; `split_default` in config can flip this) |
 | `h` `j` `k` `l` | Focus pane left, down, up, right |

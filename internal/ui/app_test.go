@@ -9,6 +9,8 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
+	"github.com/charmbracelet/x/exp/golden"
 
 	"github.com/mhersson/muxreveal/internal/core"
 )
@@ -41,29 +43,6 @@ func TestNewRequiresLogger(t *testing.T) {
 func TestNewRequiresStore(t *testing.T) {
 	if _, err := New(Options{Logger: testLogger()}); err == nil {
 		t.Error("New() without a store succeeded, want an error")
-	}
-}
-
-func TestAppQuitsOnCtrlC(t *testing.T) {
-	tests := []struct {
-		name     string
-		key      tea.KeyPressMsg
-		wantQuit bool
-	}{
-		{"ctrl+c", tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl}, true},
-		{"plain c", tea.KeyPressMsg{Code: 'c', Text: "c"}, false},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			_, cmd := newTestApp(t).Update(tt.key)
-			var msg tea.Msg
-			if cmd != nil {
-				msg = cmd()
-			}
-			if _, quit := msg.(tea.QuitMsg); quit != tt.wantQuit {
-				t.Errorf("Update(%s) cmd msg = %#v, want quit %v", tt.key, msg, tt.wantQuit)
-			}
-		})
 	}
 }
 
@@ -101,4 +80,184 @@ func TestAppViewSizes(t *testing.T) {
 			}
 		})
 	}
+}
+
+var (
+	keyLeader = tea.KeyPressMsg{Code: tea.KeySpace, Mod: tea.ModCtrl}
+	keyEsc    = tea.KeyPressMsg{Code: tea.KeyEscape}
+)
+
+func keyRune(r rune) tea.KeyPressMsg {
+	return tea.KeyPressMsg{Code: r, Text: string(r)}
+}
+
+func press(a *App, keys ...tea.KeyPressMsg) tea.Cmd {
+	var cmd tea.Cmd
+	for _, k := range keys {
+		_, cmd = a.Update(k)
+	}
+	return cmd
+}
+
+func TestLeader(t *testing.T) {
+	tests := []struct {
+		name        string
+		keys        []tea.KeyPressMsg
+		wantQuit    bool
+		wantCmd     bool
+		wantPending bool
+		wantNotice  string
+	}{
+		{"leader then q quits", []tea.KeyPressMsg{keyLeader, keyRune('q')}, true, true, false, ""},
+		{"leader then esc", []tea.KeyPressMsg{keyLeader, keyEsc}, false, false, false, ""},
+		{"leader twice", []tea.KeyPressMsg{keyLeader, keyLeader}, false, false, false, ""},
+		{"leader then unbound", []tea.KeyPressMsg{keyLeader, keyRune('x')}, false, false, false, "ctrl+space x is not bound"},
+		{"leader alone", []tea.KeyPressMsg{keyLeader}, false, true, true, ""},
+		{"ctrl+c does not quit", []tea.KeyPressMsg{{Code: 'c', Mod: tea.ModCtrl}}, false, false, false, ""},
+		{"ctrl+c while pending", []tea.KeyPressMsg{keyLeader, {Code: 'c', Mod: tea.ModCtrl}}, false, false, false, "ctrl+space ctrl+c is not bound"},
+		{"idle q does nothing", []tea.KeyPressMsg{keyRune('q')}, false, false, false, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			a := newTestApp(t)
+			sized(t, a, 100, 30)
+			cmd := press(a, tt.keys...)
+			if (cmd != nil) != tt.wantCmd {
+				t.Fatalf("last cmd non-nil = %v, want %v", cmd != nil, tt.wantCmd)
+			}
+			if tt.wantQuit {
+				if _, ok := cmd().(tea.QuitMsg); !ok {
+					t.Errorf("cmd() is not tea.QuitMsg")
+				}
+			}
+			if a.pending != tt.wantPending {
+				t.Errorf("pending = %v, want %v", a.pending, tt.wantPending)
+			}
+			if a.notice != tt.wantNotice {
+				t.Errorf("notice = %q, want %q", a.notice, tt.wantNotice)
+			}
+			plain := ansi.Strip(a.View().Content)
+			if got := strings.Contains(plain, tt.wantNotice); tt.wantNotice != "" && !got {
+				t.Errorf("view lacks notice %q:\n%s", tt.wantNotice, plain)
+			}
+		})
+	}
+}
+
+func TestNoticeClearsOnNextKey(t *testing.T) {
+	a := newTestApp(t)
+	sized(t, a, 100, 30)
+	press(a, keyLeader, keyRune('x'))
+	if a.notice == "" {
+		t.Fatal("no notice after an unbound key")
+	}
+	press(a, keyRune('y'))
+	if a.notice != "" {
+		t.Errorf("notice = %q after the next key, want empty", a.notice)
+	}
+	if strings.Contains(ansi.Strip(a.View().Content), "is not bound") {
+		t.Error("view still shows the notice")
+	}
+}
+
+func hintCount(a *App) int {
+	return strings.Count(ansi.Strip(a.View().Content), "Quit MuxReveal")
+}
+
+func TestWhichKey(t *testing.T) {
+	a := newTestApp(t)
+	sized(t, a, 100, 30)
+	before := hintCount(a)
+	press(a, keyLeader)
+	if got := hintCount(a); got != before {
+		t.Errorf("popup visible before the delay: %d hints, want %d", got, before)
+	}
+	a.Update(whichKeyMsg{seq: a.seq})
+	plain := ansi.Strip(a.View().Content)
+	if got := strings.Count(plain, "Quit MuxReveal"); got != before+1 {
+		t.Errorf("hints = %d, want %d:\n%s", got, before+1, plain)
+	}
+	if !strings.Contains(plain, "╭─ ctrl+space") || !strings.Contains(plain, "q  Quit MuxReveal") {
+		t.Errorf("popup lacks its title or row:\n%s", plain)
+	}
+	press(a, keyEsc)
+	if hintCount(a) != before {
+		t.Error("popup still visible after esc")
+	}
+}
+
+func TestStaleWhichKey(t *testing.T) {
+	tests := []struct {
+		name string
+		keys []tea.KeyPressMsg
+	}{
+		{"esc", []tea.KeyPressMsg{keyEsc}},
+		{"bound key", []tea.KeyPressMsg{keyRune('q')}},
+		{"second leader press after esc", []tea.KeyPressMsg{keyEsc, keyLeader}},
+		{"second leader press", []tea.KeyPressMsg{keyLeader}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			a := newTestApp(t)
+			sized(t, a, 100, 30)
+			press(a, keyLeader)
+			first := a.seq
+			before := hintCount(a)
+			press(a, tt.keys...)
+			a.Update(whichKeyMsg{seq: first})
+			if got := hintCount(a); got != before {
+				t.Errorf("stale tick opened the popup: %d hints, want %d", got, before)
+			}
+			if a.popup {
+				t.Error("popup = true after a stale tick")
+			}
+		})
+	}
+}
+
+func TestWhichKeySizes(t *testing.T) {
+	for _, sz := range [][2]int{{100, 30}, {40, 12}, {20, 5}, {1, 1}} {
+		t.Run(fmt.Sprintf("%dx%d", sz[0], sz[1]), func(t *testing.T) {
+			a := newTestApp(t)
+			sized(t, a, sz[0], sz[1])
+			press(a, keyLeader)
+			a.Update(whichKeyMsg{seq: a.seq})
+			content := a.View().Content
+			lines := strings.Split(content, "\n")
+			if len(lines) != sz[1] {
+				t.Fatalf("view has %d lines, want %d", len(lines), sz[1])
+			}
+			for i, line := range lines {
+				if got := lipgloss.Width(line); got != sz[0] {
+					t.Errorf("line %d width = %d, want %d: %q", i, got, sz[0], line)
+				}
+			}
+			plain := ansi.Strip(content)
+			switch sz[0] {
+			case 100, 40:
+				if !strings.Contains(plain, "╭─ ctrl+space") || !strings.Contains(plain, "│ q  Quit MuxReveal │") {
+					t.Errorf("popup not drawn:\n%s", plain)
+				}
+			case 20:
+				if !strings.Contains(plain, "╭─ ctrl+space") || strings.Contains(plain, "╮") {
+					t.Errorf("popup not clipped on the right:\n%s", plain)
+				}
+			}
+		})
+	}
+}
+
+func TestWhichKeyGolden(t *testing.T) {
+	a := newTestApp(t)
+	sized(t, a, 100, 30)
+	press(a, keyLeader)
+	a.Update(whichKeyMsg{seq: a.seq})
+	golden.RequireEqual(t, []byte(a.View().Content))
+}
+
+func TestLeaderPendingGolden(t *testing.T) {
+	a := newTestApp(t)
+	sized(t, a, 100, 30)
+	press(a, keyLeader)
+	golden.RequireEqual(t, []byte(a.View().Content))
 }

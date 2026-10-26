@@ -17,22 +17,29 @@ func review(turn int) string {
 }
 `
 
+// barState is what the status bar shows beyond the theme title.
+type barState struct {
+	leader  string
+	pending bool   // the leader was pressed and awaits a key
+	notice  string // replaces the theme title until the next key press
+}
+
 // shell draws the app frame: a body with the welcome card and a status bar on
 // the last row. Every returned line is exactly width cells wide.
-func shell(width, height int, t theme.Theme, st styles, sample []string) string {
+func shell(width, height int, t theme.Theme, st styles, sample []string, hints []hint, bar barState) string {
 	if width <= 0 || height <= 0 {
 		return ""
 	}
 	rows := make([]string, 0, height)
 	if body := height - 1; body > 0 {
-		rows = append(rows, strings.Split(renderBody(width, body, st, sample), "\n")...)
+		rows = append(rows, strings.Split(renderBody(width, body, st, sample, hints), "\n")...)
 	}
-	rows = append(rows, statusBar(width, t, st))
+	rows = append(rows, statusBar(width, t, st, bar))
 	return strings.Join(rows, "\n")
 }
 
-func renderBody(width, height int, st styles, sample []string) string {
-	card := welcomeCard(st, sample)
+func renderBody(width, height int, st styles, sample []string, hints []hint) string {
+	card := welcomeCard(st, sample, hints)
 	if lipgloss.Width(card) > width || lipgloss.Height(card) > height {
 		card = ""
 	}
@@ -40,12 +47,24 @@ func renderBody(width, height int, st styles, sample []string) string {
 		lipgloss.WithWhitespaceStyle(st.body))
 }
 
-func welcomeCard(st styles, sample []string) string {
-	lines := append([]string{
+func welcomeCard(st styles, sample []string, hints []hint) string {
+	lines := []string{
 		st.cardTitle.Render("MuxReveal"),
 		st.cardMuted.Render("No panes yet."),
 		"",
-	}, sample...)
+	}
+	keyW := 0
+	for _, h := range hints {
+		keyW = max(keyW, lipgloss.Width(h.key))
+	}
+	for _, h := range hints {
+		lines = append(lines, st.cardKey.Render(h.key)+
+			st.cardFiller.Render(strings.Repeat(" ", keyW-lipgloss.Width(h.key)+2)+h.title))
+	}
+	if len(hints) > 0 {
+		lines = append(lines, "")
+	}
+	lines = append(lines, sample...)
 	inner := 0
 	for _, l := range lines {
 		inner = max(inner, lipgloss.Width(l))
@@ -59,11 +78,23 @@ func welcomeCard(st styles, sample []string) string {
 	return st.card.Render(strings.Join(lines, "\n"))
 }
 
-func statusBar(width int, t theme.Theme, st styles) string {
-	left := st.badge.Render(" MuxReveal ") + st.barTitle.Render(" "+t.Title)
-	left = ansi.Truncate(left, width, "")
-	if gap := width - lipgloss.Width(left); gap > 0 {
-		left += st.bar.Render(strings.Repeat(" ", gap))
+// statusBar draws the left side, then the leader hint on the right when it
+// fits beside the left side with a gap; otherwise the left side truncates.
+func statusBar(width int, t theme.Theme, st styles, bar barState) string {
+	title := st.barTitle.Render(" " + t.Title)
+	if bar.notice != "" {
+		title = st.barNotice.Render(" " + bar.notice)
 	}
-	return left
+	left := st.badge.Render(" MuxReveal ") + title
+	key := st.barKey.Render(bar.leader)
+	if bar.pending {
+		key = st.badge.Render(bar.leader)
+	}
+	right := key + st.barTitle.Render(" commands ")
+	if lipgloss.Width(left)+1+lipgloss.Width(right) > width {
+		right = ""
+		left = ansi.Truncate(left, width, "")
+	}
+	gap := width - lipgloss.Width(left) - lipgloss.Width(right)
+	return left + st.bar.Render(strings.Repeat(" ", max(gap, 0))) + right
 }

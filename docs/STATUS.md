@@ -10,7 +10,7 @@ Goal: the app shell the later milestones build on: module layout from DESIGN.md,
 - [x] Config loading (`config.toml`)
 - [x] Theme engine with Catppuccin Latte, Frappé, Macchiato and Mocha (TH-1)
 - [x] Syntax highlighting themed from the same palette (TH-2)
-- [ ] Every action a named command; leader key with a which-key hint popup (UX-1)
+- [x] Every action a named command; leader key with a which-key hint popup (UX-1)
 - [ ] Command palette with fuzzy search over all commands (UX-2)
 - [x] Empty app shell
 
