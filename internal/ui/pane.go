@@ -207,6 +207,13 @@ func (p *pane) lines() []string {
 	return p.rows
 }
 
+func (p *pane) size() (cols, rows int) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	return p.vt.Size()
+}
+
 func (p *pane) cursor() (uv.Position, bool) {
 	p.mu.Lock()
 	defer p.mu.Unlock()

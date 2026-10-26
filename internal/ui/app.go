@@ -40,6 +40,8 @@ type App struct {
 
 	overlay *overlay
 	preview *look // theme picker preview; nil unless previewing
+
+	panes map[core.PaneID]*pane // runtime panes, keyed like State.Panes
 }
 
 // New returns the root model. It fails when the store's theme is unknown.
@@ -60,7 +62,7 @@ func New(opts Options) (*App, error) {
 			return nil, fmt.Errorf("ui: binding %q names unknown command %q", b.key, b.command)
 		}
 	}
-	a := &App{log: opts.Logger, store: opts.Store, reg: reg, keymap: km}
+	a := &App{log: opts.Logger, store: opts.Store, reg: reg, keymap: km, panes: map[core.PaneID]*pane{}}
 	if err := a.sync(); err != nil {
 		return nil, err
 	}
@@ -179,14 +181,10 @@ func (a *App) hints() []hint {
 // View implements tea.Model. The shell is empty until the first
 // WindowSizeMsg, so nothing is drawn at a guessed size.
 func (a *App) View() tea.View {
-	bar := barState{leader: a.keymap.leader, pending: a.pending, notice: a.notice}
 	hints := a.hints()
-	full := make([]hint, len(hints))
-	for i, h := range hints {
-		full[i] = hint{key: a.keymap.leader + " " + h.key, title: h.title}
-	}
 	lk := a.current()
-	content := shell(a.width, a.height, a.theme, lk.styles, lk.sample, full, bar)
+	g := a.geometry()
+	content := a.frameAt(g)
 	if a.popup {
 		content = overlayWhichKey(content, a.width, a.height, a.keymap.leader, hints, lk.styles)
 	}
@@ -195,6 +193,7 @@ func (a *App) View() tea.View {
 	}
 	v := tea.NewView(content)
 	v.AltScreen = true
+	v.Cursor = a.cursorAt(g)
 	v.BackgroundColor = lk.theme.UI.Bg
 	v.ForegroundColor = lk.theme.UI.Fg
 	return v

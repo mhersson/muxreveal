@@ -19,7 +19,7 @@ Live shell and `claude` panes in splits, with focus, resize, zoom and close, ful
 - [x] PTY processes and pane environment
 - [x] Layout state, actions and geometry
 - [x] Live panes with row cache and sync hold
-- [ ] Compositor
+- [x] Compositor
 - [ ] Input routing
 - [ ] Pane commands and lifecycle
 - [ ] Replay bench and gate
