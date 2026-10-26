@@ -71,11 +71,9 @@ func TestPaletteListsEveryCommand(t *testing.T) {
 	for _, c := range a.reg.all() {
 		want = append(want, c.id)
 	}
-	if len(want) > palette.MaxRows {
-		t.Fatalf("test assumes at most %d commands fit one page, have %d", palette.MaxRows, len(want))
-	}
 	view := ansi.Strip(a.View().Content)
-	for _, c := range a.reg.all() {
+	// The list scrolls past one page; the first page shows in registration order.
+	for _, c := range a.reg.all()[:min(len(want), palette.MaxRows)] {
 		if !strings.Contains(view, c.title) {
 			t.Errorf("palette view lacks command %q (%s)", c.title, c.id)
 		}
@@ -87,8 +85,8 @@ func TestPaletteListsEveryCommand(t *testing.T) {
 	if !slices.Equal(got, want) {
 		t.Errorf("palette ids = %v, want %v", got, want)
 	}
-	if !strings.Contains(view, "ctrl+space q") {
-		t.Errorf("palette lacks the quit hint:\n%s", view)
+	if !strings.Contains(view, "ctrl+space n") {
+		t.Errorf("palette lacks the new agent hint:\n%s", view)
 	}
 }
 

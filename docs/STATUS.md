@@ -2,21 +2,73 @@
 
 Update this file at the end of every session: tick what's done, set the next step, and log decisions.
 
-## Current milestone: M0 Skeleton
+## Current milestone: M1 Terminal core
 
-Goal: the app shell the later milestones build on: module layout from DESIGN.md, config, the theme engine with all four Catppuccin flavors, named commands with the leader key and which-key hints, and the command palette. Covers TH-1, TH-2, UX-1, UX-2.
+Goal: PTYs, the `tuios.dev/vt` adapter, compositor, splits, shell panes, copy mode, mouse and clipboard, hook socket, state badges, persistence and resume. Covers AG-1 to AG-5, AG-7, AG-8 (interface), PR-1 to PR-4, UX-4 to UX-6. It builds on the spike findings below.
 
-- [x] Module layout from DESIGN.md, with the packages M0 needs
-- [x] Config loading (`config.toml`)
-- [x] Theme engine with Catppuccin Latte, Frappé, Macchiato and Mocha (TH-1)
-- [x] Syntax highlighting themed from the same palette (TH-2)
-- [x] Every action a named command; leader key with a which-key hint popup (UX-1)
-- [x] Command palette with fuzzy search over all commands (UX-2)
-- [x] Empty app shell
+Gate: six busy Claude panes stay smooth at 60 fps, and a reboot brings back the same layout with every session resumed.
 
-Gate: the app launches and switches themes live.
+M1 ships as three plans, one PR each.
 
-Gate check: launches; leader t switches Mocha to Latte live (tmux capture, 2026-10-26)
+### M1a Panes
+
+Live shell and `claude` panes in splits, with focus, resize, zoom, swap and close, full key and paste forwarding, and a replay bench. Covers AG-1, AG-2, AG-3, AG-7.
+
+- [x] VT adapter on `tuios.dev/vt`
+- [x] Key encoder and paste
+- [x] PTY processes and pane environment
+- [x] Layout state, actions and geometry
+- [x] Live panes with row cache and sync hold
+- [x] Compositor
+- [x] Input routing
+- [x] Pane commands and lifecycle
+- [x] Replay bench and gate
+
+Gate: the app hosts shell and `claude` panes in splits, and the replay bench shows six busy Claude panes inside the frame budget.
+
+#### M1a gate results
+
+Gate: six-pane bench p99 <= 8 ms and idle CPU <= 1 % of one core. **Both met.** The bench gate rests on runs a, b and c; in b and c every pane's window lies in a busy stretch, and a is the spike's gate configuration (see below); the mixed run is supplementary.
+
+Bench: the real `App` with replay panes on a virtual clock at 60 FPS, 240x64, median of 3 runs, feed + update + view + present per drawn frame (`go test -tags bench ./internal/ui -run 'TestBench$'` with `MUXREVEAL_BENCH_RECORDINGS`, `_START`, `_LENGTH`, `_STAGGER`). Pane i replays [start + i x stagger, + length). Each row is the run whose p99 is the median of the 3. The component p99s are per-component and do not sum to the frame p99.
+
+| Run | Recording | Start | Length | Stagger |
+| --- | --- | --- | --- | --- |
+| a | spike `pane-2.rec` (its gate window, like-for-like with the spike) | 91 s | 30 s | 5 s |
+| b | new `p3.rec` | 72 s | 7 s | 0.5 s |
+| c | new `p2.rec` | 45 s | 4 s | 0.5 s |
+
+| Run | Panes | Frames | Bytes fed | p50 | p95 | p99 | max | CPU % | feed / update+view / present p99 | GCs |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| a | 2 | 238 | 386,215 | 2.38 ms | 4.86 ms | 5.83 ms | 6.11 ms | 2.3 | 0.11 / 1.31 / 5.10 ms | 6 |
+| a | 4 | 420 | 781,212 | 2.32 ms | 4.67 ms | 5.58 ms | 7.66 ms | 3.8 | 0.13 / 0.94 / 4.45 ms | 8 |
+| a | 6 | 593 | 1,127,049 | 2.35 ms | 4.84 ms | **6.06 ms** | 7.89 ms | 5.6 | 0.18 / 1.14 / 4.64 ms | 13 |
+| b | 2 | 61 | 111,141 | 2.35 ms | 2.95 ms | 4.59 ms | 4.59 ms | 2.1 | 0.07 / 0.69 / 3.93 ms | 1 |
+| b | 4 | 104 | 225,640 | 2.19 ms | 2.83 ms | 4.59 ms | 5.62 ms | 3.5 | 0.09 / 0.72 / 3.86 ms | 2 |
+| b | 6 | 128 | 330,780 | 2.37 ms | 4.74 ms | **5.47 ms** | 5.50 ms | 4.9 | 0.13 / 0.99 / 4.37 ms | 3 |
+| c | 2 | 44 | 91,262 | 3.24 ms | 5.12 ms | 5.68 ms | 5.68 ms | 3.8 | 0.18 / 1.40 / 5.08 ms | 1 |
+| c | 4 | 80 | 188,627 | 2.21 ms | 4.89 ms | 5.67 ms | 5.67 ms | 6.0 | 0.27 / 1.10 / 4.30 ms | 1 |
+| c | 6 | 107 | 284,741 | 2.55 ms | 5.56 ms | **6.51 ms** | 6.74 ms | 8.5 | 0.24 / 1.21 / 5.00 ms | 2 |
+
+Busy rule (the spike's): a second is busy when its bytes exceed 25 % of that recording's peak per-second rate. By it `p2.rec` (peak 14,633 B/s at 49 s) is busy 45-51 s (7 s) and `p3.rec` (peak 13,582 B/s at 42 s) is busy 36-43 s (8 s) and 72-82 s (11 s), so Claude's text answers are short bursts and runs b (pane 6 at 74.5-81.5 s) and c (pane 6 at 47.5-51.5 s) are short truecolor windows with every pane inside a busy stretch. `pane-2.rec` (peak 12,591 B/s at 134 s) is busy 93-135 s and 140-145 s. Run a is the spike's gate configuration: the sustained 30 s reply, in 256 colour (no truecolor SGRs), with windows [91 + 5i, 121 + 5i) s. Two exceptions: pane 0 starts with a 91-93 s spinner lead-in, and panes 4 and 5 cross the quiet 136-140 s. Run a is like-for-like with the spike's gate (593 frames, 1,127,049 bytes at six panes; spike p99 5.04 ms on the headless model, 6.06 ms here through the real `App`). Present is again the cost centre. GC pause totals stay under 1 ms per run.
+
+Supplementary, mixed (partly idle: recordings `p2`, `p3`, `pane-2` in turn, start 37 s, length 10 s, stagger 0.5 s, the pooled-busiest window; some panes sit at a spinner or idle in it): 2 panes 94 frames, p99 7.01 ms; 4 panes 208 frames, p99 4.89 ms; 6 panes 270 frames, 215,690 bytes, p99 5.52 ms, CPU 7.4 %.
+
+Caveat (a one-off scratch measurement, not a gate run): the bench builds one `View` per 60 FPS step, while the app calls `View` after every message. On run a's workload (six panes, 240x64) update+view p99 was 1.18 ms with one `View` per step and 2.08 ms with a `View` per dirty message, which would put the six-pane frame p99 near 7 ms, still under 8 ms.
+
+Idle: six shell panes each running `sleep 3600`, 240x64 in a private tmux, 30 s after a 5 s warm-up, `/proc/<pid>/stat` utime+stime: **0.30 %** of one core.
+
+Inputs: `p2.rec` (136 s, file size 94,552 bytes) and `p3.rec` (117 s, file size 204,497 bytes) are new recordings of two live `claude` panes (Claude Code 2.1.310, no `TMUX` in its environment, text-only prompts), recorded at 79x31 in a 159x33 tmux; both carry `38;2;` truecolor SGRs. `pane-2.rec` is the spike's recording.
+
+Fidelity limits of the replay: the recordings are 79x31, but the bench lays the panes out in the 240x64 grid, so they replay at 77-83 columns by 30-31 rows (119-120 columns by 62 rows at 2 panes, 30-31 rows at 4 panes). Recorded resizes are skipped; none fall inside any window.
+
+### M1b Copy, mouse and clipboard
+
+After M1a. Covers AG-4, UX-4, UX-5, UX-6.
+
+### M1c Agents and persistence
+
+After M1a. Covers AG-5, AG-7 shim, AG-8, PR-1 to PR-4.
 
 ## Spike - VT (done)
 
@@ -190,11 +242,12 @@ Build M1's terminal layer on `tuios.dev/vt` v0.3.1 (pure Go) behind the `VT` int
 
 ## Next
 
-M1 Terminal core: PTYs, the `tuios.dev/vt` adapter, compositor, splits, shell panes, copy mode, mouse and clipboard, hook socket, state badges, persistence and resume (AG-1 to AG-5, AG-7, AG-8 interface, PR-1 to PR-4, UX-4 to UX-6). It builds on the spike findings above.
+M1b Copy, mouse and clipboard and M1c Agents and persistence, in parallel after M1a merges.
 
 ## Done
 
 - Spike - VT: GO on `tuios.dev/vt` v0.3.1; findings in the Spike - VT section above. The spike code is on a local branch, not on GitHub.
+- M0 Skeleton: app shell, config, Catppuccin themes, commands, which-key, palette and live theme picker (PRs #4, #5, #6)
 
 ## Decisions log
 
@@ -206,7 +259,8 @@ M1 Terminal core: PTYs, the `tuios.dev/vt` adapter, compositor, splits, shell pa
 | 2026-10-26 | GO on `tuios.dev/vt` v0.3.1 (pure Go) for the terminal layer; `charmbracelet/x/vt` stays the fallback | Passes every gate line at 6 panes (bench p99 5.0 ms, interactive CPU 10.2 %, no rendering bugs, builds on go1.26.0); x/vt is no faster (4.7 ms, 10.4 %) and lacks Kitty keyboard and the sync output Claude Code uses |
 | 2026-10-26 | Adopt the VT spike findings into DESIGN.md: per-row string cache, near-zero idle CPU, own sync hold, own legacy key encoder, pane PTY environment, x/vt fallback gaps, cell-level render path as the lever | Measured in the spike; M1 builds on them |
 | 2026-10-26 | Target Go 1.27.3 (go.mod `go 1.27.3`) | Latest Go release; the local toolchain, golangci-lint and goimports are built with it; `tuios.dev/vt` needs only 1.26 |
-| 2026-10-26 | `ctrl+c` does not quit; `ctrl+space q` runs `app.quit` | M1 panes need `ctrl+c` for the agent |
+| 2026-10-26 | Every key without the leader goes to the focused pane, `ctrl+c` included; `ctrl+space q` still runs `app.quit` | Terminal panes need every key, `ctrl+c` for the agent above all |
+| 2026-10-26 | M1 ships as three plans and PRs: Panes, then Copy/mouse/clipboard and Agents/persistence in parallel | Keeps each PR reviewable and uses both workers |
 
 ## Later
 
@@ -219,5 +273,6 @@ Ideas and requests that came up outside the current milestone go here.
 - Live x/vt streaming check, only if x/vt ever becomes the backend: does Claude's unsynchronized output tear?
 - A cell-level render path that skips Bubble Tea's string re-parse (about half of present), if M1's frame cost grows.
 - Fidelity references outside the x/vt lineage: tmux `capture-pane -e` (styles included) at several checkpoints of each recording, not only the final screen.
-- Replace `core.State(cfg)` in `cmd/muxreveal/main.go` with a small `core.InitialState(cfg Config) State` when Config grows in M1.
+- Pass the guest's cursor shape (DECSCUSR) through to the outer terminal; panes show the default cursor today.
 - The palette overlay scrolls by a fixed `MaxRows` and does not use the height left below its top, so on terminals shorter than about 15 rows the last commands are cut off.
+- On a terminal whose Backspace sends 0x08 (or Enter sends 0x0a) without the Kitty keyboard protocol, leader then Backspace swaps left (and leader then that Enter swaps down); Ghostty and Kitty are unaffected.

@@ -40,7 +40,9 @@ func TestKeymapLookup(t *testing.T) {
 		{"q", "app.quit", true},
 		{":", "palette.open", true},
 		{"t", "theme.pick", true},
-		{"x", "", false},
+		{"x", "pane.close", true},
+		{"H", "pane.resize.left", true},
+		{"w", "", false},
 		{"", "", false},
 	}
 	for _, tt := range tests {
@@ -63,6 +65,7 @@ func TestKeymapKeyFor(t *testing.T) {
 		{"app.quit", "ctrl+space q", true},
 		{"palette.open", "ctrl+space :", true},
 		{"theme.pick", "ctrl+space t", true},
+		{"pane.split.right", "ctrl+space v", true},
 		{"theme.set.catppuccin-latte", "", false},
 	}
 	for _, tt := range tests {

@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/spf13/cobra"
@@ -17,8 +18,11 @@ import (
 	"github.com/mhersson/muxreveal/internal/ui/theme"
 )
 
+// closeTimeout bounds how long quitting waits for pane processes to end.
+const closeTimeout = 3 * time.Second
+
 func main() {
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
 	err := newRootCmd().ExecuteContext(ctx)
 	stop()
 	if err != nil {
@@ -29,7 +33,7 @@ func main() {
 
 func newRootCmd() *cobra.Command {
 	env, envErr := core.DefaultEnv()
-	var configPath string
+	var configPath, recordDir string
 	cmd := &cobra.Command{
 		Use:           "muxreveal",
 		Short:         "Coding agents in terminal panes, with their diffs and pull requests beside them",
@@ -46,7 +50,7 @@ func newRootCmd() *cobra.Command {
 					return fmt.Errorf("config: %w", err)
 				}
 			}
-			return run(cmd.Context(), env, configPath)
+			return run(cmd.Context(), env, configPath, recordDir)
 		},
 	}
 	defaultConfig := ""
@@ -54,12 +58,15 @@ func newRootCmd() *cobra.Command {
 		defaultConfig = core.ConfigPath(env)
 	}
 	cmd.Flags().StringVar(&configPath, "config", defaultConfig, "config file")
+	cmd.Flags().StringVar(&recordDir, "record", "", "write each pane's terminal output to a recording in this directory")
+	// Diagnostics for bench inputs and VT fixtures, not a user feature.
+	_ = cmd.Flags().MarkHidden("record")
 	return cmd
 }
 
 // run loads the config and opens the log before the TUI takes over the
 // terminal, so their errors can still be printed.
-func run(ctx context.Context, env core.Env, configPath string) (err error) {
+func run(ctx context.Context, env core.Env, configPath, recordDir string) (err error) {
 	cfg, err := core.LoadConfig(configPath)
 	if err != nil {
 		return err
@@ -78,15 +85,32 @@ func run(ctx context.Context, env core.Env, configPath string) (err error) {
 	}()
 
 	logger := slog.New(slog.NewTextHandler(f, nil))
-	app, err := ui.New(ui.Options{Logger: logger, Store: core.NewStore(core.State(cfg))})
+	cwd, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("launch directory: %w", err)
+	}
+	app, err := ui.New(ui.Options{
+		Logger: logger,
+		Store:  core.NewStore(core.InitialState(cfg)),
+		Getenv: os.Getenv,
+		Cwd:    cwd,
+
+		RecordDir: recordDir,
+	})
 	if err != nil {
 		return err
 	}
 
 	logger.Info("start", "config", configPath, "theme", cfg.Theme)
-	// ctx is the only signal handler, so SIGINT and SIGTERM both end the run
-	// cleanly instead of racing Bubble Tea's own handler.
+	// ctx is the only signal handler, so SIGINT, SIGTERM and SIGHUP (a closed
+	// terminal) end the run cleanly instead of racing Bubble Tea's own handler.
 	_, err = tea.NewProgram(app, tea.WithContext(ctx), tea.WithoutSignalHandler()).Run()
+	// The context may be cancelled already, so the close gets its own deadline.
+	closeCtx, cancel := context.WithTimeout(context.Background(), closeTimeout)
+	defer cancel()
+	if cerr := app.Close(closeCtx); cerr != nil {
+		logger.Error("close panes", "err", cerr)
+	}
 	if err != nil && ctx.Err() == nil {
 		logger.Error("run", "err", err)
 		return fmt.Errorf("run: %w", err)
