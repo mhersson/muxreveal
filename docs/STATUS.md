@@ -8,8 +8,8 @@ Goal: prove that `tuios.dev/vt` + Bubble Tea v2 can host several busy Claude Cod
 
 - [x] Read the `tuios.dev/vt` docs and source: list which features it exposes (scrollback, Kitty graphics, Kitty keyboard protocol, OSC 133, synchronized output, mouse modes) and which backend it uses (pure Go or ghostty)
 - [x] Open two PTYs with `creack/pty`, each running `claude`, feeding a `tuios.dev/vt` emulator per pane
-- [x] Render both side by side with Bubble Tea v2, with resize handling and event-driven redraws (no fixed tick)
-- [x] Forward keys to the focused pane, including Kitty keyboard protocol and bracketed paste (legacy keys and bracketed paste checked live; Kitty encoding unit-tested only, live pass is in Later)
+- [x] Render both side by side with Bubble Tea v2, with resize handling and event-driven redraws (no fixed tick). Resize handling needed a fix after the final review: a resize blanked every pane until it wrote again; now a same-size resize is skipped and a resized pane re-renders at once (tested on both backends).
+- [x] Forward keys to the focused pane, including Kitty keyboard protocol and bracketed paste (checked live on tuios, where Claude turns on Kitty flags 5 and modifyOtherKeys 2 at startup: Left went through tuios's `EncodeKeyCSIu`, letters and Backspace fell through to the legacy encoder; bracketed paste checked live; the legacy encoder's cursor, function-key and modifier paths are unit-tested only; a pass through a Kitty-protocol terminal is in Later)
 - [x] Measure frame time and CPU with both panes busy (e.g. both generating long output), then with four and six panes; also idle CPU
 - [x] Run the same harness with `charmbracelet/x/vt` for comparison
 - [x] Write the findings below: API fit, missing features, numbers, rendering bugs seen, recommendation
@@ -27,7 +27,7 @@ Gate: a go/no-go on `tuios.dev/vt` vs `charmbracelet/x/vt`, with numbers.
 | tuios builds clean with `GOTOOLCHAIN=go1.26.0` | `go build ./...` and `go vet ./...` clean on go1.26.0 | pass |
 | Bench median p99 frame cost <= 8 ms | tuios 5.04 ms (x/vt 4.69 ms) | pass |
 | Interactive CPU <= 25 % of one core | tuios 10.2 % (x/vt 10.4 %) | pass |
-| Fidelity sweep finds no blocking rendering bug | 0 mismatches at 3249 checkpoints; both match tmux; live captures clean | pass |
+| Fidelity sweep finds no blocking rendering bug | 0 mismatches at 3249 checkpoints (tuios descends from x/vt, so this cannot catch a bug they share); both final screens match tmux (text only); live captures clean | pass |
 | Pick x/vt if tuios fails build or fidelity, or is > 2x slower with no correctness edge | tuios / x/vt: p99 1.07x, bench CPU 1.07x, interactive CPU 0.98x; tuios has the correctness edge (Kitty keyboard, sync output Claude uses, OSC 52, OSC 133, Kitty graphics) | does not apply |
 | Idle CPU <= 1 % of one core (non-blocking) | tuios 0.35 %, x/vt 0.31 % | met |
 
@@ -74,7 +74,8 @@ Mapped cleanly on both: write, resize, size, `CellAt` (both return ultraviolet `
 
 Needed host code:
 
-- **Legacy keys:** tuios `EncodePaneKey` returns "" unless Kitty flags or modifyOtherKeys are on, so the adapter carries a legacy encoder ported from x/vt (MIT, listed in `THIRD_PARTY.md`, about 140 lines).
+- **Legacy keys:** tuios `EncodePaneKey` returns "" unless Kitty flags or modifyOtherKeys are on, and its `EncodeKeyCSIu` returns "" for unmodified text, Enter, Tab and Backspace, so the adapter falls back to a legacy encoder ported from x/vt (MIT, listed in `THIRD_PARTY.md`, about 140 lines). Claude pushes Kitty flags 5 and modifyOtherKeys 2 (`ESC[<u ESC[>5u ESC[>4;2m`) at 0.53 s in both recordings and keeps them on to the end (two pops of at most 0.15 s around the trust prompt, each re-pushed; last re-push at 473.29 s in `pane-1.rec`), so for Claude on tuios the port only sends text, Enter, Tab and Backspace.
+- **The legacy port is not fit for M1 as is** (`spikes/vt/term/legacykey.go`): ctrl, shift or meta with an arrow, Home/End, PgUp/PgDn or a function key returns "" and sends nothing (alt only gets an ESC prefix), where xterm sends `CSI 1;<mod>X`; a key without text it has no entry for, such as F13 and up or Begin, sends `string(Code)`, a private-use rune (x/vt's own encoder has the same F13 bug); and a key with `IsRepeat` set skips every table, so a held arrow sends a private-use rune too.
 - **Paste:** tuios offers `SanitizePaste` and `BracketedPasteEnabled`; the host wraps the text. x/vt's `Paste` wraps but does not sanitise.
 - **Sync hold:** tuios's `IsSyncActive` and `SyncUpdate` expire on the wall clock, so the host tracks DEC 2026 from the mode callbacks and applies its own 1 s hold on an injectable clock.
 - **Damage:** tuios has no damage API, so a dirty pane re-renders every row into a per-row string cache and only changed rows count. x/vt reports touched rows, but the adapter must treat an alt-screen switch or resize as all dirty and clear the list itself.
@@ -124,23 +125,24 @@ Idle (CPU % of one core, 30 s window after 5 s warmup, one run per backend):
 
 The p99 columns are medians of 3 runs. The share is not derived from them: it is present's time summed over every drawn frame of a run divided by the summed frame time (feed + render + present) of that run, then the median of 3 runs, taken from the `Total` fields of the bench JSON (`bench.md` does not print them).
 
-- **Present** (Bubble Tea's path: parse the whole view string into a cell buffer, diff it, write) takes 83-92 % of summed frame time in the gate configuration, and 85-95 % in the mixed one by the same method. Bubble Tea v2.1's `View.Content` is a string, so every changed frame is re-parsed in full.
+- **Present** (Bubble Tea's path: parse the whole view string into a cell buffer, diff it, write) takes 83-92 % of summed frame time in the gate configuration, and 85-95 % in the mixed one by the same method. Bubble Tea v2.1's `View.Content` is a string, so every changed frame is re-parsed in full. Inside present, timed on the 593 frames of a 6-pane gate run, the string parse (`NewStyledString` + `Draw`) is about 48 %, `TerminalRenderer.Render` (cell diff and escape generation) about 52 %, and `Flush` to `io.Discard` about 0 %.
 - **Render** (pane rows to strings, compose): x/vt's touched rows save about 0.15 ms p99 at 6 panes. tuios re-renders all 31 rows of a dirty pane.
 - **Feed** (emulator parse): tuios parses 2-3x faster than x/vt.
-- The emulator choice moves less than 0.4 ms of a 5 ms p99. Bubble Tea's string renderer is the cost centre.
-- Interactive CPU (10 %) is about twice bench CPU (4.5 %): it adds Bubble Tea's flush on its ticker goroutine, its 60 FPS ticker and the replay goroutines.
+- The emulator choice moves less than 0.4 ms of a 5 ms p99. Bubble Tea's presenter is the cost centre, split about evenly between the string re-parse and the cell diff. The frames are byte-identical across backends, so the present p99 gap between tuios and x/vt (0.39 ms at 6 panes) is not presenter work; it is GC landing in present: a 6-pane bench run has 14 GC cycles on tuios and 6 on x/vt.
+- Interactive CPU (10 %) is about twice bench CPU (4.5 %); the difference is not attributed, and the bench already includes present. Candidates: Bubble Tea calls `View` after every message (771 frame builds in the interactive window against 593 bench frames); the 6-pane grid of 79x31 panes is 239 columns wide in a 240-column terminal, so every frame line takes a `fit()` pass (this is also inside the interactive update+view numbers; the bench terminal is exactly 239 wide); Bubble Tea's 60 FPS ticker and the replay goroutines; and real writes to tmux instead of `io.Discard`.
 - Caveats, identical for both backends: the bench builds the frame once per 60 FPS step while Bubble Tea calls `View` after every message, so absolute render cost is slightly under-counted; interactive frame timing skips frames rebuilt only by a hold expiry.
-- Workload caveats: the gate workload is one recording (`pane-2.rec`) replayed six times 5 s apart, so the panes differ in offset but not in content, which may flatter the per-row cache. Every replay feeds bytes Claude produced while talking to tuios (with 2026 brackets and tuios's Kitty and XTVERSION replies), so the x/vt performance and fidelity numbers describe x/vt on a tuios-shaped stream; x/vt's own unbracketed live stream was probed only at a trust-prompt redraw. The conclusion stands.
+- Workload caveats: the gate workload is one recording (`pane-2.rec`) replayed six times 5 s apart, so the panes differ in offset but not in content, which may flatter the per-row cache. Every replay feeds bytes Claude produced while talking to tuios with `TMUX` set (2026 brackets, tuios's Kitty and XTVERSION replies, 256 colours; see Agent environment), so the x/vt performance and fidelity numbers describe x/vt on a tuios-shaped stream; x/vt's own unbracketed live stream was probed only at a trust-prompt redraw. The conclusion stands.
 
 #### Fidelity sweep
 
 - **Replay diff** (every cell's content, width, style and link plus the cursor, after every chunk): `pane-2.rec` 618 checkpoints, `pane-1.rec` 2631, none skipped (each Claude frame arrives in one chunk with its 2026 brackets). 0 mismatches in every class.
 - **tmux reference** (79x31, status off): the final screens of both backends match tmux for both recordings.
+- **What the diff can catch:** tuios.dev/vt's NOTICE says it started as a copy of `charmbracelet/x/vt` and that its parser is a modified copy of the `x/ansi` parser; both use ultraviolet cells and width tables. "0 mismatches at 3249 checkpoints" therefore cannot catch a bug tuios inherited. The independent evidence is the two tmux final-screen comparisons (text only) and the visual captures; references at more checkpoints are in Later.
 - **Live captures:** the two backends' 6-pane interactive captures at the 30 s mark are byte-identical apart from the status label. No stale rows; wide characters (emoji in Claude's status line) keep the pane borders aligned. The live captures of the trust prompt, input box, streaming reply and spinner are clean.
 - **Blocking rendering bugs: none** on either backend.
 - **OSC 8 on x/vt:** an earlier observation said x/vt dropped the trust prompt's "Security guide" link. It does not. Claude sends `ESC ] 8 ; id=zaxmda ; https://... BEL`, x/vt splits the payload into exactly three parts and keeps the link, the `-e` captures of both backends carry the identical OSC 8 sequence, and the replay diff shows no link mismatch.
-- **Claude does not use synchronized output on x/vt** (live, no tokens: a trust-prompt redraw forced with Down then Up, never answered). At startup Claude sends XTVERSION, a Kitty keyboard query, OSC 7501 and DA1. tuios answers XTVERSION and Kitty, Claude then asks DECRQM 2026 and wraps each redraw in `?2026h`/`?2026l` (2 brackets). x/vt answers only DA1; Claude never asks about 2026 and sends the same redraw bytes unbracketed (0 brackets). So on x/vt the host cannot hold half-drawn frames. The replays cannot show this because they replay tuios-recorded bytes. Whether it visibly tears during streaming on x/vt is untested.
-- **Agent environment:** the panes inherited `TMUX` from the outer tmux, so Claude wrapped its OSC 11 query in tmux passthrough. MuxReveal is the agent's terminal, so M1 must not pass `TMUX` or `TMUX_PANE` to agent PTYs.
+- **Claude does not use synchronized output on x/vt** (live, no tokens: a trust-prompt redraw forced with Down then Up, never answered). At startup Claude sends XTVERSION, a Kitty keyboard query, OSC 7501 and DA1. tuios answers XTVERSION and Kitty, Claude then asks DECRQM 2026 and wraps each redraw in `?2026h`/`?2026l` (2 brackets). x/vt answers only DA1; Claude never asks about 2026 and sends the same redraw bytes unbracketed (0 brackets). The first probes ran with `TMUX` set; re-run after the harness started stripping it (79x31, same Down then Up, full-stream counts), the result is unchanged: tuios 2 brackets after a DECRQM 2026 query, x/vt 0 brackets and no DECRQM 2026 query. So on x/vt the host cannot hold half-drawn frames. The replays cannot show this because they replay tuios-recorded bytes. Whether it visibly tears during streaming on x/vt is untested.
+- **Agent environment:** the recordings, the idle `claude` runs and the first probes were made with `TMUX` inherited from the outer tmux, so Claude believed it ran inside tmux: it wrapped its OSC 11 query in tmux passthrough and drew in 256 colours (neither recording holds a truecolor SGR). Without `TMUX`, Claude sends OSC 11 plainly, draws in truecolor and, on tuios, also queries Kitty graphics; a tuios control run with `TMUX` set reproduces the old behaviour. The replays therefore exercised Claude's 256-colour output, not its truecolor output (truecolor itself is covered by the caps probe). The harness now strips `TMUX` and `TMUX_PANE` from pane environments; MuxReveal is the agent's terminal, so M1 must not pass them to agent PTYs either.
 
 #### Library issues found
 
@@ -157,26 +159,30 @@ x/vt v0.1.0:
 - Entering the alt screen clears it together with its touched-row list, and leaving it marks nothing, so a screen switch never shows up as touched rows. There is also no public way to clear the list; the adapter clears the aliased slice and treats a switch as all dirty.
 - DECRQM 2026 answers 0 (not recognised). No Kitty keyboard, Kitty graphics, OSC 133, OSC 52 API or XTVERSION.
 - `Paste` does not sanitise an embedded `ESC[201~`, so pasted text can end bracketed paste early.
-- The key encoder sends nothing for shift+enter (Claude's newline key) and a private-use rune for unmapped keys such as F13.
+- The key encoder sends nothing for shift+enter (Claude's newline key) and a private-use rune for unmapped keys such as F13 (the spike's legacy port inherits the F13 bug; see API fit).
 - OSC 8 is dropped when the URL contains `;` (the handler requires exactly three `;`-separated parts). Claude's links do not hit this.
 
-Spike harness (no effect on the numbers): `run` reads `pty.Getsize` as (width, height), but it returns (rows, cols). The initial layout is transposed until Bubble Tea's first resize message; replay panes have a fixed size and the stats report 240x64, but a PTY recording made without `-pane-size` gets a transposed header.
+Spike harness (no effect on the numbers; fixed after the final review):
+
+- `run` read `pty.Getsize` as (width, height), but it returns (rows, cols). Until Bubble Tea's first resize message the layout was transposed, and PTY children started at the transposed size too (the first probes' recordings say 64x239). Replay panes have a fixed size and the stats report 240x64. `run -record` now requires `-pane-size`: the recording format stores only the initial size and has no resize records, which matters if M1 reuses it for VT fixtures.
+- A window resize blanked every pane's row cache and nothing re-rendered it, so an idle or exited pane lost its screen until it wrote again. A same-size resize is now skipped and a resized pane re-renders at once.
+- Pane children inherited `TMUX` and `TMUX_PANE` (see Agent environment); now stripped.
 
 #### Recommendation
 
-Build M1's terminal layer on `tuios.dev/vt` v0.3.1 (pure Go) behind the `VT` interface, with the host code listed under API fit. Keep `charmbracelet/x/vt` as the fallback, but note that it is only performance-equal: on x/vt, Claude Code loses Kitty keyboard (shift+enter), OSC 52 and OSC 133, and it stops using synchronized output.
+Build M1's terminal layer on `tuios.dev/vt` v0.3.1 (pure Go) behind the `VT` interface, with the host code listed under API fit. Keep `charmbracelet/x/vt` as the fallback, but note that it is only performance-equal: on x/vt, Claude Code loses Kitty keyboard (shift+enter), OSC 52 and OSC 133, and it stops using synchronized output (with or without `TMUX` in its environment). Do not reuse the spike's legacy key port as is (see API fit).
 
 ### Proposed DESIGN.md edits
 
 Proposals only; DESIGN.md is unchanged.
 
-1. **Terminal layer, rendering:** replace "The compositor draws only dirty rows of visible panes" with "Each pane keeps a per-row string cache; a dirty pane re-renders its rows and only changed rows reach the frame. tuios has no damage API, so row-change detection is ours."
+1. **Terminal layer, rendering:** replace "The compositor draws only dirty rows of visible panes" with "Each pane keeps a per-row string cache; a dirty pane re-renders its rows from cells to strings, and the frame is rebuilt only when a cached row changed. The rebuilt frame is still one string that Bubble Tea re-parses and diffs in full; only the cell-to-string step is per row. tuios has no damage API, so row-change detection is ours."
 2. **Terminal layer, idle:** replace "no fixed tick, zero CPU at idle" with "our code has no fixed tick; Bubble Tea v2's own 60 FPS ticker remains, so idle CPU is near zero (about 0.35 % of one core with six idle panes), not zero."
 3. **Terminal layer, sync output:** add "tuios's own sync hold reads the wall clock, so MuxReveal tracks mode 2026 from the emulator's mode callbacks and applies its own 1 s hold on an injectable clock."
-4. **Terminal layer, input:** add "tuios encodes Kitty and modifyOtherKeys keys; the legacy encoding is ours (ported from x/vt, MIT). Paste goes through tuios `SanitizePaste`."
+4. **Terminal layer, input:** add "tuios encodes Kitty and modifyOtherKeys keys; the legacy encoding is ours: an xterm-style encoder with the `CSI 1;<mod>X` modifier forms, nothing sent for a key it cannot encode, and repeat events encoded like presses. Paste goes through tuios `SanitizePaste`." Do not port the spike's x/vt-derived encoder as is: it lacks all three (see API fit).
 5. **Terminal layer, child environment:** add "Agent PTYs get `TERM=xterm-256color` and `COLORTERM=truecolor`, and never inherit `TMUX` or `TMUX_PANE`, because MuxReveal is their terminal."
-6. **Tech stack, VT emulation row:** after "fallback `charmbracelet/x/vt`", add "(same speed, but no Kitty keyboard, Kitty graphics, OSC 52 or OSC 133, and Claude Code does not use synchronized output on it)".
-7. **Risks, frame-rate row:** add to the mitigation "Measured in the spike: 6 busy panes at p99 5 ms; 83-92 % of summed frame time is Bubble Tea re-parsing the view string. If M1's chrome pushes p99 toward the budget, draw pane cells directly instead of through a string (Bubble Tea v2.1's `View.Content` is a string, so this needs a cell-level path)."
+6. **Tech stack, VT emulation row:** after "fallback `charmbracelet/x/vt`", add "(same speed, but no Kitty keyboard, Kitty graphics, OSC 52 or OSC 133, and Claude Code does not use synchronized output on it; checked live with and without `TMUX` in Claude's environment)".
+7. **Risks, frame-rate row:** add to the mitigation "Measured in the spike: 6 busy panes at p99 5 ms; 83-92 % of summed frame time is Bubble Tea's presenter, about half of it re-parsing the view string and half diffing cells and generating escapes. If M1's chrome pushes p99 toward the budget, draw pane cells directly instead of through a string (Bubble Tea v2.1's `View.Content` is a string, so this needs a cell-level path); that saves roughly half of present, not most of the frame time."
 
 ## Next
 
@@ -204,4 +210,5 @@ Ideas and requests that came up outside the current milestone go here.
 - tuios's `ghostty` build-tag backend (libghostty-vt through cgo, built with Zig).
 - Mouse forwarding to panes (not built in the spike).
 - Live x/vt streaming check, only if x/vt ever becomes the backend: does Claude's unsynchronized output tear?
-- A cell-level render path that skips Bubble Tea's string re-parse, if M1's frame cost grows.
+- A cell-level render path that skips Bubble Tea's string re-parse (about half of present), if M1's frame cost grows.
+- Fidelity references outside the x/vt lineage: tmux `capture-pane -e` (styles included) at several checkpoints of each recording, not only the final screen.
