@@ -1137,3 +1137,55 @@ func TestSplitOtherStartErrorsAreNotRetried(t *testing.T) {
 		t.Errorf("panes = %d, notice = %q", len(a.store.State().Panes), a.notice)
 	}
 }
+
+func TestSwapCommands(t *testing.T) {
+	ctrl := func(r rune) tea.KeyPressMsg { return tea.KeyPressMsg{Code: r, Mod: tea.ModCtrl} }
+
+	t.Run("key strings", func(t *testing.T) {
+		for r, want := range map[rune]string{'h': "ctrl+h", 'j': "ctrl+j", 'k': "ctrl+k", 'l': "ctrl+l"} {
+			if got := bindingKey(ctrl(r)); got != want {
+				t.Errorf("bindingKey(ctrl+%c) = %q, want %q", r, got, want)
+			}
+		}
+	})
+
+	t.Run("swap right", func(t *testing.T) {
+		a, st := lifeAppSized(t, 100, 30)
+		chord(a, 'v')
+		chord(a, 'h')
+		chord(a, 'L')
+		chord(a, 'L')
+		before1, before2 := len(st.proc(0).resized()), len(st.proc(1).resized())
+
+		press(a, keyLeader, ctrl('l'))
+
+		s := a.store.State()
+		if l := s.Layout; l.A.Pane != "p2" || l.B.Pane != "p1" {
+			t.Fatalf("layout = %s | %s, want p2 | p1 (notice %q)", l.A.Pane, l.B.Pane, a.notice)
+		}
+		if s.Focus != "p1" {
+			t.Errorf("Focus = %q, want p1", s.Focus)
+		}
+		assertSizes(t, a)
+		if got := st.proc(0).resized(); len(got) <= before1 || got[len(got)-1] != paneSize(t, a, "p1") {
+			t.Errorf("p1 resizes = %v, want a new one with %v", got, paneSize(t, a, "p1"))
+		}
+		if got := st.proc(1).resized(); len(got) <= before2 || got[len(got)-1] != paneSize(t, a, "p2") {
+			t.Errorf("p2 resizes = %v, want a new one with %v", got, paneSize(t, a, "p2"))
+		}
+		for i := range 2 {
+			if got := st.proc(i).sent(); got != "" {
+				t.Errorf("pane %d received %q, want nothing", i, got)
+			}
+		}
+	})
+
+	t.Run("every direction resolves", func(t *testing.T) {
+		for r, cmd := range map[rune]string{'h': "pane.swap.left", 'j': "pane.swap.down", 'k': "pane.swap.up", 'l': "pane.swap.right"} {
+			a := newTestApp(t)
+			if got, ok := a.keymap.lookup(bindingKey(ctrl(r))); !ok || got != cmd {
+				t.Errorf("lookup(ctrl+%c) = %q, %v, want %q", r, got, ok, cmd)
+			}
+		}
+	})
+}

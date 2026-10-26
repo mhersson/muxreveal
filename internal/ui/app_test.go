@@ -243,12 +243,12 @@ func TestWhichKeySizes(t *testing.T) {
 			plain := ansi.Strip(content)
 			switch sz[0] {
 			case 100:
-				if !strings.Contains(plain, "╭─ ctrl+space") || !strings.Contains(plain, "│ q  Quit MuxReveal       │") {
+				if !strings.Contains(plain, "╭─ ctrl+space") || !strings.Contains(plain, "│ q ") {
 					t.Errorf("popup not drawn:\n%s", plain)
 				}
 			case 40:
 				// The popup is taller than the body: its top rows show, the rest is clipped.
-				if !strings.Contains(plain, "╭─ ctrl+space") || !strings.Contains(plain, "│ :  Open command palette │") {
+				if !strings.Contains(plain, "╭─ ctrl+space") || !strings.Contains(plain, "│ : ") {
 					t.Errorf("popup top not drawn:\n%s", plain)
 				}
 			case 20:

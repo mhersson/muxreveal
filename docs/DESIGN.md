@@ -33,7 +33,7 @@ IDs are referenced by milestones, commits and PRs. Priority: **P0** blocks v1, *
 | ID | Requirement | Pri |
 | --- | --- | --- |
 | AG-1 | Spawn an agent pane running `claude` in a chosen worktree | P0 |
-| AG-2 | Splits (horizontal and vertical), resize, zoom, close, and focus movement | P0 |
+| AG-2 | Splits (horizontal and vertical), resize, zoom, close, swap, and focus movement | P0 |
 | AG-3 | Full-fidelity terminal: truecolor, alt screen, mouse, bracketed paste, synchronized output, Kitty keyboard protocol, OSC 8 and 52, wide chars | P0 |
 | AG-4 | Scrollback and copy mode with vim motions | P0 |
 | AG-5 | Per-pane state badge (working, blocked, idle) from Claude Code hooks | P0 |
@@ -227,6 +227,7 @@ Go 1.27 (`tuios.dev/vt` needs 1.26 or later). The reason for Rust was a proven V
 - The layout is a binary tree in `internal/core`. A leaf is a pane; a split has two children, A (left or top) and B (right or bottom), and a `ratio`, the share of the space A takes. `vertical` splits put the children side by side with a one-column separator; `horizontal` splits stack them. Geometry is integer cells: A gets `floor((W-1)*ratio)` columns (vertical) or `floor(H*ratio)` rows (horizontal), B gets the rest. A side that gets less than one cell is omitted, so a tiny terminal drops panes instead of producing negative sizes.
 - Splits follow vim: `leader s` opens a shell below the focused pane (`horizontal`), `leader v` opens one to the right (`vertical`). The new pane is child B, takes half of the focused pane (ratio 0.5) and gets focus.
 - `h j k l` focus the nearest pane in that direction: least edge distance, then most overlap on the other axis, then top-most or left-most. There is no wrap. `H J K L` move the nearest divider on that axis by 0.05 of its split (`L` and `J` grow the left or top child), clamped to [0.1, 0.9].
+- `leader ctrl+h`, `ctrl+j`, `ctrl+k`, `ctrl+l` swap the focused pane with its neighbour in that direction, chosen as for focus. The tree keeps its shape and ratios, so each position keeps its size and the moved pane takes the size of the position it lands in. Focus stays on the moved pane. A swap clears zoom; one with no neighbour does nothing and keeps it.
 - `leader z` zooms the focused pane to fill the body. Opening a pane, closing a pane, or moving focus clears zoom; a focus move that has nowhere to go keeps it.
 - Closing a pane gives its space to its sibling. Closing the focused pane focuses the first leaf of that sibling; closing another pane keeps focus. Pane IDs are never reused within a session.
 - MuxReveal starts with one shell pane in the launch directory. Closing the last pane shows the welcome card; it never quits by itself.
@@ -372,6 +373,7 @@ Terminal panes pass every key through to the agent, so global actions sit behind
 | `s` / `v` | Open a shell below / to the right of the focused pane (same cwd; `split_default` in config can flip this) |
 | `h` `j` `k` `l` | Focus pane left, down, up, right |
 | `H` `J` `K` `L` | Resize pane |
+| `ctrl+h` `ctrl+j` `ctrl+k` `ctrl+l` | Swap pane left, down, up, right |
 | `z` | Zoom pane |
 | `x` | Close pane (confirms for agents) |
 | `d` | Toggle review pane for the focused agent |

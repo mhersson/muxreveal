@@ -93,6 +93,13 @@ func defaultCommands() []command {
 			run:   func(a *App) tea.Cmd { return a.act(core.ResizeDir{Dir: d.dir}) },
 		})
 	}
+	for _, d := range dirs {
+		cmds = append(cmds, command{
+			id:    "pane.swap." + d.name,
+			title: "Swap " + d.name,
+			run:   func(a *App) tea.Cmd { return a.act(core.SwapDir{Dir: d.dir}) },
+		})
+	}
 	cmds = append(cmds, command{
 		id:    "pane.zoom",
 		title: "Zoom pane",

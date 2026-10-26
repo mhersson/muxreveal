@@ -205,10 +205,19 @@ type FocusDir struct {
 }
 
 func (a FocusDir) apply(s *State) error {
+	if id, ok := neighbour(*s, a.Dir); ok {
+		s.Focus = id
+		s.Zoomed = false
+	}
+	return nil
+}
+
+// neighbour finds the pane nearest the focused one in a direction.
+func neighbour(s State, d Dir) (PaneID, bool) {
 	rects := Rects(s.Layout, Rect{0, 0, 10000, 10000})
 	cur, ok := rects[s.Focus]
 	if !ok {
-		return nil
+		return "", false
 	}
 	type cand struct {
 		id            PaneID
@@ -221,7 +230,7 @@ func (a FocusDir) apply(s *State) error {
 			continue
 		}
 		var dist, overlap, pos int
-		switch a.Dir {
+		switch d {
 		case Left:
 			dist, overlap, pos = cur.X-(r.X+r.W), span(cur.Y, cur.H, r.Y, r.H), r.Y
 		case Right:
@@ -236,7 +245,7 @@ func (a FocusDir) apply(s *State) error {
 		}
 	}
 	if len(cands) == 0 {
-		return nil
+		return "", false
 	}
 	sort.Slice(cands, func(i, j int) bool {
 		x, y := cands[i], cands[j]
@@ -250,7 +259,26 @@ func (a FocusDir) apply(s *State) error {
 		}
 		return x.id < y.id
 	})
-	s.Focus = cands[0].id
+	return cands[0].id, true
+}
+
+// SwapDir exchanges the focused pane with its FocusDir neighbour. The tree
+// keeps its shape and ratios, so each position keeps its size; focus stays on
+// the moved pane. It does nothing at an edge.
+type SwapDir struct {
+	Dir Dir
+}
+
+func (a SwapDir) apply(s *State) error {
+	other, ok := neighbour(*s, a.Dir)
+	if !ok {
+		return nil
+	}
+	from, to := s.Layout.path(s.Focus), s.Layout.path(other)
+	if from == nil || to == nil {
+		return fmt.Errorf("core: swap between %q and %q: pane not in the layout", s.Focus, other)
+	}
+	from[len(from)-1].Pane, to[len(to)-1].Pane = other, s.Focus
 	s.Zoomed = false
 	return nil
 }

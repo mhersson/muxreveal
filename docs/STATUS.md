@@ -12,7 +12,7 @@ M1 ships as three plans, one PR each.
 
 ### M1a Panes
 
-Live shell and `claude` panes in splits, with focus, resize, zoom and close, full key and paste forwarding, and a replay bench. Covers AG-1, AG-2, AG-3, AG-7.
+Live shell and `claude` panes in splits, with focus, resize, zoom, swap and close, full key and paste forwarding, and a replay bench. Covers AG-1, AG-2, AG-3, AG-7.
 
 - [x] VT adapter on `tuios.dev/vt`
 - [x] Key encoder and paste
@@ -275,3 +275,4 @@ Ideas and requests that came up outside the current milestone go here.
 - Fidelity references outside the x/vt lineage: tmux `capture-pane -e` (styles included) at several checkpoints of each recording, not only the final screen.
 - Pass the guest's cursor shape (DECSCUSR) through to the outer terminal; panes show the default cursor today.
 - The palette overlay scrolls by a fixed `MaxRows` and does not use the height left below its top, so on terminals shorter than about 15 rows the last commands are cut off.
+- On a terminal whose Backspace sends 0x08 (or Enter sends 0x0a) without the Kitty keyboard protocol, leader then Backspace swaps left (and leader then that Enter swaps down); Ghostty and Kitty are unaffected.

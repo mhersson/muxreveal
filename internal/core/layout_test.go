@@ -1,6 +1,9 @@
 package core
 
-import "testing"
+import (
+	"maps"
+	"testing"
+)
 
 func leaf(id PaneID) *Node { return &Node{Pane: id} }
 
@@ -328,5 +331,52 @@ func TestSetPaneCwd(t *testing.T) {
 	s := dispatch(t, stateOf(leaf("p1"), "p1"), SetPaneCwd{ID: "p1", Cwd: "/tmp"})
 	if s.Panes["p1"].Cwd != "/tmp" || s.Panes["p1"].Kind != KindShell {
 		t.Errorf("pane = %+v", s.Panes["p1"])
+	}
+}
+
+func TestSwapDir(t *testing.T) {
+	ratioed := func() *Node {
+		return &Node{Split: SplitVertical, Ratio: 0.7, A: leaf("p1"), B: leaf("p2")}
+	}
+	tree := func() *Node { return vsplit(leaf("p1"), hsplit(leaf("p2"), leaf("p3"))) }
+	tests := []struct {
+		name      string
+		layout    *Node
+		focus     PaneID
+		dir       Dir
+		want      string
+		wantRatio float64
+		zoomed    bool
+		wantZoom  bool
+	}{
+		{"keeps the ratio of the position", ratioed(), "p2", Left, "v(p2,p1)", 0.7, false, false},
+		{"right takes the top-most tie", tree(), "p1", Right, "v(p2,h(p1,p3))", 0.5, false, false},
+		{"up", tree(), "p3", Up, "v(p1,h(p3,p2))", 0.5, false, false},
+		{"no neighbour keeps the tree and zoom", tree(), "p1", Left, "v(p1,h(p2,p3))", 0.5, true, true},
+		{"swap clears zoom", tree(), "p1", Right, "v(p2,h(p1,p3))", 0.5, true, false},
+		{"single pane", leaf("p1"), "p1", Right, "p1", 0, true, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := stateOf(tt.layout, tt.focus)
+			s.Zoomed = tt.zoomed
+			before := maps.Clone(s.Panes)
+			got := dispatch(t, s, SwapDir{Dir: tt.dir})
+			if g := show(got.Layout); g != tt.want {
+				t.Errorf("layout = %s, want %s", g, tt.want)
+			}
+			if got.Focus != tt.focus {
+				t.Errorf("Focus = %q, want %q", got.Focus, tt.focus)
+			}
+			if got.Zoomed != tt.wantZoom {
+				t.Errorf("Zoomed = %v, want %v", got.Zoomed, tt.wantZoom)
+			}
+			if tt.wantRatio != 0 && got.Layout.Ratio != tt.wantRatio {
+				t.Errorf("root ratio = %v, want %v", got.Layout.Ratio, tt.wantRatio)
+			}
+			if !maps.Equal(got.Panes, before) {
+				t.Errorf("Panes = %v, want %v", got.Panes, before)
+			}
+		})
 	}
 }
