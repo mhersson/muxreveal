@@ -6,8 +6,8 @@ Update this file at the end of every session: tick what's done, set the next ste
 
 Goal: the app shell the later milestones build on: module layout from DESIGN.md, config, the theme engine with all four Catppuccin flavors, named commands with the leader key and which-key hints, and the command palette. Covers TH-1, TH-2, UX-1, UX-2.
 
-- [ ] Module layout from DESIGN.md, with the packages M0 needs
-- [ ] Config loading (`config.toml`)
+- [x] Module layout from DESIGN.md, with the packages M0 needs
+- [x] Config loading (`config.toml`)
 - [ ] Theme engine with Catppuccin Latte, Frappé, Macchiato and Mocha (TH-1)
 - [ ] Syntax highlighting themed from the same palette (TH-2)
 - [ ] Every action a named command; leader key with a which-key hint popup (UX-1)
@@ -203,6 +203,7 @@ M1 Terminal core: PTYs, the `tuios.dev/vt` adapter, compositor, splits, shell pa
 | 2026-10-26 | Use only the emulator from TUIOS, not `pkg/tuios` | `pkg/tuios` is pre-1.0 and can't host our own panes as tiles |
 | 2026-10-26 | GO on `tuios.dev/vt` v0.3.1 (pure Go) for the terminal layer; `charmbracelet/x/vt` stays the fallback | Passes every gate line at 6 panes (bench p99 5.0 ms, interactive CPU 10.2 %, no rendering bugs, builds on go1.26.0); x/vt is no faster (4.7 ms, 10.4 %) and lacks Kitty keyboard and the sync output Claude Code uses |
 | 2026-10-26 | Adopt the VT spike findings into DESIGN.md: per-row string cache, near-zero idle CPU, own sync hold, own legacy key encoder, pane PTY environment, x/vt fallback gaps, cell-level render path as the lever | Measured in the spike; M1 builds on them |
+| 2026-10-26 | Target Go 1.27.3 (go.mod `go 1.27.3`) | Latest Go release; the local toolchain, golangci-lint and goimports are built with it; `tuios.dev/vt` needs only 1.26 |
 
 ## Later
 

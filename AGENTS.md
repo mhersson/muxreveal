@@ -68,7 +68,7 @@ Dependency rules:
 
 ## Code conventions
 
-- Go 1.26. Idiomatic Go: small interfaces defined where they're used, accept
+- Go 1.27. Idiomatic Go: small interfaces defined where they're used, accept
   interfaces and return structs, no package-level mutable state.
 - Every blocking call takes a `context.Context` as its first argument. Git,
   diff, HTTP and file IO never run on the Bubble Tea update loop; they run as
