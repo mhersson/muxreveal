@@ -34,7 +34,7 @@ Gate: a go/no-go on `tuios.dev/vt` vs `charmbracelet/x/vt`, with numbers.
 #### Machine
 
 - AMD Ryzen 9 3950X, 16 cores / 32 threads, 31 GiB; Arch Linux, kernel 7.2.11.
-- go1.27.3; the toolchain floor was checked with go1.26.0. Load average about 0.4 during the runs (the operator's other sessions kept running).
+- go1.27.3; the toolchain floor was checked with go1.26.0.
 - tmux 3.8 for the interactive runs and the reference screens; sessions started with `-f /dev/null`.
 
 #### Workload and cut
@@ -100,14 +100,14 @@ Bench (mixed configuration, not gating), **bench: feed+update+view+present**, me
 | 4 | 555 | 3.20 ms | 3.0 | 3.15 ms | 2.6 |
 | 6 | 796 | 4.69 ms | 5.8 | 3.89 ms | 5.2 |
 
-Interactive (gate configuration, 6 panes, real time in a 240x64 tmux session, 30 s window), **interactive: update+view**; CPU is the whole `vtspike` process as a share of one core, including Bubble Tea's flush:
+Interactive (gate configuration, 6 panes, real time in a 240x64 tmux session, 30 s window, one run per backend), **interactive: update+view**; CPU is the whole `vtspike` process as a share of one core, including Bubble Tea's flush:
 
 | Backend | Frames | p50 | p95 | p99 | max | CPU % |
 | --- | --- | --- | --- | --- | --- | --- |
 | tuios | 771 | 0.75 ms | 0.84 ms | 1.11 ms | 1.79 ms | 10.2 |
 | x/vt | 771 | 0.70 ms | 0.84 ms | 0.98 ms | 1.20 ms | 10.4 |
 
-Idle (CPU % of one core, 30 s window after 5 s warmup):
+Idle (CPU % of one core, 30 s window after 5 s warmup, one run per backend):
 
 | Panes | tuios | x/vt |
 | --- | --- | --- |
@@ -122,12 +122,13 @@ Idle (CPU % of one core, 30 s window after 5 s warmup):
 | 4 | 0.15 / 0.38 / 3.30 ms | 0.28 / 0.21 / 2.83 ms | 90 %, 88 % |
 | 6 | 0.16 / 0.41 / 4.53 ms | 0.43 / 0.25 / 4.14 ms | 92 %, 91 % |
 
-- **Present** (Bubble Tea's path: parse the whole view string into a cell buffer, diff it, write) is 83-95 % of bench frame time in every configuration. Bubble Tea v2.1's `View.Content` is a string, so every changed frame is re-parsed in full.
+- **Present** (Bubble Tea's path: parse the whole view string into a cell buffer, diff it, write) is 83-92 % of bench frame time in the gate configuration (85-95 % in the mixed one). Bubble Tea v2.1's `View.Content` is a string, so every changed frame is re-parsed in full.
 - **Render** (pane rows to strings, compose): x/vt's touched rows save about 0.15 ms p99 at 6 panes. tuios re-renders all 31 rows of a dirty pane.
 - **Feed** (emulator parse): tuios parses 2-3x faster than x/vt.
 - The emulator choice moves less than 0.4 ms of a 5 ms p99. Bubble Tea's string renderer is the cost centre.
 - Interactive CPU (10 %) is about twice bench CPU (4.5 %): it adds Bubble Tea's flush on its ticker goroutine, its 60 FPS ticker and the replay goroutines.
 - Caveats, identical for both backends: the bench builds the frame once per 60 FPS step while Bubble Tea calls `View` after every message, so absolute render cost is slightly under-counted; interactive frame timing skips frames rebuilt only by a hold expiry.
+- Workload caveats: the gate workload is one recording (`pane-2.rec`) replayed six times 5 s apart, so the panes differ in offset but not in content, which may flatter the per-row cache. Every replay feeds bytes Claude produced while talking to tuios (with 2026 brackets and tuios's Kitty and XTVERSION replies), so the x/vt performance and fidelity numbers describe x/vt on a tuios-shaped stream; x/vt's own unbracketed live stream was probed only at a trust-prompt redraw. The conclusion stands.
 
 #### Fidelity sweep
 
