@@ -166,12 +166,55 @@ func (t *Tab) placeBSP(id PaneID, split Split, area Rect, lc LayoutConfig) error
 	if split != "" {
 		dir = splitType(split)
 	}
-	tree.InsertWindow(win, focus, dir, 0.5, contentArea(area), gap)
+	if pre, ok := preselectionOf(t.Preselect); ok {
+		tree.InsertWindowWithPreselection(win, focus, pre, contentArea(area), gap)
+	} else {
+		tree.InsertWindow(win, focus, dir, 0.5, contentArea(area), gap)
+	}
+	t.Preselect = NoDir
 	if !tree.HasWindow(win) {
 		return fmt.Errorf("core: pane %q is already in the layout", id)
 	}
 	t.setTree(fromTiling(tree))
 	return nil
+}
+
+func preselectionOf(d Dir) (tiling.PreselectionDir, bool) {
+	switch d {
+	case Left:
+		return tiling.PreselectionLeft, true
+	case Down:
+		return tiling.PreselectionDown, true
+	case Up:
+		return tiling.PreselectionUp, true
+	case Right:
+		return tiling.PreselectionRight, true
+	}
+	return tiling.PreselectionNone, false
+}
+
+// equalizeNode sets every split's ratio to the share of its first child in
+// the cells that axis needs for all leaves to come out equal, and returns the
+// subtree's column and row counts.
+func equalizeNode(n *Node) (cols, rows int) {
+	if n == nil {
+		return 0, 0
+	}
+	if n.leaf() {
+		return 1, 1
+	}
+	ac, ar := equalizeNode(n.A)
+	bc, br := equalizeNode(n.B)
+	if n.Split == SplitVertical {
+		n.Ratio = equalShare(ac, bc)
+		return ac + bc, max(ar, br)
+	}
+	n.Ratio = equalShare(ar, br)
+	return max(ac, bc), ar + br
+}
+
+func equalShare(a, b int) float64 {
+	return stepShare(float64(a)/float64(a+b), 0, minRatio, maxRatio)
 }
 
 func (t *Tab) removeBSP(id PaneID) (PaneID, error) {

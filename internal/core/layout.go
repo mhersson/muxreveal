@@ -1,6 +1,7 @@
 package core
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"slices"
@@ -267,6 +268,122 @@ func (a ResizeDir) apply(s *State) error {
 			return nil
 		}
 	}
+	return nil
+}
+
+// Errors the layout actions return when the tab's mode or shape does not fit.
+var (
+	ErrNeedsBSP        = errors.New("core: needs a BSP layout")
+	ErrNeedsMaster     = errors.New("core: needs a master-stack layout")
+	ErrNothingToRotate = errors.New("core: nothing to rotate")
+)
+
+func (t Tab) isBSP() bool { return t.Mode == ModeBSP || t.Mode == "" }
+
+// Preselect makes the next pane opened in the active BSP tab go to the given
+// side of the focused pane at ratio 0.5. Focus moves keep it; a mode switch
+// and the pane it places clear it.
+type Preselect struct {
+	Dir Dir
+}
+
+func (a Preselect) apply(s *State) error {
+	t := s.cur()
+	if !t.isBSP() {
+		return ErrNeedsBSP
+	}
+	if _, ok := sideOf(a.Dir); !ok {
+		return fmt.Errorf("core: Preselect with no direction")
+	}
+	t.Preselect = a.Dir
+	return nil
+}
+
+// ClearPreselect drops the active BSP tab's preselection, set or not.
+type ClearPreselect struct{}
+
+func (ClearPreselect) apply(s *State) error {
+	t := s.cur()
+	if !t.isBSP() {
+		return ErrNeedsBSP
+	}
+	t.Preselect = NoDir
+	return nil
+}
+
+// RotateSplit flips the axis of the focused pane's parent split in BSP and
+// keeps its ratio. A lone pane has nothing to rotate.
+type RotateSplit struct{}
+
+func (RotateSplit) apply(s *State) error {
+	t := s.cur()
+	if !t.isBSP() {
+		return ErrNeedsBSP
+	}
+	p := t.Layout.path(t.Focus)
+	if len(p) < 2 {
+		return ErrNothingToRotate
+	}
+	parent := p[len(p)-2]
+	if parent.Split == SplitVertical {
+		parent.Split = SplitHorizontal
+	} else {
+		parent.Split = SplitVertical
+	}
+	t.Zoomed = false
+	return nil
+}
+
+// Equalize evens out the active tab's layout: BSP panes become equal along
+// each axis, master-stack goes back to master_ratio and every scrolling column
+// to column_width. It changes nothing for fewer than two panes.
+type Equalize struct{}
+
+func (Equalize) apply(s *State) error {
+	t := s.cur()
+	if len(t.Panes) < 2 {
+		return nil
+	}
+	switch t.Mode {
+	case ModeMaster:
+		t.Master = s.Layout.ratio()
+	case ModeScrolling:
+		for i := range t.Columns {
+			t.Columns[i].Width = s.Layout.columnWidth()
+		}
+		t.keepVisible()
+	default:
+		equalizeNode(t.Layout)
+	}
+	t.Zoomed = false
+	return nil
+}
+
+// Promote swaps the focused pane with the first pane of a master-stack tab, or
+// with the second when it is first, and focuses the pane now first.
+type Promote struct{}
+
+func (Promote) apply(s *State) error {
+	t := s.cur()
+	if t.Mode != ModeMaster {
+		return ErrNeedsMaster
+	}
+	if len(t.Panes) < 2 {
+		return nil
+	}
+	i := slices.Index(t.Panes, t.Focus)
+	if i < 0 {
+		return fmt.Errorf("core: focused pane %q is not in the layout", t.Focus)
+	}
+	other := t.Panes[0]
+	if i == 0 {
+		other = t.Panes[1]
+	}
+	if err := t.swapMaster(t.Focus, other); err != nil {
+		return err
+	}
+	t.setFocus(t.Panes[0])
+	t.Zoomed = false
 	return nil
 }
 
