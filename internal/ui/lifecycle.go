@@ -11,17 +11,29 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/mhersson/muxreveal/internal/core"
+	"github.com/mhersson/muxreveal/internal/harness"
 	"github.com/mhersson/muxreveal/internal/term"
 )
 
 // cwdProbeEvery bounds how often a pane's working directory is looked up.
 const cwdProbeEvery = 500 * time.Millisecond
 
-// paneCwdMsg carries a pane's looked-up working directory; empty when unknown.
+// agentGrace is how long a launched agent may take to show Claude in the
+// foreground before the kind rule can demote it.
+const agentGrace = 10 * time.Second
+
+// paneCwdMsg carries a pane's looked-up working directory and foreground
+// process name; each is empty when unknown. due marks the probe that
+// paneKindDueMsg starts, which is outside the cwd throttle.
 type paneCwdMsg struct {
 	id  core.PaneID
 	cwd string
+	fg  string
+	due bool
 }
+
+// paneKindDueMsg is the probe agentGrace after an agent launch.
+type paneKindDueMsg struct{ id core.PaneID }
 
 // paneCwdDueMsg ends the wait before a throttled cwd lookup.
 type paneCwdDueMsg struct{ id core.PaneID }
@@ -60,6 +72,9 @@ func (a *App) openPane(kind core.PaneKind, split core.Split) tea.Cmd {
 	}
 
 	act := core.OpenPane{Kind: kind, Cwd: cwd, Split: split}
+	if kind == core.KindAgent {
+		act.Harness = a.harness.ID()
+	}
 	id := st.NewPaneID()
 
 	// The pane starts at its final size, found by applying the action to a copy.
@@ -73,7 +88,7 @@ func (a *App) openPane(kind core.PaneKind, split core.Split) tea.Cmd {
 		}
 	}
 
-	pn, cwd, err := a.startPane(id, kind, cwd, cols, rows)
+	pn, cwd, err := a.startPane(id, kind, cwd, cols, rows, "")
 	if err != nil {
 		return nil
 	}
@@ -88,16 +103,32 @@ func (a *App) openPane(kind core.PaneKind, split core.Split) tea.Cmd {
 		return nil
 	}
 
-	return tea.Batch(pn.wait(), a.relayout())
+	cmds := []tea.Cmd{pn.wait(), a.relayout()}
+	if kind == core.KindAgent {
+		cmds = append(cmds, a.kindDueCmd(id))
+	}
+
+	return tea.Batch(cmds...)
+}
+
+// kindDueCmd schedules the probe at the end of the pane's grace period.
+func (a *App) kindDueCmd(id core.PaneID) tea.Cmd {
+	return a.tick(agentGrace, func(time.Time) tea.Msg { return paneKindDueMsg{id: id} })
 }
 
 // startPane starts the process of pane id at cols x rows and registers the
 // pane, in cwd or, when that directory is gone, the launch dir; it returns the
-// directory used. On failure it leaves a notice and registers nothing.
-func (a *App) startPane(id core.PaneID, kind core.PaneKind, cwd string, cols, rows int) (*pane, string, error) {
-	c := term.ShellCommand(a.getenv, cwd, nil)
+// directory used. An agent resumes session resume when it is set. On failure it
+// leaves a notice and registers nothing.
+func (a *App) startPane(id core.PaneID, kind core.PaneKind, cwd string, cols, rows int, resume core.SessionID) (*pane, string, error) {
+	env := []string{"MUXREVEAL_PANE=" + string(id)}
+	if a.hookSock != "" {
+		env = append(env, "MUXREVEAL_SOCK="+a.hookSock)
+	}
+
+	c := term.ShellCommand(a.getenv, cwd, env)
 	if kind == core.KindAgent {
-		c = term.AgentCommand(a.getenv, cwd, []string{"claude"}, nil)
+		c = term.AgentCommand(a.getenv, cwd, a.harness.Launch(a.hookSettings, resume), env)
 	}
 
 	// On the update loop: user-initiated, fork/exec takes a millisecond or two, and State and the registry stay in step.
@@ -138,6 +169,10 @@ func (a *App) startPane(id core.PaneID, kind core.PaneKind, cwd string, cols, ro
 	}
 
 	pn := newPane(id, p, cols, rows, a.clock, opts...)
+	if kind == core.KindAgent {
+		pn.launched = a.clock.Now()
+	}
+
 	a.panes[id] = pn
 
 	return pn, cwd, nil
@@ -343,7 +378,25 @@ func (a *App) runProbe(p *pane) tea.Cmd {
 	p.cwdBusy = true
 	p.cwdAt = a.clock.Now()
 
-	return func() tea.Msg { return paneCwdMsg{id: p.id, cwd: p.workingDir()} }
+	return probe(p, false)
+}
+
+// probe reads the pane's cwd and foreground process off the update loop.
+func probe(p *pane, due bool) tea.Cmd {
+	return func() tea.Msg {
+		return paneCwdMsg{id: p.id, cwd: p.workingDir(), fg: p.foreground(), due: due}
+	}
+}
+
+// onKindDue probes an agent pane at the end of its grace period. It leaves the
+// cwd throttle alone.
+func (a *App) onKindDue(id core.PaneID) tea.Cmd {
+	p, ok := a.panes[id]
+	if !ok {
+		return nil
+	}
+
+	return probe(p, true)
 }
 
 func (a *App) onCwdDue(id core.PaneID) tea.Cmd {
@@ -367,14 +420,60 @@ func (a *App) onCwd(msg paneCwdMsg) {
 		return
 	}
 
-	p.cwdBusy = false
+	if !msg.due {
+		p.cwdBusy = false
+	}
 
-	if msg.cwd == "" || a.store.State().Panes[msg.id].Cwd == msg.cwd {
+	if msg.cwd != "" && a.store.State().Panes[msg.id].Cwd != msg.cwd {
+		// dispatch logs its own failures.
+		_ = a.dispatch(core.SetPaneCwd{ID: msg.id, Cwd: msg.cwd})
+	}
+
+	a.applyKind(p, msg.fg)
+}
+
+// harnessOf is the harness that recognises the pane's agent: its own, else the
+// app's when the saved id is unknown.
+func (a *App) harnessOf(m core.Pane) harness.Harness {
+	if h, ok := harness.ByID(m.Harness); ok && m.Kind == core.KindAgent {
+		return h
+	}
+
+	return a.harness
+}
+
+// applyKind makes the pane follow its foreground process. An unknown name
+// changes nothing, and a launched agent keeps its kind until Claude was seen
+// and left or the grace period passed.
+func (a *App) applyKind(p *pane, fg string) {
+	if fg == "" {
 		return
 	}
 
-	// dispatch logs its own failures.
-	_ = a.dispatch(core.SetPaneCwd{ID: msg.id, Cwd: msg.cwd})
+	m, ok := a.store.State().Panes[p.id]
+	if !ok {
+		return
+	}
+
+	h := a.harnessOf(m)
+
+	switch {
+	case m.Kind == core.KindShell && fg == h.Program():
+		p.seen = true
+		p.launched = time.Time{}
+
+		// dispatch logs its own failures.
+		_ = a.dispatch(core.SetPaneKind{ID: p.id, Kind: core.KindAgent, Harness: h.ID()})
+	case m.Kind == core.KindAgent && fg == h.Program():
+		p.seen = true
+	// An agent pane is either seen or has the launch time startPane recorded.
+	case m.Kind == core.KindAgent && (p.seen || !a.clock.Now().Before(p.launched.Add(agentGrace))):
+		p.seen = false
+		p.launched = time.Time{}
+
+		// dispatch logs its own failures.
+		_ = a.dispatch(core.SetPaneKind{ID: p.id, Kind: core.KindShell})
+	}
 }
 
 // hasAgents reports whether any open pane runs an agent.
@@ -446,7 +545,7 @@ func (a *App) newTab() tea.Cmd {
 	id := st.NewPaneID()
 	cols, rows := contentSize(innerRect(bodyRect(a.width, a.height)))
 
-	pn, cwd, err := a.startPane(id, core.KindShell, cwd, cols, rows)
+	pn, cwd, err := a.startPane(id, core.KindShell, cwd, cols, rows, "")
 	if err != nil {
 		return nil
 	}

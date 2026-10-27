@@ -76,6 +76,7 @@ func (r *replayProc) Write(b []byte) (int, error) { return len(b), nil }
 func (r *replayProc) Resize(int, int) error       { return nil }
 func (r *replayProc) Done() <-chan struct{}       { return r.done }
 func (r *replayProc) Cwd() (string, error)        { return "", errNoCwd }
+func (r *replayProc) Foreground() (string, error) { return "", errNoCwd }
 
 func (r *replayProc) Close() error {
 	r.once.Do(func() { close(r.done) })

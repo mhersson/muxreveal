@@ -15,6 +15,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/mhersson/muxreveal/internal/core"
+	"github.com/mhersson/muxreveal/internal/harness"
 	"github.com/mhersson/muxreveal/internal/term"
 	"github.com/mhersson/muxreveal/internal/ui/palette"
 	"github.com/mhersson/muxreveal/internal/ui/theme"
@@ -37,6 +38,12 @@ type Options struct {
 	FocusFollowsMouse, CopyOnSelect bool
 	// NoOSC52 and NoNativeClipboard turn off a copy path; the zero value keeps both on.
 	NoOSC52, NoNativeClipboard bool
+	// Harness launches and recognises agents; nil means harness.Claude{}.
+	Harness harness.Harness
+	// HookSettings is the --settings file for agents; empty launches them without hooks.
+	HookSettings string
+	// HookSock is MUXREVEAL_SOCK for every pane; empty sets none.
+	HookSock string
 }
 
 // App is the root Bubble Tea model.
@@ -81,6 +88,9 @@ type App struct {
 	mouse     mouseState
 
 	focusFollows, copyOnSelect bool
+	harness                    harness.Harness
+	tick                       func(time.Duration, func(time.Time) tea.Msg) tea.Cmd // tea.Tick; tests replace it
+	hookSettings, hookSock     string
 	load                       loadSampler // nil on platforms without a load reading
 	start                      func(ctx context.Context, c term.Command, cols, rows int) (proc, error)
 
@@ -125,7 +135,12 @@ func New(opts Options) (*App, error) {
 			return nil, fmt.Errorf("ui: binding %q names unknown command %q", b.key, b.command)
 		}
 	}
+	h := opts.Harness
+	if h == nil {
+		h = harness.Claude{}
+	}
 	a := &App{
+		harness: h, tick: tea.Tick, hookSettings: opts.HookSettings, hookSock: opts.HookSock,
 		log: opts.Logger, store: opts.Store, reg: reg, keymap: km,
 		panes: map[core.PaneID]*pane{}, outerFocused: true,
 		getenv: getenv, cwd: cwd, recordDir: opts.RecordDir, icons: opts.Icons, clock: realClock{}, start: termStart,
@@ -279,6 +294,8 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.onCwd(msg)
 	case paneCwdDueMsg:
 		return a, a.onCwdDue(msg.id)
+	case paneKindDueMsg:
+		return a, a.onKindDue(msg.id)
 	case clockMsg:
 		return a, a.onClock(msg)
 	case gitTickMsg:

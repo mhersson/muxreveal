@@ -24,6 +24,7 @@ type proc interface {
 	Resize(cols, rows int) error
 	Done() <-chan struct{}
 	Cwd() (string, error)
+	Foreground() (string, error)
 	Close() error
 }
 
@@ -53,6 +54,8 @@ type pane struct {
 	cwdAt     time.Time // start of the last cwd lookup
 	cwdBusy   bool      // a lookup is running
 	cwdWait   bool      // a deferred lookup is scheduled
+	launched  time.Time // when MuxReveal started the agent; zero otherwise
+	seen      bool      // the harness program was the foreground process
 	stale     bool      // output or a resize arrived while its tab was hidden; render when shown
 
 	mu         sync.Mutex
@@ -364,6 +367,25 @@ func (p *pane) workingDir() string {
 	// Outside mu: the lookup is file IO.
 	if d, err := p.proc.Cwd(); err == nil {
 		return d
+	}
+
+	return ""
+}
+
+// foreground is the name of the terminal's foreground process, or "" when it
+// cannot be read, which the kind rule treats as unknown.
+func (p *pane) foreground() string {
+	p.mu.Lock()
+	closed := p.closed
+	p.mu.Unlock()
+
+	if closed {
+		return ""
+	}
+
+	// Outside mu: the lookup is file IO.
+	if name, err := p.proc.Foreground(); err == nil {
+		return name
 	}
 
 	return ""
