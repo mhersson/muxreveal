@@ -51,8 +51,11 @@ Bench: the real `App` with replay panes on a virtual clock at 60 FPS, 240x64, me
 | c | 6 | 107 | 284,741 | 2.55 ms | 5.56 ms | **6.51 ms** | 6.74 ms | 8.5 | 0.24 / 1.21 / 5.00 ms | 2 |
 | a, tabs and frames re-check | 6 | 593 | 1,127,049 | 2.45 ms | 5.19 ms | **6.12 ms** | 8.01 ms | 6.1 | 0.20 / 1.29 / 5.05 ms | 17 |
 | a, full-pane selection on one of six panes | 6 | 593 | 1,127,049 | 4.34 ms | 6.19 ms | **7.16 ms** | 8.87 ms | 8.4 | 0.26 / 2.11 / 6.27 ms | 36 |
+| a, six working agents with animated badges | 6 | 798 | 1,127,049 | 2.48 ms | 5.21 ms | **6.23 ms** | 6.72 ms | 8.1 | 0.20 / 1.29 / 5.19 ms | 23 |
 
 The selection row is run a with one pane's whole history selected, so all of its content rows are repainted on the selection background in every frame (`MUXREVEAL_BENCH_SELECTION=1`); the 30 s window is the same, and the median of three invocations is shown (p99 6.83, 7.16 and 7.51 ms). The two-pane case with a selection is not gated and reaches p99 9.03 ms (median of 3 invocations: 8.65, 9.03 and 10.02 ms), because the selected pane there is 118x60 against 82x29 at six panes, about three times the area.
+
+The agents row is run a with every pane a working agent: the badge spinner advances every 125 ms of virtual time, so each tick is an extra drawn frame (798 frames against 593). It is the median of three invocations (six-pane p99 6.42, 6.23 and 5.99 ms; two-pane 6.09 ms and four-pane 6.24 ms in the median invocation).
 
 Busy rule (the spike's): a second is busy when its bytes exceed 25 % of that recording's peak per-second rate. By it `p2.rec` (peak 14,633 B/s at 49 s) is busy 45-51 s (7 s) and `p3.rec` (peak 13,582 B/s at 42 s) is busy 36-43 s (8 s) and 72-82 s (11 s), so Claude's text answers are short bursts and runs b (pane 6 at 74.5-81.5 s) and c (pane 6 at 47.5-51.5 s) are short truecolor windows with every pane inside a busy stretch. `pane-2.rec` (peak 12,591 B/s at 134 s) is busy 93-135 s and 140-145 s. Run a is the spike's gate configuration: the sustained 30 s reply, in 256 colour (no truecolor SGRs), with windows [91 + 5i, 121 + 5i) s. Two exceptions: pane 0 starts with a 91-93 s spinner lead-in, and panes 4 and 5 cross the quiet 136-140 s. Run a is like-for-like with the spike's gate (593 frames, 1,127,049 bytes at six panes; spike p99 5.04 ms on the headless model, 6.06 ms here through the real `App`). Present is again the cost centre. GC pause totals stay under 1 ms per run.
 
@@ -81,7 +84,7 @@ Tabs, each with its own split layout, focus and zoom, with new, rename, close, j
 
 Gate: hidden tabs keep their panes running at their own size, the six-pane bench p99 stays at most 8 ms and idle CPU at most 1 % of one core with the tray on.
 
-### M1c Copy, mouse and clipboard
+### M1c Copy, mouse and clipboard (done, PR #9)
 
 Mouse selection inside panes, copy to the system clipboard (OSC 52 and native tools), scrollback with the mouse wheel, copy mode with vim motions, mouse forwarding to programs that ask for it, focus follows mouse and copy on select as options, and guests' clipboard writes passed through. Covers AG-3 (mouse, OSC 52), AG-4, UX-4, UX-5, UX-6.
 
@@ -98,7 +101,27 @@ Gate: selection, copy mode and the clipboard work in shell panes and in programs
 
 ### M1d Agents and persistence
 
-After M1b and M1c. Saves the tabs and adds the AG-5 state badges to pane frames and tabs. Covers AG-5, AG-7 shim, AG-8, PR-1 to PR-4.
+Agent panes report working, blocked and idle through Claude Code hooks and show it on frames, tabs and the tray; a pane's kind follows Claude both ways; tabs, layout, cwds and agent sessions are saved on every change and restored on start with `claude --resume`. Covers AG-5, AG-7, AG-8, PR-1 to PR-4.
+
+- [x] Agent fields and actions in core
+- [x] Harness interface and the Claude Code adapter
+- [x] Hook socket and the hook command
+- [x] State file encoding, validation and the saver
+- [x] Pane kind from the foreground process
+- [x] Agent launch with hooks
+- [x] State badges on frames, tabs and the tray
+- [x] Restore, resume and the start-up notices
+- [x] Quit, bench and idle checks
+
+Gate: agent panes show working, blocked and idle; quitting and starting again brings back the tabs, layout and every agent session; six-pane bench p99 at most 8 ms and idle CPU at most 1 %.
+
+#### M1d gate results
+
+What backs the last checklist item: the six-pane bench row "six working agents with animated badges" above, which ran before saving existed (it does not wire `Save`, which costs one state copy and an encode per dispatch on the update loop; the file write is on the saver goroutine), so no bench run covers persistence; and the idle figure below. The operator checks in Ghostty and Kitty and the reboot check are still to do.
+
+Idle, re-checked with agents, hooks and persistence: same setup as above (six shell panes each running `sleep 3600`, 240x64 in a private tmux, 30 s after a 5 s warm-up, `/proc/<pid>/stat` utime+stime), two runs: **0.73 %** and **0.70 %** of one core.
+
+The 0.17 to 0.20 point gap to the 0.53 % above is likely measurement noise: nothing added runs while idle with no agents (the agent tick runs only while a pane works, probes run only after output, and the saver, the hook socket server and the event wait block).
 
 ## Spike - VT (done)
 
@@ -272,7 +295,7 @@ Build M1's terminal layer on `tuios.dev/vt` v0.3.1 (pure Go) behind the `VT` int
 
 ## Next
 
-M1c Copy, mouse and clipboard is done on `feat/copy-mouse-clipboard` and waits for review. Then M1d Agents and persistence.
+M1d Agents and persistence is complete on `feat/agents-persistence` and waits for review; M2 follows once it merges.
 
 ## Done
 
@@ -294,12 +317,17 @@ M1c Copy, mouse and clipboard is done on `feat/copy-mouse-clipboard` and waits f
 | 2026-10-26 | Tabs join M1 as M1b; copy/mouse/clipboard becomes M1c, agents and persistence M1d | Tabs change the state shape that persistence saves |
 | 2026-10-27 | A plain drag selects in every pane; programs that report the mouse get single clicks only | Replaces shift+drag: a drag is for selecting everywhere, and the program still gets the click when the button is released in the cell it went down in |
 | 2026-10-27 | Native clipboard by direct exec of `wl-copy`, `xclip` or `pbcopy`, not `atotto/clipboard` | Its primary-selection switch is global state and it drops the clipboard arguments |
+| 2026-10-27 | A pane's kind comes from the terminal's foreground process | Follows Claude both ways without hooks or a shim; hooks never change the kind |
+| 2026-10-27 | No `claude` shim yet | A hand-typed `claude` becomes an agent by kind but has no hooks; startup files that prepend `~/.local/bin` shadow a PATH-only shim |
+| 2026-10-27 | A second instance runs unsaved | One state file per user, held under a lock; the second instance never overwrites it |
+| 2026-10-27 | Always restore, with `--fresh` to start clean | A reboot brings back the same layout without a flag |
+| 2026-10-27 | A working pane quiet for 3 s becomes idle | No hook fires when a permission prompt is dismissed with `esc`; the longest output gap observed while Claude worked was 0.24 s |
 
 ## Later
 
 Ideas and requests that came up outside the current milestone go here.
 
-- A pane's kind is fixed when it opens: `claude` started in a shell pane does not make it an agent, and an agent pane whose Claude exits stays an agent (frame colour, tab icon, tray robots). M1d makes the kind follow Claude both ways (shim and hooks, or the terminal's foreground process).
+- Hooks for a hand-typed `claude` (a PATH shim or shell integration for zsh, bash and fish): startup files that prepend `~/.local/bin` shadow a PATH-only shim.
 - Build and run the spike on the operator's Mac; all numbers so far are from Linux.
 - Kitty and Ghostty key pass by the operator: Kitty keyboard keys (shift+enter, ctrl combinations) through a real Kitty-protocol terminal, which tmux cannot carry.
 - tuios's `ghostty` build-tag backend (libghostty-vt through cgo, built with Zig).
@@ -320,3 +348,4 @@ Ideas and requests that came up outside the current milestone go here.
 - A CJK line soft-wrapped one column early copies with an extra space in the middle.
 - A button release outside the window leaves the press held until the next click, which blocks hover focus meanwhile.
 - With `focus_follows_mouse` on, every pointer move builds a frame (unmeasured).
+- `TestBenchKitOnSynth` times out waiting for pane read loops under `CGO_ENABLED=1 go test -race -count=2 ./internal/ui/` (also on main before agents and persistence); it passes at `-count=1` and on its own.

@@ -123,6 +123,9 @@ type NewTab struct {
 }
 
 func (a NewTab) apply(s *State) error {
+	if len(s.Panes) >= MaxPanes {
+		return ErrTooManyPanes
+	}
 	if a.Kind != KindShell && a.Kind != KindAgent {
 		return fmt.Errorf("core: NewTab with unknown kind %q", a.Kind)
 	}
@@ -142,8 +145,7 @@ func (a NewTab) apply(s *State) error {
 		})
 		s.Active = len(s.Tabs) - 1
 	}
-	// A conversion (S1016) ties NewTab's fields to Pane's.
-	s.Panes[id] = Pane(a)
+	s.Panes[id] = Pane{Kind: a.Kind, Cwd: a.Cwd}
 	return nil
 }
 

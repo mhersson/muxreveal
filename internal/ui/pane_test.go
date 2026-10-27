@@ -32,6 +32,7 @@ type fakeProc struct {
 	written  bytes.Buffer
 	resizes  [][2]int
 	cwd      string
+	fg       string // foreground process name; "" reads as an error
 	closed   bool
 	closeOne sync.Once
 }
@@ -68,6 +69,24 @@ func (f *fakeProc) Cwd() (string, error) {
 	}
 
 	return f.cwd, nil
+}
+
+func (f *fakeProc) Foreground() (string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	if f.fg == "" {
+		return "", io.ErrUnexpectedEOF
+	}
+
+	return f.fg, nil
+}
+
+func (f *fakeProc) setFg(name string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	f.fg = name
 }
 
 func (f *fakeProc) Close() error {

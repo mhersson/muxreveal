@@ -57,6 +57,7 @@ func (a *App) handlePaste(msg tea.PasteMsg) tea.Cmd {
 func (a *App) keyToFocused(msg tea.KeyPressMsg) {
 	a.sendToFocused(func(p *pane) {
 		a.clearSelectionOf(p.id)
+		a.answerDialog(p, msg.String())
 		p.sendKey(uv.KeyPressEvent(msg))
 	})
 }

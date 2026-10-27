@@ -92,6 +92,21 @@ func TestUIRoles(t *testing.T) {
 			}
 		}
 	}
+	for _, th := range All() {
+		p := th.Palette
+		for _, r := range []struct {
+			role      string
+			got, want Hex
+		}{
+			{"Working", th.UI.Working, p.Peach},
+			{"Blocked", th.UI.Blocked, p.Red},
+			{"Idle", th.UI.Idle, p.Green},
+		} {
+			if r.got != r.want || r.got == "" {
+				t.Errorf("%s UI.%s = %q, want %q", th.Name, r.role, r.got, r.want)
+			}
+		}
+	}
 	for _, s := range spot {
 		if s.got != s.want {
 			t.Errorf("mocha UI.%s = %q, want %q", s.role, s.got, s.want)

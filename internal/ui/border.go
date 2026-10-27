@@ -188,6 +188,12 @@ func (a *App) topBorder(grid *borderGrid, s core.State, id core.PaneID, r core.R
 		tagEnd = x - 1
 	}
 
+	if meta.Kind == core.KindAgent {
+		if tag, style, ok := st.badge(meta.State, a.spin, a.icons); ok {
+			place(tag, style)
+		}
+	}
+
 	_, focusExists := s.Panes[s.Tab().Focus]
 	if s.Tab().Zoomed && focusExists {
 		tag := " zoom "

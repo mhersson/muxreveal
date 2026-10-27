@@ -1,0 +1,219 @@
+package main
+
+import (
+	"context"
+	"fmt"
+	"io"
+	"log/slog"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"testing"
+	"time"
+
+	tea "charm.land/bubbletea/v2"
+
+	"github.com/mhersson/muxreveal/internal/core"
+)
+
+func discardLogger() *slog.Logger { return slog.New(slog.NewTextHandler(io.Discard, nil)) }
+
+func TestRunServesHooks(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	stateHome := t.TempDir()
+	t.Setenv("XDG_STATE_HOME", stateHome)
+
+	env, err := core.DefaultEnv()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// No native clipboard tool may run from a test.
+	cfg := filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(cfg, []byte("[clipboard]\nnative = false\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	in, inW := io.Pipe()
+	t.Cleanup(func() { _ = inW.Close() })
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+
+	done := make(chan error, 1)
+
+	go func() {
+		done <- run(ctx, env, cfg, "", false, tea.WithInput(in), tea.WithOutput(io.Discard))
+	}()
+
+	runDir := filepath.Join(core.StateDir(env), "run")
+	pid := strconv.Itoa(os.Getpid())
+	sock := filepath.Join(runDir, pid+".sock")
+	settings := filepath.Join(runDir, pid+"-claude.json")
+
+	waitFor(t, func() bool { return exists(sock) && exists(settings) })
+
+	if fi, err := os.Stat(runDir); err != nil || fi.Mode().Perm() != 0o700 {
+		t.Errorf("run dir = %v, %v, want mode 0700", fi, err)
+	}
+
+	for _, p := range []string{sock, settings} {
+		if fi, err := os.Stat(p); err != nil || fi.Mode().Perm() != 0o600 {
+			t.Errorf("%s = %v, %v, want mode 0600", p, fi, err)
+		}
+	}
+
+	data, err := os.ReadFile(settings)
+	if err != nil || !strings.Contains(string(data), `"hook"`) {
+		t.Errorf("settings = %q, %v, want the hook command", data, err)
+	}
+
+	cancel()
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("run() error = %v", err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("run did not return after its context ended")
+	}
+
+	if exists(sock) || exists(settings) {
+		t.Errorf("socket exists = %v, settings exists = %v, want both removed", exists(sock), exists(settings))
+	}
+}
+
+func TestStartHooksFailureTurnsHooksOff(t *testing.T) {
+	stateDir := t.TempDir()
+	// A file where the run dir belongs makes the setup fail without relying on permissions.
+	if err := os.WriteFile(filepath.Join(stateDir, "run"), []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	h := startHooks(discardLogger(), stateDir)
+	defer h.Stop()
+
+	if h.Settings != "" || h.Sock != "" || h.Events != nil {
+		t.Errorf("runtime = %+v, want no settings, socket or events", h)
+	}
+
+	if !strings.HasPrefix(h.Notice, "agent hooks are off: ") {
+		t.Errorf("notice = %q, want the hooks-off notice", h.Notice)
+	}
+}
+
+func TestStartHooksNamesAnOverlongSocketPath(t *testing.T) {
+	stateDir := filepath.Join(t.TempDir(), strings.Repeat("d", maxSockPath))
+
+	h := startHooks(discardLogger(), stateDir)
+	defer h.Stop()
+
+	if h.Settings != "" || h.Sock != "" || h.Events != nil {
+		t.Errorf("runtime = %+v, want no settings, socket or events", h)
+	}
+
+	sock := filepath.Join(stateDir, "run", strconv.Itoa(os.Getpid())+".sock")
+	want := fmt.Sprintf("agent hooks are off: socket path too long (%d bytes, at most %d)", len(sock), maxSockPath)
+
+	if h.Notice != want {
+		t.Errorf("notice = %q, want %q", h.Notice, want)
+	}
+}
+
+func TestStartHooksSweepsDeadInstances(t *testing.T) {
+	stateDir := t.TempDir()
+	runDir := filepath.Join(stateDir, "run")
+
+	if err := os.MkdirAll(runDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	dead := deadPid(t)
+
+	// Another live process: the parent of the test binary.
+	live := os.Getppid()
+
+	files := map[string]bool{ // name -> kept
+		strconv.Itoa(dead) + ".sock":         false,
+		strconv.Itoa(dead) + "-claude.json":  false,
+		strconv.Itoa(live) + ".sock":         true,
+		strconv.Itoa(live) + "-claude.json":  true,
+		"notes.txt":                          true,
+		"abc.sock":                           true,
+		"007.sock":                           true,
+		strconv.Itoa(dead) + "-claude.json~": true,
+	}
+	for name := range files {
+		if err := os.WriteFile(filepath.Join(runDir, name), nil, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	h := startHooks(discardLogger(), stateDir)
+	defer h.Stop()
+
+	if h.Notice != "" {
+		t.Fatalf("notice = %q, want none", h.Notice)
+	}
+
+	for name, kept := range files {
+		if got := exists(filepath.Join(runDir, name)); got != kept {
+			t.Errorf("%s exists = %v, want %v", name, got, kept)
+		}
+	}
+
+	if !exists(h.Sock) || !exists(h.Settings) {
+		t.Error("this instance's files are missing")
+	}
+
+	h.Stop()
+
+	if exists(h.Sock) || exists(h.Settings) {
+		t.Error("Stop left this instance's files behind")
+	}
+}
+
+func TestPidAlive(t *testing.T) {
+	if !pidAlive(os.Getpid()) {
+		t.Error("the running process is not alive")
+	}
+
+	if pidAlive(deadPid(t)) {
+		t.Error("a reaped process is alive")
+	}
+}
+
+// deadPid returns the pid of a child that has exited and been reaped.
+func deadPid(t *testing.T) int {
+	t.Helper()
+
+	c := exec.Command("true")
+	if err := c.Run(); err != nil {
+		t.Fatal(err)
+	}
+
+	return c.Process.Pid
+}
+
+func exists(path string) bool {
+	_, err := os.Lstat(path)
+
+	return err == nil
+}
+
+func waitFor(t *testing.T, cond func() bool) {
+	t.Helper()
+
+	deadline := time.Now().Add(10 * time.Second)
+	for !cond() {
+		if time.Now().After(deadline) {
+			t.Fatal("condition not met in time")
+		}
+
+		time.Sleep(10 * time.Millisecond)
+	}
+}

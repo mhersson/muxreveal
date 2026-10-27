@@ -464,7 +464,7 @@ func TestGuestOSC52ReachesTheClipboard(t *testing.T) {
 		"\x1b]52;c;" + base64.StdEncoding.EncodeToString([]byte("from the guest")) + "\x07"
 	feedAndWait(t, a.panes["p1"], procs["p1"], osc)
 
-	_, cmd := a.Update(paneDirtyMsg{id: "p1"})
+	_, cmd := a.Update(paneDirtyMsg{id: "p1", p: a.panes["p1"]})
 	pm.run(cmd)
 
 	eventually(t, "native write", func() bool { return copiedText(f) != "" })
@@ -485,7 +485,7 @@ func TestGuestOSC52FromAHiddenTabReachesTheClipboard(t *testing.T) {
 	osc := "\x1b]52;c;" + base64.StdEncoding.EncodeToString([]byte("hidden")) + "\x07"
 	feedAndWait(t, a.panes["p1"], procs["p1"], osc)
 
-	_, cmd := a.Update(paneDirtyMsg{id: "p1"})
+	_, cmd := a.Update(paneDirtyMsg{id: "p1", p: a.panes["p1"]})
 	pm.run(cmd)
 
 	eventually(t, "native write", func() bool { return copiedText(f) != "" })

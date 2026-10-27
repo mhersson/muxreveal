@@ -76,6 +76,7 @@ func (r *replayProc) Write(b []byte) (int, error) { return len(b), nil }
 func (r *replayProc) Resize(int, int) error       { return nil }
 func (r *replayProc) Done() <-chan struct{}       { return r.done }
 func (r *replayProc) Cwd() (string, error)        { return "", errNoCwd }
+func (r *replayProc) Foreground() (string, error) { return "", errNoCwd }
 
 func (r *replayProc) Close() error {
 	r.once.Do(func() { close(r.done) })
@@ -124,7 +125,9 @@ type benchConfig struct {
 	FPS                    int
 	// Selection highlights every content row of the first pane for the whole run.
 	Selection bool
-	Trace     func(at time.Duration, drew bool) // tests only; nil in production
+	// Agents makes every pane a working agent whose badge spinner advances every spinEvery.
+	Agents bool
+	Trace  func(at time.Duration, drew bool) // tests only; nil in production
 }
 
 type benchResult struct {
@@ -285,6 +288,21 @@ func newBenchApp(cfg benchConfig, clk clock) (*App, []core.PaneID, error) {
 		return nil, nil, fmt.Errorf("opened %d of %d panes", len(app.panes), cfg.Panes)
 	}
 
+	if cfg.Agents {
+		for _, id := range ids {
+			for _, act := range []core.Action{
+				core.SetPaneKind{ID: id, Kind: core.KindAgent, Harness: "claude-code"},
+				core.SetAgentState{ID: id, State: core.AgentWorking},
+			} {
+				if err := app.dispatch(act); err != nil {
+					_ = app.Close(context.Background())
+
+					return nil, nil, fmt.Errorf("make pane %s a working agent: %w", id, err)
+				}
+			}
+		}
+	}
+
 	return app, ids, nil
 }
 
@@ -361,7 +379,7 @@ func runBench(cfg benchConfig) (benchResult, error) {
 	// Untimed warm-up: history before each pane's window, then one full frame.
 	for i, f := range feeds {
 		f.feedBefore(f.start)
-		send(ids[i], paneDirtyMsg{id: ids[i]})
+		send(ids[i], paneDirtyMsg{id: ids[i], p: app.panes[ids[i]]})
 	}
 
 	if cfg.Selection {
@@ -411,17 +429,24 @@ func runBench(cfg benchConfig) (benchResult, error) {
 
 		for i, id := range ids {
 			if fed[i] {
-				send(id, paneDirtyMsg{id: id})
+				send(id, paneDirtyMsg{id: id, p: app.panes[id]})
 
 				updates++
 			}
 
 			if end, ok := armed[id]; ok && !now.Before(end) {
 				delete(armed, id)
-				send(id, holdExpiredMsg{id: id})
+				send(id, holdExpiredMsg{id: id, p: app.panes[id]})
 
 				updates++
 			}
+		}
+
+		// The agent tick advances the badge spinner every spinEvery while an agent works.
+		if cfg.Agents && at/spinEvery > (at-fi)/spinEvery {
+			app.spin++
+
+			updates++
 		}
 
 		res.Updates += updates

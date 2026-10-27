@@ -22,9 +22,11 @@ design; propose an edit to DESIGN.md instead.
 - Start each task in plan mode: list the requirement IDs it covers, the packages
   and files you'll touch, and how you'll test it. Wait for approval.
 - One branch and one PR per milestone plan; every task in it is its own reviewed
-  commit with its requirement IDs.
-- Commit messages: Conventional Commits with requirement IDs, e.g.
-  `feat(git): turn snapshots via temp index (DF-2)`.
+  commit.
+- Commit messages: Conventional Commits, e.g.
+  `feat(git): turn snapshots via temp index`. No requirement, milestone, plan or
+  task IDs in commit messages, branch names, or PR titles and descriptions: they
+  mean nothing once the plan is done.
 - Never force-push to `main`. Never merge your own PR.
 
 ## Commands
@@ -119,7 +121,8 @@ Dependency rules:
   explicit user approval.
 - Conventional commits: `type(scope): concise summary`. Always include a scope.
 - Body uses bullet points for the what and why - no long paragraphs.
-- Never reference plan phases, task numbers, or private card IDs in messages.
+- Never reference requirement IDs, milestones, plan phases, task numbers, or
+  private card IDs in messages.
 
 ## Safety rules
 

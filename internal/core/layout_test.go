@@ -1,6 +1,7 @@
 package core
 
 import (
+	"errors"
 	"maps"
 	"testing"
 )
@@ -105,6 +106,26 @@ func TestOpenPane(t *testing.T) {
 				if r := n[len(n)-2].Ratio; r != 0.5 {
 					t.Errorf("ratio = %v, want 0.5", r)
 				}
+			}
+		})
+	}
+}
+
+func TestOpenPaneHarness(t *testing.T) {
+	tests := []struct {
+		name   string
+		action OpenPane
+		want   string
+	}{
+		{"agent keeps harness", OpenPane{Kind: KindAgent, Harness: "claude-code"}, "claude-code"},
+		{"shell drops harness", OpenPane{Kind: KindShell, Harness: "claude-code"}, ""},
+		{"agent without harness", OpenPane{Kind: KindAgent}, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := dispatch(t, stateOf(nil, ""), tt.action)
+			if h := got.Panes["p1"].Harness; h != tt.want {
+				t.Errorf("Harness = %q, want %q", h, tt.want)
 			}
 		})
 	}
@@ -376,6 +397,60 @@ func TestSwapDir(t *testing.T) {
 			}
 			if !maps.Equal(got.Panes, before) {
 				t.Errorf("Panes = %v, want %v", got.Panes, before)
+			}
+		})
+	}
+}
+
+func TestPaneLimit(t *testing.T) {
+	fill := func(t *testing.T, n int) *Store {
+		t.Helper()
+
+		st := NewStore(InitialState(Config{}))
+		for len(st.State().Panes) < n {
+			if err := st.Dispatch(OpenPane{Kind: KindShell, Split: SplitVertical}); err != nil {
+				t.Fatalf("OpenPane at %d panes: %v", len(st.State().Panes), err)
+			}
+		}
+
+		return st
+	}
+
+	tests := []struct {
+		name    string
+		have    int
+		act     Action
+		wantErr bool
+	}{
+		{"OpenPane makes 64", MaxPanes - 1, OpenPane{Kind: KindShell, Split: SplitVertical}, false},
+		{"OpenPane at 64", MaxPanes, OpenPane{Kind: KindShell, Split: SplitVertical}, true},
+		{"NewTab makes 64", MaxPanes - 1, NewTab{Kind: KindShell}, false},
+		{"NewTab at 64", MaxPanes, NewTab{Kind: KindShell}, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			st := fill(t, tt.have)
+			before := len(st.State().Panes)
+
+			err := st.Dispatch(tt.act)
+			if tt.wantErr {
+				if !errors.Is(err, ErrTooManyPanes) {
+					t.Fatalf("Dispatch() error = %v, want ErrTooManyPanes", err)
+				}
+
+				if got := len(st.State().Panes); got != before {
+					t.Errorf("panes = %d, want %d unchanged", got, before)
+				}
+
+				return
+			}
+
+			if err != nil {
+				t.Fatalf("Dispatch() error = %v", err)
+			}
+
+			if got := len(st.State().Panes); got != MaxPanes {
+				t.Errorf("panes = %d, want %d", got, MaxPanes)
 			}
 		})
 	}

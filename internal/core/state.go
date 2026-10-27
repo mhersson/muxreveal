@@ -38,6 +38,13 @@ func (s State) clone() State {
 	return c
 }
 
+// MaxPanes is the most panes a state may hold across all tabs; the saved
+// layout file is rejected above it.
+const MaxPanes = 64
+
+// ErrTooManyPanes is returned by OpenPane and NewTab at MaxPanes panes.
+var ErrTooManyPanes = errors.New("core: too many panes")
+
 // Action is a state change applied through Store.Dispatch.
 type Action interface {
 	apply(*State) error

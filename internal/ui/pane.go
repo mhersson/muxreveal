@@ -24,17 +24,30 @@ type proc interface {
 	Resize(cols, rows int) error
 	Done() <-chan struct{}
 	Cwd() (string, error)
+	Foreground() (string, error)
 	Close() error
 }
 
+// The messages below carry the pane they came from, so one from a pane since
+// replaced under the same id is dropped.
+
 // paneDirtyMsg tells the App a pane has output to render.
-type paneDirtyMsg struct{ id core.PaneID }
+type paneDirtyMsg struct {
+	id core.PaneID
+	p  *pane
+}
 
 // paneExitedMsg tells the App a pane's output ended.
-type paneExitedMsg struct{ id core.PaneID }
+type paneExitedMsg struct {
+	id core.PaneID
+	p  *pane
+}
 
 // holdExpiredMsg ends a sync hold; the App renders the pane again.
-type holdExpiredMsg struct{ id core.PaneID }
+type holdExpiredMsg struct {
+	id core.PaneID
+	p  *pane
+}
 
 // pane owns one process and its emulator, and keeps a per-row render cache.
 // Its mutex serialises every VT call.
@@ -53,6 +66,11 @@ type pane struct {
 	cwdAt     time.Time // start of the last cwd lookup
 	cwdBusy   bool      // a lookup is running
 	cwdWait   bool      // a deferred lookup is scheduled
+	launched  time.Time // when MuxReveal started the agent; zero otherwise
+	seen      bool      // the harness program was the foreground process
+	resuming  bool      // launched with --resume and no SessionStart yet
+	lastOut   time.Time // when output last arrived
+	workingAt time.Time // when the agent last entered working
 	stale     bool      // output or a resize arrived while its tab was hidden; render when shown
 
 	mu         sync.Mutex
@@ -205,17 +223,17 @@ func (p *pane) wait() tea.Cmd {
 	return func() tea.Msg {
 		select {
 		case <-p.dirty:
-			return paneDirtyMsg{id: p.id}
+			return paneDirtyMsg{id: p.id, p: p}
 		default:
 		}
 
 		select {
 		case <-p.dirty:
-			return paneDirtyMsg{id: p.id}
+			return paneDirtyMsg{id: p.id, p: p}
 		case <-p.exited:
-			return paneExitedMsg{id: p.id}
+			return paneExitedMsg{id: p.id, p: p}
 		case <-p.proc.Done():
-			return paneExitedMsg{id: p.id}
+			return paneExitedMsg{id: p.id, p: p}
 		}
 	}
 }
@@ -223,7 +241,7 @@ func (p *pane) wait() tea.Cmd {
 // holdTick fires holdExpiredMsg when a sync hold ends at until.
 func (p *pane) holdTick(until time.Time) tea.Cmd {
 	return tea.Tick(until.Sub(p.clock.Now()), func(time.Time) tea.Msg {
-		return holdExpiredMsg{id: p.id}
+		return holdExpiredMsg{id: p.id, p: p}
 	})
 }
 
@@ -364,6 +382,25 @@ func (p *pane) workingDir() string {
 	// Outside mu: the lookup is file IO.
 	if d, err := p.proc.Cwd(); err == nil {
 		return d
+	}
+
+	return ""
+}
+
+// foreground is the name of the terminal's foreground process, or "" when it
+// cannot be read, which the kind rule treats as unknown.
+func (p *pane) foreground() string {
+	p.mu.Lock()
+	closed := p.closed
+	p.mu.Unlock()
+
+	if closed {
+		return ""
+	}
+
+	// Outside mu: the lookup is file IO.
+	if name, err := p.proc.Foreground(); err == nil {
+		return name
 	}
 
 	return ""
