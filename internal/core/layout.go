@@ -84,8 +84,12 @@ func (n *Node) path(id PaneID) []*Node {
 
 // Pane is the metadata of one pane.
 type Pane struct {
-	Kind PaneKind
-	Cwd  string
+	Kind       PaneKind
+	Cwd        string
+	Harness    string     // "claude-code" for agents; "" for shells
+	Session    SessionID  // the latest session the agent reported; "" for none
+	Transcript string     // that session's transcript file, as the harness reported it
+	State      AgentState // not persisted
 }
 
 // Dir is a direction for focus and resize.
@@ -106,11 +110,12 @@ func (s State) NewPaneID() PaneID {
 
 // OpenPane splits the active tab's focused pane: A keeps it, B is the new
 // pane. The first pane of a tab becomes the root and ignores Split. The new
-// pane gets focus.
+// pane gets focus. Harness is kept only for an agent.
 type OpenPane struct {
-	Kind  PaneKind
-	Cwd   string
-	Split Split
+	Kind    PaneKind
+	Cwd     string
+	Split   Split
+	Harness string
 }
 
 func (a OpenPane) apply(s *State) error {
@@ -134,7 +139,11 @@ func (a OpenPane) apply(s *State) error {
 		*target = Node{Split: a.Split, Ratio: 0.5, A: &Node{Pane: target.Pane}, B: fresh}
 	}
 	s.NextID++
-	s.Panes[id] = Pane{Kind: a.Kind, Cwd: a.Cwd}
+	p := Pane{Kind: a.Kind, Cwd: a.Cwd}
+	if a.Kind == KindAgent {
+		p.Harness = a.Harness
+	}
+	s.Panes[id] = p
 	t.Focus = id
 	t.Zoomed = false
 	return nil

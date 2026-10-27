@@ -110,6 +110,26 @@ func TestOpenPane(t *testing.T) {
 	}
 }
 
+func TestOpenPaneHarness(t *testing.T) {
+	tests := []struct {
+		name   string
+		action OpenPane
+		want   string
+	}{
+		{"agent keeps harness", OpenPane{Kind: KindAgent, Harness: "claude-code"}, "claude-code"},
+		{"shell drops harness", OpenPane{Kind: KindShell, Harness: "claude-code"}, ""},
+		{"agent without harness", OpenPane{Kind: KindAgent}, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := dispatch(t, stateOf(nil, ""), tt.action)
+			if h := got.Panes["p1"].Harness; h != tt.want {
+				t.Errorf("Harness = %q, want %q", h, tt.want)
+			}
+		})
+	}
+}
+
 func TestOpenPaneErrors(t *testing.T) {
 	tests := []struct {
 		name   string

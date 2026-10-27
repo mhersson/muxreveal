@@ -142,8 +142,7 @@ func (a NewTab) apply(s *State) error {
 		})
 		s.Active = len(s.Tabs) - 1
 	}
-	// A conversion (S1016) ties NewTab's fields to Pane's.
-	s.Panes[id] = Pane(a)
+	s.Panes[id] = Pane{Kind: a.Kind, Cwd: a.Cwd}
 	return nil
 }
 
