@@ -27,6 +27,8 @@ type styles struct {
 	kindAgent, kindShell                          lipgloss.Style
 	titleMuted, cwdFocus, cwdSubtle, dot, tagZoom lipgloss.Style
 	tagScroll                                     lipgloss.Style
+	// tagWorking, tagBlocked and tagIdle draw the state badge.
+	tagWorking, tagBlocked, tagIdle lipgloss.Style
 	// popupBorder draws the popup frame on the panel colour.
 	popupBorder lipgloss.Style
 	// popupMuted and popupSubtle are secondary text on the panel colour.
@@ -63,6 +65,9 @@ func newStyles(t theme.Theme) styles {
 		dot:         onBg.Foreground(ui.Subtle),
 		tagZoom:     onBg.Foreground(ui.Accent).Bold(true),
 		tagScroll:   onBg.Foreground(ui.Accent).Bold(true),
+		tagWorking:  onBg.Foreground(ui.Working).Bold(true),
+		tagBlocked:  onBg.Foreground(ui.Blocked).Bold(true),
+		tagIdle:     onBg.Foreground(ui.Idle).Bold(true),
 		popupBorder: lipgloss.NewStyle().Background(ui.Panel).Foreground(ui.BorderFocus),
 		popupMuted:  onPanel.Foreground(ui.Muted),
 		popupSubtle: onPanel.Foreground(ui.Subtle),
@@ -110,6 +115,31 @@ func (s styles) borderStyle(own uint8) lipgloss.Style {
 		return s.borderShell
 	}
 	return s.border
+}
+
+// badge is the state badge's text and style; ok is false for a pane with no
+// state to show.
+func (s styles) badge(st core.AgentState, spin int, icons bool) (text string, style lipgloss.Style, ok bool) {
+	frames := []rune(spinFrames)
+
+	switch st {
+	case core.AgentWorking:
+		return " " + string(frames[spin%len(frames)]) + " working ", s.tagWorking, true
+	case core.AgentBlocked:
+		if icons {
+			return " " + iconBlocked + " blocked ", s.tagBlocked, true
+		}
+
+		return " blocked ", s.tagBlocked, true
+	case core.AgentIdle:
+		if icons {
+			return " " + iconIdle + " idle ", s.tagIdle, true
+		}
+
+		return " idle ", s.tagIdle, true
+	}
+
+	return "", lipgloss.Style{}, false
 }
 
 func (s styles) kind(k core.PaneKind) lipgloss.Style {

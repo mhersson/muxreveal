@@ -9,6 +9,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/mhersson/muxreveal/internal/core"
 	"github.com/mhersson/muxreveal/internal/ui/theme"
 )
 
@@ -37,7 +38,8 @@ type tabInfo struct {
 	n        int // 1-based position
 	name     string
 	agent    bool
-	renaming bool // the segment is a text input holding name
+	state    core.AgentState // the most urgent state among the tab's agents
+	renaming bool            // the segment is a text input holding name
 }
 
 // tabLevel is how much of a tab segment shows.
@@ -247,7 +249,7 @@ func (a *App) tabInfos() []tabInfo {
 			name = "shell"
 		}
 
-		out[i] = tabInfo{n: i + 1, name: name, agent: st.TabHasAgents(i)}
+		out[i] = tabInfo{n: i + 1, name: name, agent: st.TabHasAgents(i), state: st.TabAgentState(i)}
 	}
 
 	if a.prompt != nil && a.prompt.kind == promptRename && st.Tab().ID == a.prompt.tab {
@@ -404,6 +406,20 @@ func (a *App) renameCursorX() (int, bool) {
 	return 0, false
 }
 
+// stateColour is the theme colour of an agent state, or none for no state.
+func stateColour(st core.AgentState, ui theme.UI, none theme.Hex) theme.Hex {
+	switch st {
+	case core.AgentWorking:
+		return ui.Working
+	case core.AgentBlocked:
+		return ui.Blocked
+	case core.AgentIdle:
+		return ui.Idle
+	}
+
+	return none
+}
+
 func renderSegment(t tabInfo, level tabLevel, isActive, icons bool, ui theme.UI) string {
 	if isActive && t.renaming && level == levelFull {
 		return renameSegment(t, icons, ui)
@@ -431,7 +447,11 @@ func renderSegment(t tabInfo, level tabLevel, isActive, icons bool, ui theme.UI)
 	out := dim.Render(" ") + paint(ui.Muted, ui.Surface, true).Render(strconv.Itoa(t.n)) + dim.Render(" ")
 
 	if icons && level != levelNumber {
-		out += dim.Render(icon + " ")
+		if t.state == core.AgentUnknown {
+			out += dim.Render(icon + " ")
+		} else {
+			out += paint(stateColour(t.state, ui, ui.Dim), ui.Surface, false).Render(icon) + dim.Render(" ")
+		}
 	}
 
 	if level == levelFull {

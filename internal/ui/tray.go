@@ -469,17 +469,7 @@ func parseGitStatus(out []byte) *gitInfo {
 }
 
 // agentCount is the agent panes open across all tabs.
-func (a *App) agentCount() int {
-	n := 0
-
-	for _, m := range a.store.State().Panes {
-		if m.Kind == core.KindAgent {
-			n++
-		}
-	}
-
-	return n
-}
+func (a *App) agentCount() int { return len(a.store.State().AgentPanes()) }
 
 // trayRun is a piece of text in one colour on the Surface ground.
 type trayRun struct {
@@ -513,8 +503,14 @@ func (a *App) trayModules() []trayModule {
 
 	var mods []trayModule
 
-	if n := a.agentCount(); n > 0 {
-		mods = append(mods, agentsModule(n, icons, ui))
+	st := a.store.State()
+	if ids := st.AgentPanes(); len(ids) > 0 {
+		states := make([]core.AgentState, len(ids))
+		for i, id := range ids {
+			states[i] = st.Panes[id].State
+		}
+
+		mods = append(mods, agentsModule(states, icons, ui))
 	}
 
 	if g := a.tray.git; g != nil {
@@ -532,16 +528,39 @@ func (a *App) trayModules() []trayModule {
 	return mods
 }
 
-func agentsModule(n int, icons bool, ui theme.UI) trayModule {
-	if !icons {
-		return surfaceModule(modAgents, ui, trayRun{text: fmt.Sprintf(" agents %d ", n), fg: ui.Fg})
+// agentsModule shows one icon per agent in its state's colour (Agent for no
+// state) and how many are blocked.
+func agentsModule(states []core.AgentState, icons bool, ui theme.UI) trayModule {
+	blocked := 0
+
+	for _, s := range states {
+		if s == core.AgentBlocked {
+			blocked++
+		}
 	}
 
-	return surfaceModule(modAgents, ui,
-		trayRun{text: " ", fg: ui.Fg},
-		trayRun{text: strings.Repeat(iconAgent, n), fg: ui.Agent},
-		trayRun{text: " ", fg: ui.Fg},
-	)
+	if !icons {
+		if blocked == 0 {
+			return surfaceModule(modAgents, ui, trayRun{text: fmt.Sprintf(" agents %d ", len(states)), fg: ui.Fg})
+		}
+
+		return surfaceModule(modAgents, ui,
+			trayRun{text: fmt.Sprintf(" agents %d", len(states)), fg: ui.Fg},
+			trayRun{text: fmt.Sprintf(" blocked %d", blocked), fg: ui.Blocked, bold: true},
+			trayRun{text: " ", fg: ui.Fg},
+		)
+	}
+
+	runs := []trayRun{{text: " ", fg: ui.Fg}}
+	for _, s := range states {
+		runs = append(runs, trayRun{text: iconAgent, fg: stateColour(s, ui, ui.Agent)})
+	}
+
+	if blocked > 0 {
+		runs = append(runs, trayRun{text: fmt.Sprintf(" %s%d", iconBlocked, blocked), fg: ui.Blocked, bold: true})
+	}
+
+	return surfaceModule(modAgents, ui, append(runs, trayRun{text: " ", fg: ui.Fg})...)
 }
 
 func gitModule(g gitInfo, icons bool, ui theme.UI) trayModule {

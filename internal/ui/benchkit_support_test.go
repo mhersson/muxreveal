@@ -125,7 +125,9 @@ type benchConfig struct {
 	FPS                    int
 	// Selection highlights every content row of the first pane for the whole run.
 	Selection bool
-	Trace     func(at time.Duration, drew bool) // tests only; nil in production
+	// Agents makes every pane a working agent whose badge spinner advances every spinEvery.
+	Agents bool
+	Trace  func(at time.Duration, drew bool) // tests only; nil in production
 }
 
 type benchResult struct {
@@ -286,6 +288,21 @@ func newBenchApp(cfg benchConfig, clk clock) (*App, []core.PaneID, error) {
 		return nil, nil, fmt.Errorf("opened %d of %d panes", len(app.panes), cfg.Panes)
 	}
 
+	if cfg.Agents {
+		for _, id := range ids {
+			for _, act := range []core.Action{
+				core.SetPaneKind{ID: id, Kind: core.KindAgent, Harness: "claude-code"},
+				core.SetAgentState{ID: id, State: core.AgentWorking},
+			} {
+				if err := app.dispatch(act); err != nil {
+					_ = app.Close(context.Background())
+
+					return nil, nil, fmt.Errorf("make pane %s a working agent: %w", id, err)
+				}
+			}
+		}
+	}
+
 	return app, ids, nil
 }
 
@@ -423,6 +440,13 @@ func runBench(cfg benchConfig) (benchResult, error) {
 
 				updates++
 			}
+		}
+
+		// The agent tick advances the badge spinner every spinEvery while an agent works.
+		if cfg.Agents && at/spinEvery > (at-fi)/spinEvery {
+			app.spin++
+
+			updates++
 		}
 
 		res.Updates += updates

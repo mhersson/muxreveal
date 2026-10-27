@@ -178,7 +178,7 @@ func TestBench(t *testing.T) {
 		for range benchRepeats {
 			res, err := runBench(benchConfig{
 				Panes: n, Recordings: all, Width: benchWidth, Height: benchHeight,
-				Start: start, Length: length, Stagger: stagger, FPS: 60, Selection: selection,
+				Start: start, Length: length, Stagger: stagger, FPS: 60, Selection: selection, Agents: true,
 			})
 			if err != nil {
 				t.Fatal(err)

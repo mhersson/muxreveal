@@ -3,20 +3,22 @@ package ui
 // Nerd Font glyphs, one cell wide each. They are escapes by code point because
 // editors silently drop the private-use characters.
 const (
-	iconAgent  = "\U000F06A9" // nf-md-robot
-	iconShell  = "\uF489"     // nf-oct-terminal
-	iconZoom   = "\U000F0293" // nf-md-fullscreen
-	iconScroll = "\U000F005D" // nf-md-arrow_up
-	iconApp    = "\U000F056E" // nf-md-view_dashboard
-	iconLeader = "\U000F030C" // nf-md-keyboard
-	iconAlert  = "\U000F002A" // nf-md-alert_outline
-	iconFolder = "\U000F024B" // nf-md-folder
-	iconRename = "\U000F0455" // nf-md-rename_box
-	iconClock  = "\U000F0954" // nf-md-clock_outline
-	iconGit    = "\uE725"     // nf-dev-git_branch
-	iconDirty  = "\uF444"     // nf-oct-dot_fill
-	iconLoad   = "\U000F0EE0" // nf-md-cpu_64_bit
-	iconMem    = "\U000F035B" // nf-md-memory
+	iconAgent   = "\U000F167A" // nf-md-robot_outline
+	iconShell   = "\uF489"     // nf-oct-terminal
+	iconZoom    = "\U000F0293" // nf-md-fullscreen
+	iconScroll  = "\U000F005D" // nf-md-arrow_up
+	iconApp     = "\U000F056E" // nf-md-view_dashboard
+	iconLeader  = "\U000F030C" // nf-md-keyboard
+	iconAlert   = "\U000F002A" // nf-md-alert_outline
+	iconBlocked = "\U000F0026" // nf-md-alert
+	iconIdle    = "\U000F05E1" // nf-md-check_circle_outline
+	iconFolder  = "\U000F024B" // nf-md-folder
+	iconRename  = "\U000F0455" // nf-md-rename_box
+	iconClock   = "\U000F0954" // nf-md-clock_outline
+	iconGit     = "\uE725"     // nf-dev-git_branch
+	iconDirty   = "\uF444"     // nf-oct-dot_fill
+	iconLoad    = "\U000F0EE0" // nf-md-cpu_64_bit
+	iconMem     = "\U000F035B" // nf-md-memory
 
 	iconPanes     = "\U000F0BCC" // nf-md-view_split_vertical
 	iconSplitDown = "\U000F0BCB" // nf-md-view_split_horizontal
@@ -40,3 +42,6 @@ const (
 	edgeThin  = "\uE0BB" // nf-ple-forwardslash_separator
 	trayOpen  = "\uE0BA" // nf-ple-lower_right_triangle
 )
+
+// spinFrames are the working badge's braille spinner frames, one cell wide each.
+const spinFrames = "\u280B\u2819\u2839\u2838\u283C\u2834\u2826\u2827\u2807\u280F"
