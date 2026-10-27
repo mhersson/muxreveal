@@ -32,15 +32,15 @@ design; propose an edit to DESIGN.md instead.
 ## Commands
 
 ```sh
-go build ./...
-gofmt -l . && goimports -l .     # must print nothing
-go vet ./...
-golangci-lint run
-go test -race ./...
-go run ./cmd/muxreveal           # run the app
+make build        # bin/muxreveal
+make run          # run the app; make run ARGS="..." passes arguments
+make test         # go test ./...
+make test-race    # go test -race ./...
+make lint         # golangci-lint run
+make fmt          # golangci-lint fmt
+make check        # the full commit gate
+make install      # go install into $GOBIN, else $GOPATH/bin
 ```
-
-All of formatting, vet, lint and tests must pass before a commit.
 
 ## Layout
 
@@ -114,6 +114,18 @@ Dependency rules:
   on the screen grid.
 
 ## Commit discipline
+
+Run before every commit:
+
+```bash
+make test      # clean
+make lint      # clean
+make build     # builds
+make check     # the full gate: the above plus the darwin build, formatting,
+               # vet, race tests, go mod tidy and the glyph and em-dash scans
+```
+
+Every one must be clean; `make check` covers them all.
 
 - No session links in commits or PRs.
 - **Never commit to `main`.** work on a feature branch; tasks of a plan or scope
