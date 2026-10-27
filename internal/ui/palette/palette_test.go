@@ -468,3 +468,19 @@ func TestMultibyteTitle(t *testing.T) {
 		t.Errorf("view lacks the highlighted run %q:\n%q", want, view)
 	}
 }
+
+func TestFooterEnterLabel(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		m    Model
+		want string
+	}{
+		{"default", newModel(t), "enter run"},
+		{"labelled", newModel(t).WithEnterLabel("apply"), "enter apply"},
+	} {
+		view := ansi.Strip(tc.m.View(60))
+		if !strings.Contains(view, tc.want) {
+			t.Errorf("%s: footer lacks %q:\n%s", tc.name, tc.want, view)
+		}
+	}
+}

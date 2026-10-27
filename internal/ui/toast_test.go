@@ -472,3 +472,100 @@ func TestUnboundSequenceKeyIsAToast(t *testing.T) {
 		t.Errorf("rows = %q, want the toast", got[len(got)-3:])
 	}
 }
+
+func TestCursorUnderToast(t *testing.T) {
+	// The toast ("boom", icon on) is 10 wide at columns 89-98, rows 27-29 of 100x30.
+	// Row 26 col 42 of p2's content is screen (92, 28): under the toast's text row.
+	a, _ := framedApp(t, 100, 30, shellSpec("/w/a", ""), shellSpec("/w/b", "\x1b[26;42H"))
+	fakeClip(a)
+
+	if cur := a.cursorView(); cur == nil || cur.X != 92 || cur.Y != 28 {
+		t.Fatalf("cursor = %+v, want (92, 28) without a toast", cur)
+	}
+
+	a.notice = "boom"
+
+	if cur := a.cursorView(); cur != nil {
+		t.Errorf("cursor = %+v under the toast, want none", cur)
+	}
+
+	if a.View().Cursor != nil {
+		t.Error("view carries a cursor under the toast")
+	}
+
+	press(a, keyRune('x'))
+
+	if a.notice != "" {
+		t.Fatalf("notice = %q after a key", a.notice)
+	}
+
+	if cur := a.cursorView(); cur == nil || cur.X != 92 || cur.Y != 28 {
+		t.Errorf("cursor = %+v after the toast went, want (92, 28)", cur)
+	}
+}
+
+func TestCursorOutsideToastStays(t *testing.T) {
+	a, _ := framedApp(t, 100, 30, shellSpec("/w/a", ""), shellSpec("/w/b", "\x1b[3;5Hx"))
+	fakeClip(a)
+	a.notice = "boom"
+
+	if cur := a.cursorView(); cur == nil || cur.X != 56 || cur.Y != 5 {
+		t.Errorf("cursor = %+v with a toast elsewhere, want (56, 5)", cur)
+	}
+}
+
+func TestCopyCursorUnderToast(t *testing.T) {
+	a, _ := framedApp(t, 60, 14, shellSpec("/w/a", manyLines(30)+strings.Repeat("x", 55)))
+	fakeClip(a)
+
+	enterCopy(a)
+	keys(a, "$")
+
+	x, y, ok := cursorOf(a)
+	if !ok || x < 39 || y < 11 {
+		t.Fatalf("copy cursor = (%d,%d,%v), want one under the toast's box (columns 39-58, rows 11-13)", x, y, ok)
+	}
+
+	// A search miss raises the toast while copy mode stays on.
+	keys(a, "/")
+	typeText(a, "zzz")
+	keys(a, "enter")
+
+	if a.notice == "" {
+		t.Fatal("no notice after a search miss")
+	}
+
+	if _, _, ok := cursorOf(a); ok {
+		t.Error("copy cursor shows over the toast")
+	}
+
+	keys(a, "j")
+
+	if a.notice != "" {
+		t.Fatalf("notice = %q after a key", a.notice)
+	}
+
+	if _, _, ok := cursorOf(a); !ok {
+		t.Error("copy cursor is not back after the toast went")
+	}
+}
+
+func TestPromptCursorUnderToast(t *testing.T) {
+	a, _ := framedApp(t, 60, 14, shellSpec("/w/a", manyLines(30)))
+	fakeClip(a)
+
+	enterCopy(a)
+	keys(a, "/")
+	typeText(a, "ab")
+
+	if _, _, ok := cursorOf(a); !ok {
+		t.Fatal("no prompt cursor while a search is typed")
+	}
+
+	// The toast box covers the bottom border row and the prompt cursor sits on it.
+	a.notice = strings.Repeat("n", 52)
+
+	if _, _, ok := cursorOf(a); ok {
+		t.Error("prompt cursor shows over the toast")
+	}
+}

@@ -347,7 +347,7 @@ There is no status bar. What it showed has these homes:
 | The tab's layout mode | Not shown until the tray's layout module lands; the notice `layout: <mode>` still shows when it changes |
 | The focused pane's cwd | Dropped: no screen element shows the full cwd; a tab's automatic name is the basename of its focused pane's cwd, and titles do not carry it |
 
-- **Toast.** A rounded box at the bottom right of the body, one cell from the right edge, its bottom border on the last row. Ground `Panel`, border `Warning`, one row ` 󰀪 <notice> ` with the icon in `Warning` and the text in `Fg` (no icon with `icons = false`). The box is as wide as the text needs and at most the body width minus 2, with the text cut by `…`; it is left out when the body is under 3 rows or the text has no room. It shows while a notice is set and goes with the first key press. It never takes keys or mouse events, which reach what is under it, and the which-key popup and the other overlays draw over it. Notices are the ones the commands raise (`layout: bsp`, `ctrl+space > x is not bound`, `not found: <query>` and the rest).
+- **Toast.** A rounded box at the bottom right of the body, one cell from the right edge, its bottom border on the last row. Ground `Panel`, border `Warning`, one row ` 󰀪 <notice> ` with the icon in `Warning` and the text in `Fg` (no icon with `icons = false`). The box is as wide as the text needs and at most the body width minus 2, with the text cut by `…`; it is left out when the body is under 3 rows or the text has no room. It shows while a notice is set and goes with the first key press. It never takes keys or mouse events, which reach what is under it, and the which-key popup and the other overlays draw over it. The cursor (the pane's, copy mode's or a prompt's) is hidden while its cell is inside the box. Notices are the ones the commands raise (`layout: bsp`, `ctrl+space > x is not bound`, `not found: <query>` and the rest).
 
 #### Overlays
 
@@ -364,7 +364,7 @@ Rounded boxes (`╭ ╮ ╰ ╯`, matching the pane frames; the which-key rule k
   - Input row: `❯ ` in `Accent`, then the query.
   - A divider row joined to both sides (`├`, `┤`).
   - Result rows: the command's icon (`Muted`; `Accent` when selected), the title (`Fg`, matched runes in `Match` and bold), and the key hint right-aligned (`Key`, bold). The selected row is on `Selection` with a bold title.
-  - A divider row joined to both sides (`├`, `┤`), then one hint row: `up/down move`, `enter run`, `esc close`, one cell in from the border, each key in `Key` bold and its label in `Muted`, the three pairs three cells apart. The theme picker has the same footer.
+  - A divider row joined to both sides (`├`, `┤`), then one hint row: `up/down move`, `enter run`, `esc close`, one cell in from the border, each key in `Key` bold and its label in `Muted`, the three pairs three cells apart. The theme picker has the same footer with `enter apply` in place of `enter run`.
   - ` N of M ` (`Muted`) sits in the bottom border at the right.
 - **Confirm.** Centred, width min(46, width-2), seven rows tall, top at a third of the height, border `Error`.
   - Title: ` 󰀪 <action> ` in `Error`, bold.

@@ -259,13 +259,20 @@ func printable(t string) string {
 	}, t)
 }
 
-// cursorView places the focused pane's cursor on screen; nil when the guest
-// hides it, it falls outside the pane, or an overlay, a confirm or a popup is
-// open. A prompt moves the cursor into the workspace bar or the searched pane's
-// bottom border, and copy mode shows its own block cursor.
+// cursorView places the cursor on screen: the prompt's, copy mode's block or
+// the focused pane's. It is nil under an overlay, confirm, popup or the toast.
 func (a *App) cursorView() *tea.Cursor { return a.cursorAt(a.geometry()) }
 
 func (a *App) cursorAt(g geometry) *tea.Cursor {
+	cur := a.cursorBase(g)
+	if cur != nil && toastCovers(a.width, a.height, a.notice, a.icons, cur.X, cur.Y) {
+		return nil
+	}
+
+	return cur
+}
+
+func (a *App) cursorBase(g geometry) *tea.Cursor {
 	if a.prompt != nil {
 		return a.promptCursor(g)
 	}

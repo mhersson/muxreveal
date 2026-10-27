@@ -381,3 +381,19 @@ func TestPaletteFooterPlacement(t *testing.T) {
 		}
 	}
 }
+
+func TestFooterEnterLabelPerOverlay(t *testing.T) {
+	for _, tc := range []struct {
+		key  rune
+		want string
+		not  string
+	}{{':', "enter run", "enter apply"}, {'t', "enter apply", "enter run"}} {
+		a := fastApp(t)
+		sized(t, a, 100, 30)
+		pressRun(a, keyLeader, keyRune(tc.key))
+		view := ansi.Strip(a.View().Content)
+		if !strings.Contains(view, tc.want) || strings.Contains(view, tc.not) {
+			t.Errorf("overlay %c: want %q and not %q:\n%s", tc.key, tc.want, tc.not, view)
+		}
+	}
+}

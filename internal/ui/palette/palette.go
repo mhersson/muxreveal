@@ -46,7 +46,8 @@ type Model struct {
 	sel     int // index into matches, -1 when nothing matches
 	top     int // first visible row of matches
 	theme   theme.Theme
-	icons   bool // some item has an icon, so every row reserves its column
+	icons   bool   // some item has an icon, so every row reserves its column
+	enter   string // label of the enter hint in the footer
 }
 
 type titles []Item
@@ -62,11 +63,17 @@ func New(title string, items []Item, t theme.Theme) Model {
 	// A static cursor keeps View independent of blink timing.
 	in.SetStyles(inputStyles(t))
 	in.Focus()
-	m := Model{title: title, items: items, input: in, theme: t}
+	m := Model{title: title, items: items, input: in, theme: t, enter: "run"}
 	for _, it := range items {
 		m.icons = m.icons || it.Icon != ""
 	}
 	m.refilter()
+	return m
+}
+
+// WithEnterLabel returns m with the footer's enter hint labelled label.
+func (m Model) WithEnterLabel(label string) Model {
+	m.enter = label
 	return m
 }
 
@@ -281,7 +288,7 @@ func (m Model) footer(panel lipgloss.Style) string {
 	ui := m.theme.UI
 	var sb strings.Builder
 	sb.WriteString(panel.Render(" "))
-	for i, h := range [][2]string{{"up/down", "move"}, {"enter", "run"}, {"esc", "close"}} {
+	for i, h := range [][2]string{{"up/down", "move"}, {"enter", m.enter}, {"esc", "close"}} {
 		if i > 0 {
 			sb.WriteString(panel.Render("   "))
 		}
