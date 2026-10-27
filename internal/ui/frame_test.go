@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"io"
+	"slices"
 	"strings"
 	"testing"
 
@@ -242,6 +243,45 @@ func TestFrameMinimumBody(t *testing.T) {
 	}
 }
 
+// A 3x3 pane is a box around one content cell; a tile of 2x2 is left out.
+func TestSmallestPanes(t *testing.T) {
+	t.Run("3x3 draws a box with one content cell", func(t *testing.T) {
+		a, _ := framedApp(t, 3, 5, shellSpec("/a", "x"))
+
+		if got := a.layoutRects()["p1"]; got != (core.Rect{X: 0, Y: 1, W: 3, H: 3}) {
+			t.Fatalf("rect = %+v, want 3x3 at the body", got)
+		}
+
+		if cols, rows := paneSizeOf(a, "p1"); cols != 1 || rows != 1 {
+			t.Errorf("PTY = %dx%d, want 1x1", cols, rows)
+		}
+
+		got := strings.Split(ansi.Strip(a.View().Content), "\n")[1:4]
+		if want := []string{"╭─╮", "│x│", "╰─╯"}; !slices.Equal(got, want) {
+			t.Errorf("box = %q, want %q", got, want)
+		}
+	})
+
+	t.Run("a 2x2 tile is left out", func(t *testing.T) {
+		// A 5x3 body split into 2 and 3 columns: the 2-wide tile is too small.
+		a, _ := framedApp(t, 5, 5, shellSpec("/a", "x"), shellSpec("/b", "y"))
+
+		rects := a.layoutRects()
+		if _, drawn := rects["p1"]; drawn || len(rects) != 1 {
+			t.Fatalf("rects = %v, want only p2", rects)
+		}
+
+		if cols, rows := paneSizeOf(a, "p1"); cols != 1 || rows != 1 {
+			t.Errorf("left-out PTY = %dx%d, want 1x1", cols, rows)
+		}
+
+		got := strings.Split(ansi.Strip(a.View().Content), "\n")[1:4]
+		if want := []string{"  ╭─╮", "  │y│", "  ╰─╯"}; !slices.Equal(got, want) {
+			t.Errorf("body = %q, want %q", got, want)
+		}
+	})
+}
+
 // topBorder is the top row of the frame, under the workspace bar, without styling.
 func topBorder(a *App) string {
 	return ansi.Strip(strings.Split(a.View().Content, "\n")[1])
@@ -336,7 +376,7 @@ func TestTitleColours(t *testing.T) {
 			vt := viewVT(t, a)
 			p1, p2 := a.layoutRects()["p1"], a.layoutRects()["p2"]
 			title := map[core.PaneKind]string{core.KindShell: "shell", core.KindAgent: "claude"}[tt.kind]
-			start := func(r core.Rect) int { return r.X + 1 + 1 + 2 } // after "─ icon "
+			start := func(r core.Rect) int { return r.X + 5 } // after "╭─ icon "
 
 			// Focused p1: icon and title bold in the kind colour, cwd Fg.
 			assertCell(t, vt, start(p1)-2, 1, tt.kindC, true)
@@ -350,8 +390,8 @@ func TestTitleColours(t *testing.T) {
 	}
 }
 
-// The focused pane's four sides are in its kind colour, shared cells included;
-// every other border cell is Border.
+// The focused pane's whole box is in its kind colour; every other border cell
+// is Border.
 func TestBorderColours(t *testing.T) {
 	ui := mochaUI(t)
 
@@ -372,14 +412,14 @@ func TestBorderColours(t *testing.T) {
 			}
 
 			onFocus := func(x, y int) bool {
-				return (x == r.X-1 || x == r.X+r.W) && y >= r.Y && y <= r.Y+r.H ||
-					(y == r.Y || y == r.Y+r.H) && x >= r.X-1 && x <= r.X+r.W
+				return (x == r.X || x == r.X+r.W-1) && y >= r.Y && y < r.Y+r.H ||
+					(y == r.Y || y == r.Y+r.H-1) && x >= r.X && x < r.X+r.W
 			}
 
 			for y := range a.height - 1 {
 				for x := range a.width {
 					c := vt.CellAt(x, y)
-					if c == nil || !strings.Contains("─│╭╮╰╯┬┴├┤┼", c.Content) || c.Content == "" {
+					if c == nil || !strings.Contains("─│╭╮╰╯", c.Content) || c.Content == "" {
 						continue
 					}
 
@@ -418,8 +458,9 @@ func TestNoIconsNoGlyphs(t *testing.T) {
 	}
 }
 
-// A junction in the top border is never covered by the title or a tag.
-func TestTitleKeepsJunctions(t *testing.T) {
+// Every pane is its own rounded box: the corners sit on the rect's corners,
+// neighbours touch, and no junction glyph or shared cell exists.
+func TestFramesAreOneBoxPerPane(t *testing.T) {
 	for w := 8; w <= 40; w++ {
 		a, _ := framedApp(t, w, 12,
 			paneSpec{kind: core.KindShell, cwd: "/w/top", split: core.SplitVertical},
@@ -427,17 +468,25 @@ func TestTitleKeepsJunctions(t *testing.T) {
 			paneSpec{kind: core.KindShell, cwd: "/w/right", split: core.SplitVertical})
 
 		lines := strings.Split(ansi.Strip(a.View().Content), "\n")
-		// The bottom row's top border is the line above its content; find it by its junction.
-		var found bool
-
 		for _, l := range lines {
-			if strings.Contains(l, "┬") {
-				found = true
+			if strings.ContainsAny(l, "┬┴├┤┼") {
+				t.Fatalf("width %d: junction glyph in\n%s", w, strings.Join(lines, "\n"))
 			}
 		}
 
-		if !found {
-			t.Errorf("width %d: no ┬ junction in\n%s", w, strings.Join(lines, "\n"))
+		cell := func(x, y int) string { return string([]rune(lines[y])[x]) }
+
+		for id, r := range a.layoutRects() {
+			for _, c := range []struct {
+				x, y int
+				want string
+			}{
+				{r.X, r.Y, "╭"}, {r.X + r.W - 1, r.Y, "╮"}, {r.X, r.Y + r.H - 1, "╰"}, {r.X + r.W - 1, r.Y + r.H - 1, "╯"},
+			} {
+				if got := cell(c.x, c.y); got != c.want {
+					t.Errorf("width %d: %s corner (%d, %d) = %q, want %q", w, id, c.x, c.y, got, c.want)
+				}
+			}
 		}
 	}
 }
@@ -445,7 +494,7 @@ func TestTitleKeepsJunctions(t *testing.T) {
 func TestCursorView(t *testing.T) {
 	a, procs := framedApp(t, 100, 30, shellSpec("/a", ""), shellSpec("/b", "\x1b[3;5Hx"))
 
-	// p2 is focused and sits right of p1: A gets floor(98*0.5) = 49 columns after the left frame column and a border column follows, so p2 starts at x=51.
+	// p2 is focused and sits right of p1: p1 takes floor(100*0.5) = 50 columns, so p2 starts at x=50 and its content at x=51.
 	cur := a.cursorView()
 	if cur == nil {
 		t.Fatal("cursorView() = nil, want the focused pane's cursor")
@@ -459,7 +508,7 @@ func TestCursorView(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Zoomed, p2 fills the inner rect, so the cursor is offset by the left frame column and the top border.
+	// Zoomed, p2 fills the body, so the cursor is offset by the left frame column and the top border.
 	if cur := a.cursorView(); cur == nil || cur.X != 6 || cur.Y != 4 {
 		t.Errorf("zoomed cursor = %+v, want (6, 4)", cur)
 	}
@@ -581,9 +630,8 @@ func assertCell(t *testing.T, vt term.VT, x, y int, want theme.Hex, bold bool) {
 	}
 }
 
-// A full-width pane under a vertical split has a junction in its top border;
-// its title is cut before it.
-func TestTitleCutAtJunction(t *testing.T) {
+// A full-width pane's long title is cut with an ellipsis before its right corner.
+func TestTitleCutBeforeCorner(t *testing.T) {
 	a := newTestApp(t)
 	sized(t, a, 40, 12)
 
@@ -600,28 +648,13 @@ func TestTitleCutAtJunction(t *testing.T) {
 
 	attachPanes(t, a, map[core.PaneID]string{"p2": "\x1b]2;a-very-long-title-for-the-bottom-pane\x07"})
 
-	sep := a.layoutRects()["p3"].X - 1
-	if got := a.layoutRects()["p2"].W; got != 38 {
-		t.Fatalf("p2 width = %d, want the full inner width 38", got)
+	r := a.layoutRects()["p2"]
+	if r.W != 40 {
+		t.Fatalf("p2 width = %d, want the full body width 40", r.W)
 	}
 
-	var row []rune
-
-	for _, l := range strings.Split(a.View().Content, "\n") {
-		if p := []rune(ansi.Strip(l)); sep < len(p) && p[sep] == '┴' {
-			row = p
-		}
-	}
-
-	if row == nil {
-		t.Fatalf("no ┴ at column %d", sep)
-	}
-
-	if len(row) != 40 {
-		t.Errorf("row has %d cells, want 40: %q", len(row), string(row))
-	}
-
-	if text := string(row[:sep]); !strings.Contains(text, "…") || strings.Contains(string(row[sep+1:]), "title") {
-		t.Errorf("title not cut before the junction: %q", string(row))
+	row := []rune(ansi.Strip(strings.Split(a.View().Content, "\n")[r.Y]))
+	if len(row) != 40 || row[39] != '╮' || !strings.Contains(string(row), "…") {
+		t.Errorf("top border = %q, want a cut title and a closing corner", string(row))
 	}
 }

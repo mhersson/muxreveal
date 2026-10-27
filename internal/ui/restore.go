@@ -20,7 +20,7 @@ func (a *App) startRestored() tea.Cmd {
 	defer func() { a.restoring = false }()
 
 	st := a.store.State()
-	inner := innerRect(bodyRect(a.width, a.height))
+	body := layoutBody(bodyRect(a.width, a.height))
 
 	var notices []string
 	if a.notice != "" {
@@ -38,10 +38,10 @@ func (a *App) startRestored() tea.Cmd {
 	var cmds []tea.Cmd
 
 	for _, t := range st.Tabs {
-		rects := core.Arrange(t, inner, st.Layout).Sizes
+		rects := core.Arrange(t, body, st.Layout).Sizes
 		if t.Zoomed {
 			if _, ok := st.Panes[t.Focus]; ok {
-				rects[t.Focus] = inner
+				rects[t.Focus] = body
 			}
 		}
 

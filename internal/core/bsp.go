@@ -167,9 +167,9 @@ func (t *Tab) placeBSP(id PaneID, split Split, area Rect, lc LayoutConfig) error
 		dir = splitType(split)
 	}
 	if pre, ok := preselectionOf(t.Preselect); ok {
-		tree.InsertWindowWithPreselection(win, focus, pre, contentArea(area), gap)
+		tree.InsertWindowWithPreselection(win, focus, pre, tileArea(area), gap)
 	} else {
-		tree.InsertWindow(win, focus, dir, 0.5, contentArea(area), gap)
+		tree.InsertWindow(win, focus, dir, 0.5, tileArea(area), gap)
 	}
 	t.Preselect = NoDir
 	if !tree.HasWindow(win) {
@@ -288,11 +288,11 @@ func sideOf(d Dir) (tiling.Side, bool) {
 	return 0, false
 }
 
-// virtualInner is the inner rect focus moves use when the caller gives none.
-func virtualInner() Rect { return Rect{0, 0, 10000, 10000} }
+// virtualBody is the body rect focus moves use when the caller gives none.
+func virtualBody() Rect { return Rect{0, 0, 10000, 10000} }
 
 // neighbour finds the pane the focused one steps to in direction d, by the
-// tiles Arrange lays out in area (the virtual rect when area is zero), or by
+// rects Arrange lays out in area (the virtual rect when area is zero), or by
 // the column rule in scrolling.
 func neighbour(t Tab, d Dir, area Rect, lc LayoutConfig) (PaneID, bool) {
 	if t.Mode == ModeScrolling {
@@ -303,13 +303,13 @@ func neighbour(t Tab, d Dir, area Rect, lc LayoutConfig) (PaneID, bool) {
 		return "", false
 	}
 	if area == (Rect{}) {
-		area = virtualInner()
+		area = virtualBody()
 	}
 	rects := Arrange(t, area, lc).Rects
 	cur, ok := rects[t.Focus]
 	if !ok {
 		// A body too small to draw the focused pane: move as on the virtual rect.
-		rects = Arrange(t, virtualInner(), lc).Rects
+		rects = Arrange(t, virtualBody(), lc).Rects
 		if cur, ok = rects[t.Focus]; !ok {
 			return "", false
 		}
@@ -319,10 +319,10 @@ func neighbour(t Tab, d Dir, area Rect, lc LayoutConfig) (PaneID, bool) {
 	for _, id := range t.Panes {
 		if r, ok := rects[id]; ok && id != t.Focus {
 			ids = append(ids, id)
-			cands = append(cands, tileOf(r))
+			cands = append(cands, tiling.Rect(r))
 		}
 	}
-	i := tiling.Neighbour(tileOf(cur), cands, side, false)
+	i := tiling.Neighbour(tiling.Rect(cur), cands, side, false)
 	if i < 0 {
 		return "", false
 	}

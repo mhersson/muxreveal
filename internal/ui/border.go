@@ -3,7 +3,9 @@ package ui
 import (
 	"fmt"
 	"path/filepath"
+	"slices"
 	"strings"
+	"unicode/utf8"
 
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
@@ -11,132 +13,56 @@ import (
 	"github.com/mhersson/muxreveal/internal/core"
 )
 
-// Border directions a cell's line leaves in.
-const (
-	dirU uint8 = 1 << iota
-	dirD
-	dirL
-	dirR
-)
-
-// Who owns a border cell's colour: the focused pane's kind wins over a neighbour.
+// Who owns a box's colour: the focused pane's kind, or nobody (Border).
 const (
 	ownNone uint8 = iota
 	ownAgent
 	ownShell
 )
 
-// borderGrid collects the directions of every border cell so that panes that
-// share an edge draw one connected line.
-type borderGrid struct {
-	w, h int
-	dirs []uint8
-	own  []uint8
-}
+// drawBox adds the rounded box around a pane rect: corners, sides and bottom,
+// and the top border with its title and tag segments set in. Every pane has its
+// own box, so neighbours touch without shared cells.
+func drawBox(add func(y int, s segment), r core.Rect, top []segment, own uint8, st styles) {
+	if r.W < minFrame || r.H < minFrame {
+		return
+	}
 
-func newBorderGrid(w, h int) *borderGrid {
-	return &borderGrid{w: w, h: h, dirs: make([]uint8, w*h), own: make([]uint8, w*h)}
-}
+	right := r.X + r.W - 1
+	bottom := r.Y + r.H - 1
 
-// addBox adds the border around a pane rect, on columns r.X-1..r.X+r.W and rows
-// r.Y..r.Y+r.H, and sets the colour owner of every cell on it to own unless
-// own is ownNone.
-func (g *borderGrid) addBox(r core.Rect, own uint8) {
-	x1, x2, y1, y2 := r.X-1, r.X+r.W, r.Y, r.Y+r.H
-	set := func(x, y int, d uint8) {
-		if x < 0 || y < 0 || x >= g.w || y >= g.h {
-			return
-		}
-		i := y*g.w + x
-		g.dirs[i] |= d
-		if own != ownNone {
-			g.own[i] = own
+	line := func(x, w int, glyphs string) segment { return segment{x, w, st.borderRun(own, glyphs)} }
+
+	// The top border is runs of corner and dashes between the title and tag
+	// segments; the last run ends in the other corner.
+	pos, prefix := r.X, "╭"
+	run := func(end int, tail string) {
+		if end > pos {
+			dashes := end - pos - utf8.RuneCountInString(prefix+tail)
+			add(r.Y, line(pos, end-pos, prefix+strings.Repeat("─", dashes)+tail))
 		}
 	}
-	for x := x1; x <= x2; x++ {
-		d := dirL | dirR
-		switch x {
-		case x1:
-			d = dirR
-		case x2:
-			d = dirL
+
+	slices.SortFunc(top, func(p, q segment) int { return p.x - q.x })
+
+	for _, s := range top {
+		if s.x < max(pos, r.X+1) || s.x+s.w > right {
+			continue
 		}
-		set(x, y1, d)
-		set(x, y2, d)
-	}
-	for y := y1; y <= y2; y++ {
-		d := dirU | dirD
-		switch y {
-		case y1:
-			d = dirD
-		case y2:
-			d = dirU
-		}
-		set(x1, y, d)
-		set(x2, y, d)
-	}
-}
 
-// straight reports whether (x, y) is a plain horizontal run.
-func (g *borderGrid) straight(x, y int) bool { return g.dirs[y*g.w+x] == dirL|dirR }
-
-// clear removes the border from cells [x0, x1) of row y: text sits there.
-func (g *borderGrid) clear(y, x0, x1 int) {
-	for x := x0; x < x1; x++ {
-		g.dirs[y*g.w+x] = 0
+		run(s.x, "")
+		add(r.Y, s)
+		pos, prefix = s.x+s.w, ""
 	}
-}
 
-// runs emits the remaining border cells, one styled string per run of cells
-// with the same owner.
-func (g *borderGrid) runs(st styles, add func(y int, s segment)) {
-	var sb strings.Builder
-	for y := range g.h {
-		x := 0
-		for x < g.w {
-			i := y*g.w + x
-			if g.dirs[i] == 0 {
-				x++
-				continue
-			}
-			start, own := x, g.own[i]
-			sb.Reset()
-			for x < g.w && g.dirs[y*g.w+x] != 0 && g.own[y*g.w+x] == own {
-				sb.WriteString(borderGlyph(g.dirs[y*g.w+x]))
-				x++
-			}
-			add(y, segment{start, x - start, st.borderRun(own, sb.String())})
-		}
-	}
-}
+	run(right+1, "╮")
 
-// borderGlyph is the rounded box-drawing character for the directions a cell
-// connects.
-func borderGlyph(d uint8) string {
-	switch d {
-	case dirU | dirD:
-		return "│"
-	case dirR | dirD:
-		return "╭"
-	case dirL | dirD:
-		return "╮"
-	case dirR | dirU:
-		return "╰"
-	case dirL | dirU:
-		return "╯"
-	case dirL | dirR | dirD:
-		return "┬"
-	case dirL | dirR | dirU:
-		return "┴"
-	case dirU | dirD | dirR:
-		return "├"
-	case dirU | dirD | dirL:
-		return "┤"
-	case dirU | dirD | dirL | dirR:
-		return "┼"
-	default:
-		return "─"
+	for y := r.Y + 1; y < bottom; y++ {
+		add(y, line(r.X, 1, "│"))
+		add(y, line(right, 1, "│"))
 	}
+
+	add(bottom, line(r.X, r.W, "╰"+strings.Repeat("─", r.W-2)+"╯"))
 }
 
 func kindOwner(k core.PaneKind) uint8 {
@@ -150,30 +76,22 @@ func kindOwner(k core.PaneKind) uint8 {
 const titleRoomMin = 4
 
 // topBorder returns the title and tags set into the top border of the pane at
-// r, and removes the border cells they cover from the grid. The title uses the
-// plain run of border that starts after the left corner and the tags the one
-// that ends before the right corner, so neither covers a junction.
-func (a *App) topBorder(grid *borderGrid, s core.State, id core.PaneID, r core.Rect, focused bool, st styles) []segment {
+// r: the title after the left corner and a dash, the tags before the right
+// corner. The cells between them stay border.
+func (a *App) topBorder(s core.State, id core.PaneID, r core.Rect, focused bool, st styles) []segment {
 	meta := s.Panes[id]
 	kindStyle, titleStyle, cwdStyle := st.kind(meta.Kind), st.titleMuted, st.cwdSubtle
 	if focused {
 		titleStyle, cwdStyle = kindStyle, st.cwdFocus
 	}
 
-	left, right := r.X, r.X+r.W
-	for left < right && grid.straight(left, r.Y) {
-		left++
-	}
-	rightStart := right
-	for rightStart > r.X && grid.straight(rightStart-1, r.Y) {
-		rightStart--
-	}
-	whole := left == right
+	// left is where the title must end; the first cell after the corner is a dash.
+	left, rightStart := r.X+r.W-1, r.X+1
 
 	var segs []segment
 
 	// Tags sit right to left with one border cell between them and before the corner.
-	tagEnd := right - 1
+	tagEnd := r.X + r.W - 2
 	place := func(tag string, style lipgloss.Style) {
 		tw := lipgloss.Width(tag)
 		x := tagEnd - tw
@@ -181,10 +99,7 @@ func (a *App) topBorder(grid *borderGrid, s core.State, id core.PaneID, r core.R
 			return
 		}
 		segs = append(segs, segment{x, tw, style.Render(tag)})
-		grid.clear(r.Y, x, x+tw)
-		if whole {
-			left = x
-		}
+		left = x
 		tagEnd = x - 1
 	}
 
@@ -231,7 +146,7 @@ func (a *App) topBorder(grid *borderGrid, s core.State, id core.PaneID, r core.R
 	if a.icons {
 		lead = 4
 	}
-	room := left - r.X - lead - 1
+	room := left - (r.X + 1) - lead - 1
 	if room < titleRoomMin {
 		return segs
 	}
@@ -257,9 +172,8 @@ func (a *App) topBorder(grid *borderGrid, s core.State, id core.PaneID, r core.R
 		w += 3 + cw
 	}
 	sb.WriteString(st.body.Render(" "))
-	grid.clear(r.Y, r.X+1, r.X+1+w)
 
-	return append(segs, segment{r.X + 1, w, sb.String()})
+	return append(segs, segment{r.X + 2, w, sb.String()})
 }
 
 func kindIcon(k core.PaneKind) string {

@@ -412,6 +412,7 @@ M2a Worktrees and diff engine is complete on `feat/diff-engine` and waits for re
 | 2026-10-27 | The directory watcher is `fsnotify` with our own walk instead of `rjeczalik/notify` | notify is unmaintained since 2023 and uses FSEvents on macOS only with cgo; our walk skips ignored directories |
 | 2026-10-27 | Turn snapshots copy the worktree's index to a temporary index and stage only what changed | A fresh index rehashes every file; the copy keeps git's stat cache (about 100 ms on 50k files) |
 | 2026-10-27 | Every prompt takes a snapshot until the review pane wires watchers to panes; the snapshotter already takes an "unchanged" hint | The watcher's lifecycle belongs to the pane, which the parallel UI milestone owns |
+| 2026-10-27 | Each pane gets its own rounded frame and frames touch, with no gap, no junctions and no outer frame | The operator's pick from the chrome comparison |
 
 ## Later
 

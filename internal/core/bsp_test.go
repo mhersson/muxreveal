@@ -72,7 +72,7 @@ func TestToTilingRejectsBadPaneIDs(t *testing.T) {
 	}
 }
 
-func TestArrangeOnePaneFillsInner(t *testing.T) {
+func TestArrangeOnePaneFillsBody(t *testing.T) {
 	inner := Rect{1, 1, 98, 27}
 	a := Arrange(tabOfTree(leaf("p1")), inner, LayoutConfig{})
 	if a.Rects["p1"] != inner || a.Sizes["p1"] != inner {
@@ -87,12 +87,12 @@ func TestArrangeEmptyTab(t *testing.T) {
 	}
 }
 
-func TestArrangeSplitsShareOneBorder(t *testing.T) {
+func TestArrangeSplitsTouch(t *testing.T) {
 	t.Run("vertical", func(t *testing.T) {
 		inner := Rect{1, 1, 99, 27}
 		a := Arrange(tabOfTree(vsplit(leaf("p1"), leaf("p2"))), inner, LayoutConfig{})
 		l, r := a.Rects["p1"], a.Rects["p2"]
-		if l.Y != r.Y || l.H != r.H || l.X+l.W+1 != r.X || l.W+r.W != inner.W-1 {
+		if l.Y != r.Y || l.H != r.H || l.X+l.W != r.X || l.W+r.W != inner.W {
 			t.Errorf("left %+v right %+v in %+v", l, r, inner)
 		}
 	})
@@ -107,14 +107,14 @@ func TestArrangeSplitsShareOneBorder(t *testing.T) {
 }
 
 func TestArrangeExactCells(t *testing.T) {
-	// Content area {1,2,W,H-1}; tile of the first child is floor(W*ratio) wide.
+	// The first child is floor(W*ratio) wide; the second takes the rest.
 	inner := Rect{1, 1, 80, 24}
 	tests := []struct {
 		name string
 		tree *Node
 		want map[PaneID]Rect
 	}{
-		{"side by side", vsplit(leaf("p1"), leaf("p2")), map[PaneID]Rect{"p1": {1, 1, 40, 24}, "p2": {42, 1, 39, 24}}},
+		{"side by side", vsplit(leaf("p1"), leaf("p2")), map[PaneID]Rect{"p1": {1, 1, 40, 24}, "p2": {41, 1, 40, 24}}},
 		{"stacked", hsplit(leaf("p1"), leaf("p2")), map[PaneID]Rect{"p1": {1, 1, 80, 12}, "p2": {1, 13, 80, 12}}},
 	}
 	for _, tt := range tests {
@@ -230,39 +230,39 @@ func TestPlaceAndRemoveReportBadPaneIDs(t *testing.T) {
 	}
 }
 
-// tinyArea has room for p1 and p2 of the tree below but not for p3: the pane
-// left out has no tile there, though the virtual rect has one.
-var tinyArea = Rect{1, 1, 20, 5}
+// tinyArea has room for p1 and p3 of the stack below but not for p2: the pane
+// left out has no rect there, though the virtual rect has one.
+var tinyArea = Rect{1, 1, 20, 9}
 
 func stackTree() *Node {
 	return hsplit(leaf("p1"), hsplit(leaf("p2"), leaf("p3")))
 }
 
 func TestFocusDirUsesTheArea(t *testing.T) {
-	s := stateOf(stackTree(), "p2")
+	s := stateOf(stackTree(), "p1")
 	a := Arrange(s.Tab(), tinyArea, LayoutConfig{})
-	if _, ok := a.Rects["p3"]; ok || len(a.Rects) != 2 {
-		t.Fatalf("p3 should be left out of %+v: %v", tinyArea, a.Rects)
+	if _, ok := a.Rects["p2"]; ok || len(a.Rects) != 2 {
+		t.Fatalf("p2 should be left out of %+v: %v", tinyArea, a.Rects)
 	}
-	if got := dispatch(t, s, FocusDir{Dir: Down}); got.Tab().Focus != "p3" {
-		t.Errorf("virtual rect: Focus = %q, want p3", got.Tab().Focus)
+	if got := dispatch(t, s, FocusDir{Dir: Down}); got.Tab().Focus != "p2" {
+		t.Errorf("virtual rect: Focus = %q, want p2", got.Tab().Focus)
 	}
-	if got := dispatch(t, s, FocusDir{Dir: Down, Area: tinyArea}); got.Tab().Focus != "p2" {
-		t.Errorf("tiny area: Focus = %q, want p2 (p3 has no tile there)", got.Tab().Focus)
+	if got := dispatch(t, s, FocusDir{Dir: Down, Area: tinyArea}); got.Tab().Focus != "p3" {
+		t.Errorf("tiny area: Focus = %q, want p3 (p2 has no rect there)", got.Tab().Focus)
 	}
-	if got := dispatch(t, stateOf(stackTree(), "p1"), FocusDir{Dir: Down, Area: tinyArea}); got.Tab().Focus != "p2" {
-		t.Errorf("tiny area from p1: Focus = %q, want p2", got.Tab().Focus)
+	if got := dispatch(t, stateOf(stackTree(), "p2"), FocusDir{Dir: Down, Area: tinyArea}); got.Tab().Focus != "p3" {
+		t.Errorf("undrawn focus: Focus = %q, want p3 (moves as on the virtual rect)", got.Tab().Focus)
 	}
 }
 
 func TestSwapDirUsesTheArea(t *testing.T) {
-	s := stateOf(stackTree(), "p2")
+	s := stateOf(stackTree(), "p1")
 	got := dispatch(t, s, SwapDir{Dir: Down, Area: tinyArea})
-	if show(got.Tab().Layout) != show(stackTree()) {
-		t.Errorf("tiny area swapped with a pane that has no tile: %s", show(got.Tab().Layout))
+	if show(got.Tab().Layout) != "h(p3,h(p2,p1))" {
+		t.Errorf("tiny area swapped with a pane that has no rect: %s", show(got.Tab().Layout))
 	}
 	got = dispatch(t, s, SwapDir{Dir: Down})
-	if show(got.Tab().Layout) != "h(p1,h(p3,p2))" || !slices.Equal(got.Tab().Panes, []PaneID{"p1", "p3", "p2"}) {
+	if show(got.Tab().Layout) != "h(p2,h(p1,p3))" || !slices.Equal(got.Tab().Panes, []PaneID{"p2", "p1", "p3"}) {
 		t.Errorf("virtual rect: %s %v", show(got.Tab().Layout), got.Tab().Panes)
 	}
 }

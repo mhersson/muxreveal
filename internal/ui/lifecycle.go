@@ -81,7 +81,7 @@ func (a *App) openPane(kind core.PaneKind, split core.Split) tea.Cmd {
 		cwd = m.Cwd
 	}
 
-	act := core.OpenPane{Kind: kind, Cwd: cwd, Split: split, Area: a.innerArea()}
+	act := core.OpenPane{Kind: kind, Cwd: cwd, Split: split, Area: a.bodyArea()}
 	if kind == core.KindAgent {
 		act.Harness = a.harness.ID()
 	}
@@ -601,7 +601,7 @@ func (a *App) newTab() tea.Cmd {
 	}
 
 	id := st.NewPaneID()
-	cols, rows := contentSize(innerRect(bodyRect(a.width, a.height)))
+	cols, rows := contentSize(layoutBody(bodyRect(a.width, a.height)))
 
 	pn, cwd, err := a.startPane(id, core.KindShell, cwd, cols, rows, "")
 	if err != nil {

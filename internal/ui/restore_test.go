@@ -250,7 +250,7 @@ func TestRestoreZoomedTabHiddenPaneKeepsLayoutSize(t *testing.T) {
 	r := restoreApp(t, st)
 	r.size(100, 30)
 
-	fullCols, fullRows := contentSize(innerRect(bodyRect(100, 30)))
+	fullCols, fullRows := contentSize(layoutBody(bodyRect(100, 30)))
 	if c, rows := paneSizeOf(r.a, "p1"); c != fullCols || rows != fullRows {
 		t.Errorf("zoomed pane = %dx%d, want %dx%d", c, rows, fullCols, fullRows)
 	}

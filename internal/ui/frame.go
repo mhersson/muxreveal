@@ -17,32 +17,32 @@ func bodyRect(width, height int) core.Rect {
 	return core.Rect{Y: 1, W: width, H: max(height-2, 0)}
 }
 
-// minFrame is the smallest body, in rows and columns, that has room for a frame.
+// minFrame is the smallest pane rect, in rows and columns: a frame around one
+// content cell.
 const minFrame = 3
 
-// innerRect is the body inside its frame: the left and right frame columns and
-// the bottom frame row are outside it. A body under minFrame has no inner rect.
-func innerRect(body core.Rect) core.Rect {
+// layoutBody is the rect panes are laid out in: the body itself, or the zero
+// rect when it is under minFrame square and stays blank.
+func layoutBody(body core.Rect) core.Rect {
 	if body.W < minFrame || body.H < minFrame {
 		return core.Rect{}
 	}
 
-	return core.Rect{X: body.X + 1, Y: body.Y, W: body.W - 2, H: body.H - 1}
+	return body
 }
 
-// contentRect is a pane rect without its top border row.
+// contentRect is a pane rect inside its frame: inset by one cell on every side.
 func contentRect(r core.Rect) core.Rect {
-	return core.Rect{X: r.X, Y: r.Y + 1, W: r.W, H: r.H - 1}
+	return core.Rect{X: r.X + 1, Y: r.Y + 1, W: max(r.W-2, 0), H: max(r.H-2, 0)}
 }
 
-// geometry is the pane rects (top border row included) of one View, computed
-// once.
+// geometry is the pane rects (frame included) of one View, computed once.
 type geometry struct {
 	rects map[core.PaneID]core.Rect
 }
 
 // layoutRects returns each visible pane's rect. A zoomed pane is the only one
-// and fills the inner rect.
+// and fills the body.
 func (a *App) layoutRects() map[core.PaneID]core.Rect {
 	return a.geometry().rects
 }
@@ -53,8 +53,8 @@ func (a *App) geometry() geometry {
 	return geometry{rects: a.layoutIn(st, st.Active)}
 }
 
-// tabRects lays tab i out in the inner rect with its own zoom: a zoomed tab's
-// focused pane gets the whole inner rect.
+// tabRects lays tab i out in the body with its own zoom: a zoomed tab's
+// focused pane gets the whole body.
 func (a *App) tabRects(i int) map[core.PaneID]core.Rect {
 	return a.layoutIn(a.store.State(), i)
 }
@@ -68,21 +68,21 @@ func (a *App) layoutIn(st core.State, i int) map[core.PaneID]core.Rect {
 		return z
 	}
 
-	return core.Arrange(st.Tabs[i], a.innerArea(), st.Layout).Rects
+	return core.Arrange(st.Tabs[i], a.bodyArea(), st.Layout).Rects
 }
 
-// sizesIn is the rect each pane of tab i is sized to, or the zoomed pane's
-// alone when the tab is zoomed.
+// sizesIn is the pane rects of tab i whose content is each PTY's size (the
+// caller insets them), or the zoomed pane's alone when the tab is zoomed.
 func (a *App) sizesIn(st core.State, i int) map[core.PaneID]core.Rect {
 	if z, ok := a.zoomedRects(st, i); ok {
 		return z
 	}
 
-	return core.Arrange(st.Tabs[i], a.innerArea(), st.Layout).Sizes
+	return core.Arrange(st.Tabs[i], a.bodyArea(), st.Layout).Sizes
 }
 
 // zoomedRects is the one rect of a zoomed tab: its focused pane fills the
-// inner rect.
+// body.
 func (a *App) zoomedRects(st core.State, i int) (map[core.PaneID]core.Rect, bool) {
 	t := st.Tabs[i]
 	if !t.Zoomed {
@@ -94,16 +94,16 @@ func (a *App) zoomedRects(st core.State, i int) (map[core.PaneID]core.Rect, bool
 	}
 
 	rects := map[core.PaneID]core.Rect{}
-	if inner := a.innerArea(); inner.W >= 1 && inner.H >= 1 {
-		rects[t.Focus] = inner
+	if body := a.bodyArea(); body.W >= minFrame && body.H >= minFrame {
+		rects[t.Focus] = body
 	}
 
 	return rects, true
 }
 
-// innerArea is the rect panes are laid out in.
-func (a *App) innerArea() core.Rect {
-	return innerRect(bodyRect(a.width, a.height))
+// bodyArea is the rect panes are laid out in.
+func (a *App) bodyArea() core.Rect {
+	return layoutBody(bodyRect(a.width, a.height))
 }
 
 // segment is a run of cells already styled, starting at column x.
@@ -141,8 +141,8 @@ func (a *App) frameAt(g geometry) string {
 	return strings.Join(lines, "\n")
 }
 
-// frameBody draws the body rows between the two bars: the frames, titles and
-// pane content.
+// frameBody draws the body rows between the two bars: each pane's box, title
+// and content.
 func (a *App) frameBody(g geometry, st core.State, lk look) []string {
 	rows := make([][]segment, a.height)
 	add := func(y int, s segment) {
@@ -151,21 +151,15 @@ func (a *App) frameBody(g geometry, st core.State, lk look) []string {
 		}
 	}
 
-	grid := newBorderGrid(a.width, a.height)
 	focus := st.Tab().Focus
 
-	for _, r := range g.rects {
-		grid.addBox(r, ownNone)
-	}
-
-	if r, ok := g.rects[focus]; ok {
-		grid.addBox(r, kindOwner(st.Panes[focus].Kind))
-	}
-
 	for id, r := range g.rects {
-		for _, s := range a.topBorder(grid, st, id, r, id == focus, lk.styles) {
-			add(r.Y, s)
+		own := ownNone
+		if id == focus {
+			own = kindOwner(st.Panes[id].Kind)
 		}
+
+		drawBox(add, r, a.topBorder(st, id, r, id == focus, lk.styles), own, lk.styles)
 	}
 
 	for id, r := range g.rects {
@@ -192,8 +186,6 @@ func (a *App) frameBody(g geometry, st core.State, lk look) []string {
 			add(c.Y+i, segment{c.X, c.W, text})
 		}
 	}
-
-	grid.runs(lk.styles, add)
 
 	lines := make([]string, 0, a.height-2)
 

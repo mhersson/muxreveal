@@ -79,11 +79,11 @@ func (a *App) switchLayout(act core.Action, what string) tea.Cmd {
 }
 
 func (a *App) cycleLayout() tea.Cmd {
-	return a.switchLayout(core.CycleLayoutMode{Area: a.innerArea()}, "cycle layout")
+	return a.switchLayout(core.CycleLayoutMode{Area: a.bodyArea()}, "cycle layout")
 }
 
 func (a *App) setLayout(mode core.LayoutMode) tea.Cmd {
-	return a.switchLayout(core.SetLayoutMode{Mode: mode, Area: a.innerArea()}, "set layout")
+	return a.switchLayout(core.SetLayoutMode{Mode: mode, Area: a.bodyArea()}, "set layout")
 }
 
 // movePane moves the focused pane to the tab with the 1-based number n; the
@@ -94,7 +94,7 @@ func (a *App) movePane(n int, follow bool) tea.Cmd {
 		return nil
 	}
 
-	return a.moved(id, n, core.MovePane{ID: id, Tab: n - 1, Follow: follow, Area: a.innerArea()})
+	return a.moved(id, n, core.MovePane{ID: id, Tab: n - 1, Follow: follow, Area: a.bodyArea()})
 }
 
 func (a *App) breakPane() tea.Cmd {
@@ -103,7 +103,7 @@ func (a *App) breakPane() tea.Cmd {
 		return nil
 	}
 
-	return a.moved(id, 0, core.BreakPane{ID: id, Area: a.innerArea()})
+	return a.moved(id, 0, core.BreakPane{ID: id, Area: a.bodyArea()})
 }
 
 // moved dispatches a move or break of pane id; n is the 1-based tab number

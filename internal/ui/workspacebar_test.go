@@ -449,7 +449,7 @@ func TestHiddenTabsKeepSize(t *testing.T) {
 		}
 	}
 
-	// the zoomed tab 3 fills the inner rect (80x24 -> 78x21 content 78x20)
+	// the zoomed tab 3 fills the body (80x24 -> 80x22, content 78x20)
 	if got := procs["p4"].resized(); len(got) == 0 || got[len(got)-1] != [2]int{78, 20} {
 		t.Errorf("zoomed pane resizes = %v, want 78x20 last", got)
 	}

@@ -64,9 +64,9 @@ type mouseState struct {
 	fwd   *forwarded
 }
 
-// hit finds what lies under the screen cell (x, y): a pane's content or header
-// row, a tab segment of the workspace bar, or nothing. The corner and junction
-// cells shared between panes are nothing.
+// hit finds what lies under the screen cell (x, y): a pane's content or top
+// border, a tab segment of the workspace bar, or nothing. A pane's side and
+// bottom borders are nothing.
 func (a *App) hit(x, y int) hitResult {
 	if y == 0 && a.height >= 2 {
 		return a.hitTab(x)
@@ -77,10 +77,12 @@ func (a *App) hit(x, y int) hitResult {
 			continue
 		}
 
-		switch c := contentRect(r); {
+		c := contentRect(r)
+
+		switch {
 		case y == r.Y:
 			return hitResult{area: hitHeader, pane: id}
-		case y >= c.Y && y < c.Y+c.H:
+		case y >= c.Y && y < c.Y+c.H && x >= c.X && x < c.X+c.W:
 			return hitResult{area: hitContent, pane: id, local: point{row: y - c.Y, col: x - c.X}}
 		}
 	}

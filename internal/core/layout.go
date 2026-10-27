@@ -113,7 +113,7 @@ func (s State) NewPaneID() PaneID {
 
 // OpenPane puts a new pane beside the active tab's focused pane and focuses
 // it; in BSP a split divides the focused pane with the new pane as child B. The
-// first pane of a tab ignores Split. Area is the inner rect the UI lays out in;
+// first pane of a tab ignores Split. Area is the body rect the UI lays out in;
 // a zero Area decides auto splits as on a wide screen. Harness is kept only
 // for an agent.
 type OpenPane struct {

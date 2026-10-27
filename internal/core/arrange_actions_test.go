@@ -204,11 +204,13 @@ func TestEqualizeBSP(t *testing.T) {
 		}
 	})
 	t.Run("nested non-chain", func(t *testing.T) {
+		// Ratios round to 0.01, so 1/3 becomes 0.33 and, with no gap cells to
+		// absorb it, some widths spread by 2; 100 keeps the one-cell check meaningful.
 		s := stateOf(vsplit(leaf("p1"), hsplit(vsplit(leaf("p2"), leaf("p3")), vsplit(leaf("p4"), leaf("p5")))), "p1")
 		st := NewStore(s)
 		must(t, st, Equalize{})
 		s = st.State()
-		a := Arrange(s.Tabs[0], Rect{0, 0, 120, 40}, s.Layout)
+		a := Arrange(s.Tabs[0], Rect{0, 0, 100, 40}, s.Layout)
 		var ws []int
 		for _, id := range s.Tabs[0].Panes {
 			ws = append(ws, a.Rects[id].W)

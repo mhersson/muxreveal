@@ -132,7 +132,7 @@ func TestShellFlow(t *testing.T) {
 
 	tm.Send(keyLeader)
 	tm.Send(keyRune('v'))
-	waitFor("┬")
+	waitFor("╮╭")
 
 	tm.Send(keyLeader)
 	tm.Send(keyRune('x'))

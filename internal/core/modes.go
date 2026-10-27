@@ -25,7 +25,7 @@ func validMode(m LayoutMode) bool { return slices.Contains(layoutModes[:], m) }
 // order with the configured ratio, scrolling makes one column per pane.
 // Split ratios and column widths reset; focus stays, zoom and preselection
 // clear. An empty tab only gets its mode, and the current mode changes
-// nothing. Area is the inner rect the UI lays out in.
+// nothing. Area is the body rect the UI lays out in.
 type SetLayoutMode struct {
 	Mode LayoutMode
 	Area Rect
@@ -77,7 +77,7 @@ func (t *Tab) setMode(mode LayoutMode, area Rect, lc LayoutConfig) error {
 			if err != nil {
 				return err
 			}
-			tree.InsertWindow(win, prev, tiling.SplitNone, 0.5, contentArea(area), gap)
+			tree.InsertWindow(win, prev, tiling.SplitNone, 0.5, tileArea(area), gap)
 			prev = win
 		}
 		next.setTree(fromTiling(tree))
@@ -369,24 +369,25 @@ func arrangeMaster(t Tab, area tiling.Rect, lc LayoutConfig, a *Arrangement) {
 		Grid:     lc.grid(),
 		Gap:      gap,
 	}
-	var k keeper
+	k := keeper{area: area}
 	for i, l := range tiling.CalculateMasterLayout(len(t.Panes), area.W, area.H, area.Y, p) {
-		r := paneRect(tiling.Rect{X: area.X + l.X, Y: l.Y, W: l.Width, H: l.Height})
-		if l.Width < 1 || l.Height < 1 || !k.keep(r, area) {
+		r := Rect{X: area.X + l.X, Y: l.Y, W: l.Width, H: l.Height}
+		if !k.keep(r) {
 			continue
 		}
 		a.Rects[t.Panes[i]], a.Sizes[t.Panes[i]] = r, r
 	}
 }
 
-// keeper admits drawn pane rects in pane order: one is kept only if it lies in
-// the tile area (grown one row up) and is disjoint from those already kept.
-// Dividers give up the gap before a pane's size, and a rect grown into the
-// border row then touches the tile above, so the pane is left out.
-type keeper struct{ rects []Rect }
+// keeper admits drawn pane rects in pane order: one is kept only if it is at
+// least minPane square, lies in area and is disjoint from those already kept.
+type keeper struct {
+	area  tiling.Rect
+	rects []Rect
+}
 
-func (k *keeper) keep(r Rect, area tiling.Rect) bool {
-	if !inside(r, area) || slices.ContainsFunc(k.rects, r.overlaps) {
+func (k *keeper) keep(r Rect) bool {
+	if r.W < minPane || r.H < minPane || !inside(r, k.area) || slices.ContainsFunc(k.rects, r.overlaps) {
 		return false
 	}
 	k.rects = append(k.rects, r)
@@ -408,15 +409,12 @@ func arrangeScrolling(t Tab, area tiling.Rect, a *Arrangement) {
 	for _, c := range t.Columns[first:end] {
 		widths = append(widths, c.Width)
 	}
-	xs := divide(area.X, area.W, widths, gap)
-	var k keeper
+	xs := divide(area.X, area.W, widths)
+	k := keeper{area: area}
 	for i, c := range t.Columns[first:end] {
-		for j, y := range divide(area.Y, area.H, equalWeights(len(c.Panes)), gap) {
-			if xs[i].size < 1 || y.size < 1 {
-				continue
-			}
-			r := paneRect(tiling.Rect{X: xs[i].pos, Y: y.pos, W: xs[i].size, H: y.size})
-			if !k.keep(r, area) {
+		for j, y := range divide(area.Y, area.H, equalWeights(len(c.Panes))) {
+			r := Rect{X: xs[i].pos, Y: y.pos, W: xs[i].size, H: y.size}
+			if !k.keep(r) {
 				continue
 			}
 			a.Rects[c.Panes[j]], a.Sizes[c.Panes[j]] = r, r
@@ -426,19 +424,18 @@ func arrangeScrolling(t Tab, area tiling.Rect, a *Arrangement) {
 		if i >= first && i < end {
 			continue
 		}
-		w := min(max(int(math.Round(c.Width*float64(area.W))), 1), area.W)
-		for j, y := range divide(area.Y, area.H, equalWeights(len(c.Panes)), gap) {
+		w := min(max(int(math.Round(c.Width*float64(area.W))), minPane), area.W)
+		for j, y := range divide(area.Y, area.H, equalWeights(len(c.Panes))) {
 			if y.size >= 1 {
-				a.Sizes[c.Panes[j]] = paneRect(tiling.Rect{X: area.X, Y: y.pos, W: w, H: y.size})
+				a.Sizes[c.Panes[j]] = Rect{X: area.X, Y: y.pos, W: w, H: y.size}
 			}
 		}
 	}
 }
 
-// inside reports whether the pane rect r, grown one row up, lies in the tile
-// area.
+// inside reports whether the pane rect r lies in the tile area.
 func inside(r Rect, area tiling.Rect) bool {
-	return r.X >= area.X && r.X+r.W <= area.X+area.W && r.Y+1 >= area.Y && r.Y+r.H <= area.Y+area.H
+	return r.X >= area.X && r.X+r.W <= area.X+area.W && r.Y >= area.Y && r.Y+r.H <= area.Y+area.H
 }
 
 func (r Rect) overlaps(o Rect) bool {
@@ -455,11 +452,11 @@ func equalWeights(n int) []float64 {
 
 type extent struct{ pos, size int }
 
-// divide splits total cells from origin between len(weights) neighbours in
-// proportion to weights, keeping gap cells between them. Every neighbour that
-// fits gets at least one cell; when total has fewer cells than neighbours the
-// first total of them get one each and the rest get size 0.
-func divide(origin, total int, weights []float64, gap int) []extent {
+// divide splits total cells from origin between len(weights) adjacent
+// neighbours in proportion to weights. Every neighbour that fits gets at least
+// one cell; when total has fewer cells than neighbours the first total of them
+// get one each and the rest get size 0.
+func divide(origin, total int, weights []float64) []extent {
 	n := len(weights)
 	out := make([]extent, n)
 	if n == 0 {
@@ -471,10 +468,6 @@ func divide(origin, total int, weights []float64, gap int) []extent {
 		}
 		return out
 	}
-	if n > 1 && total-gap*(n-1) < n {
-		gap = (total - n) / (n - 1)
-	}
-	avail := total - gap*(n-1)
 	sum := 0.0
 	for _, w := range weights {
 		sum += w
@@ -482,13 +475,13 @@ func divide(origin, total int, weights []float64, gap int) []extent {
 	pos, prev, acc := origin, 0, 0.0
 	for i, w := range weights {
 		acc += w
-		edge := avail
+		edge := total
 		if i < n-1 {
-			edge = int(math.Round(float64(avail) * acc / sum))
+			edge = int(math.Round(float64(total) * acc / sum))
 		}
-		edge = min(max(edge, prev+1), avail-(n-1-i))
+		edge = min(max(edge, prev+1), total-(n-1-i))
 		out[i] = extent{pos: pos, size: edge - prev}
-		pos += edge - prev + gap
+		pos += edge - prev
 		prev = edge
 	}
 	return out

@@ -342,6 +342,43 @@ func assertSizes(t *testing.T, a *App) {
 	}
 }
 
+// Each PTY is its pane's rect minus the frame: two panes side by side in a
+// 100x30 terminal are 50x28 rects, so 48x26 PTYs; scrolling's hidden column
+// is sized as if shown alone.
+func TestPaneSizesAreRectsMinusFrame(t *testing.T) {
+	a, _ := lifeAppSized(t, 100, 30)
+
+	chord(a, 'v')
+
+	for id, r := range a.layoutRects() {
+		if r.W != 50 || r.H != 28 {
+			t.Fatalf("%s rect = %+v, want 50x28", id, r)
+		}
+
+		if cols, rows := paneSizeOf(a, id); cols != 48 || rows != 26 {
+			t.Errorf("%s PTY = %dx%d, want 48x26", id, cols, rows)
+		}
+	}
+
+	chord(a, 'v')
+
+	if err := a.dispatch(core.SetLayoutMode{Mode: core.ModeScrolling, Area: a.bodyArea()}); err != nil {
+		t.Fatal(err)
+	}
+
+	run(a, a.relayout())
+
+	if _, drawn := a.layoutRects()["p1"]; drawn {
+		t.Fatal("p1 should be hidden")
+	}
+
+	for _, id := range []core.PaneID{"p1", "p2", "p3"} {
+		if cols, rows := paneSizeOf(a, id); cols != 48 || rows != 26 {
+			t.Errorf("%s PTY = %dx%d, want 48x26", id, cols, rows)
+		}
+	}
+}
+
 func TestFocusResizeZoom(t *testing.T) {
 	a, st := lifeAppSized(t, 100, 30)
 
@@ -377,17 +414,17 @@ func TestFocusResizeZoom(t *testing.T) {
 		assertSizes(t, a)
 	}
 
-	// Resizes reach the process: p1 shrank to 44 columns and grew back to 49.
+	// Resizes reach the process: p1 shrank to 43 columns and grew back to 48.
 	var sawNarrow bool
 
 	for _, r := range st.proc(0).resized() {
-		if r[0] == 44 {
+		if r[0] == 43 {
 			sawNarrow = true
 		}
 	}
 
 	if !sawNarrow {
-		t.Errorf("p1 resizes = %v, want one with 44 columns", st.proc(0).resized())
+		t.Errorf("p1 resizes = %v, want one with 43 columns", st.proc(0).resized())
 	}
 }
 
@@ -1197,9 +1234,9 @@ func TestSwapCommands(t *testing.T) {
 	})
 }
 
-// A pane the tiny body leaves out has no tile, so focus never steps onto it.
+// A pane the tiny body leaves out has no rect, so focus never steps onto it.
 func TestFocusSkipsPanesLeftOutOfATinyBody(t *testing.T) {
-	a, _ := lifeAppSized(t, 12, 7)
+	a, _ := lifeAppSized(t, 12, 11)
 
 	chord(a, 's')
 	chord(a, 's')
@@ -1209,18 +1246,18 @@ func TestFocusSkipsPanesLeftOutOfATinyBody(t *testing.T) {
 		t.Fatalf("panes = %d, want 3", len(st.Panes))
 	}
 
-	if _, drawn := a.layoutRects()["p3"]; drawn {
-		t.Fatalf("p3 is drawn in a 12x7 terminal: %v", a.layoutRects())
+	if _, drawn := a.layoutRects()["p2"]; drawn {
+		t.Fatalf("p2 is drawn in a 12x11 terminal: %v", a.layoutRects())
 	}
 
-	if err := a.dispatch(core.FocusPane{ID: "p2"}); err != nil {
+	if err := a.dispatch(core.FocusPane{ID: "p1"}); err != nil {
 		t.Fatal(err)
 	}
 
 	chord(a, 'j')
 
-	if got := a.store.State().Tab().Focus; got != "p2" {
-		t.Errorf("Focus = %q after focus down, want p2 (p3 has no tile)", got)
+	if got := a.store.State().Tab().Focus; got != "p3" {
+		t.Errorf("Focus = %q after focus down, want p3 (p2 has no rect)", got)
 	}
 }
 
@@ -1235,11 +1272,11 @@ func TestWindowResizeThroughTinyAndBack(t *testing.T) {
 		sized(t, a, sz[0], sz[1])
 		assertSizes(t, a)
 
-		inner := a.innerArea()
+		inner := a.bodyArea()
 		cells := map[[2]int]core.PaneID{}
 
 		for id, r := range a.layoutRects() {
-			if r.W < 1 || r.H < 1 || r.X < inner.X || r.Y < inner.Y ||
+			if r.W < minFrame || r.H < minFrame || r.X < inner.X || r.Y < inner.Y ||
 				r.X+r.W > inner.X+inner.W || r.Y+r.H > inner.Y+inner.H {
 				t.Fatalf("%dx%d: %s = %+v outside %+v", sz[0], sz[1], id, r, inner)
 			}

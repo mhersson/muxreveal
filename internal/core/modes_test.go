@@ -39,7 +39,7 @@ func columnsOf(t Tab) [][]PaneID {
 }
 
 // checkArrangement asserts the drawing rules in inner: every rect is inside
-// inner, non-empty and disjoint from the others; Sizes covers Rects; a pane
+// inner, at least minPane square and disjoint from the others; Sizes covers Rects; a pane
 // missing from Rects is missing from Sizes unless its scrolling column is
 // hidden.
 func checkArrangement(t *testing.T, tab Tab, inner Rect, lc LayoutConfig) Arrangement {
@@ -55,7 +55,7 @@ func checkArrangement(t *testing.T, tab Tab, inner Rect, lc LayoutConfig) Arrang
 	})
 	for i, id := range ids {
 		r := a.Rects[id]
-		if r.W < 1 || r.H < 2 {
+		if r.W < minPane || r.H < minPane {
 			t.Fatalf("%s: %s has rect %+v", label, id, r)
 		}
 		if r.X < inner.X || r.Y < inner.Y || r.X+r.W > inner.X+inner.W || r.Y+r.H > inner.Y+inner.H {
@@ -121,6 +121,26 @@ func TestArrangeEveryModeFillsInner(t *testing.T) {
 	}
 }
 
+// TestEveryModeLaysOutWithoutOverlap lays 1 to 6 panes and 64 panes out in
+// every mode at common body sizes: rects touch but never overlap, and the
+// few panes that fit are all drawn.
+func TestEveryModeLaysOutWithoutOverlap(t *testing.T) {
+	bodies := []Rect{{0, 1, 80, 24}, {0, 1, 160, 45}, {0, 1, 20, 6}}
+	for _, mode := range allModes {
+		for _, n := range []int{1, 2, 3, 4, 5, 6, 64} {
+			for _, body := range bodies {
+				t.Run(fmt.Sprintf("%s/%d/%dx%d", mode, n, body.W, body.H), func(t *testing.T) {
+					s := openN(t, mode, n, defaultLayout())
+					a := checkArrangement(t, s.Tab(), body, s.Layout)
+					if fits := n <= 4 && body.W >= 80 || n <= 6 && body.W >= 160; fits && mode != ModeScrolling && len(a.Rects) != n {
+						t.Errorf("drew %d of %d panes", len(a.Rects), n)
+					}
+				})
+			}
+		}
+	}
+}
+
 func TestMasterStackGeometry(t *testing.T) {
 	s := openN(t, ModeMaster, 3, defaultLayout())
 	a := Arrange(s.Tab(), modeInner, s.Layout)
@@ -129,7 +149,7 @@ func TestMasterStackGeometry(t *testing.T) {
 		t.Errorf("master rect %+v: want the full height at the left edge", p1)
 	}
 	for _, id := range []PaneID{"p2", "p3"} {
-		if r := a.Rects[id]; r.X <= p1.X+p1.W {
+		if r := a.Rects[id]; r.X < p1.X+p1.W {
 			t.Errorf("%s rect %+v is not right of the master %+v", id, r, p1)
 		}
 	}
@@ -187,6 +207,22 @@ func TestScrollingVisibleColumns(t *testing.T) {
 	}
 }
 
+func TestScrollingHiddenColumnIsAtLeastOneFramedCell(t *testing.T) {
+	tab := Tab{
+		Mode: ModeScrolling, Focus: "p1", Panes: []PaneID{"p1", "p2", "p3", "p4"},
+		Columns: []Column{{Panes: []PaneID{"p1"}, Width: 0.95}, {Panes: []PaneID{"p2"}, Width: 0.1}, {Panes: []PaneID{"p3", "p4"}, Width: 0.1}},
+	}
+	a := Arrange(tab, Rect{0, 1, 20, 9}, LayoutConfig{})
+	if a.HiddenRight != 2 || len(a.Rects) != 1 {
+		t.Fatalf("hidden %d/%d, drew %v", a.HiddenLeft, a.HiddenRight, a.Rects)
+	}
+	for id, wantH := range map[PaneID]int{"p2": 9, "p3": 5, "p4": 4} {
+		if got := a.Sizes[id]; got.W != minPane || got.H != wantH {
+			t.Errorf("hidden %s size %+v, want %dx%d", id, got, minPane, wantH)
+		}
+	}
+}
+
 func TestScrollingVisibleColumnsStretch(t *testing.T) {
 	lc := defaultLayout()
 	lc.ColumnWidth = 30
@@ -200,8 +236,8 @@ func TestScrollingVisibleColumnsStretch(t *testing.T) {
 	if last.X+last.W != modeInner.X+modeInner.W {
 		t.Errorf("last column ends at %d, want the body edge %d", last.X+last.W, modeInner.X+modeInner.W)
 	}
-	if a.Rects["p1"].X+a.Rects["p1"].W+1 != a.Rects["p2"].X {
-		t.Errorf("columns are not one cell apart: %+v %+v", a.Rects["p1"], a.Rects["p2"])
+	if a.Rects["p1"].X+a.Rects["p1"].W != a.Rects["p2"].X {
+		t.Errorf("columns do not touch: %+v %+v", a.Rects["p1"], a.Rects["p2"])
 	}
 }
 
@@ -746,17 +782,17 @@ func TestTinyAndOddSizesInEveryMode(t *testing.T) {
 func TestTinyAreaStillMovesFocus(t *testing.T) {
 	// A body too small to draw the focused pane: the move uses the virtual rect.
 	t.Run("bsp", func(t *testing.T) {
-		s := stateOf(stackTree(), "p3")
-		if _, ok := Arrange(s.Tab(), tinyArea, s.Layout).Rects["p3"]; ok {
-			t.Fatal("p3 should have no tile in the tiny area")
+		s := stateOf(stackTree(), "p2")
+		if _, ok := Arrange(s.Tab(), tinyArea, s.Layout).Rects["p2"]; ok {
+			t.Fatal("p2 should have no rect in the tiny area")
 		}
 		got := dispatch(t, s, FocusDir{Dir: Up, Area: tinyArea})
-		if got.Tab().Focus != "p2" {
-			t.Errorf("Focus = %q, want p2", got.Tab().Focus)
+		if got.Tab().Focus != "p1" {
+			t.Errorf("Focus = %q, want p1", got.Tab().Focus)
 		}
 		got = dispatch(t, s, SwapDir{Dir: Up, Area: tinyArea})
-		if show(got.Tab().Layout) != "h(p1,h(p3,p2))" {
-			t.Errorf("layout = %s, want p3 swapped above p2", show(got.Tab().Layout))
+		if show(got.Tab().Layout) != "h(p2,h(p1,p3))" {
+			t.Errorf("layout = %s, want p2 swapped above p1", show(got.Tab().Layout))
 		}
 	})
 	t.Run("master-stack", func(t *testing.T) {
@@ -815,7 +851,7 @@ func TestStackedScrollingColumnNeverOverlaps(t *testing.T) {
 	})
 	t.Run("stacked column next to a hidden one", func(t *testing.T) {
 		s := stackedColumn(t, 5, 2)
-		for h := 2; h <= 12; h++ {
+		for h := 3; h <= 12; h++ {
 			a := checkArrangement(t, s.Tab(), Rect{1, 1, 60, h}, s.Layout)
 			if a.HiddenRight != 1 {
 				t.Fatalf("h=%d: hidden right %d, want 1", h, a.HiddenRight)
