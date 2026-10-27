@@ -196,10 +196,13 @@ func (a *App) frameBody(g geometry, st core.State, lk look, rail []string, railW
 	focus := st.Tab().Focus
 	leftPane, rightPane := edgePanes(g)
 	now := a.clock.Now()
+	// The focused pane draws as unfocused while the rail has the keyboard, so
+	// one element shows it.
+	railKeys := a.rail.focused && a.railShows(st.Rail)
 
 	for id, r := range g.rects {
 		own := ownNone
-		if id == focus {
+		if id == focus && !railKeys {
 			own = kindOwner(st.Panes[id].Kind)
 		}
 
@@ -217,7 +220,7 @@ func (a *App) frameBody(g geometry, st core.State, lk look, rail []string, railW
 			styles = flashStyles(styles, lk.theme.UI.Match)
 		}
 
-		drawBox(add, r, a.topBorder(st, id, r, id == focus, styles), a.bottomBorder(id, r, hl, hr, styles), own, styles)
+		drawBox(add, r, a.topBorder(st, id, r, id == focus, id == focus && !railKeys, styles), a.bottomBorder(id, r, hl, hr, styles), own, styles)
 	}
 
 	for id, r := range g.rects {

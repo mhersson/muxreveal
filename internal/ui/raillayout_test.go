@@ -72,12 +72,18 @@ func TestRailClampTop(t *testing.T) {
 	}{
 		{"fits already", 20, 0, 0, 0},
 		{"first card shows its header", 20, 5, 0, 0},
-		{"scrolls down to show the blank below", 10, 0, 3, 12},
+		{"scrolls down to show the blank below, on a whole card", 10, 0, 3, 16},
 		{"scrolls up to show the blank above", 10, 20, 1, 6},
 		{"first card of a group brings its header", 10, 30, 4, 22},
-		{"last card ends at the list end", 10, 0, 5, len(rows) - 10},
+		{"last card: the top snaps down, keeping its blank rows", 10, 0, 5, 28},
 		{"too short: the first line wins", 3, 0, 2, 12},
-		{"no selection leaves the top, clamped", 10, 99, -1, len(rows) - 10},
+		{"no selection: the clamped top snaps to a blank row", 10, 99, -1, 23},
+		{"mid-card top moves up to the card's blank row", 10, 3, -1, 1},
+		{"mid-card top in a later card", 10, 14, -1, 11},
+		{"a top on a blank row stays", 10, 11, -1, 11},
+		{"a top on a header stays", 10, 22, -1, 22},
+		{"selected card whole: snap down past the mid-card top", 10, 13, 3, 16},
+		{"selected card whole: snap up when it still fits", 12, 9, 2, 6},
 		{"negative top", 10, -4, -1, 0},
 	}
 

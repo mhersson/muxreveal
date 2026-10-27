@@ -12,6 +12,7 @@ import (
 
 	"github.com/mhersson/muxreveal/internal/core"
 	"github.com/mhersson/muxreveal/internal/git"
+	"github.com/mhersson/muxreveal/internal/ui/theme"
 )
 
 // railAgent is one agent of the rail fixtures.
@@ -614,4 +615,45 @@ func TestRailBottomCounts(t *testing.T) {
 			}
 		})
 	}
+}
+
+// While the rail has the keyboard the tab's focused pane draws as an unfocused
+// one: Border frame, Muted title. The jump flash still wins.
+func TestRailFocusedPaneDrawsUnfocused(t *testing.T) {
+	a := drawApp(t, "catppuccin-mocha", true, 100, 30, railFixtureAgents())
+	ui := a.current().theme.UI
+	a.relayout()
+
+	st := a.store.State()
+	id := st.Tab().Focus
+	r := a.layoutRects()[id]
+
+	kindC := ui.Shell
+	if st.Panes[id].Kind == core.KindAgent {
+		kindC = ui.Agent
+	}
+
+	// The corner is the frame, the cell after "icon " is the first title cell.
+	check := func(name string, border, title theme.Hex) {
+		t.Helper()
+
+		vt := lineVT(t, strings.Split(a.View().Content, "\n")[r.Y], 100)
+		if c := vt.CellAt(r.X, 0); c == nil || hexOf(c.Style.Fg) != string(border) {
+			t.Errorf("%s: frame = %+v, want %v", name, c, border)
+		}
+
+		if c := vt.CellAt(r.X+5, 0); c == nil || hexOf(c.Style.Fg) != string(title) {
+			t.Errorf("%s: title = %+v, want %v", name, c, title)
+		}
+	}
+
+	check("panes have the keyboard", kindC, kindC)
+
+	a.rail.focused = true
+
+	check("rail has the keyboard", ui.Border, ui.Muted)
+
+	a.rail.flashPane, a.rail.flashUntil = id, t0.Add(600*time.Millisecond)
+
+	check("flashed", ui.Match, ui.Match)
 }

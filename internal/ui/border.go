@@ -81,12 +81,13 @@ const titleRoomMin = 4
 
 // topBorder returns the title and tags set into the top border of the pane at
 // r: the title after the left corner and a dash, the tags before the right
-// corner. The cells between them stay border.
-func (a *App) topBorder(s core.State, id core.PaneID, r core.Rect, focused bool, st styles) []segment {
+// corner. The cells between them stay border. bright draws the title in the
+// kind colour; focused alone decides the focus-only tags.
+func (a *App) topBorder(s core.State, id core.PaneID, r core.Rect, focused, bright bool, st styles) []segment {
 	meta := s.Panes[id]
 
 	kindStyle, titleStyle := st.kind(meta.Kind), st.titleMuted
-	if focused {
+	if bright {
 		titleStyle = kindStyle
 	}
 

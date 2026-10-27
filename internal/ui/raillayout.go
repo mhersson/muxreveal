@@ -97,26 +97,31 @@ func railLayout(groups []railGroup) []railRow {
 
 // railClampTop is the first row shown in h rows: top moved the least that shows
 // the selected card with its blank rows and, for the first card of a group, the
-// group's header. When they do not fit, the card's first line wins. card is the
-// selected card's index, -1 for none.
+// group's header, then snapped to a group header or a card's blank row so the
+// list never starts mid-card. When the card and its blank rows do not fit, the
+// card's first line wins. card is the selected card's index, -1 for none.
 func railClampTop(rows []railRow, h, top, card int) int {
-	top = min(max(top, 0), max(len(rows)-h, 0))
-	if card < 0 || h <= 0 {
+	maxTop := max(len(rows)-h, 0)
+	top = min(max(top, 0), maxTop)
+
+	if h <= 0 {
 		return top
 	}
 
 	f := -1
 
-	for i, r := range rows {
-		if r.kind == railRowCard && r.card == card && r.line == 0 {
-			f = i
+	if card >= 0 {
+		for i, r := range rows {
+			if r.kind == railRowCard && r.card == card && r.line == 0 {
+				f = i
 
-			break
+				break
+			}
 		}
 	}
 
 	if f < 0 {
-		return top
+		return railSnapTop(rows, top, 0, maxTop)
 	}
 
 	lo, hi := f-1, f+railCardLines
@@ -137,7 +142,58 @@ func railClampTop(rows []railRow, h, top, card int) int {
 		top = hi - h + 1
 	}
 
+	// lo is a boundary within reach, so a snap that keeps the blank rows around
+	// the card always exists, even when it leaves empty rows below the list end.
+	return railSnapTop(rows, top, max(hi-h+1, 0), lo)
+}
+
+// railSnapTop is top moved to a boundary in [from, to], or top itself when
+// there is none.
+func railSnapTop(rows []railRow, top, from, to int) int {
+	if t, ok := railSnapIn(rows, top, from, to); ok {
+		return t
+	}
+
 	return top
+}
+
+// railSnapIn is the last boundary row in [from, to] at or above top, else the
+// first one below it. A boundary is a group header or a card's blank row.
+func railSnapIn(rows []railRow, top, from, to int) (int, bool) {
+	best := -1
+
+	for i := max(from, 0); i <= to && i < len(rows); i++ {
+		if !railBoundary(rows, i) {
+			continue
+		}
+
+		if i <= top {
+			best = i
+
+			continue
+		}
+
+		if best < 0 {
+			best = i
+		}
+
+		break
+	}
+
+	return best, best >= 0
+}
+
+// railBoundary reports whether row i is where the list may start: a group
+// header or the blank row above a card.
+func railBoundary(rows []railRow, i int) bool {
+	switch rows[i].kind {
+	case railRowHeader:
+		return true
+	case railRowBlank:
+		return i+1 < len(rows) && rows[i+1].kind == railRowCard
+	}
+
+	return false
 }
 
 // railGeom is where the parts of the rail's box sit; a y of -1 means the part
