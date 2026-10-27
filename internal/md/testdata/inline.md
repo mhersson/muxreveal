@@ -13,6 +13,6 @@ Note[^1] with a footnote.
 
 [^1]: The note.
 
-# Heading skipped
+# Heading
 
 Tail 日本語のテキスト and 😀 emoji with a-very-long-unbreakable-word-that-needs-cutting-by-cells-at-narrow-widths.

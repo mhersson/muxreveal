@@ -29,6 +29,10 @@ func cellsOf(segs []seg) ([]cell, []style) {
 	)
 
 	for _, sg := range segs {
+		if sg.img != nil {
+			continue
+		}
+
 		if sg.brk {
 			cells = append(cells, cell{k: cellBreakHard})
 

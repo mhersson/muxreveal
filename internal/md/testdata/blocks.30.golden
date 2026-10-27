@@ -1,0 +1,22 @@
+‹Heading1,b:Review drawer›
+‹Rule:──────────────────────────────›
+
+Intro with ‹Link,u:a link› and ‹Code: code ›.
+
+‹Heading2,b:Checklist›
+
+  ‹TaskDone,b:✓ ›‹TaskDoneText:tests›
+  ‹TaskOpen:○ ›docs
+    ‹Bullet:◦ ›nested
+
+‹AlertNote:▎ ›‹AlertNote,b:󰋽 Note›
+‹AlertNote:▎ ›Mind the gap.
+
+‹SummaryMark,b:▸ ›‹Summary,b:Details›‹FoldHint:   enter opens›
+
+‹Image:󰥶 badge  ›‹ImageHost:img.shields.io›
+
+Done‹FootnoteRef:[1]›.
+
+‹FootnoteRule:────────────────›
+‹FootnoteNumber: 1. ›‹FootnoteText:The note.›

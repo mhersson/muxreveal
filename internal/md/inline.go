@@ -2,6 +2,8 @@ package md
 
 import (
 	"html"
+	"net/url"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"unicode"
@@ -44,13 +46,19 @@ const (
 	spaceFixed                  // plain cells that never wrap
 )
 
-// seg is a piece of inline text in one style, or a hard line break.
+// seg is a piece of inline text in one style, a line break or an image.
 type seg struct {
 	text string
 	st   style
 	sp   spaceMode
 	brk  bool
+	soft bool      // a break from a block tag, which collapses with its neighbours
+	img  *imageRef // an image, which takes a line of its own
 }
+
+// imageRef is an image seen in inline content. src and host are empty when the
+// source is not one the layout can name.
+type imageRef struct{ alt, src, host string }
 
 // inliner flattens one block's inline nodes into segs.
 type inliner struct {
@@ -59,6 +67,7 @@ type inliner struct {
 
 	// Inline HTML opens and closes in separate nodes, so its state outlives one.
 	bold, italic, kbd int
+	block             bool // inside an HTML block: block tags break the line
 	anchor            bool
 	anchorLink        int
 	anchorPath        string
@@ -135,13 +144,13 @@ func (in *inliner) walk(n ast.Node, st style, depth int) {
 		case *ast.AutoLink:
 			in.text(c.Label.Value(in.l.d.src), in.linkStyle(st, c.Destination.Value(in.l.d.src)))
 		case *ast.RawHTML:
-			in.html(c.Value.Value(in.l.d.src))
+			in.html(c.Value.Value(in.l.d.src), st)
 		case *east.FootnoteReference:
 			st2 := st
 			st2.role = RoleFootnoteRef
 			in.segs = append(in.segs, seg{text: "[" + strconv.Itoa(c.Index) + "]", st: in.eff(st2)})
 		case *ast.Image:
-			// Images lay out nothing until they have their own line.
+			in.image(in.altText(c), c.Destination.Value(in.l.d.src), st)
 		default:
 			in.walk(c, st, depth+1)
 		}
@@ -209,13 +218,19 @@ func (in *inliner) code(s string, st style) {
 }
 
 // html applies one inline HTML node: tags are dropped, a few change the style.
-func (in *inliner) html(raw string) {
+func (in *inliner) html(raw string, st style) {
 	name, closing, ok := tagName(raw)
 	if !ok {
 		return
 	}
 
-	if name != "br" && name != "a" && strings.HasSuffix(raw, "/>") {
+	if in.block && breaksBlock(name) {
+		in.segs = append(in.segs, seg{brk: true, soft: true})
+
+		return
+	}
+
+	if name != "br" && name != "a" && name != "img" && strings.HasSuffix(raw, "/>") {
 		return
 	}
 
@@ -235,6 +250,12 @@ func (in *inliner) html(raw string) {
 		if !closing {
 			in.segs = append(in.segs, seg{brk: true})
 		}
+	case "img":
+		if !closing {
+			alt, _ := tagAttr(raw, "alt")
+			src, _ := tagAttr(raw, "src")
+			in.image(alt, src, st)
+		}
 	case "a":
 		in.anchor = false
 
@@ -247,6 +268,189 @@ func (in *inliner) html(raw string) {
 			in.anchorLink, in.anchorPath = in.l.addLink(in.l.d.resolve(href))
 		}
 	}
+}
+
+// image adds an image seg; its source resolves by the link rules and only an
+// http or https URL or a local path is kept.
+func (in *inliner) image(alt, dest string, st style) {
+	ref := &imageRef{alt: strings.Join(strings.Fields(cleanProse(alt)), " ")}
+	res := in.l.d.resolve(dest)
+
+	switch {
+	case res.url != "":
+		if u, err := url.Parse(res.url); err == nil && (u.Scheme == "http" || u.Scheme == "https") {
+			ref.src, ref.host = res.url, u.Host
+		}
+	case res.path != "":
+		ref.src, ref.host = res.path, filepath.Base(res.path)
+	}
+
+	in.segs = append(in.segs, seg{img: ref, st: in.eff(st)})
+}
+
+// altText is the plain text under an image node.
+func (in *inliner) altText(n ast.Node) string {
+	var b strings.Builder
+
+	_ = ast.Walk(n, func(c ast.Node, entering bool) (ast.WalkStatus, error) {
+		if !entering {
+			return ast.WalkContinue, nil
+		}
+
+		switch c := c.(type) {
+		case *ast.Text:
+			b.WriteString(c.Value.Value(in.l.d.src))
+
+			if c.SoftLineBreak() || c.HardLineBreak() {
+				b.WriteByte(' ')
+			}
+		case *ast.CodeSpan:
+			b.WriteString(c.Value.Value(in.l.d.src))
+
+			return ast.WalkSkipChildren, nil
+		}
+
+		return ast.WalkContinue, nil
+	})
+
+	return b.String()
+}
+
+// htmlSegs flattens the text of an HTML block or fragment by the inline-HTML
+// rules: tags are dropped, a few style the text, block tags break the line and
+// script and style content is dropped.
+func (l *layouter) htmlSegs(raw string) []seg {
+	in := &inliner{l: l, anchorLink: -1, block: true}
+	st := plainStyle()
+
+	for i := 0; i < len(raw); {
+		j := strings.IndexByte(raw[i:], '<')
+		if j < 0 {
+			in.text(html.UnescapeString(raw[i:]), st)
+
+			break
+		}
+
+		if j > 0 {
+			in.text(html.UnescapeString(raw[i:i+j]), st)
+		}
+
+		i += j
+
+		if strings.HasPrefix(raw[i:], "<!--") {
+			end := strings.Index(raw[i+4:], "-->")
+			if end < 0 {
+				break
+			}
+
+			i += 4 + end + 3
+
+			continue
+		}
+
+		name, closing, ok := tagName(raw[i:])
+		if !ok {
+			if i+1 < len(raw) && (raw[i+1] == '!' || raw[i+1] == '?') {
+				i = tagEnd(raw, i)
+			} else {
+				in.text("<", st)
+
+				i++
+			}
+
+			continue
+		}
+
+		end := tagEnd(raw, i)
+		in.html(raw[i:end], st)
+		i = end
+
+		if !closing && (name == "script" || name == "style") {
+			i = skipRaw(raw, i, name)
+		}
+	}
+
+	return settleBreaks(in.segs)
+}
+
+// tagEnd returns the index after the '>' that closes the tag at raw[i], not
+// counting a '>' inside a quoted attribute value; len(raw) when there is none.
+func tagEnd(raw string, i int) int {
+	var quote byte
+
+	for j := i + 1; j < len(raw); j++ {
+		switch c := raw[j]; {
+		case quote != 0:
+			if c == quote {
+				quote = 0
+			}
+		case c == '"' || c == '\'':
+			quote = c
+		case c == '>':
+			return j + 1
+		}
+	}
+
+	if gt := strings.IndexByte(raw[i:], '>'); gt >= 0 {
+		return i + gt + 1
+	}
+
+	return len(raw)
+}
+
+// skipRaw returns the index after the closing tag of name, or len(raw).
+func skipRaw(raw string, i int, name string) int {
+	for i < len(raw) {
+		j := strings.IndexByte(raw[i:], '<')
+		if j < 0 {
+			break
+		}
+
+		i += j
+		if n, closing, ok := tagName(raw[i:]); ok && closing && n == name {
+			return tagEnd(raw, i)
+		}
+
+		i++
+	}
+
+	return len(raw)
+}
+
+// settleBreaks drops block-tag breaks that follow another break or open the
+// text, and those that close it.
+func settleBreaks(segs []seg) []seg {
+	out := segs[:0]
+	atBreak := true
+
+	for _, sg := range segs {
+		switch {
+		case sg.soft && atBreak:
+			continue
+		case sg.brk:
+			atBreak = true
+		case sg.img != nil || strings.TrimSpace(sg.text) != "":
+			atBreak = false
+		}
+
+		out = append(out, sg)
+	}
+
+	for len(out) > 0 && out[len(out)-1].soft {
+		out = out[:len(out)-1]
+	}
+
+	return out
+}
+
+// breaksBlock reports the tags that start a new line inside an HTML block.
+func breaksBlock(name string) bool {
+	switch name {
+	case "p", "div", "li", "tr", "h1", "h2", "h3", "h4", "h5", "h6":
+		return true
+	}
+
+	return false
 }
 
 // addLink registers res and returns the Link index (-1 for none) and the path.

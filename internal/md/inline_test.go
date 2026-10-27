@@ -451,8 +451,8 @@ func TestFootnoteRef(t *testing.T) {
 	tests := []struct {
 		name, src, want string
 	}{
-		{"defined", "x[^1] y\n\n[^1]: note", "x‹FootnoteRef:[1]› y\n"},
-		{"numbered by first reference", "a[^b] c[^a]\n\n[^a]: one\n\n[^b]: two", "a‹FootnoteRef:[1]› c‹FootnoteRef:[2]›\n"},
+		{"defined", "x[^1] y\n\n[^1]: note", "x‹FootnoteRef:[1]› y\n\n‹FootnoteRule:────────────────›\n‹FootnoteNumber: 1. ›‹FootnoteText:note›\n"},
+		{"numbered by first reference", "a[^b] c[^a]\n\n[^a]: one\n\n[^b]: two", "a‹FootnoteRef:[1]› c‹FootnoteRef:[2]›\n\n‹FootnoteRule:────────────────›\n‹FootnoteNumber: 1. ›‹FootnoteText:two›\n‹FootnoteNumber: 2. ›‹FootnoteText:one›\n"},
 		{"undefined stays as written", "z [^2]", "z [^2]\n"},
 	}
 	for _, tt := range tests {
@@ -464,15 +464,14 @@ func TestFootnoteRef(t *testing.T) {
 	}
 }
 
-func TestParagraphsAndSkippedBlocks(t *testing.T) {
+func TestParagraphsAndSkippedCode(t *testing.T) {
 	tests := []struct {
 		name, src string
 		want      []string
 	}{
 		{"one blank line between paragraphs", "a\n\nb\n\n\n\nc", []string{"a", "", "b", "", "c"}},
-		{"skipped blocks leave no gap", "# h\n\na\n\n---\n\n```\ncode\n```\n\nb", []string{"a", "", "b"}},
+		{"code blocks lay out nothing yet", "a\n\n```\ncode\n```\n\nb", []string{"a", "", "b"}},
 		{"empty paragraph lays out nothing", "<!-- x -->\n\na", []string{"a"}},
-		{"image lays out nothing yet", "![alt](http://e.com/i.png)\n\na", []string{"a"}},
 		{"empty document", "", nil},
 	}
 	for _, tt := range tests {

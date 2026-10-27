@@ -24,6 +24,9 @@ then done & entities
 Note‹FootnoteRef:[1]› with a
 footnote.
 
+‹Heading1,b:Heading›
+‹Rule:────────────────────›
+
 Tail
 日本語のテキスト and
 😀 emoji with
@@ -31,3 +34,6 @@ a-very-long-unbreaka
 ble-word-that-needs-
 cutting-by-cells-at-
 narrow-widths.
+
+‹FootnoteRule:────────────────›
+‹FootnoteNumber: 1. ›‹FootnoteText:The note.›
