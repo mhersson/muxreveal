@@ -135,6 +135,8 @@ func (a *App) startPane(id core.PaneID, kind core.PaneKind, cwd string, cols, ro
 
 	c := term.ShellCommand(a.getenv, cwd, env)
 	if kind == core.KindAgent {
+		// Restored and restarted agents use the app's harness; a second harness
+		// must pass the pane's own (harness.ByID(Pane.Harness)).
 		c = term.AgentCommand(a.getenv, cwd, a.harness.Launch(a.hookSettings, resume), env)
 	}
 
@@ -487,6 +489,10 @@ func (a *App) applyKind(p *pane, fg string) tea.Cmd {
 			return nil
 		case fg != h.Program():
 			return a.restartFresh(p.id)
+		default:
+			// A refused resume exits within about a second, so Claude still
+			// in the foreground now did resume, with or without its hooks.
+			p.resuming = false
 		}
 	}
 

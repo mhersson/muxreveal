@@ -540,6 +540,31 @@ func TestResumeKept(t *testing.T) {
 		}
 	})
 
+	t.Run("claude seen without a SessionStart ends the resume", func(t *testing.T) {
+		r := resumeApp(t)
+		r.st.proc(0).setFg("claude")
+		probeAt(t, r, "p1", agentGrace)
+
+		if r.a.panes["p1"].resuming {
+			t.Fatal("pane still resuming with claude in the foreground after the grace period")
+		}
+
+		r.st.proc(0).setFg("zsh")
+		probeAt(t, r, "p1", time.Second)
+
+		if r.st.count() != 3 {
+			t.Errorf("starts = %d, want no restart after claude exits", r.st.count())
+		}
+
+		if kindOf(r.a, "p1") != core.KindShell {
+			t.Errorf("kind = %q, want a shell", kindOf(r.a, "p1"))
+		}
+
+		if r.a.notice != "" {
+			t.Errorf("notice = %q, want none", r.a.notice)
+		}
+	})
+
 	t.Run("an unknown foreground changes nothing", func(t *testing.T) {
 		r := resumeApp(t)
 		r.st.proc(0).setFg("")
