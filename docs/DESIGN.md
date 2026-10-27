@@ -510,12 +510,29 @@ type PRSource struct { // returns ErrNotImplemented until the PR milestone
 	Base, Head string
 }
 
-type Status string // added, deleted, modified, renamed, copied, mode
+type Status string
+
+const (
+	Added       Status = "added"
+	Deleted     Status = "deleted"
+	Modified    Status = "modified"
+	Renamed     Status = "renamed"
+	Copied      Status = "copied"
+	ModeChanged Status = "mode"
+)
+
+type LineKind byte
+
+const (
+	Context LineKind = ' '
+	Add     LineKind = '+'
+	Del     LineKind = '-'
+)
 
 type Line struct {
-	Kind      LineKind // context, add or del
-	Old, New  int      // line numbers; 0 on the side the line is not on
-	Text      string   // as git printed it, without its newline
+	Kind      LineKind
+	Old, New  int    // line numbers; 0 on the side the line is not on
+	Text      string // as git printed it, without its newline
 	NoNewline bool
 }
 
@@ -546,6 +563,13 @@ type Result struct {
 
 type Limits struct{ Files, Bytes, Lines int }
 
+func DefaultLimits() Limits // Files 400, Bytes 2 << 20, Lines 5000
+
+var ErrNoSnapshot, ErrNoTurns, ErrNotImplemented error
+
+type Engine struct{ /* limits, temp dir, cache */ }
+
+func NewEngine(l Limits, tempDir string) *Engine // zero fields of l take the defaults
 func (e *Engine) Diff(ctx context.Context, src Source) (Result, error)
 ```
 
