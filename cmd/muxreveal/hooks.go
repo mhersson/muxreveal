@@ -73,6 +73,10 @@ func setupHooks(logger *slog.Logger, stateDir string) (hookRuntime, error) {
 	settingsPath := filepath.Join(runDir, strconv.Itoa(pid)+"-claude.json")
 	sockPath := filepath.Join(runDir, strconv.Itoa(pid)+".sock")
 
+	if len(sockPath) > maxSockPath {
+		return hookRuntime{}, fmt.Errorf("socket path too long (%d bytes, at most %d)", len(sockPath), maxSockPath)
+	}
+
 	settings, err := harness.Claude{}.Settings(exe)
 	if err != nil {
 		return hookRuntime{}, err

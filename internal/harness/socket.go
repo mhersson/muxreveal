@@ -57,7 +57,7 @@ func Listen(path string) (*Server, error) {
 
 	ln, err := net.Listen("unix", path)
 	if err != nil {
-		return nil, fmt.Errorf("harness: listen on %s: %w", path, err)
+		return nil, fmt.Errorf("harness: listen: %w", err)
 	}
 
 	if err := os.Chmod(path, 0o600); err != nil {

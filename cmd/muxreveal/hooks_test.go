@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
 	"os"
@@ -102,6 +103,24 @@ func TestStartHooksFailureTurnsHooksOff(t *testing.T) {
 
 	if !strings.HasPrefix(h.Notice, "agent hooks are off: ") {
 		t.Errorf("notice = %q, want the hooks-off notice", h.Notice)
+	}
+}
+
+func TestStartHooksNamesAnOverlongSocketPath(t *testing.T) {
+	stateDir := filepath.Join(t.TempDir(), strings.Repeat("d", maxSockPath))
+
+	h := startHooks(discardLogger(), stateDir)
+	defer h.Stop()
+
+	if h.Settings != "" || h.Sock != "" || h.Events != nil {
+		t.Errorf("runtime = %+v, want no settings, socket or events", h)
+	}
+
+	sock := filepath.Join(stateDir, "run", strconv.Itoa(os.Getpid())+".sock")
+	want := fmt.Sprintf("agent hooks are off: socket path too long (%d bytes, at most %d)", len(sock), maxSockPath)
+
+	if h.Notice != want {
+		t.Errorf("notice = %q, want %q", h.Notice, want)
 	}
 }
 
