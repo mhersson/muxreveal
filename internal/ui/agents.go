@@ -66,6 +66,10 @@ func (a *App) onHook(ev harness.Event) tea.Cmd {
 		_ = a.dispatch(core.SetAgentState{ID: ev.Pane, State: core.AgentUnknown})
 	}
 
+	if ev.ActionSet {
+		_ = a.dispatch(core.SetAgentAction{ID: ev.Pane, Action: ev.Action})
+	}
+
 	if ev.State == core.AgentUnknown {
 		return nil
 	}

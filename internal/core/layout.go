@@ -98,6 +98,7 @@ type Pane struct {
 	Session    SessionID  // the latest session the agent reported; "" for none
 	Transcript string     // that session's transcript file, as the harness reported it
 	State      AgentState // not persisted
+	Action     string     // the agent's current action from its hooks; not persisted
 }
 
 // Dir is a direction for focus, resize and preselection. The zero value is

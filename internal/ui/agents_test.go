@@ -96,6 +96,41 @@ func TestHookEvents(t *testing.T) {
 	}
 }
 
+func TestHookEventsCarryTheAction(t *testing.T) {
+	a, _, _ := agentApp(t)
+
+	steps := []struct {
+		name   string
+		ev     harness.Event
+		state  core.AgentState
+		action string
+	}{
+		{"tool call", harness.Event{Pane: "p2", Name: "PreToolUse", State: core.AgentWorking, Action: "Edit a.go", ActionSet: true}, core.AgentWorking, "Edit a.go"},
+		{"tool done leaves it", harness.Event{Pane: "p2", Name: "PostToolUse", State: core.AgentWorking}, core.AgentWorking, "Edit a.go"},
+		{"no action field leaves it", harness.Event{Pane: "p2", Name: "Notification", State: core.AgentBlocked}, core.AgentBlocked, "Edit a.go"},
+		{"compact start clears without a state", harness.Event{Pane: "p2", Name: "SessionStart", Start: true, Session: "s1", ActionSet: true}, core.AgentBlocked, ""},
+		{"prompt", harness.Event{Pane: "p2", Name: "UserPromptSubmit", State: core.AgentWorking, Action: "thinking", ActionSet: true}, core.AgentWorking, "thinking"},
+		{"stop clears", harness.Event{Pane: "p2", Name: "Stop", State: core.AgentIdle, ActionSet: true}, core.AgentIdle, ""},
+		{"set again", harness.Event{Pane: "p2", Name: "PreToolUse", State: core.AgentWorking, Action: "Bash ls", ActionSet: true}, core.AgentWorking, "Bash ls"},
+		{"end clears", harness.Event{Pane: "p2", Name: "SessionEnd", End: true, ActionSet: true}, core.AgentUnknown, ""},
+	}
+
+	for _, s := range steps {
+		hook(a, s.ev)
+
+		m := a.store.State().Panes["p2"]
+		if m.State != s.state || m.Action != s.action {
+			t.Errorf("%s: pane = state %v action %q, want %v %q", s.name, m.State, m.Action, s.state, s.action)
+		}
+	}
+
+	hook(a, harness.Event{Pane: "p1", Name: "PreToolUse", Action: "Bash ls", ActionSet: true})
+
+	if got := a.store.State().Panes["p1"].Action; got != "" {
+		t.Errorf("a shell pane took the action %q", got)
+	}
+}
+
 func TestHookEventsThatDoNotFit(t *testing.T) {
 	a, _, _ := agentApp(t)
 

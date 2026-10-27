@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"strings"
+	"unicode"
 
 	"github.com/mhersson/muxreveal/internal/core"
 )
@@ -84,6 +86,121 @@ type claudePayload struct {
 	Source           string `json:"source"`
 	ToolName         string `json:"tool_name"`
 	NotificationType string `json:"notification_type"`
+	// Lenient: a payload with an odd shape here must not drop the state.
+	ToolInput json.RawMessage `json:"tool_input"`
+	Message   json.RawMessage `json:"message"`
+}
+
+// maxActionRunes bounds the action shown on a card.
+const maxActionRunes = 120
+
+// targetKeys are the tool_input fields that name what a tool works on, in order.
+var targetKeys = []string{"file_path", "notebook_path", "command", "pattern", "url", "query", "description"}
+
+// printable keeps the printable runes of s (no control, format or other
+// non-printing runes) and trims surrounding spaces.
+func printable(s string) string {
+	return strings.TrimSpace(strings.Map(func(r rune) rune {
+		if unicode.IsPrint(r) {
+			return r
+		}
+
+		return -1
+	}, s))
+}
+
+// clip makes s an action: printable runes only, at most maxActionRunes.
+func clip(s string) string {
+	s = printable(s)
+	if len(s) <= maxActionRunes {
+		return s
+	}
+
+	i := 0
+	for pos := range s {
+		if i == maxActionRunes {
+			return s[:pos]
+		}
+
+		i++
+	}
+
+	return s
+}
+
+// jsonString returns raw as a string, or "" when it is not a JSON string.
+func jsonString(raw json.RawMessage) string {
+	var s string
+	if json.Unmarshal(raw, &s) != nil {
+		return ""
+	}
+
+	return s
+}
+
+// toolTarget is "<tool> <target>"; the target is the first non-empty target
+// field, reduced to its first line. A tool_input that is not an object leaves
+// the tool name alone.
+func toolTarget(tool string, fields map[string]json.RawMessage) string {
+	for _, k := range targetKeys {
+		if t := printable(firstLine(jsonString(fields[k]))); t != "" {
+			return tool + " " + t
+		}
+	}
+
+	return tool
+}
+
+// objectFields reads a tool_input leniently; anything but an object gives nil.
+func objectFields(input json.RawMessage) map[string]json.RawMessage {
+	var fields map[string]json.RawMessage
+	if json.Unmarshal(input, &fields) != nil {
+		return nil
+	}
+
+	return fields
+}
+
+// toolAction is the PreToolUse action. AskUserQuestion shows its first
+// question when it has one.
+func toolAction(tool string, input json.RawMessage) string {
+	fields := objectFields(input)
+	if tool == "AskUserQuestion" {
+		if q := firstQuestion(fields["questions"]); q != "" {
+			return clip(firstLine(q))
+		}
+
+		return clip(tool)
+	}
+
+	return clip(toolTarget(tool, fields))
+}
+
+// firstQuestion returns the text of the first entry of a questions list: a
+// string, or an object with a string "question".
+func firstQuestion(raw json.RawMessage) string {
+	var list []json.RawMessage
+	if json.Unmarshal(raw, &list) != nil || len(list) == 0 {
+		return ""
+	}
+
+	if q := jsonString(list[0]); q != "" {
+		return q
+	}
+
+	var obj map[string]json.RawMessage
+	if json.Unmarshal(list[0], &obj) != nil {
+		return ""
+	}
+
+	return jsonString(obj["question"])
+}
+
+func firstLine(s string) string {
+	line, _, _ := strings.Cut(s, "\n")
+	line, _, _ = strings.Cut(line, "\r")
+
+	return line
 }
 
 func (Claude) ParseEvent(payload []byte) (Event, error) {
@@ -105,33 +222,50 @@ func (Claude) ParseEvent(payload []byte) (Event, error) {
 	}
 	switch p.Name {
 	case "SessionStart":
+		ev.ActionSet = true
+
 		ev.Start = p.SessionID != ""
 		if p.Source != "compact" {
 			ev.State = core.AgentIdle
 		}
 	case "SessionEnd":
-		ev.End = true
-	case "UserPromptSubmit", "PostToolUse", "PostToolUseFailure", "ElicitationResult":
+		ev.End, ev.ActionSet = true, true
+	case "UserPromptSubmit":
+		ev.State = core.AgentWorking
+		ev.Action, ev.ActionSet = "thinking", true
+	case "PostToolUse", "PostToolUseFailure", "ElicitationResult":
 		ev.State = core.AgentWorking
 	case "PreToolUse":
-		ev.State = core.AgentWorking
+		ev.State, ev.ActionSet = core.AgentWorking, true
 		if p.ToolName == "AskUserQuestion" {
 			ev.State = core.AgentBlocked
 		}
-	case "PermissionRequest", "Elicitation":
-		ev.State = core.AgentBlocked
+
+		ev.Action = toolAction(p.ToolName, p.ToolInput)
+	case "PermissionRequest":
+		ev.State, ev.ActionSet = core.AgentBlocked, true
+		ev.Action = permissionAction(p.ToolName, p.ToolInput)
+	case "Elicitation":
+		ev.State, ev.ActionSet = core.AgentBlocked, true
+		ev.Action = clip(firstLine(jsonString(p.Message)))
 	case "Notification":
 		switch p.NotificationType {
 		case "permission_prompt", "elicitation_dialog", "elicitation_url_dialog", "agent_needs_input":
-			ev.State = core.AgentBlocked
+			ev.State, ev.ActionSet = core.AgentBlocked, true
+			ev.Action = clip(firstLine(jsonString(p.Message)))
 		case "idle_prompt":
 			ev.State = core.AgentIdle
 		}
 	case "Stop", "StopFailure":
-		ev.State = core.AgentIdle
+		ev.State, ev.ActionSet = core.AgentIdle, true
 	default:
 		return Event{}, fmt.Errorf("harness: unknown claude-code event %q", p.Name)
 	}
 
 	return ev, nil
+}
+
+// permissionAction is "Allow <tool> <target>?".
+func permissionAction(tool string, input json.RawMessage) string {
+	return clip("Allow " + toolTarget(printable(tool), objectFields(input)) + "?")
 }

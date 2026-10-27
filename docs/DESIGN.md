@@ -497,7 +497,7 @@ The example shows three events; the generated file has the same handler for ever
 | `Notification` | blocked for `notification_type` `permission_prompt`, `elicitation_dialog`, `elicitation_url_dialog` and `agent_needs_input`; idle for `idle_prompt`; any other type changes nothing |
 | `Stop`, `StopFailure` | idle |
 
-**Current action.** The adapter reduces each payload to a short action string for the rail, cut to 120 runes with control characters and newlines removed (only the first line of a command is kept):
+**Current action.** The adapter reduces each payload to a short action string for the rail, cut to 120 runes after keeping only printable characters, so control and format characters and newlines are removed (only the first line of a command or question is kept). A `tool_input` that is not an object, or a missing or unusable question, leaves the tool name alone:
 
 | Claude hook | Action |
 | --- | --- |
@@ -516,7 +516,7 @@ An agent pane whose Claude has sent no hook has no state and shows no badge. The
 
 **Hook command and socket**
 
-- `muxreveal hook claude-code` is a subcommand of the same binary. It reads the hook JSON from stdin, parses it with the harness, adds the pane id from `MUXREVEAL_PANE` and sends one compact event (pane, event name, session id, transcript path, state, working directory, current action, and the start, end and turn-start flags) as one JSON line over the Unix socket in `MUXREVEAL_SOCK`.
+- `muxreveal hook claude-code` is a subcommand of the same binary. It reads the hook JSON from stdin, parses it with the harness, adds the pane id from `MUXREVEAL_PANE` and sends one compact event (pane, event name, session id, transcript path, state, working directory, current action and the flag that says whether it is set, and the start, end and turn-start flags) as one JSON line over the Unix socket in `MUXREVEAL_SOCK`.
 - The server listens on `<state dir>/run/<pid>.sock` (mode 0600; the `run` directory is mode 0700). Both the socket and the settings file are removed on exit. The client waits up to 2 s for the server's `ok` line, which the server writes once the event is queued, except for a turn-start event (`UserPromptSubmit`), which it answers after the turn snapshot is taken or after 1.5 s, whichever comes first. The snapshot therefore lands before the agent edits anything, and a slow snapshot never holds the agent longer than the budget.
 - The server holds a turn-start event's `ok` until the event's `Done` is called (`Server.Hold`). A gate in `cmd/muxreveal` sits between the server and the app's event channel: it forwards every event to the app in order, at once, runs the snapshot for a turn start in its own goroutine with a 1.4 s context, then calls `Done`. An event whose `cwd` is not inside a repository, or whose session id is not a UUID, gets no snapshot and is answered at once.
 - `muxreveal hook` always exits 0 and prints nothing to stdout or stderr, also when the environment variables are missing, the socket is gone or the payload is bad. Claude adds the stdout of `SessionStart` and `UserPromptSubmit` hooks to the model's context, so any output would leak into the conversation.
