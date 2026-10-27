@@ -14,6 +14,12 @@ MuxReveal includes material copied from the projects below, each under the MIT L
 - Copyright (C) 2017 Alec Thomas
 - Used in `internal/ui/theme/syntax.go`: the mapping from token types to colours and text attributes.
 
+## tuios line diff and invisible characters
+
+- Source: https://github.com/Gaurav-Gosain/tuios (`internal/linediff/linediff.go`, `internal/invisible/invisible.go`, `internal/invisible/invisible_test.go`) at commit aaaa128cd35b38ba8aa08a5f69e688f01385ec3e
+- Copyright (c) 2025 Gaurav Gosain
+- Used in `internal/git/linediff/linediff.go`, `internal/git/invisible/invisible.go` and `internal/git/invisible/invisible_test.go`: the line edit script by longest common subsequence and the invisible-character checks.
+
 ## MIT License
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
