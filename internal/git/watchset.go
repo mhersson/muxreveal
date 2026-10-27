@@ -75,13 +75,14 @@ func NewWatchSet(ctx context.Context, opts WatchOptions) *WatchSet {
 func (s *WatchSet) Batches() <-chan RootBatch { return s.out }
 
 // Seq returns the change counter of the watcher for root, and false when root
-// is not watched.
+// is not watched or its watcher has reported an error or overflowed; such a
+// watcher may miss changes until it is restarted.
 func (s *WatchSet) Seq(root string) (uint64, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	e := s.entries[root]
-	if e == nil || e.w == nil || s.closed || s.ctx.Err() != nil {
+	if e == nil || e.w == nil || e.w.Degraded() || s.closed || s.ctx.Err() != nil {
 		return 0, false
 	}
 

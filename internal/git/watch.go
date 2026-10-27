@@ -59,7 +59,8 @@ type Watcher struct {
 	closeOnce sync.Once
 	closeErr  error
 
-	seq atomic.Uint64
+	seq      atomic.Uint64
+	degraded atomic.Bool // an error or overflow was reported: events may be missing for good
 
 	skipWorktrees bool
 	refsDir       string
@@ -148,6 +149,10 @@ func (w *Watcher) start(ctx context.Context) error {
 // Seq counts the events the watcher accepted, from SeqBase, before they are
 // debounced into a batch. It is safe to call from any goroutine.
 func (w *Watcher) Seq() uint64 { return w.seq.Load() }
+
+// Degraded reports whether the watcher has reported an error or lost events.
+// Changes may then go unseen, so its Seq proves nothing.
+func (w *Watcher) Degraded() bool { return w.degraded.Load() }
 
 // Batches delivers the changes. It is closed by Close or when the context ends.
 func (w *Watcher) Batches() <-chan Batch { return w.batches }
@@ -250,6 +255,10 @@ func (w *Watcher) loop(ctx context.Context) {
 			if errors.Is(err, fsnotify.ErrEventOverflow) {
 				p.overflow = true
 
+				// Lost events never reach handle, so the overflow counts itself.
+				w.seq.Add(1)
+				w.degraded.Store(true)
+
 				arm()
 
 				continue
@@ -268,6 +277,8 @@ func (w *Watcher) loop(ctx context.Context) {
 
 // report hands err to Errors without ever blocking the owner goroutine.
 func (w *Watcher) report(err error) {
+	w.degraded.Store(true)
+
 	select {
 	case w.errs <- err:
 	default:

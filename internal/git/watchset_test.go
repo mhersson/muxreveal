@@ -2,10 +2,15 @@ package git
 
 import (
 	"context"
+	"errors"
+	"os"
+	"path/filepath"
 	"runtime"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/fsnotify/fsnotify"
 )
 
 func newWatchSet(t *testing.T) *WatchSet {
@@ -273,5 +278,114 @@ func TestWatchSetConcurrentAcquireRelease(t *testing.T) {
 
 	if _, ok := s.Seq(r.Root); ok {
 		t.Fatal("still watched after every release")
+	}
+}
+
+func TestWatchSetReportsARealStartFailure(t *testing.T) {
+	bad := newRepo(t)
+	writeFile(t, bad, "sub/a.txt", "x")
+
+	badRepo := openRepo(t, bad)
+
+	// A broken config makes git check-ignore fail while the walk runs.
+	if err := os.WriteFile(filepath.Join(bad, ".git", "config"), []byte("[core\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	s := newWatchSet(t)
+
+	rel, err := s.Acquire(context.Background(), badRepo)
+	if err == nil {
+		rel()
+		t.Fatal("Acquire succeeded on a repository whose walk fails")
+	}
+
+	select {
+	case got := <-s.Batches():
+		if got.Root != badRepo.Root || got.Err == nil {
+			t.Fatalf("batch = %+v", got)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("no error batch")
+	}
+
+	select {
+	case extra := <-s.Batches():
+		t.Fatalf("second batch for one failure: %+v", extra)
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	if _, ok := s.Seq(badRepo.Root); ok {
+		t.Fatal("Seq reports a watcher that failed to start")
+	}
+
+	good := openRepo(t, newRepo(t))
+
+	rel, err = s.Acquire(context.Background(), good)
+	if err != nil {
+		t.Fatalf("healthy root after a failure: %v", err)
+	}
+
+	defer rel()
+
+	if _, ok := s.Seq(good.Root); !ok {
+		t.Fatal("healthy root not watched")
+	}
+}
+
+// A watcher that reported an error may be missing events from then on, so its
+// counter must not allow a skip until it is restarted.
+func TestWatchSetSeqIsOffAfterAWatcherError(t *testing.T) {
+	for name, injected := range map[string]error{
+		"read error": errors.New("read failed"),
+		"overflow":   fsnotify.ErrEventOverflow,
+	} {
+		t.Run(name, func(t *testing.T) {
+			dir := newRepo(t)
+			s := newWatchSet(t)
+			r := openRepo(t, dir)
+
+			rel, err := s.Acquire(context.Background(), r)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if _, ok := s.Seq(r.Root); !ok {
+				t.Fatal("healthy watcher not reported")
+			}
+
+			s.mu.Lock()
+			w := s.entries[r.Root].w
+			s.mu.Unlock()
+
+			w.fs.Errors <- injected
+
+			deadline := time.Now().Add(watchWait)
+			for time.Now().Before(deadline) {
+				if _, ok := s.Seq(r.Root); !ok {
+					break
+				}
+
+				time.Sleep(5 * time.Millisecond)
+			}
+
+			if _, ok := s.Seq(r.Root); ok {
+				t.Fatal("Seq still reported after the watcher reported an error")
+			}
+
+			// A restarted watcher starts clean.
+			rel()
+
+			rel, err = s.Acquire(context.Background(), r)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			defer rel()
+
+			if _, ok := s.Seq(r.Root); !ok {
+				t.Fatal("restarted watcher still degraded")
+			}
+		})
 	}
 }
