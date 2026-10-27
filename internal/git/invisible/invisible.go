@@ -4,11 +4,8 @@
 
 // Package invisible finds the characters that draw nothing but change how
 // text reads: format characters, variation selectors and line separators.
-// Every place tuios shows text another program wrote (agent mail, remote
-// captures, notifications, titles, agent metadata) removes them with this
-// package, so all of them agree on what counts as invisible.
-//
-// It imports nothing from tuios, so any package can use it.
+// It defines which characters count as invisible. It imports only the
+// standard library.
 package invisible
 
 import (

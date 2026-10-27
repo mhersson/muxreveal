@@ -3,8 +3,8 @@
 // Copyright (c) 2025 Gaurav Gosain. MIT License; see THIRD_PARTY.md.
 
 // Package linediff computes the line edit script between two texts by longest
-// common subsequence. It is pure Go with no imports from tuios, so the browser
-// build uses it too.
+// common subsequence, for diffing the lines inside a changed hunk. It imports
+// only the standard library.
 package linediff
 
 import (
