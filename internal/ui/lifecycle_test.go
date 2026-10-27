@@ -912,7 +912,9 @@ func gone(pid int) bool {
 
 func TestAppCloseNoLeaks(t *testing.T) {
 	base := runtime.NumGoroutine()
-	r := newRealApp(t, "sleep 30")
+	// The trailing ":" stops the shell from exec'ing sleep, so each group has a
+	// member besides its leader.
+	r := newRealApp(t, "sleep 30; :")
 
 	sized(t, r.App, 100, 30)
 	chord(r.App, 'v')
@@ -930,10 +932,10 @@ func TestAppCloseNoLeaks(t *testing.T) {
 		t.Fatalf("Close() error = %v", err)
 	}
 
+	// Close reaps only each leader; the other killed members of its group stay
+	// zombies until init reaps them.
 	for _, pid := range pids {
-		if !gone(pid) {
-			t.Errorf("process group %d survived Close", pid)
-		}
+		eventually(t, fmt.Sprintf("process group %d to be gone after Close", pid), func() bool { return gone(pid) })
 	}
 
 	if err := r.Close(ctx); err != nil {
