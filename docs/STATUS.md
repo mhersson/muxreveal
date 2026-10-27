@@ -565,6 +565,8 @@ Gate: every corpus document lays out at widths 20, 40, 80, 100 and 130 with no l
 
 Rendered markdown on screen (including images and the `Code` theme role), the PR conversation, compose preview, reviewed hunks, notifications, other PR tabs, CI log tail, remapping and worktree cleanup. Planned after M3b.
 
+- Confine a local link (a layout `Path`) to the repository before following it: a link can resolve outside the base.
+
 ## Next
 
 M1e Tiling, tab moves and chrome is merged (PR #12); the reboot part of its gate is still the operator's check. The build, CI and lint tooling work (Makefile, GitHub Actions CI with Dependabot, stricter golangci-lint config) is complete; the macOS test step in CI is non-blocking until the macOS test failures listed in Later are fixed. M3a GitHub and push backend is merged (PR #15). M1f Agents rail is merged (PR #16); M2b Review pane is next, then M3b.
