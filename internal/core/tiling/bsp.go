@@ -174,7 +174,7 @@ func (n *TileNode) Depth() int {
 	return depth
 }
 
-// BSPTree manages the binary space partition for a workspace
+// BSPTree manages the binary space partition for one layout
 type BSPTree struct {
 	Root         *TileNode         // Root of the tree (nil if empty)
 	WindowToNode map[int]*TileNode // Quick lookup: windowID -> leaf node
@@ -405,10 +405,9 @@ func (t *BSPTree) ApplyLayout(bounds Rect, gap int) map[int]Rect {
 	return result
 }
 
-// ApplyLayoutInto is ApplyLayout writing into a caller-owned map. A mouse drag
-// reapplies the layout on every motion event, and allocating a fresh map each
-// time makes the cost of a single event scale with how many panes the workspace
-// holds; reusing one keeps it flat.
+// ApplyLayoutInto is ApplyLayout writing into a caller-owned map. A caller that
+// reapplies the layout on every motion event avoids allocating a fresh map each
+// time, so the cost stays flat as the pane count grows.
 func (t *BSPTree) ApplyLayoutInto(bounds Rect, result map[int]Rect, gap int) map[int]Rect {
 	clear(result)
 	if t.Root == nil {
@@ -435,7 +434,7 @@ func (t *BSPTree) applyLayoutRecursive(node *TileNode, bounds Rect, result map[i
 	if node.IsLeaf() {
 		// A leaf occupies exactly the rectangle the tree partitioned for it.
 		// Growing it to a fixed minimum instead pushed it past that rectangle and
-		// into its sibling's space, so a workspace holding more panes than fit at
+		// into its sibling's space, so a layout holding more panes than fit at
 		// the default size rendered them overlapping rather than simply smaller.
 		// Tiling never overlaps: when space runs short the panes shrink. Floor at
 		// one cell so a degenerate split cannot yield a zero- or negative-size box.
@@ -704,9 +703,9 @@ func (t *BSPTree) syncRatiosRecursive(node *TileNode, bounds Rect, windows map[i
 	//
 	// So the rule is: sync may only move the ratios whose geometry actually
 	// disagrees with the tree. That is exactly the set the paths this function
-	// exists for change (master-stack, floating windows, windows outside the
-	// tree, and the geometry-scan fallback), and it leaves every other split
-	// holding the value a resize deliberately put there.
+	// exists for change (master-stack, windows outside the tree, and the
+	// geometry-scan fallback), and it leaves every other split holding the
+	// value a resize deliberately put there.
 	expectedLeft, expectedRight := childBounds(node, bounds, gap)
 
 	// Calculate the actual split ratio from window geometry.

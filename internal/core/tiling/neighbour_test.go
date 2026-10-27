@@ -185,7 +185,7 @@ func TestNeighbourIgnoresASharedCorner(t *testing.T) {
 	}
 }
 
-// Floating windows need not line up. A window that lies that way without
+// Tiles need not line up. A tile that lies that way without
 // facing the focused one is reached only with the fallback, which tiling
 // leaves off.
 func TestNeighbourFallbackForFloatingWindows(t *testing.T) {

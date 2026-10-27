@@ -52,9 +52,7 @@ type ScrollingLayout struct {
 	DefaultWidth float64   // Default column width proportion (e.g., 0.5)
 	PresetWidths []float64 // Preset width proportions to cycle through
 	// Gap is the cells of empty ground kept between neighbouring columns, and
-	// between windows stacked inside one column. It is appearance.gap, set by
-	// the caller on every access (see OS.GetOrCreateScrollingLayout) because it
-	// is session state that a peer client can move mid-session.
+	// between windows stacked inside one column.
 	//
 	// The strip's panes always draw their own borders, so this is ground and
 	// never a divider: there is no separator overlay in scrolling mode for a
@@ -62,14 +60,13 @@ type ScrollingLayout struct {
 	Gap int
 	// MaxProportion is the widest a column may be, as a share of the screen.
 	// Zero reads as nine tenths, which is where the next column stops peeking
-	// in at the edge. It is appearance.scroll_column_max, set by the caller on
-	// every access for the same reason Gap is.
+	// in at the edge. The caller may raise it up to 1.0.
 	MaxProportion float64
-	// ZoomedCol is the column holding the workspace's zoomed pane, or -1 for
+	// ZoomedCol is the column holding the zoomed pane, or -1 for
 	// none, and ZoomProportion is the share of the screen it is given while it
 	// holds it. Together they are what a zoom means on the strip: one column
 	// widened past the cap the others are held to, with the rest of the strip
-	// still running off the edges. Set by the caller alongside Gap.
+	// still running off the edges.
 	ZoomedCol      int
 	ZoomProportion float64
 }
@@ -202,8 +199,8 @@ func (s *ScrollingLayout) CycleWidth() {
 }
 
 // MaximizeColumn widens the focused column to the configured ceiling, the widest
-// the strip will give it. The ceiling is MaxProportion, which a user setting
-// (scroll_column_max) raises up to 1.0 for a full-width column. Cycling past
+// the strip will give it. The ceiling is MaxProportion, which the caller
+// may raise up to 1.0 for a full-width column. Cycling past
 // 0.9 lands on the same place via the 1.0 preset.
 func (s *ScrollingLayout) MaximizeColumn() {
 	if s.FocusedCol < 0 || s.FocusedCol >= len(s.Columns) {
@@ -280,8 +277,7 @@ func (s *ScrollingLayout) ResolveColumnWidth(colIndex, screenWidth int) int {
 // stops peeking in at the edge, which is the only thing that says the strip
 // has one, and it is the right default. It is not
 // somebody else's decision to make for a person who wants one column and the
-// whole screen: appearance.scroll_column_max is theirs, and MaxProportion is
-// how it reaches this far.
+// whole screen: MaxProportion is how a caller raises it.
 //
 // Exported so the resize keys and the like-scroll cap live in one place.
 func (s *ScrollingLayout) MaxColumnWidth(screenWidth int) int {
@@ -292,11 +288,11 @@ func (s *ScrollingLayout) MaxColumnWidth(screenWidth int) int {
 // 0.9 if MaxProportion is unset or out of range.
 //
 // Every width calculation the strip does against the ceiling reads through
-// this helper, so a Settings built by hand with a zero MaxProportion still gets
-// the nine tenths the strip always showed before a user could raise it.
+// this helper, so a layout built by hand with a zero MaxProportion still gets
+// the nine tenths default.
 //
 // Exported so the cycle and the maximize action can ask the strip what its
-// ceiling is without re-reading the settings row.
+// ceiling is.
 func (s *ScrollingLayout) Ceiling() float64 {
 	p := s.MaxProportion
 	if p <= 0 || p > 1 {

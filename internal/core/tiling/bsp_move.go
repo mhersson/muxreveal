@@ -4,15 +4,12 @@
 
 package tiling
 
-// Edits for a client that rearranges panes by dragging them: put a pane beside
-// another, put it at one side of everything, and set one split's ratio. They
-// are pure tree edits with no tiling policy in them, so a renderer can run the
-// same edit on its own copy of the tree and show the result before the answer
-// comes back (see the GUI bridge's layout commands).
+// Edits that rearrange panes: put a pane beside another, put it at one side of
+// everything, and set one split's ratio. They are pure tree edits with no
+// tiling policy in them.
 //
-// Each edit keeps the node objects it does not have to replace. A node's ID is
-// what a renderer names a split by, so a split that survives an edit keeps its
-// ID, and a renderer holding the old tree can still match it up.
+// Each edit keeps the node objects it does not have to replace, so a split that
+// survives an edit keeps its ID.
 
 // split is the split a pane on this side makes: a vertical divider for left and
 // right, a horizontal one for up and down. Side is the type focus steps by

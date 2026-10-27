@@ -91,7 +91,7 @@ func deepNest() *BSPTree {
 	})
 }
 
-// sharedBorders stands in for tuios's shared-borders setting.
+// sharedBorders selects a gap of 1 between panes instead of 0.
 var sharedBorders bool
 
 func sharedGap() int {

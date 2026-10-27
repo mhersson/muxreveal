@@ -29,29 +29,27 @@ type MasterParams struct {
 	// StackRatio is the first stack pane's share when the stack holds exactly
 	// two panes in one column or row. Zero and below mean an equal split.
 	StackRatio float64
-	// Grid lays four or more panes out as an equal grid instead, but only with
-	// one master on the left. That is the layout as it was before positions
-	// and counts existed, and the default keeps it so nobody's screen changes
-	// on an upgrade. Any other position or count asks for a master, and gets
-	// one at every pane count.
+	// Grid lays four or more panes out as an equal grid, but only with one
+	// master on the left. Any other position or count gets a master at every
+	// pane count.
 	Grid bool
 	// Gap is the cells kept between neighbours, as for spans.
 	Gap int
-	// Splits is the share of every other pane the user resized. A list whose
+	// Splits is the share of every other pane that was resized. A list whose
 	// length does not match the panes it describes is ignored, and those panes
 	// share their space equally. See MasterSplits.
 	Splits MasterSplits
 }
 
-// MasterSplits is the size of every pane a master-stack workspace lays out,
-// as relative weights, so a resize the user made survives the next retile.
+// MasterSplits is the size of every pane a master-stack layout holds,
+// as relative weights, so a resize survives the next retile.
 //
 // The master ratio covers one split and StackRatio one more, for a stack of
 // exactly two. Every other split (a third stack pane, a second master, a row
 // or a cell of the grid) lived only in the rectangles, and the next retile,
 // which a terminal resize always is, put it back to equal shares. The weights
-// are what the tiler reads instead of equal shares, so any split the user can
-// move is one the layout keeps.
+// are what the tiler reads instead of equal shares, so any split that can be
+// moved is one the layout keeps.
 //
 // Each list holds one weight per pane (or row) in the order the tiler places
 // them, and only the ratio between weights counts. A list is used only while

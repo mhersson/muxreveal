@@ -2,7 +2,9 @@
 // aaaa128cd35b38ba8aa08a5f69e688f01385ec3e (github.com/Gaurav-Gosain/tuios).
 // Copyright (c) 2025 Gaurav Gosain. MIT License; see THIRD_PARTY.md.
 
-// Package tiling provides window tiling and layout management for the terminal.
+// Package tiling computes tiled pane layouts: a BSP tree, master-stack and
+// scrolling columns. It knows window ids and cell rectangles and nothing of
+// the application around it.
 package tiling
 
 import (
@@ -32,7 +34,7 @@ type span struct{ Pos, Size int }
 //
 // Shares are floored at one cell and never at a fixed minimum. A minimum wider
 // than the share pushes a pane past its own rectangle and into its neighbour's,
-// so a workspace holding more panes than fit at a comfortable size would draw
+// so a layout holding more panes than fit at a comfortable size would draw
 // them overlapping instead of simply smaller. This is the rule the BSP
 // tiler already follows (bsp.go applyLayoutRecursive): tiling never overlaps;
 // when space runs short the panes shrink.
@@ -126,8 +128,8 @@ func splitByRatio(origin, total int, ratio float64, gap int) (span, span) {
 }
 
 // MinSplitRatio and MaxSplitRatio bound the master ratio and the stack ratio
-// the master-stack tiler accepts. They are the appearance.master_ratio range,
-// so the settings row, a percentage resize and the tiler agree on one range.
+// the master-stack tiler accepts. They match the MasterRatioMin..MasterRatioMax
+// percentage range, so a percentage resize and the tiler agree on one range.
 const (
 	MinSplitRatio = float64(MasterRatioMin) / 100
 	MaxSplitRatio = float64(MasterRatioMax) / 100
@@ -248,7 +250,7 @@ func SplitsBetween(rects []Rect, gap int) []SplitLine {
 			// One line per boundary, on the gap's leading column, whatever the
 			// gap is. A line on every column of the gap is what this did, which
 			// is correct at a gap of one and turns a wider gap into a thick
-			// rule: appearance.gap asks for ground between the panes, not for a
+			// rule: a wider gap asks for ground between the panes, not for a
 			// wider divider, and the BSP tiler already answers it that way.
 			if b.X == a.X+a.W+gap {
 				if from, to := max(a.Y, b.Y), min(a.Y+a.H, b.Y+b.H)-1; from <= to {

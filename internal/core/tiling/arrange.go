@@ -10,7 +10,7 @@ import (
 )
 
 // Arrangements rebuild a BSP tree so its panes sit in one of tmux's
-// select-layout shapes. tuios xpanes uses them to lay out the panes it opens.
+// select-layout shapes.
 //
 // A chain of k panes cut along one axis is even when the first cut gives the
 // first pane 1/k of the space and the rest of the chain the other (k-1)/k.

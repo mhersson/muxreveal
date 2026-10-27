@@ -37,7 +37,7 @@ func ParseSide(s string) (Side, bool) {
 // A candidate lies that way when both of its edges on that axis are further
 // along than from's: for right, it starts right of from's left edge and ends
 // right of from's right edge. That holds for a tiled neighbour, for one that
-// shares a border cell, and for a floating window that half covers from.
+// shares a border cell, and for a tile that half covers from.
 //
 // Among those, the ones that face from (share at least one cell across the
 // axis) win. The nearest wins among them. At the same distance, one sharing two
@@ -52,7 +52,7 @@ func ParseSide(s string) (Side, bool) {
 //
 // When nothing faces from and fallback is true, the nearest candidate lying
 // that way is taken instead, counting distance across the axis double. That is
-// for floating windows, which need not line up at all. A tiled layout passes
+// for tiles that need not line up at all. A tiled layout passes
 // false: its panes cover the screen, so a pane with nothing facing it on a side
 // is at the edge, and a diagonal jump there would not be the direction pressed.
 func Neighbour(from Rect, cands []Rect, side Side, fallback bool) int {

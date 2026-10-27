@@ -12,8 +12,7 @@ import (
 // The ways the master layout can fail, written down before the code:
 //
 //  1. The defaults (master on the left, one master, the grid on) move a pane
-//     that the layout before master positions existed put somewhere else. Every
-//     existing user would see a different screen after an upgrade.
+//     that the layout before master positions existed put somewhere else.
 //  2. A rectangle leaves the region or has no cells.
 //  3. Two rectangles overlap.
 //  4. The count of rectangles is not the count of panes.

@@ -11,11 +11,10 @@ import (
 // TestApplyLayoutNeverOverlaps guards the invariant a tiling layout must hold:
 // no two windows share a cell, whatever the window count or the terminal size.
 //
-// It regressed when a leaf was grown to a fixed minimum size: a workspace
+// It regressed when a leaf was grown to a fixed minimum size: a layout
 // holding more panes than fit at that minimum had its smallest tiles inflated
 // past the rectangle the tree gave them and into their neighbours, so they
-// rendered overlapping instead of simply small. This was the tiling failure a
-// daemon session showed when several windows were created on a modest screen.
+// rendered overlapping instead of simply small.
 func TestApplyLayoutNeverOverlaps(t *testing.T) {
 	// Small enough that a spiral of several panes drives the smallest tiles well
 	// below the old fixed minimum, which is exactly where the overlap lived.
@@ -65,9 +64,8 @@ func TestApplyLayoutNeverOverlaps(t *testing.T) {
 }
 
 // TestParseAutoSchemeRoundTrips checks every AutoScheme String()s to the text
-// ParseAutoScheme reads back, which is the text a layout template's
-// tiling_scheme and appearance.tiling_scheme both hold (see
-// TilingSchemes, which has to spell these the same way).
+// ParseAutoScheme reads back, which is the text a caller stores to name a
+// scheme.
 func TestParseAutoSchemeRoundTrips(t *testing.T) {
 	cases := []struct {
 		text string
