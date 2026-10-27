@@ -157,6 +157,7 @@ func (a *App) closePane(id core.PaneID) tea.Cmd {
 	p := a.panes[id]
 	delete(a.panes, id)
 	a.clearSelectionOf(id)
+	a.endCopyOf(id)
 
 	if a.confirm != nil && a.confirm.pane == id {
 		a.confirm = nil
@@ -225,6 +226,7 @@ func (a *App) relayout() tea.Cmd {
 
 		if p.resize(cols, rows) {
 			a.clearSelectionOf(id)
+			a.endCopyOf(id)
 			cmds = append(cmds, a.renderPane(p))
 		}
 	}
@@ -268,6 +270,7 @@ func (a *App) renderPane(p *pane) tea.Cmd {
 
 	if p.takeAltSwitch() {
 		a.clearSelectionOf(p.id)
+		a.endCopyOf(p.id)
 	}
 
 	if held.IsZero() || p.holdArmed {
@@ -293,6 +296,7 @@ func (a *App) onPaneDirty(id core.PaneID) tea.Cmd {
 	}
 
 	a.dropFallenSelection(p)
+	a.syncCopy(p)
 
 	return tea.Batch(cmds...)
 }

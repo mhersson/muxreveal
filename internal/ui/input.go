@@ -7,14 +7,17 @@ import (
 	"github.com/mhersson/muxreveal/internal/core"
 )
 
-// handleKey routes a key press: an open confirm first, then an open prompt, then the open overlay,
-// then the leader state machine, then the focused pane.
+// handleKey routes a key press: an open confirm first, then an open prompt, then
+// copy mode, then the open overlay, then the leader state machine, then the focused pane.
 func (a *App) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 	if a.confirm != nil {
 		return a.handleConfirmKey(msg)
 	}
 	if a.prompt != nil {
 		return a.handlePromptKey(msg)
+	}
+	if a.copy != nil {
+		return a.handleCopyKey(msg)
 	}
 	if a.overlay != nil {
 		return a.updateOverlay(msg)
@@ -28,13 +31,16 @@ func (a *App) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 }
 
 // handlePaste sends pasted text to the open prompt or overlay, else to the
-// focused pane; an open confirm drops it. A paste ends a pending leader sequence.
+// focused pane; an open confirm or copy mode drops it. A paste ends a pending leader sequence.
 func (a *App) handlePaste(msg tea.PasteMsg) tea.Cmd {
 	if a.confirm != nil {
 		return nil
 	}
 	if a.prompt != nil {
 		return a.updatePrompt(msg)
+	}
+	if a.copy != nil {
+		return nil
 	}
 	if a.overlay != nil {
 		return a.updateOverlay(msg)

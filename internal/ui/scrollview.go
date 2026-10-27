@@ -203,13 +203,22 @@ func (p *pane) viewLocked(top, hist int) []string {
 	return out
 }
 
+// lineCacheSize is how many decoded history lines a paneGrid keeps: enough for
+// the neighbouring rows a motion reads, few enough that a walk over a long
+// history does not hold it in memory.
+const lineCacheSize = 8
+
 // paneGrid is the grid over a pane's history and screen. It lives for one
-// withGrid call and caches the history lines it decodes.
+// withGrid call and keeps the last few history lines it decodes.
 type paneGrid struct {
 	vt         term.VT
 	hist, rows int
 	cols       int
-	lines      map[int][]uv.Cell
+	lines      [lineCacheSize]struct {
+		row  int
+		line []uv.Cell
+	}
+	used, next int
 }
 
 func (g *paneGrid) Rows() int { return g.hist + g.rows }
@@ -228,17 +237,33 @@ func (g *paneGrid) Cell(row, col int) *uv.Cell {
 		return g.vt.CellAt(col, row-g.hist)
 	}
 
-	line, ok := g.lines[row]
-	if !ok {
-		line = g.vt.ScrollbackLine(row)
-		g.lines[row] = line
-	}
-
+	line := g.historyLine(row)
 	if col >= len(line) {
 		return nil
 	}
 
 	return &line[col]
+}
+
+func (g *paneGrid) historyLine(row int) []uv.Cell {
+	for _, e := range g.lines[:g.used] {
+		if e.row == row {
+			return e.line
+		}
+	}
+
+	line := g.vt.ScrollbackLine(row)
+	g.lines[g.next].row, g.lines[g.next].line = row, line
+	g.next = (g.next + 1) % lineCacheSize
+	g.used = min(g.used+1, lineCacheSize)
+
+	return line
+}
+
+func (g *paneGrid) historyRows() int { return g.hist }
+
+func (g *paneGrid) scanText(from, end int, fn func(row int, cells []term.TextCell) bool) {
+	g.vt.ScrollbackText(from, end, fn)
 }
 
 func (g *paneGrid) Wrapped(row int) bool {
@@ -273,6 +298,5 @@ func (p *pane) withView(fn func(g grid, top int, trimmed uint64)) {
 
 	fn(&paneGrid{
 		vt: p.vt, hist: hist, rows: rows, cols: cols,
-		lines: map[int][]uv.Cell{},
 	}, top, p.vt.HistoryTrimmed())
 }

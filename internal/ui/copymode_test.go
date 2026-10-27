@@ -2,7 +2,10 @@ package ui
 
 import (
 	"fmt"
+	"runtime"
+	"strings"
 	"testing"
+	"time"
 )
 
 func copyTestGrid() *fakeGrid {
@@ -343,4 +346,135 @@ func TestCopyModeSearchMovesSelectionHead(t *testing.T) {
 	if !ok || m.sel == nil || m.sel.head != (point{1, 3}) || m.sel.anchor != (point{0, 0}) {
 		t.Errorf("sel %+v ok %v", m.sel, ok)
 	}
+}
+
+// A search that finds nothing over a full history must not decode the history
+// into memory: it blocks the update loop while it holds the pane lock.
+func TestSearchOverCappedHistoryIsCheap(t *testing.T) {
+	p := cappedHistoryPane(t)
+
+	var (
+		found      bool
+		elapsed    time.Duration
+		allocBytes uint64
+		rows       int
+	)
+
+	p.withGrid(func(g grid) {
+		rows = g.Rows()
+
+		var before, after runtime.MemStats
+
+		runtime.GC()
+		runtime.ReadMemStats(&before)
+
+		start := time.Now()
+		_, found = copyMode{cursor: point{row: rows - 1}}.search(g, "zzz", false)
+		elapsed = time.Since(start)
+
+		runtime.ReadMemStats(&after)
+		allocBytes = after.TotalAlloc - before.TotalAlloc
+	})
+
+	t.Logf("search over %d rows: %v, %d KB allocated", rows, elapsed, allocBytes>>10)
+
+	if found {
+		t.Fatal("found a match that is not there")
+	}
+
+	if rows < 10000 {
+		t.Fatalf("setup: only %d rows", rows)
+	}
+
+	const repeats = 3
+
+	var perSearch uint64
+
+	p.withGrid(func(g grid) {
+		var before, after runtime.MemStats
+
+		runtime.GC()
+		runtime.ReadMemStats(&before)
+
+		for range repeats {
+			copyMode{cursor: point{row: rows - 1}}.search(g, "zzz", false)
+		}
+
+		runtime.ReadMemStats(&after)
+		perSearch = (after.TotalAlloc - before.TotalAlloc) / repeats
+	})
+
+	if perSearch > 1<<20 {
+		t.Errorf("a repeated search allocated %d B, want under 1 MB", perSearch)
+	}
+
+	if allocBytes > 16<<20 {
+		t.Errorf("search allocated %d MB over a capped history, want under 16", allocBytes>>20)
+	}
+}
+
+// plainGrid hides a grid's text scanner, so the cell path runs.
+type plainGrid struct{ grid }
+
+// The text path over history gives the same matches and text as the cell path.
+func TestHistoryTextPathMatchesCellPath(t *testing.T) {
+	a, procs := framedApp(t, 40, 8, shellSpec("/w/a", ""))
+	p, fp := a.panes["p1"], procs["p1"]
+
+	var sb strings.Builder
+
+	for i := range 30 {
+		switch i % 4 {
+		case 0:
+			sb.WriteString("中文 needle \x1b[1mbold\x1b[0m needle\r\n")
+		case 1:
+			sb.WriteString("\r\n")
+		case 2:
+			sb.WriteString("a中b needle" + strings.Repeat("x", 45) + "\r\n")
+		default:
+			sb.WriteString("plain " + lineName(i) + "\r\n")
+		}
+	}
+
+	feedAndWait(t, p, fp, sb.String())
+	eventually(t, "history", func() bool { return p.histLenLocked() > 20 })
+
+	p.withGrid(func(g grid) {
+		if _, ok := g.(textScanner); !ok {
+			t.Fatal("pane grid is not a text scanner")
+		}
+
+		for _, backward := range []bool{false, true} {
+			for _, cursor := range []point{{0, 0}, {2, 3}, {10, 8}, {g.Rows() - 1, 0}} {
+				m := copyMode{cursor: cursor}
+				got, gok := m.search(g, "needle", backward)
+				want, wok := m.search(plainGrid{g}, "needle", backward)
+
+				if !gok {
+					t.Errorf("search from %v backward=%v found nothing", cursor, backward)
+				}
+
+				if gok != wok || got.cursor != want.cursor {
+					t.Errorf("search from %v backward=%v: text %v %v, cells %v %v", cursor, backward, got.cursor, gok, want.cursor, wok)
+				}
+			}
+		}
+
+		sel := selection{mode: selStream, anchor: point{0, 1}, head: point{g.Rows() - 1, 5}}
+		if got, want := extract(g, sel), extract(plainGrid{g}, sel); got != want {
+			t.Errorf("extract text path = %q, cell path = %q", got, want)
+		}
+	})
+}
+
+// cappedHistoryPane is a 200-column pane whose history holds the 10000-line cap.
+func cappedHistoryPane(t *testing.T) *pane {
+	t.Helper()
+
+	a, procs := framedApp(t, 202, 14, shellSpec("/w/a", ""))
+	p, fp := a.panes["p1"], procs["p1"]
+
+	feedPaddedLines(t, p, fp, 0, 10100, strings.Repeat("x", 180))
+
+	return p
 }

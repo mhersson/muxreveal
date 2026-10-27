@@ -31,6 +31,7 @@ const (
 	iconClose     = "\U000F0156" // nf-md-close
 	iconQuit      = "\U000F0206" // nf-md-exit_to_app
 	iconCopy      = "\U000F018F" // nf-md-content_copy
+	iconSearch    = "\U000F0349" // nf-md-magnify
 )
 
 // Powerline edges and dividers.

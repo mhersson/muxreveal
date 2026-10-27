@@ -28,13 +28,20 @@ func lineName(i int) string { return fmt.Sprintf("L%05d", i) }
 func feedLines(t *testing.T, p *pane, fp *fakeProc, from, to int) {
 	t.Helper()
 
+	feedPaddedLines(t, p, fp, from, to, "")
+}
+
+// feedPaddedLines is feedLines with pad after each line's name.
+func feedPaddedLines(t *testing.T, p *pane, fp *fakeProc, from, to int, pad string) {
+	t.Helper()
+
 	var sb strings.Builder
 
 	// A later call overwrites the previous call's END line.
 	sb.WriteString("\r\x1b[2K")
 
 	for i := from; i < to; i++ {
-		sb.WriteString(lineName(i) + "\r\n")
+		sb.WriteString(lineName(i) + pad + "\r\n")
 	}
 
 	end := fmt.Sprintf("END%d", to)

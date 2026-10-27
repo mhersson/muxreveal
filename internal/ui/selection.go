@@ -6,6 +6,8 @@ import (
 	"unicode/utf8"
 
 	uv "github.com/charmbracelet/ultraviolet"
+
+	"github.com/mhersson/muxreveal/internal/term"
 )
 
 // grid is a pane's text in absolute rows: history rows first, then the live screen.
@@ -240,6 +242,9 @@ func extract(g grid, s selection) string {
 // rowText reads columns from..to of a row, emitting a wide char once even when
 // only its continuation column is selected.
 func rowText(g grid, row, from, to int) string {
+	if ts, ok := g.(textScanner); ok && row < ts.historyRows() {
+		return historyRowText(ts, row, from, to)
+	}
 	var b strings.Builder
 	for col := from; col <= to; col++ {
 		c := g.Cell(row, col)
@@ -253,6 +258,34 @@ func rowText(g grid, row, from, to int) string {
 		default:
 			b.WriteString(c.Content)
 		}
+	}
+	return b.String()
+}
+
+// historyRowText is rowText for a history row read as text cells.
+func historyRowText(ts textScanner, row, from, to int) string {
+	var b strings.Builder
+	read := false
+	ts.scanText(row, row+1, func(_ int, cells []term.TextCell) bool {
+		read = true
+		for col := from; col <= to; col++ {
+			switch {
+			case col >= len(cells):
+				b.WriteByte(' ')
+			case cells[col].Width == 0 && col > 0 && cells[col-1].Width >= 2:
+				if col == from {
+					b.Write(cells[col-1].Content)
+				}
+			case len(cells[col].Content) == 0:
+				b.WriteByte(' ')
+			default:
+				b.Write(cells[col].Content)
+			}
+		}
+		return false
+	})
+	if !read {
+		return strings.Repeat(" ", max(to-from+1, 0))
 	}
 	return b.String()
 }

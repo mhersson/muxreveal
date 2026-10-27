@@ -88,7 +88,7 @@ Mouse selection inside panes, copy to the system clipboard (OSC 52 and native to
 - [x] Copy-mode engine
 - [x] Scrollback view and mouse wheel
 - [x] Mouse selection, clicks and clipboard
-- [ ] Copy mode
+- [x] Copy mode
 - [ ] Mouse and clipboard options and bench check
 
 Gate: selection, copy mode and the clipboard work in shell panes and in programs that report the mouse, and the six-pane bench p99 stays at most 8 ms with a selection drawn.

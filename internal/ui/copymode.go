@@ -1,6 +1,10 @@
 package ui
 
-import "strings"
+import (
+	"bytes"
+
+	"github.com/mhersson/muxreveal/internal/term"
+)
 
 // copyAction tells the caller what a copy-mode key asks of the app.
 type copyAction int
@@ -160,63 +164,152 @@ func (m copyMode) search(g grid, query string, backward bool) (copyMode, bool) {
 	if query == "" || rows == 0 {
 		return m, false
 	}
-	for i := 0; i <= rows; i++ {
-		row := ((m.cursor.row+i)%rows + rows) % rows
-		if backward {
-			row = ((m.cursor.row-i)%rows + rows) % rows
-		}
-		cols := matchCols(g, row, query)
-		col := -1
-		for _, c := range cols {
-			switch {
-			case i == 0 && !backward && c <= m.cursor.col:
-			case i == 0 && backward && c >= m.cursor.col:
-			case backward:
-				col = c
-			case col < 0:
-				col = c
+	cur := point{row: ((m.cursor.row % rows) + rows) % rows, col: m.cursor.col}
+	var hit point
+	found := false
+	if backward {
+		// The last match before the cursor, else the last one in the grid.
+		scanMatches(g, 0, cur.row+1, query, func(row int, cols []int) bool {
+			for _, c := range cols {
+				if row == cur.row && c >= cur.col {
+					break
+				}
+				hit, found = point{row, c}, true
 			}
+			return true
+		})
+		if !found {
+			scanMatches(g, cur.row, rows, query, func(row int, cols []int) bool {
+				hit, found = point{row, cols[len(cols)-1]}, true
+				return true
+			})
 		}
-		if col < 0 {
-			continue
+	} else {
+		// The first match after the cursor, else the first one in the grid.
+		scanMatches(g, cur.row, rows, query, func(row int, cols []int) bool {
+			for _, c := range cols {
+				if row == cur.row && c <= cur.col {
+					continue
+				}
+				hit, found = point{row, c}, true
+				return false
+			}
+			return true
+		})
+		if !found {
+			scanMatches(g, 0, cur.row+1, query, func(row int, cols []int) bool {
+				hit, found = point{row, cols[0]}, true
+				return false
+			})
 		}
-		m.cursor = point{row, col}
-		m.lastSearch, m.backward = query, backward
-		if m.sel != nil {
-			s := *m.sel
-			s.head = m.cursor
-			m.sel = &s
-		}
-		return m, true
 	}
-	return m, false
+	if !found {
+		return m, false
+	}
+	m.cursor = hit
+	m.lastSearch, m.backward = query, backward
+	if m.sel != nil {
+		s := *m.sel
+		s.head = m.cursor
+		m.sel = &s
+	}
+	return m, true
 }
 
-// matchCols returns the first column of every plain-substring match in a row.
-func matchCols(g grid, row int, query string) []int {
-	var b strings.Builder
-	var offsets, cols []int
-	for col := 0; col < g.Cols(); col++ {
-		c := g.Cell(row, col)
-		if c == nil || isContinuation(g, row, col) {
-			continue
+// textScanner is a grid that reads its history rows as text without building
+// cells, which keeps a scan of a long history cheap.
+type textScanner interface {
+	// historyRows is the number of leading rows scanText serves.
+	historyRows() int
+	// scanText calls fn with each non-blank history row in [from, end), in
+	// order, until fn returns false. Cells are valid only inside fn.
+	scanText(from, end int, fn func(row int, cells []term.TextCell) bool)
+}
+
+// scanMatches calls fn with the first column of every plain-substring match,
+// for each row of [from, end) that has one, in row order, until fn returns
+// false. cols is valid only inside fn.
+func scanMatches(g grid, from, end int, query string, fn func(row int, cols []int) bool) {
+	mt := rowMatcher{query: []byte(query)}
+	if ts, ok := g.(textScanner); ok && from < ts.historyRows() {
+		hist := min(end, ts.historyRows())
+		stop := false
+		ts.scanText(from, hist, func(row int, cells []term.TextCell) bool {
+			mt.reset()
+			for col, c := range cells[:min(len(cells), g.Cols())] {
+				if c.Width == 0 && col > 0 && cells[col-1].Width >= 2 {
+					continue
+				}
+				mt.add(col, c.Content)
+			}
+			if cols := mt.matches(); len(cols) > 0 && !fn(row, cols) {
+				stop = true
+				return false
+			}
+			return true
+		})
+		if stop {
+			return
 		}
-		offsets = append(offsets, b.Len())
-		cols = append(cols, col)
-		if c.Content == "" {
-			b.WriteByte(' ')
-		} else {
-			b.WriteString(c.Content)
+		from = hist
+	}
+	for row := from; row < end; row++ {
+		mt.reset()
+		prevWidth := 0
+		for col := 0; col < g.Cols(); col++ {
+			c := g.Cell(row, col)
+			if c == nil {
+				prevWidth = 0
+				continue
+			}
+			w := c.Width
+			if w == 0 && col > 0 && prevWidth >= 2 {
+				prevWidth = 0
+				continue
+			}
+			prevWidth = w
+			mt.add(col, []byte(c.Content))
+		}
+		if cols := mt.matches(); len(cols) > 0 && !fn(row, cols) {
+			return
 		}
 	}
-	text := b.String()
-	var out []int
-	for i, off := range offsets {
-		if strings.HasPrefix(text[off:], query) {
-			out = append(out, cols[i])
+}
+
+// rowMatcher finds a query in one row's text. Its buffers are reused from row
+// to row.
+type rowMatcher struct {
+	query      []byte
+	text       []byte
+	offs, cols []int
+	out        []int
+}
+
+func (r *rowMatcher) reset() { r.text, r.offs, r.cols = r.text[:0], r.offs[:0], r.cols[:0] }
+
+// add appends the cell at col; an empty cell reads as a space.
+func (r *rowMatcher) add(col int, content []byte) {
+	r.offs = append(r.offs, len(r.text))
+	r.cols = append(r.cols, col)
+	if len(content) == 0 {
+		r.text = append(r.text, ' ')
+	} else {
+		r.text = append(r.text, content...)
+	}
+}
+
+// matches returns the column of every cell the query starts at.
+func (r *rowMatcher) matches() []int {
+	r.out = r.out[:0]
+	if !bytes.Contains(r.text, r.query) {
+		return r.out
+	}
+	for i, off := range r.offs {
+		if bytes.HasPrefix(r.text[off:], r.query) {
+			r.out = append(r.out, r.cols[i])
 		}
 	}
-	return out
+	return r.out
 }
 
 // normalizeCol moves a cursor off a wide char's continuation cell.

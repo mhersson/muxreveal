@@ -586,3 +586,50 @@ func TestSetClipboardHandlerKeepsOtherCallbacks(t *testing.T) {
 		t.Fatalf("colour replies = %q", got)
 	}
 }
+
+func TestScrollbackTextMatchesScrollbackLine(t *testing.T) {
+	v, _ := newTestVT(t, 10, 3)
+
+	for _, s := range []string{"\x1b[31mred\x1b[0m\r\n", "a中b\r\n", "\r\n", "plain\r\n", "x\r\n", "y\r\n", "z\r\n"} {
+		if _, err := v.Write([]byte(s)); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	n := v.ScrollbackLen()
+	got := map[int]string{}
+
+	v.ScrollbackText(0, n, func(i int, cells []TextCell) bool {
+		var b strings.Builder
+
+		for _, c := range cells {
+			b.Write(c.Content)
+		}
+
+		got[i] = b.String()
+
+		return true
+	})
+
+	for i := range n {
+		want := lineText(v.ScrollbackLine(i))
+
+		if text, ok := got[i]; ok && strings.TrimRight(text, " ") != want {
+			t.Errorf("line %d = %q, want %q", i, text, want)
+		} else if !ok && want != "" {
+			t.Errorf("line %d (%q) was skipped", i, want)
+		}
+	}
+
+	if len(got) == 0 {
+		t.Fatal("no lines read")
+	}
+
+	calls := 0
+
+	v.ScrollbackText(0, n, func(int, []TextCell) bool { calls++; return false })
+
+	if calls > 1 {
+		t.Errorf("fn called %d times after returning false", calls)
+	}
+}

@@ -125,6 +125,11 @@ func defaultCommands() []command {
 		title: "Copy selection",
 		run:   func(a *App) tea.Cmd { return a.copySelection() },
 	}, command{
+		id:    "copy.mode",
+		icon:  iconCopy,
+		title: "Copy mode",
+		run:   (*App).enterCopyMode,
+	}, command{
 		id:    "tab.new",
 		icon:  iconTabNew,
 		title: "New tab",

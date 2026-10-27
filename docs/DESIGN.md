@@ -121,12 +121,13 @@ focus_follows_mouse = false
 copy_on_select = false
 ```
 
-- The compositor gets every mouse event first, so selection lives in MuxReveal's own screen model. While a confirm, prompt, overlay or the leader (with or without its popup) is open, every mouse event is ignored.
+- The compositor gets every mouse event first, so selection lives in MuxReveal's own screen model. While a confirm, prompt, overlay, copy mode or the leader (with or without its popup) is open, every mouse event is ignored.
 - A plain left-button drag selects in every pane, without a modifier. The selection stays in the pane where the drag began and is clamped to that pane's content even when the pointer leaves it. A drag is a stream selection, `alt+drag` a rectangle, a double-click selects a word and a triple-click a line (same cell within 400 ms). Soft-wrapped lines copy as one line.
 - The selection is stored against the pane's scrollback by stable row, so it stays on the same text while output scrolls, and it is painted onto the rows as drawn, so a held synchronized update does not tear it; one selection exists at a time and it is drawn only while its pane is visible. A click in any pane's content, a new drag, a key or paste sent to its pane, or the pane closing, resizing or switching between the main and alt screen clears it. Leader commands and tab switches do not.
 - A click in a pane's content focuses it; a click on its header only focuses; a click on a tab switches to it; separators and the status bar ignore clicks.
 - A program that asked for mouse reporting gets a click (press then release) when the button is released in the cell where it went down, the wheel, button-less motion, and middle and right buttons. A drag never reaches it: it selects instead. Selection gestures belong to MuxReveal and single clicks to the program: the second and third press of a double or triple click select a word or line and the program gets nothing for them (it already got the first click).
 - `leader y` (`copy.selection`) copies the selection and keeps it. Every copy goes out as OSC 52 to the outer terminal (and as the primary selection on Linux); both Ghostty and Kitty accept it by default, and it works over SSH.
+- `leader [` (`copy.mode`) enters copy mode on the focused pane, with a block cursor at the bottom-left of its current view. Copy mode owns every key (and drops pastes) until it ends, and the program receives none of them. The cursor and selection stay on the same text while output arrives. `y` copies the selection and exits, `q` or `esc` exits and returns the view to live; it also ends when the pane closes, resizes or switches between the main and alt screen. Keys: `h j k l`, `w b e`, `0 ^ $`, `g g` / `G`, `ctrl+u` / `ctrl+d`, `ctrl+b` / `ctrl+f`, `H M L`; `v` stream, `V` line and `ctrl+v` block selection; `/` and `?` search forward and backward, `n` / `N` repeat.
 - On a local session (neither `SSH_CONNECTION` nor `SSH_TTY` set) a copy also writes the native clipboard, off the update loop with a 2 s timeout: `pbcopy` on macOS; otherwise `wl-copy` (and `wl-copy --primary`) when `WAYLAND_DISPLAY` is set, else `xclip -selection clipboard` (and `primary`) when `DISPLAY` is set, else no native write. A missing tool is logged once.
 - A program's own OSC 52 write takes the same path, hidden tabs included. A program's clipboard read is never answered with the clipboard's content.
 
@@ -289,8 +290,10 @@ Ground `Bar`.
 - **Mode segment** at column 0, followed by  in its colour on `Bar` and one `Bar` cell. Its text is `OnAccent` and bold:
   - ` 󰕮 MuxReveal ` on `Accent` normally;
   - ` 󰌌 ctrl+space ` on `Warning` while the leader waits for a key (the configured leader's name);
-  - ` 󰑕 Rename tab ` on `Accent` while a tab is being renamed.
-- **Key legend** after it: `ctrl+space then` in `Subtle`, then pairs of a key (`Key`, bold) and an action (`Muted`), three cells apart: `: palette`, `c new tab`, `, rename`, `z zoom`, `q quit`. While the leader waits: `esc cancel`. While renaming: `enter save`, `esc cancel`, `empty automatic name`. Only the normal legend has the `ctrl+space then` lead-in. Pairs that do not fit are dropped from the end.
+  - ` 󰑕 Rename tab ` on `Accent` while a tab is being renamed;
+  - ` 󰆏 COPY ` on `Info` in copy mode;
+  - ` 󰍉 Search ` on `Info` while a copy-mode search is typed (for `/` and `?`).
+- **Key legend** after it: `ctrl+space then` in `Subtle`, then pairs of a key (`Key`, bold) and an action (`Muted`), three cells apart: `: palette`, `c new tab`, `, rename`, `z zoom`, `q quit`. While the leader waits: `esc cancel`. While renaming: `enter save`, `esc cancel`, `empty automatic name`. In copy mode: `v select`, `y copy`, `/ search`, `n next`, `q exit`. Only the normal legend has the `ctrl+space then` lead-in. While a search is typed, the input text (`Fg`, 32 characters at most) takes the legend's place, with the terminal cursor in it; `enter` jumps to the next match (an empty query repeats the last search), `esc` closes the prompt and stays in copy mode, and a miss shows the notice `not found: <query>`. Pairs that do not fit are dropped from the end.
 - **Right side**, one cell from the edge: the notice (`Warning`, with 󰀪) while there is one, else the focused pane's cwd (`Muted`, with 󰉋), with the home directory shown as `~`. The legend stops two cells before it. A notice takes the room it needs before the legend, whose pairs and then the lead-in give way; the cwd takes at most the room left after the mode segment, the lead-in and 40 cells for the legend, cut with `…`.
 
 #### Overlays
@@ -363,7 +366,8 @@ All single cell (Nerd Fonts v3 names):
 | 󰓡 | nf-md-swap_horizontal | U+F04E1 | swap commands |
 | 󰅖 | nf-md-close | U+F0156 | close pane, close tab |
 | 󰈆 | nf-md-exit_to_app | U+F0206 | quit |
-| 󰆏 | nf-md-content_copy | U+F018F | copy commands |
+| 󰆏 | nf-md-content_copy | U+F018F | copy commands, copy mode |
+| 󰍉 | nf-md-magnify | U+F0349 | search prompt |
 |  | nf-ple-upper_left_triangle | U+E0BC | segment edge |
 |  | nf-ple-lower_right_triangle | U+E0BA | tray edge |
 |  | nf-ple-forwardslash_separator | U+E0BB | thin segment divider |
@@ -372,7 +376,7 @@ All single cell (Nerd Fonts v3 names):
 
 #### Command icons
 
-The palette shows each command's icon: `palette.open` , `theme.pick` and `theme.set.*` 󰏘, `agent.new` 󰚩, `pane.split.down` 󰯋, `pane.split.right` 󰯌, `pane.focus.*` 󰓾, `pane.resize.*` 󰘖, `pane.swap.*` 󰓡, `pane.zoom` 󰊓, `pane.close` and `tab.close` 󰅖, `copy.selection` 󰆏, `tab.new` 󰝜, `tab.rename` 󰑕, `tab.next`, `tab.prev` and `tab.jump.*` 󰓩, `app.quit` 󰈆.
+The palette shows each command's icon: `palette.open` , `theme.pick` and `theme.set.*` 󰏘, `agent.new` 󰚩, `pane.split.down` 󰯋, `pane.split.right` 󰯌, `pane.focus.*` 󰓾, `pane.resize.*` 󰘖, `pane.swap.*` 󰓡, `pane.zoom` 󰊓, `pane.close` and `tab.close` 󰅖, `copy.selection` and `copy.mode` 󰆏, `tab.new` 󰝜, `tab.rename` 󰑕, `tab.next`, `tab.prev` and `tab.jump.*` 󰓩, `app.quit` 󰈆.
 
 ### Claude Code integration via hooks
 
@@ -525,7 +529,7 @@ Terminal panes pass every key through to the agent, so global actions sit behind
 | `p` | Push branch |
 | `o` | Open PR (compose overlay) |
 | `m` | Merge PR for the focused agent |
-| `[` | Copy mode |
+| `[` | Copy mode on the focused pane: `h j k l`, `w b e`, `0 ^ $`, `g g` / `G`, `ctrl+u` / `ctrl+d`, `ctrl+b` / `ctrl+f`, `H M L` move; `v` / `V` / `ctrl+v` select by stream, line or block; `y` copies and exits; `/` / `?` search, `n` / `N` repeat; `q` or `esc` exits |
 | `:` | Command palette |
 | `t` | Theme picker |
 | `c` | New tab: a shell in the focused pane's cwd |

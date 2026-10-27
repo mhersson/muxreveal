@@ -119,18 +119,38 @@ func (s paneSelection) inView(base uint64) selection {
 	return selection{mode: s.mode, anchor: rel(s.anchor), head: rel(s.head)}
 }
 
+// selectionOf is the selection to draw on p: copy mode's own while it is active
+// on p, else the mouse selection.
+func (a *App) selectionOf(p *pane) *paneSelection {
+	if a.copy != nil && a.copy.pane == p.id {
+		if a.copy.m.sel == nil {
+			return nil
+		}
+
+		return newPaneSelection(p.id, *a.copy.m.sel, a.copy.trimmed)
+	}
+
+	if a.sel != nil && a.sel.pane == p.id {
+		return a.sel
+	}
+
+	return nil
+}
+
 // withSelection returns the pane's drawn rows with the ones the selection
 // touches repainted on the theme's selection background. They are repainted
 // from the cached rows themselves, never the live emulator, so a held sync
 // update or output not yet rendered cannot tear them from the rest.
 func (a *App) withSelection(p *pane) []string {
 	lines, base := p.linesAt()
-	if a.sel == nil || a.sel.pane != p.id {
+
+	ps := a.selectionOf(p)
+	if ps == nil {
 		return lines
 	}
 
 	cols, _ := p.size()
-	sel := a.sel.inView(base)
+	sel := ps.inView(base)
 	bg := a.current().theme.UI.Selection
 	out, cloned := lines, false
 

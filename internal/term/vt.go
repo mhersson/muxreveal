@@ -26,6 +26,9 @@ type VT interface {
 	CellAt(x, y int) *uv.Cell // nil outside the grid
 	Cursor() (pos uv.Position, visible bool)
 	ScrollbackLen() int
+	// ScrollbackText calls fn with the text of history lines [from, end), oldest
+	// first, until it returns false. Blank lines are skipped. It decodes no styles.
+	ScrollbackText(from, end int, fn func(i int, cells []TextCell) bool)
 	ScrollbackLine(i int) []uv.Cell // copy of history line i (0 oldest); nil out of range
 	ScrollbackWrapped(i int) bool   // history line i soft-wraps into i+1
 	HistoryTrimmed() uint64         // lines dropped from the front of the history so far: ring overwrite, CSI 3J, reflow
@@ -44,6 +47,14 @@ type VT interface {
 	SendBytes(b []byte)                                     // raw bytes queued on the reply stream, ordered with query replies
 	SendKey(k uv.KeyPressEvent)                             // EncodeKey with the current KeyModes; unencodable keys send nothing
 	Close() error                                           // idempotent: emulator Close, then wait for the drain
+}
+
+// TextCell is one history cell's text: no style, no link. Content is empty for
+// the spacer after a wide character, and aliases history storage, so a callback
+// must not keep it.
+type TextCell struct {
+	Content []byte
+	Width   int
 }
 
 // KeyModes are the guest's keyboard modes that change how keys are encoded.
@@ -74,6 +85,7 @@ type tuiosVT struct {
 	cwd       string
 	host      string // local hostname; OSC 7 from any other host is ignored
 	trimmed   atomic.Uint64
+	textBuf   []TextCell // reused by ScrollbackText
 }
 
 // countTrims counts the lines dropped from the front of the history. The
@@ -133,6 +145,19 @@ func (t *tuiosVT) SetClipboardHandler(fn func(selection, content string)) {
 func (t *tuiosVT) ScrollbackLine(i int) []uv.Cell {
 	// The emulator may return a slice it caches.
 	return slices.Clone(t.em.ScrollbackLine(i))
+}
+
+// ScrollbackText reads history without decoding styles or filling the line
+// cache, so a scan of the whole ring stays cheap. cells is reused between calls.
+func (t *tuiosVT) ScrollbackText(from, end int, fn func(i int, cells []TextCell) bool) {
+	t.em.ScrollbackText(from, end, func(i, _ int, src []tvt.TextCell) bool {
+		t.textBuf = t.textBuf[:0]
+		for _, c := range src {
+			t.textBuf = append(t.textBuf, TextCell{Content: c.Content, Width: c.Width})
+		}
+
+		return fn(i, t.textBuf)
+	})
 }
 
 func (t *tuiosVT) HistoryTrimmed() uint64 { return t.trimmed.Load() }

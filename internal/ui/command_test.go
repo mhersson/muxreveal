@@ -73,6 +73,7 @@ func TestDefaultCommands(t *testing.T) {
 		want{"pane.zoom", "Zoom pane", iconZoom},
 		want{"pane.close", "Close pane", iconClose},
 		want{"copy.selection", "Copy selection", iconCopy},
+		want{"copy.mode", "Copy mode", iconCopy},
 		want{"tab.new", "New tab", iconTabNew},
 		want{"tab.rename", "Rename tab", iconRename},
 		want{"tab.close", "Close tab", iconClose},

@@ -72,6 +72,7 @@ type App struct {
 	tray      trayState
 	clip      *clipboard
 	sel       *paneSelection // the one selection; survives tab switches
+	copy      *copyState     // copy mode; owns every key and ignores the mouse while set
 	mouse     mouseState
 	load      loadSampler // nil on platforms without a load reading
 	start     func(ctx context.Context, c term.Command, cols, rows int) (proc, error)
@@ -190,7 +191,7 @@ func (a *App) dropGoneTab(st core.State) {
 		a.confirm = nil
 	}
 
-	if a.prompt != nil && !has(a.prompt.tab) {
+	if a.prompt != nil && a.prompt.kind == promptRename && !has(a.prompt.tab) {
 		a.prompt = nil
 	}
 }
