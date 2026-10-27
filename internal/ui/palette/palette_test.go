@@ -351,7 +351,7 @@ func TestViewFrame(t *testing.T) {
 	}
 	wantTop := "\u256d\u2500 \U000F03D8 Theme "
 	if !strings.HasPrefix(lines[0], wantTop) || !strings.HasSuffix(lines[0], "\u256e") {
-		t.Errorf("top = %q, want prefix %q and a square corner", lines[0], wantTop)
+		t.Errorf("top = %q, want prefix %q and a rounded corner", lines[0], wantTop)
 	}
 	if !strings.HasPrefix(lines[1], "\u2502 \u276f ") {
 		t.Errorf("input row = %q, want the \u276f prompt", lines[1])

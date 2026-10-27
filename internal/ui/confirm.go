@@ -45,7 +45,7 @@ func (a *App) handleConfirmKey(msg tea.KeyPressMsg) tea.Cmd {
 	return nil
 }
 
-// confirmBox draws the box w cells wide: a square border in Error with the
+// confirmBox draws the box w cells wide: a rounded border in Error with the
 // action set into the top edge, the question, its detail and the answer keys.
 func confirmBox(c confirm, w int, icons bool, st styles) []string {
 	inner := w - 2
