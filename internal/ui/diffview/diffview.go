@@ -20,8 +20,8 @@
 // The package draws; it does not lay out. The caller decides which rows are
 // on screen and asks for those only, so a file of five thousand lines costs
 // the rows that show. Tokenising is the expensive part, so the caller asks
-// for a chunk of lines at a time and keeps what Highlighter.Highlight returned for as
-// long as the diff does not change.
+// for a chunk of lines at a time and keeps what Highlighter.Highlight
+// returned for as long as the diff does not change.
 //
 // The browser build (GOOS=js) leaves chroma out and draws every line plain:
 // it never shows a review, and the lexers would add megabytes to the page.

@@ -30,7 +30,7 @@ MuxReveal includes material copied from the projects below, each under the MIT L
 
 - Source: https://github.com/Gaurav-Gosain/tuios (`internal/diffview/`, commit `aaaa128cd35b38ba8aa08a5f69e688f01385ec3e`)
 - Copyright (c) 2025 Gaurav Gosain
-- Used in `internal/ui/diffview/`: `diffview.go`, `highlight.go`, `pair.go`, `render.go`, `theme.go`, `diffview_test.go` and `lexers/` (`coded.go`, `gen.go`, `registry.go`): the diff line renderer, word-level change ranges and syntax highlighting. `shim.go` is MuxReveal's own.
+- Used in `internal/ui/diffview/`: `diffview.go`, `highlight.go`, `pair.go`, `render.go`, `theme.go` and `lexers/` (`coded.go`, `gen.go`, `registry.go`): the diff line renderer, word-level change ranges and syntax highlighting. `shim.go` is MuxReveal's own.
 
 ## chroma lexer definitions
 

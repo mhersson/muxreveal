@@ -134,7 +134,7 @@ func run() error {
 		}
 	}
 
-	dst := "internal/diffview/lexers"
+	dst := "internal/ui/diffview/lexers"
 	old, _ := filepath.Glob(filepath.Join(dst, "*.xml.gz"))
 	for _, f := range old {
 		if err := os.Remove(f); err != nil {

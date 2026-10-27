@@ -12,7 +12,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/alecthomas/chroma/v2"
-
 )
 
 // Limits past which a text is drawn plain rather than tokenised. chroma's
