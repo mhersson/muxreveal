@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"image/color"
 	"strings"
 
 	uv "github.com/charmbracelet/ultraviolet"
@@ -11,13 +12,20 @@ import (
 
 // renderRow renders live row y of the emulator; see renderCells.
 func renderRow(v term.VT, y, w int) string {
-	return renderCells(func(x int) *uv.Cell { return v.CellAt(x, y) }, w)
+	return renderCells(func(x int) *uv.Cell { return v.CellAt(x, y) }, w, nil)
+}
+
+// spanPaint paints the background of columns from..to (inclusive) of a row.
+type spanPaint struct {
+	from, to int
+	bg       color.Color
 }
 
 // renderCells returns a row as a string exactly w cells wide, with style and
 // link sequences closed at the end so rows compose independently. at returns
-// nil for a column without a cell.
-func renderCells(at func(x int) *uv.Cell, w int) string {
+// nil for a column without a cell. A non-nil hl repaints its span, wide cells
+// included when any of their columns is inside it.
+func renderCells(at func(x int) *uv.Cell, w int, hl *spanPaint) string {
 	var (
 		sb    strings.Builder
 		style uv.Style
@@ -38,6 +46,12 @@ func renderCells(at func(x int) *uv.Cell, w int) string {
 		if c.Width > 1 && x+c.Width > w {
 			// A wide cell cut by the right edge would overflow the row.
 			c = &uv.Cell{Content: " ", Width: 1, Style: c.Style}
+		}
+
+		if hl != nil && x <= hl.to && x+c.Width > hl.from {
+			painted := *c
+			painted.Style.Bg = hl.bg
+			c = &painted
 		}
 
 		if c.Link != link {

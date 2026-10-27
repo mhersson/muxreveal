@@ -7,12 +7,12 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"runtime"
 	"slices"
 	"sync"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	uv "github.com/charmbracelet/ultraviolet"
 
 	"github.com/mhersson/muxreveal/internal/core"
 	"github.com/mhersson/muxreveal/internal/term"
@@ -70,6 +70,9 @@ type App struct {
 	started   bool   // the first size message was handled; it opens the first pane only once
 	clock     clock  // the sync hold's and the tray's time source
 	tray      trayState
+	clip      *clipboard
+	sel       *paneSelection // the one selection; survives tab switches
+	mouse     mouseState
 	load      loadSampler // nil on platforms without a load reading
 	start     func(ctx context.Context, c term.Command, cols, rows int) (proc, error)
 
@@ -119,6 +122,7 @@ func New(opts Options) (*App, error) {
 		panes: map[core.PaneID]*pane{}, outerFocused: true,
 		getenv: getenv, cwd: cwd, recordDir: opts.RecordDir, icons: opts.Icons, clock: realClock{}, start: termStart,
 		load: newSysLoad(),
+		clip: newClipboard(clipboardConfig{OSC52: true, Native: true}, getenv, runtime.GOOS, opts.Logger),
 	}
 	a.tray.gitRun = runGit
 	if err := a.sync(); err != nil {
@@ -244,8 +248,12 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, a.handlePaste(msg)
 	case tea.MouseWheelMsg:
 		a.handleWheel(msg)
-	case tea.MouseClickMsg, tea.MouseReleaseMsg, tea.MouseMotionMsg:
-		// Only the wheel is handled; these must not reach the prompt or overlay.
+	case tea.MouseClickMsg:
+		return a, a.handleClick(msg)
+	case tea.MouseMotionMsg:
+		a.handleMotion(msg)
+	case tea.MouseReleaseMsg:
+		a.handleRelease(msg)
 	case tea.FocusMsg:
 		a.outerFocused = true
 		a.sendToFocused(func(p *pane) { p.sendFocus(true) })
@@ -290,73 +298,6 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return a, nil
 }
 
-// paneAt returns the pane whose content cells contain the screen cell (x, y)
-// and that cell relative to the content.
-func (a *App) paneAt(x, y int) (*pane, int, int) {
-	for id, r := range a.geometry().rects {
-		c := contentRect(r)
-		if x < c.X || x >= c.X+c.W || y < c.Y || y >= c.Y+c.H {
-			continue
-		}
-
-		if p := a.panes[id]; p != nil {
-			return p, x - c.X, y - c.Y
-		}
-	}
-
-	return nil, 0, 0
-}
-
-// handleWheel acts on the pane under the pointer without moving focus: a guest
-// that tracks the mouse gets the event, the alt screen gets cursor-key presses,
-// and any other pane scrolls its view. Modal UI owns the pointer while open.
-func (a *App) handleWheel(msg tea.MouseWheelMsg) {
-	if a.confirm != nil || a.prompt != nil || a.overlay != nil || a.popup {
-		return
-	}
-
-	m := msg.Mouse()
-
-	p, x, y := a.paneAt(m.X, m.Y)
-	if p == nil {
-		return
-	}
-
-	tracking, alt := p.inputModes()
-
-	if tracking {
-		p.scrollLive()
-		p.sendMouse(uv.MouseWheelEvent(uv.Mouse{X: x, Y: y, Button: m.Button, Mod: m.Mod}))
-
-		return
-	}
-
-	var code rune
-
-	switch m.Button {
-	case tea.MouseWheelUp:
-		code = tea.KeyUp
-	case tea.MouseWheelDown:
-		code = tea.KeyDown
-	default:
-		return
-	}
-
-	if alt {
-		for range scrollStep {
-			p.sendKey(uv.KeyPressEvent{Code: code})
-		}
-
-		return
-	}
-
-	if code == tea.KeyUp {
-		p.scrollBy(scrollStep)
-	} else {
-		p.scrollBy(-scrollStep)
-	}
-}
-
 // bindingKey names a key for keymap lookup. A shift-only key without text
 // resolves to its shifted character, so "H" and ":" match however the
 // terminal reports them.
@@ -387,7 +328,7 @@ func (a *App) runLeader(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 		return nil, true
 	}
 	if key == a.keymap.leader {
-		a.sendToFocused(func(p *pane) { p.sendKey(uv.KeyPressEvent(msg)) })
+		a.keyToFocused(msg)
 		return nil, true
 	}
 	id, ok := a.keymap.lookup(key)

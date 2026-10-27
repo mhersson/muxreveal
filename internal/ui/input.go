@@ -23,7 +23,7 @@ func (a *App) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 	if cmd, ok := a.runLeader(msg); ok {
 		return cmd
 	}
-	a.sendToFocused(func(p *pane) { p.sendKey(uv.KeyPressEvent(msg)) })
+	a.keyToFocused(msg)
 	return nil
 }
 
@@ -40,8 +40,19 @@ func (a *App) handlePaste(msg tea.PasteMsg) tea.Cmd {
 		return a.updateOverlay(msg)
 	}
 	a.pending, a.popup = false, false
-	a.sendToFocused(func(p *pane) { p.sendPaste(msg.Content) })
+	a.sendToFocused(func(p *pane) {
+		a.clearSelectionOf(p.id)
+		p.sendPaste(msg.Content)
+	})
 	return nil
+}
+
+// keyToFocused sends a key to the focused pane; typing ends that pane's selection.
+func (a *App) keyToFocused(msg tea.KeyPressMsg) {
+	a.sendToFocused(func(p *pane) {
+		a.clearSelectionOf(p.id)
+		p.sendKey(uv.KeyPressEvent(msg))
+	})
 }
 
 // sendToFocused runs f on the focused pane; with none it does nothing.

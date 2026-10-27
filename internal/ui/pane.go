@@ -58,8 +58,11 @@ type pane struct {
 	mu         sync.Mutex
 	vt         term.VT
 	rows       []string
+	rowsBase   uint64 // stable row of rows[0] when they were last rendered
 	gen        uint64 // bumps when rows change; part of the scrolled view's cache key
 	alt        bool   // the alt screen was active at the last render
+	altSwitch  bool   // the alt screen changed since takeAltSwitch
+	clip       string // the guest's latest OSC 52 write, until takeClip
 	scrolled   bool   // the view shows history; anchor is its first row
 	anchor     uint64 // stable row of the first view row while scrolled
 	viewCache  viewCache
@@ -112,9 +115,45 @@ func newPane(id core.PaneID, p proc, cols, rows int, c clock, opts ...paneOption
 		pn.rows[y] = renderRow(pn.vt, y, cols)
 	}
 
+	pn.rowsBase = pn.stableTopLocked()
+
+	// Installed before the read loop: VT calls are not concurrent-safe.
+	pn.vt.SetClipboardHandler(pn.setClip)
+
 	pn.wg.Go(pn.readLoop)
 
 	return pn
+}
+
+// setClip keeps the guest's latest clipboard write. It runs inside Write with
+// mu held, so it must not lock.
+func (p *pane) setClip(_, content string) {
+	if content != "" {
+		p.clip = content
+	}
+}
+
+// takeClip returns the guest's latest clipboard write since the last call.
+func (p *pane) takeClip() (string, bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	text := p.clip
+	p.clip = ""
+
+	return text, text != ""
+}
+
+// takeAltSwitch reports whether the pane moved between the main and alt
+// screens since the last call.
+func (p *pane) takeAltSwitch() bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	was := p.altSwitch
+	p.altSwitch = false
+
+	return was
 }
 
 func (p *pane) readLoop() {
@@ -195,7 +234,7 @@ func (p *pane) render() (changed bool, heldUntil time.Time) {
 	defer p.mu.Unlock()
 
 	if alt := p.vt.AltScreen(); alt != p.alt {
-		p.alt, p.scrolled = alt, false
+		p.alt, p.scrolled, p.altSwitch = alt, false, true
 	}
 
 	if open, _ := p.vt.SyncState(); open {
@@ -206,6 +245,7 @@ func (p *pane) render() (changed bool, heldUntil time.Time) {
 
 	w, _ := p.vt.Size()
 
+	p.rowsBase = p.stableTopLocked()
 	changed = p.forced
 	p.forced = false
 
@@ -248,21 +288,36 @@ func (p *pane) resize(cols, rows int) bool {
 	p.forced = true
 	p.scrolled = false
 	p.viewCache = viewCache{}
+	p.rowsBase = p.stableTopLocked()
 
 	return true
+}
+
+// stableTopLocked is the stable row of the first live screen row: the history
+// length plus the lines trimmed so far.
+func (p *pane) stableTopLocked() uint64 {
+	return uint64(p.histLenLocked()) + p.vt.HistoryTrimmed()
 }
 
 // lines returns the rows to draw, each exactly the pane width: the live screen,
 // or the scrolled view. It is only valid until the next render or resize.
 func (p *pane) lines() []string {
+	lines, _ := p.linesAt()
+
+	return lines
+}
+
+// linesAt is lines plus the stable row of the first one, so a caller can place
+// text-anchored state on the rows as drawn rather than as the emulator is now.
+func (p *pane) linesAt() (lines []string, base uint64) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
 	if top, hist := p.viewTopLocked(); p.scrolled {
-		return p.viewLocked(top, hist)
+		return p.viewLocked(top, hist), p.anchor
 	}
 
-	return p.rows
+	return p.rows, p.rowsBase
 }
 
 func (p *pane) size() (cols, rows int) {

@@ -120,6 +120,11 @@ func defaultCommands() []command {
 		title: "Close pane",
 		run:   (*App).closeFocused,
 	}, command{
+		id:    "copy.selection",
+		icon:  iconCopy,
+		title: "Copy selection",
+		run:   func(a *App) tea.Cmd { return a.copySelection() },
+	}, command{
 		id:    "tab.new",
 		icon:  iconTabNew,
 		title: "New tab",

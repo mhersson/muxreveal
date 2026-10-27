@@ -30,6 +30,7 @@ const (
 	iconSwap      = "\U000F04E1" // nf-md-swap_horizontal
 	iconClose     = "\U000F0156" // nf-md-close
 	iconQuit      = "\U000F0206" // nf-md-exit_to_app
+	iconCopy      = "\U000F018F" // nf-md-content_copy
 )
 
 // Powerline edges and dividers.

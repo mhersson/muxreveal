@@ -192,7 +192,7 @@ func TestWheelIgnoredUnderModalUI(t *testing.T) {
 	}{
 		{"confirm", func(a *App) { a.confirm = &confirm{} }},
 		{"prompt", func(a *App) { a.prompt = &prompt{} }},
-		{"which-key", func(a *App) { a.popup = true }},
+		{"which-key", func(a *App) { a.pending, a.popup = true, true }},
 	}
 
 	for _, tt := range tests {
@@ -218,24 +218,18 @@ func TestViewEnablesMouse(t *testing.T) {
 	}
 }
 
-func TestOtherMouseMessagesAreIgnored(t *testing.T) {
+func TestButtonlessMotionOverAShellSendsNothing(t *testing.T) {
 	a, procs := twoShells(t)
 	x, y := centre(a, "p1")
 
-	for _, m := range []tea.Msg{
-		tea.MouseClickMsg{X: x, Y: y, Button: tea.MouseLeft},
-		tea.MouseReleaseMsg{X: x, Y: y, Button: tea.MouseLeft},
-		tea.MouseMotionMsg{X: x, Y: y},
-	} {
-		a.Update(m)
-	}
-
-	if got := a.store.State().Tab().Focus; got != "p2" {
-		t.Errorf("focus = %q, want p2", got)
-	}
+	a.Update(tea.MouseMotionMsg{X: x, Y: y})
 
 	if got := procs["p1"].sent() + procs["p2"].sent(); got != "" {
 		t.Errorf("panes were sent %q", got)
+	}
+
+	if got := a.store.State().Tab().Focus; got != "p2" {
+		t.Errorf("focus = %q, want p2 (hovering does not focus)", got)
 	}
 }
 

@@ -167,7 +167,7 @@ func (p *pane) viewLocked(top, hist int) []string {
 				out[i] = p.rows[sr]
 			} else {
 				if blank == "" {
-					blank = renderCells(func(int) *uv.Cell { return nil }, cols)
+					blank = renderCells(func(int) *uv.Cell { return nil }, cols, nil)
 				}
 
 				out[i] = blank
@@ -191,7 +191,7 @@ func (p *pane) viewLocked(top, hist int) []string {
 				}
 
 				return nil
-			}, cols)
+			}, cols, nil)
 		}
 
 		out[i] = s
@@ -255,6 +255,12 @@ func (g *paneGrid) Wrapped(row int) bool {
 // withGrid runs fn under the pane lock with the pane's text in absolute rows.
 // The grid is only valid inside fn. A closed pane runs nothing.
 func (p *pane) withGrid(fn func(g grid)) {
+	p.withView(func(g grid, _ int, _ uint64) { fn(g) })
+}
+
+// withView is withGrid plus the absolute row of the first view row and the
+// lines trimmed from the history so far, which turn rows into stable rows.
+func (p *pane) withView(fn func(g grid, top int, trimmed uint64)) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
@@ -262,10 +268,11 @@ func (p *pane) withGrid(fn func(g grid)) {
 		return
 	}
 
+	top, hist := p.viewTopLocked()
 	cols, rows := p.vt.Size()
 
 	fn(&paneGrid{
-		vt: p.vt, hist: p.histLenLocked(), rows: rows, cols: cols,
+		vt: p.vt, hist: hist, rows: rows, cols: cols,
 		lines: map[int][]uv.Cell{},
-	})
+	}, top, p.vt.HistoryTrimmed())
 }

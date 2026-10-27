@@ -30,11 +30,13 @@ func newThemedApp(t *testing.T, name string) *App {
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
-	// M0 tests assert the empty-layout shell, so the first size message must not open a pane.
+	// The shell tests assert the empty layout, so the first size message must not open a pane.
 	app.started = true
 	app.start = func(context.Context, term.Command, int, int) (proc, error) {
 		return nil, errors.New("test app does not start processes")
 	}
+	// A copy must never reach the operator's real clipboard tools.
+	app.clip.run = (&fakeRun{}).run
 	return app
 }
 

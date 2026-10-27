@@ -87,7 +87,7 @@ Mouse selection inside panes, copy to the system clipboard (OSC 52 and native to
 - [x] Selection model and text extraction
 - [x] Copy-mode engine
 - [x] Scrollback view and mouse wheel
-- [ ] Mouse selection, clicks and clipboard
+- [x] Mouse selection, clicks and clipboard
 - [ ] Copy mode
 - [ ] Mouse and clipboard options and bench check
 
@@ -294,10 +294,10 @@ M1c Copy, mouse and clipboard on `feat/m1c-copy-mouse`: the scrollback view and 
 
 Ideas and requests that came up outside the current milestone go here.
 
+- A pane's kind is fixed when it opens: `claude` started in a shell pane does not make it an agent, and an agent pane whose Claude exits stays an agent (frame colour, tab icon, tray robots). M1d makes the kind follow Claude both ways (shim and hooks, or the terminal's foreground process).
 - Build and run the spike on the operator's Mac; all numbers so far are from Linux.
 - Kitty and Ghostty key pass by the operator: Kitty keyboard keys (shift+enter, ctrl combinations) through a real Kitty-protocol terminal, which tmux cannot carry.
 - tuios's `ghostty` build-tag backend (libghostty-vt through cgo, built with Zig).
-- Mouse forwarding to panes (not built in the spike).
 - A pane resize returns a scrolled view to live; tuios's `Terminal.SetReflowFunc` could remap the scroll anchor (and selections) through a reflow instead.
 - Live x/vt streaming check, only if x/vt ever becomes the backend: does Claude's unsynchronized output tear?
 - A cell-level render path that skips Bubble Tea's string re-parse (about half of present), if M1's frame cost grows.

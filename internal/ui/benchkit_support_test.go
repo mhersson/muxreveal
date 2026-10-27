@@ -243,6 +243,9 @@ func newBenchApp(cfg benchConfig, clk clock) (*App, []core.PaneID, error) {
 		return nil, nil, err
 	}
 
+	// A copy must never reach the operator's real clipboard tools.
+	app.clip.run = (&fakeRun{}).run
+
 	app.clock = clk
 	app.start = func(context.Context, term.Command, int, int) (proc, error) { return newReplayProc(), nil }
 

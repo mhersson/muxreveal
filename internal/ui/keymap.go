@@ -38,6 +38,7 @@ func defaultKeymap() keymap {
 			{key: "ctrl+l", command: "pane.swap.right", group: "Panes"},
 			{key: "z", command: "pane.zoom", group: "Panes"},
 			{key: "x", command: "pane.close", group: "Panes"},
+			{key: "y", command: "copy.selection", group: "Panes"},
 			{key: "c", command: "tab.new", group: "Tabs"},
 			{key: ",", command: "tab.rename", group: "Tabs"},
 			{key: "X", command: "tab.close", group: "Tabs"},

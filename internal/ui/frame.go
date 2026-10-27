@@ -149,7 +149,7 @@ func (a *App) frameBody(g geometry, st core.State, lk look) []string {
 		fit := false
 
 		if p := a.panes[id]; p != nil {
-			lines = p.lines()
+			lines = a.withSelection(p)
 			cols, prows := p.size()
 			fit = cols != c.W || prows != c.H
 		}
