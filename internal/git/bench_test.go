@@ -74,6 +74,31 @@ func TestBenchSaveToDiff(t *testing.T) {
 		t.Errorf("median %v exceeds %v", m, saveToDiffMedian)
 	}
 
+	// New files beside modified ones take the full-Diff path.
+	for i := range 5 {
+		writeFile(t, dir, fmt.Sprintf("d%02d/f%04d.txt", i, i+100), "modified\n")
+	}
+
+	prev, err = e.Diff(context.Background(), src)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	times = nil
+
+	for i := range 20 {
+		var took time.Duration
+
+		prev, took = saveToDiff(t, w, e, prev, src, fmt.Sprintf("new%02d.txt", i), "a new file\n")
+		times = append(times, took)
+	}
+
+	t.Logf("save of a new file beside 5 modified files over %d saves: median %v, p95 %v, all %v", len(times), median(times), p95(times), times)
+
+	if m := median(times); m > saveToDiffMedian {
+		t.Errorf("new-file median %v exceeds %v", m, saveToDiffMedian)
+	}
+
 	var snaps []time.Duration
 
 	for range 5 {
@@ -91,6 +116,12 @@ func TestBenchSaveToDiff(t *testing.T) {
 	}
 }
 
+func isMuxRevealSource(top string) bool {
+	mod, err := os.ReadFile(filepath.Join(top, "go.mod"))
+
+	return err == nil && strings.Contains(string(mod), "module github.com/mhersson/muxreveal\n")
+}
+
 // TestBenchLargeRepo times a snapshot, a working tree and a branch diff of
 // 20 edited files in the clone MUXREVEAL_BENCH_REPO names. It edits and
 // snapshots that clone: never point it at a repository you care about.
@@ -103,6 +134,11 @@ func TestBenchLargeRepo(t *testing.T) {
 	isolateGit(t)
 
 	ctx := context.Background()
+
+	if top := gitOut(t, dir, "rev-parse", "--show-toplevel"); isMuxRevealSource(top) {
+		t.Skipf("%s is the MuxReveal source tree; the bench edits files and writes snapshot refs in its target", top)
+	}
+
 	r, err := Open(ctx, dir)
 	if err != nil {
 		t.Fatal(err)

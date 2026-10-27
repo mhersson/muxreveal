@@ -21,16 +21,7 @@ func (e *Engine) Update(ctx context.Context, prev Result, src Source, b Batch) (
 		return e.Diff(ctx, src)
 	}
 
-	var worktree string
-
-	switch s := src.(type) {
-	case BranchSource:
-		worktree = s.Worktree
-	case TurnSource:
-		worktree = s.Worktree
-	}
-
-	r, err := Open(ctx, worktree)
+	r, err := Open(ctx, worktreeOf(src))
 	if err != nil {
 		return Result{}, err
 	}
@@ -88,6 +79,18 @@ func (e *Engine) Update(ctx context.Context, prev Result, src Source, b Batch) (
 	}
 
 	return res, nil
+}
+
+// worktreeOf returns the worktree of a branch or turn source.
+func worktreeOf(src Source) string {
+	switch s := src.(type) {
+	case BranchSource:
+		return s.Worktree
+	case TurnSource:
+		return s.Worktree
+	}
+
+	return ""
 }
 
 // canUpdate reports whether prev and the batch allow an incremental update.
@@ -190,6 +193,8 @@ func (e *Engine) withinCaps(files []FileDiff) bool {
 		return false
 	}
 
+	// Per-file header, per-hunk header and per-line framing, each rounded up so
+	// the sum bounds what git prints.
 	size := 0
 
 	for _, f := range files {

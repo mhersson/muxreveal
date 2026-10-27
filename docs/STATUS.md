@@ -326,7 +326,8 @@ Machine: as the Spike "Machine" section (AMD Ryzen 9 3950X, 16 cores / 32 thread
 
 | Gate line | Measured | Result |
 | --- | --- | --- |
-| Save to diff at most 300 ms (median), 2,000-file repo, 20 saves, watcher batch included (150 ms debounce) | median 186.5 ms, p95 191.7 ms | pass |
+| Save to diff at most 300 ms (median), 2,000-file repo, 20 saves, watcher batch included (150 ms debounce) | median 186.7 ms, p95 196.4 ms | pass |
+| Save of a new file beside 5 modified files at most 300 ms (median), 20 saves; this takes the full-Diff path | median 220.8 ms, p95 224.6 ms | pass |
 | Snapshot of the 2,000-file repo within the 1.4 s hook budget | median 35.2 ms of 5 | pass |
 | Turn mode isolates exactly the last turn's changes (`TestTurnModeIsolatesTheLastTurn`: three turns, a delete, an untracked file, an agent commit mid-turn) | turns 3, 2 and 1 each list exactly their own files | pass |
 

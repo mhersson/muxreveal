@@ -104,21 +104,24 @@ func TestUpdateTouchedFileEqualsFullDiff(t *testing.T) {
 func TestUpdateShapesEqualFullDiff(t *testing.T) {
 	tests := []struct {
 		name    string
+		setup   func(dir string) // before prev is computed
 		change  func(dir string)
 		touched []string
 	}{
-		{"modify", func(dir string) { writeFile(t, dir, "c.txt", "changed\n") }, []string{"c.txt"}},
-		{"revert a changed file", func(dir string) { writeFile(t, dir, "a.txt", numbered("a.txt", 30)) }, []string{"a.txt"}},
-		{"delete", func(dir string) { must(t, os.Remove(filepath.Join(dir, "b.txt"))) }, []string{"b.txt"}},
-		{"untracked file", func(dir string) { writeFile(t, dir, "new.txt", "fresh\nfile\n") }, []string{"new.txt"}},
-		{"removed directory", func(dir string) { must(t, os.RemoveAll(filepath.Join(dir, "dir"))) }, []string{"dir"}},
-		{"touched path that never existed", func(dir string) {}, []string{"ghost.txt"}},
-		{"two files", func(dir string) {
+		{"modify", nil, func(dir string) { writeFile(t, dir, "c.txt", "changed\n") }, []string{"c.txt"}},
+		{"revert a changed file", nil, func(dir string) { writeFile(t, dir, "a.txt", numbered("a.txt", 30)) }, []string{"a.txt"}},
+		{"delete", nil, func(dir string) { must(t, os.Remove(filepath.Join(dir, "b.txt"))) }, []string{"b.txt"}},
+		{"untracked file", nil, func(dir string) { writeFile(t, dir, "new.txt", "fresh\nfile\n") }, []string{"new.txt"}},
+		{"removed directory", nil, func(dir string) { must(t, os.RemoveAll(filepath.Join(dir, "dir"))) }, []string{"dir"}},
+		{"touched path that never existed", nil, func(dir string) {}, []string{"ghost.txt"}},
+		{"two files", nil, func(dir string) {
 			writeFile(t, dir, "b.txt", "x\n")
 			writeFile(t, dir, "c.txt", "y\n")
 		}, []string{"b.txt", "c.txt"}},
-		{"deleted file next to an untouched modification", func(dir string) { must(t, os.Remove(filepath.Join(dir, "dir/e.txt"))) }, []string{"dir/e.txt"}},
+		{"deleted file next to an untouched modification", nil, func(dir string) { must(t, os.Remove(filepath.Join(dir, "dir/e.txt"))) }, []string{"dir/e.txt"}},
 		{"identical content added while another file is deleted", func(dir string) {
+			must(t, os.Remove(filepath.Join(dir, "c.txt")))
+		}, func(dir string) {
 			writeFile(t, dir, "moved.txt", numbered("c.txt", 30))
 		}, []string{"moved.txt"}},
 	}
@@ -129,8 +132,8 @@ func TestUpdateShapesEqualFullDiff(t *testing.T) {
 			src := BranchSource{Worktree: dir, Base: "main"}
 			e := testEngine(t)
 
-			if tt.name == "identical content added while another file is deleted" {
-				must(t, os.Remove(filepath.Join(dir, "c.txt")))
+			if tt.setup != nil {
+				tt.setup(dir)
 			}
 
 			prev := diffOK(t, e, src)
@@ -331,5 +334,25 @@ func TestUpdateFallsBackPastTheByteCap(t *testing.T) {
 
 	if full == 0 {
 		t.Error("the merged files cross the byte cap but no full Diff ran")
+	}
+}
+
+func TestUpdateNewFileBesideChangesRunsAFullListing(t *testing.T) {
+	dir := updateRepo(t) // a.txt is modified on the branch
+	src := BranchSource{Worktree: dir, Base: "main"}
+	e := testEngine(t)
+	prev := diffOK(t, e, src)
+
+	writeFile(t, dir, "fresh.txt", "a new file\n")
+
+	logPath := fakeGit(t, "")
+	res := updateOK(t, e, prev, src, Batch{Paths: []string{"fresh.txt"}})
+	restricted, full := listingCalls(t, logPath)
+
+	sameAsFull(t, res, src)
+
+	// Git may pair a new file with a changed one as a rename or copy.
+	if full != 1 || restricted != 1 {
+		t.Errorf("listings: restricted=%d full=%d, want the touched listing and then a full one", restricted, full)
 	}
 }
