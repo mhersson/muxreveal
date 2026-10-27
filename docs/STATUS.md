@@ -418,6 +418,7 @@ M2a Worktrees and diff engine is complete on `feat/diff-engine` and waits for re
 | 2026-10-27 | A pane's title no longer shows its cwd | The operator's pick from the chrome comparison |
 | 2026-10-27 | The `Bar` role is Base, not Crust | The operator's pick from the chrome comparison |
 | 2026-10-27 | Overlay boxes (which-key, sequence popup, palette, theme picker, confirm) have rounded corners `╭ ╮ ╰ ╯`, not square ones | The operator's pick from the chrome comparison |
+| 2026-10-27 | The palette and the theme picker end in a joined divider and a hint row (`up/down move`, `enter run`, `esc close`), two rows taller | The operator's pick from the chrome comparison |
 
 ## Later
 

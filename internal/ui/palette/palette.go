@@ -258,6 +258,8 @@ func (m Model) View(width int) string {
 		lines = append(lines, m.row(i, inner))
 	}
 
+	lines = append(lines, border.Render("├"+strings.Repeat("─", inner)+"┤"), fit(m.footer(panel), panel))
+
 	// The count ends one dash before the corner; it is left out when it does not fit.
 	count := " " + strconv.Itoa(max(m.sel+1, 0)) + " of " + strconv.Itoa(len(m.matches)) + " "
 	cw := lipgloss.Width(count)
@@ -271,6 +273,22 @@ func (m Model) View(width int) string {
 		lines[i] = ansi.Truncate(l, width, "")
 	}
 	return strings.Join(lines, "\n")
+}
+
+// footer is the key hint row: each key in Key bold, its label in Muted, the
+// pairs three cells apart, after one cell of margin.
+func (m Model) footer(panel lipgloss.Style) string {
+	ui := m.theme.UI
+	var sb strings.Builder
+	sb.WriteString(panel.Render(" "))
+	for i, h := range [][2]string{{"up/down", "move"}, {"enter", "run"}, {"esc", "close"}} {
+		if i > 0 {
+			sb.WriteString(panel.Render("   "))
+		}
+		sb.WriteString(panel.Foreground(ui.Key).Bold(true).Render(h[0]))
+		sb.WriteString(panel.Foreground(ui.Muted).Render(" " + h[1]))
+	}
+	return sb.String()
 }
 
 // row draws match i: icon, title with matched runes emphasised, and the hint

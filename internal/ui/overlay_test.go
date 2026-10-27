@@ -358,3 +358,26 @@ func TestOverlayBeforeFirstSize(t *testing.T) {
 		t.Errorf("palette not visible after sizing:\n%s", view)
 	}
 }
+
+func TestPaletteFooterPlacement(t *testing.T) {
+	items := make([]palette.Item, 12)
+	for i := range items {
+		items[i] = palette.Item{ID: fmt.Sprint(i), Title: fmt.Sprint("item ", i)}
+	}
+	pal := palette.New("Commands", items, mustTheme(t, "catppuccin-mocha"))
+	// The box is 16 rows tall with ten results and starts at a quarter of the height.
+	for _, tc := range []struct {
+		height     int
+		wantHint   bool
+		wantBottom bool
+	}{{22, true, true}, {21, true, false}, {20, false, false}, {19, false, false}} {
+		base := strings.TrimSuffix(strings.Repeat(strings.Repeat(" ", 80)+"\n", tc.height), "\n")
+		text := ansi.Strip(overlayOver(base, 80, tc.height, pal))
+		if got := strings.Contains(text, "esc close"); got != tc.wantHint {
+			t.Errorf("height %d: hint row visible = %v, want %v", tc.height, got, tc.wantHint)
+		}
+		if got := strings.Contains(text, "\u2570"); got != tc.wantBottom {
+			t.Errorf("height %d: bottom border visible = %v, want %v", tc.height, got, tc.wantBottom)
+		}
+	}
+}

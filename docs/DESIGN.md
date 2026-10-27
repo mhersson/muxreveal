@@ -359,11 +359,12 @@ Rounded boxes (`╭ ╮ ╰ ╯`, matching the pane frames; the which-key rule k
   - Rows: the key in `Key`, bold, padded to the column's widest key; two cells; the title in `Fg`.
   - Directional commands collapse into one row each, their keys padded like any other row's: `h j k l` (Focus pane), `H J K L` (Resize pane), `^h^j^k^l` (Swap pane), `1-9` (Jump to tab), `> 1-9` (Move pane to tab), `. 1-9` (Send pane to tab) and `; hjkl` (Preselect). A key that starts a two-key sequence closes the popup and opens the sequence popup. The keys come from the bindings: a family collapses only when all its keys are bound (`1-9` only when they are consecutive); otherwise each bound key gets its own row.
 - **Sequence popup.** A sequence prefix (`>`, `.`, `;` after the leader) opens it at once, in the which-key box's place and style: a single column titled ` 󰌌 ctrl+space > ` (the leader's name, then the first key; no icon with `icons = false`) in `Accent`, bold, with one row per second key, laid out like which-key rows, with the key column padded to the widest key as there (`esc      Clear preselection`): after `>`, `1-9  Move pane to tab N` and `esc  Cancel`; after `.`, `1-9  Send pane to tab N` and `esc  Cancel`; after `;`, `h j k l  Preselect side` and `esc      Clear preselection`. The second key closes it, as does `esc`, a paste or an opened overlay.
-- **Palette and theme picker.** Centred, width min(64, width-4), top at a quarter of the height, border `BorderFocus`.
+- **Palette and theme picker.** Centred, width min(64, width-4), top at a quarter of the height, border `BorderFocus`. With ten result rows the box is 16 rows tall, so it fits whole from a body of 22 rows; below that the bottom rows are clipped, the hint row and the count first.
   - Title: `  Commands ` (the theme picker: ` 󰏘 Theme `), in `Accent`, bold.
   - Input row: `❯ ` in `Accent`, then the query.
   - A divider row joined to both sides (`├`, `┤`).
   - Result rows: the command's icon (`Muted`; `Accent` when selected), the title (`Fg`, matched runes in `Match` and bold), and the key hint right-aligned (`Key`, bold). The selected row is on `Selection` with a bold title.
+  - A divider row joined to both sides (`├`, `┤`), then one hint row: `up/down move`, `enter run`, `esc close`, one cell in from the border, each key in `Key` bold and its label in `Muted`, the three pairs three cells apart. The theme picker has the same footer.
   - ` N of M ` (`Muted`) sits in the bottom border at the right.
 - **Confirm.** Centred, width min(46, width-2), seven rows tall, top at a third of the height, border `Error`.
   - Title: ` 󰀪 <action> ` in `Error`, bold.
