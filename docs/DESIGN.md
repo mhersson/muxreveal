@@ -234,7 +234,7 @@ Go 1.27 (`tuios.dev/vt` needs 1.26 or later). The reason for Rust was a proven V
 | Markdown | `yuin/goldmark` (GFM) + our own renderer | Full control of layout and image placement; Glamour has no images |
 | Images | Own Kitty graphics encoder; `image/*` + `golang.org/x/image` for decode and scaling | The protocol is small; port TUIOS's passthrough (MIT) if it's cleaner |
 | File watching | `fsnotify` with our own directory walk | Maintained; the walk skips `.git` internals, `.worktrees` and ignored directories; `rjeczalik/notify` is unmaintained since 2023 and uses FSEvents on macOS only with cgo |
-| GitHub | `cli/go-gh/v2` for hosts and tokens; `net/http` REST with ETags; `Khan/genqlient` for typed GraphQL | Same auth as `gh`, full control of conditional requests |
+| GitHub | `cli/go-gh/v2` for hosts, tokens and the REST and GraphQL clients (GraphQL queries as tagged Go structs); ETags through our own transport under its clients | Same login and host routing as `gh`; no schema file or codegen; conditional requests do not count against the rate limit |
 | Fuzzy finder | `sahilm/fuzzy` | Palette and pickers |
 | Config and state | `pelletier/go-toml/v2`; `encoding/json`; `modernc.org/sqlite` | TOML config, JSON layout state, pure Go SQLite (no cgo) for turns, reviewed hunks and caches |
 | Clipboard | OSC 52 plus direct exec of `wl-copy`, `xclip` or `pbcopy` with explicit arguments | No cgo and no shell; `atotto/clipboard` is not used because its primary-selection switch is global state and it drops the clipboard arguments |
@@ -534,11 +534,7 @@ type TurnSource struct {
 	Worktree, Session string
 	Turn              int // 0 = the latest
 }
-type PRSource struct { // returns ErrNotImplemented until the PR milestone
-	Repo       string
-	Number     int
-	Base, Head string
-}
+type PRSource struct { Worktree string; Number int } // the refs FetchPR wrote
 
 type Status string
 
@@ -587,6 +583,7 @@ type Result struct {
 	Live      bool   // New is the working tree
 	Turn      int    // turn sources: the turn shown
 	Through   int    // turn sources: the last turn the diff covers
+	Head      string // PR sources: the head commit shown; a merge passes it
 	Files     []FileDiff
 	Truncated bool
 }
@@ -595,7 +592,7 @@ type Limits struct{ Files, Bytes, Lines int }
 
 func DefaultLimits() Limits // Files 400, Bytes 2 << 20, Lines 5000
 
-var ErrNoSnapshot, ErrNoTurns, ErrNotImplemented error
+var ErrNoSnapshot, ErrNoTurns, ErrNotFetched error
 
 type Engine struct{ /* limits, temp dir, cache */ }
 
@@ -607,6 +604,7 @@ func (e *Engine) Diff(ctx context.Context, src Source) (Result, error)
 - Caps default to 400 files, 2 MiB of diff text and 5000 changed lines per file. The hunk pass reads up to the byte cap, then git is killed and the output is cut at the last whole file; hunks served from the cache do not count against it. Files past a cap keep their status and counts and are marked `Truncated`; `Result.Truncated` is set when any file is. The review pane shows "too large, press `f` for the full file".
 - Hunks are cached by `(old blob id, new blob id)`, at most 2048 entries, least recently used out. Hunks are line hunks; intra-line spans are computed when rendering.
 - A branch source diffs the tree of `git merge-base <base> HEAD` against the working tree. An empty base means the default branch: the target of `refs/remotes/origin/HEAD`, else `main`, else `master`, else `ErrNoBase`; once a PR exists, its base is passed. Files that are untracked in the working tree are marked `Untracked`, whatever status git guessed (an untracked file can show as a rename or copy).
+- A PR source diffs the tree of the merge base of `refs/muxreveal/pr/<n>/base` and `.../head` against the head's tree, and its `Result.Head` is the head commit. Refs that are not fetched are `ErrNotFetched`.
 - A turn source's latest turn is live: its snapshot against the working tree. A past turn `k` is its snapshot against the next turn that has one, and `Result.Through` names the last turn the diff covers (`k`, or more when later turns have no snapshot). A turn without a snapshot is `ErrNoSnapshot`; a session with no turns is `ErrNoTurns`.
 - Diffs are computed off the UI goroutine.
 - Live mode: one watcher per worktree (see below). `Engine.Update(ctx, prev, src, batch)` rebuilds the working tree and re-lists only the touched paths (a vanished path stands for everything under it), keeping the other files of `prev`; the result equals a fresh `Diff`. It runs a full `Diff` instead when the source is not live or a newer turn exists, a rename or copy is involved (in `prev`, among the touched files, or possible between them and the others: a touched new file beside other retained changes, or a touched change beside a retained new file, always falls back, because git may pair them), more than 200 paths are touched, a `.gitignore` is touched, the batch reports git metadata changes or an overflow, any file of `prev` is `Truncated`, or the result is near the file or byte cap.
@@ -625,13 +623,22 @@ func (e *Engine) Diff(ctx context.Context, src Source) (Result, error)
 
 ### GitHub and CI
 
-- **Auth:** `go-gh` resolves hosts and tokens the way `gh` does; fall back to `gh auth token --hostname <host>` for keyring-only setups.
-- **Host routing:** github.com uses `api.github.com`; GHE uses `https://<host>/api/v3` and `https://<host>/api/graphql`. The host comes from the remote URL.
-- **Polling:** one GraphQL query per repo returns open PRs with `statusCheckRollup`. It runs every 10 s while a visible PR has pending checks, and every 60 s otherwise, with backoff on rate limits.
-- **Focused PR:** REST check runs with ETags, since `304` responses don't count against the rate limit. GraphQL has no conditional requests.
-- **PR diff:** fetch `refs/pull/<n>/head` into `refs/muxreveal/pr/<n>`, then diff locally from the merge-base. No checkout is needed, and it works the same on GHE.
-- **Approve:** `POST /pulls/<n>/reviews` with `event: APPROVE`.
-- **Merge:** `PUT /pulls/<n>/merge` with the chosen method and the reviewed head `sha`. If commits landed after you reviewed, GitHub rejects the merge, so you never merge code you haven't seen.
+- **Auth:** `Token(ctx, host)` takes go-gh's `auth.TokenFromEnvOrConfig` (`GH_TOKEN` or `GITHUB_TOKEN` for github.com, `GH_ENTERPRISE_TOKEN` or `GITHUB_ENTERPRISE_TOKEN` for GHE, then `hosts.yml`). Otherwise it runs `gh auth token --secure-storage --hostname <host>` with the context and trims the output. No token is `ErrNoToken`, whose message says `run gh auth login --hostname <host>`. Resolution runs off the UI loop, since it may run `gh`.
+- **Repository:** the remote URL gives host, owner and name. `https://` and `http://` (userinfo dropped), `ssh://[user@]host[:port]/owner/name`, `git://` and scp-like `[user@]host:owner/name` are accepted, each with an optional `.git` and trailing `/`; the path must be exactly `owner/name`. Local paths, `file://` and anything else are `ErrNotGitHub`. Hosts go through go-gh's `auth.NormalizeHostname`: lower case, and any subdomain of github.com (such as `www`, `ssh` or `api`) becomes github.com. An ssh or scp-like host is first mapped through `ssh -G <alias>` (its `hostname` line, with the context, cached per alias; on failure the alias stays as written; an alias starting with `-` is never passed). Then github.com is accepted, and other hosts only when go-gh's `auth.KnownHosts()` lists them. A URL is never kept in an error, since it may carry credentials; errors name the remote or `host/owner/name`.
+- **Clients:** one per host, with a non-empty token. go-gh's REST and GraphQL clients share one transport: the base transport wrapped by an ETag layer. go-gh routes github.com to `api.github.com` and GHE to `https://<host>/api/v3/` and `/api/graphql`, and honours `gh`'s `api_host` setting for a host. Request logging is off, because go-gh's `GH_DEBUG` logging would print to stderr; nothing is printed. The client timeout is 30 s as a backstop. go-gh's GraphQL client drops the status and headers of a non-2xx response, so the GraphQL client's transport (and only that one's) turns such a response into go-gh's `*api.HTTPError`, the error REST returns; rate limits and other HTTP errors are then classified the same way for both.
+- **ETags:** for GET requests the layer sends `If-None-Match` from its cache, keyed by the full URL, and turns a `304` with a cached entry into the cached `200`. It stores `200` responses that carry an `ETag` and a body of at most 1 MiB, keeps at most 256 entries (least recently used out) and passes other methods through. A `304` with no cached entry is an error.
+- **Polling:** one GraphQL query per repository returns its default branch, its allowed merge methods and `deleteBranchOnMerge`, the rate limit, and the 100 most recently updated open PRs with number, title, url, draft flag, head and base branch, head commit, review decision, merge state, author (a null author reads as `ghost`), whether the PR is from a fork, and the last commit's `statusCheckRollup` with its check and status counts by state. One goroutine polls each watched repository. The next poll comes in 10 s when any visible or focused PR has pending checks, else in 60 s. A rate-limited poll waits until its reset (at least 10 s, at most 1 h); any other error doubles the wait from 10 s up to 5 min. A change of the focused PR, a new repository and an explicit refresh poll at once, except during a rate-limit wait, which they wait out. A poll fails as a whole when the PR query or the focused PR's checks fail. A missing token is sent as a snapshot error and retried on the error backoff. Closing the poller cancels its requests, waits for its goroutines and closes its channel within 1 s.
+- **Check counts:** the total is check runs plus status contexts; done is the total minus the pending ones. Pending runs are `QUEUED`, `IN_PROGRESS`, `PENDING` and `WAITING`, pending statuses `PENDING` and `EXPECTED`. Failed runs are `FAILURE`, `TIMED_OUT`, `CANCELLED`, `ACTION_REQUIRED` and `STARTUP_FAILURE`, failed statuses `FAILURE` and `ERROR`. The rollup state maps to success (`SUCCESS`), failure (`FAILURE`, `ERROR`) or pending (`PENDING`, `EXPECTED`); no rollup has no state.
+- **Focused PR checks:** the poll that sees the focused PR also reads its checks for the head commit over REST through the ETag layer: `commits/<sha>/check-runs?per_page=100`, following `Link: rel="next"` for at most 5 pages, and `commits/<sha>/status?per_page=100`. A check run gives its name, status and conclusion, start and completion times and its `html_url` (else `details_url`); a status gives its context, state, `created_at` as start, `updated_at` as completion when not pending, and `target_url`. Runs come first in API order, then statuses by name. GraphQL has no conditional requests, which is why this is REST.
+- **PR refs and the PR diff:** `git fetch` brings `refs/pull/<n>/head` into `refs/muxreveal/pr/<n>/head` and the base branch into `refs/muxreveal/pr/<n>/base`, with `--no-tags --no-write-fetch-head --no-recurse-submodules --no-prune` and an empty `--refmap=`, so the fetch changes nothing outside those two refs. A remote without `refs/pull/<n>/head` is `ErrNoPR`. `DeletePRRefs` removes both refs in one `update-ref --stdin` transaction. The diff is local, from the merge base (see above); no checkout is needed, and it works the same on GHE.
+- **Push and the network mode:** the remote is `branch.<b>.pushRemote`, else `remote.pushDefault`, else `branch.<b>.remote` (unless `.`), else `origin`, and must be a configured remote (`ErrNoRemote`). When the upstream (`branch.<b>.merge`) is on that remote, the destination is the upstream's branch. Otherwise it is `refs/heads/<b>`, and `--set-upstream` is passed only when the branch has no upstream; an upstream on another remote stays as it is. The command is `git push --porcelain [--set-upstream] <remote> refs/heads/<b>:<dst>`, never forced. A rejected ref is `ErrRejected` with git's summary, such as `(non-fast-forward)`; the result says whether the branch was created or already up to date. Network git (push and fetch) starts in a new session, so it has no controlling terminal and cannot open `/dev/tty`, and runs with `GIT_TERMINAL_PROMPT=0` and `GCM_INTERACTIVE=never`: a credential or ssh prompt fails with an error instead of taking over the TUI's terminal, while ssh-agent and credential helpers still work. Killing the call kills its process group. An error carries git's first stderr line with every `<scheme>://...` URL replaced by `<url>`, so no remote URL reaches an error.
+- **Create:** `POST /repos/<o>/<r>/pulls` with title, body, base, head and draft. A `422` whose errors say a pull request already exists is `ErrPRExists`.
+- **Approve:** `POST /pulls/<n>/reviews` with `{"event":"APPROVE","commit_id":<sha>}`, so the approval is tied to the reviewed commit.
+- **Merge:** `PUT /pulls/<n>/merge` with the chosen method and the reviewed head `sha` (the `Result.Head` of the PR diff) and GitHub's default title and message. An approve or merge without a `sha` is `ErrNoSHA` and sends nothing. If commits landed after you reviewed, GitHub rejects the merge (`409`, `ErrHeadMoved`), so you never merge code you haven't seen; a `405` is `ErrNotMergeable` with GitHub's message.
+- **Delete branch:** after a successful merge, when asked: `DELETE /repos/<o>/<r>/git/refs/heads/<branch>`. It is skipped for a PR from a fork, for the repository's default branch, when the default branch is unknown and when the head branch is empty; a `404` or `422` counts as already deleted. A failed delete leaves the merge reported as done, with the delete error set.
+- **PR for a branch:** a GraphQL query on `pullRequests(headRefName: $branch)` over open, merged and closed PRs, same-repository only. The newest open one wins, else the newest of any state; none is `ErrNoPR`.
+- **Compose defaults:** as `gh pr create --fill`. The title is the subject of the only commit; with zero or several commits it is the branch name with `-` and `_` turned into spaces and its first letter upper-cased. A non-empty template is the body; otherwise one commit gives its body and several give `- <subject>` lines, oldest first. Templates are `pull_request_template.md` in the worktree root, `.github/` and `docs/` (names matched case-insensitively), then every `*.md` in a `PULL_REQUEST_TEMPLATE/` directory in those places, by name. They are read through `os.OpenRoot`, so a symlink cannot leave the worktree, and one over 64 KiB is skipped. Commits are `base..HEAD`, oldest first, at most 250.
+- **Errors:** `ErrNoToken`, `ErrNotGitHub`, `ErrNoPR`, `ErrNoSHA`, `ErrHeadMoved`, `ErrNotMergeable`, `ErrPRExists`. A rate limit is `*RateLimitError` with the reset time, matching `ErrRateLimited`: a `403` or `429` with `Retry-After` or `X-RateLimit-Remaining: 0`, or a GraphQL error of type `RATE_LIMITED`. Other HTTP errors stay go-gh's `*api.HTTPError`, wrapped. A token never appears in an error or a log line.
 
 ### Images and markdown
 
