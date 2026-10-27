@@ -56,6 +56,8 @@ type pane struct {
 	cwdWait   bool      // a deferred lookup is scheduled
 	launched  time.Time // when MuxReveal started the agent; zero otherwise
 	seen      bool      // the harness program was the foreground process
+	lastOut   time.Time // when output last arrived
+	workingAt time.Time // when the agent last entered working
 	stale     bool      // output or a resize arrived while its tab was hidden; render when shown
 
 	mu         sync.Mutex

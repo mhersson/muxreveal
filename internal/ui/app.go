@@ -44,6 +44,10 @@ type Options struct {
 	HookSettings string
 	// HookSock is MUXREVEAL_SOCK for every pane; empty sets none.
 	HookSock string
+	// Events delivers hook events; nil means none arrive.
+	Events <-chan harness.Event
+	// Notice is shown in the status bar at start; empty for none.
+	Notice string
 }
 
 // App is the root Bubble Tea model.
@@ -91,6 +95,9 @@ type App struct {
 	harness                    harness.Harness
 	tick                       func(time.Duration, func(time.Time) tea.Msg) tea.Cmd // tea.Tick; tests replace it
 	hookSettings, hookSock     string
+	events                     <-chan harness.Event
+	spin                       int         // badge spinner frame
+	agentTicking               bool        // an agentTickMsg is outstanding
 	load                       loadSampler // nil on platforms without a load reading
 	start                      func(ctx context.Context, c term.Command, cols, rows int) (proc, error)
 
@@ -141,6 +148,7 @@ func New(opts Options) (*App, error) {
 	}
 	a := &App{
 		harness: h, tick: tea.Tick, hookSettings: opts.HookSettings, hookSock: opts.HookSock,
+		events: opts.Events, notice: opts.Notice,
 		log: opts.Logger, store: opts.Store, reg: reg, keymap: km,
 		panes: map[core.PaneID]*pane{}, outerFocused: true,
 		getenv: getenv, cwd: cwd, recordDir: opts.RecordDir, icons: opts.Icons, clock: realClock{}, start: termStart,
@@ -221,7 +229,7 @@ func (a *App) dropGoneTab(st core.State) {
 
 // Init implements tea.Model.
 func (a *App) Init() tea.Cmd {
-	return a.initTray()
+	return tea.Batch(a.initTray(), a.waitEvent())
 }
 
 // Update implements tea.Model.
@@ -296,6 +304,10 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, a.onCwdDue(msg.id)
 	case paneKindDueMsg:
 		return a, a.onKindDue(msg.id)
+	case hookMsg:
+		return a, tea.Batch(a.onHook(msg.ev), a.waitEvent())
+	case agentTickMsg:
+		return a, a.onAgentTick()
 	case clockMsg:
 		return a, a.onClock(msg)
 	case gitTickMsg:

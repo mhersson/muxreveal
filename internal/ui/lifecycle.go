@@ -324,6 +324,8 @@ func (a *App) onPaneDirty(id core.PaneID) tea.Cmd {
 		return nil
 	}
 
+	p.lastOut = a.clock.Now()
+
 	cmds := []tea.Cmd{a.renderPane(p), p.wait(), a.probeCwd(p)}
 
 	if text, ok := p.takeClip(); ok {

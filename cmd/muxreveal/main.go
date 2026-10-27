@@ -68,7 +68,7 @@ func newRootCmd() *cobra.Command {
 
 // run loads the config and opens the log before the TUI takes over the
 // terminal, so their errors can still be printed.
-func run(ctx context.Context, env core.Env, configPath, recordDir string) (err error) {
+func run(ctx context.Context, env core.Env, configPath, recordDir string, progOpts ...tea.ProgramOption) (err error) {
 	cfg, err := core.LoadConfig(configPath)
 	if err != nil {
 		return err
@@ -87,6 +87,9 @@ func run(ctx context.Context, env core.Env, configPath, recordDir string) (err e
 	}()
 
 	logger := slog.New(slog.NewTextHandler(f, nil))
+	hooks := startHooks(logger, core.StateDir(env))
+	defer hooks.Stop()
+
 	cwd, err := os.Getwd()
 	if err != nil {
 		return fmt.Errorf("launch directory: %w", err)
@@ -104,6 +107,11 @@ func run(ctx context.Context, env core.Env, configPath, recordDir string) (err e
 		NoNativeClipboard: !cfg.Clipboard.NativeOn(),
 
 		RecordDir: recordDir,
+
+		HookSettings: hooks.Settings,
+		HookSock:     hooks.Sock,
+		Events:       hooks.Events,
+		Notice:       hooks.Notice,
 	})
 	if err != nil {
 		return err
@@ -112,7 +120,8 @@ func run(ctx context.Context, env core.Env, configPath, recordDir string) (err e
 	logger.Info("start", "config", configPath, "theme", cfg.Theme)
 	// ctx is the only signal handler, so SIGINT, SIGTERM and SIGHUP (a closed
 	// terminal) end the run cleanly instead of racing Bubble Tea's own handler.
-	_, err = tea.NewProgram(app, tea.WithContext(ctx), tea.WithoutSignalHandler()).Run()
+	opts := append([]tea.ProgramOption{tea.WithContext(ctx), tea.WithoutSignalHandler()}, progOpts...)
+	_, err = tea.NewProgram(app, opts...).Run()
 	// The context may be cancelled already, so the close gets its own deadline.
 	closeCtx, cancel := context.WithTimeout(context.Background(), closeTimeout)
 	defer cancel()
