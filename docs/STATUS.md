@@ -65,7 +65,7 @@ Inputs: `p2.rec` (136 s, file size 94,552 bytes) and `p3.rec` (117 s, file size 
 
 Fidelity limits of the replay: the recordings are 79x31, but the bench lays the panes out in the 240x64 grid, so they replay at 77-83 columns by 30-31 rows (119-120 columns by 62 rows at 2 panes, 30-31 rows at 4 panes). Recorded resizes are skipped; none fall inside any window.
 
-### M1b Tabs
+### M1b Tabs (done, PR #8)
 
 Tabs, each with its own split layout, focus and zoom, with new, rename, close, jump and cycle keys; framed panes with titles and Nerd Font icons; a workspace bar on the top row with the tabs and a tray (clock, agents, git, load); a restyled status bar, which-key, palette, confirm and rename. Covers AG-2, AG-9 and UX-1.
 
@@ -80,7 +80,18 @@ Gate: hidden tabs keep their panes running at their own size, the six-pane bench
 
 ### M1c Copy, mouse and clipboard
 
-Part 1 (new files only) is done on its own branch and runs alongside M1b; Part 2 rebases onto `main` after M1b merges. Covers AG-4, UX-4, UX-5, UX-6.
+Mouse selection inside panes, copy to the system clipboard (OSC 52 and native tools), scrollback with the mouse wheel, copy mode with vim motions, mouse forwarding to programs that ask for it, focus follows mouse and copy on select as options, and guests' clipboard writes passed through. Covers AG-3 (mouse, OSC 52), AG-4, UX-4, UX-5, UX-6.
+
+- [x] VT access to scrollback, screen modes, mouse and clipboard
+- [x] Clipboard writer
+- [x] Selection model and text extraction
+- [x] Copy-mode engine
+- [ ] Scrollback view and mouse wheel
+- [ ] Mouse selection, clicks and clipboard
+- [ ] Copy mode
+- [ ] Mouse and clipboard options and bench check
+
+Gate: selection, copy mode and the clipboard work in shell panes and in programs that report the mouse, and the six-pane bench p99 stays at most 8 ms with a selection drawn.
 
 ### M1d Agents and persistence
 
@@ -258,7 +269,7 @@ Build M1's terminal layer on `tuios.dev/vt` v0.3.1 (pure Go) behind the `VT` int
 
 ## Next
 
-M1b Tabs on `feat/m1b-tabs`. Then M1c Part 2 (Copy, mouse and clipboard) after M1b merges, then M1d Agents and persistence.
+M1c Copy, mouse and clipboard on `feat/m1c-copy-mouse`: the scrollback view and the wheel, mouse selection and the clipboard, copy mode, then the options and the bench check. Then M1d Agents and persistence.
 
 ## Done
 
