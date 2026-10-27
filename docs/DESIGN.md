@@ -44,6 +44,7 @@ IDs are referenced by milestones, plans and STATUS; commits and PRs do not carry
 | AG-10 | Move the focused pane to tab N, either following it there or staying on the current tab. N one past the last tab creates a new tab | P0 |
 | AG-11 | Break pane: move the focused pane into a new tab of its own, and follow it | P0 |
 | AG-12 | Tiling layouts per tab: BSP with auto-split and preselection, master-stack, scrolling columns; rotate, equalize, promote to master | P0 |
+| AG-13 | An agents rail lists every agent in every tab with its state, project, branch, current action and diff stats; it stays open until closed, takes the keyboard on a key, searches, and jumps to any agent | P0 |
 
 ### Persistence and resume
 
@@ -131,7 +132,7 @@ native = true
 - `focus_follows_mouse`: hovering a pane's content or top border focuses it, through the same path as a click, so guests get their focus reports. The outer terminal is asked for all-motion mouse reporting only while this is on, else cell-motion. Hovering the focused pane, a side or bottom border, a bar or an empty cell does nothing, and so does hovering while a confirm, prompt, overlay, copy mode or the leader is open, or while a button is held.
 - `copy_on_select`: the release that ends a drag, a double-click or a triple-click copies the selection when its text is not empty. A plain click never copies.
 
-- The compositor gets every mouse event first, so selection lives in MuxReveal's own screen model. While a confirm, prompt, overlay, copy mode or the leader (with or without its popup) is open, every mouse event is ignored.
+- The compositor gets every mouse event first, so selection lives in MuxReveal's own screen model. While a confirm, prompt, overlay, copy mode or the leader (with or without its popup) is open, every mouse event is ignored, the agents rail's included.
 - A plain left-button drag selects in every pane, without a modifier. The selection stays in the pane where the drag began and is clamped to that pane's content even when the pointer leaves it. A drag is a stream selection, `alt+drag` a rectangle, a double-click selects a word and a triple-click a line (same cell within 400 ms). Soft-wrapped lines copy as one line.
 - The selection is stored against the pane's scrollback by stable row, so it stays on the same text while output scrolls, and it is painted onto the rows as drawn, so a held synchronized update does not tear it; one selection exists at a time and it is drawn only while its pane is visible. A click in any pane's content, a new drag, a key or paste sent to its pane, or the pane closing, resizing or switching between the main and alt screen clears it. Opening copy mode (`leader [`) clears it; other leader commands and tab switches do not.
 - A click in a pane's content focuses it; a click on its top border only focuses; a click on a tab switches to it; a pane's side and bottom borders, the rule and the toast ignore clicks, and a click on the toast reaches what is under it.
@@ -212,6 +213,8 @@ type Event struct {
 	End        bool            `json:"end,omitempty"`        // the session ended
 	Cwd        string          `json:"cwd,omitempty"`        // the agent's working directory, from the hook
 	TurnStart  bool            `json:"turn_start,omitempty"` // a prompt was submitted
+	Action     string          `json:"action,omitempty"`     // the agent's current action (see Current action)
+	ActionSet  bool            `json:"action_set,omitempty"` // Action replaces the pane's action, an empty one clears it
 	Done       func()          `json:"-"`                    // set by the server on a held event; call it once the turn snapshot is taken
 }
 ```
@@ -260,7 +263,7 @@ Go 1.27 (`tuios.dev/vt` needs 1.26 or later). The reason for Rust was a proven V
 ### Panes and layout
 
 - Each tab has its own layout mode, pane order, focus and zoom; the rules below apply per tab. The mode is `bsp`, `master-stack` or `scrolling`; a new tab starts in the configured `default_mode` (see Config), and `leader space` cycles it in that order (`layout.set.*` in the palette sets one). The layout code is `internal/core/tiling`, tuios's layout package ported with its tests; it knows window ids and rectangles and nothing of MuxReveal. Core keeps each tab's layout as plain values (the mode, the panes in order, the BSP tree, the master ratio, the scrolling columns), so a state copy stays a value copy, and one function, `core.Arrange`, turns a tab into the pane rects the UI draws and the sizes the PTYs get.
-- Geometry is integer cells. Tiles are laid out over the body (the rows from the one under the rule to the last, the full width) edge to edge, with no gap, and each tile is a pane's rect: the pane's rounded box is drawn on the rect's outline, so neighbouring boxes touch, and its content is the rect inset by one cell on every side. A BSP split of a box `W` wide at ratio `r` gives its first child `floor(W*r)` columns and the second child the rest; a horizontal split does the same with the height and rows. A pane is drawn only when its rect is at least 3x3 (a frame around one content cell), lies inside the body and is disjoint from the panes kept before it in the tab's pane order; every mode applies this rule. A pane that is not drawn is left out of the rects and sizes, so a tiny terminal drops panes instead of producing negative sizes; the UI gives it a 1x1 PTY. A body under 3x3 yields no rects and stays blank. A pane's PTY size is its content rect. In BSP and master-stack, focus and swap moves read the same rects the UI draws, so a pane that is left out is never a target while the focused pane is drawn; when the focused pane itself is left out, the moves use the rects of a virtual 10000x10000 body instead. Scrolling moves by column and index and reads no rects.
+- Geometry is integer cells. Tiles are laid out over the body (the rows from the one under the rule to the last, the full width less the agents rail's columns while the rail shows) edge to edge, with no gap, and each tile is a pane's rect: the pane's rounded box is drawn on the rect's outline, so neighbouring boxes touch, and its content is the rect inset by one cell on every side. A BSP split of a box `W` wide at ratio `r` gives its first child `floor(W*r)` columns and the second child the rest; a horizontal split does the same with the height and rows. A pane is drawn only when its rect is at least 3x3 (a frame around one content cell), lies inside the body and is disjoint from the panes kept before it in the tab's pane order; every mode applies this rule. A pane that is not drawn is left out of the rects and sizes, so a tiny terminal drops panes instead of producing negative sizes; the UI gives it a 1x1 PTY. A body under 3x3 yields no rects and stays blank. A pane's PTY size is its content rect. In BSP and master-stack, focus and swap moves read the same rects the UI draws, so a pane that is left out is never a target while the focused pane is drawn; when the focused pane itself is left out, the moves use the rects of a virtual 10000x10000 body instead. Scrolling moves by column and index and reads no rects.
 - **BSP** keeps a binary tree. A leaf is a pane; a split has two children, A (left or top) and B (right or bottom), and a `ratio`, the share of the space A takes. `vertical` splits put the children side by side; `horizontal` splits stack them.
 - **Master-stack** lays the tab's panes out in their order: the first `master_count` are masters and the rest form the stack, placed by `master_position` (left, right, top, bottom or center) with `master_grid` as configured. The tab has its own master ratio, initially `master_ratio`.
 - **Scrolling** keeps columns of panes, each with a width (a share of the body). Only columns that fit whole are drawn, and the visible ones stretch to fill the body, so no pane is clipped and no space is left empty. The tab keeps its first visible column, `first`. The visible set starts at `first` and takes columns while their widths sum to at most 100 %; `first` moves only as far as needed to keep the focused column visible (a focused column left of `first` becomes `first`; one right of the visible set makes `first` the smallest value whose run to the focused column fits). The visible columns split the body width in proportion to their widths, and neighbouring columns' frames touch; the panes of a column split its height equally. Hidden panes are not drawn, not hit by the mouse and not reached by focus moves other than left and right; their PTYs are sized as if their column were shown alone at its nominal width (`round(width x body width)`, at least 3, minus the frame) with the column's height split equally. The bottom borders of the edge panes show how many columns are hidden (see Frames). A new column takes `column_width` percent of the body (50 by default, so two fit).
@@ -294,7 +297,7 @@ The chrome is framed: every pane is its own rounded box with its title in its to
 
 - Row 0 is the workspace bar and row 1 is the rule; the rows from 2 to the last are the body.
 - The rule is a full-width `─` in `Border`; it takes no clicks.
-- Panes are laid out in the body `{X: 0, Y: 2, W: width, H: height-2}`; there is no outer frame.
+- Panes are laid out in the body `{X: 0, Y: 2, W: width, H: height-2}` less the agents rail's columns on the left while the rail shows (see Agents rail), so with the rail `X` is the rail's width and `W` is the width less it; there is no outer frame.
 - Pane rects follow Panes and layout. A pane's frame is on its rect's outline; the first row of the rect is its top border, which is its header row, and its content is the rect inset by one cell on every side. Two neighbours' frames touch (`││`, `╮╭`) and share no cell.
 - A pane needs at least 3 rows and 3 columns for its frame, and so does the body; a smaller body stays blank. Height 1 shows the workspace bar only; height 2 adds the rule. Every row is exactly the terminal width.
 - An empty tab shows the welcome card in the body, without frames.
@@ -302,7 +305,7 @@ The chrome is framed: every pane is its own rounded box with its title in its to
 #### Frames
 
 - Lines are single-weight box drawing: every pane's box has `╭ ╮ ╰ ╯` at its four corners, `─` along the top and bottom and `│` on the sides. There are no junction glyphs.
-- Unfocused borders are `Border`. The focused pane's whole box, all four sides, is its kind colour (`Agent` for agents, `Shell` for shells).
+- Unfocused borders are `Border`. The focused pane's whole box, all four sides, is its kind colour (`Agent` for agents, `Shell` for shells), except for the 600 ms `Match` flash of a pane jumped to from the agents rail (see Agents rail).
 - The title is set into the top border from the cell after the corner: `─`, space, kind icon (kind colour, bold), space, title, space. Focused: the title in the kind colour and bold. Unfocused: the title in `Muted`. The title is the guest's OSC title, else `claude` or `shell`.
 - Tags sit at the right end of the top border, ending one `─` before the corner, with one `─` between two tags: ` 󰊓 zoom ` (`Accent`, bold) on a zoomed pane, and ` 󰁝 N ` (the same style; ` ↑ N ` with icons off) on a scrolled pane, where N is the number of lines above the live screen, left of the zoom tag; and the state badge (` <icon> working `, ` <icon> blocked `, ` <icon> idle ` in `Working`, `Blocked`, `Idle`, bold), the rightmost tag, with the zoom tag and then the scroll tag to its left. The working icon is a braille spinner (`⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏`, about 8 frames a second) that animates only while the agent works, so idle CPU is unchanged; blocked is 󰀦 and idle is 󰗡. With `icons = false` the badge reads ` ⠋ working `, ` blocked ` or ` idle ` (braille stays). An agent pane with no state yet, because Claude has sent no hook, shows no badge.
 - In copy mode the copy pane's top border carries the leftmost tag of the border, ` 󰆏 COPY ` (`Info`, bold; ` COPY ` with `icons = false`), left of the preselection and scroll tags. Tags that do not fit between the corners are left out in this order: the scroll tag, then the preselection tag, then the zoom tag, then the badge; COPY is the last to go.
@@ -325,12 +328,34 @@ Ground `Bar`.
 - Modules, left to right:
   - **Layout mode** (absent while the active tab has no mode): ` <icon> <mode> `, with the icon in `Accent` and the name in `Fg`: 󰕴 bsp, 󰛽 master-stack, 󰕭 scrolling. It shows the active tab's mode, and with `icons = false` it reads `layout bsp`.
   - **PR and CI** (M3; hidden until then) for the focused pane's branch: icon  (U+F407) in `Info`, the number (` #8`, `Fg`, bold), then the checks: 󰔟 and done/total (` 3/5`) in `Warning` while any check runs. M3 settles the passed and failed forms in the same slot.
-  - **Agents** (absent while no agent pane is open): one 󱙺 per agent pane across all tabs, in `Agent`. Each icon takes its state colour (`Working`, `Blocked`, `Idle`), followed by ` 󰀦N` in `Blocked`, bold, when N agents are blocked. With `icons = false` the text `agents N` is followed by ` blocked N` in `Blocked`, bold, when N > 0.
   - **Git** of the focused pane (absent outside a repo): icon  in `Git`, the branch in `Fg` (at most 18 cells, cut with `…`), then a space and the dirty marker  (U+F444) in `Warning` when there are changes; a detached HEAD shows the first 7 characters of the commit. The probe runs with fsmonitor off and without the inherited repository variables; repository-configured filters can still run, as they do for a shell prompt's git integration.
   - **Load:** icon 󰻠 in `Load`, a braille sparkline of the last 10 CPU samples (5 cells, two samples per cell, `Load`; a sample fills 1 to 4 dots of its braille column from the bottom, one per started quarter of CPU), the CPU share (` 12%`, `Fg`) (on macOS the one-minute load average over the cores), then `  󰍛 9.8G` of memory in use (`Muted`).
   - **Clock:** `HH:MM`, minute resolution.
-- **Narrow terminals** give way in this order: load, git, PR and CI leave the tray, then the layout mode; inactive tab names shrink to ` N icon `, then to ` N ` (longest names first); the clock leaves; the active tab's name shrinks, to ` N icon ` and then ` N `; the agents leave. The active tab always stays visible: if the ` N ` segments still do not fit, the segments farthest from the active tab are left out.
-- With `icons = false`, segments are separated by one `Bar` cell, tray modules by `│` (`Bar` on `Surface`), and there are no edge cells. Text stands in for the module icons: the agents read `agents N` (`Fg`), the dirty marker is `*`, the load reads `cpu ` (`Muted`) before the sparkline and `  mem 9.8G` after the share, and the checks read `ci 3/5`.
+- **Narrow terminals** give way in this order: load, git, PR and CI leave the tray, then the layout mode; inactive tab names shrink to ` N icon `, then to ` N ` (longest names first); the clock leaves; the active tab's name shrinks, to ` N icon ` and then ` N `. The active tab always stays visible: if the ` N ` segments still do not fit, the segments farthest from the active tab are left out.
+- With `icons = false`, segments are separated by one `Bar` cell, tray modules by `│` (`Bar` on `Surface`), and there are no edge cells. Text stands in for the module icons: the dirty marker is `*`, the load reads `cpu ` (`Muted`) before the sparkline and `  mem 9.8G` after the share, and the checks read `ci 3/5`.
+
+#### Agents rail
+
+A framed panel on the left of the body lists every agent pane in every tab as a card. It stays open until it is closed on purpose and takes the keyboard on a key; it is part of the layout, so the panes make room for it.
+
+- **Place.** A rounded box under the rule, the full body height, 44 columns wide when the body is at least 84 wide; else the body width minus 40, at least 24. A body under 64 columns does not show the rail: it stays open, gives the panes the whole body and shows again when the terminal widens. While the rail shows, the active tab's panes, and every tab's PTY sizes, are laid out in the body to its right. Its border is `Accent` while it has the keyboard and `Border` otherwise. The toast and the overlays draw over it.
+- **Open or closed** is `core.State.Rail`, saved in `state.json` (see Persisted state). Which of the rail or a pane has the keyboard, the selection, the search text and the probe results are UI state and are not saved.
+- **Keys.** `leader a` (`rail.toggle`, "Agents rail", group Panes): a closed rail opens and takes the keyboard when it shows; an open rail without the keyboard takes it; an open rail with the keyboard closes. On an open rail that is hidden by the width rule the key closes it. A hidden rail never holds the keyboard, and a resize that hides it while it has the keyboard returns the keyboard to the focused pane; closing the rail does the same. In the rail `j` / `k` and `down` / `up` move the selection, `/` opens the search, `enter` jumps, and `esc` ends a search (clearing its text) or, with no search, returns the keyboard to the focused pane. The leader works as everywhere; every other key is dropped. A paste goes to the search while it is open and is dropped otherwise. Keys are routed in this order: confirm, prompt, copy mode, overlay, leader, rail (while it has the keyboard), focused pane.
+- **Mouse.** A click on a card gives the rail the keyboard and selects the card; a double click jumps; the wheel over the rail moves the selection by one card per notch and the list follows it; a click on a pane gives the keyboard back to the panes. The rail ignores the mouse in the states that ignore it elsewhere (see Mouse and clipboard).
+- **Header**, in the top border: ` 󱙺 Agents N ` (icon `Agent`; the word `Accent` while the rail has the keyboard, else `Fg`, bold; N `Muted`) and, at the right end, the count per state in the state colours, bold: ` 󰀦1 ⠙3 󰗡2 ` (blocked, working with the badge spinner, idle; a state with no agents is left out).
+- **Search.** `/` opens a row under the header: ` 󰍉 ` in `Accent`, the text in `Fg` and the terminal cursor after it. It matches, case-insensitively, the project, branch, current action and tab (`tab N` or its name), and draws the matched part in `Match`, bold. `enter` ends typing and keeps the filter; `esc` clears it. While nothing matches the list reads `no agent matches` in `Subtle`.
+- **Cards** are four lines each, with a blank row between agents and above the first, cut with `…` to the rail's width:
+  1. the state glyph (the badge spinner for working, 󰀦 blocked, 󰗡 idle; the robot icon in `Muted` for an agent that has sent no hook), the project in `Fg`, bold, and at the right end the time since the agent's last activity (`8s`, `4m`, `2h`, `3d`; `Subtle`) and a `●` (`Accent`) when it changed state or finished since its pane was last focused;
+  2. `  <branch>` (icon `Git`, branch `Dim`; a detached HEAD shows its first 7 characters), then the PR number and its CI state, empty until pull requests are wired in;
+  3. the current action: the tool and its target (`Edit internal/core/modes.go`, `Bash go test ./...`) or the question a blocked agent asks, in `Blocked`; `Muted` otherwise; an idle agent reads `waiting for a prompt`, and an agent without hooks leaves the line empty;
+  4. the diff stats against the branch's base: `+N` in `Success`, `-M` in `Error`, `N files` in `Subtle`; empty outside a repo or before the first probe.
+- **Order.** Agents are grouped by state under one-line headers with a count (`Blocked 1`, `Working 3`, `Idle 2` in the state colours, a `Border` rule up to the count), most urgent first: blocked, working, idle, then `No hooks` (`Muted`) for agents without a state. Inside a group they are ordered by tab, then pane order. Idle agents are listed; shell panes never are.
+- **Selection.** An `Accent` outline (`╭ ╮ ╰ ╯ ─ │`) surrounds the selected card, drawn in the blank rows above and below it and down the rail's inner edges. It follows the same agent as the list reorders and moves to the nearest card when its agent goes. The list scrolls to keep the selected card whole. `enter` jumps: the agent's tab becomes active, its pane is focused (unzooming as a focus move does, and revealing a hidden scrolling column), its frame flashes in `Match` for 600 ms, the keyboard goes to that pane, and the rail stays open.
+- **Effects.** Working spinners animate on the agent tick (see Claude Code integration via hooks). A blocked agent's card has a `▎` bar in `Blocked` at its left edge that pulses between `Blocked` and `Border` every 500 ms; that tick runs only while the rail shows and some agent is blocked, so idle CPU is unchanged otherwise.
+- **Hints.** The rail's last inner row reads `j/k move`, `enter jump`, `/ search`, `esc back` (keys `Key`, bold; labels `Muted`); pairs that do not fit are dropped from the end.
+- **Without icons.** With `icons = false` the rail drops its Nerd Font glyphs: the header reads ` Agents N `; the counts read ` blocked N ⠙N idle N ` (braille stays, and a state with no agents is left out); on card line 1 a working card keeps the braille spinner and the other states show no glyph, the cell left blank so projects stay aligned; the branch line starts where the icon was; the search row's icon becomes `/`. `●` and `▎` stay.
+- **Activity time and the unseen dot.** The UI keeps for each pane the later of its last PTY output and its last hook event. The dot is set when an agent's state changes, or it stops, while its pane is not the focused pane of the active tab, and cleared when that pane is focused. Neither is saved.
+- **Project, branch and diff stats** come from probes that run off the update loop, only while the rail is open. The project is the main checkout's directory name (`Repo.MainRoot`, so a repo's worktrees share it; for a bare repo the common dir's name without `.git`); outside a repo it is the cwd's base name, with no branch line. Per agent: a head probe (`git.Head`) when the rail opens, when the pane's cwd changes and on `SessionStart` and `Stop`, at most once every 5 s; a stats probe (`(*Engine).Stats` in branch mode against the default branch) when the rail opens and on `Stop`, at most once every 10 s. Each probe has a 2 s context, and a result is dropped when stale (the pane closed or its cwd changed since). The tray's own git probe is separate.
 
 #### Notices, prompts and pending keys
 
@@ -342,6 +367,7 @@ There is no status bar. Each of these has its own home:
 - **Copy mode:** the COPY tag in the copy pane's top border; its keys are in the keymap.
 - **Copy-mode search prompt:** the copy pane's bottom border (see Frames).
 - **Rename:** an in-place input in the workspace bar.
+- **Agents:** the agents rail; an inactive tab's icon in the workspace bar keeps the colour of its most urgent agent.
 - **Layout mode:** the tray's layout module; the notice `layout: <mode>` also shows when it changes.
 - **Working directory:** no screen element shows a pane's full cwd; a tab's automatic name is the basename of its focused pane's cwd, and titles do not carry it.
 
@@ -353,6 +379,7 @@ Rounded boxes (`╭ ╮ ╰ ╯`, matching the pane frames; the which-key rule k
 
 - **Which-key.** Placed bottom-right, one cell from the right edge, with its bottom border on the last row. Border `BorderFocus`; title ` 󰌌 ctrl+space ` in `Accent`, bold.
   - Two columns, split by a `Border` rule that joins the top and bottom borders (`┬`, `┴`). Panes, then Layout, are on the left. Tabs, a blank row, then App are on the right.
+  - The Panes group includes the row `a  Agents rail`.
   - Group heads `󰯌 Panes`, `󰕴 Layout`, `󰓩 Tabs` and `󰒓 App` are `Accent` and bold, followed by a `Border` rule to the column's end.
   - Rows: the key in `Key`, bold, padded to the column's widest key; two cells; the title in `Fg`.
   - Directional commands collapse into one row each, their keys padded like any other row's: `h j k l` (Focus pane), `H J K L` (Resize pane), `^h^j^k^l` (Swap pane), `1-9` (Jump to tab), `> 1-9` (Move pane to tab), `. 1-9` (Send pane to tab) and `; hjkl` (Preselect). A key that starts a two-key sequence closes the popup and opens the sequence popup. The keys come from the bindings: a family collapses only when all its keys are bound (`1-9` only when they are consecutive); otherwise each bound key gets its own row.
@@ -376,14 +403,14 @@ Existing roles keep their colours. New roles:
 
 | Role | Catppuccin | Used for |
 | --- | --- | --- |
-| `Agent` | Mauve | agent frames, titles and icons; tray agent icons |
+| `Agent` | Mauve | agent frames, titles and icons; the rail's header icon |
 | `Shell` | Blue | shell frames, titles and icons |
 | `Bar` | Base | ground of the workspace bar |
 | `Dim` | Subtext0 | inactive tab text |
 | `Clock` | Lavender | clock segment |
 | `Git` | Flamingo | git icon |
 | `Load` | Teal | load icon and sparkline |
-| `Working`, `Blocked`, `Idle` | Peach, Red, Green | agent state badges, tray agent icons and tab icons |
+| `Working`, `Blocked`, `Idle` | Peach, Red, Green | agent state badges, tab icons, and the rail's state glyphs, counts and group headers |
 
 The PR and CI slot (M3) uses the existing `Info` role for its icon.
 
@@ -393,14 +420,14 @@ All single cell (Nerd Fonts v3 names):
 
 | Glyph | Name | Code point | Use |
 | --- | --- | --- | --- |
-| 󱙺 | nf-md-robot_outline | U+F167A | agent panes, agent tabs, tray agents |
+| 󱙺 | nf-md-robot_outline | U+F167A | agent panes, agent tabs, rail header, hook-less card, rail.toggle |
 |  | nf-oct-terminal | U+F489 | shell panes and tabs |
 | 󰌌 | nf-md-keyboard | U+F030C | which-key and sequence popup titles |
 | 󰑕 | nf-md-rename_box | U+F0455 | rename command |
 | 󰊓 | nf-md-fullscreen | U+F0293 | zoom tag, zoom command |
 | 󰁝 | nf-md-arrow_up | U+F005D | scrolled pane tag, preselect up |
 | 󰥔 | nf-md-clock_outline | U+F0954 | clock |
-|  | nf-dev-git_branch | U+E725 | git |
+|  | nf-dev-git_branch | U+E725 | git, card branch line |
 |  | nf-oct-dot_fill | U+F444 | uncommitted changes |
 | 󰻠 | nf-md-cpu_64_bit | U+F0EE0 | load |
 | 󰍛 | nf-md-memory | U+F035B | memory |
@@ -428,16 +455,19 @@ All single cell (Nerd Fonts v3 names):
 | 󰆥 | nf-md-crown | U+F01A5 | promote to master |
 | 󰅖 | nf-md-close | U+F0156 | close pane, close tab, clear preselection |
 | 󰈆 | nf-md-exit_to_app | U+F0206 | quit |
+| 󰍉 | nf-md-magnify | U+F0349 | the rail's search row |
 | 󰆏 | nf-md-content_copy | U+F018F | copy commands, copy tag |
 |  | nf-ple-upper_left_triangle | U+E0BC | segment edge |
 |  | nf-ple-lower_right_triangle | U+E0BA | tray edge |
 |  | nf-ple-forwardslash_separator | U+E0BB | thin segment divider |
-| 󰀦, 󰗡 | nf-md-alert, nf-md-check_circle_outline | U+F0026, U+F05E1 | blocked and idle badges |
+| 󰀦, 󰗡 | nf-md-alert, nf-md-check_circle_outline | U+F0026, U+F05E1 | blocked and idle badges, card state glyphs and header counts |
 | , 󰔟 (M3) | nf-oct-git_pull_request, nf-md-timer_sand | U+F407, U+F051F | PR and CI slot |
+
+The rail also uses `●` (U+25CF, the unseen dot) and `▎` (U+258E, the blocked bar). They are plain Unicode, not Nerd Font glyphs, so `icons = false` keeps them.
 
 #### Command icons
 
-The palette shows each command's icon: `palette.open` , `theme.pick` and `theme.set.*` 󰏘, `agent.new` 󱙺, `pane.split.down` 󰯋, `pane.split.right` 󰯌, `pane.focus.*` 󰓾, `pane.resize.*` 󰘖, `pane.swap.*` 󰓡, `pane.zoom` 󰊓, `pane.close` and `tab.close` 󰅖, `copy.selection` and `copy.mode` 󰆏, `tab.new` 󰝜, `tab.rename` 󰑕, `tab.next`, `tab.prev` and `tab.jump.*` 󰓩, `pane.move.tab.*` and `pane.send.tab.*` 󰶭, `pane.break` 󰏌, `layout.cycle` and `layout.set.bsp` 󰕴, `layout.set.master-stack` 󰛽, `layout.set.scrolling` 󰕭, `pane.preselect.left` 󰁍, `pane.preselect.down` 󰁅, `pane.preselect.up` 󰁝, `pane.preselect.right` 󰁔, `pane.preselect.clear` 󰅖, `layout.rotate` 󰑧, `layout.equalize` 󰇼, `layout.promote` 󰆥, `app.quit` 󰈆.
+The palette shows each command's icon: `palette.open` , `theme.pick` and `theme.set.*` 󰏘, `agent.new` 󱙺, `pane.split.down` 󰯋, `pane.split.right` 󰯌, `pane.focus.*` 󰓾, `pane.resize.*` 󰘖, `pane.swap.*` 󰓡, `pane.zoom` 󰊓, `pane.close` and `tab.close` 󰅖, `copy.selection` and `copy.mode` 󰆏, `tab.new` 󰝜, `tab.rename` 󰑕, `tab.next`, `tab.prev` and `tab.jump.*` 󰓩, `pane.move.tab.*` and `pane.send.tab.*` 󰶭, `pane.break` 󰏌, `layout.cycle` and `layout.set.bsp` 󰕴, `layout.set.master-stack` 󰛽, `layout.set.scrolling` 󰕭, `pane.preselect.left` 󰁍, `pane.preselect.down` 󰁅, `pane.preselect.up` 󰁝, `pane.preselect.right` 󰁔, `pane.preselect.clear` 󰅖, `layout.rotate` 󰑧, `layout.equalize` 󰇼, `layout.promote` 󰆥, `app.quit` 󰈆, `rail.toggle` 󱙺.
 
 ### Claude Code integration via hooks
 
@@ -467,13 +497,26 @@ The example shows three events; the generated file has the same handler for ever
 | `Notification` | blocked for `notification_type` `permission_prompt`, `elicitation_dialog`, `elicitation_url_dialog` and `agent_needs_input`; idle for `idle_prompt`; any other type changes nothing |
 | `Stop`, `StopFailure` | idle |
 
+**Current action.** The adapter reduces each payload to a short action string for the rail, cut to 120 runes with control characters and newlines removed (only the first line of a command is kept):
+
+| Claude hook | Action |
+| --- | --- |
+| `PreToolUse` | `<tool_name> <target>`, the target being the first present of `tool_input.file_path`, `notebook_path`, `command`, `pattern`, `url`, `query`, `description`, else the tool name alone; for `AskUserQuestion`, the first question's text |
+| `PermissionRequest` | `Allow <tool_name> <target>?` |
+| `Notification` that blocks, `Elicitation` | the payload's `message` |
+| `UserPromptSubmit` | `thinking` |
+| `Stop`, `StopFailure`, `SessionStart`, `SessionEnd` | empty |
+| `PostToolUse` and the rest | unchanged |
+
+An event with `ActionSet` true sets the pane's action to `Action`, and an empty `Action` clears it; one with `ActionSet` false leaves the action as it is. `core.Pane.Action` is not saved and changes through `SetAgentAction{ID, Action}`, applied with the state from the same event; a pane that becomes a shell loses it. The payload stays bounded by the socket's 64 KiB line limit and nothing of it is logged.
+
 An agent pane whose Claude has sent no hook has no state and shows no badge. The saved session follows every `SessionStart`, which covers `/clear` and fork (they change the id); a plain `--resume` keeps it.
 
 **Quiet output.** Claude redraws its spinner several times a second while it works, and no hook fires when a denied permission prompt is dismissed with `esc`. So a working pane that has printed nothing for 3 s becomes idle, and a key that answers a dialog (`enter`, `esc` or a digit `1`-`9`) sent to a blocked pane makes it working, with the 3 s counted from that key. Hooks always win over these two rules. One app tick of 125 ms runs only while some pane is working; it advances the spinner and applies the quiet rule.
 
 **Hook command and socket**
 
-- `muxreveal hook claude-code` is a subcommand of the same binary. It reads the hook JSON from stdin, parses it with the harness, adds the pane id from `MUXREVEAL_PANE` and sends one compact event (pane, event name, session id, transcript path, state, working directory, and the start, end and turn-start flags) as one JSON line over the Unix socket in `MUXREVEAL_SOCK`.
+- `muxreveal hook claude-code` is a subcommand of the same binary. It reads the hook JSON from stdin, parses it with the harness, adds the pane id from `MUXREVEAL_PANE` and sends one compact event (pane, event name, session id, transcript path, state, working directory, current action, and the start, end and turn-start flags) as one JSON line over the Unix socket in `MUXREVEAL_SOCK`.
 - The server listens on `<state dir>/run/<pid>.sock` (mode 0600; the `run` directory is mode 0700). Both the socket and the settings file are removed on exit. The client waits up to 2 s for the server's `ok` line, which the server writes once the event is queued, except for a turn-start event (`UserPromptSubmit`), which it answers after the turn snapshot is taken or after 1.5 s, whichever comes first. The snapshot therefore lands before the agent edits anything, and a slow snapshot never holds the agent longer than the budget.
 - The server holds a turn-start event's `ok` until the event's `Done` is called (`Server.Hold`). A gate in `cmd/muxreveal` sits between the server and the app's event channel: it forwards every event to the app in order, at once, runs the snapshot for a turn start in its own goroutine with a 1.4 s context, then calls `Done`. An event whose `cwd` is not inside a repository, or whose session id is not a UUID, gets no snapshot and is answered at once.
 - `muxreveal hook` always exits 0 and prints nothing to stdout or stderr, also when the environment variables are missing, the socket is gone or the payload is bad. Claude adds the stdout of `SessionStart` and `UserPromptSubmit` hooks to the model's context, so any output would leak into the conversation.
@@ -598,6 +641,7 @@ type Engine struct{ /* limits, temp dir, cache */ }
 
 func NewEngine(l Limits, tempDir string) *Engine // zero fields of l take the defaults
 func (e *Engine) Diff(ctx context.Context, src Source) (Result, error)
+func (e *Engine) Stats(ctx context.Context, src Source) (Stats, error) // Files, Added, Removed: the listing pass only
 ```
 
 - Diffs compare two tree ids in two passes. The listing (`git diff --raw --numstat -z -M -C --histogram`) gives every file's status, modes, full blob ids, line counts and binary flag. The hunk pass is one `git diff --histogram -U3 -M -C --full-index` over the files that need hunks (a rename's or copy's old path goes in the pathspec too, so git detects it again), parsed with `gitdiff.Parse`. The working tree becomes a tree through the temporary-index machinery of a snapshot, without the ref, so agent commits mid-turn never break a diff.
@@ -606,6 +650,7 @@ func (e *Engine) Diff(ctx context.Context, src Source) (Result, error)
 - A branch source diffs the tree of `git merge-base <base> HEAD` against the working tree. An empty base means the default branch: the target of `refs/remotes/origin/HEAD`, else `main`, else `master`, else `ErrNoBase`; once a PR exists, its base is passed. Files that are untracked in the working tree are marked `Untracked`, whatever status git guessed (an untracked file can show as a rename or copy).
 - A PR source diffs the tree of the merge base of `refs/muxreveal/pr/<n>/base` and `.../head` against the head's tree, and its `Result.Head` is the head commit. Refs that are not fetched are `ErrNotFetched`.
 - A turn source's latest turn is live: its snapshot against the working tree. A past turn `k` is its snapshot against the next turn that has one, and `Result.Through` names the last turn the diff covers (`k`, or more when later turns have no snapshot). A turn without a snapshot is `ErrNoSnapshot`; a session with no turns is `ErrNoTurns`.
+- `Head(ctx, Repo) (HeadInfo, error)` gives `HeadInfo{Branch, Detached, OID}`: `Branch` without `refs/heads/`, `OID` empty on an unborn branch. `Stats{Files, Added, Removed}` counts the changed files and their added and removed lines; it runs the listing pass only, with no hunks and no working-tree snapshot cache: untracked files count as added, and binary files count as files without lines.
 - Diffs are computed off the UI goroutine.
 - Live mode: one watcher per worktree (see below). `Engine.Update(ctx, prev, src, batch)` rebuilds the working tree and re-lists only the touched paths (a vanished path stands for everything under it), keeping the other files of `prev`; the result equals a fresh `Diff`. It runs a full `Diff` instead when the source is not live or a newer turn exists, a rename or copy is involved (in `prev`, among the touched files, or possible between them and the others: a touched new file beside other retained changes, or a touched change beside a retained new file, always falls back, because git may pair them), more than 200 paths are touched, a `.gitignore` is touched, the batch reports git metadata changes or an overflow, any file of `prev` is `Truncated`, or the result is near the file or byte cap.
 - Full-file view shows the new file with added lines marked and deleted lines as collapsible ghost lines.
@@ -692,6 +737,7 @@ State lives in the platform state dir (`$XDG_STATE_HOME/muxreveal` on Linux, `~/
 {
   "version": 2,
   "active": 0,
+  "rail": true,
   "tabs": [{
     "id": "t1",
     "name": "api",
@@ -734,9 +780,10 @@ State lives in the platform state dir (`$XDG_STATE_HOME/muxreveal` on Linux, `~/
 ```
 
 - A tab has `id`, `name` (omitted when the name is automatic), `focused`, `zoomed` (omitted when false), `mode` (`bsp`, `master-stack` or `scrolling`) and `pane_ids` (the tab's panes in layout order: BSP leaf order, master order, or columns left to right and top to bottom), then by mode: a `bsp` tab has `layout` (`null` for an empty tab), a `master-stack` tab has `master_ratio` (0.1 to 0.9), and a `scrolling` tab has `columns` (each `{ "panes": [ids], "width": 0.1 to 1.0 }`) and `first`, its first visible column (omitted when 0). A BSP layout node is either `{ "pane": id }` or a split: `split` is `"vertical"` (children side by side) or `"horizontal"` (children stacked), `ratio` is the first child's share, and `children` lists the first child (left or top) before the second. A pane has `kind` (`shell` or `agent`) and `cwd` (omitted when empty), and for agents `harness`, `session_id` and `transcript` (each omitted when empty).
+- `rail` is `true` while the agents rail is open and omitted when it is closed; a file without it opens closed, and the format stays version 2.
 - An agent pane without a harness is saved as a shell pane (its cwd kept), so the file always passes validation.
 - The layout's JSON form is read and written by one pair of functions in `internal/store/layout.go`; the JSON types are unexported and `core` has no JSON tags, so a layout change edits that file and the version only.
-- Saved: the version, the active tab, per tab its id, name, focused pane, zoom, mode, pane ids and the mode's layout (ratios and widths rounded to 0.01), and per pane its kind and cwd and, for agents, the harness, session id and transcript path. Not saved: the theme (the config decides), agent states, scrollback, and what a shell was running.
+- Saved: the version, the active tab, whether the agents rail is open, per tab its id, name, focused pane, zoom, mode, pane ids and the mode's layout (ratios and widths rounded to 0.01), and per pane its kind and cwd and, for agents, the harness, session id and transcript path. Not saved: the theme (the config decides), agent states, scrollback, and what a shell was running.
 
 **Writing**
 
@@ -784,6 +831,7 @@ Terminal panes pass every key through to the agent, so global actions sit behind
 | `ctrl+space` | Send ctrl+space to the pane |
 | `q` | Quit |
 | `n` | New agent pane in the focused pane's cwd (worktree picker from M2) |
+| `a` | Agents rail: open it, give it the keyboard, or close it (see Agents rail) |
 | `s` / `v` | Open a shell below / to the right of the focused pane (same cwd; `split_default` in config can flip this) |
 | `h` `j` `k` `l` | Focus pane left, down, up, right |
 | `H` `J` `K` `L` | Resize pane |
@@ -814,6 +862,17 @@ Terminal panes pass every key through to the agent, so global actions sit behind
 | `!` | Break pane into a new tab |
 
 A key written `> 1` is a two-key sequence: after the leader, a key that starts a sequence keeps the leader pending, the which-key popup closes and the sequence popup opens at once, titled with the leader and the first key (`ctrl+space >`). The second key runs its binding; `esc` cancels unless it is bound (`; esc` clears the preselection); the leader key sends the leader to the pane; any other key shows the notice `ctrl+space > x is not bound`. A paste or an opened overlay ends the sequence, as it ends a pending leader. `leader enter` collides with `leader ctrl+j` only on terminals that send 0x0a for Enter without the Kitty keyboard protocol. Layout and move commands without a key (`layout.set.*`) are in the palette.
+
+### Agents rail (while it has the keyboard)
+
+| Key | Action |
+| --- | --- |
+| `j` / `k`, `down` / `up` | Move the selection |
+| `/` | Search (`enter` keeps the filter, `esc` clears it) |
+| `enter` | Jump to the selected agent |
+| `esc` | End a search, else return the keyboard to the focused pane |
+
+The leader works as everywhere; every other key is dropped.
 
 ### Review pane (agent diff and PR diff)
 
@@ -852,7 +911,7 @@ v1 ships in six milestones, preceded by a VT spike. Each ends on a gate you can 
     - Gate: a written go/no-go with numbers.
 1. **M0 Skeleton.** Module layout, config, theme engine with all four Catppuccin flavors, command palette, empty app shell. Covers TH-1, TH-2, UX-1, UX-2.
     - Gate: the app launches and switches themes live.
-2. **M1 Terminal core.** PTYs, `tuios.dev/vt` adapter, compositor, splits, tabs, tiling layouts, tab moves, shell panes, copy mode, mouse and clipboard, hook socket, state badges, persistence and resume. Covers AG-1 to AG-5, AG-7, AG-8 (interface), AG-9 to AG-12, PR-1 to PR-4, UX-4 to UX-6.
+2. **M1 Terminal core.** PTYs, `tuios.dev/vt` adapter, compositor, splits, tabs, tiling layouts, tab moves, shell panes, copy mode, mouse and clipboard, hook socket, state badges, persistence and resume. Covers AG-1 to AG-5, AG-7, AG-8 (interface), AG-9 to AG-13, PR-1 to PR-4, UX-4 to UX-6.
     - Gate: six busy Claude panes stay smooth at 60 fps, and a reboot brings back the same layout with every session resumed.
 3. **M2 Worktrees and agent diff.** Worktree discovery and creation, branch and turn modes, live updates, file tree, full-file toggle. Covers WT-1, WT-2, DF-1 to DF-6.
     - Gate: a saved file shows in the diff within 300 ms, and turn mode isolates the last turn's changes.

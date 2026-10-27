@@ -8,11 +8,11 @@ M1e Tiling, tab moves and chrome is merged (PR #12) and M2a Worktrees and diff e
 
 ## M1 Terminal core
 
-Goal: PTYs, the `tuios.dev/vt` adapter, compositor, splits, tabs, tiling layouts, tab moves, shell panes, copy mode, mouse and clipboard, hook socket, state badges, persistence and resume. Covers AG-1 to AG-5, AG-7, AG-8 (interface), AG-9 to AG-12, PR-1 to PR-4, UX-4 to UX-6. It builds on the spike findings below.
+Goal: PTYs, the `tuios.dev/vt` adapter, compositor, splits, tabs, tiling layouts, tab moves, shell panes, copy mode, mouse and clipboard, hook socket, state badges, persistence and resume. Covers AG-1 to AG-5, AG-7, AG-8 (interface), AG-9 to AG-13, PR-1 to PR-4, UX-4 to UX-6. It builds on the spike findings below.
 
 Gate: six busy Claude panes stay smooth at 60 fps, and a reboot brings back the same layout with every session resumed.
 
-M1 ships as five plans, one PR each.
+M1 ships as six plans, one PR each.
 
 ### M1a Panes (done, PR #7)
 
@@ -202,6 +202,20 @@ The tick resolution is 0.033 point (100 ticks per second), so bsp and master-sta
 
 Inputs: recordings `~/.cache/muxreveal-spike/recordings/pane-2.rec` (run a), `~/.cache/muxreveal/recordings/20261026-200408/p3.rec` (run b) and `p2.rec` (run c), none of them in the repo; AMD Ryzen 9 3950X, Linux 7.2.11, go1.27.3, tmux 3.8; commit `d77d5de` (the bench mode knob on top of the tiling and chrome work).
 
+
+### M1f Agents rail
+
+A framed rail on the left lists every agent in every tab as a card (state, project, branch, current action, diff stats), stays open until closed, takes the keyboard on `leader a`, searches with `/` and jumps to any agent with `enter`; the tray's agents module goes away. Covers AG-13.
+
+- [ ] Hooks carry the agent's current action into the pane state
+- [ ] The rail's open state is saved, and panes lay out beside it
+- [ ] Git probes give each agent its project, branch and diff stats
+- [ ] Agent cards, ordered and grouped by state, with the blocked pulse
+- [ ] Keyboard focus, selection, search and jump
+- [ ] Mouse, hints and the tray without its agents module
+- [ ] Bench with the rail open and idle check
+
+Gate: six-pane bench p99 at most 8 ms with the rail open and six working agents (runs a, b and c), and idle CPU at most 1 % of one core with the rail open over six idle shells.
 
 ## Spike - VT (done)
 
@@ -583,8 +597,8 @@ Ideas and requests that came up outside the current milestone go here.
 - A button release outside the window leaves the press held until the next click, which blocks hover focus meanwhile.
 - With `focus_follows_mouse` on, every pointer move builds a frame (unmeasured).
 - `TestBenchKitOnSynth` times out waiting for pane read loops under `CGO_ENABLED=1 go test -race -count=2 ./internal/ui/` (also on main before agents and persistence); it passes at `-count=1` and on its own (skipped in the nightly race run until fixed).
+- `TestAppCloseNoLeaks` flakes in CI's race run ("process group N survived Close", once in two Linux runs with no code change). `Close` waits only for each pane's leader; any other member of its process group is killed, but only init can reap it, and the test checks `kill(-pgid, 0)` at the instant `Close` returns. A local probe saw a group still occupied right after `Close` in 200 of 200 rounds when the shell forks, and in 0 of 200 when it execs; not confirmed on Ubuntu's dash, which normally execs a lone `-c` command. Likely fix: the test polls with a deadline.
 - In a reftable repository the watcher does not watch `.git/reftable/`, so a fetch or another ref change sets no git flag in its batch.
-- An agents rail like herdr's Agents sidebar: every running agent with its project and branch, opened on command and kept open until closed, focused with its own key, searchable, and Enter jumps to the agent in any tab or pane; planned as its own plan after this milestone.
 - A weekly CI job that runs the hook and resume checks against the latest claude (DESIGN Risks); it needs a Claude login in CI.
 - Fix the tests that fail on macOS; until then the macOS test step in CI is non-blocking (`continue-on-error`), and removing that line is part of this item:
   - Unix socket paths over macOS's 103-byte limit under `t.TempDir()` (`/var/folders/...`):
