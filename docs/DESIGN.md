@@ -496,16 +496,17 @@ The example shows three events; the generated file has the same handler for ever
 | `Notification` | blocked for `notification_type` `permission_prompt`, `elicitation_dialog`, `elicitation_url_dialog` and `agent_needs_input`; idle for `idle_prompt`; any other type changes nothing |
 | `Stop`, `StopFailure` | idle |
 
-**Current action.** The adapter reduces each payload to a short action string for the rail, cut to 120 runes after keeping only printable characters, so control and format characters and newlines are removed (only the first line of a command or question is kept). A `tool_input` that is not an object, or a missing or unusable question, leaves the tool name alone:
+**Current action.** The adapter reduces each payload to a short action string for the rail, cut to 120 runes after keeping only printable characters, so control and format characters and newlines are removed (only the first line of a command or question is kept). A `file_path` or `notebook_path` that is an absolute path inside the payload's `cwd` is shown relative to it; any other path, one equal to the `cwd` and every other target stay as sent. A `tool_input` that is not an object, or a missing or unusable question, leaves the tool name alone:
 
 | Claude hook | Action |
 | --- | --- |
 | `PreToolUse` | `<tool_name> <target>`, the target being the first present of `tool_input.file_path`, `notebook_path`, `command`, `pattern`, `url`, `query`, `description`, else the tool name alone; for `AskUserQuestion`, the first question's text |
 | `PermissionRequest` | `Allow <tool_name> <target>?` |
+| `PostToolUse`, `PostToolUseFailure` | `<tool_name> <target>`, so an answered permission or question no longer shows |
 | `Notification` that blocks, `Elicitation` | the payload's `message` |
 | `UserPromptSubmit` | `thinking` |
 | `Stop`, `StopFailure`, `SessionStart`, `SessionEnd` | empty |
-| `PostToolUse` and the rest | unchanged |
+| `ElicitationResult` and the rest | unchanged |
 
 An event with `ActionSet` true sets the pane's action to `Action`, and an empty `Action` clears it; one with `ActionSet` false leaves the action as it is. `core.Pane.Action` is not saved and changes through `SetAgentAction{ID, Action}`, applied with the state from the same event; a pane that becomes a shell loses it. The payload stays bounded by the socket's 64 KiB line limit and nothing of it is logged.
 

@@ -138,14 +138,40 @@ func jsonString(raw json.RawMessage) string {
 	return s
 }
 
+// pathKeys are the targetKeys that hold file paths; only these are shown
+// relative to the working directory.
+var pathKeys = map[string]bool{"file_path": true, "notebook_path": true}
+
+// relativeTo shows an absolute path strictly inside the absolute directory cwd
+// relative to it; any other path stays as sent, never in a "../" form.
+func relativeTo(cwd, path string) string {
+	if !filepath.IsAbs(cwd) || !filepath.IsAbs(path) {
+		return path
+	}
+
+	rel, err := filepath.Rel(filepath.Clean(cwd), filepath.Clean(path))
+	if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return path
+	}
+
+	return rel
+}
+
 // toolTarget is "<tool> <target>"; the target is the first non-empty target
-// field, reduced to its first line. A tool_input that is not an object leaves
-// the tool name alone.
-func toolTarget(tool string, fields map[string]json.RawMessage) string {
+// field, reduced to its first line, with file paths relative to cwd. A
+// tool_input that is not an object leaves the tool name alone.
+func toolTarget(tool, cwd string, fields map[string]json.RawMessage) string {
 	for _, k := range targetKeys {
-		if t := printable(firstLine(jsonString(fields[k]))); t != "" {
-			return tool + " " + t
+		t := printable(firstLine(jsonString(fields[k])))
+		if t == "" {
+			continue
 		}
+
+		if pathKeys[k] {
+			t = relativeTo(cwd, t)
+		}
+
+		return tool + " " + t
 	}
 
 	return tool
@@ -163,7 +189,7 @@ func objectFields(input json.RawMessage) map[string]json.RawMessage {
 
 // toolAction is the PreToolUse action. AskUserQuestion shows its first
 // question when it has one.
-func toolAction(tool string, input json.RawMessage) string {
+func toolAction(tool, cwd string, input json.RawMessage) string {
 	fields := objectFields(input)
 	if tool == "AskUserQuestion" {
 		if q := firstQuestion(fields["questions"]); q != "" {
@@ -173,7 +199,7 @@ func toolAction(tool string, input json.RawMessage) string {
 		return clip(tool)
 	}
 
-	return clip(toolTarget(tool, fields))
+	return clip(toolTarget(tool, cwd, fields))
 }
 
 // firstQuestion returns the text of the first entry of a questions list: a
@@ -233,7 +259,10 @@ func (Claude) ParseEvent(payload []byte) (Event, error) {
 	case "UserPromptSubmit":
 		ev.State = core.AgentWorking
 		ev.Action, ev.ActionSet = "thinking", true
-	case "PostToolUse", "PostToolUseFailure", "ElicitationResult":
+	case "PostToolUse", "PostToolUseFailure":
+		ev.State, ev.ActionSet = core.AgentWorking, true
+		ev.Action = clip(toolTarget(printable(p.ToolName), p.Cwd, objectFields(p.ToolInput)))
+	case "ElicitationResult":
 		ev.State = core.AgentWorking
 	case "PreToolUse":
 		ev.State, ev.ActionSet = core.AgentWorking, true
@@ -241,10 +270,10 @@ func (Claude) ParseEvent(payload []byte) (Event, error) {
 			ev.State = core.AgentBlocked
 		}
 
-		ev.Action = toolAction(p.ToolName, p.ToolInput)
+		ev.Action = toolAction(p.ToolName, p.Cwd, p.ToolInput)
 	case "PermissionRequest":
 		ev.State, ev.ActionSet = core.AgentBlocked, true
-		ev.Action = permissionAction(p.ToolName, p.ToolInput)
+		ev.Action = permissionAction(p.ToolName, p.Cwd, p.ToolInput)
 	case "Elicitation":
 		ev.State, ev.ActionSet = core.AgentBlocked, true
 		ev.Action = clip(firstLine(jsonString(p.Message)))
@@ -266,6 +295,6 @@ func (Claude) ParseEvent(payload []byte) (Event, error) {
 }
 
 // permissionAction is "Allow <tool> <target>?".
-func permissionAction(tool string, input json.RawMessage) string {
-	return clip("Allow " + toolTarget(printable(tool), objectFields(input)) + "?")
+func permissionAction(tool, cwd string, input json.RawMessage) string {
+	return clip("Allow " + toolTarget(printable(tool), cwd, objectFields(input)) + "?")
 }
