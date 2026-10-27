@@ -360,7 +360,7 @@ Gate: a saved file shows in the open review pane within 300 ms; turn mode shows 
 
 ## Next
 
-M1e Tiling, tab moves and chrome and M2a Worktrees and diff engine are in progress in parallel; M2b Review pane follows once both have merged.
+M2a Worktrees and diff engine is complete on `feat/diff-engine` and waits for review. M1e Tiling, tab moves and chrome is in progress; the agents rail follows it, then M2b Review pane.
 
 ## Done
 
@@ -438,3 +438,4 @@ Ideas and requests that came up outside the current milestone go here.
 - A button release outside the window leaves the press held until the next click, which blocks hover focus meanwhile.
 - With `focus_follows_mouse` on, every pointer move builds a frame (unmeasured).
 - `TestBenchKitOnSynth` times out waiting for pane read loops under `CGO_ENABLED=1 go test -race -count=2 ./internal/ui/` (also on main before agents and persistence); it passes at `-count=1` and on its own.
+- In a reftable repository the watcher does not watch `.git/reftable/`, so a fetch or another ref change sets no git flag in its batch.
