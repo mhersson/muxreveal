@@ -25,6 +25,7 @@ const eventBuffer = 256
 // are empty, and Notice says why, when the setup failed.
 type hookRuntime struct {
 	Settings, Sock string
+	RunDir         string // where temporary git indexes go; empty when setup failed
 	Notice         string
 	Events         <-chan harness.Event
 
@@ -127,7 +128,7 @@ func setupHooks(logger *slog.Logger, stateDir string) (hookRuntime, error) {
 		}
 	})
 
-	return hookRuntime{Settings: settingsPath, Sock: sockPath, Events: events, stop: stop}, nil
+	return hookRuntime{Settings: settingsPath, Sock: sockPath, RunDir: runDir, Events: events, stop: stop}, nil
 }
 
 // gitSnapshot snapshots the working tree with its temporary index in tempDir.

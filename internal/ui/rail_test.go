@@ -1,0 +1,501 @@
+package ui
+
+import (
+	"os"
+	"os/exec"
+	"path/filepath"
+	"reflect"
+	"slices"
+	"testing"
+	"time"
+
+	tea "charm.land/bubbletea/v2"
+
+	"github.com/mhersson/muxreveal/internal/core"
+	"github.com/mhersson/muxreveal/internal/harness"
+)
+
+// tickRec records scheduled ticks with their delays and returns their messages at once.
+type tickRec struct{ delays []time.Duration }
+
+func (r *tickRec) tick(d time.Duration, fn func(time.Time) tea.Msg) tea.Cmd {
+	r.delays = append(r.delays, d)
+	msg := fn(t0)
+
+	return func() tea.Msg { return msg }
+}
+
+// railApp is a sized app with a recording tick, a fake git first on PATH and a
+// temp dir for the engine.
+type railApp struct {
+	*App
+	ticks *tickRec
+	clk   *fakeClock
+	log   string // the fake git's invocation log
+	slow  string // while this file exists the fake git sleeps
+	real  string
+}
+
+func newRailApp(t *testing.T, stats bool) *railApp {
+	t.Helper()
+
+	realGit, err := exec.LookPath("git")
+	if err != nil {
+		t.Skip("git not installed")
+	}
+
+	bin := t.TempDir()
+	r := &railApp{real: realGit, log: filepath.Join(bin, "log"), slow: filepath.Join(bin, "slow")}
+	script := "#!/bin/sh\necho \"$PWD $*\" >> '" + r.log + "'\n[ -e '" + r.slow + "' ] && exec sleep 30\nexec '" + realGit + "' \"$@\"\n"
+
+	if err := os.WriteFile(filepath.Join(bin, "git"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	tmp := ""
+	if stats {
+		tmp = t.TempDir()
+	}
+
+	a, _, clk := kindApp(t, func(o *Options) { o.GitTempDir = tmp })
+	r.App, r.clk, r.ticks = a, clk, &tickRec{}
+	a.tick = r.ticks.tick
+
+	return r
+}
+
+func (r *railApp) gitCalls() int {
+	b, err := os.ReadFile(r.log)
+	if err != nil {
+		return 0
+	}
+
+	n := 0
+
+	for _, c := range b {
+		if c == '\n' {
+			n++
+		}
+	}
+
+	return n
+}
+
+// step delivers a message and returns the commands the update raised.
+func (r *railApp) step(msg tea.Msg) tea.Cmd {
+	_, cmd := r.Update(msg)
+
+	return cmd
+}
+
+// settle runs the after-update work for state changed outside Update.
+func (r *railApp) settle() tea.Cmd { return r.step(struct{}{}) }
+
+// deliver runs cmd, feeds every message back and returns the messages it ran.
+func (r *railApp) deliver(cmd tea.Cmd) []tea.Msg {
+	msgs := flatten(cmd)
+	for _, m := range msgs {
+		if m != nil {
+			r.step(m)
+		}
+	}
+
+	return msgs
+}
+
+func countOf[T any](msgs []tea.Msg) int {
+	n := 0
+
+	for _, m := range msgs {
+		if _, ok := m.(T); ok {
+			n++
+		}
+	}
+
+	return n
+}
+
+func (r *railApp) addAgent(t *testing.T, newTab bool, cwd string) core.PaneID {
+	t.Helper()
+
+	id := r.store.State().NewPaneID()
+	if newTab {
+		openIn(t, r.App, core.NewTab{Kind: core.KindAgent, Cwd: cwd})
+	} else {
+		openIn(t, r.App, core.OpenPane{Kind: core.KindAgent, Cwd: cwd, Split: core.SplitVertical, Harness: "claude-code", Area: r.bodyArea()})
+	}
+
+	return id
+}
+
+func (r *railApp) setState(t *testing.T, id core.PaneID, s core.AgentState) {
+	t.Helper()
+	openIn(t, r.App, core.SetAgentState{ID: id, State: s})
+}
+
+func (r *railApp) card(id core.PaneID) (railCard, bool) {
+	for _, c := range r.railShown(r.store.State()) {
+		if c.pane == id {
+			return c, true
+		}
+	}
+
+	return railCard{}, false
+}
+
+func ids(gs []railGroup) [][]core.PaneID {
+	var out [][]core.PaneID
+
+	for _, g := range gs {
+		var row []core.PaneID
+		for _, c := range g.cards {
+			row = append(row, c.pane)
+		}
+
+		out = append(out, row)
+	}
+
+	return out
+}
+
+func TestRailCardsGroupsAndOrder(t *testing.T) {
+	r := newRailApp(t, false)
+	dir := t.TempDir()
+
+	idle := r.addAgent(t, false, dir)
+	blocked := r.addAgent(t, false, dir)
+	blocked1b := r.addAgent(t, false, dir)
+	openIn(t, r.App, core.RenameTab{ID: r.store.State().Tab().ID, Name: "Backend"})
+
+	working := r.addAgent(t, true, dir)
+	nohooks := r.addAgent(t, false, dir)
+	blocked2 := r.addAgent(t, true, dir)
+	shell := r.store.State().NewPaneID()
+	openIn(t, r.App, core.OpenPane{Kind: core.KindShell, Cwd: dir, Split: core.SplitVertical, Area: r.bodyArea()})
+
+	r.setState(t, idle, core.AgentIdle)
+	r.setState(t, blocked, core.AgentBlocked)
+	r.setState(t, blocked1b, core.AgentBlocked)
+	r.setState(t, working, core.AgentWorking)
+	r.setState(t, blocked2, core.AgentBlocked)
+	openIn(t, r.App, core.SetAgentAction{ID: blocked, Action: "Allow Bash ls?"}, core.SetAgentAction{ID: working, Action: "Edit a.go"})
+
+	got := r.railCards(r.store.State())
+	want := [][]core.PaneID{{blocked, blocked1b, blocked2}, {working}, {idle}, {nohooks}}
+
+	if !reflect.DeepEqual(ids(got), want) {
+		t.Fatalf("groups = %v, want %v", ids(got), want)
+	}
+
+	type exp struct {
+		action, tabName string
+		tab             int
+	}
+
+	base := filepath.Base(dir)
+	wantCard := map[core.PaneID]exp{
+		blocked:   {"Allow Bash ls?", "Backend", 0},
+		blocked1b: {"", "Backend", 0},
+		blocked2:  {"", base, 2},
+		working:   {"Edit a.go", base, 1},
+		idle:      {idleAction, "Backend", 0},
+		nohooks:   {"", base, 1},
+	}
+
+	for _, g := range got {
+		for _, c := range g.cards {
+			if c.pane == shell {
+				t.Error("a shell is listed")
+			}
+
+			if w := wantCard[c.pane]; c.action != w.action || c.tab != w.tab || c.tabName != w.tabName {
+				t.Errorf("%s = action %q tab %d name %q; want %v", c.pane, c.action, c.tab, c.tabName, w)
+			}
+		}
+	}
+
+	r.railSetSearch(false, "tab 2")
+
+	if got := ids(r.railCards(r.store.State())); !reflect.DeepEqual(got, [][]core.PaneID{{working}, {nohooks}}) {
+		t.Errorf("tab 2 -> %v", got)
+	}
+
+	r.railSetSearch(false, "backend")
+
+	if n := len(r.railShown(r.store.State())); n != 3 {
+		t.Errorf("backend matched %d cards, want the 3 of tab 1", n)
+	}
+}
+
+func TestRailMatcher(t *testing.T) {
+	c := railCard{tab: 1, tabName: "Backend", project: "muxreveal", branch: "feat/Rail", action: "Edit internal/core/modes.go"}
+
+	tests := []struct {
+		q    string
+		want []railHit
+	}{
+		{"", nil},
+		{"MUX", []railHit{{railFieldProject, 0, 3}}},
+		{"rail", []railHit{{railFieldBranch, 5, 9}}},
+		{"modes", []railHit{{railFieldAction, 19, 24}}},
+		{"tab 2", []railHit{{railFieldTabNumber, 0, 5}}},
+		{"back", []railHit{{railFieldTabName, 0, 4}}},
+		{"e", []railHit{{railFieldProject, 4, 5}, {railFieldBranch, 1, 2}, {railFieldAction, 0, 1}, {railFieldTabName, 4, 5}}},
+		{"nothing", nil},
+	}
+
+	for _, tt := range tests {
+		hits, ok := c.matches(tt.q)
+		if ok != (tt.q == "" || tt.want != nil) || !reflect.DeepEqual(hits, tt.want) {
+			t.Errorf("matches(%q) = %v, %v; want %v", tt.q, hits, ok, tt.want)
+		}
+	}
+}
+
+func TestRailSearchFiltersCards(t *testing.T) {
+	r := newRailApp(t, false)
+	a1 := r.addAgent(t, false, "/w/alpha")
+	a2 := r.addAgent(t, true, "/w/beta")
+
+	r.railSetSearch(true, "tab 2")
+
+	if got := ids(r.railCards(r.store.State())); !reflect.DeepEqual(got, [][]core.PaneID{{a2}}) {
+		t.Errorf("tab 2 -> %v, want only %s", got, a2)
+	}
+
+	r.railSetSearch(false, "alpha")
+
+	if got := ids(r.railCards(r.store.State())); !reflect.DeepEqual(got, [][]core.PaneID{{a1}}) {
+		t.Errorf("alpha -> %v, want only %s", got, a1)
+	}
+
+	r.railSetSearch(false, "zzz")
+
+	if len(r.railCards(r.store.State())) != 0 {
+		t.Error("a search that matches nothing lists cards")
+	}
+
+	if _, ok := r.railSelected(); ok {
+		t.Error("a selection with nothing shown")
+	}
+}
+
+func TestRailSelectionFollowsItsAgent(t *testing.T) {
+	r := newRailApp(t, false)
+	dir := t.TempDir()
+	a1 := r.addAgent(t, false, dir)
+	a2 := r.addAgent(t, false, dir)
+	a3 := r.addAgent(t, false, dir)
+
+	for _, id := range []core.PaneID{a1, a2, a3} {
+		r.setState(t, id, core.AgentIdle)
+	}
+
+	r.railOpened()
+	r.railSelect(a2)
+
+	// a3 becomes blocked and moves above a2: the selection stays on a2.
+	r.setState(t, a3, core.AgentBlocked)
+	r.settle()
+
+	if sel, _ := r.railSelected(); sel != a2 || r.rail.selIdx != 2 {
+		t.Fatalf("selection = %s at %d, want %s at 2", sel, r.rail.selIdx, a2)
+	}
+
+	// a2 goes: the card now at its index (a1's, the last) is selected.
+	openIn(t, r.App, core.ClosePane{ID: a2})
+	r.settle()
+
+	if sel, _ := r.railSelected(); sel != a1 {
+		t.Errorf("after the agent went: %s, want %s", sel, a1)
+	}
+
+	// Under a filter that hides the selection, the nearest shown card takes over.
+	r.railSelect(a3)
+	r.railSetSearch(true, "no such text")
+
+	if _, ok := r.railSelected(); ok {
+		t.Error("selection kept with an empty list")
+	}
+
+	r.railSetSearch(true, "")
+
+	if _, ok := r.railSelected(); !ok {
+		t.Error("no selection once cards are shown again")
+	}
+
+	r.railMove(10)
+
+	if sel, _ := r.railSelected(); sel != a1 {
+		t.Errorf("moved past the end: %s, want the last card %s", sel, a1)
+	}
+}
+
+func TestRailUnseenMarks(t *testing.T) {
+	r := newRailApp(t, false)
+	dir := t.TempDir()
+	a1 := r.addAgent(t, false, dir)
+	a2 := r.addAgent(t, false, dir) // focused
+	unseen := func(id core.PaneID) bool { return r.rail.panes[id] != nil && r.rail.panes[id].unseen }
+
+	hook(r.App, harness.Event{Pane: a1, Name: "UserPromptSubmit", State: core.AgentWorking})
+
+	if !unseen(a1) {
+		t.Error("a state change of an unfocused pane left no mark")
+	}
+
+	hook(r.App, harness.Event{Pane: a2, Name: "UserPromptSubmit", State: core.AgentWorking})
+
+	if unseen(a2) {
+		t.Error("the focused pane was marked")
+	}
+
+	openIn(t, r.App, core.FocusPane{ID: a1})
+	r.settle()
+
+	if unseen(a1) {
+		t.Error("focusing did not clear the mark")
+	}
+
+	// Idle again while already idle still marks.
+	hook(r.App, harness.Event{Pane: a2, Name: "Stop", State: core.AgentIdle})
+	hook(r.App, harness.Event{Pane: a2, Name: "Stop", State: core.AgentIdle})
+	r.settle()
+
+	if !unseen(a2) {
+		t.Fatal("a hook to idle left no mark")
+	}
+
+	openIn(t, r.App, core.FocusPane{ID: a2})
+	r.settle()
+
+	// The quiet rule.
+	hook(r.App, harness.Event{Pane: a1, Name: "UserPromptSubmit", State: core.AgentWorking})
+	openIn(t, r.App, core.FocusPane{ID: a2})
+	r.settle()
+	r.rail.panes[a1].unseen = false
+	r.panes[a1] = &pane{id: a1}
+
+	t.Cleanup(func() { delete(r.panes, a1) })
+	tickAt(r.App, r.clk, 10*time.Second)
+
+	if agentState(r.App, a1) != core.AgentIdle || !unseen(a1) {
+		t.Errorf("quiet rule: state %v unseen %v", agentState(r.App, a1), unseen(a1))
+	}
+
+	// A dialog key.
+	openIn(t, r.App, core.SetAgentState{ID: a1, State: core.AgentBlocked})
+	r.rail.panes[a1].unseen = false
+	r.answerDialog(&pane{id: a1}, "enter")
+
+	if !unseen(a1) {
+		t.Error("a dialog answer left no mark")
+	}
+
+	// A hidden tab's agent is cleared by showing it.
+	a3 := r.addAgent(t, true, dir)
+	openIn(t, r.App, core.SelectTab{Index: 0})
+	hook(r.App, harness.Event{Pane: a3, Name: "UserPromptSubmit", State: core.AgentWorking})
+
+	if !unseen(a3) {
+		t.Fatal("hidden tab agent not marked")
+	}
+
+	openIn(t, r.App, core.SelectTab{Index: 1})
+	r.settle()
+
+	if unseen(a3) {
+		t.Error("switching to its tab did not clear the mark")
+	}
+}
+
+func TestRailActiveTimeIsTheLaterOfOutputAndHook(t *testing.T) {
+	r := newRailApp(t, false)
+	id := r.addAgent(t, false, t.TempDir())
+	r.panes[id] = &pane{id: id, lastOut: t0.Add(5 * time.Second)}
+
+	t.Cleanup(func() { delete(r.panes, id) })
+
+	r.clk.Set(t0.Add(2 * time.Second))
+	hook(r.App, harness.Event{Pane: id, Name: "PostToolUse", State: core.AgentWorking})
+
+	if c, _ := r.card(id); !c.active.Equal(t0.Add(5 * time.Second)) {
+		t.Errorf("active = %v, want the later output time", c.active)
+	}
+
+	r.clk.Set(t0.Add(9 * time.Second))
+	hook(r.App, harness.Event{Pane: id, Name: "PostToolUse", State: core.AgentWorking})
+
+	if c, _ := r.card(id); !c.active.Equal(t0.Add(9 * time.Second)) {
+		t.Errorf("active = %v, want the hook time", c.active)
+	}
+}
+
+func TestRailForgetsClosedPanes(t *testing.T) {
+	r := newRailApp(t, false)
+	id := r.addAgent(t, false, t.TempDir())
+	hook(r.App, harness.Event{Pane: id, Name: "Stop", State: core.AgentIdle})
+
+	if r.rail.panes[id] == nil {
+		t.Fatal("no entry")
+	}
+
+	openIn(t, r.App, core.ClosePane{ID: id})
+	r.settle()
+
+	if len(r.rail.panes) != 0 {
+		t.Errorf("entries after close: %v", slices.Collect(func(y func(core.PaneID) bool) {
+			for k := range r.rail.panes {
+				if !y(k) {
+					return
+				}
+			}
+		}))
+	}
+}
+
+func TestRailUIStateSurvivesUpdates(t *testing.T) {
+	r := newRailApp(t, false)
+	r.addAgent(t, false, t.TempDir())
+	r.rail.focused, r.rail.top = true, 3
+	r.railOpened()
+	r.settle()
+
+	if !r.rail.focused || r.rail.top != 3 {
+		t.Errorf("focused %v top %d changed by the model", r.rail.focused, r.rail.top)
+	}
+}
+
+func TestRailSelectionUnderAFilterThatHidesIt(t *testing.T) {
+	r := newRailApp(t, false)
+	a1 := r.addAgent(t, true, "/w/alpha")
+	a2 := r.addAgent(t, true, "/w/beta")
+	a3 := r.addAgent(t, true, "/w/alphabet")
+
+	for _, id := range []core.PaneID{a1, a2, a3} {
+		r.setState(t, id, core.AgentIdle)
+	}
+
+	r.railSelect(a2)
+	r.railSetSearch(true, "alpha")
+
+	if sel, _ := r.railSelected(); sel != a3 {
+		t.Errorf("selection = %s, want %s (the card now at its old index)", sel, a3)
+	}
+
+	r.railSetSearch(true, "alphab")
+
+	if sel, _ := r.railSelected(); sel != a3 {
+		t.Errorf("selection = %s, want %s", sel, a3)
+	}
+
+	r.railSetSearch(true, "alpha")
+	r.railSelect(a1)
+	r.railSetSearch(true, "beta")
+
+	if sel, _ := r.railSelected(); sel != a2 {
+		t.Errorf("selection = %s, want %s (the only card)", sel, a2)
+	}
+}

@@ -15,6 +15,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/mhersson/muxreveal/internal/core"
+	"github.com/mhersson/muxreveal/internal/git"
 	"github.com/mhersson/muxreveal/internal/harness"
 	"github.com/mhersson/muxreveal/internal/term"
 	"github.com/mhersson/muxreveal/internal/ui/palette"
@@ -48,6 +49,9 @@ type Options struct {
 	Events <-chan harness.Event
 	// Notice is shown as a toast at start; empty for none.
 	Notice string
+	// GitTempDir is where the diff engine puts its temporary index for the
+	// rail's diff stats; empty turns the stats off.
+	GitTempDir string
 	// Save is called with the state after every successful dispatch; nil saves nothing.
 	Save func(core.State)
 }
@@ -91,6 +95,8 @@ type App struct {
 	save      func(core.State)
 	clock     clock // the sync hold's and the tray's time source
 	tray      trayState
+	rail      railState
+	engine    *git.Engine // nil when the rail's diff stats are off
 	clip      *clipboard
 	sel       *paneSelection // the one selection; survives tab switches
 	copy      *copyState     // copy mode; owns every key and ignores the mouse while set
@@ -172,6 +178,10 @@ func New(opts Options) (*App, error) {
 	}
 
 	a.tray.gitRun = runGit
+	if opts.GitTempDir != "" {
+		a.engine = git.NewEngine(git.Limits{}, opts.GitTempDir)
+	}
+
 	if err := a.sync(); err != nil {
 		return nil, err
 	}
@@ -267,13 +277,19 @@ func (a *App) dropGoneTab(st core.State) {
 
 // Init implements tea.Model.
 func (a *App) Init() tea.Cmd {
-	return tea.Batch(a.initTray(), a.waitEvent())
+	var rail tea.Cmd
+	if a.store.State().Rail {
+		rail = a.railOpened()
+	}
+
+	return tea.Batch(a.initTray(), a.waitEvent(), rail)
 }
 
 // Update implements tea.Model.
 func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	m, cmd := a.update(msg)
 	a.syncPaneColors()
+	a.railAfterUpdate()
 
 	if len(a.later) > 0 {
 		cmd = tea.Batch(append(a.later, cmd)...)
@@ -360,6 +376,12 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, a.onGit(msg)
 	case loadMsg:
 		return a, a.onLoad(msg)
+	case railHeadMsg:
+		return a, a.onRailHead(msg)
+	case railStatsMsg:
+		return a, a.onRailStats(msg)
+	case railDueMsg:
+		return a, a.onRailDue(msg)
 	case palette.ChosenMsg:
 		return a, a.chosen(msg.ID)
 	case palette.ClosedMsg:

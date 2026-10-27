@@ -1,0 +1,449 @@
+package ui
+
+import (
+	"context"
+	"errors"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"testing"
+	"time"
+
+	"github.com/mhersson/muxreveal/internal/core"
+	"github.com/mhersson/muxreveal/internal/harness"
+)
+
+// gitIn runs the real git in dir, with a config that needs nothing from the host.
+func (r *railApp) gitIn(t *testing.T, dir string, args ...string) {
+	t.Helper()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, r.real, args...)
+	cmd.Dir = dir
+
+	cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_SYSTEM=/dev/null",
+		"GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t", "GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t")
+
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git %v: %v\n%s", args, err, out)
+	}
+}
+
+// repo makes a repository named name on branch main with one commit and one edit.
+func (r *railApp) repo(t *testing.T, name string) string {
+	t.Helper()
+
+	dir := filepath.Join(t.TempDir(), name)
+	if err := os.Mkdir(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	r.gitIn(t, dir, "init", "-q", "-b", "main")
+	write(t, filepath.Join(dir, "a.txt"), "one\n")
+	r.gitIn(t, dir, "add", ".")
+	r.gitIn(t, dir, "commit", "-q", "-m", "init")
+	write(t, filepath.Join(dir, "a.txt"), "one\ntwo\n")
+
+	// The setup's own git calls are not the probes' business.
+	_ = os.Remove(r.log)
+
+	return dir
+}
+
+func write(t *testing.T, path, s string) {
+	t.Helper()
+
+	if err := os.WriteFile(path, []byte(s), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func idleHook(id core.PaneID) harness.Event {
+	return harness.Event{Pane: id, Name: "Stop", State: core.AgentIdle}
+}
+
+func TestRailProbesOnOpen(t *testing.T) {
+	r := newRailApp(t, true)
+	dir := r.repo(t, "proj")
+	id := r.addAgent(t, false, dir)
+
+	if cmd := r.settle(); cmd != nil || r.gitCalls() != 0 {
+		t.Fatal("a probe ran while the rail was closed")
+	}
+
+	msgs := r.deliver(r.railOpened())
+	if countOf[railHeadMsg](msgs) != 1 || countOf[railStatsMsg](msgs) != 1 {
+		t.Fatalf("open ran %v", msgs)
+	}
+
+	c, ok := r.card(id)
+	if !ok || c.project != "proj" || c.branch != "main" || c.detached {
+		t.Errorf("card = %+v", c)
+	}
+
+	if !c.statsKnown || c.stats.Files != 1 || c.stats.Added != 1 || c.stats.Removed != 0 {
+		t.Errorf("stats = %+v known %v", c.stats, c.statsKnown)
+	}
+
+	// Opening again changes nothing.
+	if r.railOpened() != nil {
+		t.Error("a second open probed again")
+	}
+}
+
+func TestRailDetachedHead(t *testing.T) {
+	r := newRailApp(t, false)
+	dir := r.repo(t, "proj")
+	r.gitIn(t, dir, "checkout", "-q", "--detach")
+	id := r.addAgent(t, false, dir)
+	r.deliver(r.railOpened())
+
+	c, _ := r.card(id)
+	if !c.detached || len(c.branch) != 7 {
+		t.Errorf("card = %+v, want a detached 7-character id", c)
+	}
+}
+
+func TestRailProbeIntervals(t *testing.T) {
+	r := newRailApp(t, true)
+	id := r.addAgent(t, false, r.repo(t, "proj"))
+	r.deliver(r.railOpened())
+
+	r.clk.Advance(time.Second)
+
+	// Both triggers fall inside their intervals: one delayed probe each.
+	msgs := flatten(hook(r.App, idleHook(id)))
+	if countOf[railDueMsg](msgs) != 2 || countOf[railHeadMsg](msgs)+countOf[railStatsMsg](msgs) != 0 {
+		t.Fatalf("idle hook inside the intervals ran %v", msgs)
+	}
+
+	if want := []time.Duration{4 * time.Second, 9 * time.Second}; len(r.ticks.delays) != 2 || r.ticks.delays[0] != want[0] || r.ticks.delays[1] != want[1] {
+		t.Errorf("delays = %v, want %v", r.ticks.delays, want)
+	}
+
+	// More triggers while the delayed probes wait add nothing.
+	r.ticks.delays = nil
+
+	if msgs := flatten(hook(r.App, idleHook(id))); len(msgs) != 0 || len(r.ticks.delays) != 0 {
+		t.Errorf("a second trigger scheduled %v %v", msgs, r.ticks.delays)
+	}
+
+	r.clk.Set(t0.Add(5 * time.Second))
+
+	head := railDueMsg{pane: id, kind: probeHead, gen: r.rail.gen}
+	if msgs := flatten(r.step(head)); countOf[railHeadMsg](msgs) != 1 {
+		t.Errorf("the head due message ran %v", msgs)
+	}
+
+	r.clk.Set(t0.Add(10 * time.Second))
+
+	stats := railDueMsg{pane: id, kind: probeStats, gen: r.rail.gen}
+	if msgs := flatten(r.step(stats)); countOf[railStatsMsg](msgs) != 1 {
+		t.Errorf("the stats due message ran %v", msgs)
+	}
+
+	// Nothing pending: a late due message does nothing.
+	if msgs := flatten(r.step(head)); len(msgs) != 0 {
+		t.Errorf("a due message with nothing pending ran %v", msgs)
+	}
+}
+
+func TestRailTriggerDuringProbeRunsOneAfter(t *testing.T) {
+	r := newRailApp(t, false)
+	id := r.addAgent(t, false, r.repo(t, "proj"))
+	cmd := r.railOpened()
+	r.clk.Advance(6 * time.Second)
+
+	if msgs := flatten(hook(r.App, harness.Event{Pane: id, Name: "SessionStart", Start: true, State: core.AgentIdle})); len(msgs) != 0 {
+		t.Fatalf("a trigger during a probe ran %v", msgs)
+	}
+
+	// The first probe's answer starts the one that waited.
+	if n := countOf[railHeadMsg](flatten(r.step(flatten(cmd)[0]))); n != 1 {
+		t.Errorf("follow-up head probes = %d, want 1", n)
+	}
+}
+
+func TestRailDropsStaleResults(t *testing.T) {
+	t.Run("pane closed", func(t *testing.T) {
+		r := newRailApp(t, false)
+		id := r.addAgent(t, false, r.repo(t, "proj"))
+		msgs := flatten(r.railOpened())
+		openIn(t, r.App, core.ClosePane{ID: id})
+		r.settle()
+		r.step(msgs[0])
+
+		if _, ok := r.rail.panes[id]; ok {
+			t.Error("a late answer revived the closed pane's entry")
+		}
+	})
+
+	t.Run("cwd changed", func(t *testing.T) {
+		r := newRailApp(t, false)
+		first, second := r.repo(t, "first"), r.repo(t, "second")
+		id := r.addAgent(t, false, first)
+		msgs := flatten(r.railOpened())
+
+		openIn(t, r.App, core.SetPaneCwd{ID: id, Cwd: second})
+		r.clk.Advance(6 * time.Second)
+
+		next := r.step(msgs[0])
+		if c, _ := r.card(id); c.project == "first" {
+			t.Error("the answer for the old cwd was applied")
+		}
+
+		// The new cwd gets its own probe.
+		follow := flatten(next)
+		if len(follow) != 1 {
+			t.Fatalf("follow-up = %v", follow)
+		}
+
+		if hm, ok := follow[0].(railHeadMsg); !ok || hm.cwd != second {
+			t.Fatalf("follow-up = %+v", follow[0])
+		}
+
+		r.step(follow[0])
+
+		if c, _ := r.card(id); c.project != "second" {
+			t.Errorf("project = %q, want second", c.project)
+		}
+	})
+
+	t.Run("rail closed", func(t *testing.T) {
+		r := newRailApp(t, false)
+		id := r.addAgent(t, false, r.repo(t, "proj"))
+		cmd := r.railOpened()
+		r.railClosed()
+
+		for _, m := range flatten(cmd) {
+			if hm, ok := m.(railHeadMsg); ok && !errors.Is(hm.err, context.Canceled) {
+				t.Errorf("a probe of a closed rail ended with %v, want a cancel", hm.err)
+			}
+
+			r.step(m)
+		}
+
+		if rp := r.rail.panes[id]; rp == nil || rp.probe.known {
+			t.Error("an answer after the rail closed was applied")
+		}
+
+		if r.rail.ctx != nil {
+			t.Error("rail context kept")
+		}
+	})
+}
+
+func TestRailTriggersNeedAnOpenRail(t *testing.T) {
+	r := newRailApp(t, true)
+	id := r.addAgent(t, false, r.repo(t, "proj"))
+
+	if msgs := flatten(hook(r.App, idleHook(id))); len(msgs) != 0 || r.gitCalls() != 0 {
+		t.Errorf("a hook probed with the rail closed: %v", msgs)
+	}
+
+	r.deliver(r.railOpened())
+	r.railClosed()
+	r.clk.Advance(time.Minute)
+	r.ticks.delays = nil
+
+	if msgs := flatten(hook(r.App, idleHook(id))); len(msgs) != 0 || len(r.ticks.delays) != 0 {
+		t.Errorf("a hook probed after the rail closed: %v", msgs)
+	}
+}
+
+func TestRailSlowGitIsCancelledAndKeepsTheLastResult(t *testing.T) {
+	r := newRailApp(t, false)
+	dir := r.repo(t, "proj")
+	id := r.addAgent(t, false, dir)
+	r.deliver(r.railOpened())
+	write(t, r.slow, "")
+	r.clk.Advance(6 * time.Second)
+
+	start := time.Now()
+	msgs := flatten(hook(r.App, idleHook(id)))
+
+	if took := time.Since(start); took < railProbeTimeout || took > railProbeTimeout+3*time.Second {
+		t.Errorf("slow probe took %v, want about %v", took, railProbeTimeout)
+	}
+
+	if len(msgs) != 1 {
+		t.Fatalf("msgs = %v", msgs)
+	}
+
+	hm, ok := msgs[0].(railHeadMsg)
+	if !ok || !errors.Is(hm.err, context.DeadlineExceeded) {
+		t.Fatalf("msg = %+v, want a deadline error", msgs[0])
+	}
+
+	r.step(hm)
+
+	if c, _ := r.card(id); c.project != "proj" || c.branch != "main" {
+		t.Errorf("card = %+v, want the previous result", c)
+	}
+}
+
+func TestRailProjectNames(t *testing.T) {
+	r := newRailApp(t, true)
+
+	plain := t.TempDir()
+	gone := filepath.Join(t.TempDir(), "vanished")
+
+	src := r.repo(t, "src")
+	bare := filepath.Join(t.TempDir(), "b.git")
+	r.gitIn(t, filepath.Dir(bare), "init", "-q", "--bare", "-b", "main", bare)
+	r.gitIn(t, src, "push", "-q", bare, "main")
+	wt := filepath.Join(t.TempDir(), "wt")
+	r.gitIn(t, bare, "worktree", "add", "-q", wt, "main")
+
+	wtsrc := filepath.Join(t.TempDir(), "linked")
+	r.gitIn(t, src, "worktree", "add", "-q", "-b", "side", wtsrc)
+
+	cases := []struct {
+		name, dir, project, branch string
+		stats                      bool
+	}{
+		{"not a repo", plain, filepath.Base(plain), "", false},
+		{"deleted cwd", gone, "vanished", "", false},
+		{"bare repo worktree", wt, "b", "main", true},
+		{"linked worktree", wtsrc, "src", "side", true},
+	}
+
+	for _, c := range cases {
+		id := r.addAgent(t, true, c.dir)
+		r.deliver(r.railOpened())
+		r.railClosed()
+
+		got, _ := r.card(id)
+		if got.project != c.project || got.branch != c.branch || got.statsKnown != c.stats {
+			t.Errorf("%s: card = project %q branch %q stats %v; want %q %q %v", c.name, got.project, got.branch, got.statsKnown, c.project, c.branch, c.stats)
+		}
+	}
+}
+
+func TestRailIdleShellsCostNothing(t *testing.T) {
+	r := newRailApp(t, true)
+
+	if cmd := r.railOpened(); cmd != nil {
+		t.Error("opening over shells probed")
+	}
+
+	if msgs := flatten(r.settle()); len(msgs) != 0 || len(r.ticks.delays) != 0 || r.gitCalls() != 0 {
+		t.Errorf("work with nothing to do: %v %v %d", msgs, r.ticks.delays, r.gitCalls())
+	}
+}
+
+func TestRailStatsOffWithoutTempDir(t *testing.T) {
+	r := newRailApp(t, false)
+	r.addAgent(t, false, r.repo(t, "proj"))
+
+	if n := countOf[railStatsMsg](r.deliver(r.railOpened())); n != 0 {
+		t.Errorf("stats probes = %d, want 0", n)
+	}
+}
+
+func TestRailReopenProbesAgain(t *testing.T) {
+	r := newRailApp(t, true)
+	id := r.addAgent(t, false, r.repo(t, "proj"))
+	r.deliver(r.railOpened())
+	r.railClosed()
+
+	// Inside the intervals the reopen schedules one delayed probe of each kind.
+	r.ticks.delays = nil
+
+	if msgs := flatten(r.railOpened()); countOf[railDueMsg](msgs) != 2 {
+		t.Fatalf("reopen inside the intervals ran %v", msgs)
+	}
+
+	r.railClosed()
+	r.clk.Advance(time.Minute)
+
+	msgs := r.deliver(r.railOpened())
+	if countOf[railHeadMsg](msgs) != 1 || countOf[railStatsMsg](msgs) != 1 {
+		t.Fatalf("reopen with the same cwd ran %v", msgs)
+	}
+
+	if c, _ := r.card(id); !c.statsKnown {
+		t.Error("no stats after the reopen")
+	}
+}
+
+func TestRailAnswerOfAnEarlierOpenIsDropped(t *testing.T) {
+	r := newRailApp(t, false)
+	dir := r.repo(t, "proj")
+	id := r.addAgent(t, false, dir)
+
+	r.railOpened()
+	oldGen := r.rail.gen
+	r.railClosed()
+	r.clk.Advance(time.Minute)
+
+	newCmd := r.railOpened()
+	if r.rail.gen == oldGen || !r.rail.panes[id].head.busy {
+		t.Fatal("the reopen did not start a probe")
+	}
+
+	stale := railHeadMsg{pane: id, cwd: dir, gen: oldGen, res: railProbe{project: "stale", known: true, headCwd: dir, repo: true}}
+	r.step(stale)
+
+	if rp := r.rail.panes[id]; rp.probe.known {
+		t.Error("a successful answer of an earlier open was applied")
+	}
+
+	if !r.rail.panes[id].head.busy {
+		t.Error("the stale answer freed the new open's probe")
+	}
+
+	r.deliver(newCmd)
+
+	if c, _ := r.card(id); c.branch != "main" {
+		t.Errorf("card = %+v after the new answer", c)
+	}
+
+	// With the rail closed and no reopen, a successful answer is dropped too.
+	r.railClosed()
+	r.step(railHeadMsg{pane: id, cwd: dir, gen: r.rail.gen, res: railProbe{project: "late", known: true, headCwd: dir}})
+
+	if c, _ := r.card(id); c.project == "late" {
+		t.Error("an answer after the close was applied")
+	}
+}
+
+func TestRailCardKeepsItsResultUntilTheNewCwdAnswers(t *testing.T) {
+	r := newRailApp(t, true)
+	first, second := r.repo(t, "first"), r.repo(t, "second")
+	id := r.addAgent(t, false, first)
+	r.deliver(r.railOpened())
+
+	openIn(t, r.App, core.SetPaneCwd{ID: id, Cwd: second})
+	r.clk.Advance(time.Minute)
+	r.settle()
+
+	if c, _ := r.card(id); c.project != "first" || c.branch != "main" || !c.statsKnown {
+		t.Fatalf("card = %+v, want the previous result until the new cwd answers", c)
+	}
+
+	// A failed probe of the new cwd clears it.
+	r.step(railHeadMsg{pane: id, cwd: second, gen: r.rail.gen, err: context.DeadlineExceeded})
+	r.step(railStatsMsg{pane: id, cwd: second, gen: r.rail.gen, err: context.DeadlineExceeded})
+
+	c, _ := r.card(id)
+	if c.project != "second" || c.branch != "" || c.statsKnown {
+		t.Errorf("card = %+v, want the cwd's base name with no branch and no stats", c)
+	}
+}
+
+func TestRailFailedProbeOfTheSameCwdKeepsTheResult(t *testing.T) {
+	r := newRailApp(t, true)
+	id := r.addAgent(t, false, r.repo(t, "proj"))
+	r.deliver(r.railOpened())
+
+	cwd := r.store.State().Panes[id].Cwd
+	r.step(railHeadMsg{pane: id, cwd: cwd, gen: r.rail.gen, err: context.DeadlineExceeded})
+	r.step(railStatsMsg{pane: id, cwd: cwd, gen: r.rail.gen, err: context.DeadlineExceeded})
+
+	if c, _ := r.card(id); c.branch != "main" || !c.statsKnown {
+		t.Errorf("card = %+v, want the previous result", c)
+	}
+}

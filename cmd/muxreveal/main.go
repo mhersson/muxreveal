@@ -171,6 +171,7 @@ func run(ctx context.Context, env core.Env, configPath, recordDir string, fresh 
 		HookSettings: hooks.Settings,
 		HookSock:     hooks.Sock,
 		Events:       hooks.Events,
+		GitTempDir:   hooks.RunDir,
 		Notice:       strings.Join(notices, "; "),
 		Save:         save,
 	})
