@@ -559,6 +559,7 @@ State lives in the platform state dir (`$XDG_STATE_HOME/muxreveal` on Linux, `~/
     "name": "api",
     "focused": "p1",
     "zoomed": true,
+    "pane_ids": ["p1", "p2"],
     "layout": { "split": "vertical", "ratio": 0.55, "children": [ { "pane": "p1" }, { "pane": "p2" } ] }
   }],
   "panes": {
@@ -574,8 +575,10 @@ State lives in the platform state dir (`$XDG_STATE_HOME/muxreveal` on Linux, `~/
 }
 ```
 
-- A tab has `id`, `name` (omitted when the name is automatic), `focused`, `zoomed` (omitted when false) and `layout` (absent for an empty tab). A layout node is either `{ "pane": id }` or a split: `split` is `"vertical"` (children side by side) or `"horizontal"` (children stacked), `ratio` is the first child's share, and `children` lists the first child (left or top) before the second. A pane has `kind` (`shell` or `agent`) and `cwd`, and for agents `harness`, `session_id` and `transcript`.
-- Saved: the version, the active tab, per tab its id, name, focused pane, zoom and layout (ratios rounded to 0.01), and per pane its kind and cwd and, for agents, the harness, session id and transcript path. Not saved: the theme (the config decides), agent states, scrollback, and what a shell was running.
+- A tab has `id`, `name` (omitted when the name is automatic), `focused`, `zoomed` (omitted when false), `pane_ids` (the tab's panes in layout leaf order) and `layout` (`null` for an empty tab). A layout node is either `{ "pane": id }` or a split: `split` is `"vertical"` (children side by side) or `"horizontal"` (children stacked), `ratio` is the first child's share, and `children` lists the first child (left or top) before the second. A pane has `kind` (`shell` or `agent`) and `cwd` (omitted when empty), and for agents `harness`, `session_id` and `transcript` (each omitted when empty).
+- An agent pane without a harness is saved as a shell pane (its cwd kept), so the file always passes validation.
+- The layout's JSON form is read and written by one pair of functions in `internal/store/layout.go`; the JSON types are unexported and `core` has no JSON tags, so a later layout engine changes that file and the version only.
+- Saved: the version, the active tab, per tab its id, name, focused pane, zoom, pane ids and layout (ratios rounded to 0.01), and per pane its kind and cwd and, for agents, the harness, session id and transcript path. Not saved: the theme (the config decides), agent states, scrollback, and what a shell was running.
 
 **Writing**
 
@@ -589,14 +592,16 @@ State lives in the platform state dir (`$XDG_STATE_HOME/muxreveal` on Linux, `~/
 **Start-up**
 
 - MuxReveal always restores. `--fresh` starts with one shell for this run and replaces the saved state at the first change. No file, or one with no panes, starts as without a state: one shell in the launch dir.
-- A file that does not decode or validate is renamed to `state.json.bad` (replacing an older one) and the start is fresh, with the notice `the saved layout could not be read; it was kept as state.json.bad`.
+- A file whose tabs or panes do not decode or validate is renamed to `state.json.bad` (replacing an older one) and the start is fresh, with the notice `the saved layout could not be read; it was kept as state.json.bad`.
+- A file whose `version` is not 1 (newer, missing or not a number) is not an error: its tabs and panes are read, every tab gets the default layout over its `pane_ids`, and the notice is `saved layout format <v> is not supported; restored the tabs with default layouts`, with `<v>` the version as written (cut to 16 characters, control characters removed) or `unknown` when it is missing. A version 1 tab whose layout cannot be read gets the default layout too, and the notice is `a saved tab layout could not be read; restored it with a default layout`, or `N saved tab layouts could not be read; restored them with default layouts`. The default layout puts the panes side by side in `pane_ids` order in a chain of vertical splits where pane i takes `1/(n-i)` of what is left, rounded to 0.01 and kept within [0.1, 0.9]: the columns are equal up to 10 panes, and beyond that each split keeps at least 0.1. Saving goes on as usual, so the first change writes a version 1 file.
 - A restored pane that fails to start is closed as `ClosePane` does, so a tab whose panes all fail goes away; if no pane is left, one shell opens in the launch dir.
 - The start-up notices (from the command, then any from starting the restored panes, such as a missing cwd) are collected in order and shown as one notice joined with `; `. It stays until the first key press like any notice; after start a new notice replaces the current one.
 
 **Validation**
 
-- Version 1; at least one tab; `active` in range; tab ids `t<N>` and pane ids `p<N>` unique; a node is a leaf (`pane`) or a split with `vertical` or `horizontal` and exactly two children; a ratio that is not finite fails, else it is clamped to [0.1, 0.9] and rounded to 0.01; every leaf names a pane in `panes` and every pane sits in exactly one leaf; kind `shell` or `agent`, and an agent's harness `claude-code`; a tab with no layout only when it is the only tab.
-- These fall back instead of failing: a focused pane that is not a leaf of its tab becomes the tab's first leaf; a session id that is not a UUID is dropped, and so is that pane's transcript; a cwd that is not absolute becomes empty (the launch dir); a name is cut to 32 runes with control characters removed.
+- Decoding checks, and a failure makes the file invalid: at least one tab; `active` in range; tab ids `t<N>` and pane ids `p<N>` (a positive number without leading zeros) unique; every id in a tab's `pane_ids` names a pane in `panes`, no pane is in two tabs and every pane is in one; kind `shell` or `agent`, and an agent's harness `claude-code`; a tab with no panes only when it is the only tab; a file of at most 16 MiB.
+- The layout codec checks one tab's layout, and a failure there means the default layout, not an invalid file: a node is a leaf (`pane`) or a split with `vertical` or `horizontal`, a finite `ratio` and exactly two children; a ratio is clamped to [0.1, 0.9] and rounded to 0.01; the leaves are exactly the tab's `pane_ids`, each once.
+- These fall back instead of failing: a focused pane that is not a leaf of its tab's final layout becomes that tab's first leaf; a session id that is not a UUID is dropped, and so is that pane's transcript; a cwd that is not absolute becomes empty (the launch dir); a name is cut to 32 runes with control characters removed.
 - `NextID` and `NextTabID` become the highest numbers in the file, so ids are not reused. Nothing from the file reaches a shell unquoted.
 
 **Resume** (PR-2, PR-4)

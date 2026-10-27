@@ -1,0 +1,69 @@
+{
+  "version": 1,
+  "active": 1,
+  "tabs": [
+    {
+      "id": "t1",
+      "name": "api",
+      "focused": "p2",
+      "zoomed": true,
+      "pane_ids": [
+        "p1",
+        "p2",
+        "p3"
+      ],
+      "layout": {
+        "split": "vertical",
+        "ratio": 0.33,
+        "children": [
+          {
+            "pane": "p1"
+          },
+          {
+            "split": "horizontal",
+            "ratio": 0.5,
+            "children": [
+              {
+                "pane": "p2"
+              },
+              {
+                "pane": "p3"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "t2",
+      "focused": "p4",
+      "pane_ids": [
+        "p4"
+      ],
+      "layout": {
+        "pane": "p4"
+      }
+    }
+  ],
+  "panes": {
+    "p1": {
+      "kind": "agent",
+      "cwd": "/home/me/code/api",
+      "harness": "claude-code",
+      "session_id": "7c0b6f1e-3a52-4d8e-9b41-2f5e8a1d0c37",
+      "transcript": "/home/me/.claude/projects/api/7c0b6f1e-3a52-4d8e-9b41-2f5e8a1d0c37.jsonl"
+    },
+    "p2": {
+      "kind": "shell",
+      "cwd": "/home/me/code/api"
+    },
+    "p3": {
+      "kind": "shell"
+    },
+    "p4": {
+      "kind": "agent",
+      "cwd": "/home/me",
+      "harness": "claude-code"
+    }
+  }
+}
