@@ -446,17 +446,42 @@ M3 ships as two plans, one PR each.
 
 Headless, in `internal/github` and `internal/git`: repository and token resolution through `gh`'s login, the open-PR poller with check states, the focused PR's checks with ETags, creating, approving and merging PRs, the compose defaults, push with upstream on first push, and PR diffs from fetched refs. Covers the backends of GH-1 (agents), GH-2, GH-4 (status), GH-5, GH-6, GH-7, GA-1, GA-2, GA-3 and GA-5.
 
-- [ ] Push with upstream on first push
-- [ ] Pull request refs and the PR diff source
-- [ ] Repositories, hosts and tokens
-- [ ] API clients with conditional requests
-- [ ] Pull requests and checks
-- [ ] Create, approve and merge
-- [ ] Compose defaults from templates and commits
-- [ ] Poller
-- [ ] Read-only live check and gate
+- [x] Push with upstream on first push
+- [x] Pull request refs and the PR diff source
+- [x] Repositories, hosts and tokens
+- [x] API clients with conditional requests
+- [x] Pull requests and checks
+- [x] Create, approve and merge
+- [x] Compose defaults from templates and commits
+- [x] Poller
+- [x] Read-only live check and gate
 
 Gate: every query and action is covered by recorded-fixture tests; push and PR fetch are tested against local repositories; the read-only live test passes against a real repository; the poller leaves no goroutine behind after `Close`.
+
+#### M3a gate results
+
+| Gate line | Result |
+| --- | --- |
+| Every query and action is covered by recorded-fixture tests | pass: `internal/github` runs them against `httptest` servers with no network |
+| Push and PR fetch are tested against local repositories | pass: `internal/git` tests use bare and temporary repositories |
+| The read-only live test passes against a real repository | pass: see the live run below |
+| The poller leaves no goroutine behind after `Close` | pass: the poller tests check this |
+
+Live run: by the controller on 2026-10-27, read-only, on this branch before the history fold. Command: `MUXREVEAL_LIVE_REPO=mhersson/muxreveal MUXREVEAL_LIVE_BRANCH=chore/build-ci-lint go test -tags live ./internal/github -run '^TestLiveReadOnly$' -v -count=1`. PASS in 4.98 s.
+
+- Repository github.com/mhersson/muxreveal: default branch `main`, merge methods merge, squash and rebase, 1 open PR.
+- Open PR path, PR #14: OPEN, 5 checks, all success.
+- Branch path, `chore/build-ci-lint`, PR #13: MERGED, 5 checks, 4 success and 1 failure (go-checks, a known flaky test).
+- In both paths the second `Checks` call was answered entirely by 304s (2 of 2 responses).
+
+Test counts from `go test -count=1 -v`, counting `--- PASS` lines (top-level tests only, then top-level tests and subtests together); the `internal/git` figures cover that package alone, not `invisible` or `linediff`:
+
+| Package | Top-level tests | With subtests |
+| --- | --- | --- |
+| `internal/git` | 152 | 275 |
+| `internal/github` | 100 | 166 |
+
+`make check` passes.
 
 ### M3b Pull requests on screen
 
@@ -575,3 +600,6 @@ Ideas and requests that came up outside the current milestone go here.
 - Live write tests (create, merge, branch delete) against a sandbox repository, run on request.
 - A GHE check of the poll query (`checkRunCountsByState`, `mergeStateStatus`) on older GHES versions.
 - More than the 100 most recently updated open PRs per repository in the poller.
+- A poller keeps a host's client after its token is revoked or expires, so every poll for that host fails with 401 until a restart; rebuild the client after a 401.
+- A persistent failure of the focused PR's checks (for example a fine-grained token without checks access) fails every poll while that PR is focused; report the checks error beside a fresh PR list.
+- A change of `Watch.Visible` alone neither polls nor recomputes the cadence, so a pending PR scrolled into view can wait up to the slow interval.
