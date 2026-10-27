@@ -1,0 +1,194 @@
+{
+  "Files": [
+    {
+      "Added": 1,
+      "Binary": false,
+      "Hunks": [
+        {
+          "Lines": [
+            {
+              "Kind": " ",
+              "New": 1,
+              "NoNewline": false,
+              "Old": 1,
+              "Text": "a\r"
+            },
+            {
+              "Kind": "-",
+              "New": 0,
+              "NoNewline": false,
+              "Old": 2,
+              "Text": "b\r"
+            },
+            {
+              "Kind": "+",
+              "New": 2,
+              "NoNewline": false,
+              "Old": 0,
+              "Text": "B\r"
+            },
+            {
+              "Kind": " ",
+              "New": 3,
+              "NoNewline": false,
+              "Old": 3,
+              "Text": "c\r"
+            }
+          ],
+          "NewLines": 3,
+          "NewStart": 1,
+          "OldLines": 3,
+          "OldStart": 1,
+          "Section": ""
+        }
+      ],
+      "NewMode": "100644",
+      "NewOID": "d5a6cc6abcf2268e05671de39c071470e30d5228",
+      "OldMode": "100644",
+      "OldOID": "b5eff5721aa4f9468960ecd78cd2764deab97b55",
+      "OldPath": "",
+      "Path": "crlf.txt",
+      "Removed": 1,
+      "Status": "modified",
+      "Truncated": false,
+      "Untracked": false
+    },
+    {
+      "Added": 1,
+      "Binary": false,
+      "Hunks": [
+        {
+          "Lines": [
+            {
+              "Kind": " ",
+              "New": 1,
+              "NoNewline": false,
+              "Old": 1,
+              "Text": "p"
+            },
+            {
+              "Kind": "-",
+              "New": 0,
+              "NoNewline": true,
+              "Old": 2,
+              "Text": "q"
+            },
+            {
+              "Kind": "+",
+              "New": 2,
+              "NoNewline": false,
+              "Old": 0,
+              "Text": "q"
+            }
+          ],
+          "NewLines": 2,
+          "NewStart": 1,
+          "OldLines": 2,
+          "OldStart": 1,
+          "Section": ""
+        }
+      ],
+      "NewMode": "100644",
+      "NewOID": "e563bc26ea3b674d322781c26c1a9b5cb1c5c8d0",
+      "OldMode": "100644",
+      "OldOID": "8d7864f1cbaf21a9cb5ec9a1371bb26ebc10d4ce",
+      "OldPath": "",
+      "Path": "gains.txt",
+      "Removed": 1,
+      "Status": "modified",
+      "Truncated": false,
+      "Untracked": false
+    },
+    {
+      "Added": 1,
+      "Binary": false,
+      "Hunks": [
+        {
+          "Lines": [
+            {
+              "Kind": "+",
+              "New": 1,
+              "NoNewline": true,
+              "Old": 0,
+              "Text": "only line"
+            }
+          ],
+          "NewLines": 1,
+          "NewStart": 1,
+          "OldLines": 0,
+          "OldStart": 0,
+          "Section": ""
+        }
+      ],
+      "NewMode": "100644",
+      "NewOID": "98bd6b8cb82d1eb1ca8704d9d9de64d69b639e41",
+      "OldMode": "",
+      "OldOID": "",
+      "OldPath": "",
+      "Path": "new-noeol.txt",
+      "Removed": 0,
+      "Status": "added",
+      "Truncated": false,
+      "Untracked": true
+    },
+    {
+      "Added": 2,
+      "Binary": false,
+      "Hunks": [
+        {
+          "Lines": [
+            {
+              "Kind": " ",
+              "New": 1,
+              "NoNewline": false,
+              "Old": 1,
+              "Text": "x"
+            },
+            {
+              "Kind": "-",
+              "New": 0,
+              "NoNewline": true,
+              "Old": 2,
+              "Text": "y"
+            },
+            {
+              "Kind": "+",
+              "New": 2,
+              "NoNewline": false,
+              "Old": 0,
+              "Text": "y"
+            },
+            {
+              "Kind": "+",
+              "New": 3,
+              "NoNewline": true,
+              "Old": 0,
+              "Text": "z"
+            }
+          ],
+          "NewLines": 3,
+          "NewStart": 1,
+          "OldLines": 2,
+          "OldStart": 1,
+          "Section": ""
+        }
+      ],
+      "NewMode": "100644",
+      "NewOID": "66455a1927aca44d68db33e7839a7fba9a9c9875",
+      "OldMode": "100644",
+      "OldOID": "1b322989b6eea65102d4f5921ccb7df5dc613fe7",
+      "OldPath": "",
+      "Path": "noeol.txt",
+      "Removed": 1,
+      "Status": "modified",
+      "Truncated": false,
+      "Untracked": false
+    }
+  ],
+  "Live": true,
+  "New": "6813b5b490a82c7be512b83d6092663eea1ecfd6",
+  "Old": "8a4c7d0c08706c1915d716e4e35a3e9c1f82e09f",
+  "Through": 0,
+  "Truncated": false,
+  "Turn": 0
+}

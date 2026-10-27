@@ -1,0 +1,64 @@
+{
+  "Files": [
+    {
+      "Added": 6000,
+      "Binary": false,
+      "Hunks": null,
+      "NewMode": "100644",
+      "NewOID": "386be1d0432534475c357f75cab16dd5e188a607",
+      "OldMode": "100644",
+      "OldOID": "50edde62af50fb01138f20754a9e4a1ee1947df2",
+      "OldPath": "",
+      "Path": "big.txt",
+      "Removed": 0,
+      "Status": "modified",
+      "Truncated": true,
+      "Untracked": false
+    },
+    {
+      "Added": 1,
+      "Binary": false,
+      "Hunks": [
+        {
+          "Lines": [
+            {
+              "Kind": "-",
+              "New": 0,
+              "NoNewline": false,
+              "Old": 1,
+              "Text": "s"
+            },
+            {
+              "Kind": "+",
+              "New": 1,
+              "NoNewline": false,
+              "Old": 0,
+              "Text": "s changed"
+            }
+          ],
+          "NewLines": 1,
+          "NewStart": 1,
+          "OldLines": 1,
+          "OldStart": 1,
+          "Section": ""
+        }
+      ],
+      "NewMode": "100644",
+      "NewOID": "48bb21e46f4124e2a97ff0f3708e6c01fffb33c5",
+      "OldMode": "100644",
+      "OldOID": "b4785957bc986dc39c629de9fac9df46972c00fc",
+      "OldPath": "",
+      "Path": "small.txt",
+      "Removed": 1,
+      "Status": "modified",
+      "Truncated": false,
+      "Untracked": false
+    }
+  ],
+  "Live": true,
+  "New": "fb6dbce735d1a4f911c5d121798c2cb41b0337d9",
+  "Old": "100759a699acd4c0ac4d2566f05e18b0684c9464",
+  "Through": 0,
+  "Truncated": true,
+  "Turn": 0
+}

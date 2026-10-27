@@ -1,0 +1,180 @@
+{
+  "Files": [
+    {
+      "Added": 1,
+      "Binary": false,
+      "Hunks": [
+        {
+          "Lines": [
+            {
+              "Kind": "+",
+              "New": 1,
+              "NoNewline": false,
+              "Old": 0,
+              "Text": "c"
+            }
+          ],
+          "NewLines": 1,
+          "NewStart": 1,
+          "OldLines": 0,
+          "OldStart": 0,
+          "Section": ""
+        }
+      ],
+      "NewMode": "100644",
+      "NewOID": "f2ad6c76f0115a6ba5b00456a849810e7ec0af20",
+      "OldMode": "",
+      "OldOID": "",
+      "OldPath": "",
+      "Path": "committed-new.txt",
+      "Removed": 0,
+      "Status": "added",
+      "Truncated": false,
+      "Untracked": false
+    },
+    {
+      "Added": 1,
+      "Binary": false,
+      "Hunks": [
+        {
+          "Lines": [
+            {
+              "Kind": " ",
+              "New": 3,
+              "NoNewline": false,
+              "Old": 3,
+              "Text": "feature 3"
+            },
+            {
+              "Kind": " ",
+              "New": 4,
+              "NoNewline": false,
+              "Old": 4,
+              "Text": "feature 4"
+            },
+            {
+              "Kind": " ",
+              "New": 5,
+              "NoNewline": false,
+              "Old": 5,
+              "Text": "feature 5"
+            },
+            {
+              "Kind": "+",
+              "New": 6,
+              "NoNewline": false,
+              "Old": 0,
+              "Text": "f1"
+            }
+          ],
+          "NewLines": 4,
+          "NewStart": 3,
+          "OldLines": 3,
+          "OldStart": 3,
+          "Section": "feature 2"
+        }
+      ],
+      "NewMode": "100644",
+      "NewOID": "ac69c97af8c86690b054e597eeda1d81ef8951ed",
+      "OldMode": "100644",
+      "OldOID": "c490fe2598918b01de9838b0cd6f6a7a5e62978f",
+      "OldPath": "",
+      "Path": "feature.txt",
+      "Removed": 0,
+      "Status": "modified",
+      "Truncated": false,
+      "Untracked": false
+    },
+    {
+      "Added": 1,
+      "Binary": false,
+      "Hunks": [
+        {
+          "Lines": [
+            {
+              "Kind": " ",
+              "New": 8,
+              "NoNewline": false,
+              "Old": 8,
+              "Text": "shared 8"
+            },
+            {
+              "Kind": " ",
+              "New": 9,
+              "NoNewline": false,
+              "Old": 9,
+              "Text": "shared 9"
+            },
+            {
+              "Kind": " ",
+              "New": 10,
+              "NoNewline": false,
+              "Old": 10,
+              "Text": "shared 10"
+            },
+            {
+              "Kind": "+",
+              "New": 11,
+              "NoNewline": false,
+              "Old": 0,
+              "Text": "dirty"
+            }
+          ],
+          "NewLines": 4,
+          "NewStart": 8,
+          "OldLines": 3,
+          "OldStart": 8,
+          "Section": "shared 7"
+        }
+      ],
+      "NewMode": "100644",
+      "NewOID": "5be6dadb33e3c6131b60a6b06d64c78dee72ac3e",
+      "OldMode": "100644",
+      "OldOID": "d426bce2ce8798c4e3749e1de18d27dd375cd386",
+      "OldPath": "",
+      "Path": "shared.txt",
+      "Removed": 0,
+      "Status": "modified",
+      "Truncated": false,
+      "Untracked": false
+    },
+    {
+      "Added": 1,
+      "Binary": false,
+      "Hunks": [
+        {
+          "Lines": [
+            {
+              "Kind": "+",
+              "New": 1,
+              "NoNewline": false,
+              "Old": 0,
+              "Text": "u"
+            }
+          ],
+          "NewLines": 1,
+          "NewStart": 1,
+          "OldLines": 0,
+          "OldStart": 0,
+          "Section": ""
+        }
+      ],
+      "NewMode": "100644",
+      "NewOID": "4ae8ef021bf6fcfff43a13be5abfa52bb6fb5dbc",
+      "OldMode": "",
+      "OldOID": "",
+      "OldPath": "",
+      "Path": "untracked.txt",
+      "Removed": 0,
+      "Status": "added",
+      "Truncated": false,
+      "Untracked": true
+    }
+  ],
+  "Live": true,
+  "New": "4444b863f79b852b5b8918aea8efd0fe4d5ab1f7",
+  "Old": "165f366ee6d1e5738da55dd99d3258eb56ccd895",
+  "Through": 0,
+  "Truncated": false,
+  "Turn": 0
+}

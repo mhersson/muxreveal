@@ -1,0 +1,241 @@
+{
+  "Files": [
+    {
+      "Added": 1,
+      "Binary": false,
+      "Hunks": [
+        {
+          "Lines": [
+            {
+              "Kind": "+",
+              "New": 1,
+              "NoNewline": false,
+              "Old": 0,
+              "Text": "content of \"back\\\\slash.txt\""
+            }
+          ],
+          "NewLines": 1,
+          "NewStart": 1,
+          "OldLines": 0,
+          "OldStart": 0,
+          "Section": ""
+        }
+      ],
+      "NewMode": "100644",
+      "NewOID": "fa9da339dcc065c1c4bcec6fbebc2721c744f37e",
+      "OldMode": "",
+      "OldOID": "",
+      "OldPath": "",
+      "Path": "back\\slash.txt",
+      "Removed": 0,
+      "Status": "added",
+      "Truncated": false,
+      "Untracked": true
+    },
+    {
+      "Added": 1,
+      "Binary": false,
+      "Hunks": [
+        {
+          "Lines": [
+            {
+              "Kind": "+",
+              "New": 1,
+              "NoNewline": false,
+              "Old": 0,
+              "Text": "content of \"inv\\xffalid.txt\""
+            }
+          ],
+          "NewLines": 1,
+          "NewStart": 1,
+          "OldLines": 0,
+          "OldStart": 0,
+          "Section": ""
+        }
+      ],
+      "NewMode": "100644",
+      "NewOID": "df89b173cedf6fde68f5e5b29acf98250bb1ac82",
+      "OldMode": "",
+      "OldOID": "",
+      "OldPath": "",
+      "Path": "inv�alid.txt",
+      "Removed": 0,
+      "Status": "added",
+      "Truncated": false,
+      "Untracked": true
+    },
+    {
+      "Added": 1,
+      "Binary": false,
+      "Hunks": [
+        {
+          "Lines": [
+            {
+              "Kind": "+",
+              "New": 1,
+              "NoNewline": false,
+              "Old": 0,
+              "Text": "content of \"new\\nline.txt\""
+            }
+          ],
+          "NewLines": 1,
+          "NewStart": 1,
+          "OldLines": 0,
+          "OldStart": 0,
+          "Section": ""
+        }
+      ],
+      "NewMode": "100644",
+      "NewOID": "e61e309da50e87419422dbefa7d9fcb4bdedab07",
+      "OldMode": "",
+      "OldOID": "",
+      "OldPath": "",
+      "Path": "new\nline.txt",
+      "Removed": 0,
+      "Status": "added",
+      "Truncated": false,
+      "Untracked": true
+    },
+    {
+      "Added": 1,
+      "Binary": false,
+      "Hunks": [
+        {
+          "Lines": [
+            {
+              "Kind": "+",
+              "New": 1,
+              "NoNewline": false,
+              "Old": 0,
+              "Text": "content of \"quo\\\"te.txt\""
+            }
+          ],
+          "NewLines": 1,
+          "NewStart": 1,
+          "OldLines": 0,
+          "OldStart": 0,
+          "Section": ""
+        }
+      ],
+      "NewMode": "100644",
+      "NewOID": "7050dfe1578098f2a078114aec9b160bbdd288e2",
+      "OldMode": "",
+      "OldOID": "",
+      "OldPath": "",
+      "Path": "quo\"te.txt",
+      "Removed": 0,
+      "Status": "added",
+      "Truncated": false,
+      "Untracked": true
+    },
+    {
+      "Added": 1,
+      "Binary": false,
+      "Hunks": [
+        {
+          "Lines": [
+            {
+              "Kind": "-",
+              "New": 0,
+              "NoNewline": false,
+              "Old": 1,
+              "Text": "old"
+            },
+            {
+              "Kind": "+",
+              "New": 1,
+              "NoNewline": false,
+              "Old": 0,
+              "Text": "content of \"sp ace.txt\""
+            }
+          ],
+          "NewLines": 1,
+          "NewStart": 1,
+          "OldLines": 1,
+          "OldStart": 1,
+          "Section": ""
+        }
+      ],
+      "NewMode": "100644",
+      "NewOID": "7bc8efa34e3e03e9ec69a5f84cab4699f446324c",
+      "OldMode": "100644",
+      "OldOID": "3367afdbbf91e638efe983616377c60477cc6612",
+      "OldPath": "",
+      "Path": "sp ace.txt",
+      "Removed": 1,
+      "Status": "modified",
+      "Truncated": false,
+      "Untracked": false
+    },
+    {
+      "Added": 1,
+      "Binary": false,
+      "Hunks": [
+        {
+          "Lines": [
+            {
+              "Kind": "+",
+              "New": 1,
+              "NoNewline": false,
+              "Old": 0,
+              "Text": "content of \"tab\\there.txt\""
+            }
+          ],
+          "NewLines": 1,
+          "NewStart": 1,
+          "OldLines": 0,
+          "OldStart": 0,
+          "Section": ""
+        }
+      ],
+      "NewMode": "100644",
+      "NewOID": "59a2123cd3dfc543e69bd2ad97181fc420906282",
+      "OldMode": "",
+      "OldOID": "",
+      "OldPath": "",
+      "Path": "tab\there.txt",
+      "Removed": 0,
+      "Status": "added",
+      "Truncated": false,
+      "Untracked": true
+    },
+    {
+      "Added": 1,
+      "Binary": false,
+      "Hunks": [
+        {
+          "Lines": [
+            {
+              "Kind": "+",
+              "New": 1,
+              "NoNewline": false,
+              "Old": 0,
+              "Text": "content of \"uni/ünï-日本.txt\""
+            }
+          ],
+          "NewLines": 1,
+          "NewStart": 1,
+          "OldLines": 0,
+          "OldStart": 0,
+          "Section": ""
+        }
+      ],
+      "NewMode": "100644",
+      "NewOID": "573aada33da1b9310c0d588a443a005576971394",
+      "OldMode": "",
+      "OldOID": "",
+      "OldPath": "",
+      "Path": "uni/ünï-日本.txt",
+      "Removed": 0,
+      "Status": "added",
+      "Truncated": false,
+      "Untracked": true
+    }
+  ],
+  "Live": true,
+  "New": "5f80c56dd4fb52c8799f44f8fcd94921e9dbd42e",
+  "Old": "9714dc31092c667c5249b85f4a1c780d07b8be1d",
+  "Through": 0,
+  "Truncated": false,
+  "Turn": 0
+}

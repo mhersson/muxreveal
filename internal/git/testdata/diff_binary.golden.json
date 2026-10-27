@@ -1,0 +1,55 @@
+{
+  "Files": [
+    {
+      "Added": 0,
+      "Binary": true,
+      "Hunks": null,
+      "NewMode": "100644",
+      "NewOID": "55aecbe2ca7c917f808e85b5e2b759f3de53ddfe",
+      "OldMode": "",
+      "OldOID": "",
+      "OldPath": "",
+      "Path": "added.bin",
+      "Removed": 0,
+      "Status": "added",
+      "Truncated": false,
+      "Untracked": true
+    },
+    {
+      "Added": 0,
+      "Binary": true,
+      "Hunks": null,
+      "NewMode": "",
+      "NewOID": "",
+      "OldMode": "100644",
+      "OldOID": "2c8eac44e7b1d5e7195f112c6f34c1f7bf039a24",
+      "OldPath": "",
+      "Path": "gone.bin",
+      "Removed": 0,
+      "Status": "deleted",
+      "Truncated": false,
+      "Untracked": false
+    },
+    {
+      "Added": 0,
+      "Binary": true,
+      "Hunks": null,
+      "NewMode": "100644",
+      "NewOID": "f9e371ff2657e5d2bd4389e3b323fe0550e3a860",
+      "OldMode": "100644",
+      "OldOID": "e7be1ea5722fddec13dbce5018dc1056c0dd3fdb",
+      "OldPath": "",
+      "Path": "old.bin",
+      "Removed": 0,
+      "Status": "modified",
+      "Truncated": false,
+      "Untracked": false
+    }
+  ],
+  "Live": true,
+  "New": "d3766a792d3c7ed45e93f603441a63e1f9ce38a6",
+  "Old": "422c5bb4e8aa6c77b6e6c7de3f5e68b4d38d8a29",
+  "Through": 0,
+  "Truncated": false,
+  "Turn": 0
+}
