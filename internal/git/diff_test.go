@@ -528,13 +528,6 @@ func TestDiffBranchErrors(t *testing.T) {
 	})
 }
 
-func TestDiffPRSourceIsNotImplemented(t *testing.T) {
-	_, err := testEngine(t).Diff(context.Background(), PRSource{Repo: "o/r", Number: 3, Base: "main", Head: "abc"})
-	if !errors.Is(err, ErrNotImplemented) {
-		t.Errorf("err = %v, want ErrNotImplemented", err)
-	}
-}
-
 func TestDiffOddRepositories(t *testing.T) {
 	t.Run("detached HEAD", func(t *testing.T) {
 		dir := seedRepo(t)

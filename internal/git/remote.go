@@ -47,6 +47,12 @@ func PushRemote(ctx context.Context, r Repo, branch string) (string, error) {
 		}
 	}
 
+	return configuredRemote(ctx, r, remote)
+}
+
+// configuredRemote returns remote when it names a configured remote, else
+// ErrNoRemote. A URL or an option-like name is never one.
+func configuredRemote(ctx context.Context, r Repo, remote string) (string, error) {
 	if strings.HasPrefix(remote, "-") {
 		return "", fmt.Errorf("remote %q: %w", remote, ErrNoRemote)
 	}
@@ -57,7 +63,7 @@ func PushRemote(ctx context.Context, r Repo, branch string) (string, error) {
 	}
 
 	for _, name := range strings.Split(string(out), "\n") {
-		if name == remote {
+		if name != "" && name == remote {
 			return remote, nil
 		}
 	}
