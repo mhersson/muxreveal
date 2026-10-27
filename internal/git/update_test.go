@@ -280,7 +280,7 @@ func TestUpdateKeepsCaps(t *testing.T) {
 		}
 	})
 	src := BranchSource{Worktree: dir, Base: "main"}
-	e := NewEngine(Limits{Files: 5, Lines: 30}, t.TempDir())
+	e := NewEngine(EngineOptions{Limits: Limits{Files: 5, Lines: 30}, TempDir: t.TempDir()})
 
 	prev := diffOK(t, e, src)
 
@@ -290,7 +290,7 @@ func TestUpdateKeepsCaps(t *testing.T) {
 
 	res := updateOK(t, e, prev, src, Batch{Paths: []string{"f4.txt", "f5.txt"}})
 
-	want := diffOK(t, NewEngine(Limits{Files: 5, Lines: 30}, t.TempDir()), src)
+	want := diffOK(t, NewEngine(EngineOptions{Limits: Limits{Files: 5, Lines: 30}, TempDir: t.TempDir()}), src)
 	if !reflect.DeepEqual(res, want) {
 		t.Errorf("capped Update differs from a full Diff\n got: %s\nwant: %s", goldenJSON(t, res), goldenJSON(t, want))
 	}
@@ -299,7 +299,7 @@ func TestUpdateKeepsCaps(t *testing.T) {
 	writeFile(t, dir, "f0.txt", numbered("w", 40))
 
 	res = updateOK(t, e, res, src, Batch{Paths: []string{"f0.txt"}})
-	want = diffOK(t, NewEngine(Limits{Files: 5, Lines: 30}, t.TempDir()), src)
+	want = diffOK(t, NewEngine(EngineOptions{Limits: Limits{Files: 5, Lines: 30}, TempDir: t.TempDir()}), src)
 
 	if !reflect.DeepEqual(res, want) || !res.Truncated {
 		t.Errorf("line cap: got %s\nwant %s", goldenJSON(t, res), goldenJSON(t, want))
@@ -317,7 +317,7 @@ func TestUpdateFallsBackPastTheByteCap(t *testing.T) {
 		}
 	})
 	src := BranchSource{Worktree: dir, Base: "main"}
-	e := NewEngine(Limits{Bytes: 5000}, t.TempDir())
+	e := NewEngine(EngineOptions{Limits: Limits{Bytes: 5000}, TempDir: t.TempDir()})
 	prev := diffOK(t, e, src)
 
 	writeFile(t, dir, "f3.txt", numbered("y", 100))

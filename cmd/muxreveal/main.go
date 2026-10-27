@@ -111,7 +111,9 @@ func run(ctx context.Context, env core.Env, configPath, recordDir string, fresh 
 	logger := slog.New(slog.NewTextHandler(f, nil))
 	stateDir := core.StateDir(env)
 
-	hooks := startHooks(logger, stateDir)
+	indexCache := indexCacheDir(logger)
+
+	hooks := startHooks(logger, stateDir, indexCache)
 	defer hooks.Stop()
 
 	st, saver, notices, unlock, err := openState(logger, stateDir, cfg, fresh)
@@ -172,6 +174,7 @@ func run(ctx context.Context, env core.Env, configPath, recordDir string, fresh 
 		HookSock:     hooks.Sock,
 		Events:       hooks.Events,
 		GitTempDir:   hooks.RunDir,
+		IndexCache:   indexCache,
 		Notice:       strings.Join(notices, "; "),
 		Save:         save,
 	})

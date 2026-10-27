@@ -552,6 +552,7 @@ func isolateGit(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
 }
 
 // seededRepo returns a repository with one commit and an untracked file, so a
@@ -669,7 +670,7 @@ func TestHookAnswersAfterTheSnapshotExists(t *testing.T) {
 	repo := seededRepo(t)
 	base := runtime.NumGoroutine()
 
-	h, err := setupHooks(discardLogger(), t.TempDir())
+	h, err := setupHooks(discardLogger(), t.TempDir(), "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -700,7 +701,7 @@ func TestHookBudgetSlowSnapshot(t *testing.T) {
 
 	base := runtime.NumGoroutine()
 
-	h, err := setupHooks(discardLogger(), t.TempDir())
+	h, err := setupHooks(discardLogger(), t.TempDir(), "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -740,7 +741,7 @@ func TestHookBudgetServerClosingMidSnapshot(t *testing.T) {
 
 	base := runtime.NumGoroutine()
 
-	h, err := setupHooks(discardLogger(), t.TempDir())
+	h, err := setupHooks(discardLogger(), t.TempDir(), "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -798,7 +799,7 @@ func TestHookBudgetHeldIndexLockDoesNotBlockTheSnapshot(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	h, err := setupHooks(discardLogger(), t.TempDir())
+	h, err := setupHooks(discardLogger(), t.TempDir(), "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -824,7 +825,7 @@ func TestHookBudgetUnsnapshottableTurnsAnswerAtOnce(t *testing.T) {
 	notRepo := t.TempDir()
 	base := runtime.NumGoroutine()
 
-	h, err := setupHooks(discardLogger(), t.TempDir())
+	h, err := setupHooks(discardLogger(), t.TempDir(), "")
 	if err != nil {
 		t.Fatal(err)
 	}

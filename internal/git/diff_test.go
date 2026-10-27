@@ -146,7 +146,7 @@ func checkInvariants(t *testing.T, res Result) {
 func testEngine(t *testing.T) *Engine {
 	t.Helper()
 
-	return NewEngine(Limits{}, t.TempDir())
+	return NewEngine(EngineOptions{TempDir: t.TempDir()})
 }
 
 // diffOK runs Diff, then checks the engine left nothing in its temp dir.
@@ -1088,7 +1088,7 @@ func TestDiffConcurrent(t *testing.T) {
 }
 
 func TestNewEngineDefaults(t *testing.T) {
-	e := NewEngine(Limits{Files: 7}, "")
+	e := NewEngine(EngineOptions{Limits: Limits{Files: 7}})
 
 	if want := (Limits{Files: 7, Bytes: 2 << 20, Lines: 5000}); e.limits != want {
 		t.Errorf("limits = %+v, want %+v", e.limits, want)
@@ -1105,7 +1105,7 @@ func TestDiffByteCapInsideTheFirstFile(t *testing.T) {
 		writeFile(t, dir, "b.txt", "tiny\n")
 	})
 
-	res := diffOK(t, NewEngine(Limits{Bytes: 500}, t.TempDir()), BranchSource{Worktree: dir, Base: "main"})
+	res := diffOK(t, NewEngine(EngineOptions{Limits: Limits{Bytes: 500}, TempDir: t.TempDir()}), BranchSource{Worktree: dir, Base: "main"})
 
 	for _, f := range res.Files {
 		if !f.Truncated || len(f.Hunks) != 0 {

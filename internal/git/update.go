@@ -37,7 +37,7 @@ func (e *Engine) Update(ctx context.Context, prev Result, src Source, b Batch) (
 		}
 	}
 
-	wt, err := WorkingTree(ctx, r, e.tempDir, 0)
+	wt, err := e.workingTree(ctx, r)
 	if err != nil {
 		return Result{}, fmt.Errorf("update: %w", err)
 	}
@@ -57,7 +57,7 @@ func (e *Engine) Update(ctx context.Context, prev Result, src Source, b Batch) (
 
 	// A scratch cache keeps hunks of a result that falls back out of the real
 	// one: cached hunks skip the byte budget, which would skew the full Diff.
-	scratch := &Engine{limits: e.limits, tempDir: e.tempDir, cache: newHunkCache(cacheBytes)}
+	scratch := &Engine{limits: e.limits, tempDir: e.tempDir, indexCache: e.indexCache, cache: newHunkCache(cacheBytes)}
 	if err := scratch.addHunks(ctx, r, prev.Old, wt.Tree, touched); err != nil {
 		return Result{}, err
 	}

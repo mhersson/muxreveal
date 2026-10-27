@@ -22,6 +22,7 @@ func TestRootRejectsBadConfig(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Setenv("HOME", t.TempDir())
 			t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+			t.Setenv("XDG_CACHE_HOME", t.TempDir())
 			stateHome := t.TempDir()
 			t.Setenv("XDG_STATE_HOME", stateHome)
 
@@ -65,6 +66,7 @@ func TestRootRejectsBadLayoutConfig(t *testing.T) {
 		t.Run(strings.TrimSpace(content), func(t *testing.T) {
 			t.Setenv("HOME", t.TempDir())
 			t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+			t.Setenv("XDG_CACHE_HOME", t.TempDir())
 			stateHome := t.TempDir()
 			t.Setenv("XDG_STATE_HOME", stateHome)
 
@@ -97,6 +99,7 @@ func TestRootRejectsBadLayoutConfig(t *testing.T) {
 func TestRootRejectsUnknownTheme(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
 	stateHome := t.TempDir()
 	t.Setenv("XDG_STATE_HOME", stateHome)
 

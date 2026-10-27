@@ -52,6 +52,9 @@ type Options struct {
 	// GitTempDir is where the diff engine puts its temporary index for the
 	// rail's diff stats; empty turns the stats off.
 	GitTempDir string
+	// IndexCache is the directory where git keeps a refreshed index copy per
+	// worktree; empty disables the cache.
+	IndexCache string
 	// Save is called with the state after every successful dispatch; nil saves nothing.
 	Save func(core.State)
 }
@@ -181,7 +184,7 @@ func New(opts Options) (*App, error) {
 	}
 
 	if opts.GitTempDir != "" {
-		a.engine = git.NewEngine(git.Limits{}, opts.GitTempDir)
+		a.engine = git.NewEngine(git.EngineOptions{TempDir: opts.GitTempDir, IndexCache: opts.IndexCache})
 	}
 
 	if err := a.sync(); err != nil {

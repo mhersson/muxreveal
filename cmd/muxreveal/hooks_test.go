@@ -23,6 +23,7 @@ func discardLogger() *slog.Logger { return slog.New(slog.NewTextHandler(io.Disca
 func TestRunServesHooks(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
 	stateHome := t.TempDir()
 	t.Setenv("XDG_STATE_HOME", stateHome)
 
@@ -95,7 +96,7 @@ func TestStartHooksFailureTurnsHooksOff(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	h := startHooks(discardLogger(), stateDir)
+	h := startHooks(discardLogger(), stateDir, "")
 	defer h.Stop()
 
 	if h.Settings != "" || h.Sock != "" || h.Events != nil {
@@ -110,7 +111,7 @@ func TestStartHooksFailureTurnsHooksOff(t *testing.T) {
 func TestStartHooksNamesAnOverlongSocketPath(t *testing.T) {
 	stateDir := filepath.Join(t.TempDir(), strings.Repeat("d", maxSockPath))
 
-	h := startHooks(discardLogger(), stateDir)
+	h := startHooks(discardLogger(), stateDir, "")
 	defer h.Stop()
 
 	if h.Settings != "" || h.Sock != "" || h.Events != nil {
@@ -160,7 +161,7 @@ func TestStartHooksSweepsDeadInstances(t *testing.T) {
 		}
 	}
 
-	h := startHooks(discardLogger(), stateDir)
+	h := startHooks(discardLogger(), stateDir, "")
 	defer h.Stop()
 
 	if h.Notice != "" {

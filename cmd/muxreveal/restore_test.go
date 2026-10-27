@@ -298,6 +298,7 @@ func testEnv(t *testing.T) (env core.Env, cfg string) {
 
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	t.Setenv("SHELL", "/bin/sh")
 

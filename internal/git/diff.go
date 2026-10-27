@@ -116,14 +116,23 @@ func DefaultLimits() Limits {
 
 // Engine turns sources into structured diffs. It is safe for concurrent use.
 type Engine struct {
-	limits  Limits
-	tempDir string
-	cache   *hunkCache
+	limits     Limits
+	tempDir    string
+	indexCache string
+	cache      *hunkCache
 }
 
-// NewEngine returns an engine with the given limits; zero fields take the
-// defaults. tempDir is where working-tree snapshots keep their temporary index.
-func NewEngine(l Limits, tempDir string) *Engine {
+// EngineOptions configure NewEngine.
+type EngineOptions struct {
+	Limits     Limits // zero fields take the defaults
+	TempDir    string // where working-tree snapshots keep their temporary index
+	IndexCache string // keeps a refreshed index copy per worktree; empty = none
+}
+
+// NewEngine returns an engine for the given options.
+func NewEngine(o EngineOptions) *Engine {
+	l := o.Limits
+
 	d := DefaultLimits()
 	if l.Files <= 0 {
 		l.Files = d.Files
@@ -137,7 +146,11 @@ func NewEngine(l Limits, tempDir string) *Engine {
 		l.Lines = d.Lines
 	}
 
-	return &Engine{limits: l, tempDir: tempDir, cache: newHunkCache(cacheBytes)}
+	return &Engine{limits: l, tempDir: o.TempDir, indexCache: o.IndexCache, cache: newHunkCache(cacheBytes)}
+}
+
+func (e *Engine) workingTree(ctx context.Context, r Repo) (WorkTree, error) {
+	return WorkingTree(ctx, r, TreeOptions{TempDir: e.tempDir, IndexCache: e.indexCache})
 }
 
 // Diff computes the diff for src.
@@ -194,7 +207,7 @@ func (e *Engine) branchTrees(ctx context.Context, s BranchSource) (Repo, string,
 		return Repo{}, "", WorkTree{}, err
 	}
 
-	wt, err := WorkingTree(ctx, r, e.tempDir, 0)
+	wt, err := e.workingTree(ctx, r)
 	if err != nil {
 		return Repo{}, "", WorkTree{}, fmt.Errorf("diff: %w", err)
 	}
@@ -270,7 +283,7 @@ func (e *Engine) diffTurn(ctx context.Context, s TurnSource) (Result, error) {
 	var res Result
 
 	if next < 0 {
-		wt, err := WorkingTree(ctx, r, e.tempDir, 0)
+		wt, err := e.workingTree(ctx, r)
 		if err != nil {
 			return Result{}, fmt.Errorf("diff: %w", err)
 		}
