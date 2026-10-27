@@ -1,0 +1,187 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    # A docs-only push has nothing for the Go jobs to check.
+    paths-ignore:
+      - "README.md"
+      - "AGENTS.md"
+      - "THIRD_PARTY.md"
+      - "docs/**"
+      - "LICENSE"
+  # No paths-ignore: a workflow suppressed by it reports no checks, which
+  # blocks a docs-only pull request on its required checks. The changes job
+  # skips the Go jobs instead.
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Only one run per ref. A newer pull-request run cancels the older one; a
+# running push or workflow_dispatch run finishes, but a pending one is replaced
+# when a newer run joins the group.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  # Answers one question for pull requests against the base sha: did any Go
+  # code change (a file that is not documentation, or a .go file anywhere)?
+  # Nothing but Go code, go.mod and the build files feeds the Go jobs, so a
+  # docs-only pull request skips them. Any fetch or diff failure, or an empty
+  # diff, answers true, so the jobs run whenever there is doubt.
+  changes:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    outputs:
+      go: ${{ steps.detect.outputs.go }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Detect changed areas
+        id: detect
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          go=true
+          if git fetch --no-tags --depth=1 origin "$BASE_SHA" \
+            && files=$(git diff --name-only "$BASE_SHA" HEAD) && [ -n "$files" ]; then
+            go=false
+            grep -Evq '^(README\.md$|AGENTS\.md$|THIRD_PARTY\.md$|LICENSE$|docs/)' <<<"$files" && go=true
+            grep -q '\.go$' <<<"$files" && go=true
+          fi
+          echo "go=$go" >> "$GITHUB_OUTPUT"
+          echo "go=$go"
+
+  # Skipped on a pull request that changes no Go code (see the changes job); a
+  # skipped job satisfies the required check. Runs on push too (the changes job
+  # is skipped there and its empty output runs this job).
+  go-checks:
+    needs: [changes]
+    if: |
+      !cancelled() &&
+      needs.changes.outputs.go != 'false'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      # Runs first: the action installs golangci-lint and adds it to PATH for
+      # the later steps, and fmt-check below needs that binary.
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.15.0
+
+      # Every make check prerequisite except lint, which the step above ran.
+      - name: make gates
+        run: make build build-darwin fmt-check vet test-race tidy-check scan
+
+  # Same trigger as go-checks. Native macOS catches what a Linux build and a
+  # cross-compile cannot: the darwin test run, GNU make 3.81, and BSD grep,
+  # xargs and mktemp in the scan recipe.
+  macos:
+    needs: [changes]
+    if: |
+      !cancelled() &&
+      needs.changes.outputs.go != 'false'
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: make build and vet
+        run: make build-darwin vet
+
+      - name: make scan
+        run: make scan
+
+      - name: make test
+        run: make test
+
+  govulncheck:
+    needs: [changes]
+    if: |
+      !cancelled() &&
+      github.event_name != 'push' &&
+      needs.changes.outputs.go != 'false'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@v1.9.0
+
+      # Fails only on symbol-level findings (the code actually calls the
+      # vulnerable symbol) that also have an upstream fix available.
+      # Module/package-level findings without a callable trace are noise from
+      # transitive deps and don't block CI.
+      - name: Run govulncheck (fail only on callable, fixable findings)
+        run: |
+          set -euo pipefail
+          govulncheck -format=json ./... > /tmp/vuln.json 2>&1 || true
+
+          # Every run emits a config message first; without one the output
+          # format changed or the tool failed, and zero findings means nothing.
+          if ! jq -e -s 'any(.[]; .config != null)' /tmp/vuln.json > /dev/null; then
+            echo "::error::govulncheck JSON output has no config message"
+            exit 1
+          fi
+
+          FIXABLE=$(jq -s '[.[] | select(.finding != null
+                                          and (.finding.fixed_version // "") != ""
+                                          and (.finding.trace | any((.function // "") != "")))] | length' /tmp/vuln.json)
+
+          echo "callable + fixable findings: ${FIXABLE}"
+
+          govulncheck ./... || true
+
+          if [ "${FIXABLE:-0}" -gt 0 ]; then
+            echo "::error::Callable, fixable vulnerabilities detected. See output above."
+            exit 1
+          fi
+
+          echo "No callable, fixable vulnerabilities. Remaining findings are uncalled by this code or have no upstream fix."
+
+  static-checks:
+    if: github.event_name != 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # A case-insensitive checkout (macOS) resolves two paths, or two module
+      # names (a file name without its extension), that differ only in case
+      # to one file; a Linux build never notices.
+      - name: No paths that differ only in case
+        env:
+          LC_ALL: C
+        run: |
+          clashes=$(git ls-files \
+            | awk -F/ '{ p = ""; for (i = 1; i <= NF; i++) { p = p (i > 1 ? "/" : "") $i; n = p; if (i == NF) sub(/\.[^.\/]*$/, "", n); print n } }' \
+            | sort -u | sort -f | uniq -Di)
+          if [ -n "$clashes" ]; then
+            echo "::error::Paths that differ only in case (extensions dropped):"
+            echo "$clashes"
+            exit 1
+          fi
+
+      # Runs on every pull request, including docs-only ones, where go-checks
+      # is skipped.
+      - name: make scan
+        run: make scan
