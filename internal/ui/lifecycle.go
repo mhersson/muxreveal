@@ -156,6 +156,8 @@ func usableDir(dir string) bool {
 func (a *App) closePane(id core.PaneID) tea.Cmd {
 	p := a.panes[id]
 	delete(a.panes, id)
+	a.clearSelectionOf(id)
+	a.endCopyOf(id)
 
 	if a.confirm != nil && a.confirm.pane == id {
 		a.confirm = nil
@@ -223,6 +225,8 @@ func (a *App) relayout() tea.Cmd {
 		}
 
 		if p.resize(cols, rows) {
+			a.clearSelectionOf(id)
+			a.endCopyOf(id)
 			cmds = append(cmds, a.renderPane(p))
 		}
 	}
@@ -263,6 +267,12 @@ func (a *App) renderPane(p *pane) tea.Cmd {
 	}
 
 	_, held := p.render()
+
+	if p.takeAltSwitch() {
+		a.clearSelectionOf(p.id)
+		a.endCopyOf(p.id)
+	}
+
 	if held.IsZero() || p.holdArmed {
 		return nil
 	}
@@ -279,7 +289,16 @@ func (a *App) onPaneDirty(id core.PaneID) tea.Cmd {
 		return nil
 	}
 
-	return tea.Batch(a.renderPane(p), p.wait(), a.probeCwd(p))
+	cmds := []tea.Cmd{a.renderPane(p), p.wait(), a.probeCwd(p)}
+
+	if text, ok := p.takeClip(); ok {
+		cmds = append(cmds, a.clip.copy(text))
+	}
+
+	a.dropFallenSelection(p)
+	a.syncCopy(p)
+
+	return tea.Batch(cmds...)
 }
 
 func (a *App) onHoldExpired(id core.PaneID) tea.Cmd {

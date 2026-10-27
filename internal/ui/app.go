@@ -7,12 +7,12 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"runtime"
 	"slices"
 	"sync"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	uv "github.com/charmbracelet/ultraviolet"
 
 	"github.com/mhersson/muxreveal/internal/core"
 	"github.com/mhersson/muxreveal/internal/term"
@@ -32,6 +32,11 @@ type Options struct {
 	RecordDir string
 	// Icons draws Nerd Font glyphs; false drops every one.
 	Icons bool
+	// FocusFollowsMouse focuses the pane under the pointer; CopyOnSelect copies
+	// a selection when the button is released.
+	FocusFollowsMouse, CopyOnSelect bool
+	// NoOSC52 and NoNativeClipboard turn off a copy path; the zero value keeps both on.
+	NoOSC52, NoNativeClipboard bool
 }
 
 // App is the root Bubble Tea model.
@@ -70,8 +75,14 @@ type App struct {
 	started   bool   // the first size message was handled; it opens the first pane only once
 	clock     clock  // the sync hold's and the tray's time source
 	tray      trayState
-	load      loadSampler // nil on platforms without a load reading
-	start     func(ctx context.Context, c term.Command, cols, rows int) (proc, error)
+	clip      *clipboard
+	sel       *paneSelection // the one selection; survives tab switches
+	copy      *copyState     // copy mode; owns every key and ignores the mouse while set
+	mouse     mouseState
+
+	focusFollows, copyOnSelect bool
+	load                       loadSampler // nil on platforms without a load reading
+	start                      func(ctx context.Context, c term.Command, cols, rows int) (proc, error)
 
 	// ctx is the lifetime of the pane processes; Close cancels it.
 	ctx     context.Context
@@ -118,7 +129,9 @@ func New(opts Options) (*App, error) {
 		log: opts.Logger, store: opts.Store, reg: reg, keymap: km,
 		panes: map[core.PaneID]*pane{}, outerFocused: true,
 		getenv: getenv, cwd: cwd, recordDir: opts.RecordDir, icons: opts.Icons, clock: realClock{}, start: termStart,
-		load: newSysLoad(),
+		load:         newSysLoad(),
+		focusFollows: opts.FocusFollowsMouse, copyOnSelect: opts.CopyOnSelect,
+		clip: newClipboard(clipboardConfig{OSC52: !opts.NoOSC52, Native: !opts.NoNativeClipboard}, getenv, runtime.GOOS, opts.Logger),
 	}
 	a.tray.gitRun = runGit
 	if err := a.sync(); err != nil {
@@ -186,7 +199,7 @@ func (a *App) dropGoneTab(st core.State) {
 		a.confirm = nil
 	}
 
-	if a.prompt != nil && !has(a.prompt.tab) {
+	if a.prompt != nil && a.prompt.kind == promptRename && !has(a.prompt.tab) {
 		a.prompt = nil
 	}
 }
@@ -242,6 +255,14 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, a.handleKey(msg)
 	case tea.PasteMsg:
 		return a, a.handlePaste(msg)
+	case tea.MouseWheelMsg:
+		a.handleWheel(msg)
+	case tea.MouseClickMsg:
+		return a, a.handleClick(msg)
+	case tea.MouseMotionMsg:
+		return a, a.handleMotion(msg)
+	case tea.MouseReleaseMsg:
+		return a, a.handleRelease(msg)
 	case tea.FocusMsg:
 		a.outerFocused = true
 		a.sendToFocused(func(p *pane) { p.sendFocus(true) })
@@ -316,7 +337,7 @@ func (a *App) runLeader(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 		return nil, true
 	}
 	if key == a.keymap.leader {
-		a.sendToFocused(func(p *pane) { p.sendKey(uv.KeyPressEvent(msg)) })
+		a.keyToFocused(msg)
 		return nil, true
 	}
 	id, ok := a.keymap.lookup(key)
@@ -349,6 +370,10 @@ func (a *App) View() tea.View {
 	}
 	v := tea.NewView(content)
 	v.AltScreen = true
+	v.MouseMode = tea.MouseModeCellMotion
+	if a.focusFollows {
+		v.MouseMode = tea.MouseModeAllMotion
+	}
 	v.ReportFocus = true
 	// Modified keys arrive with their shifted character, which the legacy encoder needs.
 	v.KeyboardEnhancements.ReportAlternateKeys = true

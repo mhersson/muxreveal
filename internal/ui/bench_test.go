@@ -161,9 +161,12 @@ func TestBench(t *testing.T) {
 		}
 	}
 
+	selection := os.Getenv("MUXREVEAL_BENCH_SELECTION") != ""
+
 	var sb strings.Builder
 
-	fmt.Fprintf(&sb, "recordings=%d window=%v+%v stagger=%v size=%dx%d\n", len(paths), start, length, stagger, benchWidth, benchHeight)
+	fmt.Fprintf(&sb, "recordings=%d window=%v+%v stagger=%v size=%dx%d selection=%v\n",
+		len(paths), start, length, stagger, benchWidth, benchHeight, selection)
 	sb.WriteString("Rows are the run whose p99 is the median of the repeats.\n")
 	sb.WriteString("| panes | frames | p50 | p95 | p99 (gate) | max | CPU % | bytes fed |\n|---|---|---|---|---|---|---|---|\n")
 
@@ -175,7 +178,7 @@ func TestBench(t *testing.T) {
 		for range benchRepeats {
 			res, err := runBench(benchConfig{
 				Panes: n, Recordings: all, Width: benchWidth, Height: benchHeight,
-				Start: start, Length: length, Stagger: stagger, FPS: 60,
+				Start: start, Length: length, Stagger: stagger, FPS: 60, Selection: selection,
 			})
 			if err != nil {
 				t.Fatal(err)

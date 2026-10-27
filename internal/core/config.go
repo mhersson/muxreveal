@@ -18,8 +18,30 @@ const DefaultTheme = "catppuccin-mocha"
 type Config struct {
 	Theme string `toml:"theme"`
 	// Icons is a pointer so an absent key (nil) can mean true.
-	Icons *bool `toml:"icons"`
+	Icons     *bool     `toml:"icons"`
+	Mouse     Mouse     `toml:"mouse"`
+	Clipboard Clipboard `toml:"clipboard"`
 }
+
+// Mouse is the [mouse] section; both switches are off by default.
+type Mouse struct {
+	FocusFollowsMouse bool `toml:"focus_follows_mouse"`
+	CopyOnSelect      bool `toml:"copy_on_select"`
+}
+
+// Clipboard is the [clipboard] section. The pointers let an absent key (nil)
+// mean true.
+type Clipboard struct {
+	OSC52  *bool `toml:"osc52"`
+	Native *bool `toml:"native"`
+}
+
+// OSC52On reports whether copies are sent as OSC 52; the default is on.
+func (c Clipboard) OSC52On() bool { return c.OSC52 == nil || *c.OSC52 }
+
+// NativeOn reports whether copies also go to native clipboard tools on a
+// local session; the default is on.
+func (c Clipboard) NativeOn() bool { return c.Native == nil || *c.Native }
 
 // IconsOn reports whether Nerd Font glyphs are drawn; the default is on.
 func (c Config) IconsOn() bool {

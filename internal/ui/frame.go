@@ -149,7 +149,7 @@ func (a *App) frameBody(g geometry, st core.State, lk look) []string {
 		fit := false
 
 		if p := a.panes[id]; p != nil {
-			lines = p.lines()
+			lines = a.withSelection(p)
 			cols, prows := p.size()
 			fit = cols != c.W || prows != c.H
 		}
@@ -245,19 +245,19 @@ func printable(t string) string {
 
 // cursorView places the focused pane's cursor on screen; nil when the guest
 // hides it, it falls outside the pane, or an overlay, a confirm or the which-key
-// popup is open. A prompt moves the cursor into the workspace bar.
+// popup is open. A prompt moves the cursor into the workspace bar or the status
+// bar, and copy mode shows its own block cursor.
 func (a *App) cursorView() *tea.Cursor { return a.cursorAt(a.geometry()) }
 
 func (a *App) cursorAt(g geometry) *tea.Cursor {
 	if a.prompt != nil {
-		if x, ok := a.renameCursorX(); ok {
-			return tea.NewCursor(x, 0)
-		}
-
-		return nil
+		return a.promptCursor()
 	}
 	if a.overlay != nil || a.popup || a.confirm != nil {
 		return nil
+	}
+	if a.copy != nil {
+		return a.copyCursor(g)
 	}
 	st := a.store.State()
 	p := a.panes[st.Tab().Focus]

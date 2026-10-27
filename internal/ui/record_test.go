@@ -38,6 +38,9 @@ func TestRecordFlag(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// A copy must never reach the operator's real clipboard tools.
+	app.clip.run = (&fakeRun{}).run
+
 	app.start = shCommand("printf hi")
 
 	t.Cleanup(func() { _ = app.Close(context.Background()) })
@@ -266,6 +269,9 @@ func TestRecordDirCollisionSetsNotice(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	// A copy must never reach the operator's real clipboard tools.
+	app.clip.run = (&fakeRun{}).run
 
 	app.start = func(context.Context, term.Command, int, int) (proc, error) { return newFakeProc(), nil }
 

@@ -6,9 +6,12 @@ import (
 	"image/color"
 	"os"
 	"runtime"
+	"strings"
 	"sync"
 	"testing"
 	"time"
+
+	uv "github.com/charmbracelet/ultraviolet"
 )
 
 type safeBuf struct {
@@ -250,6 +253,64 @@ func TestScrollbackLen(t *testing.T) {
 	}
 }
 
+func TestHistoryTrimmed(t *testing.T) {
+	t.Run("ring overflow", func(t *testing.T) {
+		v, _ := newTestVT(t, 10, 3)
+		total := ScrollbackLines + 500
+
+		for range total {
+			if _, err := v.Write([]byte("x\r\n")); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		if got := v.ScrollbackLen(); got != ScrollbackLines {
+			t.Fatalf("ScrollbackLen = %d, want the cap %d", got, ScrollbackLines)
+		}
+
+		// Every line that left the screen is in history or was trimmed from it.
+		if got := int(v.HistoryTrimmed()) + v.ScrollbackLen(); got != total-2 {
+			t.Fatalf("trimmed + len = %d, want %d", got, total-2)
+		}
+
+		if v.HistoryTrimmed() == 0 {
+			t.Fatal("HistoryTrimmed did not move past the cap")
+		}
+	})
+
+	t.Run("clear scrollback", func(t *testing.T) {
+		v, _ := newTestVT(t, 10, 3)
+
+		for range 20 {
+			if _, err := v.Write([]byte("x\r\n")); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		n := v.ScrollbackLen()
+
+		if _, err := v.Write([]byte("\x1b[3J")); err != nil {
+			t.Fatal(err)
+		}
+
+		if v.ScrollbackLen() != 0 || int(v.HistoryTrimmed()) != n {
+			t.Fatalf("after CSI 3J: len = %d, trimmed = %d, want 0 and %d", v.ScrollbackLen(), v.HistoryTrimmed(), n)
+		}
+	})
+
+	t.Run("no trim", func(t *testing.T) {
+		v, _ := newTestVT(t, 10, 3)
+
+		if _, err := v.Write([]byte("a\r\nb\r\nc\r\nd\r\n")); err != nil {
+			t.Fatal(err)
+		}
+
+		if v.HistoryTrimmed() != 0 {
+			t.Fatalf("HistoryTrimmed = %d, want 0", v.HistoryTrimmed())
+		}
+	})
+}
+
 func TestCloseIdempotent(t *testing.T) {
 	base := runtime.NumGoroutine()
 
@@ -322,5 +383,253 @@ func TestReplyWriteErrorKeepsDraining(t *testing.T) {
 
 	if w.calls != 1 {
 		t.Fatalf("writer called %d times; replies after its error must be dropped", w.calls)
+	}
+}
+
+// replyAfterMarker returns everything on the reply stream up to a marker sent
+// after the call under test; the stream is ordered, so nothing can follow it.
+func replyAfterMarker(t *testing.T, v VT, reply *safeBuf) string {
+	t.Helper()
+
+	const marker = "\x00marker\x00"
+
+	v.SendBytes([]byte(marker))
+	waitFor(t, func() bool { return strings.HasSuffix(reply.String(), marker) })
+
+	return strings.TrimSuffix(reply.String(), marker)
+}
+
+func lineText(cells []uv.Cell) string {
+	var b strings.Builder
+
+	for _, c := range cells {
+		b.WriteString(c.Content)
+	}
+
+	return strings.TrimRight(b.String(), " ")
+}
+
+func TestScrollbackLine(t *testing.T) {
+	v, _ := newTestVT(t, 10, 10)
+
+	for i := range 30 {
+		if _, err := v.Write([]byte("row" + string(rune('A'+i%26)) + "\r\n")); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	n := v.ScrollbackLen()
+	if n == 0 {
+		t.Fatal("no scrollback")
+	}
+
+	if got := lineText(v.ScrollbackLine(0)); got != "rowA" {
+		t.Fatalf("oldest line = %q", got)
+	}
+
+	if got := lineText(v.ScrollbackLine(n - 1)); got != "row"+string(rune('A'+(n-1)%26)) {
+		t.Fatalf("newest line = %q", got)
+	}
+
+	if v.ScrollbackLine(-1) != nil || v.ScrollbackLine(n) != nil {
+		t.Fatal("out of range must be nil")
+	}
+
+	a := v.ScrollbackLine(0)
+	a[0].Content = "Z"
+
+	if got := lineText(v.ScrollbackLine(0)); got != "rowA" {
+		t.Fatalf("mutating a returned line changed history: %q", got)
+	}
+}
+
+func TestSoftWrapFlags(t *testing.T) {
+	v, _ := newTestVT(t, 5, 3)
+
+	// 7 chars wrap once on row 0; a hard newline follows.
+	if _, err := v.Write([]byte("abcdefg\r\nxy")); err != nil {
+		t.Fatal(err)
+	}
+
+	if !v.RowWrapped(0) || v.RowWrapped(1) || v.RowWrapped(2) {
+		t.Fatalf("live wraps = %v %v %v", v.RowWrapped(0), v.RowWrapped(1), v.RowWrapped(2))
+	}
+
+	if v.RowWrapped(-1) || v.RowWrapped(3) {
+		t.Fatal("out of range rows must not wrap")
+	}
+
+	if _, err := v.Write([]byte("\r\n\r\n\r\n")); err != nil {
+		t.Fatal(err)
+	}
+
+	if v.ScrollbackLen() < 2 || !v.ScrollbackWrapped(0) || v.ScrollbackWrapped(1) {
+		t.Fatalf("history wraps = %v %v (len %d)", v.ScrollbackWrapped(0), v.ScrollbackWrapped(1), v.ScrollbackLen())
+	}
+
+	if v.ScrollbackWrapped(-1) || v.ScrollbackWrapped(1000) {
+		t.Fatal("out of range lines must not wrap")
+	}
+}
+
+func TestAltScreen(t *testing.T) {
+	v, _ := newTestVT(t, 10, 3)
+
+	if v.AltScreen() {
+		t.Fatal("alt screen must start off")
+	}
+
+	if _, err := v.Write([]byte("\x1b[?1049h")); err != nil {
+		t.Fatal(err)
+	}
+
+	if !v.AltScreen() {
+		t.Fatal("alt screen not set")
+	}
+
+	if _, err := v.Write([]byte("\x1b[?1049l")); err != nil {
+		t.Fatal(err)
+	}
+
+	if v.AltScreen() {
+		t.Fatal("alt screen not reset")
+	}
+}
+
+func TestMouseTrackingAndSend(t *testing.T) {
+	click := uv.MouseClickEvent(uv.Mouse{X: 2, Y: 3, Button: uv.MouseLeft})
+
+	t.Run("tracking on", func(t *testing.T) {
+		v, reply := newTestVT(t, 10, 5)
+
+		if v.MouseTracking() {
+			t.Fatal("tracking must start off")
+		}
+
+		if _, err := v.Write([]byte("\x1b[?1000h\x1b[?1006h")); err != nil {
+			t.Fatal(err)
+		}
+
+		if !v.MouseTracking() {
+			t.Fatal("tracking not set")
+		}
+
+		v.SendMouse(click)
+
+		if got := replyAfterMarker(t, v, reply); got != "\x1b[<0;3;4M" {
+			t.Fatalf("reply = %q", got)
+		}
+	})
+
+	t.Run("tracking off", func(t *testing.T) {
+		v, reply := newTestVT(t, 10, 5)
+
+		v.SendMouse(click)
+
+		if got := replyAfterMarker(t, v, reply); got != "" {
+			t.Fatalf("reply = %q; want nothing", got)
+		}
+	})
+}
+
+func TestClipboardHandler(t *testing.T) {
+	type call struct{ sel, content string }
+
+	v, _ := newTestVT(t, 10, 3)
+
+	var calls []call
+
+	v.SetClipboardHandler(func(sel, content string) { calls = append(calls, call{sel, content}) })
+
+	if _, err := v.Write([]byte("\x1b]52;c;aGk=\x07")); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(calls) != 1 || calls[0] != (call{"c", "hi"}) {
+		t.Fatalf("calls = %+v", calls)
+	}
+}
+
+func TestClipboardQueryRepliesEmpty(t *testing.T) {
+	v, reply := newTestVT(t, 10, 3)
+	v.SetClipboardHandler(func(string, string) {})
+
+	if _, err := v.Write([]byte("\x1b]52;c;?\x07")); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := replyAfterMarker(t, v, reply); got != "\x1b]52;c;\x07" {
+		t.Fatalf("reply = %q", got)
+	}
+}
+
+func TestSetClipboardHandlerKeepsOtherCallbacks(t *testing.T) {
+	v, reply := newTestVT(t, 10, 3)
+	v.SetDefaultColors(color.RGBA{R: 0x11, G: 0x22, B: 0x33, A: 0xff}, color.RGBA{R: 0xaa, G: 0xbb, B: 0xcc, A: 0xff})
+	v.SetClipboardHandler(func(string, string) {})
+
+	in := "\x1b]2;ttl\x07\x1b]7;file:///tmp/x\x07\x1b[?2026h\x1b]10;?\x07\x1b]11;?\x07"
+	if _, err := v.Write([]byte(in)); err != nil {
+		t.Fatal(err)
+	}
+
+	if v.Title() != "ttl" || v.WorkingDir() != "/tmp/x" {
+		t.Fatalf("title %q cwd %q", v.Title(), v.WorkingDir())
+	}
+
+	if open, serial := v.SyncState(); !open || serial != 1 {
+		t.Fatalf("sync = %v, %d", open, serial)
+	}
+
+	got := replyAfterMarker(t, v, reply)
+	if !strings.Contains(got, "]10;rgb:1111/2222/3333") || !strings.Contains(got, "]11;rgb:aaaa/bbbb/cccc") {
+		t.Fatalf("colour replies = %q", got)
+	}
+}
+
+func TestScrollbackTextMatchesScrollbackLine(t *testing.T) {
+	v, _ := newTestVT(t, 10, 3)
+
+	for _, s := range []string{"\x1b[31mred\x1b[0m\r\n", "a中b\r\n", "\r\n", "plain\r\n", "x\r\n", "y\r\n", "z\r\n"} {
+		if _, err := v.Write([]byte(s)); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	n := v.ScrollbackLen()
+	got := map[int]string{}
+
+	v.ScrollbackText(0, n, func(i int, cells []TextCell) bool {
+		var b strings.Builder
+
+		for _, c := range cells {
+			b.Write(c.Content)
+		}
+
+		got[i] = b.String()
+
+		return true
+	})
+
+	for i := range n {
+		want := lineText(v.ScrollbackLine(i))
+
+		if text, ok := got[i]; ok && strings.TrimRight(text, " ") != want {
+			t.Errorf("line %d = %q, want %q", i, text, want)
+		} else if !ok && want != "" {
+			t.Errorf("line %d (%q) was skipped", i, want)
+		}
+	}
+
+	if len(got) == 0 {
+		t.Fatal("no lines read")
+	}
+
+	calls := 0
+
+	v.ScrollbackText(0, n, func(int, []TextCell) bool { calls++; return false })
+
+	if calls > 1 {
+		t.Errorf("fn called %d times after returning false", calls)
 	}
 }

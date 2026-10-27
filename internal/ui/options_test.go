@@ -1,0 +1,293 @@
+package ui
+
+import (
+	"strings"
+	"testing"
+
+	tea "charm.land/bubbletea/v2"
+
+	"github.com/mhersson/muxreveal/internal/core"
+)
+
+// release delivers a left release and runs the command it returns.
+func release(a *App, x, y int) {
+	_, cmd := a.Update(tea.MouseReleaseMsg{X: x, Y: y, Button: tea.MouseLeft})
+	run(a, cmd)
+}
+
+// dragRun is drag with the release's command run, as the program would.
+func dragRun(a *App, x0, y0, x1, y1 int, mod tea.KeyMod) {
+	mdown(a, x0, y0, tea.MouseLeft, mod)
+	mmove(a, x1, y1, tea.MouseLeft)
+	release(a, x1, y1)
+}
+
+func clickRun(a *App, x, y int) {
+	mdown(a, x, y, tea.MouseLeft, 0)
+	release(a, x, y)
+}
+
+// lastCopied is the text of the latest native write, "" when none happened.
+func lastCopied(f *fakeRun) string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	if len(f.calls) == 0 {
+		return ""
+	}
+
+	return f.calls[len(f.calls)-1].stdin
+}
+
+func hover(a *App, x, y int) {
+	_, cmd := a.Update(tea.MouseMotionMsg{X: x, Y: y, Button: tea.MouseNone})
+	run(a, cmd)
+}
+
+func focusOf(a *App) core.PaneID { return a.store.State().Tab().Focus }
+
+func TestMouseModeFollowsTheOption(t *testing.T) {
+	tests := []struct {
+		name  string
+		focus bool
+		want  tea.MouseMode
+	}{
+		{"off", false, tea.MouseModeCellMotion},
+		{"on", true, tea.MouseModeAllMotion},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			a, _, _ := shellsWith(t, "a", "b")
+			a.focusFollows = tt.focus
+
+			if got := a.View().MouseMode; got != tt.want {
+				t.Errorf("MouseMode = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestHoverFocusesThePaneUnderThePointer(t *testing.T) {
+	a, _, _ := shellsWith(t, "a", "b")
+	a.focusFollows = true
+	c1, c2 := contentRectOf(a, "p1"), contentRectOf(a, "p2")
+
+	if focusOf(a) != "p2" {
+		t.Fatalf("setup: focus = %q, want p2", focusOf(a))
+	}
+
+	hover(a, c2.X+1, c2.Y+1)
+
+	if focusOf(a) != "p2" {
+		t.Errorf("hovering the focused pane changed focus to %q", focusOf(a))
+	}
+
+	hover(a, c1.X+1, c1.Y+1)
+
+	if focusOf(a) != "p1" {
+		t.Errorf("focus = %q after hovering p1's content, want p1", focusOf(a))
+	}
+
+	hover(a, c2.X+1, c2.Y-1)
+
+	if focusOf(a) != "p2" {
+		t.Errorf("focus = %q after hovering p2's header, want p2", focusOf(a))
+	}
+}
+
+func TestHoverIgnoresBordersBarsAndEmptyCells(t *testing.T) {
+	a, _, _ := shellsWith(t, "a", "b")
+	a.focusFollows = true
+	c1 := contentRectOf(a, "p1")
+
+	for _, cell := range [][2]int{{c1.X + c1.W, c1.Y + 1}, {c1.X, 0}, {c1.X, a.height - 1}, {-3, -3}, {a.width + 5, 4}} {
+		hover(a, cell[0], cell[1])
+
+		if focusOf(a) != "p2" {
+			t.Errorf("hovering %v moved focus to %q", cell, focusOf(a))
+		}
+	}
+}
+
+func TestHoverDoesNothingWhenTheOptionIsOff(t *testing.T) {
+	a, _, _ := shellsWith(t, "a", "b")
+	c1 := contentRectOf(a, "p1")
+
+	hover(a, c1.X+1, c1.Y+1)
+
+	if focusOf(a) != "p2" {
+		t.Errorf("focus = %q, want p2 with focus follows mouse off", focusOf(a))
+	}
+}
+
+func TestHoverNeverStealsFocusUnderModalUI(t *testing.T) {
+	tests := []struct {
+		name string
+		open func(a *App)
+	}{
+		{"pending leader", func(a *App) { a.pending = true }},
+		{"pending leader with popup", func(a *App) { a.pending, a.popup = true, true }},
+		{"confirm", func(a *App) { a.confirm = &confirm{} }},
+		{"prompt", func(a *App) { a.prompt = &prompt{} }},
+		{"overlay", func(a *App) { a.overlay = &overlay{} }},
+		{"copy mode", func(a *App) { a.copy = &copyState{pane: "p2"} }},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			a, _, _ := shellsWith(t, "a", "b")
+			a.focusFollows = true
+			c1 := contentRectOf(a, "p1")
+
+			tt.open(a)
+			hover(a, c1.X+1, c1.Y+1)
+
+			if focusOf(a) != "p2" {
+				t.Errorf("focus = %q under %s, want p2", focusOf(a), tt.name)
+			}
+		})
+	}
+}
+
+func TestHoverDoesNotFocusDuringADrag(t *testing.T) {
+	a, _, _ := shellsWith(t, sampleText, "RIGHT")
+	a.focusFollows = true
+	c1, c2 := contentRectOf(a, "p1"), contentRectOf(a, "p2")
+
+	mdown(a, c1.X, c1.Y, tea.MouseLeft, 0)
+	hover(a, c2.X+1, c2.Y+1)
+
+	if focusOf(a) != "p1" {
+		t.Errorf("focus = %q while the button is held in p1, want p1", focusOf(a))
+	}
+
+	mmove(a, c2.X+1, c2.Y+1, tea.MouseLeft)
+
+	if focusOf(a) != "p1" {
+		t.Errorf("focus = %q after dragging over p2, want p1", focusOf(a))
+	}
+}
+
+func TestHoverReportsFocusToGuests(t *testing.T) {
+	a, procs, _ := shellsWith(t, "a", "b")
+	a.focusFollows = true
+	feedAndWait(t, a.panes["p1"], procs["p1"], "\x1b[?1004h")
+	feedAndWait(t, a.panes["p2"], procs["p2"], "\x1b[?1004h")
+	c1 := contentRectOf(a, "p1")
+
+	hover(a, c1.X+1, c1.Y+1)
+
+	eventually(t, "focus in", func() bool { return strings.Contains(procs["p1"].sent(), "\x1b[I") })
+	eventually(t, "focus out", func() bool { return strings.Contains(procs["p2"].sent(), "\x1b[O") })
+}
+
+func TestCopyOnSelect(t *testing.T) {
+	tests := []struct {
+		name    string
+		option  bool
+		gesture func(a *App, c core.Rect)
+		want    string
+	}{
+		{"drag copies", true, func(a *App, c core.Rect) { dragRun(a, c.X, c.Y, c.X+4, c.Y, 0) }, "hello"},
+		{"block drag copies", true, func(a *App, c core.Rect) { dragRun(a, c.X, c.Y, c.X+1, c.Y+1, tea.ModAlt) }, "he\nse"},
+		{"double click copies the word", true, func(a *App, c core.Rect) {
+			clickRun(a, c.X+1, c.Y)
+			clickRun(a, c.X+1, c.Y)
+		}, "hello"},
+		{"triple click copies the line", true, func(a *App, c core.Rect) {
+			clickRun(a, c.X+1, c.Y)
+			clickRun(a, c.X+1, c.Y)
+			clickRun(a, c.X+1, c.Y)
+		}, "hello world"},
+		{"plain click does not copy", true, func(a *App, c core.Rect) { clickRun(a, c.X+1, c.Y) }, ""},
+		{"drag with the option off does not copy", false, func(a *App, c core.Rect) { dragRun(a, c.X, c.Y, c.X+4, c.Y, 0) }, ""},
+		{"double click with the option off does not copy", false, func(a *App, c core.Rect) {
+			clickRun(a, c.X+1, c.Y)
+			clickRun(a, c.X+1, c.Y)
+		}, ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			a, _, f := shellsWith(t, sampleText, "RIGHT")
+			a.copyOnSelect = tt.option
+			c := contentRectOf(a, "p1")
+
+			tt.gesture(a, c)
+
+			if got := lastCopied(f); got != tt.want {
+				t.Errorf("copied %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestCopyOnSelectCopiesOnReleaseNotWhileDragging(t *testing.T) {
+	a, _, f := shellsWith(t, sampleText, "RIGHT")
+	a.copyOnSelect = true
+	c := contentRectOf(a, "p1")
+
+	mdown(a, c.X, c.Y, tea.MouseLeft, 0)
+	mmove(a, c.X+4, c.Y, tea.MouseLeft)
+
+	if got := copiedText(f); got != "" {
+		t.Fatalf("copied %q before release", got)
+	}
+
+	release(a, c.X+4, c.Y)
+
+	if got := copiedText(f); got != "hello" {
+		t.Errorf("copied %q after release, want hello", got)
+	}
+}
+
+func TestCopyOnSelectSkipsABlankSelection(t *testing.T) {
+	a, _, f := shellsWith(t, "", "RIGHT")
+	a.copyOnSelect = true
+	c := contentRectOf(a, "p1")
+
+	dragRun(a, c.X, c.Y, c.X+4, c.Y, 0)
+
+	if len(f.calls) != 0 {
+		t.Errorf("native writes = %v, want none for an empty selection", f.calls)
+	}
+}
+
+func TestOptionsReachTheApp(t *testing.T) {
+	a, _, _ := shellsWith(t, "a", "b")
+	if a.focusFollows || a.copyOnSelect || !a.clip.cfg.OSC52 || !a.clip.cfg.Native {
+		t.Errorf("zero Options: focusFollows=%v copyOnSelect=%v clip=%+v, want mouse off and clipboard on",
+			a.focusFollows, a.copyOnSelect, a.clip.cfg)
+	}
+}
+
+func TestOptionsSetEachFlagOnItsOwnField(t *testing.T) {
+	tests := []struct {
+		name string
+		opts Options
+		want [4]bool // focusFollows, copyOnSelect, OSC52, Native
+	}{
+		{"focus follows mouse", Options{FocusFollowsMouse: true}, [4]bool{true, false, true, true}},
+		{"copy on select", Options{CopyOnSelect: true}, [4]bool{false, true, true, true}},
+		{"no OSC 52", Options{NoOSC52: true}, [4]bool{false, false, false, true}},
+		{"no native clipboard", Options{NoNativeClipboard: true}, [4]bool{false, false, true, false}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.opts.Logger = testLogger()
+			tt.opts.Store = core.NewStore(core.State{Theme: "catppuccin-mocha"})
+
+			a, err := New(tt.opts)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			got := [4]bool{a.focusFollows, a.copyOnSelect, a.clip.cfg.OSC52, a.clip.cfg.Native}
+			if got != tt.want {
+				t.Errorf("focusFollows, copyOnSelect, OSC52, Native = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}

@@ -156,3 +156,42 @@ func TestSummaryNearestRank(t *testing.T) {
 		t.Fatal("empty summary is not the zero value")
 	}
 }
+
+func TestBenchSelectionHighlightsEveryRowOfOnePane(t *testing.T) {
+	cfg := benchConfig{Panes: 2, Width: 82, Height: 20}
+
+	app, ids, err := newBenchApp(cfg, &fakeClock{t: time.Unix(1_000_000, 0)})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	selectWholePane(app, ids[0])
+
+	in, out := contentRectOf(app, ids[0]), contentRectOf(app, ids[1])
+
+	for y := in.Y; y < in.Y+in.H; y++ {
+		for _, x := range []int{in.X, in.X + in.W - 1} {
+			if !selBgAt(app, x, y) {
+				t.Errorf("selected pane cell (%d,%d) is not highlighted", x, y)
+			}
+		}
+	}
+
+	if selBgAt(app, out.X, out.Y) {
+		t.Error("the other pane is highlighted")
+	}
+}
+
+func TestBenchKitRunsWithASelection(t *testing.T) {
+	res, err := runBench(benchConfig{
+		Panes: 2, Recordings: [][]rec.Record{rec.Synth(40, 16, 5*time.Second, 1)},
+		Width: 82, Height: 20, Stagger: ms(500), Length: 2 * time.Second, FPS: 60, Selection: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if res.Frames.Count == 0 {
+		t.Error("no frames were drawn with a selection")
+	}
+}

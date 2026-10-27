@@ -6,6 +6,7 @@ const (
 	iconAgent  = "\U000F06A9" // nf-md-robot
 	iconShell  = "\uF489"     // nf-oct-terminal
 	iconZoom   = "\U000F0293" // nf-md-fullscreen
+	iconScroll = "\U000F005D" // nf-md-arrow_up
 	iconApp    = "\U000F056E" // nf-md-view_dashboard
 	iconLeader = "\U000F030C" // nf-md-keyboard
 	iconAlert  = "\U000F002A" // nf-md-alert_outline
@@ -29,6 +30,8 @@ const (
 	iconSwap      = "\U000F04E1" // nf-md-swap_horizontal
 	iconClose     = "\U000F0156" // nf-md-close
 	iconQuit      = "\U000F0206" // nf-md-exit_to_app
+	iconCopy      = "\U000F018F" // nf-md-content_copy
+	iconSearch    = "\U000F0349" // nf-md-magnify
 )
 
 // Powerline edges and dividers.

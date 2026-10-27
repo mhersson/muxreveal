@@ -16,6 +16,20 @@ func TestIconsOn(t *testing.T) {
 	}
 }
 
+func TestClipboardDefaultsOn(t *testing.T) {
+	d := DefaultConfig()
+	if !d.Clipboard.OSC52On() || !d.Clipboard.NativeOn() {
+		t.Error("clipboard: want OSC 52 and native on by default")
+	}
+	if d.Mouse.FocusFollowsMouse || d.Mouse.CopyOnSelect {
+		t.Error("mouse: want both options off by default")
+	}
+	off := Clipboard{OSC52: ptr(false), Native: ptr(false)}
+	if off.OSC52On() || off.NativeOn() {
+		t.Error("clipboard: want false to turn both off")
+	}
+}
+
 func TestLoadConfig(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -34,6 +48,17 @@ func TestLoadConfig(t *testing.T) {
 		{name: "icons off", content: "icons = false\n", want: Config{Theme: DefaultTheme, Icons: ptr(false)}},
 		{name: "icons on", content: "icons = true\n", want: Config{Theme: DefaultTheme, Icons: ptr(true)}},
 		{name: "icons wrong type", content: "icons = \"no\"\n", wantErr: true, errHas: []string{"line 1", "icons"}},
+		{name: "mouse options", content: "[mouse]\nfocus_follows_mouse = true\ncopy_on_select = true\n",
+			want: Config{Theme: DefaultTheme, Mouse: Mouse{FocusFollowsMouse: true, CopyOnSelect: true}}},
+		{name: "mouse partly set", content: "[mouse]\ncopy_on_select = true\n",
+			want: Config{Theme: DefaultTheme, Mouse: Mouse{CopyOnSelect: true}}},
+		{name: "clipboard off", content: "[clipboard]\nosc52 = false\nnative = false\n",
+			want: Config{Theme: DefaultTheme, Clipboard: Clipboard{OSC52: ptr(false), Native: ptr(false)}}},
+		{name: "clipboard native only off", content: "[clipboard]\nnative = false\n",
+			want: Config{Theme: DefaultTheme, Clipboard: Clipboard{Native: ptr(false)}}},
+		{name: "unknown mouse key", content: "[mouse]\nfocus = true\n", wantErr: true, errHas: []string{"unknown key mouse.focus"}},
+		{name: "unknown clipboard key", content: "[clipboard]\nosc = true\n", wantErr: true, errHas: []string{"unknown key clipboard.osc"}},
+		{name: "mouse wrong type", content: "[mouse]\ncopy_on_select = \"yes\"\n", wantErr: true, errHas: []string{"copy_on_select"}},
 		{name: "invalid toml", content: "theme = \"x", wantErr: true, errHas: []string{"line 1"}},
 		{name: "unknown key", content: "them = \"x\"\n", wantErr: true, errHas: []string{"unknown key them"}},
 		{name: "wrong type", content: "theme = 3\n", wantErr: true, errHas: []string{"line 1", "theme"}},

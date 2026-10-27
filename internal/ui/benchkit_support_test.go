@@ -122,7 +122,9 @@ type benchConfig struct {
 	Width, Height          int
 	Start, Length, Stagger time.Duration
 	FPS                    int
-	Trace                  func(at time.Duration, drew bool) // tests only; nil in production
+	// Selection highlights every content row of the first pane for the whole run.
+	Selection bool
+	Trace     func(at time.Duration, drew bool) // tests only; nil in production
 }
 
 type benchResult struct {
@@ -243,6 +245,9 @@ func newBenchApp(cfg benchConfig, clk clock) (*App, []core.PaneID, error) {
 		return nil, nil, err
 	}
 
+	// A copy must never reach the operator's real clipboard tools.
+	app.clip.run = (&fakeRun{}).run
+
 	app.clock = clk
 	app.start = func(context.Context, term.Command, int, int) (proc, error) { return newReplayProc(), nil }
 
@@ -281,6 +286,19 @@ func newBenchApp(cfg benchConfig, clk clock) (*App, []core.PaneID, error) {
 	}
 
 	return app, ids, nil
+}
+
+// selectWholePane selects the pane's whole history and more, so every content
+// row stays highlighted in every frame while the replay scrolls.
+func selectWholePane(app *App, id core.PaneID) {
+	cols, _ := app.panes[id].size()
+
+	app.sel = &paneSelection{
+		pane:   id,
+		mode:   selStream,
+		anchor: stablePoint{},
+		head:   stablePoint{row: 1 << 40, col: cols - 1},
+	}
 }
 
 // holdEnd is when the pane's current sync hold ends.
@@ -344,6 +362,10 @@ func runBench(cfg benchConfig) (benchResult, error) {
 	for i, f := range feeds {
 		f.feedBefore(f.start)
 		send(ids[i], paneDirtyMsg{id: ids[i]})
+	}
+
+	if cfg.Selection {
+		selectWholePane(app, ids[0])
 	}
 
 	pr := newPresenter(cfg.Width, cfg.Height)

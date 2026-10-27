@@ -96,6 +96,11 @@ func run(ctx context.Context, env core.Env, configPath, recordDir string) (err e
 		Cwd:    cwd,
 		Icons:  cfg.IconsOn(),
 
+		FocusFollowsMouse: cfg.Mouse.FocusFollowsMouse,
+		CopyOnSelect:      cfg.Mouse.CopyOnSelect,
+		NoOSC52:           !cfg.Clipboard.OSC52On(),
+		NoNativeClipboard: !cfg.Clipboard.NativeOn(),
+
 		RecordDir: recordDir,
 	})
 	if err != nil {

@@ -1,0 +1,863 @@
+package ui
+
+import (
+	"encoding/base64"
+	"image/color"
+	"strings"
+	"testing"
+	"time"
+
+	tea "charm.land/bubbletea/v2"
+	uv "github.com/charmbracelet/ultraviolet"
+
+	"github.com/mhersson/muxreveal/internal/core"
+)
+
+// fakeClip routes the app's native clipboard writes to a recorder on a
+// deterministic Linux/Wayland environment, so no test runs a real tool.
+func fakeClip(a *App) *fakeRun {
+	f := &fakeRun{}
+	a.clip.run = f.run
+	a.clip.getenv = envFrom(map[string]string{"WAYLAND_DISPLAY": "wayland-0"})
+	a.clip.goos = "linux"
+
+	return f
+}
+
+// copiedText is the text of the first native write, "" when none happened.
+func copiedText(f *fakeRun) string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	if len(f.calls) == 0 {
+		return ""
+	}
+
+	return f.calls[0].stdin
+}
+
+func mdown(a *App, x, y int, b tea.MouseButton, mod tea.KeyMod) {
+	a.Update(tea.MouseClickMsg{X: x, Y: y, Button: b, Mod: mod})
+}
+
+func mmove(a *App, x, y int, b tea.MouseButton) {
+	a.Update(tea.MouseMotionMsg{X: x, Y: y, Button: b})
+}
+
+func mup(a *App, x, y int, b tea.MouseButton) {
+	a.Update(tea.MouseReleaseMsg{X: x, Y: y, Button: b})
+}
+
+// drag presses the left button at (x0, y0), moves to (x1, y1) and releases.
+func drag(a *App, x0, y0, x1, y1 int, mod tea.KeyMod) {
+	mdown(a, x0, y0, tea.MouseLeft, mod)
+	mmove(a, x1, y1, tea.MouseLeft)
+	mup(a, x1, y1, tea.MouseLeft)
+}
+
+func click(a *App, x, y int) {
+	mdown(a, x, y, tea.MouseLeft, 0)
+	mup(a, x, y, tea.MouseLeft)
+}
+
+// shellsWith is a 60x14 app with two side-by-side shells holding the given
+// text; p2 is focused.
+func shellsWith(t *testing.T, left, right string) (*App, map[core.PaneID]*fakeProc, *fakeRun) {
+	t.Helper()
+
+	a, procs := framedApp(t, 60, 14, shellSpec("/w/a", left), shellSpec("/w/b", right))
+
+	return a, procs, fakeClip(a)
+}
+
+const sampleText = "hello world\r\nsecond line\r\nthird"
+
+// copyNow runs the copy command and returns the copied text.
+func copyNow(a *App, f *fakeRun) string {
+	run(a, chord(a, 'y'))
+
+	return copiedText(f)
+}
+
+func selBgAt(a *App, x, y int) bool {
+	w, h := a.width, a.height
+	buf := uv.NewScreenBuffer(w, h)
+	uv.NewStyledString(a.View().Content).Draw(buf, buf.Bounds())
+
+	c := buf.CellAt(x, y)
+	if c == nil || c.Style.Bg == nil {
+		return false
+	}
+
+	return sameColor(c.Style.Bg, a.current().theme.UI.Selection)
+}
+
+func sameColor(p, q color.Color) bool {
+	pr, pg, pb, pa := p.RGBA()
+	qr, qg, qb, qa := q.RGBA()
+
+	return pr == qr && pg == qg && pb == qb && pa == qa
+}
+
+func TestDragSelectsAndHighlightsExactlyThoseCells(t *testing.T) {
+	a, _, f := shellsWith(t, sampleText, "RIGHTSIDE")
+	c := contentRect(a.layoutRects()["p1"])
+
+	drag(a, c.X, c.Y, c.X+4, c.Y, 0)
+
+	if a.sel == nil || a.sel.pane != "p1" {
+		t.Fatalf("sel = %+v, want a selection in p1", a.sel)
+	}
+
+	for x := c.X; x <= c.X+4; x++ {
+		if !selBgAt(a, x, c.Y) {
+			t.Errorf("cell (%d,%d) is not highlighted", x, c.Y)
+		}
+	}
+
+	for _, cell := range [][2]int{{c.X + 5, c.Y}, {c.X, c.Y + 1}, {c.X + 4, c.Y + 1}} {
+		if selBgAt(a, cell[0], cell[1]) {
+			t.Errorf("cell %v is highlighted, want plain", cell)
+		}
+	}
+
+	if got := copyNow(a, f); got != "hello" {
+		t.Errorf("copied %q, want %q", got, "hello")
+	}
+
+	if got := a.store.State().Tab().Focus; got != "p1" {
+		t.Errorf("focus = %q, want p1 (a press focuses the pane)", got)
+	}
+}
+
+func TestDragThatLeavesItsPaneStaysClamped(t *testing.T) {
+	r := contentRectOf
+	tests := []struct {
+		name string
+		to   func(a *App) (x, y int)
+		want string
+	}{
+		{"into the neighbour", func(a *App) (int, int) {
+			c := r(a, "p2")
+			return c.X + 3, r(a, "p1").Y + 1
+		}, "hello world\nsecond line"},
+		{"onto the header", func(a *App) (int, int) {
+			c := r(a, "p2")
+			return c.X + 1, c.Y - 1
+		}, "hello world"},
+		{"onto the status bar", func(a *App) (int, int) {
+			return r(a, "p1").X + 2, a.height - 1
+		}, "hello world\nsecond line\nthird"},
+		{"onto the tab bar", func(a *App) (int, int) {
+			return r(a, "p1").X + 2, 0
+		}, "hel"},
+		{"off screen", func(a *App) (int, int) {
+			return -9, -9
+		}, "h"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			a, _, f := shellsWith(t, sampleText, "RIGHTSIDE")
+			c := r(a, "p1")
+			x, y := tt.to(a)
+
+			drag(a, c.X, c.Y, x, y, 0)
+
+			got := copyNow(a, f)
+			if strings.Contains(got, "RIGHT") {
+				t.Fatalf("copied %q, includes the neighbour", got)
+			}
+
+			want := tt.want
+			if tt.name == "onto the status bar" {
+				// The rows below the text are blank lines up to the pane's last row.
+				want += strings.Repeat("\n", c.H-3)
+			}
+
+			if got != want {
+				t.Errorf("copied %q, want %q", got, want)
+			}
+
+			n := r(a, "p2")
+			for y := n.Y; y < n.Y+n.H; y++ {
+				for x := n.X; x < n.X+n.W; x++ {
+					if selBgAt(a, x, y) {
+						t.Fatalf("neighbour cell (%d,%d) is highlighted", x, y)
+					}
+				}
+			}
+		})
+	}
+}
+
+func contentRectOf(a *App, id core.PaneID) core.Rect { return contentRect(a.layoutRects()[id]) }
+
+func trackingShells(t *testing.T) (*App, map[core.PaneID]*fakeProc, *fakeRun) {
+	t.Helper()
+
+	a, procs, f := shellsWith(t, sampleText, "")
+	feedAndWait(t, a.panes["p1"], procs["p1"], "\x1b[?1000h\x1b[?1006h")
+
+	return a, procs, f
+}
+
+// settle sends a wheel notch and waits for its bytes: everything forwarded
+// before it has reached the process by then.
+func settle(t *testing.T, a *App, fp *fakeProc, c core.Rect) string {
+	t.Helper()
+
+	wheelAt(a, c.X, c.Y, tea.MouseWheelUp)
+
+	want := "\x1b[<64;1;1M"
+	eventually(t, "probe wheel", func() bool { return strings.HasSuffix(fp.sent(), want) })
+
+	return strings.TrimSuffix(fp.sent(), want)
+}
+
+func TestClickInTrackingPaneIsForwardedOnRelease(t *testing.T) {
+	a, procs, _ := trackingShells(t)
+	c := contentRectOf(a, "p1")
+
+	mdown(a, c.X+4, c.Y+2, tea.MouseLeft, 0)
+
+	if got := settle(t, a, procs["p1"], c); got != "" {
+		t.Fatalf("sent %q on press, want nothing until release", got)
+	}
+
+	mup(a, c.X+4, c.Y+2, tea.MouseLeft)
+
+	want := "\x1b[<0;5;3M\x1b[<0;5;3m"
+	eventually(t, "click", func() bool { return strings.Contains(procs["p1"].sent(), want) })
+
+	if a.sel != nil {
+		t.Errorf("a plain click made a selection %+v", a.sel)
+	}
+
+	if got := a.store.State().Tab().Focus; got != "p1" {
+		t.Errorf("focus = %q, want p1", got)
+	}
+}
+
+func TestDragInTrackingPaneSelectsAndSendsNothing(t *testing.T) {
+	a, procs, f := trackingShells(t)
+	c := contentRectOf(a, "p1")
+
+	drag(a, c.X, c.Y, c.X+4, c.Y, 0)
+
+	if got := settle(t, a, procs["p1"], c); got != "" {
+		t.Errorf("sent %q for a drag, want nothing", got)
+	}
+
+	if got := copyNow(a, f); got != "hello" {
+		t.Errorf("copied %q, want hello", got)
+	}
+}
+
+func TestRightButtonIsForwardedAndNeverSelects(t *testing.T) {
+	a, procs, _ := trackingShells(t)
+	c := contentRectOf(a, "p1")
+
+	mdown(a, c.X+1, c.Y+1, tea.MouseRight, 0)
+	mmove(a, c.X+5, c.Y+1, tea.MouseRight)
+	mup(a, c.X+5, c.Y+1, tea.MouseRight)
+
+	eventually(t, "right press", func() bool { return strings.Contains(procs["p1"].sent(), "\x1b[<2;2;2M") })
+	eventually(t, "right release", func() bool { return strings.Contains(procs["p1"].sent(), "\x1b[<2;6;2m") })
+
+	if a.sel != nil {
+		t.Errorf("a right-button drag selected %+v", a.sel)
+	}
+}
+
+func TestNewPressReleasesAHeldForwardedButton(t *testing.T) {
+	a, procs, _ := trackingShells(t)
+	c := contentRectOf(a, "p1")
+
+	mdown(a, c.X+1, c.Y+1, tea.MouseMiddle, 0)
+	mdown(a, c.X+3, c.Y+2, tea.MouseLeft, 0)
+
+	eventually(t, "middle release", func() bool { return strings.Contains(procs["p1"].sent(), "\x1b[<1;2;2m") })
+
+	if a.mouse.fwd != nil {
+		t.Errorf("forwarded button still held: %+v", *a.mouse.fwd)
+	}
+}
+
+func TestModalOpeningReleasesAHeldForwardedButton(t *testing.T) {
+	a, procs, _ := trackingShells(t)
+	c := contentRectOf(a, "p1")
+
+	mdown(a, c.X+1, c.Y+1, tea.MouseRight, 0)
+	a.pending = true
+	mmove(a, c.X+4, c.Y+1, tea.MouseRight)
+
+	eventually(t, "right release", func() bool { return strings.Contains(procs["p1"].sent(), "\x1b[<2;2;2m") })
+
+	if a.mouse.fwd != nil {
+		t.Errorf("forwarded button still held: %+v", *a.mouse.fwd)
+	}
+}
+
+func TestDoubleAndTripleClickSelectWordAndLine(t *testing.T) {
+	a, _, f := shellsWith(t, sampleText, "")
+	clk := &fakeClock{t: time.Unix(1000, 0)}
+	a.clock = clk
+	c := contentRectOf(a, "p1")
+	x, y := c.X+8, c.Y
+
+	click(a, x, y)
+
+	if a.sel != nil {
+		t.Fatalf("one click selected %+v", a.sel)
+	}
+
+	clk.Advance(100 * time.Millisecond)
+	click(a, x, y)
+
+	if got := copyNow(a, f); got != "world" {
+		t.Errorf("double click copied %q, want world", got)
+	}
+
+	clk.Advance(100 * time.Millisecond)
+	click(a, x, y)
+
+	f.mu.Lock()
+	f.calls = nil
+	f.mu.Unlock()
+
+	if got := copyNow(a, f); got != "hello world" {
+		t.Errorf("triple click copied %q, want the line", got)
+	}
+
+	clk.Advance(100 * time.Millisecond)
+	click(a, x, y)
+
+	if a.sel != nil {
+		t.Errorf("a fourth click starts again at one and clears; sel = %+v", a.sel)
+	}
+}
+
+func TestSlowOrMovedClicksDoNotCount(t *testing.T) {
+	a, _, _ := shellsWith(t, sampleText, "")
+	clk := &fakeClock{t: time.Unix(1000, 0)}
+	a.clock = clk
+	c := contentRectOf(a, "p1")
+
+	click(a, c.X+8, c.Y)
+	clk.Advance(500 * time.Millisecond)
+	click(a, c.X+8, c.Y)
+
+	if a.sel != nil {
+		t.Errorf("clicks 500 ms apart selected %+v", a.sel)
+	}
+
+	clk.Advance(100 * time.Millisecond)
+	click(a, c.X+9, c.Y)
+
+	if a.sel != nil {
+		t.Errorf("clicks on different cells selected %+v", a.sel)
+	}
+}
+
+func TestAltDragSelectsABlock(t *testing.T) {
+	a, _, f := shellsWith(t, "abcdef\r\nghijkl\r\nmnopqr", "")
+	c := contentRectOf(a, "p1")
+
+	drag(a, c.X+1, c.Y, c.X+3, c.Y+2, tea.ModAlt)
+
+	if got := copyNow(a, f); got != "bcd\nhij\nnop" {
+		t.Errorf("copied %q, want the block", got)
+	}
+}
+
+func TestHeaderClickFocusesOnly(t *testing.T) {
+	a, procs, _ := trackingShells(t)
+	r := a.layoutRects()["p1"]
+
+	click(a, r.X+2, r.Y)
+
+	if got := a.store.State().Tab().Focus; got != "p1" {
+		t.Errorf("focus = %q, want p1", got)
+	}
+
+	if a.sel != nil {
+		t.Errorf("header click selected %+v", a.sel)
+	}
+
+	if got := settle(t, a, procs["p1"], contentRect(r)); got != "" {
+		t.Errorf("header click reached the guest: %q", got)
+	}
+}
+
+func TestSeparatorAndStatusClicksAreIgnored(t *testing.T) {
+	a, _, _ := shellsWith(t, sampleText, "")
+	r1 := a.layoutRects()["p1"]
+
+	// The column right of p1 is the separator between the two panes.
+	if h := a.hit(r1.X+r1.W, r1.Y+3); h.area != hitNone {
+		t.Fatalf("separator hit = %+v, want none", h)
+	}
+
+	click(a, r1.X+r1.W, r1.Y+3)
+	click(a, 5, a.height-1)
+
+	if got := a.store.State().Tab().Focus; got != "p2" {
+		t.Errorf("focus = %q, want p2 unchanged", got)
+	}
+}
+
+func TestTabClickSwitchesTab(t *testing.T) {
+	a, _, _ := shellsWith(t, sampleText, "")
+
+	if err := a.dispatch(core.NewTab{Kind: core.KindShell, Cwd: "/w/c"}); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := a.store.State().Active; got != 1 {
+		t.Fatalf("active = %d, want 1", got)
+	}
+
+	plan := planBar(a.tabInfos(), 1, a.trayModules(), a.width, a.icons)
+	x := segWidth(a.tabInfos()[plan.tabs[0].idx], plan.tabs[0].level, a.icons) + 1 - 2
+
+	click(a, x, 0)
+
+	if got := a.store.State().Active; got != 0 {
+		t.Errorf("active = %d after clicking tab 1, want 0", got)
+	}
+
+	// The edge cell after the segment is not a tab.
+	edge := segWidth(a.tabInfos()[0], plan.tabs[0].level, a.icons)
+	click(a, edge, 0)
+
+	if got := a.store.State().Active; got != 0 {
+		t.Errorf("active = %d after clicking the edge, want 0", got)
+	}
+}
+
+func TestCopyWithoutSelectionDoesNothing(t *testing.T) {
+	a, _, f := shellsWith(t, sampleText, "")
+
+	if got := copyNow(a, f); got != "" {
+		t.Errorf("copied %q with no selection", got)
+	}
+}
+
+func TestCopyKeepsTheSelection(t *testing.T) {
+	a, _, f := shellsWith(t, sampleText, "")
+	c := contentRectOf(a, "p1")
+
+	drag(a, c.X, c.Y, c.X+4, c.Y, 0)
+	copyNow(a, f)
+
+	if a.sel == nil {
+		t.Error("copy cleared the selection")
+	}
+}
+
+func TestGuestOSC52ReachesTheClipboard(t *testing.T) {
+	a, procs, f := shellsWith(t, sampleText, "")
+	pm := newPump(t)
+
+	osc := "\x1b]52;c;" + base64.StdEncoding.EncodeToString([]byte("first")) + "\x07" +
+		"\x1b]52;c;" + base64.StdEncoding.EncodeToString([]byte("from the guest")) + "\x07"
+	feedAndWait(t, a.panes["p1"], procs["p1"], osc)
+
+	_, cmd := a.Update(paneDirtyMsg{id: "p1"})
+	pm.run(cmd)
+
+	eventually(t, "native write", func() bool { return copiedText(f) != "" })
+
+	if got := copiedText(f); got != "from the guest" {
+		t.Errorf("copied %q, want the last write of the chunk", got)
+	}
+}
+
+func TestGuestOSC52FromAHiddenTabReachesTheClipboard(t *testing.T) {
+	a, procs, f := shellsWith(t, sampleText, "")
+	pm := newPump(t)
+
+	if err := a.dispatch(core.NewTab{Kind: core.KindShell, Cwd: "/w/c"}); err != nil {
+		t.Fatal(err)
+	}
+
+	osc := "\x1b]52;c;" + base64.StdEncoding.EncodeToString([]byte("hidden")) + "\x07"
+	feedAndWait(t, a.panes["p1"], procs["p1"], osc)
+
+	_, cmd := a.Update(paneDirtyMsg{id: "p1"})
+	pm.run(cmd)
+
+	eventually(t, "native write", func() bool { return copiedText(f) != "" })
+}
+
+// modalCases opens each kind of UI that owns the pointer.
+func modalCases() []struct {
+	name string
+	open func(a *App)
+} {
+	return []struct {
+		name string
+		open func(a *App)
+	}{
+		{"confirm", func(a *App) {
+			a.openConfirm(confirm{action: "x", prompt: "x?", yes: func(*App) tea.Cmd { return nil }})
+		}},
+		{"prompt", func(a *App) { a.renameTab() }},
+		{"palette", func(a *App) { a.openCommandPalette() }},
+		{"leader pending", func(a *App) { press(a, keyLeader) }},
+		{"which-key popup", func(a *App) {
+			press(a, keyLeader)
+			a.popup = true
+		}},
+	}
+}
+
+func TestMouseIsIgnoredUnderModalUI(t *testing.T) {
+	for _, m := range modalCases() {
+		t.Run(m.name, func(t *testing.T) {
+			a, procs, _ := trackingShells(t)
+			c := contentRectOf(a, "p1")
+
+			if err := a.dispatch(core.NewTab{Kind: core.KindShell, Cwd: "/w/c"}); err != nil {
+				t.Fatal(err)
+			}
+
+			if err := a.dispatch(core.SelectTab{Index: 0}); err != nil {
+				t.Fatal(err)
+			}
+
+			if err := a.dispatch(core.FocusPane{ID: "p2"}); err != nil {
+				t.Fatal(err)
+			}
+
+			m.open(a)
+
+			drag(a, c.X, c.Y, c.X+4, c.Y, 0)
+			click(a, c.X+1, c.Y+1)
+			wheelAt(a, c.X+1, c.Y+1, tea.MouseWheelUp)
+			click(a, 1, 0)
+
+			if a.sel != nil {
+				t.Errorf("a selection appeared: %+v", a.sel)
+			}
+
+			if got := a.store.State().Tab().Focus; got != "p2" {
+				t.Errorf("focus = %q, want p2", got)
+			}
+
+			if got := a.store.State().Active; got != 0 {
+				t.Errorf("active tab = %d, want 0", got)
+			}
+
+			// Drop the modal so the probe is not swallowed, then check nothing was sent.
+			a.pending, a.popup, a.confirm, a.prompt, a.overlay = false, false, nil, nil, nil
+			if got := settle(t, a, procs["p1"], c); got != "" {
+				t.Errorf("sent %q to the guest", got)
+			}
+		})
+	}
+}
+
+func TestKeyToTheSelectionPaneClearsIt(t *testing.T) {
+	a, _, _ := shellsWith(t, sampleText, "")
+	c := contentRectOf(a, "p1")
+
+	drag(a, c.X, c.Y, c.X+4, c.Y, 0)
+	press(a, keyLeader, keyRune('y'))
+	press(a, keyLeader, keyRune('w'))
+
+	if a.sel == nil {
+		t.Fatal("leader commands cleared the selection")
+	}
+
+	press(a, keyRune('x'))
+
+	if a.sel != nil {
+		t.Errorf("sel = %+v after a key to its pane, want nil", a.sel)
+	}
+}
+
+func TestKeyToAnotherPaneKeepsTheSelection(t *testing.T) {
+	a, _, _ := shellsWith(t, sampleText, "")
+	c := contentRectOf(a, "p1")
+
+	drag(a, c.X, c.Y, c.X+4, c.Y, 0)
+
+	if err := a.dispatch(core.FocusPane{ID: "p2"}); err != nil {
+		t.Fatal(err)
+	}
+
+	press(a, keyRune('x'))
+
+	if a.sel == nil {
+		t.Error("a key to p2 cleared p1's selection")
+	}
+}
+
+func TestPasteToTheSelectionPaneClearsIt(t *testing.T) {
+	a, _, _ := shellsWith(t, sampleText, "")
+	c := contentRectOf(a, "p1")
+
+	drag(a, c.X, c.Y, c.X+4, c.Y, 0)
+	a.Update(tea.PasteMsg{Content: "pasted"})
+
+	if a.sel != nil {
+		t.Errorf("sel = %+v after a paste, want nil", a.sel)
+	}
+}
+
+func TestClickClearsAndDragReplaces(t *testing.T) {
+	a, _, f := shellsWith(t, sampleText, "RIGHTSIDE")
+	c := contentRectOf(a, "p1")
+
+	drag(a, c.X, c.Y, c.X+4, c.Y, 0)
+	click(a, contentRectOf(a, "p2").X+1, c.Y)
+
+	if a.sel != nil {
+		t.Errorf("a click in another pane left %+v", a.sel)
+	}
+
+	drag(a, c.X, c.Y, c.X+4, c.Y, 0)
+	drag(a, c.X+6, c.Y, c.X+10, c.Y, 0)
+
+	if got := copyNow(a, f); got != "world" {
+		t.Errorf("copied %q, want the second drag's text", got)
+	}
+}
+
+func TestSelectionSurvivesTabSwitchAndIsHiddenMeanwhile(t *testing.T) {
+	a, _, _ := shellsWith(t, sampleText, "")
+	c := contentRectOf(a, "p1")
+
+	drag(a, c.X, c.Y, c.X+4, c.Y, 0)
+
+	if err := a.dispatch(core.NewTab{Kind: core.KindShell, Cwd: "/w/c"}); err != nil {
+		t.Fatal(err)
+	}
+
+	if a.sel == nil {
+		t.Fatal("a tab switch cleared the selection")
+	}
+
+	if err := a.dispatch(core.SelectTab{Index: 0}); err != nil {
+		t.Fatal(err)
+	}
+
+	if !selBgAt(a, c.X, c.Y) {
+		t.Error("selection is not drawn after returning to its tab")
+	}
+}
+
+func TestClosingThePaneClearsItsSelection(t *testing.T) {
+	a, _, _ := shellsWith(t, sampleText, "")
+	c := contentRectOf(a, "p1")
+
+	drag(a, c.X, c.Y, c.X+4, c.Y, 0)
+	a.closePane("p1")
+
+	if a.sel != nil {
+		t.Errorf("sel = %+v after its pane closed", a.sel)
+	}
+}
+
+func TestResizeAndAltScreenClearTheSelection(t *testing.T) {
+	t.Run("resize", func(t *testing.T) {
+		a, _, _ := shellsWith(t, sampleText, "")
+		c := contentRectOf(a, "p1")
+
+		drag(a, c.X, c.Y, c.X+4, c.Y, 0)
+		a.Update(tea.WindowSizeMsg{Width: 70, Height: 16})
+
+		if a.sel != nil {
+			t.Errorf("sel = %+v after a resize", a.sel)
+		}
+	})
+
+	t.Run("alt screen", func(t *testing.T) {
+		a, procs, _ := shellsWith(t, sampleText, "")
+		c := contentRectOf(a, "p1")
+
+		drag(a, c.X, c.Y, c.X+4, c.Y, 0)
+		feedAndWait(t, a.panes["p1"], procs["p1"], "\x1b[?1049h")
+		a.renderPane(a.panes["p1"])
+
+		if a.sel != nil {
+			t.Errorf("sel = %+v after the alt screen opened", a.sel)
+		}
+	})
+}
+
+func TestSelectionStaysOnItsTextWhileOutputScrolls(t *testing.T) {
+	a, procs, f := shellsWith(t, manyLines(30), "")
+	p := a.panes["p1"]
+	c := contentRectOf(a, "p1")
+
+	drag(a, c.X, c.Y, c.X+5, c.Y, 0)
+	want := copyNow(a, f)
+
+	feedLines(t, p, procs["p1"], 30, 40)
+
+	f.mu.Lock()
+	f.calls = nil
+	f.mu.Unlock()
+
+	if got := copyNow(a, f); got != want {
+		t.Errorf("after output copied %q, want %q", got, want)
+	}
+}
+
+func TestWheelUsesTheSharedHitTest(t *testing.T) {
+	a, _, _ := shellsWith(t, manyLines(30), "")
+	r := a.layoutRects()["p1"]
+
+	// The header row is not content: the wheel there does nothing.
+	wheelAt(a, r.X+1, r.Y, tea.MouseWheelUp)
+
+	if got := a.panes["p1"].linesAbove(); got != 0 {
+		t.Errorf("wheel on a header scrolled %d lines", got)
+	}
+}
+
+func TestHitAreas(t *testing.T) {
+	a, _, _ := shellsWith(t, sampleText, "")
+	r := a.layoutRects()["p1"]
+	c := contentRect(r)
+
+	tests := []struct {
+		name string
+		x, y int
+		area hitArea
+		pane core.PaneID
+	}{
+		{"content", c.X + 2, c.Y + 1, hitContent, "p1"},
+		{"header", r.X + 1, r.Y, hitHeader, "p1"},
+		{"header corner is shared", r.X - 1, r.Y, hitNone, ""},
+		{"status bar", 3, a.height - 1, hitNone, ""},
+		{"tab", 2, 0, hitTab, ""},
+		{"off screen", -1, -1, hitNone, ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := a.hit(tt.x, tt.y)
+			if h.area != tt.area || h.pane != tt.pane {
+				t.Errorf("hit(%d,%d) = %+v, want area %v pane %q", tt.x, tt.y, h, tt.area, tt.pane)
+			}
+		})
+	}
+
+	if h := a.hit(c.X+2, c.Y+1); h.local != (point{row: 1, col: 2}) {
+		t.Errorf("local = %+v, want row 1 col 2", h.local)
+	}
+}
+
+func TestModalOpeningMidDragDropsTheHeldButton(t *testing.T) {
+	a, _, _ := shellsWith(t, sampleText, "")
+	c := contentRectOf(a, "p1")
+
+	mdown(a, c.X, c.Y, tea.MouseLeft, 0)
+	a.openConfirm(confirm{action: "x", prompt: "x?", yes: func(*App) tea.Cmd { return nil }})
+	mup(a, c.X, c.Y, tea.MouseLeft)
+
+	if a.mouse.press != nil || a.mouse.fwd != nil {
+		t.Errorf("held button survived a modal: %+v %+v", a.mouse.press, a.mouse.fwd)
+	}
+}
+
+// drawnRow is the text on screen row y across the content rect c.
+func drawnRow(a *App, c core.Rect, y int) string {
+	buf := uv.NewScreenBuffer(a.width, a.height)
+	uv.NewStyledString(a.View().Content).Draw(buf, buf.Bounds())
+
+	var sb strings.Builder
+
+	for x := c.X; x < c.X+c.W; x++ {
+		if cell := buf.CellAt(x, y); cell != nil && cell.Content != "" {
+			sb.WriteString(cell.Content)
+		} else {
+			sb.WriteByte(' ')
+		}
+	}
+
+	return strings.TrimRight(sb.String(), " ")
+}
+
+func TestHighlightFollowsDrawnRowsDuringSyncHold(t *testing.T) {
+	a, procs, _ := shellsWith(t, sampleText, "")
+	p := a.panes["p1"]
+	c := contentRectOf(a, "p1")
+
+	drag(a, c.X, c.Y, c.X+4, c.Y, 0)
+	feedAndWait(t, p, procs["p1"], "\x1b[?2026h\x1b[1;1HXXXXXXXXXXX")
+	a.renderPane(p)
+
+	if got := drawnRow(a, c, c.Y); got != "hello world" {
+		t.Fatalf("selected row drawn as %q, want the held frame %q", got, "hello world")
+	}
+
+	for x := c.X; x <= c.X+4; x++ {
+		if !selBgAt(a, x, c.Y) {
+			t.Errorf("cell (%d,%d) lost its highlight", x, c.Y)
+		}
+	}
+}
+
+func TestHighlightStaysOnDrawnTextWhenOutputIsNotRenderedYet(t *testing.T) {
+	a, procs, _ := shellsWith(t, manyLines(30), "")
+	p := a.panes["p1"]
+	c := contentRectOf(a, "p1")
+
+	want := drawnRow(a, c, c.Y+2)
+
+	drag(a, c.X, c.Y+2, c.X+5, c.Y+2, 0)
+	feedAndWait(t, p, procs["p1"], manyLines(5))
+
+	// No render: the rows drawn are the old ones, and so must be the highlight.
+	if got := drawnRow(a, c, c.Y+2); got != want {
+		t.Fatalf("row drawn as %q, want %q", got, want)
+	}
+
+	for x := c.X; x <= c.X+5; x++ {
+		if !selBgAt(a, x, c.Y+2) {
+			t.Errorf("cell (%d,%d) lost its highlight", x, c.Y+2)
+		}
+	}
+
+	if selBgAt(a, c.X, c.Y+3) || selBgAt(a, c.X, c.Y+1) {
+		t.Error("the highlight spilled onto a neighbouring row")
+	}
+}
+
+func TestMultiClickInTrackingPaneSelectsAndForwardsOnlyTheFirstClick(t *testing.T) {
+	tests := []struct {
+		name   string
+		clicks int
+		want   string
+	}{
+		{"double", 2, "world"},
+		{"triple", 3, "hello world"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			a, procs, f := trackingShells(t)
+			a.clock = &fakeClock{t: time.Unix(1000, 0)}
+			c := contentRectOf(a, "p1")
+
+			for range tt.clicks {
+				click(a, c.X+8, c.Y)
+				a.clock.(*fakeClock).Advance(100 * time.Millisecond)
+			}
+
+			if got := copyNow(a, f); got != tt.want {
+				t.Errorf("copied %q, want %q", got, tt.want)
+			}
+
+			one := "\x1b[<0;9;1M\x1b[<0;9;1m"
+			if got := settle(t, a, procs["p1"], c); got != one {
+				t.Errorf("guest got %q, want exactly the first click %q", got, one)
+			}
+		})
+	}
+}

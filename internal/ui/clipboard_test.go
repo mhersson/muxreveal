@@ -1,0 +1,210 @@
+package ui
+
+import (
+	"bytes"
+	"context"
+	"errors"
+	"log/slog"
+	"os/exec"
+	"reflect"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	tea "charm.land/bubbletea/v2"
+)
+
+func envFrom(m map[string]string) func(string) string {
+	return func(k string) string { return m[k] }
+}
+
+func TestNativeCommands(t *testing.T) {
+	tests := []struct {
+		name string
+		env  map[string]string
+		goos string
+		want [][]string
+	}{
+		{"darwin", nil, "darwin", [][]string{{"pbcopy"}}},
+		{"wayland", map[string]string{"WAYLAND_DISPLAY": "wayland-0", "DISPLAY": ":0"}, "linux",
+			[][]string{{"wl-copy"}, {"wl-copy", "--primary"}}},
+		{"x11", map[string]string{"DISPLAY": ":0"}, "linux",
+			[][]string{{"xclip", "-selection", "clipboard"}, {"xclip", "-selection", "primary"}}},
+		{"no display", nil, "linux", nil},
+		{"ssh connection", map[string]string{"SSH_CONNECTION": "a b c d", "DISPLAY": ":0"}, "linux", nil},
+		{"ssh tty", map[string]string{"SSH_TTY": "/dev/pts/1", "WAYLAND_DISPLAY": "w"}, "linux", nil},
+		{"ssh darwin", map[string]string{"SSH_CONNECTION": "a"}, "darwin", nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := nativeCommands(envFrom(tt.env), tt.goos)
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Fatalf("nativeCommands = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+// flatten runs a Cmd and expands a BatchMsg into the messages of its inner
+// Cmds. Native write Cmds return nil and are executed for their side effect.
+func flatten(cmd tea.Cmd) []tea.Msg {
+	if cmd == nil {
+		return nil
+	}
+	msg := cmd()
+	if b, ok := msg.(tea.BatchMsg); ok {
+		var out []tea.Msg
+		for _, c := range b {
+			out = append(out, flatten(c)...)
+		}
+		return out
+	}
+	return []tea.Msg{msg}
+}
+
+type runCall struct {
+	argv  []string
+	stdin string
+}
+
+type fakeRun struct {
+	mu    sync.Mutex
+	calls []runCall
+	err   func(argv []string) error
+}
+
+func (f *fakeRun) run(_ context.Context, argv []string, stdin string) error {
+	f.mu.Lock()
+	f.calls = append(f.calls, runCall{argv, stdin})
+	f.mu.Unlock()
+	if f.err != nil {
+		return f.err(argv)
+	}
+	return nil
+}
+
+func newTestClipboard(cfg clipboardConfig, env map[string]string, goos string, run func(context.Context, []string, string) error) (*clipboard, *bytes.Buffer) {
+	var buf bytes.Buffer
+	log := slog.New(slog.NewTextHandler(&buf, nil))
+	c := newClipboard(cfg, envFrom(env), goos, log)
+	c.run = run
+	return c, &buf
+}
+
+func TestClipboardCopy(t *testing.T) {
+	const text = "hello"
+	osc := tea.SetClipboard(text)()
+	prim := tea.SetPrimaryClipboard(text)()
+	wayland := map[string]string{"WAYLAND_DISPLAY": "w"}
+
+	tests := []struct {
+		name      string
+		cfg       clipboardConfig
+		env       map[string]string
+		goos      string
+		text      string
+		wantMsgs  []tea.Msg
+		wantCalls []runCall
+	}{
+		{"empty text", clipboardConfig{true, true}, wayland, "linux", "", nil, nil},
+		{"linux wayland", clipboardConfig{true, true}, wayland, "linux", text,
+			[]tea.Msg{osc, prim, nil},
+			[]runCall{{[]string{"wl-copy"}, text}, {[]string{"wl-copy", "--primary"}, text}}},
+		{"darwin", clipboardConfig{true, true}, nil, "darwin", text,
+			[]tea.Msg{osc, nil}, []runCall{{[]string{"pbcopy"}, text}}},
+		{"ssh keeps osc52", clipboardConfig{true, true}, map[string]string{"SSH_CONNECTION": "x", "DISPLAY": ":0"}, "linux", text,
+			[]tea.Msg{osc, prim}, nil},
+		{"osc52 off", clipboardConfig{false, true}, map[string]string{"DISPLAY": ":0"}, "linux", text,
+			[]tea.Msg{nil},
+			[]runCall{{[]string{"xclip", "-selection", "clipboard"}, text}, {[]string{"xclip", "-selection", "primary"}, text}}},
+		{"native off", clipboardConfig{true, false}, wayland, "linux", text, []tea.Msg{osc, prim}, nil},
+		{"nothing to send", clipboardConfig{false, true}, nil, "linux", text, nil, nil},
+		{"both off", clipboardConfig{false, false}, wayland, "linux", text, nil, nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fr := &fakeRun{}
+			c, _ := newTestClipboard(tt.cfg, tt.env, tt.goos, fr.run)
+			cmd := c.copy(tt.text)
+			if len(tt.wantMsgs) == 0 {
+				if cmd != nil {
+					t.Fatalf("copy returned a Cmd, want nil")
+				}
+				return
+			}
+			got := flatten(cmd)
+			if !reflect.DeepEqual(got, tt.wantMsgs) {
+				t.Fatalf("msgs = %#v, want %#v", got, tt.wantMsgs)
+			}
+			if !reflect.DeepEqual(fr.calls, tt.wantCalls) {
+				t.Fatalf("calls = %v, want %v", fr.calls, tt.wantCalls)
+			}
+		})
+	}
+}
+
+func TestClipboardNativeTimeout(t *testing.T) {
+	run := func(ctx context.Context, _ []string, _ string) error {
+		<-ctx.Done()
+		return ctx.Err()
+	}
+	c, buf := newTestClipboard(clipboardConfig{Native: true}, map[string]string{"WAYLAND_DISPLAY": "w"}, "linux", run)
+	c.timeout = 20 * time.Millisecond
+
+	done := make(chan struct{})
+	go func() {
+		flatten(c.copy("x"))
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("native write Cmd did not return after the timeout")
+	}
+	if got := strings.Count(buf.String(), "context deadline exceeded"); got != 2 {
+		t.Fatalf("timeouts logged %d times, want 2 (one per argv):\n%s", got, buf.String())
+	}
+}
+
+func TestClipboardMissingToolLoggedOnce(t *testing.T) {
+	fr := &fakeRun{err: func(argv []string) error {
+		if argv[0] == "wl-copy" {
+			return &exec.Error{Name: "wl-copy", Err: exec.ErrNotFound}
+		}
+		return nil
+	}}
+	c, buf := newTestClipboard(clipboardConfig{OSC52: true, Native: true}, map[string]string{"WAYLAND_DISPLAY": "w"}, "linux", fr.run)
+
+	for range 3 {
+		msgs := flatten(c.copy("x"))
+		if len(msgs) < 2 || msgs[0] != tea.SetClipboard("x")() {
+			t.Fatalf("OSC 52 must still go out, got %#v", msgs)
+		}
+	}
+	if got := strings.Count(buf.String(), "level=WARN"); got != 1 {
+		t.Fatalf("missing tool logged %d times, want 1:\n%s", got, buf.String())
+	}
+	if len(fr.calls) != 6 {
+		t.Fatalf("run called %d times, want 6 (every argv still attempted)", len(fr.calls))
+	}
+}
+
+func TestClipboardOtherFailuresLoggedEachTime(t *testing.T) {
+	fr := &fakeRun{err: func([]string) error { return errors.New("exit status 1") }}
+	c, buf := newTestClipboard(clipboardConfig{Native: true}, nil, "darwin", fr.run)
+	for range 2 {
+		flatten(c.copy("x"))
+	}
+	if got := strings.Count(buf.String(), "exit status 1"); got != 2 {
+		t.Fatalf("failure logged %d times, want 2:\n%s", got, buf.String())
+	}
+}
+
+// Only a binary that cannot exist runs, so no real clipboard tool is touched.
+func TestRunNativeReportsAMissingTool(t *testing.T) {
+	err := runNative(context.Background(), []string{"muxreveal-no-such-clipboard-tool", "-x"}, "text")
+	if !errors.Is(err, exec.ErrNotFound) {
+		t.Errorf("runNative error = %v, want exec.ErrNotFound", err)
+	}
+}

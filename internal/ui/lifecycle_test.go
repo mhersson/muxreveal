@@ -103,6 +103,9 @@ func lifeApp(t *testing.T) (*App, *starts) {
 		t.Fatalf("New() error = %v", err)
 	}
 
+	// A copy must never reach the operator's real clipboard tools.
+	a.clip.run = (&fakeRun{}).run
+
 	st := &starts{}
 	a.start = st.start
 
@@ -819,6 +822,9 @@ func newRealApp(t *testing.T, scripts ...string) *realApp {
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
+
+	// A copy must never reach the operator's real clipboard tools.
+	a.clip.run = (&fakeRun{}).run
 
 	r := &realApp{App: a}
 

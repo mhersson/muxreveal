@@ -95,6 +95,9 @@ func TestShellFlow(t *testing.T) {
 		t.Fatalf("New() error = %v", err)
 	}
 
+	// A copy must never reach the operator's real clipboard tools.
+	app.clip.run = (&fakeRun{}).run
+
 	var mu sync.Mutex
 
 	var pids []int
@@ -173,6 +176,9 @@ func TestTabFlow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
+
+	// A copy must never reach the operator's real clipboard tools.
+	app.clip.run = (&fakeRun{}).run
 
 	var mu sync.Mutex
 

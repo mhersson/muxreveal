@@ -89,6 +89,50 @@ type statusMode struct {
 	icon, text string
 }
 
+// statusModeOf picks the mode segment for the current input state.
+func (a *App) statusModeOf(ui theme.UI) statusMode {
+	switch {
+	case a.prompt != nil && a.prompt.kind == promptSearch:
+		return statusMode{bg: ui.Info, icon: iconSearch, text: "Search"}
+	case a.prompt != nil:
+		return statusMode{bg: ui.Accent, icon: iconRename, text: "Rename tab"}
+	case a.copy != nil:
+		return statusMode{bg: ui.Info, icon: iconCopy, text: "COPY"}
+	case a.pending:
+		return statusMode{bg: ui.Warning, icon: iconLeader, text: a.keymap.leader}
+	}
+
+	return statusMode{bg: ui.Accent, icon: iconApp, text: "MuxReveal"}
+}
+
+// modeLabel is the mode segment's text and the cells it takes including the
+// edge and the blank after it.
+func (a *App) modeLabel(m statusMode) (label string, cells int) {
+	label = " "
+	if a.icons {
+		label += m.icon + " "
+	}
+
+	label += m.text + " "
+	cells = ansi.StringWidth(label) + 1
+
+	if a.icons {
+		cells++
+	}
+
+	return label, cells
+}
+
+// searchCursorX is the column of the search input's cursor in the status bar;
+// false when the text leaves no room for it.
+func (a *App) searchCursorX() (int, bool) {
+	_, cells := a.modeLabel(a.statusModeOf(a.current().theme.UI))
+	in := a.prompt.input
+	x := cells + ansi.StringWidth(printable(string([]rune(in.Value())[:in.Position()])))
+
+	return x, x < a.width
+}
+
 // statusBar draws the last row: the mode segment, the key legend and, right
 // aligned, the notice or the focused pane's cwd. It is exactly width cells.
 func (a *App) statusBar(width int, st core.State) string {
@@ -106,31 +150,15 @@ func (a *App) statusBar(width int, st core.State) string {
 		return ground.Render(strings.Repeat(" ", n))
 	}
 
-	m := statusMode{bg: ui.Accent, icon: iconApp, text: "MuxReveal"}
-
-	switch {
-	case a.prompt != nil:
-		m = statusMode{bg: ui.Accent, icon: iconRename, text: "Rename tab"}
-	case a.pending:
-		m = statusMode{bg: ui.Warning, icon: iconLeader, text: a.keymap.leader}
-	}
-
-	label := " "
-	if a.icons {
-		label += m.icon + " "
-	}
-
-	label += m.text + " "
+	m := a.statusModeOf(ui)
+	label, modeW := a.modeLabel(m)
 	mode := paint(ui.OnAccent, m.bg, true).Render(label)
-	modeW := ansi.StringWidth(label)
 
 	if a.icons {
 		mode += paint(m.bg, ui.Bar, false).Render(edgeSolid)
-		modeW++
 	}
 
 	mode += blanks(1)
-	modeW++
 
 	if width <= modeW {
 		return ansi.Truncate(mode, width, "")
@@ -139,7 +167,7 @@ func (a *App) statusBar(width int, st core.State) string {
 	lead := a.keymap.leader + " then"
 	leadW := 0
 
-	if !a.pending && a.prompt == nil {
+	if !a.pending && a.prompt == nil && a.copy == nil {
 		leadW = ansi.StringWidth(lead) + 2
 	}
 
@@ -188,8 +216,13 @@ func (a *App) statusBar(width int, st core.State) string {
 	sep := 0
 
 	switch {
+	case a.prompt != nil && a.prompt.kind == promptSearch:
+		text := ansi.Truncate(printable(a.prompt.input.Value()), max(legendEnd-x, 0), "")
+		put(0, paint(ui.Fg, ui.Bar, false).Render(text), ansi.StringWidth(text))
 	case a.prompt != nil:
 		pairs = []legendPair{{"enter", "save"}, {"esc", "cancel"}, {"empty", "automatic name"}}
+	case a.copy != nil:
+		pairs = []legendPair{{"v", "select"}, {"y", "copy"}, {"/", "search"}, {"n", "next"}, {"q", "exit"}}
 	case a.pending:
 		pairs = []legendPair{{"esc", "cancel"}}
 	case put(0, paint(ui.Subtle, ui.Bar, false).Render(lead), ansi.StringWidth(lead)):

@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"path/filepath"
 	"strings"
 
@@ -171,20 +172,38 @@ func (a *App) topBorder(grid *borderGrid, s core.State, id core.PaneID, r core.R
 
 	var segs []segment
 
+	// Tags sit right to left with one border cell between them and before the corner.
+	tagEnd := right - 1
+	place := func(tag string, style lipgloss.Style) {
+		tw := lipgloss.Width(tag)
+		x := tagEnd - tw
+		if x < rightStart {
+			return
+		}
+		segs = append(segs, segment{x, tw, style.Render(tag)})
+		grid.clear(r.Y, x, x+tw)
+		if whole {
+			left = x
+		}
+		tagEnd = x - 1
+	}
+
 	_, focusExists := s.Panes[s.Tab().Focus]
 	if s.Tab().Zoomed && focusExists {
 		tag := " zoom "
 		if a.icons {
 			tag = " " + iconZoom + " zoom "
 		}
-		tw := lipgloss.Width(tag)
-		if tw+1 <= right-rightStart {
-			x := right - 1 - tw
-			segs = append(segs, segment{x, tw, st.tagZoom.Render(tag)})
-			grid.clear(r.Y, x, x+tw)
-			if whole {
-				left = x
+		place(tag, st.tagZoom)
+	}
+
+	if p := a.panes[id]; p != nil {
+		if n := p.linesAbove(); n > 0 {
+			arrow := "\u2191"
+			if a.icons {
+				arrow = iconScroll
 			}
+			place(fmt.Sprintf(" %s %d ", arrow, n), st.tagScroll)
 		}
 	}
 

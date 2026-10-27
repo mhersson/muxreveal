@@ -50,6 +50,9 @@ Bench: the real `App` with replay panes on a virtual clock at 60 FPS, 240x64, me
 | c | 4 | 80 | 188,627 | 2.21 ms | 4.89 ms | 5.67 ms | 5.67 ms | 6.0 | 0.27 / 1.10 / 4.30 ms | 1 |
 | c | 6 | 107 | 284,741 | 2.55 ms | 5.56 ms | **6.51 ms** | 6.74 ms | 8.5 | 0.24 / 1.21 / 5.00 ms | 2 |
 | a, tabs and frames re-check | 6 | 593 | 1,127,049 | 2.45 ms | 5.19 ms | **6.12 ms** | 8.01 ms | 6.1 | 0.20 / 1.29 / 5.05 ms | 17 |
+| a, full-pane selection on one of six panes | 6 | 593 | 1,127,049 | 4.34 ms | 6.19 ms | **7.16 ms** | 8.87 ms | 8.4 | 0.26 / 2.11 / 6.27 ms | 36 |
+
+The selection row is run a with one pane's whole history selected, so all of its content rows are repainted on the selection background in every frame (`MUXREVEAL_BENCH_SELECTION=1`); the 30 s window is the same, and the median of three invocations is shown (p99 6.83, 7.16 and 7.51 ms). The two-pane case with a selection is not gated and reaches p99 9.03 ms (median of 3 invocations: 8.65, 9.03 and 10.02 ms), because the selected pane there is 118x60 against 82x29 at six panes, about three times the area.
 
 Busy rule (the spike's): a second is busy when its bytes exceed 25 % of that recording's peak per-second rate. By it `p2.rec` (peak 14,633 B/s at 49 s) is busy 45-51 s (7 s) and `p3.rec` (peak 13,582 B/s at 42 s) is busy 36-43 s (8 s) and 72-82 s (11 s), so Claude's text answers are short bursts and runs b (pane 6 at 74.5-81.5 s) and c (pane 6 at 47.5-51.5 s) are short truecolor windows with every pane inside a busy stretch. `pane-2.rec` (peak 12,591 B/s at 134 s) is busy 93-135 s and 140-145 s. Run a is the spike's gate configuration: the sustained 30 s reply, in 256 colour (no truecolor SGRs), with windows [91 + 5i, 121 + 5i) s. Two exceptions: pane 0 starts with a 91-93 s spinner lead-in, and panes 4 and 5 cross the quiet 136-140 s. Run a is like-for-like with the spike's gate (593 frames, 1,127,049 bytes at six panes; spike p99 5.04 ms on the headless model, 6.06 ms here through the real `App`). Present is again the cost centre. GC pause totals stay under 1 ms per run.
 
@@ -63,9 +66,9 @@ Idle, re-checked with the tabs and the tray (clock, agents, git and load samplin
 
 Inputs: `p2.rec` (136 s, file size 94,552 bytes) and `p3.rec` (117 s, file size 204,497 bytes) are new recordings of two live `claude` panes (Claude Code 2.1.310, no `TMUX` in its environment, text-only prompts), recorded at 79x31 in a 159x33 tmux; both carry `38;2;` truecolor SGRs. `pane-2.rec` is the spike's recording.
 
-Fidelity limits of the replay: the recordings are 79x31, but the bench lays the panes out in the 240x64 grid, so they replay at 77-83 columns by 30-31 rows (119-120 columns by 62 rows at 2 panes, 30-31 rows at 4 panes). Recorded resizes are skipped; none fall inside any window.
+Fidelity limits of the replay: the recordings are 79x31, but the bench lays the panes out in the 240x64 grid, so they replay at 77-82 columns by 29-30 rows at six panes (118-119 columns by 60 rows at 2 panes, 118-119 columns by 29-30 rows at 4 panes). Recorded resizes are skipped; none fall inside any window.
 
-### M1b Tabs
+### M1b Tabs (done, PR #8)
 
 Tabs, each with its own split layout, focus and zoom, with new, rename, close, jump and cycle keys; framed panes with titles and Nerd Font icons; a workspace bar on the top row with the tabs and a tray (clock, agents, git, load); a restyled status bar, which-key, palette, confirm and rename. Covers AG-2, AG-9 and UX-1.
 
@@ -80,7 +83,18 @@ Gate: hidden tabs keep their panes running at their own size, the six-pane bench
 
 ### M1c Copy, mouse and clipboard
 
-Part 1 (new files only) is done on its own branch and runs alongside M1b; Part 2 rebases onto `main` after M1b merges. Covers AG-4, UX-4, UX-5, UX-6.
+Mouse selection inside panes, copy to the system clipboard (OSC 52 and native tools), scrollback with the mouse wheel, copy mode with vim motions, mouse forwarding to programs that ask for it, focus follows mouse and copy on select as options, and guests' clipboard writes passed through. Covers AG-3 (mouse, OSC 52), AG-4, UX-4, UX-5, UX-6.
+
+- [x] VT access to scrollback, screen modes, mouse and clipboard
+- [x] Clipboard writer
+- [x] Selection model and text extraction
+- [x] Copy-mode engine
+- [x] Scrollback view and mouse wheel
+- [x] Mouse selection, clicks and clipboard
+- [x] Copy mode
+- [x] Mouse and clipboard options and bench check
+
+Gate: selection, copy mode and the clipboard work in shell panes and in programs that report the mouse, and the six-pane bench p99 stays at most 8 ms with a selection drawn.
 
 ### M1d Agents and persistence
 
@@ -258,7 +272,7 @@ Build M1's terminal layer on `tuios.dev/vt` v0.3.1 (pure Go) behind the `VT` int
 
 ## Next
 
-M1b Tabs on `feat/m1b-tabs`. Then M1c Part 2 (Copy, mouse and clipboard) after M1b merges, then M1d Agents and persistence.
+M1c Copy, mouse and clipboard is done on `feat/copy-mouse-clipboard` and waits for review. Then M1d Agents and persistence.
 
 ## Done
 
@@ -278,15 +292,18 @@ M1b Tabs on `feat/m1b-tabs`. Then M1c Part 2 (Copy, mouse and clipboard) after M
 | 2026-10-26 | Every key without the leader goes to the focused pane, `ctrl+c` included; `ctrl+space q` still runs `app.quit` | Terminal panes need every key, `ctrl+c` for the agent above all |
 | 2026-10-26 | M1 ships as several plans and PRs, Panes first, with two workers running plans in parallel where their files do not overlap | Keeps each PR reviewable and uses both workers |
 | 2026-10-26 | Tabs join M1 as M1b; copy/mouse/clipboard becomes M1c, agents and persistence M1d | Tabs change the state shape that persistence saves |
+| 2026-10-27 | A plain drag selects in every pane; programs that report the mouse get single clicks only | Replaces shift+drag: a drag is for selecting everywhere, and the program still gets the click when the button is released in the cell it went down in |
+| 2026-10-27 | Native clipboard by direct exec of `wl-copy`, `xclip` or `pbcopy`, not `atotto/clipboard` | Its primary-selection switch is global state and it drops the clipboard arguments |
 
 ## Later
 
 Ideas and requests that came up outside the current milestone go here.
 
+- A pane's kind is fixed when it opens: `claude` started in a shell pane does not make it an agent, and an agent pane whose Claude exits stays an agent (frame colour, tab icon, tray robots). M1d makes the kind follow Claude both ways (shim and hooks, or the terminal's foreground process).
 - Build and run the spike on the operator's Mac; all numbers so far are from Linux.
 - Kitty and Ghostty key pass by the operator: Kitty keyboard keys (shift+enter, ctrl combinations) through a real Kitty-protocol terminal, which tmux cannot carry.
 - tuios's `ghostty` build-tag backend (libghostty-vt through cgo, built with Zig).
-- Mouse forwarding to panes (not built in the spike).
+- A pane resize returns a scrolled view to live; tuios's `Terminal.SetReflowFunc` could remap the scroll anchor (and selections) through a reflow instead.
 - Live x/vt streaming check, only if x/vt ever becomes the backend: does Claude's unsynchronized output tear?
 - A cell-level render path that skips Bubble Tea's string re-parse (about half of present), if M1's frame cost grows.
 - Fidelity references outside the x/vt lineage: tmux `capture-pane -e` (styles included) at several checkpoints of each recording, not only the final screen.
@@ -295,3 +312,11 @@ Ideas and requests that came up outside the current milestone go here.
 - On a terminal whose Backspace sends 0x08 (or Enter sends 0x0a) without the Kitty keyboard protocol, leader then Backspace swaps left (and leader then that Enter swaps down); Ghostty and Kitty are unaffected.
 - Check the macOS tray memory figure on the operator's Mac: it subtracts only free pages, so file cache may count as used.
 - Rename on an automatically named tab starts blank; consider the automatic name as a Muted placeholder.
+- Memoise painted selection rows by source row string, span and background: six-pane p99 is 7.16 ms with a full-pane selection against 6.03 ms without, and the two-pane case reaches 9.03 ms (ungated).
+- Middle-click paste of the primary selection does not reach shell panes, because MuxReveal always requests mouse reporting; shift+middle still works.
+- Request all-motion mouse reporting while a visible guest has mode 1003 on, so it gets hover motion without `focus_follows_mouse`.
+- The mouse wheel does nothing in copy mode; it could scroll the copy-mode view.
+- Native clipboard writes are not serialised, so two copies close together can land out of order.
+- A CJK line soft-wrapped one column early copies with an extra space in the middle.
+- A button release outside the window leaves the press held until the next click, which blocks hover focus meanwhile.
+- With `focus_follows_mouse` on, every pointer move builds a frame (unmeasured).

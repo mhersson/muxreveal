@@ -250,7 +250,7 @@ func (a *App) tabInfos() []tabInfo {
 		out[i] = tabInfo{n: i + 1, name: name, agent: st.TabHasAgents(i)}
 	}
 
-	if a.prompt != nil && st.Tab().ID == a.prompt.tab {
+	if a.prompt != nil && a.prompt.kind == promptRename && st.Tab().ID == a.prompt.tab {
 		out[st.Active].name = printable(a.prompt.input.Value())
 		out[st.Active].renaming = true
 	}
