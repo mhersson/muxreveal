@@ -2,13 +2,17 @@
 
 Update this file at the end of every session: tick what's done, set the next step, and log decisions.
 
-## Current milestone: M1 Terminal core
+## Current milestones
+
+M1e Tiling, tab moves and chrome and M2a Worktrees and diff engine run in parallel, each on its own branch and PR; M2b Review pane follows once both have merged.
+
+## M1 Terminal core
 
 Goal: PTYs, the `tuios.dev/vt` adapter, compositor, splits, tabs, shell panes, copy mode, mouse and clipboard, hook socket, state badges, persistence and resume. Covers AG-1 to AG-5, AG-7, AG-8 (interface), AG-9, PR-1 to PR-4, UX-4 to UX-6. It builds on the spike findings below.
 
 Gate: six busy Claude panes stay smooth at 60 fps, and a reboot brings back the same layout with every session resumed.
 
-M1 ships as four plans, one PR each.
+M1 ships as five plans, one PR each.
 
 ### M1a Panes (done, PR #7)
 
@@ -99,7 +103,7 @@ Mouse selection inside panes, copy to the system clipboard (OSC 52 and native to
 
 Gate: selection, copy mode and the clipboard work in shell panes and in programs that report the mouse, and the six-pane bench p99 stays at most 8 ms with a selection drawn.
 
-### M1d Agents and persistence
+### M1d Agents and persistence (done, PR #10)
 
 Agent panes report working, blocked and idle through Claude Code hooks and show it on frames, tabs and the tray; a pane's kind follows Claude both ways; tabs, layout, cwds and agent sessions are saved on every change and restored on start with `claude --resume`. Covers AG-5, AG-7, AG-8, PR-1 to PR-4.
 
@@ -117,7 +121,7 @@ Gate: agent panes show working, blocked and idle; quitting and starting again br
 
 #### M1d gate results
 
-What backs the last checklist item: the six-pane bench row "six working agents with animated badges" above, which ran before saving existed (it does not wire `Save`, which costs one state copy and an encode per dispatch on the update loop; the file write is on the saver goroutine), so no bench run covers persistence; and the idle figure below. The operator checks in Ghostty and Kitty and the reboot check are still to do.
+What backs the last checklist item: the six-pane bench row "six working agents with animated badges" above, which ran before saving existed (it does not wire `Save`, which costs one state copy and an encode per dispatch on the update loop; the file write is on the saver goroutine), so no bench run covers persistence; and the idle figure below. The operator checked Ghostty, Kitty and a reboot on 2026-10-27: agent panes, badges and chrome look right in both terminals, and a reboot brought back the tabs, layout and every agent session.
 
 Idle, re-checked with agents, hooks and persistence: same setup as above (six shell panes each running `sleep 3600`, 240x64 in a private tmux, 30 s after a 5 s warm-up, `/proc/<pid>/stat` utime+stime), two runs: **0.73 %** and **0.70 %** of one core.
 
@@ -293,9 +297,70 @@ Spike harness bugs, fixed in the spike code (no effect on the numbers):
 
 Build M1's terminal layer on `tuios.dev/vt` v0.3.1 (pure Go) behind the `VT` interface, with the host code listed under API fit. Keep `charmbracelet/x/vt` as the fallback, but note that it is only performance-equal: on x/vt, Claude Code loses Kitty keyboard (shift+enter), OSC 52 and OSC 133, and it stops using synchronized output (with or without `TMUX` in its environment). Do not reuse the spike's legacy key port as is (see API fit).
 
+## M2 Worktrees and agent diff
+
+Goal: worktree discovery and creation, turn snapshots, one diff engine for branch and turn modes, live updates, and the review pane with file tree and full-file toggle. Covers WT-1, WT-2, DF-1 to DF-6.
+
+Gate: a saved file shows in the diff within 300 ms, and turn mode isolates the last turn's changes.
+
+M2 ships as two plans, one PR each.
+
+### M2a Worktrees and diff engine
+
+Headless, in `internal/git`: worktrees, turn snapshots taken before the prompt hook is answered, the diff engine with branch and turn sources, and the directory watcher. Covers WT-1, WT-2, DF-1, DF-2, DF-3.
+
+- [x] Port tuios's line diff and invisible-character marks
+- [x] Git runner and repository discovery
+- [x] Worktree discovery and creation
+- [x] Turn snapshots
+- [x] Hook answer after the turn snapshot
+- [x] Diff engine with branch and turn sources
+- [x] Directory watcher
+- [x] Live recompute, gate checks and snapshot timing on a large repo
+
+Gate: a saved file is reported by the watcher and its diff recomputed within 300 ms; turn mode isolates exactly the last turn's changes in a test with three turns.
+
+#### M2a gate results
+
+Machine: as the Spike "Machine" section (AMD Ryzen 9 3950X, 16 cores / 32 threads, 31 GiB; Arch Linux, kernel 7.2.11; go1.27.3). Scratch directories were on tmpfs.
+
+| Gate line | Measured | Result |
+| --- | --- | --- |
+| Save to diff at most 300 ms (median), 2,000-file repo, 20 saves, watcher batch included (150 ms debounce) | median 186.7 ms, p95 196.4 ms | pass |
+| Save of a new file beside 5 modified files at most 300 ms (median), 20 saves; this takes the full-Diff path | median 220.8 ms, p95 224.6 ms | pass |
+| Snapshot of the 2,000-file repo within the 1.4 s hook budget | median 35.2 ms of 5 | pass |
+| Turn mode isolates exactly the last turn's changes (`TestTurnModeIsolatesTheLastTurn`: three turns, a delete, an untracked file, an agent commit mid-turn) | turns 3, 2 and 1 each list exactly their own files | pass |
+
+Large repo (`kubernetes/kubernetes`, `--depth 1`, 31,509 tracked files, 20 tracked files edited, scratch clone on tmpfs, OS file cache warm from the clone; cold is the first call, one sample; warm is the median of the next 5). A fresh clone's index entries are racily clean, so git re-hashes them on every call: our temporary index copy is discarded, so a refresh never sticks. After one `git status` in the clone (as a developer's own tools keep the index fresh) the same calls are about 17 times faster:
+
+| Operation | Fresh clone, cold / warm | Refreshed index, cold / warm |
+| --- | --- | --- |
+| `Snapshot` | 2.92 s / 2.88 s | 175 ms / 157 ms |
+| `WorkingTree` | 2.85 s / 2.88 s | 144 ms / 148 ms |
+| Branch `Diff` against `HEAD` (20 files, fresh engine per call) | 2.91 s / 2.90 s | 168 ms / 167 ms |
+
+In a fresh-clone snapshot `ls-files` takes 1.45 s and `update-index` 1.42 s; with a refreshed index they take 96 ms and 30 ms, `write-tree` is 20-30 ms in both, and every other subcommand is under 2 ms. Every snapshot is therefore over the 1.4 s hook budget until something refreshes the user's index, because the temporary copy's refresh is discarded: the gate cancels it and the turn gets a "no snapshot" marker; the watcher's unchanged hint (M2b) skips the snapshot when nothing changed.
+
+### M2b Review pane
+
+The review pane (a layout pane of kind `review`), the ported `diffview` renderer, file tree, full-file view, the worktree picker for `leader n`, and the review-pane keys. Covers DF-4, DF-5, DF-6. Planned after M1e and M2a merge.
+
+- [ ] Port tuios's `diffview` with its lexers
+- [ ] Review pane kind, state and persistence
+- [ ] Unified and side-by-side rendering with highlighting and invisible characters
+- [ ] File tree with per-file stats
+- [ ] Full-file view with ghost lines
+- [ ] Live updates that keep the cursor on its hunk
+- [ ] Worktree picker and new worktree
+- [ ] Review-pane keys and commands
+- [ ] Watchers per agent pane, and the snapshot skip they enable
+- [ ] `[worktrees]` and `[diff]` config
+
+Gate: a saved file shows in the open review pane within 300 ms; turn mode shows only the last turn's changes and `,`/`.` step through earlier turns; six-pane bench p99 at most 8 ms with one review pane open on a busy agent, and scrolling a 10,000-line file diff stays inside the frame budget; idle CPU at most 1 % of one core with a review pane open.
+
 ## Next
 
-M1d Agents and persistence is complete on `feat/agents-persistence` and waits for review; M2 follows once it merges.
+M2a Worktrees and diff engine is complete on `feat/diff-engine` and waits for review. M1e Tiling, tab moves and chrome is in progress; the agents rail follows it, then M2b Review pane.
 
 ## Done
 
@@ -322,11 +387,35 @@ M1d Agents and persistence is complete on `feat/agents-persistence` and waits fo
 | 2026-10-27 | A second instance runs unsaved | One state file per user, held under a lock; the second instance never overwrites it |
 | 2026-10-27 | Always restore, with `--fresh` to start clean | A reboot brings back the same layout without a flag |
 | 2026-10-27 | A working pane quiet for 3 s becomes idle | No hook fires when a permission prompt is dismissed with `esc`; the longest output gap observed while Claude worked was 0.24 s |
+| 2026-10-27 | M1e and M2a run in parallel, split by file ownership; whichever merges second rebases and reruns every gate | Headless new-package work can run beside the UI milestone before it; UI-core work stays serial |
+| 2026-10-27 | Commits, branch names and PR titles and bodies carry no requirement, milestone, plan or task IDs | They mean nothing once the plan is done |
+| 2026-10-27 | Cycling a tab's layout mode rebuilds it from the tab's pane order | As tuios; keeping each mode's arrangement is in Later |
+| 2026-10-27 | Scrolling layouts draw whole columns only, with hidden-column counts in the bottom border | No clipped panes, and the compositor stays as it is |
+| 2026-10-27 | The layout mode shows in the status bar, left of the cwd | Always visible, at little cost |
+| 2026-10-27 | The directory watcher is `fsnotify` with our own walk instead of `rjeczalik/notify` | notify is unmaintained since 2023 and uses FSEvents on macOS only with cgo; our walk skips ignored directories |
+| 2026-10-27 | Turn snapshots copy the worktree's index to a temporary index and stage only what changed | A fresh index rehashes every file; the copy keeps git's stat cache (about 100 ms on 50k files) |
+| 2026-10-27 | Every prompt takes a snapshot until the review pane wires watchers to panes; the snapshotter already takes an "unchanged" hint | The watcher's lifecycle belongs to the pane, which the parallel UI milestone owns |
 
 ## Later
 
 Ideas and requests that came up outside the current milestone go here.
 
+- Snapshots that fall back to `read-tree HEAD` (a split or unreadable index) lose skip-worktree bits, so a sparse checkout's snapshot shows the sparse files as deleted.
+- A tracked file inside a directory git ignores (force-added) gets no watch, so its edits show only after a full recompute.
+- Last-tab jump.
+- Per-tab attention marks: an agent needs you, a bell, unseen output.
+- A tab switcher with previews.
+- A go-to picker over agents, tabs and panes.
+- Sessions above tabs (PR-5).
+- Keep each layout mode's arrangement (BSP ratios, master ratio, column widths) per tab across mode switches.
+- tuios `composer` for the PR compose body (M3).
+- tuios `markdown` and `tuios.dev/sketch` for Mermaid (M4).
+- `tuios.dev/swatch` for TH-3.
+- `tuios.dev/shot` for visual golden tests.
+- tuios `hints` for labelled copy and open.
+- tuios `transcript` as a backstop for AG-5 state.
+- An FSEvents watcher backend on macOS: kqueue, which `fsnotify` uses there, needs a file descriptor per watched file.
+- Prune the turn snapshots of old sessions in a repo's main checkout; only removing a worktree prunes them (WT-3).
 - Hooks for a hand-typed `claude` (a PATH shim or shell integration for zsh, bash and fish): startup files that prepend `~/.local/bin` shadow a PATH-only shim.
 - Build and run the spike on the operator's Mac; all numbers so far are from Linux.
 - Kitty and Ghostty key pass by the operator: Kitty keyboard keys (shift+enter, ctrl combinations) through a real Kitty-protocol terminal, which tmux cannot carry.
@@ -349,3 +438,4 @@ Ideas and requests that came up outside the current milestone go here.
 - A button release outside the window leaves the press held until the next click, which blocks hover focus meanwhile.
 - With `focus_follows_mouse` on, every pointer move builds a frame (unmeasured).
 - `TestBenchKitOnSynth` times out waiting for pane read loops under `CGO_ENABLED=1 go test -race -count=2 ./internal/ui/` (also on main before agents and persistence); it passes at `-count=1` and on its own.
+- In a reftable repository the watcher does not watch `.git/reftable/`, so a fetch or another ref change sets no git flag in its batch.

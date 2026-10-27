@@ -18,7 +18,8 @@ import (
 const (
 	// maxLine bounds one event line on the socket.
 	maxLine = 64 << 10
-	// connDeadline bounds a whole connection, read to answer.
+	// connDeadline bounds reading the event line and, separately, writing the
+	// answer: the write deadline is reset after a turn start's hold.
 	connDeadline = 2 * time.Second
 	// sendTimeout bounds how long a full out channel holds an event.
 	sendTimeout = time.Second
@@ -27,16 +28,21 @@ const (
 
 // Server receives hook events on a Unix socket and forwards them to a channel.
 // Each connection carries one JSON line and is answered with "ok" once the
-// event is on the channel.
+// event is on the channel; a turn start is answered after its Done is called
+// or Hold passes.
 type Server struct {
 	// Log receives dropped events; nil discards them.
 	Log *slog.Logger
+	// Hold is how long a turn-start event's answer waits for its Done; 0 never
+	// holds. Set before Serve.
+	Hold time.Duration
 
 	ln   net.Listener
 	path string
 
 	mu     sync.Mutex
 	closed bool
+	quit   chan struct{} // closed on shutdown
 	conns  map[net.Conn]struct{}
 	wg     sync.WaitGroup
 }
@@ -66,7 +72,7 @@ func Listen(path string) (*Server, error) {
 		return nil, fmt.Errorf("harness: chmod socket: %w", err)
 	}
 
-	return &Server{ln: ln, path: path, conns: make(map[net.Conn]struct{})}, nil
+	return &Server{ln: ln, path: path, quit: make(chan struct{}), conns: make(map[net.Conn]struct{})}, nil
 }
 
 // Serve accepts connections until ctx ends or Close is called, then waits for
@@ -129,6 +135,7 @@ func (s *Server) shutdown() {
 	}
 
 	s.closed = true
+	close(s.quit)
 	_ = s.ln.Close()
 
 	for c := range s.conns {
@@ -155,6 +162,13 @@ func (s *Server) handle(ctx context.Context, conn net.Conn, out chan<- Event) {
 		return
 	}
 
+	var held chan struct{}
+
+	if ev.TurnStart && s.Hold > 0 {
+		held = make(chan struct{})
+		ev.Done = sync.OnceFunc(func() { close(held) })
+	}
+
 	timer := time.NewTimer(sendTimeout)
 	defer timer.Stop()
 
@@ -170,7 +184,30 @@ func (s *Server) handle(ctx context.Context, conn net.Conn, out chan<- Event) {
 		return
 	}
 
+	if held != nil && !s.hold(ctx, held) {
+		return
+	}
+
+	_ = conn.SetWriteDeadline(time.Now().Add(sendTimeout))
 	_, _ = io.WriteString(conn, ack+"\n")
+}
+
+// hold waits for done, the hold time, shutdown or ctx; it reports whether the
+// connection should still be answered.
+func (s *Server) hold(ctx context.Context, done <-chan struct{}) bool {
+	timer := time.NewTimer(s.Hold)
+	defer timer.Stop()
+
+	select {
+	case <-done:
+	case <-timer.C:
+	case <-s.quit:
+		return false
+	case <-ctx.Done():
+		return false
+	}
+
+	return true
 }
 
 func (s *Server) drop(msg string, err error) {

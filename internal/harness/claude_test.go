@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -69,8 +70,10 @@ func TestParseEvent(t *testing.T) {
 				State:      tt.state,
 				Start:      tt.start,
 				End:        tt.end,
+				Cwd:        "/work",
+				TurnStart:  tt.name == "UserPromptSubmit",
 			}
-			if ev != want {
+			if !reflect.DeepEqual(ev, want) {
 				t.Errorf("event = %+v, want %+v", ev, want)
 			}
 		})

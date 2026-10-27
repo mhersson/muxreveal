@@ -28,6 +28,14 @@ type Event struct {
 	State      core.AgentState `json:"state,omitempty"` // AgentUnknown leaves the state as it is
 	Start      bool            `json:"start,omitempty"` // Session is now the pane's current session
 	End        bool            `json:"end,omitempty"`   // the session ended
+	Cwd        string          `json:"cwd,omitempty"`   // the agent's working directory
+
+	// TurnStart marks a prompt submission: the agent starts working once the
+	// hook is answered, so the server holds the answer until Done.
+	TurnStart bool `json:"turn_start,omitempty"`
+	// Done releases the held answer. The server sets it on a held event; it is
+	// safe to call more than once and concurrently. Nil when nothing is held.
+	Done func() `json:"-"`
 }
 
 // ByID returns the harness saved under id.

@@ -1,0 +1,102 @@
+package git
+
+import (
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+// isolateGit points git at an empty global config in a temp dir with a fixed
+// identity, so no test depends on the machine's git setup.
+func isolateGit(t *testing.T) {
+	t.Helper()
+
+	cfg := filepath.Join(t.TempDir(), "gitconfig")
+	if err := os.WriteFile(cfg, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
+	t.Setenv("GIT_CONFIG_GLOBAL", cfg)
+	t.Setenv("GIT_AUTHOR_NAME", "Test")
+	t.Setenv("GIT_AUTHOR_EMAIL", "test@example.com")
+	t.Setenv("GIT_COMMITTER_NAME", "Test")
+	t.Setenv("GIT_COMMITTER_EMAIL", "test@example.com")
+}
+
+// newRepo creates an empty repository on branch main in a temp dir and returns
+// its symlink-free path.
+func newRepo(t *testing.T) string {
+	t.Helper()
+	isolateGit(t)
+
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	gitOut(t, dir, "init", "-q", "-b", "main")
+
+	return dir
+}
+
+func writeFile(t *testing.T, dir, rel, content string) {
+	t.Helper()
+
+	path := filepath.Join(dir, rel)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func commitAll(t *testing.T, dir, msg string) {
+	t.Helper()
+	gitOut(t, dir, "add", "-A")
+	gitOut(t, dir, "commit", "-q", "-m", msg)
+}
+
+// gitOut runs git directly for test setup and returns trimmed stdout.
+func gitOut(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, out)
+	}
+
+	return strings.TrimSpace(string(out))
+}
+
+// fakeGit puts a git wrapper first on PATH. It appends its arguments, one call
+// per line, to the returned log, runs extraShell (which may use $LOG), then
+// execs the real git.
+func fakeGit(t *testing.T, extraShell string) (logPath string) {
+	t.Helper()
+
+	gitPath, err := exec.LookPath("git")
+	if err != nil {
+		t.Skip("git not found")
+	}
+
+	dir := t.TempDir()
+	logPath = filepath.Join(dir, "calls.log")
+	script := "#!/bin/sh\nLOG='" + logPath + "'\nprintf '%s ' \"$@\" >> \"$LOG\"\necho >> \"$LOG\"\n" +
+		extraShell + "\nexec '" + gitPath + "' \"$@\"\n"
+
+	if err := os.WriteFile(filepath.Join(dir, "git"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	return logPath
+}

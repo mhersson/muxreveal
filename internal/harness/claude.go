@@ -72,6 +72,7 @@ type claudePayload struct {
 	Name             string `json:"hook_event_name"`
 	SessionID        string `json:"session_id"`
 	TranscriptPath   string `json:"transcript_path"`
+	Cwd              string `json:"cwd"`
 	Source           string `json:"source"`
 	ToolName         string `json:"tool_name"`
 	NotificationType string `json:"notification_type"`
@@ -89,6 +90,8 @@ func (Claude) ParseEvent(payload []byte) (Event, error) {
 		Name:       p.Name,
 		Session:    core.SessionID(p.SessionID),
 		Transcript: p.TranscriptPath,
+		Cwd:        p.Cwd,
+		TurnStart:  p.Name == "UserPromptSubmit",
 	}
 	switch p.Name {
 	case "SessionStart":

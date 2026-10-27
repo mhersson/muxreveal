@@ -146,12 +146,12 @@ One process owns the screen, the PTYs and every service. It talks to Claude Code
 flowchart TB
   term["Ghostty / Kitty"]
   subgraph proc["muxreveal process (single binary, no daemon in v1)"]
-    ui["UI and compositor<br/>Bubble Tea v2, input router, keymap, themes, image placement"]
+    ui["UI and compositor<br/>Bubble Tea v2, input router, keymap, themes, image placement, diffview"]
     core["App core<br/>event bus, state store, actions: push, open PR, approve, merge"]
     store["Persistence<br/>state.json: layout, sessions<br/>SQLite: turns, reviews"]
     panes["Panes<br/>creack/pty, tuios.dev/vt, scrollback"]
     hooks["Hook server<br/>Unix socket: session ids, turns, badges"]
-    git["Git and diff<br/>worktrees, snapshots, watcher, go-gitdiff, Chroma"]
+    git["Git and diff<br/>worktrees, snapshots, watcher, go-gitdiff, linediff"]
     gh["GitHub<br/>GraphQL poll, ETags, approve, merge"]
   end
   claude["Claude Code processes<br/>one per agent pane, launched with --settings"]
@@ -185,7 +185,7 @@ One Go module, `github.com/mhersson/muxreveal`.
 | `internal/ui` | Compositor, layout tree, widgets, keymap, themes, image placement |
 | `internal/term` | PTY plus the `VT` interface; `tuios.dev/vt` adapter (fallback `charmbracelet/x/vt`) |
 | `internal/harness` | `Harness` interface; Claude Code adapter (launch args, hook settings, resume) |
-| `internal/git` | Worktrees, turn snapshots, watcher, diff engine, highlighting |
+| `internal/git` | Worktrees, turn snapshots, watcher, diff engine, highlighting; `linediff` and `invisible` (ported from tuios) |
 | `internal/github` | Auth via `gh`, GraphQL and REST client, poller, PR actions |
 | `internal/md` | Markdown to styled cells plus image references |
 | `internal/store` | `state.json` and SQLite persistence |
@@ -207,6 +207,9 @@ type Event struct {
 	State      core.AgentState `json:"state,omitempty"`      // AgentUnknown leaves the state as it is
 	Start      bool            `json:"start,omitempty"`      // Session is now the pane's current session
 	End        bool            `json:"end,omitempty"`        // the session ended
+	Cwd        string          `json:"cwd,omitempty"`        // the agent's working directory, from the hook
+	TurnStart  bool            `json:"turn_start,omitempty"` // a prompt was submitted
+	Done       func()          `json:"-"`                    // set by the server on a held event; call it once the turn snapshot is taken
 }
 ```
 
@@ -222,11 +225,12 @@ Go 1.27 (`tuios.dev/vt` needs 1.26 or later). The reason for Rust was a proven V
 | VT emulation | `tuios.dev/vt`; fallback `charmbracelet/x/vt` | Emulator TUIOS runs agent panes on daily: scrollback, Kitty graphics and keyboard protocol, OSC 133. Wrapped behind our `VT` interface. The fallback is as fast but has no Kitty keyboard, Kitty graphics, OSC 52 or OSC 133, and Claude Code does not use synchronized output on it (checked live with and without `TMUX` in Claude's environment). |
 | PTY | `github.com/creack/pty` | Standard Go PTY package; macOS and Linux |
 | Git | `git` CLI (plumbing and porcelain v2, `-z` output) | Keeps the user's credential helpers, hooks and config; fast enough; one code path for reads and writes |
-| Diff | `git diff --histogram` parsed with `bluekeyes/go-gitdiff`; word spans with `sergi/go-diff` | Same hunks as git; intra-line highlighting on top |
+| Diff | `git diff --histogram` parsed with `bluekeyes/go-gitdiff`; intra-line spans from the ported tuios `diffview` (`Changed`), computed when rendering | Same hunks as git; tuios's span rule |
+| Diff rendering | Ported tuios `diffview` with its lexers (M2b) | Highlighting, gutter, tints and side-by-side pairing built for the same job |
 | Syntax | Chroma v2 | Ships Catppuccin styles; wide language coverage |
 | Markdown | `yuin/goldmark` (GFM) + our own renderer | Full control of layout and image placement; Glamour has no images |
 | Images | Own Kitty graphics encoder; `image/*` + `golang.org/x/image` for decode and scaling | The protocol is small; port TUIOS's passthrough (MIT) if it's cleaner |
-| File watching | `rjeczalik/notify` | Recursive FSEvents on macOS and inotify on Linux; `fsnotify` needs one fd per file on macOS |
+| File watching | `fsnotify` with our own directory walk | Maintained; the walk skips `.git` internals, `.worktrees` and ignored directories; `rjeczalik/notify` is unmaintained since 2023 and uses FSEvents on macOS only with cgo |
 | GitHub | `cli/go-gh/v2` for hosts and tokens; `net/http` REST with ETags; `Khan/genqlient` for typed GraphQL | Same auth as `gh`, full control of conditional requests |
 | Fuzzy finder | `sahilm/fuzzy` | Palette and pickers |
 | Config and state | `pelletier/go-toml/v2`; `encoding/json`; `modernc.org/sqlite` | TOML config, JSON layout state, pure Go SQLite (no cgo) for turns, reviewed hunks and caches |
@@ -419,7 +423,7 @@ MuxReveal never edits the user's Claude settings. Every agent it launches runs `
 }
 ```
 
-The example shows three events; the generated file has the same handler for every event in the table. The command is the absolute path of the running binary. Synchronous handlers keep the events in order, and the hook answers in milliseconds.
+The example shows three events; the generated file has the same handler for every event in the table. The command is the absolute path of the running binary. Synchronous handlers keep the events in order, and the hook answers in milliseconds, except a turn start, which waits for its snapshot (see below).
 
 **State rules**
 
@@ -439,8 +443,9 @@ An agent pane whose Claude has sent no hook has no state and shows no badge. The
 
 **Hook command and socket**
 
-- `muxreveal hook claude-code` is a subcommand of the same binary. It reads the hook JSON from stdin, parses it with the harness, adds the pane id from `MUXREVEAL_PANE` and sends one compact event (pane, event name, session id, transcript path, state, start and end flags) as one JSON line over the Unix socket in `MUXREVEAL_SOCK`.
-- The server listens on `<state dir>/run/<pid>.sock` (mode 0600; the `run` directory is mode 0700). Both the socket and the settings file are removed on exit. The client waits up to 2 s for the server's `ok` line, which the server writes after the event is queued. `UserPromptSubmit` waits for that answer; from M2 the server answers after the turn snapshot, so the snapshot lands before the agent edits anything.
+- `muxreveal hook claude-code` is a subcommand of the same binary. It reads the hook JSON from stdin, parses it with the harness, adds the pane id from `MUXREVEAL_PANE` and sends one compact event (pane, event name, session id, transcript path, state, working directory, and the start, end and turn-start flags) as one JSON line over the Unix socket in `MUXREVEAL_SOCK`.
+- The server listens on `<state dir>/run/<pid>.sock` (mode 0600; the `run` directory is mode 0700). Both the socket and the settings file are removed on exit. The client waits up to 2 s for the server's `ok` line, which the server writes once the event is queued, except for a turn-start event (`UserPromptSubmit`), which it answers after the turn snapshot is taken or after 1.5 s, whichever comes first. The snapshot therefore lands before the agent edits anything, and a slow snapshot never holds the agent longer than the budget.
+- The server holds a turn-start event's `ok` until the event's `Done` is called (`Server.Hold`). A gate in `cmd/muxreveal` sits between the server and the app's event channel: it forwards every event to the app in order, at once, runs the snapshot for a turn start in its own goroutine with a 1.4 s context, then calls `Done`. An event whose `cwd` is not inside a repository, or whose session id is not a UUID, gets no snapshot and is answered at once.
 - `muxreveal hook` always exits 0 and prints nothing to stdout or stderr, also when the environment variables are missing, the socket is gone or the payload is bad. Claude adds the stdout of `SessionStart` and `UserPromptSubmit` hooks to the model's context, so any output would leak into the conversation.
 - If the socket or the settings file cannot be set up, MuxReveal runs agents without `--settings` and shows the notice `agent hooks are off: <error>`; a socket path over the platform limit (107 bytes on Linux, 103 on macOS) reads `socket path too long (N bytes, at most M)`.
 - Events are applied by the core. An event for a closed pane, an unknown pane id or a pane that is not an agent is ignored, as is an event after `SessionEnd` that has nothing to change.
@@ -457,52 +462,136 @@ An agent pane whose Claude has sent no hook has no state and shows no badge. The
 
 ### Turn snapshots
 
-Each turn start records the full working tree as a commit under a private ref. A temporary index keeps the user's index and stash untouched.
+Each turn start records the full working tree as a commit under a private ref, taken before the prompt hook is answered. A temporary index leaves the user's index, stash, HEAD and branches untouched; the user's index file is only read.
 
-```sh
-export GIT_INDEX_FILE="$(mktemp)"
-git -C "$wt" read-tree HEAD
-git -C "$wt" add -A                      # respects .gitignore
-tree=$(git -C "$wt" write-tree)
-c=$(git -C "$wt" commit-tree "$tree" -p HEAD -m "muxreveal turn $n")
-git -C "$wt" update-ref "refs/muxreveal/$session/$n" "$c"
-```
+1. With `GIT_INDEX_FILE` pointing at a temporary file, copy the worktree's index (`<git dir>/index`) to it with mode 0600 and the source's mtime, so git trusts its stat cache. A fresh index would rehash every file; with a refreshed user index a whole snapshot takes about 157-175 ms on 31.5k files.
+2. `git ls-files -t -z --modified --deleted --others --exclude-standard` lists what differs. Untracked files over the size cap (default 50 MiB) are dropped and listed as skipped, as is any path ending in `/` (a nested repository that is not a submodule).
+3. `git update-index --add --remove -z --stdin` stages the rest, then `git write-tree` gives the tree. Untracked files that are not ignored enter the tree; ignored files never do; submodules stay gitlinks at their recorded commit.
+
+When the index is missing, empty or unusable (a split index, an `update-index` failure), the snapshot falls back to an empty temporary index plus `git read-tree HEAD` (nothing for an unborn HEAD) and the same staging.
+
+The commit is `git commit-tree --no-gpg-sign <tree> [-p HEAD]` with author and committer `MuxReveal <muxreveal@localhost>` set in the environment, so no user identity or signing setup is needed. The ref is written create-only: `git update-ref --no-deref -m "muxreveal turn" refs/muxreveal/<session>/<n> <commit> ""`.
 
 - The live turn diff is snapshot `n` against the working tree. A past turn is snapshot `n` against snapshot `n+1`.
 - Trees are compared, not HEAD, so agent commits mid-turn don't break the diff.
-- The refs keep snapshots safe from `git gc`. They're pruned when a worktree is removed.
+- `n` is one more than the highest number under `refs/muxreveal/<session>/`, 1 for the first. The refs live in the common dir, so every worktree of the repo sees them, and they keep snapshots safe from `git gc`.
+- The commit message is `muxreveal turn <n>`, a blank line, then trailers: `Session: <id>`, `Worktree: <absolute path>`, `Skipped-Count: <k>` and up to 20 `Skipped: <path>` lines when untracked files were skipped.
+- Budget: the snapshot runs under a 1.4 s context. One whose tree is not written within it is cancelled and writes no snapshot ref; once the tree exists, the commit and the ref are written under their own 2 s context, since a killed `update-ref` leaves its lock file behind, so a ref may land up to 2 s after the budget. A turn without a snapshot gets a marker from the gate under its turn number, a commit of the empty tree with the trailer `Snapshot: none` (own 5 s context), so later turns keep their numbers and the turn shows as having no snapshot. Snapshots of one session run one at a time.
+- `SnapshotOptions.Unchanged` (the watcher saw no change since the last snapshot) makes a snapshot reuse the previous turn's tree without staging anything. Every prompt takes a snapshot until the review pane wires watchers to panes.
+- Pruning: removing a worktree deletes every `refs/muxreveal/<session>/<n>` whose commit names it, and a session's refs can be deleted on their own, each in one `git update-ref --stdin` transaction. Snapshots of old sessions in a repo's main checkout stay until then.
+- The temporary index lives in `<state dir>/run/` as `<pid>-index-<random>`; the run-dir sweep removes the files of dead instances.
+
+### Worktrees
+
+`internal/git` discovers and creates worktrees (WT-1, WT-2).
+
+- Discovery parses `git worktree list --porcelain -z`: path, `HEAD`, branch (without `refs/heads/`), `bare`, `detached`, `locked [reason]` and `prunable [reason]`. The first record is the main checkout.
+- Creation checks the branch name with `git check-ref-format --branch` and turns it into a directory name: every run of characters outside `[A-Za-z0-9._-]` becomes one `-`, leading and trailing `-` and `.` are trimmed, and an empty result is an error.
+- The root is `<main checkout>/.worktrees/<name>` (inside, the default) or `<parent of main checkout>/<main checkout name>.worktrees/<name>` (sibling). The main checkout is the parent of the common dir when that ends in `.git`; a bare repository has no inside root. An existing path is refused.
+- An existing branch is checked out (`git worktree add -- <path> <branch>`); otherwise it is created from the base (`git worktree add -b <branch> -- <path> <base>`). The base defaults to the repo's default branch: `origin/<name>` when `refs/remotes/origin/HEAD` points at an existing branch, else `main`, else `master` (the local names checked as `refs/heads/<name>`). A base starting with `-` is refused. A new branch tracks nothing, and its first push sets its upstream.
+- With the inside root, the first creation in a repo appends the line `/.worktrees/` to `<common dir>/info/exclude` unless a line already equals it (`info/` is created when missing). `.gitignore` is never touched.
+- Creation also reports the tools found in the main checkout that need their own ignore entry, each with the file that triggered it and a hint such as `add ".worktrees" to files.watcherExclude`: JetBrains (a `.idea/` directory), VS Code (`.vscode/settings.json` whose `files.watcherExclude` has no key containing `.worktrees`), Jest or Vitest (`jest.config.*`, `vitest.config.*` or a `jest` key in `package.json`), pytest (`pytest.ini`, `[tool.pytest.ini_options]` in `pyproject.toml`, `[tool:pytest]` in `setup.cfg` or `[pytest]` in `tox.ini`), TypeScript (`tsconfig.json` with no `include`, or an entry starting with `**`), ESLint (`.eslintrc*` or `eslint.config.*`) and Docker (a `Dockerfile` with no `.dockerignore`, or one with no line containing `.worktrees`). Detection reads files only; JSON that does not parse counts as needing an entry.
 
 ### One diff engine, three sources
 
 The agent view and the PR view share one engine, so the full-file toggle and reviewed-hunk tracking work in both.
 
 ```go
-type DiffSource interface{ diffSource() }
+type Source interface{ source() }
 
-type BranchSource struct{ Worktree, Base string }                   // merge-base(base, HEAD) -> working tree + untracked
+type BranchSource struct{ Worktree, Base string } // merge-base(base, HEAD) -> working tree + untracked
 type TurnSource struct {
-	Worktree string
-	Session  SessionID
-	Turn     int
+	Worktree, Session string
+	Turn              int // 0 = the latest
 }
-type PRSource struct {
-	Repo       RepoID
+type PRSource struct { // returns ErrNotImplemented until the PR milestone
+	Repo       string
 	Number     int
-	Base, Head OID
+	Base, Head string
+}
+
+type Status string
+
+const (
+	Added       Status = "added"
+	Deleted     Status = "deleted"
+	Modified    Status = "modified"
+	Renamed     Status = "renamed"
+	Copied      Status = "copied"
+	ModeChanged Status = "mode"
+)
+
+type LineKind byte
+
+const (
+	Context LineKind = ' '
+	Add     LineKind = '+'
+	Del     LineKind = '-'
+)
+
+type Line struct {
+	Kind      LineKind
+	Old, New  int    // line numbers; 0 on the side the line is not on
+	Text      string // as git printed it, without its newline
+	NoNewline bool
+}
+
+type Hunk struct {
+	OldStart, OldLines, NewStart, NewLines int
+	Section                                string
+	Lines                                  []Line
 }
 
 type FileDiff struct {
-	Path     string
-	Old, New OID   // zero value for added or deleted files
-	Hunks    []Hunk // line hunks with word-level spans
+	Path, OldPath                string
+	Status                       Status
+	OldOID, NewOID               string // full ids; "" on the side a file does not exist
+	OldMode, NewMode             string
+	Binary, Untracked, Truncated bool
+	Added, Removed               int
+	Hunks                        []Hunk
 }
+
+type Result struct {
+	Old, New  string // tree ids
+	Live      bool   // New is the working tree
+	Turn      int    // turn sources: the turn shown
+	Through   int    // turn sources: the last turn the diff covers
+	Files     []FileDiff
+	Truncated bool
+}
+
+type Limits struct{ Files, Bytes, Lines int }
+
+func DefaultLimits() Limits // Files 400, Bytes 2 << 20, Lines 5000
+
+var ErrNoSnapshot, ErrNoTurns, ErrNotImplemented error
+
+type Engine struct{ /* limits, temp dir, cache */ }
+
+func NewEngine(l Limits, tempDir string) *Engine // zero fields of l take the defaults
+func (e *Engine) Diff(ctx context.Context, src Source) (Result, error)
 ```
 
-- Diffs are computed off the UI goroutine and cached by `(old, new)` blob id.
-- Live mode: one recursive watcher per worktree, ignoring `.git` except HEAD, index and refs. Changes are debounced at 150 ms and only touched files are recomputed.
+- Diffs compare two tree ids in two passes. The listing (`git diff --raw --numstat -z -M -C --histogram`) gives every file's status, modes, full blob ids, line counts and binary flag. The hunk pass is one `git diff --histogram -U3 -M -C --full-index` over the files that need hunks (a rename's or copy's old path goes in the pathspec too, so git detects it again), parsed with `gitdiff.Parse`. The working tree becomes a tree through the temporary-index machinery of a snapshot, without the ref, so agent commits mid-turn never break a diff.
+- Caps default to 400 files, 2 MiB of diff text and 5000 changed lines per file. The hunk pass reads up to the byte cap, then git is killed and the output is cut at the last whole file; hunks served from the cache do not count against it. Files past a cap keep their status and counts and are marked `Truncated`; `Result.Truncated` is set when any file is. The review pane shows "too large, press `f` for the full file".
+- Hunks are cached by `(old blob id, new blob id)`, at most 2048 entries, least recently used out. Hunks are line hunks; intra-line spans are computed when rendering.
+- A branch source diffs the tree of `git merge-base <base> HEAD` against the working tree. An empty base means the default branch: the target of `refs/remotes/origin/HEAD`, else `main`, else `master`, else `ErrNoBase`; once a PR exists, its base is passed. Files that are untracked in the working tree are marked `Untracked`, whatever status git guessed (an untracked file can show as a rename or copy).
+- A turn source's latest turn is live: its snapshot against the working tree. A past turn `k` is its snapshot against the next turn that has one, and `Result.Through` names the last turn the diff covers (`k`, or more when later turns have no snapshot). A turn without a snapshot is `ErrNoSnapshot`; a session with no turns is `ErrNoTurns`.
+- Diffs are computed off the UI goroutine.
+- Live mode: one watcher per worktree (see below). `Engine.Update(ctx, prev, src, batch)` rebuilds the working tree and re-lists only the touched paths (a vanished path stands for everything under it), keeping the other files of `prev`; the result equals a fresh `Diff`. It runs a full `Diff` instead when the source is not live or a newer turn exists, a rename or copy is involved (in `prev`, among the touched files, or possible between them and the others: a touched new file beside other retained changes, or a touched change beside a retained new file, always falls back, because git may pair them), more than 200 paths are touched, a `.gitignore` is touched, the batch reports git metadata changes or an overflow, any file of `prev` is `Truncated`, or the result is near the file or byte cap.
 - Full-file view shows the new file with added lines marked and deleted lines as collapsible ghost lines.
 - Large files are virtualized; highlighting is capped per frame.
 - Reviewed hunks are keyed by a hash of the hunk content, so they stay read across rebases.
+
+**Watcher**
+
+- It watches every directory of the worktree except `.git`, the main checkout's `.worktrees/` and directories git ignores (`git check-ignore -z --stdin` over the walk's directories), so `node_modules` and `target` get no watches. Directories created later are walked the same way.
+- Git metadata is watched separately: the worktree's own git dir for `HEAD` and `index`, and the common dir's `packed-refs` and `refs/` except `refs/muxreveal/`, so snapshot writes do not wake it. Events there set `Batch.Git` instead of adding paths.
+- File events for paths git ignores are dropped; tracked files are never reported as ignored.
+- A batch goes out 150 ms after the last event, or 1 s after the first unsent one while events keep coming. An `fsnotify` overflow sends `Batch{Overflow: true}`.
+- A change to a `.gitignore` re-walks to add directories that are no longer ignored; directories that became ignored stay watched until the watcher restarts.
+- Running out of watches is an error naming `fs.inotify.max_user_watches` on Linux. `Close` stops every goroutine and closes the batch channel within 1 s.
 
 ### GitHub and CI
 
@@ -718,8 +807,8 @@ The biggest risk is terminal-layer correctness and performance, so the spike and
 | Claude Code changes `--settings`, hook payloads or resume behavior | Resume or turns break | Everything lives in the harness adapter; a weekly CI job runs against the latest `claude` |
 | `--resume` fails for a session | Lost context on restore | Fresh `claude` with a visible notice (PR-4) |
 | Kitty graphics differences between Ghostty and Kitty | Broken or ghost images | Test both from M3; detect support at startup; disable images under tmux or over SSH |
-| Turn snapshots slow on large repos | Prompt submit feels sluggish | Measure in M2; skip when the watcher saw no changes |
-| `rjeczalik/notify` maintenance | Watcher bugs | Small wrapper interface; `fsnotify` with a directory walk as fallback on Linux |
+| Turn snapshots slow on large repos | Prompt submit feels sluggish | Index copy keeps git's stat cache; measured in M2a; skipped when the watcher saw no change (M2b) |
+| `fsnotify` uses kqueue on macOS | One descriptor per watched file; a large repo can reach the open-file limit | Ignored directories get no watches; FSEvents backend later |
 | GitHub rate limits with many PRs | Stale CI | Poll only repos with open panes, adaptive intervals, ETags on focused PRs |
 | Merging something unreviewed | Bad merge | Head `sha` guard plus a confirm dialog |
 | Scope | v1 never ships | P0 cut is strict; everything else waits for v1.x |

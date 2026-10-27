@@ -1,0 +1,579 @@
+{
+  "Files": [
+    {
+      "Added": 0,
+      "Binary": true,
+      "Hunks": null,
+      "NewMode": "100644",
+      "NewOID": "f75c32acfbf126176c30bf9bda9a5f2bb8f78d06",
+      "OldMode": "100644",
+      "OldOID": "eaf36c1daccfdf325514461cd1a2ffbc139b5464",
+      "OldPath": "",
+      "Path": "bin.dat",
+      "Removed": 0,
+      "Status": "modified",
+      "Truncated": false,
+      "Untracked": false
+    },
+    {
+      "Added": 0,
+      "Binary": false,
+      "Hunks": null,
+      "NewMode": "100644",
+      "NewOID": "2d54177c329e55d9034f1e12672055042079cdd5",
+      "OldMode": "100644",
+      "OldOID": "2d54177c329e55d9034f1e12672055042079cdd5",
+      "OldPath": "src.txt",
+      "Path": "copy.txt",
+      "Removed": 0,
+      "Status": "copied",
+      "Truncated": false,
+      "Untracked": true
+    },
+    {
+      "Added": 0,
+      "Binary": false,
+      "Hunks": [
+        {
+          "Lines": [
+            {
+              "Kind": "-",
+              "New": 0,
+              "NoNewline": false,
+              "Old": 1,
+              "Text": "del 1"
+            },
+            {
+              "Kind": "-",
+              "New": 0,
+              "NoNewline": false,
+              "Old": 2,
+              "Text": "del 2"
+            },
+            {
+              "Kind": "-",
+              "New": 0,
+              "NoNewline": false,
+              "Old": 3,
+              "Text": "del 3"
+            },
+            {
+              "Kind": "-",
+              "New": 0,
+              "NoNewline": false,
+              "Old": 4,
+              "Text": "del 4"
+            },
+            {
+              "Kind": "-",
+              "New": 0,
+              "NoNewline": false,
+              "Old": 5,
+              "Text": "del 5"
+            },
+            {
+              "Kind": "-",
+              "New": 0,
+              "NoNewline": false,
+              "Old": 6,
+              "Text": "del 6"
+            },
+            {
+              "Kind": "-",
+              "New": 0,
+              "NoNewline": false,
+              "Old": 7,
+              "Text": "del 7"
+            },
+            {
+              "Kind": "-",
+              "New": 0,
+              "NoNewline": false,
+              "Old": 8,
+              "Text": "del 8"
+            },
+            {
+              "Kind": "-",
+              "New": 0,
+              "NoNewline": false,
+              "Old": 9,
+              "Text": "del 9"
+            },
+            {
+              "Kind": "-",
+              "New": 0,
+              "NoNewline": false,
+              "Old": 10,
+              "Text": "del 10"
+            },
+            {
+              "Kind": "-",
+              "New": 0,
+              "NoNewline": false,
+              "Old": 11,
+              "Text": "del 11"
+            },
+            {
+              "Kind": "-",
+              "New": 0,
+              "NoNewline": false,
+              "Old": 12,
+              "Text": "del 12"
+            },
+            {
+              "Kind": "-",
+              "New": 0,
+              "NoNewline": false,
+              "Old": 13,
+              "Text": "del 13"
+            },
+            {
+              "Kind": "-",
+              "New": 0,
+              "NoNewline": false,
+              "Old": 14,
+              "Text": "del 14"
+            },
+            {
+              "Kind": "-",
+              "New": 0,
+              "NoNewline": false,
+              "Old": 15,
+              "Text": "del 15"
+            },
+            {
+              "Kind": "-",
+              "New": 0,
+              "NoNewline": false,
+              "Old": 16,
+              "Text": "del 16"
+            },
+            {
+              "Kind": "-",
+              "New": 0,
+              "NoNewline": false,
+              "Old": 17,
+              "Text": "del 17"
+            },
+            {
+              "Kind": "-",
+              "New": 0,
+              "NoNewline": false,
+              "Old": 18,
+              "Text": "del 18"
+            },
+            {
+              "Kind": "-",
+              "New": 0,
+              "NoNewline": false,
+              "Old": 19,
+              "Text": "del 19"
+            },
+            {
+              "Kind": "-",
+              "New": 0,
+              "NoNewline": false,
+              "Old": 20,
+              "Text": "del 20"
+            }
+          ],
+          "NewLines": 0,
+          "NewStart": 0,
+          "OldLines": 20,
+          "OldStart": 1,
+          "Section": ""
+        }
+      ],
+      "NewMode": "",
+      "NewOID": "",
+      "OldMode": "100644",
+      "OldOID": "b71871eec4ad432494f0faade205773a4ad6491c",
+      "OldPath": "",
+      "Path": "del.txt",
+      "Removed": 20,
+      "Status": "deleted",
+      "Truncated": false,
+      "Untracked": false
+    },
+    {
+      "Added": 2,
+      "Binary": false,
+      "Hunks": [
+        {
+          "Lines": [
+            {
+              "Kind": " ",
+              "New": 2,
+              "NoNewline": false,
+              "Old": 2,
+              "Text": "mod 2"
+            },
+            {
+              "Kind": " ",
+              "New": 3,
+              "NoNewline": false,
+              "Old": 3,
+              "Text": "mod 3"
+            },
+            {
+              "Kind": " ",
+              "New": 4,
+              "NoNewline": false,
+              "Old": 4,
+              "Text": "mod 4"
+            },
+            {
+              "Kind": "-",
+              "New": 0,
+              "NoNewline": false,
+              "Old": 5,
+              "Text": "mod 5"
+            },
+            {
+              "Kind": "+",
+              "New": 5,
+              "NoNewline": false,
+              "Old": 0,
+              "Text": "mod five"
+            },
+            {
+              "Kind": " ",
+              "New": 6,
+              "NoNewline": false,
+              "Old": 6,
+              "Text": "mod 6"
+            },
+            {
+              "Kind": " ",
+              "New": 7,
+              "NoNewline": false,
+              "Old": 7,
+              "Text": "mod 7"
+            },
+            {
+              "Kind": " ",
+              "New": 8,
+              "NoNewline": false,
+              "Old": 8,
+              "Text": "mod 8"
+            }
+          ],
+          "NewLines": 7,
+          "NewStart": 2,
+          "OldLines": 7,
+          "OldStart": 2,
+          "Section": "mod 1"
+        },
+        {
+          "Lines": [
+            {
+              "Kind": " ",
+              "New": 12,
+              "NoNewline": false,
+              "Old": 12,
+              "Text": "mod 12"
+            },
+            {
+              "Kind": " ",
+              "New": 13,
+              "NoNewline": false,
+              "Old": 13,
+              "Text": "mod 13"
+            },
+            {
+              "Kind": " ",
+              "New": 14,
+              "NoNewline": false,
+              "Old": 14,
+              "Text": "mod 14"
+            },
+            {
+              "Kind": "-",
+              "New": 0,
+              "NoNewline": false,
+              "Old": 15,
+              "Text": "mod 15"
+            },
+            {
+              "Kind": "+",
+              "New": 15,
+              "NoNewline": false,
+              "Old": 0,
+              "Text": "mod fifteen"
+            },
+            {
+              "Kind": " ",
+              "New": 16,
+              "NoNewline": false,
+              "Old": 16,
+              "Text": "mod 16"
+            },
+            {
+              "Kind": " ",
+              "New": 17,
+              "NoNewline": false,
+              "Old": 17,
+              "Text": "mod 17"
+            },
+            {
+              "Kind": " ",
+              "New": 18,
+              "NoNewline": false,
+              "Old": 18,
+              "Text": "mod 18"
+            }
+          ],
+          "NewLines": 7,
+          "NewStart": 12,
+          "OldLines": 7,
+          "OldStart": 12,
+          "Section": "mod 11"
+        }
+      ],
+      "NewMode": "100644",
+      "NewOID": "623985aa6786151ecfdc06ac11353065c4b255a1",
+      "OldMode": "100644",
+      "OldOID": "49b22dcbbbed98bd753fda1c45c553dc114ca044",
+      "OldPath": "",
+      "Path": "mod.txt",
+      "Removed": 2,
+      "Status": "modified",
+      "Truncated": false,
+      "Untracked": false
+    },
+    {
+      "Added": 0,
+      "Binary": false,
+      "Hunks": null,
+      "NewMode": "100755",
+      "NewOID": "8b2fe5434fec16870a71cd8b272c7fcf6d352536",
+      "OldMode": "100644",
+      "OldOID": "8b2fe5434fec16870a71cd8b272c7fcf6d352536",
+      "OldPath": "",
+      "Path": "mode.sh",
+      "Removed": 0,
+      "Status": "mode",
+      "Truncated": false,
+      "Untracked": false
+    },
+    {
+      "Added": 0,
+      "Binary": false,
+      "Hunks": null,
+      "NewMode": "100644",
+      "NewOID": "5a354bc25d4d4d20abf7f3f0bcb25c2e478e5c31",
+      "OldMode": "100644",
+      "OldOID": "5a354bc25d4d4d20abf7f3f0bcb25c2e478e5c31",
+      "OldPath": "ren.txt",
+      "Path": "moved.txt",
+      "Removed": 0,
+      "Status": "renamed",
+      "Truncated": false,
+      "Untracked": true
+    },
+    {
+      "Added": 1,
+      "Binary": false,
+      "Hunks": [
+        {
+          "Lines": [
+            {
+              "Kind": " ",
+              "New": 1,
+              "NoNewline": false,
+              "Old": 1,
+              "Text": "renedit 1"
+            },
+            {
+              "Kind": " ",
+              "New": 2,
+              "NoNewline": false,
+              "Old": 2,
+              "Text": "renedit 2"
+            },
+            {
+              "Kind": "-",
+              "New": 0,
+              "NoNewline": false,
+              "Old": 3,
+              "Text": "renedit 3"
+            },
+            {
+              "Kind": "+",
+              "New": 3,
+              "NoNewline": false,
+              "Old": 0,
+              "Text": "renedit three"
+            },
+            {
+              "Kind": " ",
+              "New": 4,
+              "NoNewline": false,
+              "Old": 4,
+              "Text": "renedit 4"
+            },
+            {
+              "Kind": " ",
+              "New": 5,
+              "NoNewline": false,
+              "Old": 5,
+              "Text": "renedit 5"
+            },
+            {
+              "Kind": " ",
+              "New": 6,
+              "NoNewline": false,
+              "Old": 6,
+              "Text": "renedit 6"
+            }
+          ],
+          "NewLines": 6,
+          "NewStart": 1,
+          "OldLines": 6,
+          "OldStart": 1,
+          "Section": ""
+        }
+      ],
+      "NewMode": "100644",
+      "NewOID": "2ac2f38003d51bc181555283767a04ccb000a8ac",
+      "OldMode": "100644",
+      "OldOID": "8ad34cd5b2d033b44d3ce50b45ac2c0e52eb39d8",
+      "OldPath": "renedit.txt",
+      "Path": "renamed-edit.txt",
+      "Removed": 1,
+      "Status": "renamed",
+      "Truncated": false,
+      "Untracked": true
+    },
+    {
+      "Added": 1,
+      "Binary": false,
+      "Hunks": [
+        {
+          "Lines": [
+            {
+              "Kind": " ",
+              "New": 18,
+              "NoNewline": false,
+              "Old": 18,
+              "Text": "src 18"
+            },
+            {
+              "Kind": " ",
+              "New": 19,
+              "NoNewline": false,
+              "Old": 19,
+              "Text": "src 19"
+            },
+            {
+              "Kind": " ",
+              "New": 20,
+              "NoNewline": false,
+              "Old": 20,
+              "Text": "src 20"
+            },
+            {
+              "Kind": "+",
+              "New": 21,
+              "NoNewline": false,
+              "Old": 0,
+              "Text": "src appended"
+            }
+          ],
+          "NewLines": 4,
+          "NewStart": 18,
+          "OldLines": 3,
+          "OldStart": 18,
+          "Section": "src 17"
+        }
+      ],
+      "NewMode": "100644",
+      "NewOID": "92fd83fa1f22ac6387fb2efcc792e727024f2164",
+      "OldMode": "100644",
+      "OldOID": "2d54177c329e55d9034f1e12672055042079cdd5",
+      "OldPath": "",
+      "Path": "src.txt",
+      "Removed": 0,
+      "Status": "modified",
+      "Truncated": false,
+      "Untracked": false
+    },
+    {
+      "Added": 1,
+      "Binary": false,
+      "Hunks": [
+        {
+          "Lines": [
+            {
+              "Kind": "+",
+              "New": 1,
+              "NoNewline": false,
+              "Old": 0,
+              "Text": "s1"
+            }
+          ],
+          "NewLines": 1,
+          "NewStart": 1,
+          "OldLines": 0,
+          "OldStart": 0,
+          "Section": ""
+        }
+      ],
+      "NewMode": "100644",
+      "NewOID": "655c6e645cc5a42912b35234405e82775c242252",
+      "OldMode": "",
+      "OldOID": "",
+      "OldPath": "",
+      "Path": "staged.txt",
+      "Removed": 0,
+      "Status": "added",
+      "Truncated": false,
+      "Untracked": false
+    },
+    {
+      "Added": 2,
+      "Binary": false,
+      "Hunks": [
+        {
+          "Lines": [
+            {
+              "Kind": "+",
+              "New": 1,
+              "NoNewline": false,
+              "Old": 0,
+              "Text": "u1"
+            },
+            {
+              "Kind": "+",
+              "New": 2,
+              "NoNewline": false,
+              "Old": 0,
+              "Text": "u2"
+            }
+          ],
+          "NewLines": 2,
+          "NewStart": 1,
+          "OldLines": 0,
+          "OldStart": 0,
+          "Section": ""
+        }
+      ],
+      "NewMode": "100644",
+      "NewOID": "8ff1852d20b8ccab7f8f380dbbf1080b2c97633d",
+      "OldMode": "",
+      "OldOID": "",
+      "OldPath": "",
+      "Path": "untracked.txt",
+      "Removed": 0,
+      "Status": "added",
+      "Truncated": false,
+      "Untracked": true
+    }
+  ],
+  "Live": true,
+  "New": "2e5e7d2fee7d2713c881a428445dccc493340d51",
+  "Old": "f4c4730e90b463680ca9dad0fce6b05f35554c11",
+  "Through": 0,
+  "Truncated": false,
+  "Turn": 0
+}

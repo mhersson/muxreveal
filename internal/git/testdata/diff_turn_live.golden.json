@@ -1,0 +1,81 @@
+{
+  "Files": [
+    {
+      "Added": 1,
+      "Binary": false,
+      "Hunks": [
+        {
+          "Lines": [
+            {
+              "Kind": "-",
+              "New": 0,
+              "NoNewline": false,
+              "Old": 1,
+              "Text": "turn two"
+            },
+            {
+              "Kind": "+",
+              "New": 1,
+              "NoNewline": false,
+              "Old": 0,
+              "Text": "after two"
+            }
+          ],
+          "NewLines": 1,
+          "NewStart": 1,
+          "OldLines": 1,
+          "OldStart": 1,
+          "Section": ""
+        }
+      ],
+      "NewMode": "100644",
+      "NewOID": "554eb649f0f8f835eb64312249829c8b1c6f6d69",
+      "OldMode": "100644",
+      "OldOID": "017034771a4f89f88f9cc361633abf918c9fcada",
+      "OldPath": "",
+      "Path": "a.txt",
+      "Removed": 1,
+      "Status": "modified",
+      "Truncated": false,
+      "Untracked": false
+    },
+    {
+      "Added": 1,
+      "Binary": false,
+      "Hunks": [
+        {
+          "Lines": [
+            {
+              "Kind": "+",
+              "New": 1,
+              "NoNewline": false,
+              "Old": 0,
+              "Text": "live"
+            }
+          ],
+          "NewLines": 1,
+          "NewStart": 1,
+          "OldLines": 0,
+          "OldStart": 0,
+          "Section": ""
+        }
+      ],
+      "NewMode": "100644",
+      "NewOID": "e23fe645b7a2cf4e94e10a365985983f25266ca3",
+      "OldMode": "",
+      "OldOID": "",
+      "OldPath": "",
+      "Path": "live.txt",
+      "Removed": 0,
+      "Status": "added",
+      "Truncated": false,
+      "Untracked": true
+    }
+  ],
+  "Live": true,
+  "New": "943b9bbc011047a42fd4e38c93e4570e8fac5c11",
+  "Old": "26fd0144baa936547a52123726876bd420895f32",
+  "Through": 2,
+  "Truncated": false,
+  "Turn": 2
+}

@@ -1,0 +1,138 @@
+{
+  "Files": [
+    {
+      "Added": 1,
+      "Binary": false,
+      "Hunks": [
+        {
+          "Lines": [
+            {
+              "Kind": "+",
+              "New": 1,
+              "NoNewline": false,
+              "Old": 0,
+              "Text": "now a file"
+            }
+          ],
+          "NewLines": 1,
+          "NewStart": 1,
+          "OldLines": 0,
+          "OldStart": 0,
+          "Section": ""
+        }
+      ],
+      "NewMode": "100644",
+      "NewOID": "3f899ea7ab51da801dbacbf633c168b0591d7765",
+      "OldMode": "",
+      "OldOID": "",
+      "OldPath": "",
+      "Path": "d",
+      "Removed": 0,
+      "Status": "added",
+      "Truncated": false,
+      "Untracked": true
+    },
+    {
+      "Added": 0,
+      "Binary": false,
+      "Hunks": [
+        {
+          "Lines": [
+            {
+              "Kind": "-",
+              "New": 0,
+              "NoNewline": false,
+              "Old": 1,
+              "Text": "inner"
+            }
+          ],
+          "NewLines": 0,
+          "NewStart": 0,
+          "OldLines": 1,
+          "OldStart": 1,
+          "Section": ""
+        }
+      ],
+      "NewMode": "",
+      "NewOID": "",
+      "OldMode": "100644",
+      "OldOID": "f05648e753bc95da97c2b753903c1111061d67af",
+      "OldPath": "",
+      "Path": "d/inner.txt",
+      "Removed": 1,
+      "Status": "deleted",
+      "Truncated": false,
+      "Untracked": false
+    },
+    {
+      "Added": 0,
+      "Binary": false,
+      "Hunks": [
+        {
+          "Lines": [
+            {
+              "Kind": "-",
+              "New": 0,
+              "NoNewline": false,
+              "Old": 1,
+              "Text": "was a file"
+            }
+          ],
+          "NewLines": 0,
+          "NewStart": 0,
+          "OldLines": 1,
+          "OldStart": 1,
+          "Section": ""
+        }
+      ],
+      "NewMode": "",
+      "NewOID": "",
+      "OldMode": "100644",
+      "OldOID": "5125a286a4866450970e58bd9e682faffe7d904e",
+      "OldPath": "",
+      "Path": "x",
+      "Removed": 1,
+      "Status": "deleted",
+      "Truncated": false,
+      "Untracked": false
+    },
+    {
+      "Added": 1,
+      "Binary": false,
+      "Hunks": [
+        {
+          "Lines": [
+            {
+              "Kind": "+",
+              "New": 1,
+              "NoNewline": false,
+              "Old": 0,
+              "Text": "now inside"
+            }
+          ],
+          "NewLines": 1,
+          "NewStart": 1,
+          "OldLines": 0,
+          "OldStart": 0,
+          "Section": ""
+        }
+      ],
+      "NewMode": "100644",
+      "NewOID": "5ddba3b0ad41386cfb50c22242b91add12cdc29e",
+      "OldMode": "",
+      "OldOID": "",
+      "OldPath": "",
+      "Path": "x/new.txt",
+      "Removed": 0,
+      "Status": "added",
+      "Truncated": false,
+      "Untracked": true
+    }
+  ],
+  "Live": true,
+  "New": "2454b0427f22e7afdd1ab44108a310dd3a2423e5",
+  "Old": "ae5c016de5c467e13da96b65f59f3b3cd3cd819a",
+  "Through": 0,
+  "Truncated": false,
+  "Turn": 0
+}

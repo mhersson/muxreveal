@@ -1,0 +1,160 @@
+{
+  "Files": [
+    {
+      "Added": 1,
+      "Binary": false,
+      "Hunks": [
+        {
+          "Lines": [
+            {
+              "Kind": "-",
+              "New": 0,
+              "NoNewline": true,
+              "Old": 1,
+              "Text": "target.txt"
+            },
+            {
+              "Kind": "+",
+              "New": 1,
+              "NoNewline": true,
+              "Old": 0,
+              "Text": "elsewhere.txt"
+            }
+          ],
+          "NewLines": 1,
+          "NewStart": 1,
+          "OldLines": 1,
+          "OldStart": 1,
+          "Section": ""
+        }
+      ],
+      "NewMode": "120000",
+      "NewOID": "77d373837a3bd5d037b91a2ec86c1d75b159fb32",
+      "OldMode": "120000",
+      "OldOID": "4cbb553f3f4ac2ee7b01ff6c951d6bf583c39c15",
+      "OldPath": "",
+      "Path": "link",
+      "Removed": 1,
+      "Status": "modified",
+      "Truncated": false,
+      "Untracked": false
+    },
+    {
+      "Added": 0,
+      "Binary": false,
+      "Hunks": null,
+      "NewMode": "120000",
+      "NewOID": "4cbb553f3f4ac2ee7b01ff6c951d6bf583c39c15",
+      "OldMode": "120000",
+      "OldOID": "4cbb553f3f4ac2ee7b01ff6c951d6bf583c39c15",
+      "OldPath": "link",
+      "Path": "newlink",
+      "Removed": 0,
+      "Status": "copied",
+      "Truncated": false,
+      "Untracked": true
+    },
+    {
+      "Added": 1,
+      "Binary": false,
+      "Hunks": [
+        {
+          "Lines": [
+            {
+              "Kind": "-",
+              "New": 0,
+              "NoNewline": true,
+              "Old": 1,
+              "Text": "target.txt"
+            }
+          ],
+          "NewLines": 0,
+          "NewStart": 0,
+          "OldLines": 1,
+          "OldStart": 1,
+          "Section": ""
+        },
+        {
+          "Lines": [
+            {
+              "Kind": "+",
+              "New": 1,
+              "NoNewline": false,
+              "Old": 0,
+              "Text": "now a file"
+            }
+          ],
+          "NewLines": 1,
+          "NewStart": 1,
+          "OldLines": 0,
+          "OldStart": 0,
+          "Section": ""
+        }
+      ],
+      "NewMode": "100644",
+      "NewOID": "3f899ea7ab51da801dbacbf633c168b0591d7765",
+      "OldMode": "120000",
+      "OldOID": "4cbb553f3f4ac2ee7b01ff6c951d6bf583c39c15",
+      "OldPath": "",
+      "Path": "tofile",
+      "Removed": 1,
+      "Status": "modified",
+      "Truncated": false,
+      "Untracked": false
+    },
+    {
+      "Added": 1,
+      "Binary": false,
+      "Hunks": [
+        {
+          "Lines": [
+            {
+              "Kind": "-",
+              "New": 0,
+              "NoNewline": false,
+              "Old": 1,
+              "Text": "was a file"
+            }
+          ],
+          "NewLines": 0,
+          "NewStart": 0,
+          "OldLines": 1,
+          "OldStart": 1,
+          "Section": ""
+        },
+        {
+          "Lines": [
+            {
+              "Kind": "+",
+              "New": 1,
+              "NoNewline": true,
+              "Old": 0,
+              "Text": "target.txt"
+            }
+          ],
+          "NewLines": 1,
+          "NewStart": 1,
+          "OldLines": 0,
+          "OldStart": 0,
+          "Section": ""
+        }
+      ],
+      "NewMode": "120000",
+      "NewOID": "4cbb553f3f4ac2ee7b01ff6c951d6bf583c39c15",
+      "OldMode": "100644",
+      "OldOID": "5125a286a4866450970e58bd9e682faffe7d904e",
+      "OldPath": "",
+      "Path": "tolink.txt",
+      "Removed": 1,
+      "Status": "modified",
+      "Truncated": false,
+      "Untracked": false
+    }
+  ],
+  "Live": true,
+  "New": "0811782148a68cb14d6457b8417ca4fc916256e5",
+  "Old": "6d5d46e781283148e1a3448e788592856aa83cc3",
+  "Through": 0,
+  "Truncated": false,
+  "Turn": 0
+}
