@@ -4,7 +4,7 @@ Update this file at the end of every session: tick what's done, set the next ste
 
 ## Current milestones
 
-M1e Tiling, tab moves and chrome is merged (PR #12) and M2a Worktrees and diff engine is merged (PR #11); the reboot part of the M1e gate is still the operator's check. The build, CI and lint tooling work (Makefile, GitHub Actions CI with Dependabot, stricter golangci-lint config) is complete. The agents rail and M3a GitHub and push backend run next, in parallel, each on its own branch and PR; M2b Review pane follows the rail, and M3b follows M2b.
+M1e Tiling, tab moves and chrome is merged (PR #12), M2a Worktrees and diff engine is merged (PR #11) and M3a GitHub and push backend is merged (PR #15); the reboot part of the M1e gate is still the operator's check. The build, CI and lint tooling work (Makefile, GitHub Actions CI with Dependabot, stricter golangci-lint config) is complete. M1f Agents rail is complete and waits for review on its PR. M2b Review pane is next, then M3b.
 
 ## M1 Terminal core
 
@@ -219,42 +219,42 @@ Gate: six-pane bench p99 at most 8 ms with the rail open and six working agents 
 
 #### M1f gate results
 
-Gate: six-pane bench p99 <= 8 ms with the rail open and six working agents (runs a, b and c), and idle CPU <= 1 % of one core with the rail open over six idle shells. **Both met**, the bench with a thin margin: the rail costs about 1 ms of p99 at six panes, and one invocation of run b (8.16 ms) came out over the line.
+Gate: six-pane bench p99 <= 8 ms with the rail open and six working agents (runs a, b and c), and idle CPU <= 1 % of one core with the rail open over six idle shells. **Both met.**
 
-Bench: the same setup as the M1a gate results (runs a, b and c with the same recordings, windows and staggers, 240x64, 60 FPS virtual clock, bsp, every pane a working agent with an animated badge, each invocation the median of 3 per row), with the rail open through `MUXREVEAL_BENCH_RAIL=1` (`CGO_ENABLED=1 MUXREVEAL_BENCH_RAIL=1 go test -tags bench ./internal/ui -run 'TestBench$' -v`). The rail is 44 columns wide, so the panes replay at 62 or 66 columns by 29 rows at six panes (82 or 76 before). Each run was invoked four times (the load average read 2.4 to 2.9 throughout); the row shown is the invocation whose six-pane p99 is the median (the upper middle of four). Six-pane p99 per invocation, in order, and the median:
+Bench: the same setup as the M1a gate results (runs a, b and c with the same recordings, windows and staggers, 240x64, 60 FPS virtual clock, bsp, every pane a working agent with an animated badge), one invocation per run, each the median of 3 repeats, with the rail open through `MUXREVEAL_BENCH_RAIL=1` (`CGO_ENABLED=1 MUXREVEAL_BENCH_RAIL=1 go test -tags bench ./internal/ui -run 'TestBench$' -v`, with `MUXREVEAL_BENCH_RECORDINGS`, `_START`, `_LENGTH`, `_STAGGER`). Quiet machine; 1-minute load average before each run: a 1.27, b 1.45, c 1.41. The rail is 44 columns wide, so the panes replay at 62 or 66 columns by 29 rows at six panes (82 or 76 without it). Six-pane p99:
 
-| Run | Invocations | Median |
-| --- | --- | --- |
-| a | 7.82, 7.21, 7.72, 7.51 ms | **7.72 ms** |
-| b | 8.16, 7.54, 7.02, 6.93 ms | **7.54 ms** |
-| c | 7.72, 7.02, 7.16, 6.42 ms | **7.16 ms** |
-
-Two more invocations of run b read 7.79 and 7.26 ms. Against the same machine without the rail, run b read 5.85 and 6.50 ms (M1e, no rail: 6.49 ms): the rail adds about 0.5 ms to p50, about 1 ms to p99 and about 0.7 ms to update+view p99 (every frame draws the rail's cards on top of six animating badges).
+| Run | Six-pane p99 |
+| --- | --- |
+| a | **7.03 ms** |
+| b | **7.19 ms** |
+| c | **6.12 ms** |
 
 | Run | Panes | Frames | Bytes fed | p50 | p95 | p99 | max | CPU % | feed / update+view / present p99 | GCs |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| a | 2 | 462 | 386,215 | 2.68 ms | 5.45 ms | 6.52 ms | 8.47 ms | 5.1 | 0.11 / 1.47 / 5.66 ms | 18 |
-| a | 4 | 634 | 781,212 | 2.78 ms | 5.81 ms | 6.61 ms | 8.29 ms | 7.4 | 0.17 / 1.69 / 4.98 ms | 24 |
-| a | 6 | 798 | 1,127,049 | 3.36 ms | 6.54 ms | **7.72 ms** | 9.54 ms | 10.9 | 0.24 / 2.15 / 6.28 ms | 37 |
-| b | 2 | 106 | 111,141 | 3.04 ms | 5.49 ms | 6.10 ms | 6.23 ms | 5.5 | 0.11 / 1.77 / 4.28 ms | 4 |
-| b | 4 | 141 | 225,640 | 2.85 ms | 5.72 ms | 6.89 ms | 7.46 ms | 7.1 | 0.17 / 1.71 / 5.39 ms | 5 |
-| b | 6 | 161 | 330,780 | 3.22 ms | 6.47 ms | **7.54 ms** | 8.38 ms | 9.2 | 0.29 / 2.18 / 6.43 ms | 8 |
-| c | 2 | 69 | 91,262 | 3.57 ms | 6.45 ms | 7.00 ms | 7.00 ms | 6.5 | 0.18 / 1.80 / 6.36 ms | 3 |
-| c | 4 | 100 | 188,627 | 2.83 ms | 5.76 ms | 6.90 ms | 7.07 ms | 9.0 | 0.25 / 1.85 / 4.79 ms | 3 |
-| c | 6 | 124 | 284,741 | 3.51 ms | 6.37 ms | **7.16 ms** | 7.20 ms | 13.0 | 0.27 / 2.05 / 5.04 ms | 5 |
+| a | 2 | 462 | 386,215 | 2.52 ms | 5.17 ms | 6.16 ms | 7.50 ms | 4.7 | 0.10 / 1.25 / 5.67 ms | 16 |
+| a | 4 | 634 | 781,212 | 2.61 ms | 5.51 ms | 6.78 ms | 8.13 ms | 7.0 | 0.18 / 1.32 / 5.97 ms | 19 |
+| a | 6 | 798 | 1,127,049 | 2.75 ms | 5.76 ms | **7.03 ms** | 7.86 ms | 9.4 | 0.21 / 1.63 / 5.95 ms | 29 |
+| b | 2 | 106 | 111,141 | 2.52 ms | 5.62 ms | 6.75 ms | 7.19 ms | 5.0 | 0.16 / 1.42 / 5.24 ms | 3 |
+| b | 4 | 141 | 225,640 | 2.74 ms | 5.78 ms | 7.48 ms | 7.71 ms | 7.0 | 0.20 / 1.40 / 6.79 ms | 4 |
+| b | 6 | 161 | 330,780 | 2.78 ms | 6.34 ms | **7.19 ms** | 7.85 ms | 8.1 | 0.21 / 1.84 / 5.34 ms | 6 |
+| c | 2 | 69 | 91,262 | 2.66 ms | 5.56 ms | 6.63 ms | 6.63 ms | 6.1 | 0.19 / 1.49 / 5.63 ms | 2 |
+| c | 4 | 100 | 188,627 | 2.53 ms | 5.29 ms | 6.12 ms | 7.60 ms | 7.6 | 0.20 / 1.62 / 4.43 ms | 3 |
+| c | 6 | 124 | 284,741 | 2.60 ms | 4.91 ms | **6.12 ms** | 6.46 ms | 8.8 | 0.26 / 1.57 / 4.34 ms | 4 |
 
-The max column sits above 8 ms in some rows (run a six panes 9.54 ms, run b six panes 8.38 ms); the gate is the p99.
+The max column sits above 8 ms in one row (run a, four panes, 8.13 ms); the gate is the p99.
 
-Idle: six shell panes each running `sleep 3600`, 240x64 in a private tmux, no agents, tray on, the panes opened with `leader v` and `leader s` in turn, the rail opened with `leader a` and `esc` pressed (the rail stays open and shows "no running agents"), 30 s after a 5 s warm-up, `/proc/<pid>/stat` utime+stime. The binary was built from a `git archive` of the commit below.
+Rail cost, run b at six panes, from one invocation each on this machine and commit (the load before the no-rail run was 1.41): with the rail p99 7.19 ms, p50 2.78 ms, update+view p99 1.84 ms, present p99 5.34 ms; without it (`MUXREVEAL_BENCH_RAIL=0`) p99 7.02 ms, p50 2.82 ms, update+view p99 1.37 ms, present p99 6.28 ms. The rail adds about 0.5 ms to update+view p99; the frame p99 differs by 0.17 ms, inside the spread between invocations (M1e read 6.49 ms for this run without a rail).
+
+Idle: six shell panes each running `sleep 3600`, 240x64 in a private tmux, no agents, tray on, the panes opened with `leader v` and `leader s` in turn, the rail opened with `leader a` and `esc` pressed (the rail stays open and shows "no running agents"), 30 s after a 5 s warm-up, `/proc/<pid>/stat` utime+stime, two runs. The binary was built from a `git archive` of the commit below.
 
 | Run | Load average (1 min) | Ticks in 30 s | CPU |
 | --- | --- | --- | --- |
-| 1 | 1.58 | 19 | **0.63 %** |
-| 2 | 1.25 | 19 | **0.63 %** |
+| 1 | 0.64 | 17 | **0.57 %** |
+| 2 | 0.55 | 18 | **0.60 %** |
 
-Two earlier runs with the screen captured before the warm-up read 19 and 20 ticks (**0.63 %** and **0.67 %**, load 1.48 and 2.25). That is the M1e bsp figure (0.53 % and 0.57 %) plus about 0.1 point, within three ticks of it: the rail adds no tick and no probe while no agent works or is blocked.
+That is the M1e bsp figure (0.53 % and 0.57 %) within a tick: the rail adds no tick and no probe while no agent works or is blocked.
 
-Inputs: recordings `~/.cache/muxreveal-spike/recordings/pane-2.rec` (run a), `~/.cache/muxreveal/recordings/20261026-200408/p3.rec` (run b) and `p2.rec` (run c), none of them in the repo; AMD Ryzen 9 3950X, Linux 7.2.11, go1.27.3, tmux 3.8; commit `c69e199` (the rail bench knob on top of the rail).
+Inputs: recordings `~/.cache/muxreveal-spike/recordings/pane-2.rec` (run a), `~/.cache/muxreveal/recordings/20261026-200408/p3.rec` (run b) and `p2.rec` (run c), none of them in the repo; AMD Ryzen 9 3950X, Linux 7.2.11, go1.27.3, tmux 3.8; commit `65c71fd` (the agents rail as it merges).
 
 ## Spike - VT (done)
 
@@ -542,7 +542,7 @@ The PR list (agent branches), the PR view with its diff in the review pane, the 
 
 ## Next
 
-M1e Tiling, tab moves and chrome is merged (PR #12); the reboot part of its gate is still the operator's check. The build, CI and lint tooling work (Makefile, GitHub Actions CI with Dependabot, stricter golangci-lint config) is complete; the macOS test step in CI is non-blocking until the macOS test failures listed in Later are fixed. The agents rail and M3a GitHub and push backend run next, in parallel, each on its own branch and PR; M2b Review pane follows the rail, and M3b follows M2b.
+M1e Tiling, tab moves and chrome is merged (PR #12); the reboot part of its gate is still the operator's check. The build, CI and lint tooling work (Makefile, GitHub Actions CI with Dependabot, stricter golangci-lint config) is complete; the macOS test step in CI is non-blocking until the macOS test failures listed in Later are fixed. M3a GitHub and push backend is merged (PR #15). The agents rail is complete and waits for review on its PR; M2b Review pane is next, then M3b.
 
 ## Done
 
@@ -595,6 +595,9 @@ M1e Tiling, tab moves and chrome is merged (PR #12); the reboot part of its gate
 | 2026-10-27 | A PR diff names the head commit it shows, and a merge passes that commit | You never merge a commit you have not seen |
 | 2026-10-27 | The agents rail is 44 columns wide on a body of at least 84 columns, else the body less 40 (at least 24), and is not shown on a body under 64 (it stays open and the panes get the whole body); the wheel over it moves the selection; a hidden rail never holds the keyboard; with icons off it drops its glyphs but keeps the braille spinner, `●` and `▎`; a leader command that changes the active tab or its focused pane returns the keyboard to the panes while the rest leave it with the rail; the blocked bar sits under the selection outline (the operator's playground pick); hidden cards are counted in the bottom border (` ↑ N ` and ` N ↓ `) | The rail must leave room for the panes at any size and never trap the keys; moving focus is the signal that the user is done with the rail; the outline and the pulse must not fight for the same cells; the counts say what scrolled out of sight |
 | 2026-10-27 | The tray's git module is removed | The agents rail shows each agent's branch, and a shell's own prompt shows its branch |
+| 2026-10-27 | While the agents rail has the keyboard, the focused pane is drawn as an unfocused one (`Border` frame, `Muted` title) | Only one thing should look focused; the rail's `Accent` border says where the keys go |
+| 2026-10-27 | The rail's list scrolls by whole cards, keeping the selected card whole | A half-cut card hides its state and action; the counts in the border say what is out of sight |
+| 2026-10-27 | The rail keeps its last lines in a cache keyed by the store version, size, query, selection and animation phase | The rail is redrawn on every frame while a badge animates; a frame in which nothing changed in the rail reuses its lines |
 
 ## Later
 
