@@ -54,6 +54,7 @@ func (a *App) onHook(ev harness.Event) tea.Cmd {
 	}
 
 	a.railEntry(ev.Pane).hookAt = a.clock.Now()
+	a.watchRetry(ev.Pane)
 	probes := a.railHook(ev.Pane, ev.Start, ev.State == core.AgentIdle)
 
 	if ev.State == core.AgentIdle {

@@ -36,6 +36,7 @@ type probeSlot struct {
 	pending bool      // a trigger arrived that has not run yet
 	timer   bool      // a delayed probe is scheduled
 	cwd     string    // the cwd the latest probe was started for
+	force   bool      // the next run ignores the interval
 }
 
 // railHeadMsg is a head probe's answer; it carries the cwd it ran for.
@@ -182,7 +183,10 @@ func (a *App) railFire(st core.State, id core.PaneID, k railProbeKind) tea.Cmd {
 		every = statsEvery
 	}
 
-	if since := a.clock.Now().Sub(s.last); !s.last.IsZero() && since < every {
+	force := s.force
+	s.force = false
+
+	if since := a.clock.Now().Sub(s.last); !force && !s.last.IsZero() && since < every {
 		s.pending = true
 		if s.timer {
 			return nil
@@ -284,6 +288,8 @@ func (a *App) onRailHead(msg railHeadMsg) tea.Cmd {
 		return nil
 	}
 
+	var cmds []tea.Cmd
+
 	if fresh {
 		if msg.err != nil {
 			a.log.Debug("head probe", "pane", msg.pane, "err", msg.err)
@@ -294,20 +300,29 @@ func (a *App) onRailHead(msg railHeadMsg) tea.Cmd {
 			}
 		} else {
 			stats := rp.probe
+			moved := stats.known && stats.headCwd == msg.cwd && stats.repo && msg.res.repo &&
+				(stats.branch != msg.res.branch || stats.detached != msg.res.detached || stats.oid != msg.res.oid)
 			rp.probe = msg.res
 			rp.probe.stats, rp.probe.statsKnown, rp.probe.statsCwd = stats.stats, stats.statsKnown, stats.statsCwd
 
 			if !msg.res.repo {
 				rp.probe.stats, rp.probe.statsKnown = git.Stats{}, false
 			}
+
+			// A switch or a commit changes the totals; the interval waits otherwise.
+			if moved {
+				rp.stats.force = true
+
+				cmds = append(cmds, a.railFire(a.store.State(), msg.pane, probeStats))
+			}
 		}
 	}
 
 	if rp.head.pending {
-		return a.railFire(a.store.State(), msg.pane, probeHead)
+		cmds = append(cmds, a.railFire(a.store.State(), msg.pane, probeHead))
 	}
 
-	return nil
+	return tea.Batch(cmds...)
 }
 
 func (a *App) onRailStats(msg railStatsMsg) tea.Cmd {
@@ -371,7 +386,7 @@ func probeHeadOf(ctx context.Context, cwd string) (railProbe, error) {
 		return railProbe{}, err
 	}
 
-	res.branch, res.detached = h.Branch, h.Detached
+	res.branch, res.detached, res.oid = h.Branch, h.Detached, h.OID
 	if h.Detached {
 		res.branch = h.OID[:min(shortOIDLen, len(h.OID))]
 	}

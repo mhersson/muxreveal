@@ -43,10 +43,12 @@ type paneWatch struct {
 	want    string // the resolved root of cwd; "" outside a repository or until resolved
 	root    string // the root release holds a reference on
 	release func()
+	failed  bool // the latest resolution failed; a hook retries it
 }
 
 type watchState struct {
 	set    *git.WatchSet
+	open   func(context.Context, string) (git.Repo, error)
 	panes  map[core.PaneID]*paneWatch
 	failed map[string]bool // roots whose failure was already shown
 	holds  holds
@@ -195,11 +197,13 @@ func (a *App) watchSync() tea.Cmd {
 }
 
 func (a *App) resolveCmd(id core.PaneID, cwd string) tea.Cmd {
+	open := a.watches.open
+
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(a.ctx, watchResolveTimeout)
 		defer cancel()
 
-		r, err := git.Open(ctx, cwd)
+		r, err := open(ctx, cwd)
 
 		return paneRepoMsg{id: id, cwd: cwd, repo: r, err: err}
 	}
@@ -214,15 +218,22 @@ func (a *App) onPaneRepo(msg paneRepoMsg) tea.Cmd {
 	}
 
 	switch {
-	case errors.Is(msg.err, git.ErrNotRepo):
+	case errors.Is(msg.err, git.ErrNotRepo), msg.err != nil && !usableDir(msg.cwd):
 		w.clear(a)
 
 		return nil
 	case msg.err != nil:
-		a.log.Debug("resolve watch repo", "pane", msg.id, "err", msg.err)
+		a.log.Warn("resolve watch repo", "pane", msg.id, "err", msg.err)
+		w.clear(a)
+
+		w.failed = true
+
+		a.noticeOnce("project "+filepath.Base(msg.cwd), filepath.Base(msg.cwd), msg.err)
 
 		return nil
 	}
+
+	w.failed = false
 
 	w.want = msg.repo.Root
 	if w.root == msg.repo.Root {
@@ -251,7 +262,7 @@ func (a *App) onWatchAcquired(msg watchAcquiredMsg) {
 		return
 	}
 
-	delete(a.watches.failed, msg.repo.Root)
+	delete(a.watches.failed, "root "+msg.repo.Root)
 
 	w := a.watches.panes[msg.id]
 	if w == nil || w.want != msg.repo.Root || w.root == msg.repo.Root {
@@ -267,12 +278,6 @@ func (a *App) onWatchAcquired(msg watchAcquiredMsg) {
 func (a *App) noticeWatchFailed(r git.Repo, err error) {
 	a.log.Warn("watch failed", "root", r.Root, "err", err)
 
-	if a.watches.failed[r.Root] || errors.Is(err, context.Canceled) {
-		return
-	}
-
-	a.watches.failed[r.Root] = true
-
 	project := filepath.Base(r.Root)
 	if root, merr := r.MainRoot(); merr == nil {
 		project = filepath.Base(root)
@@ -280,7 +285,24 @@ func (a *App) noticeWatchFailed(r git.Repo, err error) {
 		project = strings.TrimSuffix(filepath.Base(r.CommonDir), ".git")
 	}
 
+	a.noticeOnce("root "+r.Root, project, err)
+}
+
+// noticeOnce shows the failure notice unless key was shown before.
+func (a *App) noticeOnce(key, project string, err error) {
+	if a.watches.failed[key] || errors.Is(err, context.Canceled) {
+		return
+	}
+
+	a.watches.failed[key] = true
 	a.notice = fmt.Sprintf("watching %s failed: %v", project, err)
+}
+
+// watchRetry makes the next sync resolve a pane whose last resolution failed.
+func (a *App) watchRetry(id core.PaneID) {
+	if w := a.watches.panes[id]; w != nil && w.failed {
+		w.cwd = ""
+	}
 }
 
 // onWatch re-probes the rail for every agent in the batch's root.
@@ -305,11 +327,19 @@ func (a *App) onWatch(msg watchMsg) tea.Cmd {
 			continue
 		}
 
+		// A head change shows at once; its totals follow in onRailHead. Other
+		// changes keep the stats interval.
 		if b.Git || b.Overflow {
+			if a.railIsOpen() {
+				a.railEntry(id).head.force = true
+			}
+
 			cmds = append(cmds, a.railFire(st, id, probeHead))
 		}
 
-		cmds = append(cmds, a.railFire(st, id, probeStats))
+		if len(b.Paths) > 0 || b.Overflow {
+			cmds = append(cmds, a.railFire(st, id, probeStats))
+		}
 	}
 
 	return tea.Batch(cmds...)

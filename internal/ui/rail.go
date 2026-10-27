@@ -69,6 +69,7 @@ type railHit struct {
 // railProbe is the result of one pane's probes.
 type railProbe struct {
 	project, branch string
+	oid             string // the full commit id; "" on an unborn branch
 	detached        bool
 	repo            bool // the cwd is inside a repository
 	known           bool // a head probe has succeeded

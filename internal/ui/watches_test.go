@@ -14,6 +14,7 @@ import (
 
 	"github.com/mhersson/muxreveal/internal/core"
 	"github.com/mhersson/muxreveal/internal/git"
+	"github.com/mhersson/muxreveal/internal/harness"
 )
 
 const watchWait = 5 * time.Second
@@ -255,6 +256,13 @@ func TestHoldsReleaseOnceAndAfterClose(t *testing.T) {
 func TestRailSeesABranchSwitch(t *testing.T) {
 	w := newWatchApp(t, true)
 	dir := w.repo(t, "proj")
+	// A branch with one more file, so switching to it changes the totals.
+	w.gitIn(t, dir, "switch", "-q", "-c", "other")
+	write(t, dir+"/b.txt", "b\n")
+	w.gitIn(t, dir, "add", "b.txt")
+	w.gitIn(t, dir, "commit", "-q", "-m", "b")
+	w.gitIn(t, dir, "switch", "-q", "main")
+
 	root := w.rootOf(t, dir)
 	id := w.addAgent(t, false, dir)
 
@@ -262,27 +270,120 @@ func TestRailSeesABranchSwitch(t *testing.T) {
 	w.until(t, "the worktree to be watched", nil, func() bool { return w.held(id) == root })
 
 	w.pm.run(w.railOpened())
-	w.until(t, "the card to show main", nil, func() bool {
+	w.until(t, "the first probes", nil, func() bool {
 		c, ok := w.card(id)
 
-		return ok && c.branch == "main"
+		return ok && c.branch == "main" && c.statsKnown
 	})
 
-	// The head interval has passed, so a change re-probes at once.
-	w.clk.Advance(time.Minute)
-	w.gitIn(t, dir, "switch", "-q", "-c", "other")
+	c, _ := w.card(id)
+	files := c.stats.Files
+
+	// No clock jump: the switch lands inside both intervals.
+	w.gitIn(t, dir, "switch", "-q", "other")
 
 	start := time.Now()
 
-	w.until(t, "the card to show other", nil, func() bool {
+	w.until(t, "the card to show other with its totals", nil, func() bool {
 		c, _ := w.card(id)
 
-		return c.branch == "other"
+		return c.branch == "other" && c.stats.Files != files
 	})
 
 	if d := time.Since(start); d > 2*time.Second {
 		t.Errorf("the card took %v to follow the switch", d)
 	}
+}
+
+func TestIndexOnlyChangeCostsNoStatsProbe(t *testing.T) {
+	w := newWatchApp(t, true)
+	dir := w.repo(t, "proj")
+	root := w.rootOf(t, dir)
+	id := w.addAgent(t, false, dir)
+
+	w.pm.run(w.settle())
+	w.until(t, "the worktree to be watched", nil, func() bool { return w.held(id) == root })
+
+	w.pm.run(w.railOpened())
+	w.until(t, "the first probes", nil, func() bool {
+		c, ok := w.card(id)
+
+		return ok && c.branch == "main" && c.statsKnown
+	})
+
+	heads, stats := 0, 0
+	seen := func(m tea.Msg) {
+		switch m.(type) {
+		case railHeadMsg:
+			heads++
+		case railStatsMsg:
+			stats++
+		}
+	}
+
+	// Staging rewrites the index and moves no head.
+	w.gitIn(t, dir, "add", "a.txt")
+	w.until(t, "the head probe the index change caused", seen, func() bool { return heads >= 1 })
+
+	deadline := time.Now().Add(400 * time.Millisecond)
+	for time.Now().Before(deadline) {
+		select {
+		case m := <-w.pm.msgs:
+			seen(m)
+
+			_, cmd := w.Update(m)
+			w.pm.run(cmd)
+		case <-time.After(20 * time.Millisecond):
+		}
+	}
+
+	if stats != 0 {
+		t.Errorf("an index-only change ran %d stats probes inside the interval", stats)
+	}
+}
+
+func TestFailedResolveNotifiesOnceAndRetriesOnAHook(t *testing.T) {
+	w := newWatchApp(t, false)
+	dir := w.repo(t, "proj")
+	root := w.rootOf(t, dir)
+
+	w.watches.open = func(context.Context, string) (git.Repo, error) { return git.Repo{}, errors.New("too slow") }
+
+	first := w.addAgent(t, false, dir)
+	w.addAgent(t, false, dir)
+
+	w.pm.run(w.settle())
+
+	failures := 0
+	seen := func(m tea.Msg) {
+		if r, ok := m.(paneRepoMsg); ok && r.err != nil {
+			failures++
+		}
+	}
+
+	w.until(t, "the first failure", seen, func() bool { return failures >= 1 && w.notice != "" })
+
+	if want := "watching proj failed: too slow"; w.notice != want {
+		t.Errorf("notice = %q, want %q", w.notice, want)
+	}
+
+	w.notice = ""
+
+	w.until(t, "the second failure", seen, func() bool { return failures >= 2 })
+
+	if w.notice != "" {
+		t.Errorf("the same project's second failure showed %q", w.notice)
+	}
+
+	if w.held(first) != "" || w.watched(root) {
+		t.Fatal("a failed resolve left a watch held")
+	}
+
+	// A hook event retries, with no timer.
+	w.watches.open = git.Open
+
+	w.pm.run(hook(w.App, harness.Event{Pane: first, Name: "Stop"}))
+	w.until(t, "the retry to acquire", nil, func() bool { return w.held(first) == root })
 }
 
 func TestRailStatsFollowAFileWrite(t *testing.T) {
@@ -343,7 +444,6 @@ func TestFailedWatchNotifiesOnce(t *testing.T) {
 	w.notice = ""
 
 	w.until(t, "the second failure", seen, func() bool { return failures >= 2 })
-	w.until(t, "a settled app", seen, func() bool { return len(w.pm.msgs) == 0 })
 
 	if w.notice != "" {
 		t.Errorf("the same root's second failure showed %q", w.notice)
