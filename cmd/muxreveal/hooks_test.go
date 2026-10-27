@@ -45,7 +45,7 @@ func TestRunServesHooks(t *testing.T) {
 	done := make(chan error, 1)
 
 	go func() {
-		done <- run(ctx, env, cfg, "", tea.WithInput(in), tea.WithOutput(io.Discard))
+		done <- run(ctx, env, cfg, "", false, tea.WithInput(in), tea.WithOutput(io.Discard))
 	}()
 
 	runDir := filepath.Join(core.StateDir(env), "run")

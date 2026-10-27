@@ -311,6 +311,27 @@ func TestDecodeValidation(t *testing.T) {
 	}
 }
 
+// manyPanes is a one-tab document with n shell panes in a row.
+func manyPanes(n int) string {
+	var ids, panes []string
+	for i := 1; i <= n; i++ {
+		ids = append(ids, fmt.Sprintf("%q", fmt.Sprintf("p%d", i)))
+		panes = append(panes, fmt.Sprintf(`"p%d":{"kind":"shell"}`, i))
+	}
+	return doc("1", "0", tabDoc("t1", "p1", strings.Join(ids, ","), `null`), strings.Join(panes, ","))
+}
+
+func TestDecodePaneCap(t *testing.T) {
+	st, _, err := Decode([]byte(manyPanes(64)))
+	noErr(t, err)
+	eq(t, len(st.Panes), 64)
+
+	_, _, err = Decode([]byte(manyPanes(65)))
+	if !errors.Is(err, ErrInvalid) {
+		t.Fatalf("65 panes: err = %v, want ErrInvalid", err)
+	}
+}
+
 func TestDecodeFallbacks(t *testing.T) {
 	other := tabDoc("t2", "p3", `"p3"`, `{"pane":"p3"}`)
 	tests := []struct {

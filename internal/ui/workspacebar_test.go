@@ -470,7 +470,7 @@ func TestHiddenPaneRendersOnSwitch(t *testing.T) {
 	p1 := a.panes["p1"]
 
 	feedAndWait(t, p1, procs["p1"], "hidden text")
-	a.Update(paneDirtyMsg{id: "p1"})
+	a.Update(paneDirtyMsg{id: "p1", p: a.panes["p1"]})
 
 	if rows := strings.Join(p1.lines(), ""); strings.Contains(rows, "hidden text") {
 		t.Errorf("hidden pane rendered its rows: %q", rows)

@@ -103,17 +103,23 @@ Gate: selection, copy mode and the clipboard work in shell panes and in programs
 
 Agent panes report working, blocked and idle through Claude Code hooks and show it on frames, tabs and the tray; a pane's kind follows Claude both ways; tabs, layout, cwds and agent sessions are saved on every change and restored on start with `claude --resume`. Covers AG-5, AG-7, AG-8, PR-1 to PR-4.
 
-- [ ] Agent fields and actions in core
-- [ ] Harness interface and the Claude Code adapter
-- [ ] Hook socket and the hook command
-- [ ] State file encoding, validation and the saver
-- [ ] Pane kind from the foreground process
-- [ ] Agent launch with hooks
-- [ ] State badges on frames, tabs and the tray
-- [ ] Restore, resume and the start-up notices
-- [ ] Quit, bench check and gate
+- [x] Agent fields and actions in core
+- [x] Harness interface and the Claude Code adapter
+- [x] Hook socket and the hook command
+- [x] State file encoding, validation and the saver
+- [x] Pane kind from the foreground process
+- [x] Agent launch with hooks
+- [x] State badges on frames, tabs and the tray
+- [x] Restore, resume and the start-up notices
+- [x] Quit, bench check and gate
 
 Gate: agent panes show working, blocked and idle; quitting and starting again brings back the tabs, layout and every agent session; six-pane bench p99 at most 8 ms and idle CPU at most 1 %.
+
+#### M1d gate results
+
+What backs the last checklist item: the six-pane bench row "six working agents with animated badges" above, which ran before saving existed (it does not wire `Save`, which costs one state copy and an encode per dispatch on the update loop; the file write is on the saver goroutine), so no bench run covers persistence; and the idle figure below. The operator checks in Ghostty and Kitty and the reboot check are still to do.
+
+Idle, re-checked with agents, hooks and persistence: same setup as above (six shell panes each running `sleep 3600`, 240x64 in a private tmux, 30 s after a 5 s warm-up, `/proc/<pid>/stat` utime+stime), two runs: **0.73 %** and **0.70 %** of one core.
 
 ## Spike - VT (done)
 
@@ -287,7 +293,7 @@ Build M1's terminal layer on `tuios.dev/vt` v0.3.1 (pure Go) behind the `VT` int
 
 ## Next
 
-M1d Agents and persistence on `feat/agents-persistence`.
+M1d Agents and persistence is complete on `feat/agents-persistence` and waits for review; M2 follows once it merges.
 
 ## Done
 

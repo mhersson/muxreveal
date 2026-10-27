@@ -599,9 +599,9 @@ func TestPaneExit(t *testing.T) {
 
 		// Late answers are harmless.
 		press(a, keyRune('y'))
-		a.Update(paneExitedMsg{id: "p2"})
-		a.Update(paneDirtyMsg{id: "p2"})
-		a.Update(holdExpiredMsg{id: "p2"})
+		a.Update(paneExitedMsg{id: "p2", p: a.panes["p2"]})
+		a.Update(paneDirtyMsg{id: "p2", p: a.panes["p2"]})
+		a.Update(holdExpiredMsg{id: "p2", p: a.panes["p2"]})
 	})
 
 	t.Run("quit confirm survives an agent exit", func(t *testing.T) {
@@ -647,8 +647,8 @@ func TestMessagesForUnknownPane(t *testing.T) {
 	a, _ := lifeAppSized(t, 100, 30)
 
 	for _, m := range []tea.Msg{
-		paneDirtyMsg{id: "p9"}, holdExpiredMsg{id: "p9"}, paneExitedMsg{id: "p9"},
-		paneCwdMsg{id: "p9", cwd: "/x"}, paneCwdDueMsg{id: "p9"},
+		paneDirtyMsg{id: "p9", p: a.panes["p9"]}, holdExpiredMsg{id: "p9"}, paneExitedMsg{id: "p9"},
+		paneCwdMsg{id: "p9", p: a.panes["p9"], cwd: "/x"}, paneCwdDueMsg{id: "p9"},
 	} {
 		if _, cmd := a.Update(m); cmd != nil {
 			t.Errorf("%T for an unknown pane returned a command", m)
@@ -721,7 +721,7 @@ func TestCwdTracking(t *testing.T) {
 
 	clk.Advance(400 * time.Millisecond)
 
-	_, cmd = a.Update(paneCwdDueMsg{id: "p1"})
+	_, cmd = a.Update(paneCwdDueMsg{id: "p1", p: a.panes["p1"]})
 	if cmd == nil {
 		t.Fatal("the trailing check did not probe")
 	}
@@ -734,7 +734,7 @@ func TestCwdTracking(t *testing.T) {
 	}
 
 	// An empty answer keeps the old value.
-	a.Update(paneCwdMsg{id: "p1", cwd: ""})
+	a.Update(paneCwdMsg{id: "p1", p: a.panes["p1"], cwd: ""})
 
 	if got := a.store.State().Panes["p1"].Cwd; got != "/again" {
 		t.Errorf("cwd after an empty answer = %q, want /again", got)
@@ -745,7 +745,7 @@ func TestDirtyMessageSchedulesCwdProbe(t *testing.T) {
 	a, st := lifeAppSized(t, 100, 30)
 	st.proc(0).cwd = "/moved"
 
-	_, cmd := a.Update(paneDirtyMsg{id: "p1"})
+	_, cmd := a.Update(paneDirtyMsg{id: "p1", p: a.panes["p1"]})
 
 	var got bool
 

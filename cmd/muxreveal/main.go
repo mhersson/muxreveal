@@ -3,10 +3,14 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
+	"path/filepath"
+	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -14,6 +18,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/mhersson/muxreveal/internal/core"
+	"github.com/mhersson/muxreveal/internal/store"
 	"github.com/mhersson/muxreveal/internal/ui"
 	"github.com/mhersson/muxreveal/internal/ui/theme"
 )
@@ -34,6 +39,7 @@ func main() {
 func newRootCmd() *cobra.Command {
 	env, envErr := core.DefaultEnv()
 	var configPath, recordDir string
+	var fresh bool
 	cmd := &cobra.Command{
 		Use:           "muxreveal",
 		Short:         "Coding agents in terminal panes, with their diffs and pull requests beside them",
@@ -50,7 +56,7 @@ func newRootCmd() *cobra.Command {
 					return fmt.Errorf("config: %w", err)
 				}
 			}
-			return run(cmd.Context(), env, configPath, recordDir)
+			return run(cmd.Context(), env, configPath, recordDir, fresh)
 		},
 	}
 	defaultConfig := ""
@@ -58,6 +64,7 @@ func newRootCmd() *cobra.Command {
 		defaultConfig = core.ConfigPath(env)
 	}
 	cmd.Flags().StringVar(&configPath, "config", defaultConfig, "config file")
+	cmd.Flags().BoolVar(&fresh, "fresh", false, "start with one shell instead of the saved layout; the first change replaces the saved state")
 	cmd.Flags().StringVar(&recordDir, "record", "", "write each pane's terminal output to a recording in this directory")
 	// Diagnostics for bench inputs and VT fixtures, not a user feature.
 	_ = cmd.Flags().MarkHidden("record")
@@ -68,7 +75,7 @@ func newRootCmd() *cobra.Command {
 
 // run loads the config and opens the log before the TUI takes over the
 // terminal, so their errors can still be printed.
-func run(ctx context.Context, env core.Env, configPath, recordDir string, progOpts ...tea.ProgramOption) (err error) {
+func run(ctx context.Context, env core.Env, configPath, recordDir string, fresh bool, progOpts ...tea.ProgramOption) (err error) {
 	cfg, err := core.LoadConfig(configPath)
 	if err != nil {
 		return err
@@ -87,8 +94,44 @@ func run(ctx context.Context, env core.Env, configPath, recordDir string, progOp
 	}()
 
 	logger := slog.New(slog.NewTextHandler(f, nil))
-	hooks := startHooks(logger, core.StateDir(env))
+	stateDir := core.StateDir(env)
+	hooks := startHooks(logger, stateDir)
 	defer hooks.Stop()
+
+	st, saver, notices, unlock, err := openState(logger, stateDir, cfg, fresh)
+	if err != nil {
+		return err
+	}
+	// Held until the end of the run: a dropped unlock lets the finalizer release the lock.
+	defer func() {
+		if uerr := unlock(); uerr != nil {
+			logger.Warn("release state lock", "err", uerr)
+		}
+	}()
+
+	// The saver is closed before any pane is, so agents dying on quit are not saved as shells.
+	closeSaver := sync.OnceFunc(func() {
+		if saver == nil {
+			return
+		}
+
+		closeCtx, cancel := context.WithTimeout(context.Background(), closeTimeout)
+		defer cancel()
+
+		if cerr := saver.Close(closeCtx); cerr != nil {
+			logger.Error("close saver", "err", cerr)
+		}
+	})
+	defer closeSaver()
+
+	var save func(core.State)
+	if saver != nil {
+		save = saver.Save
+	}
+
+	if hooks.Notice != "" {
+		notices = append(notices, hooks.Notice)
+	}
 
 	cwd, err := os.Getwd()
 	if err != nil {
@@ -96,7 +139,7 @@ func run(ctx context.Context, env core.Env, configPath, recordDir string, progOp
 	}
 	app, err := ui.New(ui.Options{
 		Logger: logger,
-		Store:  core.NewStore(core.InitialState(cfg)),
+		Store:  core.NewStore(st),
 		Getenv: os.Getenv,
 		Cwd:    cwd,
 		Icons:  cfg.IconsOn(),
@@ -111,7 +154,8 @@ func run(ctx context.Context, env core.Env, configPath, recordDir string, progOp
 		HookSettings: hooks.Settings,
 		HookSock:     hooks.Sock,
 		Events:       hooks.Events,
-		Notice:       hooks.Notice,
+		Notice:       strings.Join(notices, "; "),
+		Save:         save,
 	})
 	if err != nil {
 		return err
@@ -122,6 +166,7 @@ func run(ctx context.Context, env core.Env, configPath, recordDir string, progOp
 	// terminal) end the run cleanly instead of racing Bubble Tea's own handler.
 	opts := append([]tea.ProgramOption{tea.WithContext(ctx), tea.WithoutSignalHandler()}, progOpts...)
 	_, err = tea.NewProgram(app, opts...).Run()
+	closeSaver()
 	// The context may be cancelled already, so the close gets its own deadline.
 	closeCtx, cancel := context.WithTimeout(context.Background(), closeTimeout)
 	defer cancel()
@@ -134,4 +179,31 @@ func run(ctx context.Context, env core.Env, configPath, recordDir string, progOp
 	}
 	logger.Info("exit")
 	return nil
+}
+
+// openState takes the state lock and loads the saved state. When another
+// instance holds the lock this one starts fresh and gets no saver. The caller
+// keeps unlock reachable until the run ends.
+func openState(logger *slog.Logger, stateDir string, cfg core.Config, fresh bool) (st core.State, saver *store.Saver, notices []string, unlock func() error, err error) {
+	unlock, err = store.Lock(stateDir)
+	if errors.Is(err, store.ErrLocked) {
+		logger.Warn("state is locked by another instance")
+
+		return core.InitialState(cfg), nil, []string{noticeSecondInstance}, func() error { return nil }, nil
+	}
+
+	if err != nil {
+		return core.State{}, nil, nil, nil, fmt.Errorf("state lock: %w", err)
+	}
+
+	statePath := filepath.Join(stateDir, "state.json")
+
+	st, notices = loadState(statePath, fresh, cfg)
+
+	var resume []string
+
+	st, resume = checkResume(st, transcriptExists)
+	notices = append(notices, resume...)
+
+	return st, store.NewSaver(statePath, logger), notices, unlock, nil
 }

@@ -166,7 +166,7 @@ func TestQuietRule(t *testing.T) {
 		hook(a, harness.Event{Pane: "p2", Name: "UserPromptSubmit", State: core.AgentWorking})
 
 		clk.Set(t0.Add(2 * time.Second))
-		a.Update(paneDirtyMsg{id: "p2"})
+		a.Update(paneDirtyMsg{id: "p2", p: a.panes["p2"]})
 
 		tickAt(a, clk, 4*time.Second)
 

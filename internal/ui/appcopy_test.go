@@ -403,7 +403,7 @@ func TestCopyModePinsTextWhileOutputArrives(t *testing.T) {
 	before := screenText(a, y)
 
 	feedAndWait(t, a.panes["p1"], fp, "\r\nmore one\r\nmore two\r\nmore three")
-	a.Update(paneDirtyMsg{id: "p1"})
+	a.Update(paneDirtyMsg{id: "p1", p: a.panes["p1"]})
 
 	_, y2, ok := cursorOf(a)
 	if !ok {
@@ -443,7 +443,7 @@ func TestCopyModeEndsOnAltScreenSwitch(t *testing.T) {
 
 	enterCopy(a)
 	feedAndWait(t, a.panes["p1"], fp, "\x1b[?1049h")
-	a.Update(paneDirtyMsg{id: "p1"})
+	a.Update(paneDirtyMsg{id: "p1", p: a.panes["p1"]})
 
 	if a.copy != nil {
 		t.Error("copy mode survived a switch to the alt screen")
@@ -513,7 +513,7 @@ func TestCopyModeCursorStaysOnItsTextWhileLiveOutputScrolls(t *testing.T) {
 	before := screenText(a, y)
 
 	feedAndWait(t, a.panes["p1"], fp, strings.Repeat("\r\nx", 40))
-	a.Update(paneDirtyMsg{id: "p1"})
+	a.Update(paneDirtyMsg{id: "p1", p: a.panes["p1"]})
 
 	_, y2, ok := cursorOf(a)
 	if !ok {
@@ -532,7 +532,7 @@ func TestCopyModeAcrossHistoryCap(t *testing.T) {
 	p := a.panes["p1"]
 
 	feedLines(t, p, fp, 0, 10100)
-	a.Update(paneDirtyMsg{id: "p1"})
+	a.Update(paneDirtyMsg{id: "p1", p: a.panes["p1"]})
 
 	enterCopy(a)
 	keys(a, "k", "k", "v", "k")
@@ -545,7 +545,7 @@ func TestCopyModeAcrossHistoryCap(t *testing.T) {
 	before := screenText(a, y)
 
 	feedLines(t, p, fp, 10100, 10150)
-	a.Update(paneDirtyMsg{id: "p1"})
+	a.Update(paneDirtyMsg{id: "p1", p: a.panes["p1"]})
 
 	_, y2, ok := cursorOf(a)
 	if !ok || screenText(a, y2) != before {
@@ -553,7 +553,7 @@ func TestCopyModeAcrossHistoryCap(t *testing.T) {
 	}
 
 	feedLines(t, p, fp, 10150, 20300)
-	a.Update(paneDirtyMsg{id: "p1"})
+	a.Update(paneDirtyMsg{id: "p1", p: a.panes["p1"]})
 
 	var rows int
 

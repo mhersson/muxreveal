@@ -48,6 +48,8 @@ type Options struct {
 	Events <-chan harness.Event
 	// Notice is shown in the status bar at start; empty for none.
 	Notice string
+	// Save is called with the state after every successful dispatch; nil saves nothing.
+	Save func(core.State)
 }
 
 // App is the root Bubble Tea model.
@@ -84,7 +86,9 @@ type App struct {
 	recordDir string // empty unless recording
 	icons     bool   // draw Nerd Font glyphs
 	started   bool   // the first size message was handled; it opens the first pane only once
-	clock     clock  // the sync hold's and the tray's time source
+	restoring bool   // startRestored is running; its dispatches are not saved
+	save      func(core.State)
+	clock     clock // the sync hold's and the tray's time source
 	tray      trayState
 	clip      *clipboard
 	sel       *paneSelection // the one selection; survives tab switches
@@ -148,7 +152,7 @@ func New(opts Options) (*App, error) {
 	}
 	a := &App{
 		harness: h, tick: tea.Tick, hookSettings: opts.HookSettings, hookSock: opts.HookSock,
-		events: opts.Events, notice: opts.Notice,
+		events: opts.Events, notice: opts.Notice, save: opts.Save,
 		log: opts.Logger, store: opts.Store, reg: reg, keymap: km,
 		panes: map[core.PaneID]*pane{}, outerFocused: true,
 		getenv: getenv, cwd: cwd, recordDir: opts.RecordDir, icons: opts.Icons, clock: realClock{}, start: termStart,
@@ -194,6 +198,9 @@ func (a *App) dispatch(act core.Action) error {
 		return err
 	}
 	st := a.store.State()
+	if a.save != nil && !a.restoring {
+		a.save(st)
+	}
 	a.dropGoneTab(st)
 	a.reportFocusChange(prev.Focus, st.Tab().Focus)
 	if cmd := a.syncGit(); cmd != nil {
@@ -268,7 +275,9 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var cmds []tea.Cmd
 		if !a.started {
 			a.started = true
-			if a.store.State().Tab().Layout == nil {
+			if len(a.store.State().Panes) > 0 {
+				cmds = append(cmds, a.startRestored())
+			} else if a.store.State().Tab().Layout == nil {
 				cmds = append(cmds, a.openPane(core.KindShell, core.SplitVertical))
 			}
 		}
@@ -293,17 +302,17 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.outerFocused = false
 		a.sendToFocused(func(p *pane) { p.sendFocus(false) })
 	case paneDirtyMsg:
-		return a, a.onPaneDirty(msg.id)
+		return a, a.onPaneDirty(msg)
 	case holdExpiredMsg:
-		return a, a.onHoldExpired(msg.id)
+		return a, a.onHoldExpired(msg)
 	case paneExitedMsg:
-		return a, a.onPaneExited(msg.id)
+		return a, a.onPaneExited(msg)
 	case paneCwdMsg:
-		a.onCwd(msg)
+		return a, a.onCwd(msg)
 	case paneCwdDueMsg:
-		return a, a.onCwdDue(msg.id)
+		return a, a.onCwdDue(msg)
 	case paneKindDueMsg:
-		return a, a.onKindDue(msg.id)
+		return a, a.onKindDue(msg)
 	case hookMsg:
 		return a, tea.Batch(a.onHook(msg.ev), a.waitEvent())
 	case agentTickMsg:

@@ -125,7 +125,7 @@ func TestKindFollowsForeground(t *testing.T) {
 
 		clk.Advance(agentGrace)
 
-		a.Update(paneKindDueMsg{id: "p2"})
+		a.Update(paneKindDueMsg{id: "p2", p: a.panes["p2"]})
 		a.Update(probe(a.panes["p2"], true)())
 
 		if kindOf(a, "p2") != core.KindShell {
@@ -203,7 +203,7 @@ func TestKindFollowsForeground(t *testing.T) {
 
 		clk.Advance(agentGrace)
 
-		cmd := a.onKindDue("p2")
+		cmd := a.onKindDue(paneKindDueMsg{id: "p2", p: a.panes["p2"]})
 		if cmd == nil {
 			t.Fatal("the grace probe returned no command")
 		}

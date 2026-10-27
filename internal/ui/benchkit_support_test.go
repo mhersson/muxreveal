@@ -379,7 +379,7 @@ func runBench(cfg benchConfig) (benchResult, error) {
 	// Untimed warm-up: history before each pane's window, then one full frame.
 	for i, f := range feeds {
 		f.feedBefore(f.start)
-		send(ids[i], paneDirtyMsg{id: ids[i]})
+		send(ids[i], paneDirtyMsg{id: ids[i], p: app.panes[ids[i]]})
 	}
 
 	if cfg.Selection {
@@ -429,14 +429,14 @@ func runBench(cfg benchConfig) (benchResult, error) {
 
 		for i, id := range ids {
 			if fed[i] {
-				send(id, paneDirtyMsg{id: id})
+				send(id, paneDirtyMsg{id: id, p: app.panes[id]})
 
 				updates++
 			}
 
 			if end, ok := armed[id]; ok && !now.Before(end) {
 				delete(armed, id)
-				send(id, holdExpiredMsg{id: id})
+				send(id, holdExpiredMsg{id: id, p: app.panes[id]})
 
 				updates++
 			}

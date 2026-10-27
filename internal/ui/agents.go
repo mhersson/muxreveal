@@ -55,6 +55,10 @@ func (a *App) onHook(ev harness.Event) tea.Cmd {
 
 	switch {
 	case ev.Start:
+		if p, ok := a.panes[ev.Pane]; ok {
+			p.resuming = false
+		}
+
 		// dispatch logs its own failures.
 		_ = a.dispatch(core.SetAgentSession{ID: ev.Pane, Session: ev.Session, Transcript: ev.Transcript})
 	case ev.End:
