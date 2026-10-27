@@ -2,6 +2,7 @@ version: "2"
 run:
   build-tags:
   - bench
+  - live
 linters:
   default: none
   enable:
@@ -46,6 +47,13 @@ linters:
     - linters: [gosec]
       text: "G703"
       path: "internal/git/worktree_tree\\.go$"
+    # G702: the host reaches Token from a parsed git remote, and from
+    # MUXREVEAL_LIVE_HOST in the live test (the only reason it fires under that
+    # tag). gh comes from LookPath, the host is its own argv element after
+    # --hostname, an empty or dash-led host is refused, and no shell is used.
+    - linters: [gosec]
+      text: "G702"
+      path: "internal/github/token\\.go$"
     # G703: bench-tagged tests open the repo and recordings an operator names in
     # MUXREVEAL_BENCH_REPO and MUXREVEAL_BENCH_RECORDINGS.
     - linters: [gosec]
