@@ -297,6 +297,7 @@ func Decode(data []byte, lc core.LayoutConfig) (core.State, Report, error) {
 			focus = tab.Panes[0]
 		}
 		tab.Focus, tab.Zoomed = focus, jt.Zoomed && focus != ""
+		tab.KeepVisible()
 		st.Tabs = append(st.Tabs, tab)
 	}
 	for id := range st.Panes {
@@ -319,7 +320,7 @@ func tabMode(raw json.RawMessage) core.LayoutMode {
 // decodeTab builds the tab's layout from its mode and fields; base carries the
 // identity and the panes. ok is false when the layout was unusable and the tab
 // got the default. A valid saved first column is kept and an invalid one
-// becomes 0; the focused column comes into view at the next focus change.
+// becomes 0; Decode then scrolls the focused column into view.
 func decodeTab(jt tabJSON, base core.Tab, lc core.LayoutConfig) (tab core.Tab, ok bool) {
 	ids := base.Panes
 	mode := tabMode(jt.Mode)

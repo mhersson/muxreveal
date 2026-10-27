@@ -286,3 +286,13 @@ func TestDecodeEmptyTabWithUnknownMode(t *testing.T) {
 		})
 	}
 }
+
+func TestDecodeDefaultedScrollingTabShowsFocus(t *testing.T) {
+	const v1 = `{"version":1,"active":0,"tabs":[{"id":"t1","focused":"p4","pane_ids":["p1","p2","p3","p4"]}],` +
+		`"panes":{"p1":{"kind":"shell"},"p2":{"kind":"shell"},"p3":{"kind":"shell"},"p4":{"kind":"shell"}}}`
+	st, _, err := Decode([]byte(v1), core.LayoutConfig{DefaultMode: "scrolling"})
+	noErr(t, err)
+	tab := st.Tabs[0]
+	eq(t, tab.Focus, core.PaneID("p4"))
+	eq(t, tab.First, 2)
+}

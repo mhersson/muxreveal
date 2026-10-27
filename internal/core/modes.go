@@ -201,6 +201,10 @@ func (t *Tab) keepVisible() {
 	}
 }
 
+// KeepVisible scrolls a scrolling tab so its focused column is drawn; other
+// modes are unchanged. A restored tab calls it once its focus is set.
+func (t *Tab) KeepVisible() { t.keepVisible() }
+
 // setFocus focuses a pane of the tab and keeps it in view.
 func (t *Tab) setFocus(id PaneID) {
 	t.Focus = id
@@ -250,6 +254,9 @@ func (t *Tab) removeScrolling(id PaneID) (PaneID, error) {
 	next := t.Focus
 	if len(col) == 0 {
 		t.Columns = slices.Delete(t.Columns, c, c+1)
+		if c < t.First {
+			t.First--
+		}
 	}
 	t.syncPanes()
 	t.First = min(max(t.First, 0), max(len(t.Columns)-1, 0))

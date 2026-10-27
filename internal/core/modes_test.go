@@ -399,6 +399,17 @@ func TestScrollingFirstFollowsFocus(t *testing.T) {
 	}
 }
 
+func TestScrollingCloseLeftOfFirstKeepsVisibleSet(t *testing.T) {
+	s := openN(t, ModeScrolling, 4, defaultLayout()) // p3 and p4 visible, focus p4
+	if s.Tab().First != 2 || s.Tab().Focus != "p4" {
+		t.Fatalf("setup: First %d, Focus %s", s.Tab().First, s.Tab().Focus)
+	}
+	s = dispatch(t, s, ClosePane{ID: "p1"})
+	if got := s.Tab().First; got != 1 || s.Tab().Columns[got].Panes[0] != "p3" {
+		t.Errorf("First = %d, columns = %v", got, columnsOf(s.Tab()))
+	}
+}
+
 func TestSwap(t *testing.T) {
 	t.Run("master-stack swaps with the neighbour in the order", func(t *testing.T) {
 		s := openN(t, ModeMaster, 3, defaultLayout()) // p1 left; p2 above p3
