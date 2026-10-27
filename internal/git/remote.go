@@ -10,6 +10,9 @@ import (
 // ErrNoRemote means the named remote is not configured.
 var ErrNoRemote = errors.New("git: no such remote")
 
+// errNotConfigured carries no remote text: the value may be a URL with credentials.
+var errNotConfigured = fmt.Errorf("push remote is not a configured remote: %w", ErrNoRemote)
+
 // configGet reads one config value; ok is false when it is unset.
 func configGet(ctx context.Context, r Repo, key string) (value string, ok bool, err error) {
 	out, err := run(ctx, call{dir: r.Root, args: []string{"config", "--get", key}, read: true})
@@ -51,10 +54,10 @@ func PushRemote(ctx context.Context, r Repo, branch string) (string, error) {
 }
 
 // configuredRemote returns remote when it names a configured remote, else
-// ErrNoRemote. A URL or an option-like name is never one.
+// ErrNoRemote without the value. A URL or an option-like name is never one.
 func configuredRemote(ctx context.Context, r Repo, remote string) (string, error) {
 	if strings.HasPrefix(remote, "-") {
-		return "", fmt.Errorf("remote %q: %w", remote, ErrNoRemote)
+		return "", errNotConfigured
 	}
 
 	out, err := run(ctx, call{dir: r.Root, args: []string{"remote"}, read: true})
@@ -68,23 +71,23 @@ func configuredRemote(ctx context.Context, r Repo, remote string) (string, error
 		}
 	}
 
-	return "", fmt.Errorf("remote %q: %w", remote, ErrNoRemote)
+	return "", errNotConfigured
 }
 
 // RemoteURL returns the URL git would use for remote, with url.<base>.insteadOf
 // applied. The URL may carry credentials, so never put it in an error or log.
 func RemoteURL(ctx context.Context, r Repo, remote string) (string, error) {
 	if remote == "" || strings.HasPrefix(remote, "-") {
-		return "", fmt.Errorf("remote %q: %w", remote, ErrNoRemote)
+		return "", errNotConfigured
 	}
 
 	out, err := run(ctx, call{dir: r.Root, args: []string{"remote", "get-url", remote}, read: true})
 	if err != nil {
 		if isExitCode(err, 2) {
-			return "", fmt.Errorf("remote %q: %w", remote, ErrNoRemote)
+			return "", errNotConfigured
 		}
 
-		return "", fmt.Errorf("remote %q url: %w", remote, err)
+		return "", fmt.Errorf("remote url: %w", err)
 	}
 
 	return strings.TrimSpace(string(out)), nil

@@ -3,6 +3,7 @@ package git
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 )
 
@@ -76,5 +77,21 @@ func TestRemoteURLRefusesOptionNames(t *testing.T) {
 
 	if _, err := RemoteURL(context.Background(), openRepo(t, root), "--all"); !errors.Is(err, ErrNoRemote) {
 		t.Fatalf("err = %v, want ErrNoRemote", err)
+	}
+}
+
+func TestRemoteURLNeverEchoesItsArgument(t *testing.T) {
+	root := newRepo(t)
+	arg := "https://user:secret@example.invalid/o/r.git" //nolint:gosec // G101: fixture URL, no real credential
+
+	_, err := RemoteURL(context.Background(), openRepo(t, root), arg)
+	if !errors.Is(err, ErrNoRemote) {
+		t.Fatalf("err = %v, want ErrNoRemote", err)
+	}
+
+	for _, leak := range []string{"secret", "example.invalid"} {
+		if strings.Contains(err.Error(), leak) {
+			t.Errorf("error %q contains %q", err, leak)
+		}
 	}
 }

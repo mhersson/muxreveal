@@ -19,21 +19,16 @@ type PushResult struct {
 	SetUpstream    bool
 }
 
-// Push sends branch to its push remote, never forcing. The branch's upstream is
-// set only when it has none; an upstream on the push remote names the
-// destination, and one on another remote is left alone.
+// Push sends branch to its push remote, never forcing, always to a remote
+// branch of the same name (git's simple rule), so a branch cut from origin/main
+// cannot land on main. The upstream is set only when the branch has none.
 func Push(ctx context.Context, r Repo, branch string) (PushResult, error) {
 	remote, err := PushRemote(ctx, r, branch)
 	if err != nil {
 		return PushResult{}, err
 	}
 
-	upRemote, _, err := configGet(ctx, r, "branch."+branch+".remote")
-	if err != nil {
-		return PushResult{}, err
-	}
-
-	merge, hasUpstream, err := configGet(ctx, r, "branch."+branch+".merge")
+	_, hasUpstream, err := configGet(ctx, r, "branch."+branch+".merge")
 	if err != nil {
 		return PushResult{}, err
 	}
@@ -41,13 +36,10 @@ func Push(ctx context.Context, r Repo, branch string) (PushResult, error) {
 	res := PushResult{Remote: remote, Branch: branch, Dst: "refs/heads/" + branch}
 	args := []string{"push", "--porcelain"}
 
-	switch {
-	case !hasUpstream:
+	if !hasUpstream {
 		res.SetUpstream = true
 
 		args = append(args, "--set-upstream")
-	case upRemote == remote && strings.HasPrefix(merge, "refs/heads/"):
-		res.Dst = merge
 	}
 
 	args = append(args, remote, "refs/heads/"+branch+":"+res.Dst)

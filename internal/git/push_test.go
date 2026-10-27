@@ -141,7 +141,7 @@ func TestPushUpToDate(t *testing.T) {
 	}
 }
 
-func TestPushToUpstreamName(t *testing.T) {
+func TestPushIgnoresUpstreamOfAnotherName(t *testing.T) {
 	f := newPushFixture(t)
 	gitOut(t, f.root, "config", "branch.feat.remote", "origin")
 	gitOut(t, f.root, "config", "branch.feat.merge", "refs/heads/other")
@@ -151,12 +151,77 @@ func TestPushToUpstreamName(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if res.Dst != "refs/heads/other" || res.SetUpstream || !res.Created {
+	if res.Dst != "refs/heads/feat" || res.SetUpstream || !res.Created {
 		t.Errorf("result = %+v", res)
 	}
 
-	if got := gitOut(t, f.bare, "for-each-ref", "--format=%(refname)"); got != "refs/heads/other" {
+	if got := gitOut(t, f.bare, "for-each-ref", "--format=%(refname)"); got != "refs/heads/feat" {
 		t.Errorf("remote refs = %q", got)
+	}
+
+	if got := gitOut(t, f.root, "config", "branch.feat.merge"); got != "refs/heads/other" {
+		t.Errorf("branch.feat.merge = %q, want it unchanged", got)
+	}
+}
+
+func TestPushNeverLandsOnTheBaseBranch(t *testing.T) {
+	f := newPushFixture(t)
+	ctx := context.Background()
+
+	gitOut(t, f.root, "push", "-q", "origin", "feat:main")
+	gitOut(t, f.root, "fetch", "-q", "origin")
+	gitOut(t, f.root, "switch", "-q", "-c", "agent-fix", "origin/main")
+	writeFile(t, f.root, "f", "2\n")
+	commitAll(t, f.root, "fix")
+
+	mainBefore := gitOut(t, f.bare, "rev-parse", "refs/heads/main")
+
+	res, err := Push(ctx, f.repo, "agent-fix")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if res.Dst != "refs/heads/agent-fix" || res.SetUpstream || !res.Created {
+		t.Errorf("result = %+v", res)
+	}
+
+	if got := gitOut(t, f.bare, "rev-parse", "refs/heads/main"); got != mainBefore {
+		t.Errorf("remote main = %s, want %s", got, mainBefore)
+	}
+
+	if got, want := gitOut(t, f.bare, "rev-parse", "refs/heads/agent-fix"), gitOut(t, f.root, "rev-parse", "agent-fix"); got != want {
+		t.Errorf("remote agent-fix = %s, want %s", got, want)
+	}
+
+	if got := gitOut(t, f.root, "config", "branch.agent-fix.merge"); got != "refs/heads/main" {
+		t.Errorf("branch.agent-fix.merge = %q, want refs/heads/main", got)
+	}
+}
+
+func TestPushRefusesURLAsRemote(t *testing.T) {
+	f := newPushFixture(t)
+	gitOut(t, f.root, "config", "branch.feat.remote", "https://user:secret@example.invalid/o/r.git") //nolint:gosec // G101: fixture URL, no real credential
+	logPath := fakeGit(t, "")
+
+	_, pushErr := Push(context.Background(), f.repo, "feat")
+	_, remoteErr := PushRemote(context.Background(), f.repo, "feat")
+
+	for name, err := range map[string]error{"Push": pushErr, "PushRemote": remoteErr} {
+		if !errors.Is(err, ErrNoRemote) {
+			t.Errorf("%s: err = %v, want ErrNoRemote", name, err)
+
+			continue
+		}
+
+		for _, leak := range []string{"secret", "example.invalid"} {
+			if strings.Contains(err.Error(), leak) {
+				t.Errorf("%s: error %q contains %q", name, err, leak)
+			}
+		}
+	}
+
+	if log, _ := os.ReadFile(logPath); strings.Contains(string(log), " push ") {
+		t.Errorf("a push ran:\n%s", log)
 	}
 }
 

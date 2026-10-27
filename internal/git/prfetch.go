@@ -31,11 +31,6 @@ func FetchPR(ctx context.Context, r Repo, remote string, number int, base string
 	}
 
 	if _, err := configuredRemote(ctx, r, remote); err != nil {
-		if errors.Is(err, ErrNoRemote) {
-			// The name may be a URL carrying credentials.
-			return PRRefs{}, fmt.Errorf("fetch pull request: %w", ErrNoRemote)
-		}
-
 		return PRRefs{}, fmt.Errorf("fetch pull request: %w", err)
 	}
 
