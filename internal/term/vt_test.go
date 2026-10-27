@@ -253,6 +253,64 @@ func TestScrollbackLen(t *testing.T) {
 	}
 }
 
+func TestHistoryTrimmed(t *testing.T) {
+	t.Run("ring overflow", func(t *testing.T) {
+		v, _ := newTestVT(t, 10, 3)
+		total := ScrollbackLines + 500
+
+		for range total {
+			if _, err := v.Write([]byte("x\r\n")); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		if got := v.ScrollbackLen(); got != ScrollbackLines {
+			t.Fatalf("ScrollbackLen = %d, want the cap %d", got, ScrollbackLines)
+		}
+
+		// Every line that left the screen is in history or was trimmed from it.
+		if got := int(v.HistoryTrimmed()) + v.ScrollbackLen(); got != total-2 {
+			t.Fatalf("trimmed + len = %d, want %d", got, total-2)
+		}
+
+		if v.HistoryTrimmed() == 0 {
+			t.Fatal("HistoryTrimmed did not move past the cap")
+		}
+	})
+
+	t.Run("clear scrollback", func(t *testing.T) {
+		v, _ := newTestVT(t, 10, 3)
+
+		for range 20 {
+			if _, err := v.Write([]byte("x\r\n")); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		n := v.ScrollbackLen()
+
+		if _, err := v.Write([]byte("\x1b[3J")); err != nil {
+			t.Fatal(err)
+		}
+
+		if v.ScrollbackLen() != 0 || int(v.HistoryTrimmed()) != n {
+			t.Fatalf("after CSI 3J: len = %d, trimmed = %d, want 0 and %d", v.ScrollbackLen(), v.HistoryTrimmed(), n)
+		}
+	})
+
+	t.Run("no trim", func(t *testing.T) {
+		v, _ := newTestVT(t, 10, 3)
+
+		if _, err := v.Write([]byte("a\r\nb\r\nc\r\nd\r\n")); err != nil {
+			t.Fatal(err)
+		}
+
+		if v.HistoryTrimmed() != 0 {
+			t.Fatalf("HistoryTrimmed = %d, want 0", v.HistoryTrimmed())
+		}
+	})
+}
+
 func TestCloseIdempotent(t *testing.T) {
 	base := runtime.NumGoroutine()
 

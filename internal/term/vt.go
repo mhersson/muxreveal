@@ -8,6 +8,7 @@ import (
 	"os"
 	"slices"
 	"sync"
+	"sync/atomic"
 
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
@@ -27,6 +28,7 @@ type VT interface {
 	ScrollbackLen() int
 	ScrollbackLine(i int) []uv.Cell // copy of history line i (0 oldest); nil out of range
 	ScrollbackWrapped(i int) bool   // history line i soft-wraps into i+1
+	HistoryTrimmed() uint64         // lines dropped from the front of the history so far: ring overwrite, CSI 3J, reflow
 	RowWrapped(y int) bool          // live row y soft-wraps into y+1
 	AltScreen() bool
 	MouseTracking() bool                                    // guest enabled any of mouse modes 9, 1000, 1001, 1002, 1003
@@ -57,6 +59,7 @@ func NewVT(cols, rows int, reply io.Writer) VT {
 	t := &tuiosVT{em: tvt.NewWithScrollback(cols, rows, ScrollbackLines), host: host}
 	// SetCallbacks replaces the whole set, so add callbacks here.
 	t.applyCallbacks()
+	t.countTrims()
 	t.drain = startDrain(t.em, reply)
 
 	return t
@@ -70,6 +73,35 @@ type tuiosVT struct {
 	title     string
 	cwd       string
 	host      string // local hostname; OSC 7 from any other host is ignored
+	trimmed   atomic.Uint64
+}
+
+// countTrims counts the lines dropped from the front of the history. The
+// emulator's own trim hook keeps its OSC 133 markers aligned, so it is
+// replaced by one that does both. A backend without the accessors counts nothing.
+func (t *tuiosVT) countTrims() {
+	em, ok := t.em.(interface {
+		Scrollback() *tvt.Scrollback
+		SemanticMarkers() *tvt.SemanticMarkerList
+	})
+	if !ok {
+		return
+	}
+
+	sb := em.Scrollback()
+	if sb == nil {
+		return
+	}
+
+	markers := em.SemanticMarkers()
+
+	sb.SetOnTrim(func(n int) {
+		t.trimmed.Add(uint64(n))
+
+		if markers != nil {
+			markers.AdjustForScrollbackTrim(n)
+		}
+	})
 }
 
 // applyCallbacks installs the whole callback set; SetCallbacks replaces it, so
@@ -102,6 +134,8 @@ func (t *tuiosVT) ScrollbackLine(i int) []uv.Cell {
 	// The emulator may return a slice it caches.
 	return slices.Clone(t.em.ScrollbackLine(i))
 }
+
+func (t *tuiosVT) HistoryTrimmed() uint64 { return t.trimmed.Load() }
 
 func (t *tuiosVT) ScrollbackWrapped(i int) bool {
 	wrapped, known := t.em.ScrollbackSoftWrapped(i)

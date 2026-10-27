@@ -9,9 +9,15 @@ import (
 	"github.com/mhersson/muxreveal/internal/term"
 )
 
-// renderRow returns row y as a string exactly w cells wide, with style and
-// link sequences closed at the end so rows compose independently.
+// renderRow renders live row y of the emulator; see renderCells.
 func renderRow(v term.VT, y, w int) string {
+	return renderCells(func(x int) *uv.Cell { return v.CellAt(x, y) }, w)
+}
+
+// renderCells returns a row as a string exactly w cells wide, with style and
+// link sequences closed at the end so rows compose independently. at returns
+// nil for a column without a cell.
+func renderCells(at func(x int) *uv.Cell, w int) string {
 	var (
 		sb    strings.Builder
 		style uv.Style
@@ -20,7 +26,7 @@ func renderRow(v term.VT, y, w int) string {
 	)
 
 	for x := 0; x < w; x++ {
-		c := v.CellAt(x, y)
+		c := at(x)
 		if c == nil {
 			c = &uv.Cell{Content: " ", Width: 1}
 		}

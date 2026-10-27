@@ -6,6 +6,7 @@ const (
 	iconAgent  = "\U000F06A9" // nf-md-robot
 	iconShell  = "\uF489"     // nf-oct-terminal
 	iconZoom   = "\U000F0293" // nf-md-fullscreen
+	iconScroll = "\U000F005D" // nf-md-arrow_up
 	iconApp    = "\U000F056E" // nf-md-view_dashboard
 	iconLeader = "\U000F030C" // nf-md-keyboard
 	iconAlert  = "\U000F002A" // nf-md-alert_outline

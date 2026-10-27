@@ -242,6 +242,10 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, a.handleKey(msg)
 	case tea.PasteMsg:
 		return a, a.handlePaste(msg)
+	case tea.MouseWheelMsg:
+		a.handleWheel(msg)
+	case tea.MouseClickMsg, tea.MouseReleaseMsg, tea.MouseMotionMsg:
+		// Only the wheel is handled; these must not reach the prompt or overlay.
 	case tea.FocusMsg:
 		a.outerFocused = true
 		a.sendToFocused(func(p *pane) { p.sendFocus(true) })
@@ -284,6 +288,73 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 	return a, nil
+}
+
+// paneAt returns the pane whose content cells contain the screen cell (x, y)
+// and that cell relative to the content.
+func (a *App) paneAt(x, y int) (*pane, int, int) {
+	for id, r := range a.geometry().rects {
+		c := contentRect(r)
+		if x < c.X || x >= c.X+c.W || y < c.Y || y >= c.Y+c.H {
+			continue
+		}
+
+		if p := a.panes[id]; p != nil {
+			return p, x - c.X, y - c.Y
+		}
+	}
+
+	return nil, 0, 0
+}
+
+// handleWheel acts on the pane under the pointer without moving focus: a guest
+// that tracks the mouse gets the event, the alt screen gets cursor-key presses,
+// and any other pane scrolls its view. Modal UI owns the pointer while open.
+func (a *App) handleWheel(msg tea.MouseWheelMsg) {
+	if a.confirm != nil || a.prompt != nil || a.overlay != nil || a.popup {
+		return
+	}
+
+	m := msg.Mouse()
+
+	p, x, y := a.paneAt(m.X, m.Y)
+	if p == nil {
+		return
+	}
+
+	tracking, alt := p.inputModes()
+
+	if tracking {
+		p.scrollLive()
+		p.sendMouse(uv.MouseWheelEvent(uv.Mouse{X: x, Y: y, Button: m.Button, Mod: m.Mod}))
+
+		return
+	}
+
+	var code rune
+
+	switch m.Button {
+	case tea.MouseWheelUp:
+		code = tea.KeyUp
+	case tea.MouseWheelDown:
+		code = tea.KeyDown
+	default:
+		return
+	}
+
+	if alt {
+		for range scrollStep {
+			p.sendKey(uv.KeyPressEvent{Code: code})
+		}
+
+		return
+	}
+
+	if code == tea.KeyUp {
+		p.scrollBy(scrollStep)
+	} else {
+		p.scrollBy(-scrollStep)
+	}
 }
 
 // bindingKey names a key for keymap lookup. A shift-only key without text
@@ -349,6 +420,7 @@ func (a *App) View() tea.View {
 	}
 	v := tea.NewView(content)
 	v.AltScreen = true
+	v.MouseMode = tea.MouseModeCellMotion
 	v.ReportFocus = true
 	// Modified keys arrive with their shifted character, which the legacy encoder needs.
 	v.KeyboardEnhancements.ReportAlternateKeys = true

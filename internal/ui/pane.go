@@ -58,6 +58,11 @@ type pane struct {
 	mu         sync.Mutex
 	vt         term.VT
 	rows       []string
+	gen        uint64 // bumps when rows change; part of the scrolled view's cache key
+	alt        bool   // the alt screen was active at the last render
+	scrolled   bool   // the view shows history; anchor is its first row
+	anchor     uint64 // stable row of the first view row while scrolled
+	viewCache  viewCache
 	forced     bool
 	closed     bool
 	syncSerial uint64
@@ -189,6 +194,10 @@ func (p *pane) render() (changed bool, heldUntil time.Time) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
+	if alt := p.vt.AltScreen(); alt != p.alt {
+		p.alt, p.scrolled = alt, false
+	}
+
 	if open, _ := p.vt.SyncState(); open {
 		if end := p.openedAt.Add(syncMaxHold); p.clock.Now().Before(end) {
 			return false, end
@@ -205,6 +214,10 @@ func (p *pane) render() (changed bool, heldUntil time.Time) {
 			p.rows[y] = s
 			changed = true
 		}
+	}
+
+	if changed {
+		p.gen++
 	}
 
 	return changed, time.Time{}
@@ -233,15 +246,21 @@ func (p *pane) resize(cols, rows int) bool {
 	}
 
 	p.forced = true
+	p.scrolled = false
+	p.viewCache = viewCache{}
 
 	return true
 }
 
-// lines returns the row cache, each row exactly the pane width. It is only
-// valid until the next render or resize.
+// lines returns the rows to draw, each exactly the pane width: the live screen,
+// or the scrolled view. It is only valid until the next render or resize.
 func (p *pane) lines() []string {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+
+	if top, hist := p.viewTopLocked(); p.scrolled {
+		return p.viewLocked(top, hist)
+	}
 
 	return p.rows
 }
@@ -253,11 +272,15 @@ func (p *pane) size() (cols, rows int) {
 	return p.vt.Size()
 }
 
+// cursor is the guest's cursor; hidden while the view is scrolled.
 func (p *pane) cursor() (uv.Position, bool) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	return p.vt.Cursor()
+	pos, visible := p.vt.Cursor()
+	p.viewTopLocked()
+
+	return pos, visible && !p.scrolled
 }
 
 func (p *pane) title() string {
@@ -296,6 +319,7 @@ func (p *pane) sendKey(k uv.KeyPressEvent) {
 	defer p.mu.Unlock()
 
 	if !p.closed {
+		p.scrolled = false
 		p.vt.SendKey(k)
 	}
 }
@@ -305,7 +329,28 @@ func (p *pane) sendPaste(text string) {
 	defer p.mu.Unlock()
 
 	if !p.closed {
+		p.scrolled = false
 		p.vt.SendBytes(term.EncodePaste(text, p.vt.BracketedPaste()))
+	}
+}
+
+// inputModes reports whether the guest tracks the mouse and whether it is on
+// the alt screen.
+func (p *pane) inputModes() (tracking, alt bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	return p.vt.MouseTracking(), p.vt.AltScreen()
+}
+
+// sendMouse forwards a mouse event in pane cell coordinates; the emulator
+// encodes it per the guest's modes.
+func (p *pane) sendMouse(ev uv.MouseEvent) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	if !p.closed {
+		p.vt.SendMouse(ev)
 	}
 }
 

@@ -26,6 +26,7 @@ type styles struct {
 	// kindAgent and kindShell are bold in the kind colour: icon and focused title.
 	kindAgent, kindShell                          lipgloss.Style
 	titleMuted, cwdFocus, cwdSubtle, dot, tagZoom lipgloss.Style
+	tagScroll                                     lipgloss.Style
 	// popupBorder draws the popup frame on the panel colour.
 	popupBorder lipgloss.Style
 	// popupMuted and popupSubtle are secondary text on the panel colour.
@@ -61,6 +62,7 @@ func newStyles(t theme.Theme) styles {
 		cwdSubtle:   onBg.Foreground(ui.Subtle),
 		dot:         onBg.Foreground(ui.Subtle),
 		tagZoom:     onBg.Foreground(ui.Accent).Bold(true),
+		tagScroll:   onBg.Foreground(ui.Accent).Bold(true),
 		popupBorder: lipgloss.NewStyle().Background(ui.Panel).Foreground(ui.BorderFocus),
 		popupMuted:  onPanel.Foreground(ui.Muted),
 		popupSubtle: onPanel.Foreground(ui.Subtle),

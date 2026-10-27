@@ -86,7 +86,7 @@ Mouse selection inside panes, copy to the system clipboard (OSC 52 and native to
 - [x] Clipboard writer
 - [x] Selection model and text extraction
 - [x] Copy-mode engine
-- [ ] Scrollback view and mouse wheel
+- [x] Scrollback view and mouse wheel
 - [ ] Mouse selection, clicks and clipboard
 - [ ] Copy mode
 - [ ] Mouse and clipboard options and bench check
@@ -298,6 +298,7 @@ Ideas and requests that came up outside the current milestone go here.
 - Kitty and Ghostty key pass by the operator: Kitty keyboard keys (shift+enter, ctrl combinations) through a real Kitty-protocol terminal, which tmux cannot carry.
 - tuios's `ghostty` build-tag backend (libghostty-vt through cgo, built with Zig).
 - Mouse forwarding to panes (not built in the spike).
+- A pane resize returns a scrolled view to live; tuios's `Terminal.SetReflowFunc` could remap the scroll anchor (and selections) through a reflow instead.
 - Live x/vt streaming check, only if x/vt ever becomes the backend: does Claude's unsynchronized output tear?
 - A cell-level render path that skips Bubble Tea's string re-parse (about half of present), if M1's frame cost grows.
 - Fidelity references outside the x/vt lineage: tmux `capture-pane -e` (styles included) at several checkpoints of each recording, not only the final screen.
