@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/cli/go-gh/v2/pkg/api"
@@ -47,6 +48,13 @@ func (e *RateLimitError) Unwrap() error { return e.cause }
 // unchanged, so the original *api.HTTPError or *api.GraphQLError stays
 // reachable with errors.As.
 func classify(err error, now time.Time) error {
+	return classifyAt(err, now, time.Time{})
+}
+
+// classifyAt is classify with the reset a response header gave for a GraphQL
+// rate limit, which arrives as a 200 whose body carries the error. A zero
+// reset means none was seen.
+func classifyAt(err error, now, gqlReset time.Time) error {
 	if err == nil {
 		return nil
 	}
@@ -69,7 +77,12 @@ func classify(err error, now time.Time) error {
 	if errors.As(err, &ge) {
 		for _, item := range ge.Errors {
 			if item.Type == "RATE_LIMITED" {
-				return &RateLimitError{Reset: now.Add(rateLimitFallback), cause: err}
+				reset := gqlReset
+				if reset.IsZero() {
+					reset = now.Add(rateLimitFallback)
+				}
+
+				return &RateLimitError{Reset: reset, cause: err}
 			}
 		}
 	}
@@ -95,6 +108,11 @@ func httpRateLimitReset(he *api.HTTPError, now time.Time) (time.Time, bool) {
 			return time.Unix(unix, 0), true
 		}
 
+		return now.Add(rateLimitFallback), true
+	}
+
+	// A secondary limit may carry neither header.
+	if strings.Contains(strings.ToLower(he.Message), "secondary rate limit") {
 		return now.Add(rateLimitFallback), true
 	}
 

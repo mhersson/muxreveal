@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"net/url"
 	"os/exec"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -49,6 +50,10 @@ func ParseRemoteURL(raw string) (Repo, error) {
 
 	return Repo{Host: auth.NormalizeHostname(p.host), Owner: p.owner, Name: p.name}, nil
 }
+
+// repoPart is what an owner or a repository name may contain; it keeps the
+// userinfo of a malformed scp-like URL out of the owner.
+var repoPart = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
 
 func errUnsupported() error {
 	return fmt.Errorf("%w: unsupported remote URL", ErrNotGitHub)
@@ -98,8 +103,7 @@ func parseRemote(raw string) (remote, error) {
 	path = strings.TrimSuffix(path, ".git")
 
 	owner, name, ok := strings.Cut(path, "/")
-	if !ok || owner == "" || name == "" || strings.Contains(name, "/") ||
-		strings.ContainsAny(path, " \t\n") {
+	if !ok || !repoPart.MatchString(owner) || !repoPart.MatchString(name) {
 		return remote{}, errUnsupported()
 	}
 

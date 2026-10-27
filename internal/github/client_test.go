@@ -118,6 +118,13 @@ func TestNewClientRequiresToken(t *testing.T) {
 	}
 }
 
+func TestNewClientRefusesAnEmptyHost(t *testing.T) {
+	_, err := NewClient("", Options{Token: testToken})
+	if !errors.Is(err, ErrNotGitHub) {
+		t.Fatalf("err = %v, want ErrNotGitHub", err)
+	}
+}
+
 // Not parallel: it swaps os.Stderr and sets the environment.
 func TestClientPrintsNothingWithGHDebug(t *testing.T) {
 	t.Setenv("GH_DEBUG", "api")
@@ -277,6 +284,58 @@ func TestGraphQLHTTPErrors(t *testing.T) {
 
 			if strings.Contains(err.Error(), testToken) {
 				t.Error("error carries the token")
+			}
+		})
+	}
+}
+
+func TestGraphQLRateLimitWaitsForItsReset(t *testing.T) {
+	const body = `{"data":null,"errors":[{"type":"RATE_LIMITED","message":"API rate limit exceeded"}]}`
+
+	tests := []struct {
+		name   string
+		header map[string]string
+		check  func(reset time.Time) bool
+	}{
+		{
+			"reset header",
+			map[string]string{"X-RateLimit-Remaining": "0", "X-RateLimit-Reset": "4102444800"},
+			func(r time.Time) bool { return r.Unix() == 4102444800 },
+		},
+		{
+			"no headers", nil,
+			func(r time.Time) bool {
+				d := time.Until(r)
+
+				return d > 50*time.Second && d <= time.Minute
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			c, _ := newTestClient(t, "github.com", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				for k, v := range tc.header {
+					w.Header().Set(k, v)
+				}
+
+				okJSON(w, body)
+			}))
+
+			err := c.query(context.Background(), "Viewer", new(viewerQuery), nil)
+
+			var rl *RateLimitError
+			if !errors.As(err, &rl) || !errors.Is(err, ErrRateLimited) {
+				t.Fatalf("err = %v, want a *RateLimitError", err)
+			}
+
+			if !tc.check(rl.Reset) {
+				t.Errorf("reset = %v", rl.Reset)
+			}
+
+			var ge *api.GraphQLError
+			if !errors.As(err, &ge) {
+				t.Error("original *api.GraphQLError lost")
 			}
 		})
 	}

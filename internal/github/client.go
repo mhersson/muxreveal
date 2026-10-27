@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
+	"sync/atomic"
 	"time"
 
 	"github.com/cli/go-gh/v2/pkg/api"
@@ -28,9 +30,14 @@ type Client struct {
 	gqlAPI  *api.GraphQLClient
 }
 
-// NewClient builds a client for host. Host, token and transport are always
-// passed, so go-gh resolves none of them and never logs requests.
+// NewClient builds a client for host, which must be named. Host, token and
+// transport are always passed, so go-gh resolves none of them and never logs
+// requests.
 func NewClient(host string, o Options) (*Client, error) {
+	if host == "" {
+		return nil, fmt.Errorf("%w: no host", ErrNotGitHub)
+	}
+
 	if o.Token == "" {
 		return nil, ErrNoToken
 	}
@@ -70,14 +77,29 @@ func NewClient(host string, o Options) (*Client, error) {
 	return &Client{host: host, restAPI: restClient, gqlAPI: gqlClient}, nil
 }
 
+// resetKey keys the resetHolder a query puts in its request context.
+type resetKey struct{}
+
+// resetHolder receives the reset (unix seconds) of an exhausted rate limit
+// from the GraphQL transport; 0 means none was seen.
+type resetHolder struct{ unix atomic.Int64 }
+
 // httpErrorTransport turns a non-2xx GraphQL response into *api.HTTPError;
-// shurcooL-graphql drops the status and headers that rate limits need.
+// shurcooL-graphql drops the status and headers that rate limits need. It also
+// records the reset of an exhausted limit on any status, since GitHub reports
+// a GraphQL primary limit as a 200.
 type httpErrorTransport struct{ next http.RoundTripper }
 
 func (t httpErrorTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	resp, err := t.next.RoundTrip(req)
 	if err != nil {
 		return nil, err
+	}
+
+	if h, ok := req.Context().Value(resetKey{}).(*resetHolder); ok && resp.Header.Get("X-RateLimit-Remaining") == "0" {
+		if unix, err := strconv.ParseInt(resp.Header.Get("X-RateLimit-Reset"), 10, 64); err == nil {
+			h.unix.Store(unix)
+		}
 	}
 
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
@@ -114,7 +136,17 @@ func (c *Client) rest(ctx context.Context, method, path string, body, out any) e
 
 // query runs a struct-tagged GraphQL query; name labels it in errors.
 func (c *Client) query(ctx context.Context, name string, q any, vars map[string]any) error {
-	err := c.gqlAPI.QueryWithContext(ctx, name, q, vars)
+	h := new(resetHolder)
+	err := c.gqlAPI.QueryWithContext(context.WithValue(ctx, resetKey{}, h), name, q, vars)
 
-	return wrapAPI("github: query "+name, err, time.Now())
+	var reset time.Time
+	if unix := h.unix.Load(); unix != 0 {
+		reset = time.Unix(unix, 0)
+	}
+
+	if err == nil {
+		return nil
+	}
+
+	return fmt.Errorf("github: query %s: %w", name, classifyAt(err, time.Now(), reset))
 }

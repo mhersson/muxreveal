@@ -33,10 +33,12 @@ func TestMain(m *testing.M) {
 		originalEnv[k] = savedVar{value: v, set: ok}
 	}
 
-	env := map[string]string{"GH_CONFIG_DIR": dir}
-	for _, k := range isolatedEnv[1:] {
+	env := map[string]string{}
+	for _, k := range isolatedEnv {
 		env[k] = ""
 	}
+
+	env["GH_CONFIG_DIR"] = dir
 
 	for k, v := range env {
 		if err := os.Setenv(k, v); err != nil {

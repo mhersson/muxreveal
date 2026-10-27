@@ -35,6 +35,11 @@ func TestParseRemoteURL(t *testing.T) {
 		{name: "empty name", raw: "https://github.com/o/.git", err: true},
 		{name: "unknown scheme", raw: "ftp://github.com/o/r", err: true},
 		{name: "secret in rejected url", raw: "https://user:secret@github.com/o", err: true}, //nolint:gosec // credentials are the point of the case
+		{name: "scp-like userinfo in the owner", raw: "user:tok@host:o/r", err: true},
+		{name: "scp-like userinfo and port", raw: "user:tok@github.com:o/r", err: true},
+		{name: "owner with a colon", raw: "github.com:a:b/r", err: true},
+		{name: "name with a quote", raw: "https://github.com/o/r'x", err: true},
+		{name: "owner with an at sign", raw: "https://github.com/o@x/r", err: true},
 		{name: "option-like host", raw: "-oProxyCommand=x:o/r", err: true},
 	}
 	for _, tt := range tests {
@@ -45,7 +50,7 @@ func TestParseRemoteURL(t *testing.T) {
 					t.Fatalf("err = %v, want ErrNotGitHub", err)
 				}
 
-				if strings.Contains(err.Error(), "secret") {
+				if strings.Contains(err.Error(), "secret") || strings.Contains(err.Error(), "tok") {
 					t.Fatal("error carries the remote's credentials")
 				}
 

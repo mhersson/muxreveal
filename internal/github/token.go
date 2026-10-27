@@ -17,9 +17,16 @@ type TokenOptions struct {
 }
 
 // Token returns the token for host from the environment or gh's config, else
-// from `gh auth token`. Nothing found is ErrNoToken. gh's output is never
-// copied into an error.
+// from `gh auth token`. Nothing found is ErrNoToken; an empty or option-like
+// host is refused first. gh's output is never copied into an error.
 func Token(ctx context.Context, host string, o TokenOptions) (string, error) {
+	switch {
+	case host == "":
+		return "", fmt.Errorf("%w: no host", ErrNoToken)
+	case strings.HasPrefix(host, "-"):
+		return "", fmt.Errorf("%w: invalid host", ErrNoToken)
+	}
+
 	from := o.FromEnvOrConfig
 	if from == nil {
 		from = func(h string) string {
@@ -41,7 +48,7 @@ func Token(ctx context.Context, host string, o TokenOptions) (string, error) {
 	}
 
 	path, err := exec.LookPath(gh)
-	if host == "" || err != nil || strings.HasPrefix(host, "-") {
+	if err != nil {
 		return "", noToken
 	}
 

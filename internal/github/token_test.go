@@ -143,3 +143,24 @@ func TestTokenEmptyHostDoesNotRunGh(t *testing.T) {
 		t.Fatal("gh ran for an empty host")
 	}
 }
+
+func TestTokenRefusesAnEmptyHostBeforeAnyLookup(t *testing.T) {
+	t.Setenv("GH_ENTERPRISE_TOKEN", "enterprise-tok")
+
+	gh, args := fakeGH(t, "echo from-gh\n")
+
+	for _, host := range []string{"", "-oProxyCommand=x"} {
+		got, err := Token(t.Context(), host, TokenOptions{GH: gh})
+		if !errors.Is(err, ErrNoToken) || got != "" {
+			t.Errorf("host %q: token = %q, err = %v, want ErrNoToken", host, got, err)
+		}
+
+		if err != nil && strings.Contains(err.Error(), "--hostname") {
+			t.Errorf("host %q: error %q carries a login hint", host, err)
+		}
+	}
+
+	if _, err := os.Stat(args); err == nil {
+		t.Error("gh ran for an unusable host")
+	}
+}
