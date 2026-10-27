@@ -85,7 +85,11 @@ type railState struct {
 	selIdx    int         // its index in the shown list when last seen
 	searching bool        // the search row is open
 	query     string
-	top       int // first list row shown; the drawing clamps it
+	top       int  // first list row shown; the drawing clamps it
+	pulseDim  bool // the blocked bar shows Border instead of Blocked
+
+	flashPane  core.PaneID // the pane whose frame shows the jump flash
+	flashUntil time.Time   // the flash ends when the clock reaches this
 
 	panes  map[core.PaneID]*railPane
 	ctx    context.Context //nolint:containedctx // the rail's lifetime, set while the rail is open; probes derive from it
@@ -141,6 +145,9 @@ func (a *App) railCards(st core.State) []railGroup {
 		if p, ok := a.panes[id]; ok && p.lastOut.After(c.active) {
 			c.active = p.lastOut
 		}
+
+		// Printable once, so the matcher and the drawing see the same runes.
+		c.project, c.branch, c.action = printable(c.project), printable(c.branch), printable(c.action)
 
 		if _, ok := c.matches(a.rail.query); ok {
 			byState[c.state] = append(byState[c.state], c)

@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/mhersson/muxreveal/internal/core"
+	"github.com/mhersson/muxreveal/internal/ui/theme"
 )
 
 // bodyRect is the area under the rule on row 1, down to the last row.
@@ -77,7 +78,7 @@ func (a *App) arrangeIn(st core.State, i int) core.Arrangement {
 		return core.Arrangement{Rects: z}
 	}
 
-	return core.Arrange(st.Tabs[i], a.bodyArea(), st.Layout)
+	return core.Arrange(st.Tabs[i], a.bodyAreaIn(st.Rail), st.Layout)
 }
 
 // sizesIn is the pane rects of tab i whose content is each PTY's size (the
@@ -87,7 +88,7 @@ func (a *App) sizesIn(st core.State, i int) map[core.PaneID]core.Rect {
 		return z
 	}
 
-	return core.Arrange(st.Tabs[i], a.bodyArea(), st.Layout).Sizes
+	return core.Arrange(st.Tabs[i], a.bodyAreaIn(st.Rail), st.Layout).Sizes
 }
 
 // zoomedRects is the one rect of a zoomed tab: its focused pane fills the
@@ -103,16 +104,25 @@ func (a *App) zoomedRects(st core.State, i int) (map[core.PaneID]core.Rect, bool
 	}
 
 	rects := map[core.PaneID]core.Rect{}
-	if body := a.bodyArea(); body.W >= minFrame && body.H >= minFrame {
+	if body := a.bodyAreaIn(st.Rail); body.W >= minFrame && body.H >= minFrame {
 		rects[t.Focus] = body
 	}
 
 	return rects, true
 }
 
-// bodyArea is the rect panes are laid out in.
-func (a *App) bodyArea() core.Rect {
-	return layoutBody(bodyRect(a.width, a.height))
+// bodyArea is the rect panes are laid out in: the body less the rail's columns
+// while the rail shows.
+func (a *App) bodyArea() core.Rect { return a.bodyAreaIn(a.store.State().Rail) }
+
+func (a *App) bodyAreaIn(rail bool) core.Rect {
+	body := bodyRect(a.width, a.height)
+	if a.railShows(rail) {
+		w := railWidthFor(body)
+		body.X, body.W = w, body.W-w
+	}
+
+	return layoutBody(body)
 }
 
 // segment is a run of cells already styled, starting at column x.
@@ -140,19 +150,38 @@ func (a *App) frameAt(g geometry) string {
 	}
 
 	if bodyH := a.height - 2; bodyH > 0 {
+		var rail []string
+
+		railW := 0
+		if v, ok := a.railViewOf(st); ok {
+			rail, railW = a.railLines(st, lk, v), v.geom.box.W
+		}
+
 		if st.Tab().Empty() {
-			lines = append(lines, strings.Split(renderBody(a.width, bodyH, lk.styles, lk.sample, a.welcomeHints()), "\n")...)
+			lines = append(lines, a.welcomeBody(bodyH, lk, rail, railW)...)
 		} else {
-			lines = append(lines, a.frameBody(g, st, lk)...)
+			lines = append(lines, a.frameBody(g, st, lk, rail, railW)...)
 		}
 	}
 
 	return strings.Join(lines, "\n")
 }
 
-// frameBody draws the body rows under the rule: each pane's box, title and
-// content.
-func (a *App) frameBody(g geometry, st core.State, lk look) []string {
+// welcomeBody is the welcome card centred in the body to the right of the rail.
+func (a *App) welcomeBody(bodyH int, lk look, rail []string, railW int) []string {
+	w := a.width - railW
+
+	lines := strings.Split(renderBody(w, bodyH, lk.styles, lk.sample, a.welcomeHints()), "\n")
+	for i := range min(len(rail), len(lines)) {
+		lines[i] = rail[i] + lines[i]
+	}
+
+	return lines
+}
+
+// frameBody draws the body rows under the rule: the rail, then each pane's box,
+// title and content.
+func (a *App) frameBody(g geometry, st core.State, lk look, rail []string, railW int) []string {
 	rows := make([][]segment, a.height)
 	add := func(y int, s segment) {
 		if y >= 0 && y < len(rows) && s.w > 0 {
@@ -160,8 +189,13 @@ func (a *App) frameBody(g geometry, st core.State, lk look) []string {
 		}
 	}
 
+	for i, l := range rail {
+		add(2+i, segment{0, railW, l})
+	}
+
 	focus := st.Tab().Focus
 	leftPane, rightPane := edgePanes(g)
+	now := a.clock.Now()
 
 	for id, r := range g.rects {
 		own := ownNone
@@ -178,7 +212,12 @@ func (a *App) frameBody(g geometry, st core.State, lk look) []string {
 			hr = g.hiddenRight
 		}
 
-		drawBox(add, r, a.topBorder(st, id, r, id == focus, lk.styles), a.bottomBorder(id, r, hl, hr, lk.styles), own, lk.styles)
+		styles := lk.styles
+		if id == a.rail.flashPane && now.Before(a.rail.flashUntil) {
+			styles = flashStyles(styles, lk.theme.UI.Match)
+		}
+
+		drawBox(add, r, a.topBorder(st, id, r, id == focus, styles), a.bottomBorder(id, r, hl, hr, styles), own, styles)
 	}
 
 	for id, r := range g.rects {
@@ -233,6 +272,17 @@ func (a *App) frameBody(g geometry, st core.State, lk look) []string {
 	}
 
 	return lines
+}
+
+// flashStyles draws a pane's whole frame, title included, in the jump flash colour.
+func flashStyles(st styles, match theme.Hex) styles {
+	st.border = st.border.Foreground(match)
+	st.borderAgent, st.borderShell = st.border, st.border
+	st.kindAgent, st.kindShell = st.kindAgent.Foreground(match), st.kindShell.Foreground(match)
+	st.titleMuted = st.titleMuted.Foreground(match)
+	st.runs = &runCache{}
+
+	return st
 }
 
 // edgePanes are the bottom panes of the leftmost and rightmost visible columns,
@@ -336,6 +386,10 @@ func (a *App) cursorBase(g geometry) *tea.Cursor {
 	}
 
 	st := a.store.State()
+	if cur := a.railCursor(st); cur != nil {
+		return cur
+	}
+
 	p := a.panes[st.Tab().Focus]
 
 	r, ok := g.rects[st.Tab().Focus]

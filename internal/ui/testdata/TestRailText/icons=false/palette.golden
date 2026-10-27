@@ -1,0 +1,30 @@
+ 1 web   2 docs   3 scratch                                                              layout bsp 
+────────────────────────────────────────────────────────────────────────────────────────────────────
+╭─ Agents 6 ───────── blocked 1 ⠋2 idle 2 ─╮╭─ claude ────────── idle ─╮╭─ claude ─────────────────╮
+│ Blocked ────────────────────────────── 1 ││                          ││                          │
+│                                          ││                          ││                          │
+│▎  api                               8s ● ││                          ││                          │
+│   main                                   ││                          ││                          │
+│   Allow Bash rm ╭─ Commands ───────────────────────────────────────────────────╮                 │
+│   +12 -3  2 file│ ❯                                                            │                 │
+│                 ├──────────────────────────────────────────────────────────────┤                 │
+│ Working ────────│ Open command palette                            ctrl+space : │                 │
+│╭────────────────│ Pick theme                                      ctrl+space t │                 │
+││⠋ web           │ New agent pane                                  ctrl+space n │                 │
+││  feat/login    │ Split: shell below                              ctrl+space s │                 │
+││  Edit src/login│ Split: shell right                              ctrl+space v │                 │
+││  +120 -14  5 fi│ Focus left                                      ctrl+space h │                 │
+│╰────────────────│ Focus down                                      ctrl+space j │                 │
+│ ⠋ muxreveal     │ Focus up                                        ctrl+space k │                 │
+│   feat/agents-ra│ Focus right                                     ctrl+space l │                 │
+│   Bash go test .│ Resize left                                     ctrl+space H │                 │
+│   +340 -12  9 fi├──────────────────────────────────────────────────────────────┤                 │
+│                 │ up/down move   enter run   esc close                         │                 │
+│ Idle ───────────╰──────────────────────────────────────────────────── 1 of 71 ─╯                 │
+│                                          ││                          ││                          │
+│   docs                                1d ││                          ││                          │
+│   main                                   ││                          ││                          │
+│   waiting for a prompt                   ││                          ││                          │
+│                                          ││                          ││                          │
+│ j/k move  enter jump  / search  esc back ││                          ││                          │
+╰──────────────────────────────────────────╯╰──────────────────────────╯╰──────────────────────────╯

@@ -55,3 +55,12 @@ const (
 
 // spinFrames are the working badge's braille spinner frames, one cell wide each.
 const spinFrames = "\u280B\u2819\u2839\u2838\u283C\u2834\u2826\u2827\u2807\u280F"
+
+// spinFrame is the working badge's spinner glyph for frame n.
+func spinFrame(n int) string {
+	const w = 3 // every frame is one three-byte rune
+
+	i := n % (len(spinFrames) / w)
+
+	return spinFrames[i*w : (i+1)*w]
+}

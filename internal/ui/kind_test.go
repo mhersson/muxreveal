@@ -74,8 +74,8 @@ func TestKindFollowsForeground(t *testing.T) {
 			t.Fatalf("pane = %+v, want a claude-code agent", m)
 		}
 
-		if a.agentCount() != 1 || !a.tabInfos()[0].agent {
-			t.Errorf("agentCount = %d, tab agent = %v, want the tray and tab to follow", a.agentCount(), a.tabInfos()[0].agent)
+		if len(a.store.State().AgentPanes()) != 1 || !a.tabInfos()[0].agent {
+			t.Errorf("agents = %d, tab agent = %v, want the tab to follow", len(a.store.State().AgentPanes()), a.tabInfos()[0].agent)
 		}
 
 		if !a.panes["p1"].launched.IsZero() || !a.panes["p1"].seen {
@@ -89,8 +89,8 @@ func TestKindFollowsForeground(t *testing.T) {
 			t.Errorf("pane = %+v, want a shell", m)
 		}
 
-		if a.agentCount() != 0 {
-			t.Errorf("agentCount = %d, want 0", a.agentCount())
+		if n := len(a.store.State().AgentPanes()); n != 0 {
+			t.Errorf("agents = %d, want 0", n)
 		}
 	})
 

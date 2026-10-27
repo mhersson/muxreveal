@@ -84,52 +84,14 @@ func modIDs(mods []trayModule) []string {
 	return ids
 }
 
-func TestAgentsModuleFollowsAgentPanes(t *testing.T) {
-	a := newTestApp(t)
-	sized(t, a, 100, 30)
-
-	has := func() (int, bool) {
-		for _, m := range a.trayModules() {
-			if m.id == modAgents {
-				return m.width, true
-			}
-		}
-
-		return 0, false
-	}
-
-	if _, ok := has(); ok {
-		t.Fatal("agents module present with no panes")
-	}
-
-	openIn(t, a, core.OpenPane{Kind: core.KindShell, Cwd: "/w/a", Split: core.SplitVertical})
-
-	if _, ok := has(); ok {
-		t.Error("agents module present with only a shell")
-	}
-
+func TestTrayHasNoAgentsModule(t *testing.T) {
+	a := trayApp(t, true)
 	openIn(t, a, core.OpenPane{Kind: core.KindAgent, Cwd: "/w/b", Split: core.SplitVertical})
 
-	if w, ok := has(); !ok || w != 3 {
-		t.Errorf("one agent: present=%v width=%d, want true 3", ok, w)
-	}
-
-	// An agent in another tab counts too.
-	openIn(t, a, core.NewTab{Kind: core.KindAgent, Cwd: "/w/c"}, core.SelectTab{Index: 0})
-
-	if w, ok := has(); !ok || w != 4 {
-		t.Errorf("two agents across tabs: present=%v width=%d, want true 4", ok, w)
-	}
-
-	st := a.store.State()
-	for id, m := range st.Panes {
-		if m.Kind == core.KindAgent {
-			openIn(t, a, core.ClosePane{ID: id})
+	for _, id := range modIDs(a.trayModules()) {
+		if id == "agents" {
+			t.Fatal("the tray carries an agents module")
 		}
-	}
-
-	if _, ok := has(); ok {
-		t.Error("agents module present after the agent panes closed")
 	}
 }
 
@@ -336,7 +298,7 @@ func TestTrayModuleWidths(t *testing.T) {
 		a := trayApp(t, icons)
 		mods := a.trayModules()
 
-		if want := []string{modLayout, modAgents, modGit, modLoad, modClock}; !slices.Equal(modIDs(mods), want) {
+		if want := []string{modLayout, modGit, modLoad, modClock}; !slices.Equal(modIDs(mods), want) {
 			t.Fatalf("icons=%v modules = %v, want %v", icons, modIDs(mods), want)
 		}
 
@@ -377,7 +339,7 @@ func TestBarLinesStayExactWidth(t *testing.T) {
 
 // The tray gives way in DESIGN's order as the bar narrows.
 func TestTrayDropOrder(t *testing.T) {
-	rank := map[string]int{modLoad: 0, modGit: 1, modPR: 2, modLayout: 3, modClock: 4, modAgents: 5}
+	rank := map[string]int{modLoad: 0, modGit: 1, modPR: 2, modLayout: 3, modClock: 4}
 
 	for _, icons := range []bool{true, false} {
 		a := trayApp(t, icons)
@@ -411,7 +373,7 @@ func TestBarGoldens(t *testing.T) {
 	}{
 		{"icons wide", true, 100},
 		{"icons without load", true, 70},
-		{"icons agents and clock", true, 50},
+		{"icons layout and clock", true, 50},
 		{"plain wide", false, 100},
 		{"plain without load", false, 66},
 	}
@@ -442,7 +404,7 @@ func TestTrayColours(t *testing.T) {
 	w := 100
 	vt := lineVT(t, a.workspaceBar(w), w)
 
-	// Walk the tray from the right: clock segment, load, git, agents.
+	// Walk the tray from the right: clock segment, load, git, layout.
 	clockW := lipgloss.Width(trayModuleByID(a, modClock).render())
 	x := w - clockW
 	assertColours(t, vt, x-1, 0, trayOpen, ui.Clock, ui.Surface, false)
@@ -460,13 +422,9 @@ func TestTrayColours(t *testing.T) {
 	assertColours(t, vt, gx+3, 0, "f", ui.Fg, ui.Surface, false)
 	assertColours(t, vt, gx+gitW-2, 0, iconDirty, ui.Warning, ui.Surface, false)
 
-	agW := trayModuleByID(a, modAgents).width
-	ax := gx - 1 - agW
-	assertColours(t, vt, ax-1, 0, edgeThin, ui.Bar, ui.Surface, false)
-	assertColours(t, vt, ax+1, 0, iconAgent, ui.Agent, ui.Surface, false)
-
 	lyW := trayModuleByID(a, modLayout).width
-	yx := ax - 1 - lyW
+	yx := gx - 1 - lyW
+	assertColours(t, vt, gx-1, 0, edgeThin, ui.Bar, ui.Surface, false)
 	assertColours(t, vt, yx-1, 0, trayOpen, ui.Surface, ui.Bar, false)
 }
 

@@ -468,9 +468,6 @@ func parseGitStatus(out []byte) *gitInfo {
 	return &info
 }
 
-// agentCount is the agent panes open across all tabs.
-func (a *App) agentCount() int { return len(a.store.State().AgentPanes()) }
-
 // trayRun is a piece of text in one colour on the Surface ground.
 type trayRun struct {
 	text string
@@ -506,15 +503,6 @@ func (a *App) trayModules() []trayModule {
 	st := a.store.State()
 	if m := st.Tab().Mode; m != "" {
 		mods = append(mods, layoutModule(m, icons, ui))
-	}
-
-	if ids := st.AgentPanes(); len(ids) > 0 {
-		states := make([]core.AgentState, len(ids))
-		for i, id := range ids {
-			states[i] = st.Panes[id].State
-		}
-
-		mods = append(mods, agentsModule(states, icons, ui))
 	}
 
 	if g := a.tray.git; g != nil {
@@ -553,41 +541,6 @@ func layoutModule(m core.LayoutMode, icons bool, ui theme.UI) trayModule {
 		trayRun{text: icon, fg: ui.Accent},
 		trayRun{text: " " + string(m) + " ", fg: ui.Fg},
 	)
-}
-
-// agentsModule shows one icon per agent in its state's colour (Agent for no
-// state) and how many are blocked.
-func agentsModule(states []core.AgentState, icons bool, ui theme.UI) trayModule {
-	blocked := 0
-
-	for _, s := range states {
-		if s == core.AgentBlocked {
-			blocked++
-		}
-	}
-
-	if !icons {
-		if blocked == 0 {
-			return surfaceModule(modAgents, ui, trayRun{text: fmt.Sprintf(" agents %d ", len(states)), fg: ui.Fg})
-		}
-
-		return surfaceModule(modAgents, ui,
-			trayRun{text: fmt.Sprintf(" agents %d", len(states)), fg: ui.Fg},
-			trayRun{text: fmt.Sprintf(" blocked %d", blocked), fg: ui.Blocked, bold: true},
-			trayRun{text: " ", fg: ui.Fg},
-		)
-	}
-
-	runs := []trayRun{{text: " ", fg: ui.Fg}}
-	for _, s := range states {
-		runs = append(runs, trayRun{text: iconAgent, fg: stateColour(s, ui, ui.Agent)})
-	}
-
-	if blocked > 0 {
-		runs = append(runs, trayRun{text: fmt.Sprintf(" %s%d", iconBlocked, blocked), fg: ui.Blocked, bold: true})
-	}
-
-	return surfaceModule(modAgents, ui, append(runs, trayRun{text: " ", fg: ui.Fg})...)
 }
 
 func gitModule(g gitInfo, icons bool, ui theme.UI) trayModule {

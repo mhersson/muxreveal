@@ -134,11 +134,9 @@ func (s styles) borderStyle(own uint8) lipgloss.Style {
 // badge is the state badge's text and style; ok is false for a pane with no
 // state to show.
 func (s styles) badge(st core.AgentState, spin int, icons bool) (text string, style lipgloss.Style, ok bool) {
-	frames := []rune(spinFrames)
-
 	switch st {
 	case core.AgentWorking:
-		return " " + string(frames[spin%len(frames)]) + " working ", s.tagWorking, true
+		return " " + spinFrame(spin) + " working ", s.tagWorking, true
 	case core.AgentBlocked:
 		if icons {
 			return " " + iconBlocked + " blocked ", s.tagBlocked, true
