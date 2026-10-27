@@ -315,7 +315,7 @@ func (w *Watcher) classify(ev fsnotify.Event, p *pending) bool {
 
 	// kqueue notes a directory's own entry changes as a Write on the directory;
 	// the entries' events report the change.
-	if ev.Op == fsnotify.Write && w.isWatchedDir(name) {
+	if isDirNote(ev) && w.isWatchedDir(name) {
 		return false
 	}
 
@@ -334,6 +334,12 @@ func (w *Watcher) classify(ev fsnotify.Event, p *pending) bool {
 	p.paths[rel] = struct{}{}
 
 	return true
+}
+
+// isDirNote reports whether ev is kqueue's note that a directory's entries
+// changed: a Write, possibly with Chmod, and nothing that adds or removes it.
+func isDirNote(ev fsnotify.Event) bool {
+	return ev.Has(fsnotify.Write) && !ev.Has(fsnotify.Create) && !ev.Has(fsnotify.Remove) && !ev.Has(fsnotify.Rename)
 }
 
 func (w *Watcher) isWatchedDir(name string) bool {
@@ -388,7 +394,7 @@ func (w *Watcher) handleMeta(ev fsnotify.Event, p *pending) bool {
 	case within(w.ownRefsDir, name):
 		return false
 	case strings.HasPrefix(name, w.refsDir+string(filepath.Separator)):
-		if strings.HasSuffix(base, ".lock") || (ev.Op == fsnotify.Write && w.isWatchedDir(name)) {
+		if strings.HasSuffix(base, ".lock") || (isDirNote(ev) && w.isWatchedDir(name)) {
 			return false
 		}
 

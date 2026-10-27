@@ -807,8 +807,16 @@ func eventWatcher(t *testing.T) *Watcher {
 		t.Fatal(err)
 	}
 
+	fsw, err := fsnotify.NewWatcher()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	t.Cleanup(func() { _ = fsw.Close() })
+
 	w := &Watcher{
 		repo:       r,
+		fs:         fsw,
 		refsDir:    filepath.Join(r.CommonDir, "refs"),
 		ownRefsDir: filepath.Join(r.CommonDir, "refs", "muxreveal"),
 		watched:    map[string]struct{}{},
@@ -845,6 +853,8 @@ func TestKqueueEvents(t *testing.T) {
 		{name: "write on a ref", ev: fsnotify.Event{Name: filepath.Join(refs, "heads", "main"), Op: fsnotify.Write}, wantGit: true, accepted: true},
 		{name: "write plus chmod on a ref", ev: fsnotify.Event{Name: filepath.Join(refs, "heads", "main"), Op: fsnotify.Write | fsnotify.Chmod}, wantGit: true, accepted: true},
 		{name: "dir write in worktree", ev: fsnotify.Event{Name: filepath.Join(w.repo.Root, "src"), Op: fsnotify.Write}},
+		{name: "dir write plus chmod in worktree", ev: fsnotify.Event{Name: filepath.Join(w.repo.Root, "src"), Op: fsnotify.Write | fsnotify.Chmod}},
+		{name: "dir write plus chmod on refs/heads", ev: fsnotify.Event{Name: filepath.Join(refs, "heads"), Op: fsnotify.Write | fsnotify.Chmod}},
 		{name: "file write in worktree", ev: fsnotify.Event{Name: filepath.Join(w.repo.Root, "src", "a.go"), Op: fsnotify.Write}, wantPath: "src/a.go", accepted: true},
 	}
 
@@ -876,7 +886,7 @@ func TestKqueueEvents(t *testing.T) {
 
 func TestSeqCountsEventsBeforeTheBatch(t *testing.T) {
 	dir := baseRepo(t)
-	opts := WatchOptions{Debounce: 400 * time.Millisecond, MaxDelay: 2 * time.Second, SeqBase: 100}
+	opts := WatchOptions{Debounce: time.Second, MaxDelay: 3 * time.Second, SeqBase: 100}
 	w := startWatch(t, dir, opts)
 
 	if got := w.Seq(); got != 100 {
@@ -894,4 +904,127 @@ func TestSeqCountsEventsBeforeTheBatch(t *testing.T) {
 	}
 
 	waitPaths(t, w, "tracked.txt")
+}
+
+type metaRow struct {
+	name    string
+	ev      fsnotify.Event
+	wantGit bool
+}
+
+func runMetaRows(t *testing.T, w *Watcher, rows []metaRow) {
+	t.Helper()
+
+	for _, tt := range rows {
+		t.Run(tt.name, func(t *testing.T) {
+			p := newPending()
+			before := w.Seq()
+
+			got := w.handle(tt.ev, p)
+			if got != tt.wantGit || p.git != tt.wantGit {
+				t.Errorf("handle = %v, git = %v; want %v", got, p.git, tt.wantGit)
+			}
+
+			want := uint64(0)
+			if tt.wantGit {
+				want = 1
+			}
+
+			if rose := w.Seq() - before; rose != want {
+				t.Errorf("Seq rose by %d, want %d", rose, want)
+			}
+		})
+	}
+}
+
+func TestKqueueMetaOps(t *testing.T) {
+	w := eventWatcher(t)
+	gitDir, refs := w.repo.GitDir, w.refsDir
+	ref := filepath.Join(refs, "heads", "main")
+
+	rows := []metaRow{
+		{name: "lock write", ev: fsnotify.Event{Name: ref + ".lock", Op: fsnotify.Write}},
+		{name: "lock create", ev: fsnotify.Event{Name: ref + ".lock", Op: fsnotify.Create}},
+		{name: "packed-refs write", ev: fsnotify.Event{Name: filepath.Join(gitDir, "packed-refs"), Op: fsnotify.Write}, wantGit: true},
+		{name: "unrelated git file", ev: fsnotify.Event{Name: filepath.Join(gitDir, "config"), Op: fsnotify.Write}},
+	}
+
+	for _, op := range []fsnotify.Op{fsnotify.Create, fsnotify.Remove, fsnotify.Rename} {
+		for name, path := range map[string]string{
+			"HEAD": filepath.Join(gitDir, "HEAD"), "index": filepath.Join(gitDir, "index"), "ref": ref,
+		} {
+			rows = append(rows, metaRow{name: op.String() + " " + name, ev: fsnotify.Event{Name: path, Op: op}, wantGit: true})
+		}
+	}
+
+	runMetaRows(t, w, rows)
+}
+
+func TestKqueueNewDirectoryUnderRefs(t *testing.T) {
+	w := eventWatcher(t)
+	heads := filepath.Join(w.refsDir, "heads")
+
+	mk := func(t *testing.T, dir string, files ...string) string {
+		t.Helper()
+
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+
+		for _, f := range files {
+			if err := os.WriteFile(filepath.Join(dir, f), []byte("x\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		return dir
+	}
+
+	rows := []metaRow{
+		{name: "holding a ref", ev: fsnotify.Event{Name: mk(t, filepath.Join(heads, "feat"), "x"), Op: fsnotify.Create}, wantGit: true},
+		{name: "holding a ref below", ev: fsnotify.Event{Name: mk(t, filepath.Join(heads, "a", "b"), "x"), Op: fsnotify.Create}, wantGit: true},
+		{name: "empty", ev: fsnotify.Event{Name: mk(t, filepath.Join(heads, "empty")), Op: fsnotify.Create}},
+		{name: "only a lock", ev: fsnotify.Event{Name: mk(t, filepath.Join(heads, "locked"), "x.lock"), Op: fsnotify.Create}},
+		{name: "under refs/muxreveal", ev: fsnotify.Event{Name: mk(t, filepath.Join(w.ownRefsDir, "sub"), "x"), Op: fsnotify.Create}},
+	}
+
+	runMetaRows(t, w, rows)
+}
+
+func TestKqueueLinkedWorktreeGitDir(t *testing.T) {
+	main := eventWatcher(t)
+	common := main.repo.CommonDir
+	linkedGit := filepath.Join(common, "worktrees", "x")
+
+	if err := os.MkdirAll(linkedGit, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	linked := &Watcher{
+		repo:       Repo{Root: t.TempDir(), GitDir: linkedGit, CommonDir: common},
+		fs:         main.fs,
+		refsDir:    main.refsDir,
+		ownRefsDir: main.ownRefsDir,
+		watched:    map[string]struct{}{linkedGit: {}},
+	}
+
+	runMetaRows(t, linked, []metaRow{
+		{name: "linked HEAD", ev: fsnotify.Event{Name: filepath.Join(linkedGit, "HEAD"), Op: fsnotify.Write}, wantGit: true},
+		{name: "linked index", ev: fsnotify.Event{Name: filepath.Join(linkedGit, "index"), Op: fsnotify.Write}, wantGit: true},
+		{name: "main HEAD", ev: fsnotify.Event{Name: filepath.Join(main.repo.GitDir, "HEAD"), Op: fsnotify.Write}},
+		{name: "linked config", ev: fsnotify.Event{Name: filepath.Join(linkedGit, "config"), Op: fsnotify.Write}},
+	})
+}
+
+func TestWatchNestedBranchSetsGit(t *testing.T) {
+	dir := baseRepo(t)
+	w := startWatch(t, dir, fastWatch)
+
+	gitOut(t, dir, "update-ref", "refs/heads/a/b", "HEAD")
+
+	collect(t, w, func(b Batch) bool { return b.Git })
+
+	gitOut(t, dir, "update-ref", "refs/heads/a/c/d", "HEAD")
+
+	collect(t, w, func(b Batch) bool { return b.Git })
 }
