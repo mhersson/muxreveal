@@ -96,7 +96,6 @@ func TestWorkingTreeReusesTheCache(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	time.Sleep(20 * time.Millisecond)
 	treeOf(t, r, cache, tmp)
 
 	after, err := os.Stat(file)
@@ -229,20 +228,61 @@ func TestCacheWriteIsAtomic(t *testing.T) {
 	}
 }
 
+// The cache file's mtime is set equal to the cached entry's mtime, so git
+// must treat the entry as racy and compare content. A copy stamped with the
+// copy time instead would trust the entry's size and mtime and miss the edit.
 func TestWorkingTreeSeesAnEditAfterTheCache(t *testing.T) {
 	dir, cache, tmp, r := cacheRepo(t)
+	gitOut(t, dir, "config", "core.trustctime", "false")
 
-	for i := range 10 {
-		writeFile(t, dir, "a.txt", fmt.Sprintf("value %d\n", i%10))
-		treeOf(t, r, cache, tmp)
+	past := time.Now().Add(-time.Hour)
+	file := filepath.Join(dir, "a.txt")
 
-		// Same size, written right after a cached call.
-		writeFile(t, dir, "a.txt", fmt.Sprintf("value %d\n", (i+1)%10))
+	writeFile(t, dir, "a.txt", "aaaa\n")
 
-		wt := treeOf(t, r, cache, tmp)
-		if got := gitOut(t, dir, "rev-parse", wt.Tree+":a.txt"); got != gitOut(t, dir, "hash-object", "a.txt") {
-			t.Fatalf("round %d: tree has stale a.txt", i)
-		}
+	if err := os.Chtimes(file, past, past); err != nil {
+		t.Fatal(err)
+	}
+
+	treeOf(t, r, cache, tmp)
+
+	cached := cacheFiles(t, cache)[0]
+	if err := os.Chtimes(cached, past, past); err != nil {
+		t.Fatal(err)
+	}
+
+	writeFile(t, dir, "a.txt", "bbbb\n")
+
+	if err := os.Chtimes(file, past, past); err != nil {
+		t.Fatal(err)
+	}
+
+	wt := treeOf(t, r, cache, tmp)
+	if got := gitOut(t, dir, "rev-parse", wt.Tree+":a.txt"); got != gitOut(t, dir, "hash-object", "a.txt") {
+		t.Fatal("tree has the stale a.txt")
+	}
+}
+
+func TestWorkingTreeKeepsADeletedTrackedFileTracked(t *testing.T) {
+	dir, cache, tmp, r := cacheRepo(t)
+
+	if err := os.Remove(filepath.Join(dir, "a.txt")); err != nil {
+		t.Fatal(err)
+	}
+
+	if wt := treeOf(t, r, cache, tmp); gitOut(t, dir, "ls-tree", "--name-only", wt.Tree) != "b.txt" {
+		t.Fatal("deleted file is still in the tree")
+	}
+
+	writeFile(t, dir, "a.txt", "alpha\n")
+
+	wt := treeOf(t, r, cache, tmp)
+	if len(wt.Untracked) != 0 {
+		t.Fatalf("untracked = %v, want none", wt.Untracked)
+	}
+
+	if got, want := gitOut(t, dir, "rev-parse", wt.Tree+":a.txt"), gitOut(t, dir, "rev-parse", "HEAD:a.txt"); got != want {
+		t.Fatalf("a.txt = %s, want %s", got, want)
 	}
 }
 

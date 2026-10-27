@@ -198,9 +198,9 @@ func headCommit(ctx context.Context, dir string) (string, error) {
 }
 
 // stage brings the temporary index in line with the files on disk and writes
-// the tree. afterTracked, when set, runs once the tracked paths are staged and before
-// untracked ones are added, so a copy taken there holds no untracked entries;
-// changed tells whether staging them wrote the index.
+// the tree. afterTracked, when set, runs once the modified tracked paths are
+// staged and before deleted and untracked ones are, so a copy taken there holds
+// neither; changed tells whether staging wrote the index.
 func (t *tempIndex) stage(ctx context.Context, r Repo, maxUntracked int64, afterTracked func(changed bool)) (WorkTree, error) {
 	out, err := run(ctx, call{
 		dir:  r.Root,
@@ -212,7 +212,7 @@ func (t *tempIndex) stage(ctx context.Context, r Repo, maxUntracked int64, after
 		return WorkTree{}, err
 	}
 
-	tracked, others := splitListing(out)
+	tracked, deleted, others := splitListing(out)
 
 	skip, err := t.gitlinks(ctx, r, tracked)
 	if err != nil {
@@ -223,13 +223,22 @@ func (t *tempIndex) stage(ctx context.Context, r Repo, maxUntracked int64, after
 
 	var trackedIn, othersIn bytes.Buffer
 
-	// Tracked paths go first: a removed file must leave the index before a
-	// directory of the same name is added.
+	// Modified paths are staged first and cached. Deleted ones go in the second
+	// pass, ahead of untracked paths: a removed file must leave the index before
+	// a directory of the same name is added, and the cache keeps its entry so the
+	// file is not listed as untracked if it comes back.
 	for _, p := range tracked {
-		if !skip[p] {
-			trackedIn.WriteString(p)
-			trackedIn.WriteByte(0)
+		if skip[p] {
+			continue
 		}
+
+		in := &trackedIn
+		if deleted[p] {
+			in = &othersIn
+		}
+
+		in.WriteString(p)
+		in.WriteByte(0)
 	}
 
 	for _, p := range others {
@@ -287,8 +296,9 @@ func (t *tempIndex) updateIndex(ctx context.Context, r Repo, in *bytes.Buffer) e
 }
 
 // splitListing separates `ls-files -t -z` records into tracked (modified or
-// deleted, each path once) and untracked paths.
-func splitListing(out []byte) (tracked, others []string) {
+// deleted, each path once), the deleted ones among them, and untracked paths.
+func splitListing(out []byte) (tracked []string, deleted map[string]bool, others []string) {
+	deleted = map[string]bool{}
 	seen := map[string]bool{}
 
 	for rec := range bytes.SplitSeq(out, []byte{0}) {
@@ -301,6 +311,10 @@ func splitListing(out []byte) (tracked, others []string) {
 		case "?":
 			others = append(others, path)
 		case "C", "R":
+			if tag == "R" {
+				deleted[path] = true
+			}
+
 			if !seen[path] {
 				seen[path] = true
 
@@ -309,7 +323,7 @@ func splitListing(out []byte) (tracked, others []string) {
 		}
 	}
 
-	return tracked, others
+	return tracked, deleted, others
 }
 
 // gitlinks returns the tracked paths that are submodules. Staging one would
