@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"slices"
 
 	"github.com/mhersson/muxreveal/internal/core"
 )
@@ -155,24 +156,6 @@ func nodeFromJSON(j *layoutJSON, depth int, want, seen map[core.PaneID]bool) (*c
 	return &core.Node{Split: split, Ratio: normRatio(*j.Ratio), A: a, B: b}, nil
 }
 
-// defaultLayout puts panes side by side in a chain of vertical splits where
-// pane i takes 1/(n-i) of what is left. Ratios stay within [0.1, 0.9], so the
-// columns are equal up to 10 panes and each split keeps at least 0.1.
-func defaultLayout(panes []core.PaneID) *core.Node {
-	switch len(panes) {
-	case 0:
-		return nil
-	case 1:
-		return &core.Node{Pane: panes[0]}
-	}
-	return &core.Node{
-		Split: core.SplitVertical,
-		Ratio: normRatio(1 / float64(len(panes))),
-		A:     &core.Node{Pane: panes[0]},
-		B:     defaultLayout(panes[1:]),
-	}
-}
-
 // leafOrder lists a tree's panes, first leaf first.
 func leafOrder(n *core.Node) []core.PaneID {
 	switch {
@@ -182,4 +165,77 @@ func leafOrder(n *core.Node) []core.PaneID {
 		return []core.PaneID{n.Pane}
 	}
 	return append(leafOrder(n.A), leafOrder(n.B)...)
+}
+
+// columnJSON is the file form of a scrolling column. Width stays raw so a
+// value that is not a number defaults only its tab.
+type columnJSON struct {
+	Panes []string        `json:"panes"`
+	Width json.RawMessage `json:"width"`
+}
+
+type columnOut struct {
+	Panes []string `json:"panes"`
+	Width float64  `json:"width"`
+}
+
+func finite(v float64) bool { return !math.IsNaN(v) && !math.IsInf(v, 0) }
+
+// normWidth clamps a column width to 0.1-1.0 and rounds it to 0.01.
+func normWidth(w float64) float64 {
+	return math.Round(min(max(w, minRatio), 1)*100) / 100
+}
+
+// finiteNumber reads raw as a finite JSON number; ok is false for anything
+// else, including null and strings.
+func finiteNumber(raw json.RawMessage) (float64, bool) {
+	var v float64
+	if json.Unmarshal(raw, &v) != nil || !finite(v) || isNull(raw) {
+		return 0, false
+	}
+	return v, true
+}
+
+func encodeColumns(cols []core.Column) ([]columnOut, error) {
+	out := make([]columnOut, 0, len(cols))
+	for _, c := range cols {
+		if !finite(c.Width) {
+			return nil, errors.New("column width is not a finite number")
+		}
+		ids := make([]string, len(c.Panes))
+		for i, id := range c.Panes {
+			ids[i] = string(id)
+		}
+		out = append(out, columnOut{Panes: ids, Width: normWidth(c.Width)})
+	}
+	return out, nil
+}
+
+// decodeColumns reads scrolling columns that hold exactly panes, in order.
+func decodeColumns(raw json.RawMessage, panes []core.PaneID) ([]core.Column, error) {
+	var in []columnJSON
+	if err := json.Unmarshal(raw, &in); err != nil {
+		return nil, fmt.Errorf("parsing columns: %w", err)
+	}
+	cols := make([]core.Column, 0, len(in))
+	var flat []core.PaneID
+	for i, c := range in {
+		if len(c.Panes) == 0 {
+			return nil, fmt.Errorf("column %d is empty", i)
+		}
+		w, ok := finiteNumber(c.Width)
+		if !ok {
+			return nil, fmt.Errorf("column %d width is not a finite number", i)
+		}
+		col := core.Column{Width: normWidth(w)}
+		for _, s := range c.Panes {
+			col.Panes = append(col.Panes, core.PaneID(s))
+		}
+		flat = append(flat, col.Panes...)
+		cols = append(cols, col)
+	}
+	if !slices.Equal(flat, panes) {
+		return nil, errors.New("columns do not hold the tab's panes in order")
+	}
+	return cols, nil
 }

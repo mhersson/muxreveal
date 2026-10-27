@@ -828,3 +828,53 @@ func TestStackedScrollingColumnNeverOverlaps(t *testing.T) {
 		}
 	})
 }
+
+func TestDefaultLayout(t *testing.T) {
+	panes := []PaneID{"p1", "p2", "p3"}
+	base := Tab{ID: "t1", Name: "n", Focus: "p2", Zoomed: true, Panes: panes, Preselect: Right}
+	tests := []struct {
+		name  string
+		lc    LayoutConfig
+		check func(*testing.T, Tab)
+	}{
+		{"bsp", LayoutConfig{}, func(t *testing.T, got Tab) {
+			if got.Mode != ModeBSP || got.Layout == nil || got.Master != 0 || got.Columns != nil {
+				t.Fatalf("got %+v", got)
+			}
+			if !slices.Equal(got.Panes, panes) || !slices.Equal(leafOrder(got.Layout), panes) {
+				t.Fatalf("order %v / %v", got.Panes, leafOrder(got.Layout))
+			}
+			if got.Layout.Split != SplitVertical || got.Layout.Ratio != 0.33 {
+				t.Fatalf("root %+v", got.Layout)
+			}
+		}},
+		{"master", LayoutConfig{DefaultMode: "master-stack", MasterRatio: 60}, func(t *testing.T, got Tab) {
+			if got.Mode != ModeMaster || got.Master != 0.6 || got.Layout != nil || got.Columns != nil || !slices.Equal(got.Panes, panes) {
+				t.Fatalf("got %+v", got)
+			}
+		}},
+		{"scrolling", LayoutConfig{DefaultMode: "scrolling", ColumnWidth: 40}, func(t *testing.T, got Tab) {
+			if got.Mode != ModeScrolling || got.First != 0 || got.Layout != nil || len(got.Columns) != 3 {
+				t.Fatalf("got %+v", got)
+			}
+			for i, c := range got.Columns {
+				if c.Width != 0.4 || !slices.Equal(c.Panes, panes[i:i+1]) {
+					t.Fatalf("column %d %+v", i, c)
+				}
+			}
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := DefaultLayout(base, tt.lc)
+			tt.check(t, got)
+			if got.ID != "t1" || got.Name != "n" || got.Focus != "p2" || !got.Zoomed || got.Preselect != NoDir {
+				t.Fatalf("identity fields changed: %+v", got)
+			}
+		})
+	}
+	empty := DefaultLayout(Tab{ID: "t2"}, LayoutConfig{DefaultMode: "scrolling"})
+	if !empty.Empty() || empty.Layout != nil || empty.Columns != nil {
+		t.Fatalf("empty tab: %+v", empty)
+	}
+}

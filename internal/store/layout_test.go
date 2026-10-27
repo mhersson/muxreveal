@@ -200,6 +200,11 @@ func TestDefaultLayout(t *testing.T) {
 	}
 }
 
+// defaultLayout is the BSP default tree core builds for panes.
+func defaultLayout(panes []core.PaneID) *core.Node {
+	return core.DefaultLayout(core.Tab{Panes: panes}, core.LayoutConfig{}).Layout
+}
+
 func sortedX(rects map[core.PaneID]core.Rect, order []core.PaneID) []int {
 	xs := make([]int, len(order))
 	for i, id := range order {

@@ -65,7 +65,7 @@ func stateDoc(version string, layouts ...layoutFn) string {
 
 	for i, l := range layouts {
 		a, b := strconv.Quote("p"+strconv.Itoa(2*i+1)), strconv.Quote("p"+strconv.Itoa(2*i+2))
-		tabs = append(tabs, `{"id":"t`+strconv.Itoa(i+1)+`","focused":`+a+`,"pane_ids":[`+a+`,`+b+`],"layout":`+l(a, b)+`}`)
+		tabs = append(tabs, `{"id":"t`+strconv.Itoa(i+1)+`","mode":"bsp","focused":`+a+`,"pane_ids":[`+a+`,`+b+`],"layout":`+l(a, b)+`}`)
 		panes = append(panes, a+`:{"kind":"shell","cwd":"/work"}`, b+`:{"kind":"shell"}`)
 	}
 
@@ -85,7 +85,7 @@ func TestLoadState(t *testing.T) {
 
 	t.Run("a restored state takes the layout settings from the config", func(t *testing.T) {
 		path := filepath.Join(t.TempDir(), "state.json")
-		writeFile(t, path, stateDoc("1", good))
+		writeFile(t, path, stateDoc("2", good))
 
 		cfg := core.DefaultConfig()
 		cfg.Layout.DefaultMode, cfg.Layout.MasterCount = "scrolling", 3
@@ -99,7 +99,7 @@ func TestLoadState(t *testing.T) {
 
 	t.Run("fresh ignores a valid file and leaves it", func(t *testing.T) {
 		path := filepath.Join(t.TempDir(), "state.json")
-		doc := stateDoc("1", good)
+		doc := stateDoc("2", good)
 		writeFile(t, path, doc)
 
 		st, notices := loadState(path, true, testCfg)
@@ -136,7 +136,7 @@ func TestLoadState(t *testing.T) {
 
 	t.Run("a valid file is restored with the theme from the config", func(t *testing.T) {
 		path := filepath.Join(t.TempDir(), "state.json")
-		writeFile(t, path, stateDoc("1", good))
+		writeFile(t, path, stateDoc("2", good))
 
 		st, notices := loadState(path, false, testCfg)
 
@@ -145,20 +145,20 @@ func TestLoadState(t *testing.T) {
 		}
 	})
 
-	t.Run("version 2 restores default layouts, stays in place and is replaced by version 1", func(t *testing.T) {
+	t.Run("an older or newer version restores default layouts, stays in place and is replaced by the current one", func(t *testing.T) {
 		path := filepath.Join(t.TempDir(), "state.json")
-		doc := stateDoc("2", good)
+		doc := stateDoc("1", good)
 		writeFile(t, path, doc)
 
 		st, notices := loadState(path, false, testCfg)
 
-		want := []string{"saved layout format 2 is not supported; restored the tabs with default layouts"}
+		want := []string{"saved layout format 1 is not supported; restored the tabs with default layouts"}
 		if !slices.Equal(notices, want) || len(st.Panes) != 2 || st.Tabs[0].Layout.Ratio != 0.5 {
 			t.Errorf("state = %+v, notices = %q, want %q and a default layout", st, notices, want)
 		}
 
 		if readFile(t, path) != doc {
-			t.Error("loading changed the version 2 file")
+			t.Error("loading changed the version 1 file")
 		}
 
 		data, err := store.Encode(st)
@@ -170,8 +170,8 @@ func TestLoadState(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if _, rep, err := store.Load(path); err != nil || rep.Version != "" {
-			t.Errorf("saved file: report %+v, err %v, want version 1", rep, err)
+		if _, rep, err := store.Load(path, core.LayoutConfig{}); err != nil || rep.Version != "" {
+			t.Errorf("saved file: report %+v, err %v, want the current version", rep, err)
 		}
 	})
 
@@ -188,7 +188,7 @@ func TestLoadState(t *testing.T) {
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
 				path := filepath.Join(t.TempDir(), "state.json")
-				writeFile(t, path, stateDoc("1", tt.layouts...))
+				writeFile(t, path, stateDoc("2", tt.layouts...))
 
 				_, notices := loadState(path, false, testCfg)
 				if !slices.Equal(notices, tt.want) {
@@ -380,7 +380,7 @@ func TestRunSecondInstanceStartsFresh(t *testing.T) {
 	defer func() { _ = unlock() }()
 
 	path := filepath.Join(dir, "state.json")
-	doc := stateDoc("1", goodLayout)
+	doc := stateDoc("2", goodLayout)
 	writeFile(t, path, doc)
 
 	s := startSession(t, env, cfg, false)
@@ -436,7 +436,7 @@ func fakeClaude(t *testing.T) (logPath string) {
 func loadSaved(t *testing.T, path string) (core.State, bool) {
 	t.Helper()
 
-	st, _, err := store.Load(path)
+	st, _, err := store.Load(path, core.LayoutConfig{})
 
 	return st, err == nil
 }

@@ -25,7 +25,7 @@ func loadState(statePath string, fresh bool, cfg core.Config) (core.State, []str
 		return core.InitialState(cfg), nil
 	}
 
-	st, rep, err := store.Load(statePath)
+	st, rep, err := store.Load(statePath, cfg.Layout)
 	if errors.Is(err, os.ErrNotExist) {
 		return core.InitialState(cfg), nil
 	}

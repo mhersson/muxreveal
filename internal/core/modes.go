@@ -87,6 +87,42 @@ func (t *Tab) setMode(mode LayoutMode, area Rect, lc LayoutConfig) error {
 	return nil
 }
 
+// DefaultLayout returns t with the configured default mode built from t.Panes,
+// for a state file with no usable layout. It needs no screen size: BSP puts
+// the panes side by side in equal columns, master-stack keeps the order at the
+// configured ratio, scrolling makes one column per pane. Focus and zoom stay;
+// preselection clears.
+func DefaultLayout(t Tab, lc LayoutConfig) Tab {
+	next := Tab{ID: t.ID, Name: t.Name, Focus: t.Focus, Zoomed: t.Zoomed, Mode: lc.Mode()}
+	order := slices.Clone(t.Panes)
+	if len(order) == 0 {
+		return next
+	}
+	switch next.Mode {
+	case ModeMaster:
+		next.Panes, next.Master = order, lc.ratio()
+	case ModeScrolling:
+		next.Panes = order
+		for _, id := range order {
+			next.Columns = append(next.Columns, Column{Panes: []PaneID{id}, Width: lc.columnWidth()})
+		}
+	default:
+		next.setTree(equalColumns(order))
+	}
+	return next
+}
+
+// equalColumns chains vertical splits where pane i takes 1/(n-i) of what is
+// left. Ratios stay within [0.1, 0.9] on the 0.01 grid, so the columns are
+// equal up to 10 panes.
+func equalColumns(panes []PaneID) *Node {
+	if len(panes) == 1 {
+		return &Node{Pane: panes[0]}
+	}
+	r := math.Round(min(max(1/float64(len(panes)), minRatio), maxRatio)*100) / 100
+	return &Node{Split: SplitVertical, Ratio: r, A: &Node{Pane: panes[0]}, B: equalColumns(panes[1:])}
+}
+
 // start makes id the only pane of an empty tab in mode.
 func (t *Tab) start(id PaneID, mode LayoutMode, lc LayoutConfig) {
 	*t = Tab{ID: t.ID, Name: t.Name, Mode: mode, Panes: []PaneID{id}}

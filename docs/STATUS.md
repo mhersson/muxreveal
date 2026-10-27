@@ -136,7 +136,7 @@ Tabs lay out their panes with tuios's tiling layouts (BSP with auto-split and pr
 - [ ] Master-stack and scrolling modes, and the `[layout]` config
 - [ ] Preselect, rotate, equalize and promote
 - [ ] Move and break panes
-- [ ] Layout state file version 2
+- [x] Layout state file version 2
 - [ ] Keys, commands and which-key for layouts and moves
 - [ ] Layout mode, hidden columns and preselection on screen
 - [ ] Chrome pass against tuios

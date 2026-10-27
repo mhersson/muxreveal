@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "active": 1,
   "tabs": [
     {
@@ -7,6 +7,7 @@
       "name": "api",
       "focused": "p2",
       "zoomed": true,
+      "mode": "bsp",
       "pane_ids": [
         "p1",
         "p2",
@@ -37,6 +38,7 @@
     {
       "id": "t2",
       "focused": "p4",
+      "mode": "bsp",
       "pane_ids": [
         "p4"
       ],
