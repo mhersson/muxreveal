@@ -83,7 +83,28 @@ func TestDefaultCommands(t *testing.T) {
 	for n := 1; n <= 9; n++ {
 		fixed = append(fixed, want{fmt.Sprintf("tab.jump.%d", n), fmt.Sprintf("Jump to tab %d", n), iconTabs})
 	}
-	fixed = append(fixed, want{"app.quit", "Quit MuxReveal", iconQuit})
+	for n := 1; n <= 9; n++ {
+		fixed = append(fixed, want{fmt.Sprintf("pane.move.tab.%d", n), fmt.Sprintf("Move pane to tab %d", n), iconMove})
+	}
+	for n := 1; n <= 9; n++ {
+		fixed = append(fixed, want{fmt.Sprintf("pane.send.tab.%d", n), fmt.Sprintf("Send pane to tab %d", n), iconMove})
+	}
+	fixed = append(fixed,
+		want{"pane.break", "Break pane into new tab", iconBreak},
+		want{"layout.cycle", "Cycle layout", iconLayoutBSP},
+		want{"layout.set.bsp", "Layout: BSP", iconLayoutBSP},
+		want{"layout.set.master-stack", "Layout: master-stack", iconLayoutMaster},
+		want{"layout.set.scrolling", "Layout: scrolling", iconLayoutScrolling},
+		want{"pane.preselect.left", "Preselect left", iconArrowLeft},
+		want{"pane.preselect.down", "Preselect down", iconArrowDown},
+		want{"pane.preselect.up", "Preselect up", iconArrowUp},
+		want{"pane.preselect.right", "Preselect right", iconArrowRight},
+		want{"pane.preselect.clear", "Clear preselection", iconClose},
+		want{"layout.rotate", "Rotate split", iconRotate},
+		want{"layout.equalize", "Equalize", iconEqualize},
+		want{"layout.promote", "Promote to master", iconPromote},
+		want{"app.quit", "Quit MuxReveal", iconQuit},
+	)
 	if len(cmds) != len(fixed)+len(theme.All()) {
 		t.Fatalf("defaultCommands() has %d commands, want %d", len(cmds), len(fixed)+len(theme.All()))
 	}

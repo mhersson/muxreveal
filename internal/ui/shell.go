@@ -83,6 +83,21 @@ const (
 	minRight = 4
 )
 
+type legendPair struct{ key, label string }
+
+// prefixLegend lists the keys that finish a sequence started by prefix; ""
+// is the bare leader.
+func prefixLegend(prefix string) []legendPair {
+	switch prefix {
+	case ">", ".":
+		return []legendPair{{"1-9", "tab"}, {"esc", "cancel"}}
+	case ";":
+		return []legendPair{{"h j k l", "side"}, {"esc", "clear"}}
+	}
+
+	return []legendPair{{"esc", "cancel"}}
+}
+
 // statusMode is the status bar's leftmost segment.
 type statusMode struct {
 	bg         theme.Hex
@@ -98,6 +113,8 @@ func (a *App) statusModeOf(ui theme.UI) statusMode {
 		return statusMode{bg: ui.Accent, icon: iconRename, text: "Rename tab"}
 	case a.copy != nil:
 		return statusMode{bg: ui.Info, icon: iconCopy, text: "COPY"}
+	case a.pending && a.prefix != "":
+		return statusMode{bg: ui.Warning, icon: iconLeader, text: a.keymap.leader + " " + a.prefix}
 	case a.pending:
 		return statusMode{bg: ui.Warning, icon: iconLeader, text: a.keymap.leader}
 	}
@@ -209,8 +226,6 @@ func (a *App) statusBar(width int, st core.State) string {
 			ansi.StringWidth(key) + 1 + ansi.StringWidth(action)
 	}
 
-	type legendPair struct{ key, label string }
-
 	var pairs []legendPair
 
 	sep := 0
@@ -224,7 +239,7 @@ func (a *App) statusBar(width int, st core.State) string {
 	case a.copy != nil:
 		pairs = []legendPair{{"v", "select"}, {"y", "copy"}, {"/", "search"}, {"n", "next"}, {"q", "exit"}}
 	case a.pending:
-		pairs = []legendPair{{"esc", "cancel"}}
+		pairs = prefixLegend(a.prefix)
 	case put(0, paint(ui.Subtle, ui.Bar, false).Render(lead), ansi.StringWidth(lead)):
 		sep = 2
 

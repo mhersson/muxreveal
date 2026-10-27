@@ -163,6 +163,7 @@ func defaultCommands() []command {
 			run:   func(a *App) tea.Cmd { return a.act(core.SelectTab{Index: n - 1}) },
 		})
 	}
+	cmds = append(cmds, layoutCommands()...)
 	cmds = append(cmds, command{
 		id:    "app.quit",
 		icon:  iconQuit,

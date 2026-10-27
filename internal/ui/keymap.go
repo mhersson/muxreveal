@@ -1,9 +1,14 @@
 package ui
 
-import "time"
+import (
+	"strconv"
+	"strings"
+	"time"
+)
 
 // binding maps a key pressed after the leader to a command id; group names
-// the which-key section it is listed under.
+// the which-key section it is listed under. A sequence is two key names
+// joined by one space, as in "> 1"; no key name contains a space.
 type binding struct{ key, command, group string }
 
 // keymap binds keys pressed after the leader key to commands.
@@ -15,7 +20,7 @@ type keymap struct {
 
 // defaultKeymap returns the built-in bindings.
 func defaultKeymap() keymap {
-	return keymap{
+	km := keymap{
 		leader: "ctrl+space",
 		delay:  300 * time.Millisecond,
 		bindings: []binding{
@@ -40,6 +45,15 @@ func defaultKeymap() keymap {
 			{key: "x", command: "pane.close", group: "Panes"},
 			{key: "y", command: "copy.selection", group: "Panes"},
 			{key: "[", command: "copy.mode", group: "Panes"},
+			{key: "space", command: "layout.cycle", group: "Layout"},
+			{key: "; h", command: "pane.preselect.left", group: "Layout"},
+			{key: "; j", command: "pane.preselect.down", group: "Layout"},
+			{key: "; k", command: "pane.preselect.up", group: "Layout"},
+			{key: "; l", command: "pane.preselect.right", group: "Layout"},
+			{key: "; esc", command: "pane.preselect.clear", group: "Layout"},
+			{key: "r", command: "layout.rotate", group: "Layout"},
+			{key: "=", command: "layout.equalize", group: "Layout"},
+			{key: "enter", command: "layout.promote", group: "Layout"},
 			{key: "c", command: "tab.new", group: "Tabs"},
 			{key: ",", command: "tab.rename", group: "Tabs"},
 			{key: "X", command: "tab.close", group: "Tabs"},
@@ -54,9 +68,31 @@ func defaultKeymap() keymap {
 			{key: "7", command: "tab.jump.7", group: "Tabs"},
 			{key: "8", command: "tab.jump.8", group: "Tabs"},
 			{key: "9", command: "tab.jump.9", group: "Tabs"},
+			{key: "!", command: "pane.break", group: "Tabs"},
 			{key: "q", command: "app.quit", group: "App"},
 		},
 	}
+	for n := 1; n <= 9; n++ {
+		km.bindings = append(km.bindings,
+			binding{key: "> " + strconv.Itoa(n), command: "pane.move.tab." + strconv.Itoa(n), group: "Tabs"},
+			binding{key: ". " + strconv.Itoa(n), command: "pane.send.tab." + strconv.Itoa(n), group: "Tabs"})
+	}
+	return km
+}
+
+// isPrefix reports whether key starts a two-key sequence such as "> 1".
+func (k keymap) isPrefix(key string) bool {
+	if key == "" {
+		return false
+	}
+
+	for _, b := range k.bindings {
+		if strings.HasPrefix(b.key, key+" ") {
+			return true
+		}
+	}
+
+	return false
 }
 
 func (k keymap) lookup(key string) (string, bool) {

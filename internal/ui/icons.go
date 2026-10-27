@@ -34,6 +34,19 @@ const (
 	iconQuit      = "\U000F0206" // nf-md-exit_to_app
 	iconCopy      = "\U000F018F" // nf-md-content_copy
 	iconSearch    = "\U000F0349" // nf-md-magnify
+
+	iconMove            = "\U000F0DAD" // nf-md-application_export
+	iconBreak           = "\U000F03CC" // nf-md-open_in_new
+	iconLayoutBSP       = "\U000F0574" // nf-md-view_quilt
+	iconLayoutMaster    = "\U000F06FD" // nf-md-page_layout_sidebar_left
+	iconLayoutScrolling = "\U000F056D" // nf-md-view_column
+	iconArrowLeft       = "\U000F004D" // nf-md-arrow_left
+	iconArrowDown       = "\U000F0045" // nf-md-arrow_down
+	iconArrowUp         = "\U000F005D" // nf-md-arrow_up
+	iconArrowRight      = "\U000F0054" // nf-md-arrow_right
+	iconRotate          = "\U000F0467" // nf-md-rotate_right
+	iconEqualize        = "\U000F01FC" // nf-md-equal
+	iconPromote         = "\U000F01A5" // nf-md-crown
 )
 
 // Powerline edges and dividers.

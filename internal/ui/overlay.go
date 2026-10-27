@@ -58,7 +58,7 @@ func (a *App) current() look {
 
 // openOverlay replaces any open overlay and ends a pending leader sequence.
 func (a *App) openOverlay(kind overlayKind, title string, items []palette.Item) *overlay {
-	a.pending, a.popup = false, false
+	a.endLeader()
 	a.preview = nil
 	a.overlay = &overlay{kind: kind, items: items, pal: palette.New(title, items, a.theme)}
 	return a.overlay

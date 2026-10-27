@@ -421,6 +421,15 @@ func TestWhichKeyGolden(t *testing.T) {
 	golden.RequireEqual(t, []byte(a.View().Content))
 }
 
+func TestWhichKeyNoIconsGolden(t *testing.T) {
+	a := newTestApp(t)
+	a.icons = false
+	sized(t, a, 100, 30)
+	press(a, keyLeader)
+	a.Update(whichKeyMsg{seq: a.seq})
+	golden.RequireEqual(t, []byte(a.View().Content))
+}
+
 func TestLeaderPendingGolden(t *testing.T) {
 	a := newTestApp(t)
 	sized(t, a, 100, 30)

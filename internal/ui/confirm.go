@@ -25,7 +25,7 @@ type confirm struct {
 
 // openConfirm shows c and ends a pending leader sequence.
 func (a *App) openConfirm(c confirm) {
-	a.pending, a.popup = false, false
+	a.endLeader()
 	a.confirm = &c
 }
 

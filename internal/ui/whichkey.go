@@ -30,6 +30,9 @@ func hintFamilies() []hintFamily {
 		{"pane.resize.", []string{"left", "down", "up", "right"}, "Resize pane", " "},
 		{"pane.swap.", []string{"left", "down", "up", "right"}, "Swap pane", ""},
 		{"tab.jump.", []string{"1", "2", "3", "4", "5", "6", "7", "8", "9"}, "Jump to tab", "-"},
+		{"pane.move.tab.", []string{"1", "2", "3", "4", "5", "6", "7", "8", "9"}, "Move pane to tab", "-"},
+		{"pane.send.tab.", []string{"1", "2", "3", "4", "5", "6", "7", "8", "9"}, "Send pane to tab", "-"},
+		{"pane.preselect.", []string{"left", "down", "up", "right"}, "Preselect", ""},
 	}
 }
 
@@ -38,6 +41,8 @@ func groupIcon(group string) string {
 	switch group {
 	case "Panes":
 		return iconPanes
+	case "Layout":
+		return iconLayoutBSP
 	case "Tabs":
 		return iconTabs
 	case "App":
@@ -68,13 +73,26 @@ func (f hintFamily) collapse(a *App) (hint, bool) {
 			group = a.keymap.groupOf(f.prefix + m)
 		}
 	}
-	if f.sep == "-" {
-		if !consecutive(keys) {
-			return hint{key: strings.Join(keys, " "), title: f.title, group: group}, true
+	// Sequence keys such as "> 1" share their first key, which leads the row.
+	lead := ""
+	if first, _, ok := strings.Cut(keys[0], " "); ok {
+		lead = first + " "
+		for i, k := range keys {
+			rest, ok := strings.CutPrefix(k, lead)
+			if !ok || strings.Contains(rest, " ") {
+				return hint{}, false
+			}
+			keys[i] = rest
 		}
-		return hint{key: keys[0] + "-" + keys[len(keys)-1], title: f.title, group: group}, true
 	}
-	return hint{key: strings.Join(keys, f.sep), title: f.title, group: group}, true
+	if f.sep == "-" && consecutive(keys) {
+		return hint{key: lead + keys[0] + "-" + keys[len(keys)-1], title: f.title, group: group}, true
+	}
+	sep := f.sep
+	if sep == "-" {
+		sep = " "
+	}
+	return hint{key: lead + strings.Join(keys, sep), title: f.title, group: group}, true
 }
 
 // consecutive reports whether keys are single characters in ascending order.
@@ -107,7 +125,7 @@ func (a *App) hints() []hint {
 		}
 		var fam *hintFamily
 		for i := range families {
-			if strings.HasPrefix(b.command, families[i].prefix) {
+			if rest, ok := strings.CutPrefix(b.command, families[i].prefix); ok && slices.Contains(families[i].members, rest) {
 				fam = &families[i]
 			}
 		}
@@ -127,7 +145,7 @@ func (a *App) hints() []hint {
 
 // groupOrder lists the which-key groups left to right and top to bottom;
 // any other group follows in the order it first appears.
-func groupOrder() []string { return []string{"Panes", "Tabs", "App"} }
+func groupOrder() []string { return []string{"Panes", "Layout", "Tabs", "App"} }
 
 // groupHints splits hints by group, in groupOrder.
 func groupHints(hints []hint) [][]hint {
@@ -204,14 +222,19 @@ func whichKeyColumn(groups [][]hint, icons bool, st styles) column {
 	return column{rows: rows, width: contentW + 2}
 }
 
-// whichKeyPopup draws the grouped hint list titled with the leader key: the
-// first group in a left column, the others in a right one.
+// whichKeyPopup draws the grouped hint list titled with the leader key: Panes
+// and Layout in a left column, the others in a right one.
 func whichKeyPopup(leader string, hints []hint, icons bool, st styles) []string {
 	groups := groupHints(hints)
 	if len(groups) == 0 {
 		return nil
 	}
-	left, right := groups[:1], groups[1:]
+	// Panes and Layout share the left column; the rest go right.
+	nLeft := 1
+	if len(groups) > 1 && groups[0][0].group == "Panes" && groups[1][0].group == "Layout" {
+		nLeft = 2
+	}
+	left, right := groups[:nLeft], groups[nLeft:]
 
 	title := " " + leader + " "
 	if icons {

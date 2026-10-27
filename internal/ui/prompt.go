@@ -45,7 +45,7 @@ func (a *App) showPrompt(p *prompt, value string) {
 	in.CursorEnd()
 	in.Focus()
 
-	a.pending, a.popup = false, false
+	a.endLeader()
 	p.input = in
 	a.prompt = p
 }
