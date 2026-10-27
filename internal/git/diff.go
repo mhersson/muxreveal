@@ -292,14 +292,7 @@ func (e *Engine) compare(ctx context.Context, r Repo, oldTree string, newSide Wo
 		return Result{}, err
 	}
 
-	untracked := make(map[string]bool, len(newSide.Untracked))
-	for _, p := range newSide.Untracked {
-		untracked[p] = true
-	}
-
-	for i := range files {
-		files[i].Untracked = untracked[files[i].Path]
-	}
+	markUntracked(files, newSide.Untracked)
 
 	if err := e.addHunks(ctx, r, oldTree, newSide.Tree, files); err != nil {
 		return Result{}, err
@@ -312,4 +305,15 @@ func (e *Engine) compare(ctx context.Context, r Repo, oldTree string, newSide Wo
 	res.Files = files
 
 	return res, nil
+}
+
+func markUntracked(files []FileDiff, untracked []string) {
+	set := make(map[string]bool, len(untracked))
+	for _, p := range untracked {
+		set[p] = true
+	}
+
+	for i := range files {
+		files[i].Untracked = set[files[i].Path]
+	}
 }

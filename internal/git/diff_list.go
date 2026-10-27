@@ -11,14 +11,24 @@ import (
 const listLimit = 64 << 20
 
 // listFiles runs the listing pass: status, modes, blob ids and line counts of
-// every changed file between two trees.
-func listFiles(ctx context.Context, r Repo, oldTree, newTree string) ([]FileDiff, error) {
+// every changed file between two trees, limited to paths (and what lies under
+// them) when any are given.
+func listFiles(ctx context.Context, r Repo, oldTree, newTree string, paths ...string) ([]FileDiff, error) {
+	args := []string{
+		"diff", "--raw", "--numstat", "-z", "-M", "-C", "--histogram", "--no-abbrev",
+		"--no-color", "--no-ext-diff", "--no-textconv", "--no-relative", "--submodule=short", "--ignore-submodules=none", oldTree, newTree,
+	}
+
+	if len(paths) > 0 {
+		args = append(args, "--")
+		for _, p := range paths {
+			args = append(args, ":(literal)"+p)
+		}
+	}
+
 	out, err := run(ctx, call{
-		dir: r.Root,
-		args: []string{
-			"diff", "--raw", "--numstat", "-z", "-M", "-C", "--histogram", "--no-abbrev",
-			"--no-color", "--no-ext-diff", "--no-textconv", "--no-relative", "--submodule=short", "--ignore-submodules=none", oldTree, newTree,
-		},
+		dir:   r.Root,
+		args:  args,
 		read:  true,
 		limit: listLimit,
 	})
