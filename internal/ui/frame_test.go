@@ -307,18 +307,18 @@ func TestTitle(t *testing.T) {
 		zoom  bool
 		want  string
 	}{
-		{"shell", core.KindShell, "/home/u/proj", "", 40, true, false, dashes("╭─ "+iconShell+" shell · proj ", 40)},
-		{"agent", core.KindAgent, "/home/u/proj", "", 40, true, false, dashes("╭─ "+iconAgent+" claude · proj ", 40)},
-		{"osc title", core.KindShell, "/home/u/proj", "\x1b]2;vim main.go\x07", 40, true, false, dashes("╭─ "+iconShell+" vim main.go · proj ", 40)},
-		{"no cwd", core.KindShell, "", "", 40, true, false, dashes("╭─ "+iconShell+" shell ", 40)},
-		{"no icons", core.KindAgent, "/home/u/proj", "", 40, false, false, dashes("╭─ claude · proj ", 40)},
-		{"cwd fits exactly", core.KindAgent, "/home/u/proj", "", 20, true, false, dashes("╭─ "+iconAgent+" claude · proj ", 20)},
-		{"cwd goes first", core.KindAgent, "/home/u/proj", "", 19, true, false, dashes("╭─ "+iconAgent+" claude ", 19)},
+		{"shell", core.KindShell, "/home/u/proj", "", 40, true, false, dashes("╭─ "+iconShell+" shell ", 40)},
+		{"agent", core.KindAgent, "/home/u/proj", "", 40, true, false, dashes("╭─ "+iconAgent+" claude ", 40)},
+		{"osc title", core.KindShell, "/home/u/proj", "\x1b]2;vim main.go\x07", 40, true, false, dashes("╭─ "+iconShell+" vim main.go ", 40)},
+		{"no icons", core.KindAgent, "/home/u/proj", "", 40, false, false, dashes("╭─ claude ", 40)},
+		{"no cwd in the title", core.KindShell, "", "", 40, true, false, dashes("╭─ "+iconShell+" shell ", 40)},
+		{"title fits exactly", core.KindAgent, "/home/u/proj", "", 13, true, false, dashes("╭─ "+iconAgent+" claude ", 13)},
+		{"title shrinks first", core.KindAgent, "/home/u/proj", "", 12, true, false, dashes("╭─ "+iconAgent+" clau… ", 12)},
 		{"title shrinks", core.KindShell, "/home/u/proj", "\x1b]2;abcdefghij\x07", 14, true, false, dashes("╭─ "+iconShell+" abcdef… ", 14)},
 		{"title shrinks to one", core.KindShell, "/home/u/proj", "\x1b]2;abcdefghij\x07", 11, true, false, dashes("╭─ "+iconShell+" abc… ", 11)},
 		{"title goes", core.KindShell, "/home/u/proj", "\x1b]2;abcdefghij\x07", 10, true, false, dashes("╭", 10)},
-		{"zoom tag", core.KindShell, "/home/u/proj", "", 40, true, true, fill("╭─ "+iconShell+" shell · proj ", 30) + zoom + "─╮"},
-		{"zoom tag no icons", core.KindShell, "/home/u/proj", "", 40, false, true, fill("╭─ shell · proj ", 32) + " zoom ─╮"},
+		{"zoom tag", core.KindShell, "/home/u/proj", "", 40, true, true, fill("╭─ "+iconShell+" shell ", 30) + zoom + "─╮"},
+		{"zoom tag no icons", core.KindShell, "/home/u/proj", "", 40, false, true, fill("╭─ shell ", 32) + " zoom ─╮"},
 		{"zoom tag takes the title room", core.KindShell, "/home/u/proj", "", 21, true, true, "╭─ " + iconShell + " shell " + zoom + "─╮"},
 		{"zoom tag alone", core.KindShell, "/home/u/proj", "", 11, true, true, "╭" + zoom + "─╮"},
 		{"zoom tag does not fit", core.KindShell, "/home/u/proj", "", 10, true, true, dashes("╭", 10)},
@@ -343,15 +343,15 @@ func TestTitle(t *testing.T) {
 }
 
 func TestTitleControlCharacters(t *testing.T) {
-	a, _ := framedApp(t, 40, 6, paneSpec{kind: core.KindShell, cwd: "/home/u/a\nb\x1b[31mc", split: core.SplitVertical})
+	a, _ := framedApp(t, 40, 6, paneSpec{kind: core.KindShell, cwd: "/home/u/a", split: core.SplitVertical, text: "\x1b]2;a\x01b\x7fc\x07"})
 
-	if got, want := topBorder(a), dashes("╭─ "+iconShell+" shell · ab[31mc ", 40); got != want {
+	if got, want := topBorder(a), dashes("╭─ "+iconShell+" abc ", 40); got != want {
 		t.Errorf("top border = %q, want %q", got, want)
 	}
 }
 
-// An unfocused pane's title is Muted and its cwd Subtle; the focused pane's
-// title is bold in its kind colour and its cwd Fg.
+// An unfocused pane's title is Muted; the focused pane's title is bold in its
+// kind colour. The icon is in the kind colour either way.
 func TestTitleColours(t *testing.T) {
 	ui := mochaUI(t)
 	tests := []struct {
@@ -375,17 +375,14 @@ func TestTitleColours(t *testing.T) {
 
 			vt := viewVT(t, a)
 			p1, p2 := a.layoutRects()["p1"], a.layoutRects()["p2"]
-			title := map[core.PaneKind]string{core.KindShell: "shell", core.KindAgent: "claude"}[tt.kind]
 			start := func(r core.Rect) int { return r.X + 5 } // after "╭─ icon "
 
-			// Focused p1: icon and title bold in the kind colour, cwd Fg.
+			// Focused p1: icon and title bold in the kind colour.
 			assertCell(t, vt, start(p1)-2, 2, tt.kindC, true)
 			assertCell(t, vt, start(p1), 2, tt.kindC, true)
-			assertCell(t, vt, start(p1)+len(title)+3, 2, ui.Fg, false)
-			// Unfocused p2: Muted title, Subtle cwd, the icon still in the kind colour.
+			// Unfocused p2: Muted title, the icon still in the kind colour.
 			assertCell(t, vt, start(p2)-2, 2, tt.kindC, true)
 			assertCell(t, vt, start(p2), 2, ui.Muted, false)
-			assertCell(t, vt, start(p2)+len(title)+3, 2, ui.Subtle, false)
 		})
 	}
 }

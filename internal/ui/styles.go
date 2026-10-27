@@ -24,9 +24,9 @@ type styles struct {
 	// focused pane's.
 	border, borderAgent, borderShell lipgloss.Style
 	// kindAgent and kindShell are bold in the kind colour: icon and focused title.
-	kindAgent, kindShell                          lipgloss.Style
-	titleMuted, cwdFocus, cwdSubtle, dot, tagZoom lipgloss.Style
-	tagScroll                                     lipgloss.Style
+	kindAgent, kindShell lipgloss.Style
+	titleMuted, tagZoom  lipgloss.Style
+	tagScroll            lipgloss.Style
 	// tagWorking, tagBlocked and tagIdle draw the state badge.
 	tagWorking, tagBlocked, tagIdle lipgloss.Style
 	// popupBorder draws the popup frame on the panel colour.
@@ -60,9 +60,6 @@ func newStyles(t theme.Theme) styles {
 		kindAgent:   onBg.Foreground(ui.Agent).Bold(true),
 		kindShell:   onBg.Foreground(ui.Shell).Bold(true),
 		titleMuted:  onBg.Foreground(ui.Muted),
-		cwdFocus:    onBg,
-		cwdSubtle:   onBg.Foreground(ui.Subtle),
-		dot:         onBg.Foreground(ui.Subtle),
 		tagZoom:     onBg.Foreground(ui.Accent).Bold(true),
 		tagScroll:   onBg.Foreground(ui.Accent).Bold(true),
 		tagWorking:  onBg.Foreground(ui.Working).Bold(true),

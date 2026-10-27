@@ -2,7 +2,6 @@ package ui
 
 import (
 	"fmt"
-	"path/filepath"
 	"slices"
 	"strings"
 	"unicode/utf8"
@@ -80,9 +79,9 @@ const titleRoomMin = 4
 // corner. The cells between them stay border.
 func (a *App) topBorder(s core.State, id core.PaneID, r core.Rect, focused bool, st styles) []segment {
 	meta := s.Panes[id]
-	kindStyle, titleStyle, cwdStyle := st.kind(meta.Kind), st.titleMuted, st.cwdSubtle
+	kindStyle, titleStyle := st.kind(meta.Kind), st.titleMuted
 	if focused {
-		titleStyle, cwdStyle = kindStyle, st.cwdFocus
+		titleStyle = kindStyle
 	}
 
 	// left is where the title must end; the first cell after the corner is a dash.
@@ -137,10 +136,6 @@ func (a *App) topBorder(s core.State, id core.PaneID, r core.Rect, focused bool,
 			title = t
 		}
 	}
-	cwd := ""
-	if meta.Cwd != "" {
-		cwd = printable(filepath.Base(meta.Cwd))
-	}
 
 	lead := 2
 	if a.icons {
@@ -151,8 +146,6 @@ func (a *App) topBorder(s core.State, id core.PaneID, r core.Rect, focused bool,
 		return segs
 	}
 	tw := ansi.StringWidth(title)
-	cw := ansi.StringWidth(cwd)
-	showCwd := cwd != "" && tw+3+cw <= room
 	if tw > room {
 		title = ansi.Truncate(title, room, "…")
 		tw = ansi.StringWidth(title)
@@ -166,11 +159,6 @@ func (a *App) topBorder(s core.State, id core.PaneID, r core.Rect, focused bool,
 	}
 	sb.WriteString(titleStyle.Render(title))
 	w := lead - 1 + tw + 1
-	if showCwd {
-		sb.WriteString(st.dot.Render(" · "))
-		sb.WriteString(cwdStyle.Render(cwd))
-		w += 3 + cw
-	}
 	sb.WriteString(st.body.Render(" "))
 
 	return append(segs, segment{r.X + 2, w, sb.String()})

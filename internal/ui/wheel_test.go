@@ -295,9 +295,9 @@ func TestScrollTag(t *testing.T) {
 		zoom  bool
 		want  string
 	}{
-		{"tag", 40, true, false, fill("╭─ "+iconShell+" shell · proj ", 33) + scroll + "─╮"},
-		{"no icons", 40, false, false, fill("╭─ shell · proj ", 33) + " \u2191 3 ─╮"},
-		{"left of zoom", 50, true, true, fill("╭─ "+iconShell+" shell · proj ", 34) + scroll + "─" + zoom + "─╮"},
+		{"tag", 40, true, false, fill("╭─ "+iconShell+" shell ", 33) + scroll + "─╮"},
+		{"no icons", 40, false, false, fill("╭─ shell ", 33) + " \u2191 3 ─╮"},
+		{"left of zoom", 50, true, true, fill("╭─ "+iconShell+" shell ", 34) + scroll + "─" + zoom + "─╮"},
 		{"takes title room", 17, true, false, "╭─ " + iconShell + " she… " + scroll + "─╮"},
 		{"alone", 8, true, false, "╭" + scroll + "─╮"},
 		{"does not fit", 7, true, false, dashes("╭", 7)},
