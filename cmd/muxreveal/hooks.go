@@ -13,6 +13,7 @@ import (
 
 	"golang.org/x/sys/unix"
 
+	"github.com/mhersson/muxreveal/internal/git"
 	"github.com/mhersson/muxreveal/internal/harness"
 	"github.com/mhersson/muxreveal/internal/store"
 )
@@ -94,16 +95,22 @@ func setupHooks(logger *slog.Logger, stateDir string) (hookRuntime, error) {
 	}
 
 	srv.Log = logger
+	srv.Hold = turnHold
 
+	raw := make(chan harness.Event, eventBuffer)
 	events := make(chan harness.Event, eventBuffer)
 	ctx, cancel := context.WithCancel(context.Background())
 
 	var wg sync.WaitGroup
 
 	wg.Go(func() {
-		if err := srv.Serve(ctx, events); err != nil {
+		if err := srv.Serve(ctx, raw); err != nil {
 			logger.Error("hook server", "err", err)
 		}
+	})
+
+	wg.Go(func() {
+		runTurnGate(ctx, raw, events, gitSnapshot(runDir), gitMarker, logger)
 	})
 
 	stop := sync.OnceFunc(func() {
@@ -123,7 +130,23 @@ func setupHooks(logger *slog.Logger, stateDir string) (hookRuntime, error) {
 	return hookRuntime{Settings: settingsPath, Sock: sockPath, Events: events, stop: stop}, nil
 }
 
-// sweepRunDir removes the socket and settings file of instances that are gone.
+// gitSnapshot snapshots the working tree with its temporary index in tempDir.
+func gitSnapshot(tempDir string) snapshotFunc {
+	return func(ctx context.Context, dir, session string) error {
+		_, err := git.Snapshot(ctx, dir, session, git.SnapshotOptions{TempDir: tempDir})
+
+		return err
+	}
+}
+
+func gitMarker(ctx context.Context, dir, session string) error {
+	_, err := git.MarkMissing(ctx, dir, session)
+
+	return err
+}
+
+// sweepRunDir removes the socket, settings file and temporary indexes of
+// instances that are gone.
 // Other names, and files of live instances, stay.
 func sweepRunDir(logger *slog.Logger, dir string, alive func(pid int) bool) {
 	entries, err := os.ReadDir(dir)
@@ -145,17 +168,25 @@ func sweepRunDir(logger *slog.Logger, dir string, alive func(pid int) bool) {
 	}
 }
 
-// runFilePid extracts the pid from "<pid>.sock" and "<pid>-claude.json".
+// runFilePid extracts the pid from "<pid>.sock", "<pid>-claude.json" and
+// "<pid>-index-<anything>" (a snapshot's temporary index or its lock).
 func runFilePid(name string) (int, bool) {
-	for _, suffix := range []string{".sock", "-claude.json"} {
-		if digits, ok := strings.CutSuffix(name, suffix); ok {
-			pid, err := strconv.Atoi(digits)
-
-			return pid, err == nil && pid > 0 && digits == strconv.Itoa(pid)
-		}
+	digits, ok := strings.CutSuffix(name, ".sock")
+	if !ok {
+		digits, ok = strings.CutSuffix(name, "-claude.json")
 	}
 
-	return 0, false
+	if !ok {
+		digits, _, ok = strings.Cut(name, "-index-")
+	}
+
+	if !ok {
+		return 0, false
+	}
+
+	pid, err := strconv.Atoi(digits)
+
+	return pid, err == nil && pid > 0 && digits == strconv.Itoa(pid)
 }
 
 // pidAlive reports whether a process with pid exists; a process of another

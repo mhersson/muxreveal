@@ -138,14 +138,20 @@ func TestStartHooksSweepsDeadInstances(t *testing.T) {
 	live := os.Getppid()
 
 	files := map[string]bool{ // name -> kept
-		strconv.Itoa(dead) + ".sock":         false,
-		strconv.Itoa(dead) + "-claude.json":  false,
-		strconv.Itoa(live) + ".sock":         true,
-		strconv.Itoa(live) + "-claude.json":  true,
-		"notes.txt":                          true,
-		"abc.sock":                           true,
-		"007.sock":                           true,
-		strconv.Itoa(dead) + "-claude.json~": true,
+		strconv.Itoa(dead) + ".sock":            false,
+		strconv.Itoa(dead) + "-claude.json":     false,
+		strconv.Itoa(live) + ".sock":            true,
+		strconv.Itoa(live) + "-claude.json":     true,
+		"notes.txt":                             true,
+		"abc.sock":                              true,
+		"007.sock":                              true,
+		strconv.Itoa(dead) + "-claude.json~":    true,
+		strconv.Itoa(dead) + "-index-a1b2":      false,
+		strconv.Itoa(dead) + "-index-a1b2.lock": false,
+		strconv.Itoa(live) + "-index-a1b2":      true,
+		strconv.Itoa(live) + "-index-a1b2.lock": true,
+		"abc-index-a1b2":                        true,
+		strconv.Itoa(dead) + "-indexed":         true,
 	}
 	for name := range files {
 		if err := os.WriteFile(filepath.Join(runDir, name), nil, 0o600); err != nil {

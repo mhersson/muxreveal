@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -81,7 +82,7 @@ func TestSendRoundTrip(t *testing.T) {
 		t.Fatalf("Send() error = %v", err)
 	}
 
-	if got := recv(t, s.out); got != want {
+	if got := recv(t, s.out); !reflect.DeepEqual(got, want) {
 		t.Fatalf("event = %+v, want %+v", got, want)
 	}
 }
@@ -361,5 +362,133 @@ func TestListenKeepsNonSocketFile(t *testing.T) {
 	got, err := os.ReadFile(path)
 	if err != nil || string(got) != "precious" {
 		t.Fatalf("file = %q, %v; want it left untouched", got, err)
+	}
+}
+
+func startHeldServer(t *testing.T, hold time.Duration) *served {
+	t.Helper()
+
+	path := socketPath(t)
+
+	srv, err := Listen(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	srv.Hold = hold
+	s := &served{srv: srv, out: make(chan Event, 4), path: path, done: make(chan error, 1)}
+	ctx, cancel := context.WithCancel(context.Background())
+
+	go func() { s.done <- srv.Serve(ctx, s.out) }()
+
+	t.Cleanup(func() {
+		cancel()
+		_ = srv.Close()
+		if err := <-s.done; err != nil {
+			t.Errorf("Serve() error = %v", err)
+		}
+	})
+
+	return s
+}
+
+// sendAsync sends ev and reports the Send error and how long it took.
+func sendAsync(path string, ev Event) <-chan sendResult {
+	res := make(chan sendResult, 1)
+
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		start := time.Now()
+		err := Send(ctx, path, ev)
+		res <- sendResult{err: err, took: time.Since(start)}
+	}()
+
+	return res
+}
+
+type sendResult struct {
+	err  error
+	took time.Duration
+}
+
+func TestTurnStartAnsweredAfterDone(t *testing.T) {
+	s := startHeldServer(t, 300*time.Millisecond)
+	res := sendAsync(s.path, Event{Pane: "p", Name: "UserPromptSubmit", TurnStart: true})
+
+	ev := recv(t, s.out)
+	if ev.Done == nil {
+		t.Fatal("held event has no Done")
+	}
+
+	select {
+	case r := <-res:
+		t.Fatalf("answered before Done: %+v", r)
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	ev.Done()
+	ev.Done() // more than once is fine
+
+	r := <-res
+	if r.err != nil || r.took > 250*time.Millisecond {
+		t.Errorf("Send() = %v after %v, want ok well under the hold", r.err, r.took)
+	}
+}
+
+func TestTurnStartAnsweredAfterHold(t *testing.T) {
+	s := startHeldServer(t, 300*time.Millisecond)
+	res := sendAsync(s.path, Event{Pane: "p", Name: "UserPromptSubmit", TurnStart: true})
+	_ = recv(t, s.out)
+
+	r := <-res
+	if r.err != nil || r.took < 250*time.Millisecond || r.took > time.Second {
+		t.Errorf("Send() = %v after %v, want ok at about 300ms", r.err, r.took)
+	}
+}
+
+func TestNonTurnEventAnsweredAtOnce(t *testing.T) {
+	s := startHeldServer(t, 300*time.Millisecond)
+	res := sendAsync(s.path, Event{Pane: "p", Name: "Stop"})
+
+	if ev := recv(t, s.out); ev.Done != nil {
+		t.Error("non-turn event has Done")
+	}
+
+	if r := <-res; r.err != nil || r.took > 200*time.Millisecond {
+		t.Errorf("Send() = %v after %v, want ok at once", r.err, r.took)
+	}
+}
+
+func TestZeroHoldAnswersAtOnce(t *testing.T) {
+	s := startHeldServer(t, 0)
+	res := sendAsync(s.path, Event{Pane: "p", Name: "UserPromptSubmit", TurnStart: true})
+
+	if ev := recv(t, s.out); ev.Done != nil {
+		t.Error("event has Done without a hold")
+	}
+
+	if r := <-res; r.err != nil || r.took > 200*time.Millisecond {
+		t.Errorf("Send() = %v after %v, want ok at once", r.err, r.took)
+	}
+}
+
+func TestCloseDuringHoldDoesNotWait(t *testing.T) {
+	s := startHeldServer(t, 5*time.Second)
+	res := sendAsync(s.path, Event{Pane: "p", Name: "UserPromptSubmit", TurnStart: true})
+	_ = recv(t, s.out)
+
+	start := time.Now()
+	if err := s.srv.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	if d := time.Since(start); d > time.Second {
+		t.Errorf("Close() took %v during a hold", d)
+	}
+
+	if r := <-res; r.err == nil {
+		t.Error("Send() succeeded though the server closed mid-hold")
 	}
 }
