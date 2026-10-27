@@ -339,7 +339,7 @@ Large repo (`kubernetes/kubernetes`, `--depth 1`, 31,509 tracked files, 20 track
 | `WorkingTree` | 2.85 s / 2.88 s | 144 ms / 148 ms |
 | Branch `Diff` against `HEAD` (20 files, fresh engine per call) | 2.91 s / 2.90 s | 168 ms / 167 ms |
 
-In a fresh-clone snapshot `ls-files` takes 1.45 s and `update-index` 1.42 s; with a refreshed index they take 96 ms and 30 ms, `write-tree` is 20-30 ms in both, and every other subcommand is under 2 ms. A first snapshot in an unrefreshed clone is therefore over the 1.4 s hook budget: the gate cancels it and the turn gets a "no snapshot" marker; the watcher's unchanged hint (M2b) skips the snapshot when nothing changed.
+In a fresh-clone snapshot `ls-files` takes 1.45 s and `update-index` 1.42 s; with a refreshed index they take 96 ms and 30 ms, `write-tree` is 20-30 ms in both, and every other subcommand is under 2 ms. Every snapshot is therefore over the 1.4 s hook budget until something refreshes the user's index, because the temporary copy's refresh is discarded: the gate cancels it and the turn gets a "no snapshot" marker; the watcher's unchanged hint (M2b) skips the snapshot when nothing changed.
 
 ### M2b Review pane
 

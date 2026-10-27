@@ -12,6 +12,8 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/fsnotify/fsnotify"
 )
 
 const watchWait = 5 * time.Second
@@ -435,7 +437,7 @@ func TestWatchBurstCoalesces(t *testing.T) {
 
 func TestWatchSteadyStreamIsSentByMaxDelay(t *testing.T) {
 	dir := baseRepo(t)
-	w := startWatch(t, dir, WatchOptions{})
+	w := startWatch(t, dir, WatchOptions{Debounce: 400 * time.Millisecond})
 
 	stop := make(chan struct{})
 	finished := make(chan struct{})
@@ -462,7 +464,7 @@ func TestWatchSteadyStreamIsSentByMaxDelay(t *testing.T) {
 
 	select {
 	case <-w.Batches():
-		// Events every 50 ms keep resetting the 150 ms debounce, so only the
+		// Events every 50 ms keep resetting the 400 ms debounce, so only the
 		// 1 s maximum delay can have sent this batch.
 		if d := time.Since(start); d < 800*time.Millisecond || d > 2*time.Second {
 			t.Fatalf("first batch after %v, want about 1s", d)
@@ -742,5 +744,51 @@ func TestWatchErrorNamesInstanceLimit(t *testing.T) {
 
 	if err := instanceError("/repo", syscall.EINVAL); strings.Contains(err.Error(), "max_user_instances") {
 		t.Fatalf("unrelated error names the limit: %v", err)
+	}
+}
+
+func TestWatchOverflowRewalksUnwatchedDirectories(t *testing.T) {
+	dir := baseRepo(t)
+
+	r, err := Open(context.Background(), dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	fsw, err := fsnotify.NewBufferedWatcher(eventBuffer)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// No loop goroutine runs, so the Create events below are never handled.
+	w := &Watcher{repo: r, fs: fsw, watched: map[string]struct{}{}}
+	t.Cleanup(func() { _ = fsw.Close() })
+
+	if err := w.start(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+
+	writeFile(t, dir, "fresh/deep/a.go", "package a\n")
+
+	if hasWatch(t, w, filepath.Join(dir, "fresh")) {
+		t.Fatal("fresh is watched before the flush")
+	}
+
+	p := newPending()
+	p.overflow = true
+
+	b, err := w.flush(context.Background(), p)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, d := range []string{"fresh", "fresh/deep"} {
+		if !hasWatch(t, w, filepath.Join(dir, d)) {
+			t.Errorf("%s has no watch after an overflow", d)
+		}
+	}
+
+	if !b.Overflow || !slices.Contains(b.Paths, "fresh/deep/a.go") {
+		t.Errorf("batch = %+v, want overflow and fresh/deep/a.go", b)
 	}
 }

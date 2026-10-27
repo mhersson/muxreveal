@@ -1172,15 +1172,21 @@ func hostileDiffConfig(t *testing.T, dir string) (mark string) {
 	writeFile(t, filepath.Dir(script), filepath.Base(script), "#!/bin/sh\necho ran >> '"+mark+"'\n")
 	must(t, os.Chmod(script, 0o755))
 
+	// Puts the last paths of the listing first.
+	order := filepath.Join(t.TempDir(), "order")
+	writeFile(t, filepath.Dir(order), filepath.Base(order), "sm\nmoved*\n")
+
 	for k, v := range map[string]string{
 		"diff.submodule": "log", "diff.suppressBlankEmpty": "true", "diff.noprefix": "true",
 		"diff.mnemonicPrefix": "true", "color.diff": "always", "color.ui": "always",
 		"diff.relative": "true", "diff.renames": "false", "diff.algorithm": "minimal",
 		"diff.context": "10", "diff.interHunkContext": "20", "diff.ignoreSubmodules": "all",
-		"diff.external": script,
+		"diff.external": script, "diff.orderFile": order,
 	} {
 		gitOut(t, dir, "config", k, v)
 	}
+
+	t.Setenv("GIT_DIFF_OPTS", "--unified=0")
 
 	return mark
 }

@@ -18,7 +18,8 @@ import (
 const (
 	// maxLine bounds one event line on the socket.
 	maxLine = 64 << 10
-	// connDeadline bounds a whole connection, read to answer.
+	// connDeadline bounds reading the event line and, separately, writing the
+	// answer: the write deadline is reset after a turn start's hold.
 	connDeadline = 2 * time.Second
 	// sendTimeout bounds how long a full out channel holds an event.
 	sendTimeout = time.Second
@@ -27,7 +28,8 @@ const (
 
 // Server receives hook events on a Unix socket and forwards them to a channel.
 // Each connection carries one JSON line and is answered with "ok" once the
-// event is on the channel.
+// event is on the channel; a turn start is answered after its Done is called
+// or Hold passes.
 type Server struct {
 	// Log receives dropped events; nil discards them.
 	Log *slog.Logger

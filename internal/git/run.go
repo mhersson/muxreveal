@@ -117,7 +117,7 @@ func (c call) command(ctx context.Context) *exec.Cmd {
 // cleanEnv drops git's repository-local variables from inherited, so a call
 // reads only the repository it was pointed at. The list is from
 // `git rev-parse --local-env-vars` (git 2.56); GIT_CONFIG_COUNT also removes its
-// KEY_<n> and VALUE_<n> pairs.
+// KEY_<n> and VALUE_<n> pairs. GIT_DIFF_OPTS goes too: it would override -U3.
 func cleanEnv(inherited []string) []string {
 	env := make([]string, 0, len(inherited))
 
@@ -141,7 +141,7 @@ func repoLocalVar(name string) bool {
 		return true
 	}
 
-	return strings.HasPrefix(name, "GIT_CONFIG_KEY_") || strings.HasPrefix(name, "GIT_CONFIG_VALUE_")
+	return name == "GIT_DIFF_OPTS" || strings.HasPrefix(name, "GIT_CONFIG_KEY_") || strings.HasPrefix(name, "GIT_CONFIG_VALUE_")
 }
 
 // firstLine formats stderr's first line as a ": ..." suffix, or "" when empty.

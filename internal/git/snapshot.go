@@ -16,6 +16,10 @@ import (
 const (
 	refPrefix      = "refs/muxreveal/"
 	maxSkippedTags = 20
+
+	// refWriteBudget bounds writing a ref and its commit once the tree exists;
+	// a killed update-ref leaves its lock file behind.
+	refWriteBudget = 2 * time.Second
 )
 
 // ErrBadSession means a session id is not a UUID.
@@ -25,6 +29,18 @@ var (
 	sessionRE = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 	turnRefRE = regexp.MustCompile(`^refs/muxreveal/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/([0-9]+)$`)
 )
+
+// refWriteContext returns the context for a ref write: the caller's error when
+// it is already done, else one that survives its cancellation for refWriteBudget.
+func refWriteContext(ctx context.Context) (context.Context, context.CancelFunc, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, nil, err
+	}
+
+	c, cancel := context.WithTimeout(context.WithoutCancel(ctx), refWriteBudget)
+
+	return c, cancel, nil
+}
 
 // SnapshotOptions tune one snapshot.
 type SnapshotOptions struct {
@@ -105,8 +121,14 @@ func MarkMissing(ctx context.Context, dir, session string) (Turn, error) {
 		return Turn{}, err
 	}
 
+	wctx, cancel, err := refWriteContext(ctx)
+	if err != nil {
+		return Turn{}, err
+	}
+	defer cancel()
+
 	// mktree writes the empty tree in whatever hash the repository uses.
-	out, err := run(ctx, call{dir: r.Root, args: []string{"mktree"}, stdin: bytes.NewReader(nil)})
+	out, err := run(wctx, call{dir: r.Root, args: []string{"mktree"}, stdin: bytes.NewReader(nil)})
 	if err != nil {
 		return Turn{}, fmt.Errorf("mark missing: %w", err)
 	}
@@ -123,40 +145,59 @@ func writeTurn(ctx context.Context, r Repo, session string, turns []Turn, tree s
 	}
 
 	for attempt := 0; ; attempt++ {
-		n := nextTurn(turns)
-		now := time.Now().Truncate(time.Second)
-
-		commit, err := commitTurn(ctx, r, session, n, tree, parent, skipped, none, now)
+		wctx, cancel, err := refWriteContext(ctx)
 		if err != nil {
 			return Turn{}, err
 		}
 
-		ref := fmt.Sprintf("%s%s/%d", refPrefix, session, n)
+		n := nextTurn(turns)
 
-		_, err = run(ctx, call{
-			dir:  r.Root,
-			args: []string{"update-ref", "--no-deref", "-m", "muxreveal turn", ref, commit, ""},
-			env:  isolatedEnv(),
-		})
+		turn, err := writeRef(wctx, r, session, n, tree, parent, skipped, none)
+
+		cancel()
+
 		if err == nil {
-			return Turn{N: n, Commit: commit, Tree: tree, Missing: none, Skipped: skipped, Time: now}, nil
+			return turn, nil
 		}
 
 		if attempt > 0 || ctx.Err() != nil {
-			return Turn{}, fmt.Errorf("write %s: %w", ref, err)
+			return Turn{}, err
 		}
 
 		updateErr := err
 
 		turns, err = Turns(ctx, r, session)
 		if err != nil {
-			return Turn{}, fmt.Errorf("write %s: %w (then %w)", ref, updateErr, err)
+			return Turn{}, fmt.Errorf("%w (then %w)", updateErr, err)
 		}
 
 		if nextTurn(turns) == n {
-			return Turn{}, fmt.Errorf("write %s: %w", ref, updateErr)
+			return Turn{}, updateErr
 		}
 	}
+}
+
+// writeRef commits tree as turn n and creates its ref.
+func writeRef(ctx context.Context, r Repo, session string, n int, tree, parent string, skipped []string, none bool) (Turn, error) {
+	now := time.Now().Truncate(time.Second)
+
+	commit, err := commitTurn(ctx, r, session, n, tree, parent, skipped, none, now)
+	if err != nil {
+		return Turn{}, err
+	}
+
+	ref := fmt.Sprintf("%s%s/%d", refPrefix, session, n)
+
+	_, err = run(ctx, call{
+		dir:  r.Root,
+		args: []string{"update-ref", "--no-deref", "-m", "muxreveal turn", ref, commit, ""},
+		env:  isolatedEnv(),
+	})
+	if err != nil {
+		return Turn{}, fmt.Errorf("write %s: %w", ref, err)
+	}
+
+	return Turn{N: n, Commit: commit, Tree: tree, Missing: none, Skipped: skipped, Time: now}, nil
 }
 
 func commitTurn(ctx context.Context, r Repo, session string, n int, tree, parent string, skipped []string, none bool, at time.Time) (string, error) {
@@ -366,7 +407,13 @@ func deleteRefs(ctx context.Context, r Repo, recs []turnRecord, match func(turnR
 		return 0, nil
 	}
 
-	_, err := run(ctx, call{dir: r.CommonDir, args: []string{"update-ref", "--stdin"}, env: isolatedEnv(), stdin: &stdin})
+	wctx, cancel, err := refWriteContext(ctx)
+	if err != nil {
+		return 0, err
+	}
+	defer cancel()
+
+	_, err = run(wctx, call{dir: r.CommonDir, args: []string{"update-ref", "--stdin"}, env: isolatedEnv(), stdin: &stdin})
 	if err != nil {
 		return 0, fmt.Errorf("prune turns: %w", err)
 	}

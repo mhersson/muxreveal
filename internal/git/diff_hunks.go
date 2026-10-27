@@ -72,7 +72,8 @@ func (e *Engine) addHunks(ctx context.Context, r Repo, oldTree, newTree string, 
 func (e *Engine) readHunks(ctx context.Context, r Repo, oldTree, newTree string, files []FileDiff, need []int) (map[string][]*gitdiff.File, error) {
 	args := []string{
 		"diff", "--histogram", "-U3", "-M", "-C", "--full-index", "--no-color", "--no-ext-diff",
-		"--no-textconv", "--no-relative", "--submodule=short", "--ignore-submodules=none", "--inter-hunk-context=0", "--src-prefix=a/", "--dst-prefix=b/", oldTree, newTree, "--",
+		"--no-textconv", "--no-relative", "--submodule=short", "--ignore-submodules=none",
+		"--inter-hunk-context=0", "-O/dev/null", "--src-prefix=a/", "--dst-prefix=b/", oldTree, newTree, "--",
 	}
 
 	seen := map[string]bool{}
@@ -133,10 +134,8 @@ func (e *Engine) readHunks(ctx context.Context, r Repo, oldTree, newTree string,
 	return byPath, nil
 }
 
-// wholeFiles cuts buf before its last file header: the file it stopped in is
-// incomplete. A complete file whose end coincides with the cap is dropped too,
-// deliberately: it cannot be told from a cut one. A header line is unambiguous because content lines begin with
-// ' ', '+', '-' or '\'.
+// wholeFiles cuts buf before its last file header, as the file it stopped in may be
+// incomplete; a file ending exactly at the cap goes too. Content lines never start with "diff".
 func wholeFiles(buf []byte) []byte {
 	i := bytes.LastIndex(buf, []byte("\ndiff --git "))
 	if i < 0 {

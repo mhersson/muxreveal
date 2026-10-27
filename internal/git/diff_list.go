@@ -16,7 +16,8 @@ const listLimit = 64 << 20
 func listFiles(ctx context.Context, r Repo, oldTree, newTree string, paths ...string) ([]FileDiff, error) {
 	args := []string{
 		"diff", "--raw", "--numstat", "-z", "-M", "-C", "--histogram", "--no-abbrev",
-		"--no-color", "--no-ext-diff", "--no-textconv", "--no-relative", "--submodule=short", "--ignore-submodules=none", oldTree, newTree,
+		"--no-color", "--no-ext-diff", "--no-textconv", "--no-relative", "--submodule=short",
+		"--ignore-submodules=none", "-O/dev/null", oldTree, newTree,
 	}
 
 	if len(paths) > 0 {

@@ -17,8 +17,8 @@ const (
 	// turnHold is how long the hook server holds a prompt hook's answer; the
 	// hook client gives up at 2 s.
 	turnHold = 1500 * time.Millisecond
-	// turnBudget bounds a turn snapshot, counted from the event's arrival; it
-	// ends before turnHold so the answer never waits for a snapshot in flight.
+	// turnBudget bounds a turn snapshot, counted from when the gate reads the
+	// event; a backed-up app channel delays the read, so it can end after turnHold.
 	turnBudget = 1400 * time.Millisecond
 	// markerBudget bounds writing a "no snapshot" marker.
 	markerBudget = 5 * time.Second

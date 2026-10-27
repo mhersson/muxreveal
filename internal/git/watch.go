@@ -593,7 +593,8 @@ func (w *Watcher) checkIgnore(ctx context.Context, paths []string) (map[string]b
 func (w *Watcher) flush(ctx context.Context, p *pending) (Batch, error) {
 	var errs []error
 
-	if p.regate {
+	// An overflow lost Create events, so directories may be unwatched.
+	if p.regate || p.overflow {
 		if err := w.walk(ctx, []string{w.repo.Root}, false, p.paths); err != nil {
 			errs = append(errs, err)
 		}

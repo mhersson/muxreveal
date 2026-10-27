@@ -1029,3 +1029,56 @@ func TestTempIndexNameAndLockCleanup(t *testing.T) {
 	idx.remove()
 	assertEmptyDir(t, tmp)
 }
+
+func TestSnapshotRefWriteSurvivesTheContextEnding(t *testing.T) {
+	dir := seedRepo(t)
+	r := openRepo(t, dir)
+
+	// update-ref outlasts the deadline; the ref write must not be killed.
+	fakeGit(t, `case "$*" in
+*update-ref*) sleep 1.5;;
+esac`)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	turn, err := Snapshot(ctx, dir, sessA, SnapshotOptions{TempDir: t.TempDir()})
+	if err != nil {
+		t.Fatalf("Snapshot: %v", err)
+	}
+
+	if turn.N != 1 {
+		t.Errorf("turn = %d, want 1", turn.N)
+	}
+
+	locks, err := filepath.Glob(filepath.Join(r.CommonDir, "refs", "muxreveal", "*", "*.lock"))
+	if err != nil || len(locks) > 0 {
+		t.Errorf("lock files %v (%v)", locks, err)
+	}
+
+	if next := snap(t, dir, sessA, SnapshotOptions{}); next.N != 2 {
+		t.Errorf("second turn = %d, want 2", next.N)
+	}
+}
+
+func TestWriteTurnWithDoneContextWritesNothing(t *testing.T) {
+	dir := seedRepo(t)
+	r := openRepo(t, dir)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	tree := gitOut(t, dir, "rev-parse", "HEAD^{tree}")
+
+	if _, err := writeTurn(ctx, r, sessA, nil, tree, nil, false); !errors.Is(err, context.Canceled) {
+		t.Errorf("writeTurn error = %v, want context.Canceled", err)
+	}
+
+	if _, err := MarkMissing(ctx, dir, sessA); err == nil {
+		t.Error("MarkMissing with a done context succeeded")
+	}
+
+	if refs := gitOut(t, dir, "for-each-ref", "refs/muxreveal"); refs != "" {
+		t.Errorf("refs written: %s", refs)
+	}
+}
