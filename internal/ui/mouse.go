@@ -48,6 +48,7 @@ type heldPress struct {
 	mod      tea.KeyMod
 	anchor   stablePoint
 	dragging bool
+	multi    bool // a double or triple click, which selects on press
 }
 
 // forwarded is a middle or right button whose press went to a guest.
@@ -204,7 +205,7 @@ func (a *App) contentPress(h hitResult, m tea.Mouse) tea.Cmd {
 	tracking = tracking && n == 1
 	pr := &heldPress{
 		pane: h.pane, x: m.X, y: m.Y, local: h.local, tracking: tracking,
-		alt: m.Mod.Contains(tea.ModAlt), mod: m.Mod,
+		alt: m.Mod.Contains(tea.ModAlt), mod: m.Mod, multi: n > 1,
 	}
 
 	a.sel = nil
@@ -226,9 +227,9 @@ func (a *App) contentPress(h hitResult, m tea.Mouse) tea.Cmd {
 	return cmd
 }
 
-func (a *App) handleMotion(msg tea.MouseMotionMsg) {
+func (a *App) handleMotion(msg tea.MouseMotionMsg) tea.Cmd {
 	if a.mouseBlocked() {
-		return
+		return nil
 	}
 
 	m := msg.Mouse()
@@ -240,15 +241,25 @@ func (a *App) handleMotion(msg tea.MouseMotionMsg) {
 		a.forwardHeld(a.mouse.fwd, m, func(m uv.Mouse) uv.MouseEvent { return uv.MouseMotionEvent(m) })
 	case m.Button == tea.MouseNone:
 		h := a.hit(m.X, m.Y)
+
+		var cmd tea.Cmd
+		if a.focusFollows && a.mouse.press == nil && a.mouse.fwd == nil && (h.area == hitContent || h.area == hitHeader) {
+			cmd = a.focusPane(h.pane)
+		}
+
 		if p := a.panes[h.pane]; h.area == hitContent && p != nil {
 			p.sendMouse(uv.MouseMotionEvent(uv.Mouse{X: h.local.col, Y: h.local.row, Button: m.Button, Mod: m.Mod}))
 		}
+
+		return cmd
 	}
+
+	return nil
 }
 
-func (a *App) handleRelease(msg tea.MouseReleaseMsg) {
+func (a *App) handleRelease(msg tea.MouseReleaseMsg) tea.Cmd {
 	if a.mouseBlocked() {
-		return
+		return nil
 	}
 
 	m := msg.Mouse()
@@ -257,12 +268,12 @@ func (a *App) handleRelease(msg tea.MouseReleaseMsg) {
 		a.mouse.fwd = nil
 		a.forwardHeld(f, m, func(m uv.Mouse) uv.MouseEvent { return uv.MouseReleaseEvent(m) })
 
-		return
+		return nil
 	}
 
 	pr := a.mouse.press
 	if pr == nil || m.Button != tea.MouseLeft {
-		return
+		return nil
 	}
 
 	a.mouse.press = nil
@@ -271,8 +282,16 @@ func (a *App) handleRelease(msg tea.MouseReleaseMsg) {
 		a.dragTo(pr, m.X, m.Y)
 	}
 
-	if pr.dragging || !pr.tracking {
-		return
+	if pr.dragging || pr.multi {
+		if a.copyOnSelect {
+			return a.copySelection()
+		}
+
+		return nil
+	}
+
+	if !pr.tracking {
+		return nil
 	}
 
 	if p := a.panes[pr.pane]; p != nil {
@@ -280,6 +299,8 @@ func (a *App) handleRelease(msg tea.MouseReleaseMsg) {
 		p.sendMouse(uv.MouseClickEvent(mouse))
 		p.sendMouse(uv.MouseReleaseEvent(mouse))
 	}
+
+	return nil
 }
 
 // contentCell clamps the screen cell (x, y) into pane id's content rect and

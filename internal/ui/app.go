@@ -32,6 +32,11 @@ type Options struct {
 	RecordDir string
 	// Icons draws Nerd Font glyphs; false drops every one.
 	Icons bool
+	// FocusFollowsMouse focuses the pane under the pointer; CopyOnSelect copies
+	// a selection when the button is released.
+	FocusFollowsMouse, CopyOnSelect bool
+	// NoOSC52 and NoNativeClipboard turn off a copy path; the zero value keeps both on.
+	NoOSC52, NoNativeClipboard bool
 }
 
 // App is the root Bubble Tea model.
@@ -74,8 +79,10 @@ type App struct {
 	sel       *paneSelection // the one selection; survives tab switches
 	copy      *copyState     // copy mode; owns every key and ignores the mouse while set
 	mouse     mouseState
-	load      loadSampler // nil on platforms without a load reading
-	start     func(ctx context.Context, c term.Command, cols, rows int) (proc, error)
+
+	focusFollows, copyOnSelect bool
+	load                       loadSampler // nil on platforms without a load reading
+	start                      func(ctx context.Context, c term.Command, cols, rows int) (proc, error)
 
 	// ctx is the lifetime of the pane processes; Close cancels it.
 	ctx     context.Context
@@ -122,8 +129,9 @@ func New(opts Options) (*App, error) {
 		log: opts.Logger, store: opts.Store, reg: reg, keymap: km,
 		panes: map[core.PaneID]*pane{}, outerFocused: true,
 		getenv: getenv, cwd: cwd, recordDir: opts.RecordDir, icons: opts.Icons, clock: realClock{}, start: termStart,
-		load: newSysLoad(),
-		clip: newClipboard(clipboardConfig{OSC52: true, Native: true}, getenv, runtime.GOOS, opts.Logger),
+		load:         newSysLoad(),
+		focusFollows: opts.FocusFollowsMouse, copyOnSelect: opts.CopyOnSelect,
+		clip: newClipboard(clipboardConfig{OSC52: !opts.NoOSC52, Native: !opts.NoNativeClipboard}, getenv, runtime.GOOS, opts.Logger),
 	}
 	a.tray.gitRun = runGit
 	if err := a.sync(); err != nil {
@@ -252,9 +260,9 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.MouseClickMsg:
 		return a, a.handleClick(msg)
 	case tea.MouseMotionMsg:
-		a.handleMotion(msg)
+		return a, a.handleMotion(msg)
 	case tea.MouseReleaseMsg:
-		a.handleRelease(msg)
+		return a, a.handleRelease(msg)
 	case tea.FocusMsg:
 		a.outerFocused = true
 		a.sendToFocused(func(p *pane) { p.sendFocus(true) })
@@ -363,6 +371,9 @@ func (a *App) View() tea.View {
 	v := tea.NewView(content)
 	v.AltScreen = true
 	v.MouseMode = tea.MouseModeCellMotion
+	if a.focusFollows {
+		v.MouseMode = tea.MouseModeAllMotion
+	}
 	v.ReportFocus = true
 	// Modified keys arrive with their shifted character, which the legacy encoder needs.
 	v.KeyboardEnhancements.ReportAlternateKeys = true

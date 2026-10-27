@@ -50,6 +50,9 @@ Bench: the real `App` with replay panes on a virtual clock at 60 FPS, 240x64, me
 | c | 4 | 80 | 188,627 | 2.21 ms | 4.89 ms | 5.67 ms | 5.67 ms | 6.0 | 0.27 / 1.10 / 4.30 ms | 1 |
 | c | 6 | 107 | 284,741 | 2.55 ms | 5.56 ms | **6.51 ms** | 6.74 ms | 8.5 | 0.24 / 1.21 / 5.00 ms | 2 |
 | a, tabs and frames re-check | 6 | 593 | 1,127,049 | 2.45 ms | 5.19 ms | **6.12 ms** | 8.01 ms | 6.1 | 0.20 / 1.29 / 5.05 ms | 17 |
+| a, full-pane selection on one of six panes | 6 | 593 | 1,127,049 | 4.34 ms | 6.19 ms | **7.16 ms** | 8.87 ms | 8.4 | 0.26 / 2.11 / 6.27 ms | 36 |
+
+The selection row is run a with one pane's whole history selected, so all of its content rows are repainted on the selection background in every frame (`MUXREVEAL_BENCH_SELECTION=1`); the 30 s window is the same, and the median of three invocations is shown (p99 6.83, 7.16 and 7.51 ms). The two-pane case with a selection is not gated and reaches p99 9.03 ms (median of 3 invocations: 8.65, 9.03 and 10.02 ms), because the selected pane there is about twice the size.
 
 Busy rule (the spike's): a second is busy when its bytes exceed 25 % of that recording's peak per-second rate. By it `p2.rec` (peak 14,633 B/s at 49 s) is busy 45-51 s (7 s) and `p3.rec` (peak 13,582 B/s at 42 s) is busy 36-43 s (8 s) and 72-82 s (11 s), so Claude's text answers are short bursts and runs b (pane 6 at 74.5-81.5 s) and c (pane 6 at 47.5-51.5 s) are short truecolor windows with every pane inside a busy stretch. `pane-2.rec` (peak 12,591 B/s at 134 s) is busy 93-135 s and 140-145 s. Run a is the spike's gate configuration: the sustained 30 s reply, in 256 colour (no truecolor SGRs), with windows [91 + 5i, 121 + 5i) s. Two exceptions: pane 0 starts with a 91-93 s spinner lead-in, and panes 4 and 5 cross the quiet 136-140 s. Run a is like-for-like with the spike's gate (593 frames, 1,127,049 bytes at six panes; spike p99 5.04 ms on the headless model, 6.06 ms here through the real `App`). Present is again the cost centre. GC pause totals stay under 1 ms per run.
 
@@ -89,7 +92,7 @@ Mouse selection inside panes, copy to the system clipboard (OSC 52 and native to
 - [x] Scrollback view and mouse wheel
 - [x] Mouse selection, clicks and clipboard
 - [x] Copy mode
-- [ ] Mouse and clipboard options and bench check
+- [x] Mouse and clipboard options and bench check
 
 Gate: selection, copy mode and the clipboard work in shell panes and in programs that report the mouse, and the six-pane bench p99 stays at most 8 ms with a selection drawn.
 
