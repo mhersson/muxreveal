@@ -95,9 +95,9 @@ func (a *App) openPane(kind core.PaneKind, split core.Split) tea.Cmd {
 // pane, in cwd or, when that directory is gone, the launch dir; it returns the
 // directory used. On failure it leaves a notice and registers nothing.
 func (a *App) startPane(id core.PaneID, kind core.PaneKind, cwd string, cols, rows int) (*pane, string, error) {
-	c := term.ShellCommand(a.getenv, cwd)
+	c := term.ShellCommand(a.getenv, cwd, nil)
 	if kind == core.KindAgent {
-		c = term.AgentCommand(a.getenv, cwd)
+		c = term.AgentCommand(a.getenv, cwd, []string{"claude"}, nil)
 	}
 
 	// On the update loop: user-initiated, fork/exec takes a millisecond or two, and State and the registry stay in step.

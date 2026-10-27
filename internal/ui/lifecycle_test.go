@@ -185,7 +185,7 @@ func TestStartupOpensShell(t *testing.T) {
 	}
 
 	c := st.cmds[0]
-	want := term.ShellCommand(testGetenv, testCwd)
+	want := term.ShellCommand(testGetenv, testCwd, nil)
 
 	if !slices.Equal(c.Argv, want.Argv) || c.Dir != testCwd {
 		t.Errorf("command = %v in %q, want %v in %q", c.Argv, c.Dir, want.Argv, testCwd)
@@ -285,9 +285,9 @@ func TestSplitCommands(t *testing.T) {
 				t.Errorf("state = %+v, want p2 (%s) focused in /elsewhere", s, tt.kind)
 			}
 
-			want := term.ShellCommand(testGetenv, "/elsewhere")
+			want := term.ShellCommand(testGetenv, "/elsewhere", nil)
 			if tt.kind == core.KindAgent {
-				want = term.AgentCommand(testGetenv, "/elsewhere")
+				want = term.AgentCommand(testGetenv, "/elsewhere", []string{"claude"}, nil)
 			}
 
 			if got := st.cmds[1]; !slices.Equal(got.Argv, want.Argv) || got.Dir != "/elsewhere" {
