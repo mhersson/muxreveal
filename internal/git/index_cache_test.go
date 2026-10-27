@@ -233,6 +233,7 @@ func TestCacheWriteIsAtomic(t *testing.T) {
 // copy time instead would trust the entry's size and mtime and miss the edit.
 func TestWorkingTreeSeesAnEditAfterTheCache(t *testing.T) {
 	dir, cache, tmp, r := cacheRepo(t)
+	// The rewrite changes ctime, which would mask the mtime check.
 	gitOut(t, dir, "config", "core.trustctime", "false")
 
 	past := time.Now().Add(-time.Hour)
