@@ -21,6 +21,7 @@ func TestLock(t *testing.T) {
 	}
 
 	noErr(t, unlock())
+
 	unlock2, err := Lock(dir)
 	noErr(t, err)
 	noErr(t, unlock2())
@@ -30,6 +31,7 @@ func TestLock(t *testing.T) {
 func TestLockMissingDir(t *testing.T) {
 	_, err := Lock(filepath.Join(t.TempDir(), "missing"))
 	wantErr(t, err)
+
 	if errors.Is(err, ErrLocked) {
 		t.Fatal("a missing dir is not a held lock")
 	}

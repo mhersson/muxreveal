@@ -631,7 +631,9 @@ func newGitCounter() *gitCounter {
 
 func (g *gitCounter) run(_ context.Context, cwd string) ([]byte, error) {
 	g.calls.Add(1)
+
 	g.started <- cwd
+
 	<-g.release
 
 	return []byte("# branch.oid abc\x00# branch.head " + strings.ReplaceAll(strings.Trim(cwd, "/"), "/", "-") + "\x00"), nil
@@ -753,7 +755,9 @@ func TestGitTickProbes(t *testing.T) {
 	openIn(t, a, core.OpenPane{Kind: core.KindShell, Cwd: "/w/a", Split: core.SplitVertical})
 
 	probe := a.takeLater()
+
 	g.release <- struct{}{}
+
 	a.Update(probe())
 
 	if a.tray.gitBusy {
@@ -834,6 +838,7 @@ func TestGitProbeEnv(t *testing.T) {
 		"GIT_INDEX_FILE=/i",
 		"LANG=C.UTF-8",
 	}
+
 	want := []string{"LANG=C.UTF-8", "GIT_OPTIONAL_LOCKS=0"}
 	if got := gitProbeEnv(inherited); !slices.Equal(got, want) {
 		t.Fatalf("gitProbeEnv = %q, want %q", got, want)

@@ -61,7 +61,7 @@ func Listen(path string) (*Server, error) {
 		}
 	}
 
-	ln, err := net.Listen("unix", path)
+	ln, err := (&net.ListenConfig{}).Listen(context.Background(), "unix", path)
 	if err != nil {
 		return nil, fmt.Errorf("harness: listen: %w", err)
 	}
@@ -100,6 +100,7 @@ func (s *Server) Serve(ctx context.Context, out chan<- Event) error {
 		s.mu.Lock()
 		if s.closed {
 			s.mu.Unlock()
+
 			_ = conn.Close()
 
 			continue

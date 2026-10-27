@@ -9,6 +9,7 @@ import (
 // paletteFields returns every field of p keyed by field name.
 func paletteFields(p Palette) map[string]Hex {
 	v := reflect.ValueOf(p)
+
 	fields := make(map[string]Hex, v.NumField())
 	for i := range v.NumField() {
 		fields[v.Type().Field(i).Name] = Hex(v.Field(i).String())
@@ -19,11 +20,13 @@ func paletteFields(p Palette) map[string]Hex {
 
 func TestPaletteHex(t *testing.T) {
 	hexRE := regexp.MustCompile(`^#[0-9a-f]{6}$`)
+
 	for _, th := range All() {
 		fields := paletteFields(th.Palette)
 		if len(fields) != 26 {
 			t.Errorf("%s: Palette has %d fields, want 26", th.Name, len(fields))
 		}
+
 		for name, h := range fields {
 			if !hexRE.MatchString(string(h)) {
 				t.Errorf("%s: Palette.%s = %q, want #rrggbb", th.Name, name, h)
@@ -74,6 +77,7 @@ func TestPaletteSpotValues(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ByName(%q): %v", tt.theme, err)
 		}
+
 		if got := paletteFields(th.Palette)[tt.field]; got != tt.want {
 			t.Errorf("%s Palette.%s = %q, want %q", tt.theme, tt.field, got, tt.want)
 		}

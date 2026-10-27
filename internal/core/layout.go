@@ -52,8 +52,10 @@ func (n *Node) clone() *Node {
 	if n == nil {
 		return nil
 	}
+
 	c := *n
 	c.A, c.B = n.A.clone(), n.B.clone()
+
 	return &c
 }
 
@@ -61,6 +63,7 @@ func (n *Node) firstLeaf() PaneID {
 	for !n.leaf() {
 		n = n.A
 	}
+
 	return n.Pane
 }
 
@@ -69,17 +72,21 @@ func (n *Node) path(id PaneID) []*Node {
 	if n == nil {
 		return nil
 	}
+
 	if n.leaf() {
 		if n.Pane == id {
 			return []*Node{n}
 		}
+
 		return nil
 	}
+
 	for _, c := range []*Node{n.A, n.B} {
 		if p := c.path(id); p != nil {
 			return append([]*Node{n}, p...)
 		}
 	}
+
 	return nil
 }
 
@@ -128,25 +135,33 @@ func (a OpenPane) apply(s *State) error {
 	if len(s.Panes) >= MaxPanes {
 		return ErrTooManyPanes
 	}
+
 	if a.Kind != KindShell && a.Kind != KindAgent {
 		return fmt.Errorf("core: OpenPane with unknown kind %q", a.Kind)
 	}
+
 	id := s.NewPaneID()
+
 	t := s.cur()
 	if !t.Empty() && a.Split != SplitVertical && a.Split != SplitHorizontal {
 		return fmt.Errorf("core: OpenPane with unknown split %q", a.Split)
 	}
+
 	if err := t.place(id, a.Split, a.Area, s.Layout); err != nil {
 		return err
 	}
+
 	s.NextID++
+
 	p := Pane{Kind: a.Kind, Cwd: a.Cwd}
 	if a.Kind == KindAgent {
 		p.Harness = a.Harness
 	}
+
 	s.Panes[id] = p
 	t.setFocus(id)
 	t.Zoomed = false
+
 	return nil
 }
 
@@ -159,22 +174,29 @@ type ClosePane struct {
 
 func (a ClosePane) apply(s *State) error {
 	s.normalize()
+
 	i, ok := s.TabOf(a.ID)
 	if !ok {
 		return fmt.Errorf("core: no pane %q", a.ID)
 	}
+
 	t := &s.Tabs[i]
 	if len(t.Panes) == 1 {
 		s.removeTab(i, true)
+
 		return nil
 	}
+
 	next, err := t.remove(a.ID)
 	if err != nil {
 		return err
 	}
+
 	delete(s.Panes, a.ID)
+
 	t.Zoomed = false
 	t.setFocus(next)
+
 	return nil
 }
 
@@ -188,10 +210,12 @@ func (a FocusPane) apply(s *State) error {
 	if !slices.Contains(t.Panes, a.ID) {
 		return fmt.Errorf("core: no pane %q", a.ID)
 	}
+
 	if a.ID != t.Focus {
 		t.setFocus(a.ID)
 		t.Zoomed = false
 	}
+
 	return nil
 }
 
@@ -208,6 +232,7 @@ func (a FocusDir) apply(s *State) error {
 		t.setFocus(id)
 		t.Zoomed = false
 	}
+
 	return nil
 }
 
@@ -221,15 +246,19 @@ type SwapDir struct {
 
 func (a SwapDir) apply(s *State) error {
 	t := s.cur()
+
 	other, ok := neighbour(*t, a.Dir, a.Area, s.Layout)
 	if !ok {
 		return nil
 	}
+
 	if err := t.swap(t.Focus, other); err != nil {
 		return err
 	}
+
 	t.Zoomed = false
 	t.keepVisible()
+
 	return nil
 }
 
@@ -243,31 +272,39 @@ type ResizeDir struct {
 
 func (a ResizeDir) apply(s *State) error {
 	axis, delta := SplitHorizontal, ratioStep
+
 	switch a.Dir {
 	case Left, Right:
 		axis = SplitVertical
 	}
+
 	switch a.Dir {
 	case Left, Up:
 		delta = -ratioStep
 	}
+
 	t := s.cur()
 	switch t.Mode {
 	case ModeMaster:
 		t.resizeMaster(a.Dir, s.Layout)
+
 		return nil
 	case ModeScrolling:
 		t.resizeColumn(a.Dir)
+
 		return nil
 	}
+
 	p := t.Layout.path(t.Focus)
 	for i := len(p) - 2; i >= 0; i-- {
 		if p[i].Split == axis {
 			r := math.Round((p[i].Ratio+delta)*100) / 100
 			p[i].Ratio = min(max(r, minRatio), maxRatio)
+
 			return nil
 		}
 	}
+
 	return nil
 }
 
@@ -292,10 +329,13 @@ func (a Preselect) apply(s *State) error {
 	if !t.isBSP() {
 		return ErrNeedsBSP
 	}
+
 	if _, ok := sideOf(a.Dir); !ok {
 		return fmt.Errorf("core: Preselect with no direction")
 	}
+
 	t.Preselect = a.Dir
+
 	return nil
 }
 
@@ -307,7 +347,9 @@ func (ClearPreselect) apply(s *State) error {
 	if !t.isBSP() {
 		return ErrNeedsBSP
 	}
+
 	t.Preselect = NoDir
+
 	return nil
 }
 
@@ -320,17 +362,21 @@ func (RotateSplit) apply(s *State) error {
 	if !t.isBSP() {
 		return ErrNeedsBSP
 	}
+
 	p := t.Layout.path(t.Focus)
 	if len(p) < 2 {
 		return ErrNothingToRotate
 	}
+
 	parent := p[len(p)-2]
 	if parent.Split == SplitVertical {
 		parent.Split = SplitHorizontal
 	} else {
 		parent.Split = SplitVertical
 	}
+
 	t.Zoomed = false
+
 	return nil
 }
 
@@ -344,6 +390,7 @@ func (Equalize) apply(s *State) error {
 	if len(t.Panes) < 2 {
 		return nil
 	}
+
 	switch t.Mode {
 	case ModeMaster:
 		t.Master = s.Layout.ratio()
@@ -351,11 +398,14 @@ func (Equalize) apply(s *State) error {
 		for i := range t.Columns {
 			t.Columns[i].Width = s.Layout.columnWidth()
 		}
+
 		t.keepVisible()
 	default:
 		equalizeNode(t.Layout)
 	}
+
 	t.Zoomed = false
+
 	return nil
 }
 
@@ -368,22 +418,28 @@ func (Promote) apply(s *State) error {
 	if t.Mode != ModeMaster {
 		return ErrNeedsMaster
 	}
+
 	if len(t.Panes) < 2 {
 		return nil
 	}
+
 	i := slices.Index(t.Panes, t.Focus)
 	if i < 0 {
 		return fmt.Errorf("core: focused pane %q is not in the layout", t.Focus)
 	}
+
 	other := t.Panes[0]
 	if i == 0 {
 		other = t.Panes[1]
 	}
+
 	if err := t.swapMaster(t.Focus, other); err != nil {
 		return err
 	}
+
 	t.setFocus(t.Panes[0])
 	t.Zoomed = false
+
 	return nil
 }
 
@@ -395,7 +451,9 @@ func (ToggleZoom) apply(s *State) error {
 	if t.Focus == "" {
 		return nil
 	}
+
 	t.Zoomed = !t.Zoomed
+
 	return nil
 }
 
@@ -410,7 +468,9 @@ func (a SetPaneCwd) apply(s *State) error {
 	if !ok {
 		return fmt.Errorf("core: no pane %q", a.ID)
 	}
+
 	p.Cwd = a.Cwd
 	s.Panes[a.ID] = p
+
 	return nil
 }

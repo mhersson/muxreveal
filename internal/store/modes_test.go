@@ -47,8 +47,10 @@ func TestModesRoundTripAndGolden(t *testing.T) {
 	if *update {
 		noErr(t, os.WriteFile(path, data, 0o644))
 	}
+
 	want, err := os.ReadFile(path)
 	noErr(t, err)
+
 	if string(data) != string(want) {
 		t.Fatalf("encoding differs from %s:\n%s", path, data)
 	}
@@ -62,12 +64,14 @@ func TestModesRoundTripAndGolden(t *testing.T) {
 func TestEncodeFieldsPerMode(t *testing.T) {
 	data, err := Encode(modesState())
 	noErr(t, err)
+
 	s := string(data)
 	for _, want := range []string{`"mode": "bsp"`, `"mode": "master-stack"`, `"mode": "scrolling"`, `"master_ratio": 0.65`, `"first": 1`} {
 		if !strings.Contains(s, want) {
 			t.Errorf("missing %s", want)
 		}
 	}
+
 	if strings.Count(s, `"layout"`) != 1 || strings.Count(s, `"master_ratio"`) != 1 || strings.Count(s, `"columns"`) != 1 {
 		t.Errorf("mode fields written for the wrong modes:\n%s", s)
 	}
@@ -76,6 +80,7 @@ func TestEncodeFieldsPerMode(t *testing.T) {
 	st.Tabs[2].First = 0
 	data, err = Encode(st)
 	noErr(t, err)
+
 	if strings.Contains(string(data), `"first"`) {
 		t.Errorf("first written at 0:\n%s", data)
 	}
@@ -85,16 +90,20 @@ func TestEncodeEmptyTab(t *testing.T) {
 	for _, mode := range []core.LayoutMode{"", core.ModeBSP} {
 		data, err := Encode(core.State{Tabs: []core.Tab{{ID: "t1", Mode: mode}}})
 		noErr(t, err)
+
 		s := string(data)
 		if !strings.Contains(s, `"layout": null`) || strings.Contains(s, "master_ratio") || strings.Contains(s, "columns") || strings.Contains(s, `"first"`) {
 			t.Errorf("mode %q: empty tab encoded as\n%s", mode, s)
 		}
 	}
+
 	data, err := Encode(core.State{Tabs: []core.Tab{{ID: "t1", Mode: core.ModeScrolling}}})
 	noErr(t, err)
+
 	if strings.Contains(string(data), "columns") || strings.Contains(string(data), "layout") {
 		t.Errorf("empty scrolling tab encoded as\n%s", data)
 	}
+
 	got, _, err := Decode(data, core.LayoutConfig{})
 	noErr(t, err)
 	eq(t, got.Tabs[0].Mode, core.ModeScrolling)
@@ -103,6 +112,7 @@ func TestEncodeEmptyTab(t *testing.T) {
 func TestDecodeVersion1KeepsPanesWithConfigDefault(t *testing.T) {
 	data, err := os.ReadFile(filepath.Join("testdata", "state.v1.json"))
 	noErr(t, err)
+
 	tests := []struct {
 		name  string
 		lc    core.LayoutConfig
@@ -136,6 +146,7 @@ func TestDecodeVersion1KeepsPanesWithConfigDefault(t *testing.T) {
 			eq(t, st.Tabs[0].Panes, []core.PaneID{"p1", "p2", "p3"})
 			eq(t, st.Tabs[0].Focus, core.PaneID("p2"))
 			eq(t, st.Tabs[0].Zoomed, true)
+
 			for _, tab := range st.Tabs {
 				tt.check(t, tab)
 			}
@@ -246,10 +257,12 @@ func TestDecodeHostileVersion2(t *testing.T) {
 			bad := `{"id":"t1","focused":"p2","pane_ids":["p1","p2"],` + tt.fields + `}`
 			st, rep, err := Decode([]byte(doc("2", "0", bad+","+good, panes)), lc)
 			noErr(t, err)
+
 			want := Report{}
 			if tt.defaults {
 				want.Defaulted = 1
 			}
+
 			eq(t, rep, want)
 			tt.check(t, st.Tabs[0])
 			eq(t, st.Tabs[0].Focus, core.PaneID("p2"))
@@ -275,6 +288,7 @@ func TestDecodeNonJSONFieldsStillFailWholeFile(t *testing.T) {
 
 func TestDecodeEmptyTabWithUnknownMode(t *testing.T) {
 	lc := core.LayoutConfig{DefaultMode: "master-stack"}
+
 	for _, mode := range []string{`"floating"`, `5`, `["bsp"]`, `{}`} {
 		t.Run(mode, func(t *testing.T) {
 			tab := `{"id":"t1","mode":` + mode + `,"pane_ids":[]}`
@@ -290,8 +304,10 @@ func TestDecodeEmptyTabWithUnknownMode(t *testing.T) {
 func TestDecodeDefaultedScrollingTabShowsFocus(t *testing.T) {
 	const v1 = `{"version":1,"active":0,"tabs":[{"id":"t1","focused":"p4","pane_ids":["p1","p2","p3","p4"]}],` +
 		`"panes":{"p1":{"kind":"shell"},"p2":{"kind":"shell"},"p3":{"kind":"shell"},"p4":{"kind":"shell"}}}`
+
 	st, _, err := Decode([]byte(v1), core.LayoutConfig{DefaultMode: "scrolling"})
 	noErr(t, err)
+
 	tab := st.Tabs[0]
 	eq(t, tab.Focus, core.PaneID("p4"))
 	eq(t, tab.First, 2)

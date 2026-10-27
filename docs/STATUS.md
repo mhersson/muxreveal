@@ -4,7 +4,7 @@ Update this file at the end of every session: tick what's done, set the next ste
 
 ## Current milestones
 
-M1e Tiling, tab moves and chrome is complete and waits for review; M2a Worktrees and diff engine is done (PR #11). The agents rail comes next, then M2b Review pane.
+M1e Tiling, tab moves and chrome is merged (PR #12) and M2a Worktrees and diff engine is merged (PR #11); the reboot part of the M1e gate is still the operator's check. The build, CI and lint tooling work (Makefile, GitHub Actions CI with Dependabot, stricter golangci-lint config) is complete. The agents rail and M3a GitHub and push backend run next, in parallel, each on its own branch and PR; M2b Review pane follows the rail, and M3b follows M2b.
 
 ## M1 Terminal core
 
@@ -436,7 +436,7 @@ Gate: a saved file shows in the open review pane within 300 ms; turn mode shows 
 
 ## Next
 
-M1e Tiling, tab moves and chrome is complete on `feat/tiling-tab-moves` and waits for review; the reboot part of its gate is the operator's check. The agents rail comes next, then M2b Review pane.
+M1e Tiling, tab moves and chrome is merged (PR #12); the reboot part of its gate is still the operator's check. The build, CI and lint tooling work (Makefile, GitHub Actions CI with Dependabot, stricter golangci-lint config) is complete; the macOS test step in CI is non-blocking until the macOS test failures listed in Later are fixed. The agents rail and M3a GitHub and push backend run next, in parallel, each on its own branch and PR; M2b Review pane follows the rail, and M3b follows M2b.
 
 ## Done
 
@@ -478,6 +478,9 @@ M1e Tiling, tab moves and chrome is complete on `feat/tiling-tab-moves` and wait
 | 2026-10-27 | The `Bar` role is Base, not Crust | The operator's pick from the chrome comparison |
 | 2026-10-27 | Overlay boxes (which-key, sequence popup, palette, theme picker, confirm) have rounded corners `╭ ╮ ╰ ╯`, not square ones | The operator's pick from the chrome comparison |
 | 2026-10-27 | The palette and the theme picker end in a joined divider and a hint row (`up/down move`, `enter run`, `esc close`), two rows taller | The operator's pick from the chrome comparison |
+| 2026-10-27 | A Makefile and GitHub Actions CI with Dependabot: the Linux job runs the `make check` gates, a macOS job builds, vets, tests and scans natively (its tests are non-blocking until the macOS failures in Later are fixed), pull requests add govulncheck and a case-clash check, and a nightly run does the race tests at `-count=2` | One command locally and the same gates on every pull request; Dependabot keeps modules and actions current |
+| 2026-10-27 | The golangci-lint config is adapted from contextmatrix's and stricter; ported tuios code stays out of the style-only linters and formatters | The ports stay close to upstream; correctness linters still run on them |
+| 2026-10-27 | v1 ends with a docs and demo milestone | A new user needs a README and user docs that show MuxReveal working |
 
 ## Later
 
@@ -520,6 +523,17 @@ Ideas and requests that came up outside the current milestone go here.
 - A CJK line soft-wrapped one column early copies with an extra space in the middle.
 - A button release outside the window leaves the press held until the next click, which blocks hover focus meanwhile.
 - With `focus_follows_mouse` on, every pointer move builds a frame (unmeasured).
-- `TestBenchKitOnSynth` times out waiting for pane read loops under `CGO_ENABLED=1 go test -race -count=2 ./internal/ui/` (also on main before agents and persistence); it passes at `-count=1` and on its own.
+- `TestBenchKitOnSynth` times out waiting for pane read loops under `CGO_ENABLED=1 go test -race -count=2 ./internal/ui/` (also on main before agents and persistence); it passes at `-count=1` and on its own (skipped in the nightly race run until fixed).
 - In a reftable repository the watcher does not watch `.git/reftable/`, so a fetch or another ref change sets no git flag in its batch.
 - An agents rail like herdr's Agents sidebar: every running agent with its project and branch, opened on command and kept open until closed, focused with its own key, searchable, and Enter jumps to the agent in any tab or pane; planned as its own plan after this milestone.
+- A weekly CI job that runs the hook and resume checks against the latest claude (DESIGN Risks); it needs a Claude login in CI.
+- Fix the tests that fail on macOS; until then the macOS test step in CI is non-blocking (`continue-on-error`), and removing that line is part of this item:
+  - Unix socket paths over macOS's 103-byte limit under `t.TempDir()` (`/var/folders/...`):
+    - `internal/harness`: `TestFullChannelDropsAfterOneSecond` and `TestSendSilentServerHonoursDeadline` ("bind: invalid argument").
+    - `cmd/muxreveal`: `TestRunServesHooks` ("condition not met in time"), `TestRunRestoresTheSession` ("connect: invalid argument"), `TestStartHooksSweepsDeadInstances`, `TestHookAnswersAfterTheSnapshotExists`, `TestHookBudgetServerClosingMidSnapshot`, `TestHookBudgetHeldIndexLockDoesNotBlockTheSnapshot` and `TestHookBudgetUnsnapshottableTurnsAnswerAtOnce` (each "socket path too long (110-127 bytes, at most 103)").
+  - `internal/git` on APFS:
+    - `TestSnapshotTreeContent`: an invalid-UTF-8 file name is refused ("illegal byte sequence").
+    - `TestDiffOddPaths`: the golden differs.
+    - `TestListWorktrees`: no worktree records found, likely `/var` vs `/private/var`.
+  - `internal/git` watcher on kqueue: `TestWatchWriteTrackedFile` and both `TestWatchSnapshotRefsDoNotWake` cases get a batch with `Git:true` from a plain write. This may be a real watcher bug on macOS, not only a test issue.
+  - `internal/ui`: `TestToastGoesWithTheFirstKey` ("the key reached the pane as "", want "x"").

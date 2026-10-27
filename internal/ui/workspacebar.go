@@ -212,7 +212,10 @@ func planBar(tabs []tabInfo, active int, mods []trayModule, width int, icons boo
 	stages = append(stages, shrink(levelNumber, true), drop(modAgents), omit)
 
 	for _, stage := range stages {
-		for !fits() && stage() {
+		for !fits() {
+			if !stage() {
+				break
+			}
 		}
 	}
 
@@ -321,6 +324,7 @@ func renderTabs(p barPlan, tabs []tabInfo, active int, icons bool, ui theme.UI) 
 
 		if !icons {
 			sb.WriteString(ground.Render(" "))
+
 			continue
 		}
 

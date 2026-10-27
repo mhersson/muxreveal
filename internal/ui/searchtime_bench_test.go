@@ -8,7 +8,9 @@ import (
 )
 
 // TestSearchMissTiming logs the cost of a search that finds nothing over a
-// full history: CGO_ENABLED=1 go test -tags bench -run TestSearchMissTiming -v ./internal/ui/
+// full history. Run it with:
+//
+//	CGO_ENABLED=1 go test -tags bench -run TestSearchMissTiming -v ./internal/ui/
 func TestSearchMissTiming(t *testing.T) {
 	p := cappedHistoryPane(t)
 

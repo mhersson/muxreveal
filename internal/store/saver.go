@@ -20,26 +20,35 @@ func WriteAtomic(path string, data []byte) (err error) {
 	if err != nil {
 		return fmt.Errorf("creating temp file: %w", err)
 	}
+
 	tmp := f.Name()
+
 	defer func() {
 		if err != nil {
 			_ = os.Remove(tmp)
 		}
 	}()
+
 	if _, err = f.Write(data); err != nil {
 		_ = f.Close()
+
 		return fmt.Errorf("writing %s: %w", tmp, err)
 	}
+
 	if err = f.Sync(); err != nil {
 		_ = f.Close()
+
 		return fmt.Errorf("syncing %s: %w", tmp, err)
 	}
+
 	if err = f.Close(); err != nil {
 		return fmt.Errorf("closing %s: %w", tmp, err)
 	}
+
 	if err = os.Rename(tmp, path); err != nil {
 		return fmt.Errorf("renaming %s: %w", tmp, err)
 	}
+
 	return nil
 }
 
@@ -62,6 +71,7 @@ func NewSaver(path string, log *slog.Logger) *Saver {
 	if log == nil {
 		log = slog.New(slog.DiscardHandler)
 	}
+
 	s := &Saver{
 		path: path,
 		log:  log,
@@ -70,6 +80,7 @@ func NewSaver(path string, log *slog.Logger) *Saver {
 		done: make(chan struct{}),
 	}
 	go s.run()
+
 	return s
 }
 
@@ -79,15 +90,20 @@ func (s *Saver) Save(st core.State) {
 	data, err := Encode(st)
 	if err != nil {
 		s.log.Error("encoding state", "err", err)
+
 		return
 	}
+
 	s.mu.Lock()
 	if s.closed {
 		s.mu.Unlock()
+
 		return
 	}
+
 	s.pending = data
 	s.mu.Unlock()
+
 	select {
 	case s.wake <- struct{}{}:
 	default:
@@ -103,6 +119,7 @@ func (s *Saver) Close(ctx context.Context) error {
 		close(s.stop)
 	}
 	s.mu.Unlock()
+
 	select {
 	case <-s.done:
 		return nil
@@ -113,27 +130,35 @@ func (s *Saver) Close(ctx context.Context) error {
 
 func (s *Saver) run() {
 	defer close(s.done)
+
 	var last []byte
+
 	flush := func() {
 		s.mu.Lock()
 		data := s.pending
 		s.pending = nil
 		s.mu.Unlock()
+
 		if data == nil || bytes.Equal(data, last) {
 			return
 		}
+
 		if err := WriteAtomic(s.path, data); err != nil {
 			s.log.Error("writing state", "path", s.path, "err", err)
+
 			return
 		}
+
 		last = data
 	}
+
 	for {
 		select {
 		case <-s.wake:
 			flush()
 		case <-s.stop:
 			flush()
+
 			return
 		}
 	}

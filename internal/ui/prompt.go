@@ -48,6 +48,7 @@ func (a *App) showPrompt(p *prompt, value string) {
 	in.Focus()
 
 	a.endLeader()
+
 	p.input = in
 	a.prompt = p
 }

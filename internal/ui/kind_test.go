@@ -223,6 +223,7 @@ func TestKindFollowsForeground(t *testing.T) {
 		}
 
 		a.panes["p1"].seen = true
+
 		st.proc(0).setFg("zsh")
 		probeKind(t, a, clk, "p1")
 

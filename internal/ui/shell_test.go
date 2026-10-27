@@ -17,10 +17,12 @@ import (
 
 func mustTheme(t *testing.T, name string) theme.Theme {
 	t.Helper()
+
 	th, err := theme.ByName(name)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	return th
 }
 
@@ -52,10 +54,12 @@ func TestViewColours(t *testing.T) {
 			a := newThemedApp(t, name)
 			sized(t, a, 100, 30)
 			v := a.View()
+
 			th := mustTheme(t, name)
 			if v.BackgroundColor != th.UI.Bg {
 				t.Errorf("BackgroundColor = %v, want %v", v.BackgroundColor, th.UI.Bg)
 			}
+
 			if v.ForegroundColor != th.UI.Fg {
 				t.Errorf("ForegroundColor = %v, want %v", v.ForegroundColor, th.UI.Fg)
 			}
@@ -66,10 +70,13 @@ func TestViewColours(t *testing.T) {
 func TestThemeFollowsStore(t *testing.T) {
 	a := newThemedApp(t, "catppuccin-mocha")
 	sized(t, a, 100, 30)
+
 	if err := a.dispatch(core.SetTheme{Name: "catppuccin-latte"}); err != nil {
 		t.Fatal(err)
 	}
+
 	v := a.View()
+
 	latte := mustTheme(t, "catppuccin-latte")
 	if v.BackgroundColor != latte.UI.Bg {
 		t.Errorf("BackgroundColor = %v, want %v", v.BackgroundColor, latte.UI.Bg)
@@ -80,13 +87,16 @@ func TestDispatchUnknownThemeKeepsPrevious(t *testing.T) {
 	a := newThemedApp(t, "catppuccin-mocha")
 	sized(t, a, 100, 30)
 	before := a.View()
+
 	err := a.dispatch(core.SetTheme{Name: "nope"})
 	if !errors.Is(err, theme.ErrUnknownTheme) {
 		t.Fatalf("dispatch() error = %v, want one wrapping ErrUnknownTheme", err)
 	}
+
 	if got := a.store.State().Theme; got != "catppuccin-mocha" {
 		t.Errorf("store theme = %q, want catppuccin-mocha", got)
 	}
+
 	if after := a.View(); after.Content != before.Content || after.BackgroundColor != before.BackgroundColor {
 		t.Error("view changed after a rejected theme")
 	}
@@ -99,15 +109,18 @@ func TestShellSizes(t *testing.T) {
 				a := newThemedApp(t, name)
 				sized(t, a, sz[0], sz[1])
 				content := a.View().Content
+
 				lines := strings.Split(content, "\n")
 				if len(lines) != sz[1] {
 					t.Fatalf("view has %d lines, want %d", len(lines), sz[1])
 				}
+
 				for i, line := range lines {
 					if got := lipgloss.Width(line); got != sz[0] {
 						t.Errorf("line %d width = %d, want %d: %q", i, got, sz[0], line)
 					}
 				}
+
 				if strings.Contains(content, "\t") {
 					t.Error("view contains a raw tab")
 				}
@@ -129,6 +142,7 @@ func TestShellContent(t *testing.T) {
 		t.Run(fmt.Sprintf("%dx%d", tt.w, tt.h), func(t *testing.T) {
 			a := newThemedApp(t, "catppuccin-mocha")
 			sized(t, a, tt.w, tt.h)
+
 			plain := ansi.Strip(a.View().Content)
 			if got := strings.Contains(plain, "No panes yet."); got != tt.wantCard {
 				t.Errorf("card present = %v, want %v:\n%s", got, tt.wantCard, plain)

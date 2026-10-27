@@ -29,7 +29,9 @@ const closeTimeout = 3 * time.Second
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
 	err := newRootCmd().ExecuteContext(ctx)
+
 	stop()
+
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "muxreveal: %v\n", err)
 		os.Exit(1)
@@ -38,8 +40,12 @@ func main() {
 
 func newRootCmd() *cobra.Command {
 	env, envErr := core.DefaultEnv()
-	var configPath, recordDir string
-	var fresh bool
+
+	var (
+		configPath, recordDir string
+		fresh                 bool
+	)
+
 	cmd := &cobra.Command{
 		Use:           "muxreveal",
 		Short:         "Coding agents in terminal panes, with their diffs and pull requests beside them",
@@ -56,13 +62,16 @@ func newRootCmd() *cobra.Command {
 					return fmt.Errorf("config: %w", err)
 				}
 			}
+
 			return run(cmd.Context(), env, configPath, recordDir, fresh)
 		},
 	}
+
 	defaultConfig := ""
 	if envErr == nil {
 		defaultConfig = core.ConfigPath(env)
 	}
+
 	cmd.Flags().StringVar(&configPath, "config", defaultConfig, "config file")
 	cmd.Flags().BoolVar(&fresh, "fresh", false, "start with one shell instead of the saved layout; the first change replaces the saved state")
 	cmd.Flags().StringVar(&recordDir, "record", "", "write each pane's terminal output to a recording in this directory")
@@ -80,12 +89,15 @@ func run(ctx context.Context, env core.Env, configPath, recordDir string, fresh 
 	if err != nil {
 		return err
 	}
+
 	if _, err := theme.ByName(cfg.Theme); err != nil {
 		return fmt.Errorf("config %s: %w", configPath, err)
 	}
+
 	if err := cfg.Layout.Validate(); err != nil {
 		return fmt.Errorf("config %s: %w", configPath, err)
 	}
+
 	f, err := openLog(core.StateDir(env))
 	if err != nil {
 		return err
@@ -98,6 +110,7 @@ func run(ctx context.Context, env core.Env, configPath, recordDir string, fresh 
 
 	logger := slog.New(slog.NewTextHandler(f, nil))
 	stateDir := core.StateDir(env)
+
 	hooks := startHooks(logger, stateDir)
 	defer hooks.Stop()
 
@@ -140,6 +153,7 @@ func run(ctx context.Context, env core.Env, configPath, recordDir string, fresh 
 	if err != nil {
 		return fmt.Errorf("launch directory: %w", err)
 	}
+
 	app, err := ui.New(ui.Options{
 		Logger: logger,
 		Store:  core.NewStore(st),
@@ -169,18 +183,24 @@ func run(ctx context.Context, env core.Env, configPath, recordDir string, fresh 
 	// terminal) end the run cleanly instead of racing Bubble Tea's own handler.
 	opts := append([]tea.ProgramOption{tea.WithContext(ctx), tea.WithoutSignalHandler()}, progOpts...)
 	_, err = tea.NewProgram(app, opts...).Run()
+
 	closeSaver()
 	// The context may be cancelled already, so the close gets its own deadline.
 	closeCtx, cancel := context.WithTimeout(context.Background(), closeTimeout)
 	defer cancel()
+
 	if cerr := app.Close(closeCtx); cerr != nil {
 		logger.Error("close panes", "err", cerr)
 	}
+
 	if err != nil && ctx.Err() == nil {
 		logger.Error("run", "err", err)
+
 		return fmt.Errorf("run: %w", err)
 	}
+
 	logger.Info("exit")
+
 	return nil
 }
 

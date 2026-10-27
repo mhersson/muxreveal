@@ -14,17 +14,21 @@ func TestSyntaxMatchesChroma(t *testing.T) {
 			if bundled.Name != th.Name {
 				t.Fatalf("styles.Get(%q) returned %q; Chroma has no such style", th.Name, bundled.Name)
 			}
+
 			ours, err := th.Syntax()
 			if err != nil {
 				t.Fatalf("Syntax(): %v", err)
 			}
+
 			if got, want := len(ours.Types()), len(bundled.Types()); got != want {
 				t.Errorf("ours has %d token types, bundled has %d", got, want)
 			}
+
 			types := map[chroma.TokenType]bool{}
 			for _, tt := range append(bundled.Types(), ours.Types()...) {
 				types[tt] = true
 			}
+
 			for tt := range types {
 				if got, want := ours.Get(tt), bundled.Get(tt); got != want {
 					t.Errorf("%s: ours %q, bundled %q", tt, got, want)
@@ -41,10 +45,12 @@ func TestSyntaxColoursFromPalette(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Syntax(): %v", err)
 			}
+
 			inPalette := map[chroma.Colour]bool{}
 			for _, h := range paletteFields(th.Palette) {
 				inPalette[chroma.MustParseColour(string(h))] = true
 			}
+
 			for _, tt := range ours.Types() {
 				e := ours.Get(tt)
 				for _, c := range []chroma.Colour{e.Colour, e.Background, e.Border} {

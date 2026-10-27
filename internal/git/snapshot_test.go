@@ -82,6 +82,7 @@ func gitEnvOut(t *testing.T, dir string, env []string, args ...string) string {
 
 	cmd := exec.Command("git", args...)
 	cmd.Dir = dir
+
 	cmd.Env = append(os.Environ(), env...)
 
 	out, err := cmd.Output()
@@ -337,6 +338,7 @@ func TestSnapshotUntrackedSizeCap(t *testing.T) {
 	dir := seedRepo(t)
 
 	big := filepath.Join(dir, "big\nfile.bin")
+
 	f, err := os.Create(big)
 	if err != nil {
 		t.Fatal(err)
@@ -575,6 +577,7 @@ func TestSnapshotLeavesUserStateAlone(t *testing.T) {
 	_ = os.Remove(filepath.Join(marks, "mark"))
 	turn := snap(t, dir, sessA, SnapshotOptions{})
 	mark := snap(t, dir, sessA, SnapshotOptions{Unchanged: true})
+
 	missing, err := MarkMissing(context.Background(), dir, sessA)
 	if err != nil {
 		t.Fatal(err)
@@ -815,6 +818,7 @@ func TestSnapshotUnchangedReusesPreviousTree(t *testing.T) {
 	}
 
 	logBefore, _ := os.ReadFile(logPath)
+
 	writeFile(t, dir, "ignored-by-reuse.txt", "x\n")
 
 	fourth := snap(t, dir, sessA, SnapshotOptions{Unchanged: true})

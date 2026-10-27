@@ -115,6 +115,7 @@ func Watch(ctx context.Context, r Repo, opts WatchOptions) (*Watcher, error) {
 
 	if err := w.start(ctx); err != nil {
 		cancel()
+
 		_ = fsw.Close()
 
 		return nil, err

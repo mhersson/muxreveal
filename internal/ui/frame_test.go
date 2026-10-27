@@ -57,6 +57,7 @@ func attachPanes(t *testing.T, a *App, texts map[core.PaneID]string) map[core.Pa
 		c := contentRect(rects[id])
 		fp := newFakeProc()
 		p := newPane(id, fp, max(c.W, 1), max(c.H, 1), realClock{})
+
 		t.Cleanup(func() { _ = p.close() })
 
 		a.panes[id] = p
@@ -163,6 +164,7 @@ func frameCases() []struct {
 			a := started(t, func(a *App) {
 				open(t, a, core.KindShell, "/home/u/proj", core.SplitVertical)
 				open(t, a, core.KindShell, "/home/u/other", core.SplitVertical)
+
 				if err := a.dispatch(core.ToggleZoom{}); err != nil {
 					t.Fatal(err)
 				}
@@ -403,6 +405,7 @@ func TestBorderColours(t *testing.T) {
 			st := a.store.State()
 			focus := st.Tab().Focus
 			r := a.layoutRects()[focus]
+
 			kindC := ui.Shell
 			if st.Panes[focus].Kind == core.KindAgent {
 				kindC = ui.Agent
@@ -514,6 +517,7 @@ func TestCursorView(t *testing.T) {
 	if a.cursorView() != nil {
 		t.Error("cursorView() with an overlay open, want nil")
 	}
+
 	a.overlay = nil
 
 	feedAndWait(t, a.panes["p2"], procs["p2"], "\x1b[?25l")
@@ -597,6 +601,7 @@ func viewVT(t *testing.T, a *App) term.VT {
 	t.Helper()
 
 	vt := term.NewVT(a.width, a.height, io.Discard)
+
 	t.Cleanup(func() { _ = vt.Close() })
 
 	if _, err := vt.Write([]byte(strings.ReplaceAll(a.View().Content, "\n", "\r\n"))); err != nil {
@@ -612,6 +617,7 @@ func assertCell(t *testing.T, vt term.VT, x, y int, want theme.Hex, bold bool) {
 	c := vt.CellAt(x, y)
 	if c == nil || c.Style.Fg == nil {
 		t.Errorf("cell (%d, %d) has no foreground", x, y)
+
 		return
 	}
 

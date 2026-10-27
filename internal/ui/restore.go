@@ -58,6 +58,7 @@ func (a *App) startRestored() tea.Cmd {
 	if len(a.store.State().Panes) == 0 {
 		a.notice = ""
 		cmds = append(cmds, a.openPane(core.KindShell, core.SplitVertical))
+
 		collect()
 	}
 

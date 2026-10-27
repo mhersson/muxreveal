@@ -183,7 +183,9 @@ func (a *App) frameBody(g geometry, st core.State, lk look) []string {
 
 	for id, r := range g.rects {
 		c := contentRect(r)
+
 		var lines []string
+
 		fit := false
 
 		if p := a.panes[id]; p != nil {
@@ -259,14 +261,17 @@ func edgePanes(g geometry) (left, right core.PaneID) {
 // their full key sequences.
 func (a *App) welcomeHints() []hint {
 	ids := []string{"palette.open", "agent.new", "pane.split.down", "pane.split.right", "theme.pick", "app.quit"}
+
 	hints := make([]hint, 0, len(ids))
 	for _, id := range ids {
 		key, ok := a.keymap.keyFor(id)
+
 		c, found := a.reg.get(id)
 		if ok && found {
 			hints = append(hints, hint{key: key, title: c.title})
 		}
 	}
+
 	return hints
 }
 
@@ -275,6 +280,7 @@ func spaces(body lipgloss.Style, n int) string {
 	if n <= 0 {
 		return ""
 	}
+
 	return body.Render(strings.Repeat(" ", n))
 }
 
@@ -288,6 +294,7 @@ func fitWidth(s string, w int, body lipgloss.Style) string {
 	case got > w:
 		return ansi.Truncate(s, w, "")
 	}
+
 	return s + spaces(body, w-got)
 }
 
@@ -297,6 +304,7 @@ func printable(t string) string {
 		if r < 0x20 || r == 0x7f || (r >= 0x80 && r < 0xa0) {
 			return -1
 		}
+
 		return r
 	}, t)
 }
@@ -318,22 +326,29 @@ func (a *App) cursorBase(g geometry) *tea.Cursor {
 	if a.prompt != nil {
 		return a.promptCursor(g)
 	}
+
 	if a.overlay != nil || a.popup || a.sequenceOpen() || a.confirm != nil {
 		return nil
 	}
+
 	if a.copy != nil {
 		return a.copyCursor(g)
 	}
+
 	st := a.store.State()
 	p := a.panes[st.Tab().Focus]
+
 	r, ok := g.rects[st.Tab().Focus]
 	if p == nil || !ok {
 		return nil
 	}
+
 	pos, visible := p.cursor()
+
 	c := contentRect(r)
 	if !visible || pos.X < 0 || pos.Y < 0 || pos.X >= c.W || pos.Y >= c.H {
 		return nil
 	}
+
 	return tea.NewCursor(c.X+pos.X, c.Y+pos.Y)
 }

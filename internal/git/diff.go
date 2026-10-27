@@ -136,7 +136,7 @@ func NewEngine(l Limits, tempDir string) *Engine {
 		l.Lines = d.Lines
 	}
 
-	return &Engine{limits: l, tempDir: tempDir, cache: newHunkCache(cacheEntries, cacheBytes)}
+	return &Engine{limits: l, tempDir: tempDir, cache: newHunkCache(cacheBytes)}
 }
 
 // Diff computes the diff for src.

@@ -17,6 +17,7 @@ func newTestVT(t *testing.T, cols, rows int) term.VT {
 	t.Helper()
 
 	v := term.NewVT(cols, rows, discard{})
+
 	t.Cleanup(func() { _ = v.Close() })
 
 	return v

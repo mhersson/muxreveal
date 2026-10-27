@@ -1,0 +1,29 @@
+# Go modules and GitHub Actions, weekly on Saturday at 02:00 Oslo time, with
+# minor and patch updates grouped into one pull request per ecosystem.
+version: 2
+updates:
+  - package-ecosystem: "gomod"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "saturday"
+      time: "02:00"
+      timezone: "Europe/Oslo"
+    groups:
+      minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "saturday"
+      time: "02:00"
+      timezone: "Europe/Oslo"
+    groups:
+      minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"

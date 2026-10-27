@@ -72,6 +72,7 @@ func kindOwner(k core.PaneKind) uint8 {
 	if k == core.KindAgent {
 		return ownAgent
 	}
+
 	return ownShell
 }
 
@@ -83,6 +84,7 @@ const titleRoomMin = 4
 // corner. The cells between them stay border.
 func (a *App) topBorder(s core.State, id core.PaneID, r core.Rect, focused bool, st styles) []segment {
 	meta := s.Panes[id]
+
 	kindStyle, titleStyle := st.kind(meta.Kind), st.titleMuted
 	if focused {
 		titleStyle = kindStyle
@@ -185,6 +187,7 @@ func (a *App) topBorder(s core.State, id core.PaneID, r core.Rect, focused bool,
 	if meta.Kind == core.KindAgent {
 		title = "claude"
 	}
+
 	if p := a.panes[id]; p != nil {
 		if t := printable(p.title()); t != "" {
 			title = t
@@ -195,10 +198,12 @@ func (a *App) topBorder(s core.State, id core.PaneID, r core.Rect, focused bool,
 	if a.icons {
 		lead = 4
 	}
+
 	room := left - (r.X + 1) - lead - 1
 	if room < titleRoomMin {
 		return segs
 	}
+
 	tw := ansi.StringWidth(title)
 	if tw > room {
 		title = ansi.Truncate(title, room, "…")
@@ -207,12 +212,16 @@ func (a *App) topBorder(s core.State, id core.PaneID, r core.Rect, focused bool,
 
 	var sb strings.Builder
 	sb.WriteString(st.body.Render(" "))
+
 	if a.icons {
 		sb.WriteString(kindStyle.Render(kindIcon(meta.Kind)))
 		sb.WriteString(st.body.Render(" "))
 	}
+
 	sb.WriteString(titleStyle.Render(title))
+
 	w := lead - 1 + tw + 1
+
 	sb.WriteString(st.body.Render(" "))
 
 	return append(segs, segment{r.X + 2, w, sb.String()})
@@ -308,5 +317,6 @@ func kindIcon(k core.PaneKind) string {
 	if k == core.KindAgent {
 		return iconAgent
 	}
+
 	return iconShell
 }

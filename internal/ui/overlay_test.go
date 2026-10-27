@@ -24,6 +24,7 @@ func fastApp(t *testing.T) *App {
 	t.Helper()
 	a := newTestApp(t)
 	a.keymap.delay = 0
+
 	return a
 }
 
@@ -33,6 +34,7 @@ func run(a *App, cmd tea.Cmd) {
 	if cmd == nil {
 		return
 	}
+
 	switch msg := cmd().(type) {
 	case nil:
 	case tea.BatchMsg:
@@ -64,13 +66,16 @@ func TestPaletteListsEveryCommand(t *testing.T) {
 	a := fastApp(t)
 	sized(t, a, 100, 30)
 	pressRun(a, keyLeader, keyRune(':'))
+
 	if a.overlay == nil {
 		t.Fatal("overlay not open after leader :")
 	}
+
 	var want []string
 	for _, c := range a.reg.all() {
 		want = append(want, c.id)
 	}
+
 	view := ansi.Strip(a.View().Content)
 	// The list scrolls past one page; the first page shows in registration order.
 	for _, c := range a.reg.all()[:min(len(want), palette.MaxRows)] {
@@ -78,13 +83,16 @@ func TestPaletteListsEveryCommand(t *testing.T) {
 			t.Errorf("palette view lacks command %q (%s)", c.title, c.id)
 		}
 	}
+
 	var got []string
 	for _, it := range a.overlay.items {
 		got = append(got, it.ID)
 	}
+
 	if !slices.Equal(got, want) {
 		t.Errorf("palette ids = %v, want %v", got, want)
 	}
+
 	if !strings.Contains(view, "ctrl+space n") {
 		t.Errorf("palette lacks the new agent hint:\n%s", view)
 	}
@@ -97,19 +105,23 @@ func TestPaletteIcons(t *testing.T) {
 			a.icons = icons
 			sized(t, a, 100, 30)
 			pressRun(a, keyLeader, keyRune(':'))
+
 			view := ansi.Strip(a.View().Content)
 			for _, g := range []string{iconPalette, iconTheme, iconAgent, iconSplitDown, iconPanes, iconFocus} {
 				if got := strings.Contains(view, g); got != icons {
 					t.Errorf("glyph %q present = %v, want %v:\n%s", g, got, icons, view)
 				}
 			}
+
 			title := "\u256d\u2500 " + iconPalette + " Commands "
 			if !icons {
 				title = "\u256d\u2500 Commands "
 			}
+
 			if !strings.Contains(view, title) {
 				t.Errorf("palette lacks title %q:\n%s", title, view)
 			}
+
 			if !strings.Contains(view, " 1 of ") {
 				t.Errorf("palette lacks its count:\n%s", view)
 			}
@@ -123,10 +135,12 @@ func TestThemePickerIcons(t *testing.T) {
 		a.icons = icons
 		sized(t, a, 100, 30)
 		pressRun(a, keyLeader, keyRune('t'))
+
 		view := ansi.Strip(a.View().Content)
 		if got := strings.Contains(view, iconTheme); got != icons {
 			t.Errorf("icons=%v: theme glyph present = %v:\n%s", icons, got, view)
 		}
+
 		if !strings.Contains(view, " Theme ") || !strings.Contains(view, " of 4 ") {
 			t.Errorf("icons=%v: picker lacks its title or count:\n%s", icons, view)
 		}
@@ -139,9 +153,11 @@ func TestPaletteRunsCommand(t *testing.T) {
 	pressRun(a, keyLeader, keyRune(':'))
 	typeText(a, "macchiato")
 	pressRun(a, keyEnter)
+
 	if a.overlay != nil {
 		t.Error("overlay still open after enter")
 	}
+
 	if got := a.store.State().Theme; got != "catppuccin-macchiato" {
 		t.Errorf("theme = %q, want catppuccin-macchiato", got)
 	}
@@ -153,6 +169,7 @@ func TestPaletteOpensThemePicker(t *testing.T) {
 	pressRun(a, keyLeader, keyRune(':'))
 	typeText(a, "pick")
 	pressRun(a, keyEnter)
+
 	if a.overlay == nil || a.overlay.kind != overlayThemes {
 		t.Fatalf("overlay = %+v, want the theme picker", a.overlay)
 	}
@@ -162,13 +179,16 @@ func TestThemePickerCommits(t *testing.T) {
 	a := fastApp(t)
 	sized(t, a, 100, 30)
 	pressRun(a, keyLeader, keyRune('t'), keyDown, keyEnter)
+
 	latte := mustTheme(t, "catppuccin-latte")
 	if got := a.store.State().Theme; got != latte.Name {
 		t.Errorf("theme = %q, want %q", got, latte.Name)
 	}
+
 	if a.overlay != nil || a.preview != nil {
 		t.Error("overlay or preview still set after enter")
 	}
+
 	if got := a.View().BackgroundColor; got != latte.UI.Bg {
 		t.Errorf("background = %v, want %v", got, latte.UI.Bg)
 	}
@@ -178,27 +198,36 @@ func TestThemePickerEscRestores(t *testing.T) {
 	a := fastApp(t)
 	sized(t, a, 100, 30)
 	mocha := mustTheme(t, "catppuccin-mocha")
+
 	pressRun(a, keyLeader, keyRune('t'))
+
 	for _, name := range []string{"catppuccin-latte", "catppuccin-frappe", "catppuccin-macchiato"} {
 		pressRun(a, keyDown)
+
 		th := mustTheme(t, name)
 		if got := a.View().BackgroundColor; got != th.UI.Bg {
 			t.Errorf("after moving to %s: background = %v, want %v", name, got, th.UI.Bg)
 		}
+
 		if got := a.store.State().Theme; got != mocha.Name {
 			t.Errorf("after moving to %s: store theme = %q, want mocha", name, got)
 		}
 	}
+
 	pressRun(a, keyEsc)
+
 	if a.overlay != nil || a.preview != nil {
 		t.Error("overlay or preview still set after esc")
 	}
+
 	v := a.View()
 	if v.BackgroundColor != mocha.UI.Bg {
 		t.Errorf("background after esc = %v, want %v", v.BackgroundColor, mocha.UI.Bg)
 	}
+
 	fresh := fastApp(t)
 	sized(t, fresh, 100, 30)
+
 	if v.Content != fresh.View().Content {
 		t.Error("view after esc differs from a never-previewed shell")
 	}
@@ -208,15 +237,18 @@ func TestOverlayOwnsKeys(t *testing.T) {
 	a := fastApp(t)
 	sized(t, a, 100, 30)
 	pressRun(a, keyLeader, keyRune(':'))
+
 	cmd := press(a, keyLeader, keyRune('q'))
 	if a.pending {
 		t.Error("leader started while the overlay is open")
 	}
+
 	if cmd != nil {
 		if _, ok := cmd().(tea.QuitMsg); ok {
 			t.Error("q quit the app instead of typing into the query")
 		}
 	}
+
 	if view := ansi.Strip(a.View().Content); !strings.Contains(view, "\u276f q") {
 		t.Errorf("query does not show q:\n%s", view)
 	}
@@ -229,6 +261,7 @@ func TestOverlayEndsLeaderPopup(t *testing.T) {
 	seq := a.seq
 	pressRun(a, keyRune(':'))
 	a.Update(whichKeyMsg{seq: seq})
+
 	if a.popup {
 		t.Error("stale which-key tick opened the popup over the overlay")
 	}
@@ -242,10 +275,12 @@ func TestOverlaySizes(t *testing.T) {
 				a := fastApp(t)
 				sized(t, a, w, h)
 				pressRun(a, keyLeader, keyRune(key))
+
 				lines := strings.Split(a.View().Content, "\n")
 				if len(lines) != h {
 					t.Fatalf("view has %d lines, want %d", len(lines), h)
 				}
+
 				for i, l := range lines {
 					if got := lipgloss.Width(l); got != w {
 						t.Errorf("line %d width = %d, want %d", i, got, w)
@@ -288,6 +323,7 @@ func TestLateHighlightIgnored(t *testing.T) {
 		sized(t, a, 100, 30)
 		pressRun(a, keyLeader, keyRune('t'), keyEsc)
 		a.Update(latte)
+
 		if got := a.View().BackgroundColor; got != mocha.UI.Bg {
 			t.Errorf("background = %v, want mocha %v", got, mocha.UI.Bg)
 		}
@@ -297,6 +333,7 @@ func TestLateHighlightIgnored(t *testing.T) {
 		sized(t, a, 100, 30)
 		pressRun(a, keyLeader, keyRune('t'), keyDown, keyDown, keyEnter)
 		a.Update(latte)
+
 		if got := a.View().BackgroundColor; got != frappe.UI.Bg {
 			t.Errorf("background = %v, want frappe %v", got, frappe.UI.Bg)
 		}
@@ -306,6 +343,7 @@ func TestLateHighlightIgnored(t *testing.T) {
 		sized(t, a, 100, 30)
 		pressRun(a, keyLeader, keyRune('t'), keyDown, keyDown)
 		a.Update(latte)
+
 		if got := a.View().BackgroundColor; got != frappe.UI.Bg {
 			t.Errorf("background = %v, want frappe %v", got, frappe.UI.Bg)
 		}
@@ -318,6 +356,7 @@ func TestPasteReachesPalette(t *testing.T) {
 	pressRun(a, keyLeader, keyRune(':'))
 	_, cmd := a.Update(tea.PasteMsg{Content: "quit"})
 	run(a, cmd)
+
 	view := ansi.Strip(a.View().Content)
 	if !strings.Contains(view, "\u276f quit") || strings.Contains(view, "Theme: Catppuccin") {
 		t.Errorf("paste did not filter the palette:\n%s", view)
@@ -328,17 +367,22 @@ func TestLateChosenIgnored(t *testing.T) {
 	a := fastApp(t)
 	sized(t, a, 100, 30)
 	pressRun(a, keyLeader, keyRune(':'))
+
 	chosen := palette.ChosenMsg{ID: "theme.pick"}
 	_, cmd := a.Update(chosen)
 	run(a, cmd)
+
 	if a.overlay == nil || a.overlay.kind != overlayThemes {
 		t.Fatalf("overlay = %+v, want the theme picker", a.overlay)
 	}
+
 	_, cmd = a.Update(chosen)
 	run(a, cmd)
+
 	if a.overlay == nil || a.overlay.kind != overlayThemes {
 		t.Errorf("late chosen closed or replaced the picker: %+v", a.overlay)
 	}
+
 	if got := a.store.State().Theme; got != "catppuccin-mocha" {
 		t.Errorf("store theme = %q, want catppuccin-mocha", got)
 	}
@@ -349,11 +393,14 @@ func TestOverlayBeforeFirstSize(t *testing.T) {
 	press(a, keyLeader)
 	a.Update(whichKeyMsg{seq: a.seq})
 	pressRun(a, keyRune(':'))
+
 	v := a.View()
 	if v.Content != "" || !v.AltScreen {
 		t.Errorf("unsized view content = %q, AltScreen = %v, want empty and true", v.Content, v.AltScreen)
 	}
+
 	sized(t, a, 100, 30)
+
 	if view := ansi.Strip(a.View().Content); !strings.Contains(view, "Commands") {
 		t.Errorf("palette not visible after sizing:\n%s", view)
 	}
@@ -364,6 +411,7 @@ func TestPaletteFooterPlacement(t *testing.T) {
 	for i := range items {
 		items[i] = palette.Item{ID: fmt.Sprint(i), Title: fmt.Sprint("item ", i)}
 	}
+
 	pal := palette.New("Commands", items, mustTheme(t, "catppuccin-mocha"))
 	// The box is 16 rows tall with ten results and starts at a quarter of the height.
 	for _, tc := range []struct {
@@ -372,10 +420,12 @@ func TestPaletteFooterPlacement(t *testing.T) {
 		wantBottom bool
 	}{{22, true, true}, {21, true, false}, {20, false, false}, {19, false, false}} {
 		base := strings.TrimSuffix(strings.Repeat(strings.Repeat(" ", 80)+"\n", tc.height), "\n")
+
 		text := ansi.Strip(overlayOver(base, 80, tc.height, pal))
 		if got := strings.Contains(text, "esc close"); got != tc.wantHint {
 			t.Errorf("height %d: hint row visible = %v, want %v", tc.height, got, tc.wantHint)
 		}
+
 		if got := strings.Contains(text, "\u2570"); got != tc.wantBottom {
 			t.Errorf("height %d: bottom border visible = %v, want %v", tc.height, got, tc.wantBottom)
 		}
@@ -391,6 +441,7 @@ func TestFooterEnterLabelPerOverlay(t *testing.T) {
 		a := fastApp(t)
 		sized(t, a, 100, 30)
 		pressRun(a, keyLeader, keyRune(tc.key))
+
 		view := ansi.Strip(a.View().Content)
 		if !strings.Contains(view, tc.want) || strings.Contains(view, tc.not) {
 			t.Errorf("overlay %c: want %q and not %q:\n%s", tc.key, tc.want, tc.not, view)

@@ -19,8 +19,10 @@ func newFakeGrid(cols int, wrapped []int, rows ...string) *fakeGrid {
 	for _, r := range wrapped {
 		g.wrapped[r] = true
 	}
+
 	for _, text := range rows {
 		row := make([]uv.Cell, 0, cols)
+
 		for _, r := range text {
 			if r >= 0x2E80 {
 				row = append(row, uv.Cell{Content: string(r), Width: 2}, uv.Cell{Width: 0})
@@ -28,11 +30,14 @@ func newFakeGrid(cols int, wrapped []int, rows ...string) *fakeGrid {
 				row = append(row, uv.Cell{Content: string(r), Width: 1})
 			}
 		}
+
 		for len(row) < cols {
 			row = append(row, uv.Cell{Content: " ", Width: 1})
 		}
+
 		g.cells = append(g.cells, row)
 	}
+
 	return g
 }
 
@@ -42,6 +47,7 @@ func (g *fakeGrid) Cell(row, col int) *uv.Cell {
 	if row < 0 || row >= len(g.cells) || col < 0 || col >= len(g.cells[row]) {
 		return nil
 	}
+
 	return &g.cells[row][col]
 }
 func (g *fakeGrid) Wrapped(row int) bool { return g.wrapped[row] }
@@ -93,6 +99,7 @@ func TestExtract(t *testing.T) {
 
 func TestRowSpan(t *testing.T) {
 	const cols = 10
+
 	tests := []struct {
 		name     string
 		sel      selection
@@ -129,6 +136,7 @@ func TestRowSpan(t *testing.T) {
 func TestWordAt(t *testing.T) {
 	g := newFakeGrid(20, nil, "see ~/src/a-b.go now", "", "", "", "", "中文 x", "")
 	gw := newFakeGrid(13, []int{2}, "", "", "/home/user/pr", "oject/file.go", "")
+
 	tests := []struct {
 		name     string
 		p        point
@@ -150,6 +158,7 @@ func TestWordAt(t *testing.T) {
 			if sel.mode != selStream {
 				t.Errorf("mode = %d, want selStream", sel.mode)
 			}
+
 			from, to := sel.ordered()
 			if from != tt.wantFrom || to != tt.wantTo {
 				t.Errorf("wordAt = %v..%v, want %v..%v", from, to, tt.wantFrom, tt.wantTo)
@@ -160,15 +169,18 @@ func TestWordAt(t *testing.T) {
 	if got := extract(g, wordAt(g, point{0, 8})); got != "~/src/a-b.go" {
 		t.Errorf("extract(wordAt) = %q", got)
 	}
+
 	for _, p := range []point{{2, 3}, {3, 1}} {
 		sel := wordAt(gw, p)
 		if sel.anchor != (point{2, 0}) || sel.head != (point{3, 12}) {
 			t.Errorf("wordAt(%v) across wrap = %+v", p, sel)
 		}
+
 		if got := extract(gw, sel); got != "/home/user/project/file.go" {
 			t.Errorf("extract(wordAt across wrap) = %q", got)
 		}
 	}
+
 	if sel := wordAt(newFakeGrid(5, nil), point{3, 3}); sel.anchor != (point{0, 3}) || sel.head != (point{0, 3}) {
 		t.Errorf("wordAt on empty grid = %+v", sel)
 	}
@@ -176,6 +188,7 @@ func TestWordAt(t *testing.T) {
 
 func TestLineAt(t *testing.T) {
 	g := newFakeGrid(8, []int{1, 2}, "first", "wrapped1", "wrapped2", "end", "other")
+
 	tests := []struct {
 		name         string
 		p            point
@@ -191,12 +204,14 @@ func TestLineAt(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			sel := lineAt(g, tt.p)
+
 			want := selection{selLine, point{tt.wantR1, 0}, point{tt.wrR2, 7}}
 			if sel != want {
 				t.Errorf("lineAt = %+v, want %+v", sel, want)
 			}
 		})
 	}
+
 	if got := extract(g, lineAt(g, point{2, 0})); got != "wrapped1wrapped2end" {
 		t.Errorf("extract(lineAt) = %q", got)
 	}
@@ -204,6 +219,7 @@ func TestLineAt(t *testing.T) {
 
 func TestClampPoint(t *testing.T) {
 	g := newFakeGrid(5, nil, "a", "b", "c")
+
 	tests := []struct{ in, want point }{
 		{point{1, 2}, point{1, 2}},
 		{point{-1, -1}, point{0, 0}},
@@ -214,6 +230,7 @@ func TestClampPoint(t *testing.T) {
 			t.Errorf("clampPoint(%v) = %v, want %v", tt.in, got, tt.want)
 		}
 	}
+
 	if got := clampPoint(newFakeGrid(0, nil), point{4, 4}); got != (point{}) {
 		t.Errorf("clampPoint on empty grid = %v", got)
 	}
@@ -224,11 +241,24 @@ func TestCharClass(t *testing.T) {
 		content string
 		want    int
 	}{
-		{"", classBlank}, {" ", classBlank},
-		{"a", classWord}, {"Z", classWord}, {"7", classWord}, {"_", classWord},
-		{"-", classWord}, {".", classWord}, {"/", classWord}, {"~", classWord}, {":", classWord}, {"@", classWord},
-		{"中", classWord}, {"é", classWord},
-		{"(", classOther}, {",", classOther}, {"=", classOther}, {"\t", classOther},
+		{"", classBlank},
+		{" ", classBlank},
+		{"a", classWord},
+		{"Z", classWord},
+		{"7", classWord},
+		{"_", classWord},
+		{"-", classWord},
+		{".", classWord},
+		{"/", classWord},
+		{"~", classWord},
+		{":", classWord},
+		{"@", classWord},
+		{"中", classWord},
+		{"é", classWord},
+		{"(", classOther},
+		{",", classOther},
+		{"=", classOther},
+		{"\t", classOther},
 	}
 	for _, tt := range tests {
 		if got := charClass(tt.content); got != tt.want {

@@ -190,8 +190,10 @@ func layoutCommands() []command {
 		dir  core.Dir
 		icon string
 	}{
-		{"left", core.Left, iconArrowLeft}, {"down", core.Down, iconArrowDown},
-		{"up", core.Up, iconArrowUp}, {"right", core.Right, iconArrowRight},
+		{"left", core.Left, iconArrowLeft},
+		{"down", core.Down, iconArrowDown},
+		{"up", core.Up, iconArrowUp},
+		{"right", core.Right, iconArrowRight},
 	} {
 		cmds = append(cmds, command{
 			id:    "pane.preselect." + d.name,

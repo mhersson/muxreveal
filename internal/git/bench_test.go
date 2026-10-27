@@ -37,6 +37,7 @@ func timeIt(t *testing.T, f func() error) time.Duration {
 	t.Helper()
 
 	start := time.Now()
+
 	if err := f(); err != nil {
 		t.Fatal(err)
 	}

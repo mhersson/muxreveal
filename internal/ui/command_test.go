@@ -11,6 +11,7 @@ import (
 
 func TestRegistry(t *testing.T) {
 	noop := func(*App) tea.Cmd { return nil }
+
 	tests := []struct {
 		name    string
 		cmds    []command
@@ -28,21 +29,26 @@ func TestRegistry(t *testing.T) {
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("newRegistry() error = %v, wantErr %v", err, tt.wantErr)
 			}
+
 			if err != nil {
 				return
 			}
+
 			got := r.all()
 			if len(got) != len(tt.cmds) {
 				t.Fatalf("all() has %d commands, want %d", len(got), len(tt.cmds))
 			}
+
 			for i, c := range tt.cmds {
 				if got[i].id != c.id {
 					t.Errorf("all()[%d].id = %q, want %q", i, got[i].id, c.id)
 				}
+
 				if byID, ok := r.get(c.id); !ok || byID.title != c.title {
 					t.Errorf("get(%q) = %+v, %v", c.id, byID, ok)
 				}
 			}
+
 			if _, ok := r.get("missing"); ok {
 				t.Error("get(missing) found a command")
 			}
@@ -52,7 +58,9 @@ func TestRegistry(t *testing.T) {
 
 func TestDefaultCommands(t *testing.T) {
 	cmds := defaultCommands()
+
 	type want struct{ id, title, icon string }
+
 	fixed := []want{
 		{"palette.open", "Open command palette", iconPalette},
 		{"theme.pick", "Pick theme", iconTheme},
@@ -63,12 +71,15 @@ func TestDefaultCommands(t *testing.T) {
 	for _, d := range []string{"left", "down", "up", "right"} {
 		fixed = append(fixed, want{"pane.focus." + d, "Focus " + d, iconFocus})
 	}
+
 	for _, d := range []string{"left", "down", "up", "right"} {
 		fixed = append(fixed, want{"pane.resize." + d, "Resize " + d, iconResize})
 	}
+
 	for _, d := range []string{"left", "down", "up", "right"} {
 		fixed = append(fixed, want{"pane.swap." + d, "Swap " + d, iconSwap})
 	}
+
 	fixed = append(fixed,
 		want{"pane.zoom", "Zoom pane", iconZoom},
 		want{"pane.close", "Close pane", iconClose},
@@ -83,12 +94,15 @@ func TestDefaultCommands(t *testing.T) {
 	for n := 1; n <= 9; n++ {
 		fixed = append(fixed, want{fmt.Sprintf("tab.jump.%d", n), fmt.Sprintf("Jump to tab %d", n), iconTabs})
 	}
+
 	for n := 1; n <= 9; n++ {
 		fixed = append(fixed, want{fmt.Sprintf("pane.move.tab.%d", n), fmt.Sprintf("Move pane to tab %d", n), iconMove})
 	}
+
 	for n := 1; n <= 9; n++ {
 		fixed = append(fixed, want{fmt.Sprintf("pane.send.tab.%d", n), fmt.Sprintf("Send pane to tab %d", n), iconMove})
 	}
+
 	fixed = append(fixed,
 		want{"pane.break", "Break pane into new tab", iconBreak},
 		want{"layout.cycle", "Cycle layout", iconLayoutBSP},
@@ -108,11 +122,13 @@ func TestDefaultCommands(t *testing.T) {
 	if len(cmds) != len(fixed)+len(theme.All()) {
 		t.Fatalf("defaultCommands() has %d commands, want %d", len(cmds), len(fixed)+len(theme.All()))
 	}
+
 	for i, f := range fixed {
 		if cmds[i].id != f.id || cmds[i].title != f.title || cmds[i].icon != f.icon {
 			t.Errorf("command %d = %q %q %q, want %s %s %q", i, cmds[i].id, cmds[i].title, cmds[i].icon, f.id, f.title, f.icon)
 		}
 	}
+
 	for i, th := range theme.All() {
 		c := cmds[len(fixed)+i]
 		if c.id != "theme.set."+th.Name || c.title != "Theme: "+th.Title || c.icon != iconTheme {
@@ -124,16 +140,20 @@ func TestDefaultCommands(t *testing.T) {
 func TestThemeCommands(t *testing.T) {
 	a := newTestApp(t)
 	sized(t, a, 100, 30)
+
 	c, ok := a.reg.get("theme.set.catppuccin-latte")
 	if !ok {
 		t.Fatal("theme.set.catppuccin-latte is not registered")
 	}
+
 	if cmd := c.run(a); cmd != nil {
 		t.Errorf("run() cmd = %v, want nil", cmd)
 	}
+
 	if got := a.store.State().Theme; got != "catppuccin-latte" {
 		t.Errorf("store theme = %q, want catppuccin-latte", got)
 	}
+
 	v := a.View()
 	if want := mustTheme(t, "catppuccin-latte").UI.Bg; v.BackgroundColor != want {
 		t.Errorf("BackgroundColor = %v, want %v", v.BackgroundColor, want)

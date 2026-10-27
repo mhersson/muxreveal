@@ -28,6 +28,7 @@ func (s AgentState) String() string {
 	case AgentBlocked:
 		return "blocked"
 	}
+
 	return ""
 }
 
@@ -44,6 +45,7 @@ func (a SetPaneKind) apply(s *State) error {
 	if !ok {
 		return fmt.Errorf("core: no pane %q", a.ID)
 	}
+
 	switch a.Kind {
 	case KindShell:
 		p = Pane{Kind: KindShell, Cwd: p.Cwd}
@@ -51,11 +53,14 @@ func (a SetPaneKind) apply(s *State) error {
 		if a.Harness == "" {
 			return fmt.Errorf("core: SetPaneKind agent for pane %q without a harness", a.ID)
 		}
+
 		p.Kind, p.Harness = KindAgent, a.Harness
 	default:
 		return fmt.Errorf("core: SetPaneKind with unknown kind %q", a.Kind)
 	}
+
 	s.Panes[a.ID] = p
+
 	return nil
 }
 
@@ -65,9 +70,11 @@ func (s *State) agentPane(id PaneID) (Pane, error) {
 	if !ok {
 		return Pane{}, fmt.Errorf("core: no pane %q", id)
 	}
+
 	if p.Kind != KindAgent {
 		return Pane{}, fmt.Errorf("core: pane %q is not an agent", id)
 	}
+
 	return p, nil
 }
 
@@ -84,11 +91,14 @@ func (a SetAgentSession) apply(s *State) error {
 	if err != nil {
 		return err
 	}
+
 	p.Session, p.Transcript = a.Session, a.Transcript
 	if a.Session == "" {
 		p.Transcript = ""
 	}
+
 	s.Panes[a.ID] = p
+
 	return nil
 }
 
@@ -102,12 +112,15 @@ func (a SetAgentState) apply(s *State) error {
 	if a.State < AgentUnknown || a.State > AgentBlocked {
 		return fmt.Errorf("core: SetAgentState with unknown state %d", int(a.State))
 	}
+
 	p, err := s.agentPane(a.ID)
 	if err != nil {
 		return err
 	}
+
 	p.State = a.State
 	s.Panes[a.ID] = p
+
 	return nil
 }
 
@@ -117,18 +130,21 @@ func (s State) TabAgentState(i int) AgentState {
 	if i < 0 || i >= len(s.Tabs) {
 		return AgentUnknown
 	}
+
 	best := AgentUnknown
 	for _, id := range s.tabLeaves(i) {
 		if p := s.Panes[id]; p.Kind == KindAgent && p.State > best {
 			best = p.State
 		}
 	}
+
 	return best
 }
 
 // AgentPanes lists the agent panes by tab, then layout order.
 func (s State) AgentPanes() []PaneID {
 	var out []PaneID
+
 	for i := range s.Tabs {
 		for _, id := range s.tabLeaves(i) {
 			if s.Panes[id].Kind == KindAgent {
@@ -136,6 +152,7 @@ func (s State) AgentPanes() []PaneID {
 			}
 		}
 	}
+
 	return out
 }
 

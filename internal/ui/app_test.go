@@ -26,6 +26,7 @@ func testLogger() *slog.Logger {
 
 func newThemedApp(t *testing.T, name string) *App {
 	t.Helper()
+
 	app, err := New(Options{Logger: testLogger(), Icons: true, Store: core.NewStore(core.State{Theme: name})})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
@@ -37,11 +38,13 @@ func newThemedApp(t *testing.T, name string) *App {
 	}
 	// A copy must never reach the operator's real clipboard tools.
 	app.clip.run = (&fakeRun{}).run
+
 	return app
 }
 
 func newTestApp(t *testing.T) *App {
 	t.Helper()
+
 	return newThemedApp(t, "catppuccin-mocha")
 }
 
@@ -74,17 +77,21 @@ func TestAppViewSizes(t *testing.T) {
 		t.Run(fmt.Sprintf("%dx%d", tt.w, tt.h), func(t *testing.T) {
 			app := newTestApp(t)
 			app.Update(tea.WindowSizeMsg{Width: tt.w, Height: tt.h})
+
 			v := app.View()
 			if !v.AltScreen {
 				t.Error("AltScreen = false, want true")
 			}
+
 			if got := strings.Contains(v.Content, "MuxReveal"); got != tt.wantWord {
 				t.Errorf("view contains MuxReveal = %v, want %v", got, tt.wantWord)
 			}
+
 			lines := strings.Split(v.Content, "\n")
 			if len(lines) != tt.h {
 				t.Fatalf("view has %d lines, want %d:\n%s", len(lines), tt.h, v.Content)
 			}
+
 			for i, line := range lines {
 				if got := lipgloss.Width(line); got != tt.w {
 					t.Errorf("line %d width = %d, want %d: %q", i, got, tt.w, line)
@@ -108,6 +115,7 @@ func press(a *App, keys ...tea.KeyPressMsg) tea.Cmd {
 	for _, k := range keys {
 		_, cmd = a.Update(k)
 	}
+
 	return cmd
 }
 
@@ -133,21 +141,26 @@ func TestLeader(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			a := newTestApp(t)
 			sized(t, a, 140, 30)
+
 			cmd := press(a, tt.keys...)
 			if (cmd != nil) != tt.wantCmd {
 				t.Fatalf("last cmd non-nil = %v, want %v", cmd != nil, tt.wantCmd)
 			}
+
 			if tt.wantQuit {
 				if _, ok := cmd().(tea.QuitMsg); !ok {
 					t.Errorf("cmd() is not tea.QuitMsg")
 				}
 			}
+
 			if a.pending != tt.wantPending {
 				t.Errorf("pending = %v, want %v", a.pending, tt.wantPending)
 			}
+
 			if a.notice != tt.wantNotice {
 				t.Errorf("notice = %q, want %q", a.notice, tt.wantNotice)
 			}
+
 			plain := ansi.Strip(a.View().Content)
 			if got := strings.Contains(plain, tt.wantNotice); tt.wantNotice != "" && !got {
 				t.Errorf("view lacks notice %q:\n%s", tt.wantNotice, plain)
@@ -160,13 +173,17 @@ func TestNoticeClearsOnNextKey(t *testing.T) {
 	a := newTestApp(t)
 	sized(t, a, 100, 30)
 	press(a, keyLeader, keyRune('w'))
+
 	if a.notice == "" {
 		t.Fatal("no notice after an unbound key")
 	}
+
 	press(a, keyRune('y'))
+
 	if a.notice != "" {
 		t.Errorf("notice = %q after the next key, want empty", a.notice)
 	}
+
 	if strings.Contains(ansi.Strip(a.View().Content), "is not bound") {
 		t.Error("view still shows the notice")
 	}
@@ -181,14 +198,18 @@ func TestWhichKey(t *testing.T) {
 	sized(t, a, 100, 30)
 	before := hintCount(a)
 	press(a, keyLeader)
+
 	if got := hintCount(a); got != before {
 		t.Errorf("popup visible before the delay: %d hints, want %d", got, before)
 	}
+
 	a.Update(whichKeyMsg{seq: a.seq})
+
 	plain := ansi.Strip(a.View().Content)
 	if got := hintCount(a); got != before+1 {
 		t.Errorf("hints = %d, want %d:\n%s", got, before+1, plain)
 	}
+
 	for _, want := range []string{
 		"\u256d\u2500 " + iconLeader + " ctrl+space ",
 		iconPanes + " Panes", iconTabs + " Tabs", iconCog + " App",
@@ -204,7 +225,9 @@ func TestWhichKey(t *testing.T) {
 			t.Errorf("popup lacks the row %q:\n%s", row, plain)
 		}
 	}
+
 	press(a, keyEsc)
+
 	if hintCount(a) != before {
 		t.Error("popup still visible after esc")
 	}
@@ -216,12 +239,14 @@ func TestWhichKeyNoIcons(t *testing.T) {
 	sized(t, a, 100, 30)
 	press(a, keyLeader)
 	a.Update(whichKeyMsg{seq: a.seq})
+
 	plain := ansi.Strip(a.View().Content)
 	for _, want := range []string{"\u256d\u2500 ctrl+space \u2500", "Panes", "Tabs", "App"} {
 		if !strings.Contains(plain, want) {
 			t.Errorf("popup lacks %q:\n%s", want, plain)
 		}
 	}
+
 	for _, ic := range []string{iconLeader, iconPanes, iconTabs, iconCog} {
 		if strings.Contains(plain, ic) {
 			t.Errorf("popup draws glyph %q with icons off", ic)
@@ -232,12 +257,15 @@ func TestWhichKeyNoIcons(t *testing.T) {
 // cellOf finds the first cell of needle in the stripped screen rows.
 func cellOf(t *testing.T, rows []string, needle string) (x, y int) {
 	t.Helper()
+
 	for y, row := range rows {
 		if i := strings.Index(row, needle); i >= 0 {
 			return lipgloss.Width(row[:i]), y
 		}
 	}
+
 	t.Fatalf("screen lacks %q:\n%s", needle, strings.Join(rows, "\n"))
+
 	return 0, 0
 }
 
@@ -249,10 +277,13 @@ func TestWhichKeyColours(t *testing.T) {
 	a.Update(whichKeyMsg{seq: a.seq})
 	content := a.View().Content
 	vt := term.NewVT(100, 30, io.Discard)
+
 	t.Cleanup(func() { _ = vt.Close() })
+
 	if _, err := vt.Write([]byte(strings.ReplaceAll(content, "\n", "\r\n"))); err != nil {
 		t.Fatal(err)
 	}
+
 	rows := strings.Split(ansi.Strip(content), "\n")
 
 	x, y := cellOf(t, rows, "\u256d\u2500 "+iconLeader)
@@ -281,6 +312,7 @@ func TestWhichKeyColours(t *testing.T) {
 func bindingsWithout(keys ...string) keymap {
 	km := defaultKeymap()
 	km.bindings = slices.DeleteFunc(km.bindings, func(b binding) bool { return slices.Contains(keys, b.key) })
+
 	return km
 }
 
@@ -291,31 +323,46 @@ func TestHintsDeriveFromBindings(t *testing.T) {
 		want    []string
 		notWant []string
 	}{
-		{"all bound", nil,
+		{
+			"all bound", nil,
 			[]string{"h j k l|Focus pane", "H J K L|Resize pane", "^h^j^k^l|Swap pane", "1-9|Jump to tab"},
-			[]string{"h|Focus left"}},
-		{"partial focus", []string{"j"},
+			[]string{"h|Focus left"},
+		},
+		{
+			"partial focus",
+			[]string{"j"},
 			[]string{"h|Focus left", "k|Focus up", "l|Focus right"},
-			[]string{"h j k l|Focus pane"}},
-		{"partial jump", []string{"5"},
+			[]string{"h j k l|Focus pane"},
+		},
+		{
+			"partial jump",
+			[]string{"5"},
 			[]string{"1|Jump to tab 1", "9|Jump to tab 9"},
-			[]string{"1-9|Jump to tab"}},
-		{"no swap", []string{"ctrl+h", "ctrl+j", "ctrl+k", "ctrl+l"}, nil,
-			[]string{"Swap pane", "Swap left"}},
+			[]string{"1-9|Jump to tab"},
+		},
+		{
+			"no swap",
+			[]string{"ctrl+h", "ctrl+j", "ctrl+k", "ctrl+l"},
+			nil,
+			[]string{"Swap pane", "Swap left"},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			a := newTestApp(t)
 			a.keymap = bindingsWithout(tt.unbind...)
+
 			var got []string
 			for _, h := range a.hints() {
 				got = append(got, h.key+"|"+h.title)
 			}
+
 			for _, w := range tt.want {
 				if !slices.Contains(got, w) {
 					t.Errorf("hints lack %q: %q", w, got)
 				}
 			}
+
 			for _, w := range tt.notWant {
 				if slices.ContainsFunc(got, func(g string) bool { return strings.Contains(g, w) }) {
 					t.Errorf("hints contain %q: %q", w, got)
@@ -328,12 +375,15 @@ func TestHintsDeriveFromBindings(t *testing.T) {
 func TestHintGroups(t *testing.T) {
 	a := newTestApp(t)
 	groups := map[string]string{}
+
 	for _, h := range a.hints() {
 		if h.group == "" {
 			t.Errorf("hint %q has no group", h.title)
 		}
+
 		groups[h.title] = h.group
 	}
+
 	for title, want := range map[string]string{
 		"Focus pane": "Panes", "Zoom pane": "Panes", "New tab": "Tabs",
 		"Jump to tab": "Tabs", "Quit MuxReveal": "App", "Pick theme": "App",
@@ -363,9 +413,11 @@ func TestStaleWhichKey(t *testing.T) {
 			before := hintCount(a)
 			press(a, tt.keys...)
 			a.Update(whichKeyMsg{seq: first})
+
 			if got := hintCount(a); got != before {
 				t.Errorf("stale tick opened the popup: %d hints, want %d", got, before)
 			}
+
 			if a.popup {
 				t.Error("popup = true after a stale tick")
 			}
@@ -381,16 +433,20 @@ func TestWhichKeySizes(t *testing.T) {
 			press(a, keyLeader)
 			a.Update(whichKeyMsg{seq: a.seq})
 			content := a.View().Content
+
 			lines := strings.Split(content, "\n")
 			if len(lines) != sz[1] {
 				t.Fatalf("view has %d lines, want %d", len(lines), sz[1])
 			}
+
 			for i, line := range lines {
 				if got := lipgloss.Width(line); got != sz[0] {
 					t.Errorf("line %d width = %d, want %d: %q", i, got, sz[0], line)
 				}
 			}
+
 			plain := ansi.Strip(content)
+
 			switch sz[0] {
 			case 100, 80:
 				// Fits whole: the bottom border sits on the last row, one cell from the edge.

@@ -34,9 +34,11 @@ type MovePane struct {
 
 func (a MovePane) apply(s *State) error {
 	s.normalize()
+
 	if a.Tab > maxMoveTab {
 		return ErrNoTab
 	}
+
 	return a.move(s)
 }
 
@@ -47,12 +49,15 @@ func (a MovePane) move(s *State) error {
 	if !ok {
 		return fmt.Errorf("core: no pane %q", a.ID)
 	}
+
 	if a.Tab < 0 || a.Tab > len(s.Tabs) {
 		return ErrNoTab
 	}
+
 	if a.Tab == src {
 		return ErrSameTab
 	}
+
 	lone := len(s.Tabs[src].Panes) == 1
 	if lone && a.Tab == len(s.Tabs) {
 		return ErrAlone
@@ -63,25 +68,31 @@ func (a MovePane) move(s *State) error {
 		s.NextTabID++
 		s.Tabs = append(s.Tabs, Tab{ID: TabID("t" + strconv.Itoa(s.NextTabID))})
 	}
+
 	if err := s.Tabs[dst].place(a.ID, "", a.Area, s.Layout); err != nil {
 		return err
 	}
+
 	s.Tabs[dst].setFocus(a.ID)
 	s.Tabs[dst].Zoomed = false
 
 	activeID := s.Tabs[s.Active].ID
+
 	dstID := s.Tabs[dst].ID
 	if lone {
 		s.Tabs = slices.Delete(s.Tabs, src, src+1)
 	} else {
 		t := &s.Tabs[src]
+
 		next, err := t.remove(a.ID)
 		if err != nil {
 			return err
 		}
+
 		if t.Focus == a.ID {
 			t.Zoomed = false
 		}
+
 		t.setFocus(next)
 	}
 
@@ -93,6 +104,7 @@ func (a MovePane) move(s *State) error {
 	default:
 		s.Active = active
 	}
+
 	return nil
 }
 
@@ -104,5 +116,6 @@ type BreakPane struct {
 
 func (a BreakPane) apply(s *State) error {
 	s.normalize()
+
 	return MovePane{ID: a.ID, Tab: len(s.Tabs), Follow: true, Area: a.Area}.move(s)
 }

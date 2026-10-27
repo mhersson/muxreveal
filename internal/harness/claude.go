@@ -31,9 +31,11 @@ func (Claude) Launch(settings string, resume core.SessionID) []string {
 	if settings != "" {
 		argv = append(argv, "--settings", settings)
 	}
+
 	if resume != "" {
 		argv = append(argv, "--resume", string(resume))
 	}
+
 	return argv
 }
 
@@ -42,27 +44,33 @@ func (c Claude) Settings(exe string) ([]byte, error) {
 	if !filepath.IsAbs(exe) {
 		return nil, fmt.Errorf("harness: hook executable %q is not an absolute path", exe)
 	}
+
 	type handler struct {
 		Type    string   `json:"type"`
 		Command string   `json:"command"`
 		Args    []string `json:"args"`
 		Timeout int      `json:"timeout"`
 	}
+
 	type group struct {
 		Hooks []handler `json:"hooks"`
 	}
+
 	h := handler{Type: "command", Command: exe, Args: []string{"hook", c.ID()}, Timeout: hookTimeout}
 	events := claudeEvents()
+
 	hooks := make(map[string][]group, len(events))
 	for _, name := range events {
 		hooks[name] = []group{{Hooks: []handler{h}}}
 	}
+
 	out, err := json.Marshal(struct {
 		Hooks map[string][]group `json:"hooks"`
 	}{hooks})
 	if err != nil {
 		return nil, fmt.Errorf("harness: encode settings: %w", err)
 	}
+
 	return out, nil
 }
 
@@ -83,9 +91,11 @@ func (Claude) ParseEvent(payload []byte) (Event, error) {
 	if err := json.Unmarshal(payload, &p); err != nil {
 		return Event{}, fmt.Errorf("harness: parse claude-code payload: %w", err)
 	}
+
 	if p.Name == "" {
 		return Event{}, errors.New("harness: claude-code payload has no hook_event_name")
 	}
+
 	ev := Event{
 		Name:       p.Name,
 		Session:    core.SessionID(p.SessionID),
@@ -122,5 +132,6 @@ func (Claude) ParseEvent(payload []byte) (Event, error) {
 	default:
 		return Event{}, fmt.Errorf("harness: unknown claude-code event %q", p.Name)
 	}
+
 	return ev, nil
 }

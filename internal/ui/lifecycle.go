@@ -85,6 +85,7 @@ func (a *App) openPane(kind core.PaneKind, split core.Split) tea.Cmd {
 	if kind == core.KindAgent {
 		act.Harness = a.harness.ID()
 	}
+
 	id := st.NewPaneID()
 
 	// The pane starts at its final size, found by applying the action to a copy.

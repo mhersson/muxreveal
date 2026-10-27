@@ -30,6 +30,7 @@ type copyMode struct {
 
 func newCopyMode(g grid, viewTop, viewRows int) copyMode {
 	row := max(min(viewTop+max(viewRows, 1)-1, g.Rows()-1), 0)
+
 	return copyMode{cursor: point{row, 0}, top: viewTop}
 }
 
@@ -42,6 +43,7 @@ func (m copyMode) viewTop(viewRows, current int) int {
 	case m.cursor.row > current+viewRows-1:
 		return m.cursor.row - viewRows + 1
 	}
+
 	return current
 }
 
@@ -63,6 +65,7 @@ func (m copyMode) key(g grid, key string, viewRows int) (copyMode, copyAction) {
 		} else {
 			c.col++
 		}
+
 		if c.col > g.Cols()-1 {
 			c.col = m.cursor.col
 		}
@@ -88,8 +91,10 @@ func (m copyMode) key(g grid, key string, viewRows int) (copyMode, copyAction) {
 	case "g":
 		if !wasG {
 			m.pendingG = true
+
 			return m, copyNone
 		}
+
 		c = point{0, firstNonBlank(g, 0)}
 	case "H", "M", "L":
 		offset := map[string]int{"H": 0, "M": (viewRows - 1) / 2, "L": viewRows - 1}[key]
@@ -100,9 +105,11 @@ func (m copyMode) key(g grid, key string, viewRows int) (copyMode, copyAction) {
 		if key == "ctrl+b" || key == "ctrl+f" {
 			delta = viewRows
 		}
+
 		if key == "ctrl+u" || key == "ctrl+b" {
 			delta = -delta
 		}
+
 		c.row += delta
 		m.top = min(max(m.top+delta, 0), maxTop)
 		paged = true
@@ -118,6 +125,7 @@ func (m copyMode) key(g grid, key string, viewRows int) (copyMode, copyAction) {
 			s.mode = mode
 			m.sel = &s
 		}
+
 		return m, copyNone
 	case "y":
 		return m, copyYank
@@ -131,10 +139,12 @@ func (m copyMode) key(g grid, key string, viewRows int) (copyMode, copyAction) {
 		if m.lastSearch == "" {
 			return m, copyNone
 		}
+
 		dir := m.backward
 		next, _ := m.search(g, m.lastSearch, dir != (key == "N"))
 		next.backward = dir
 		next.top = next.viewTop(viewRows, next.top)
+
 		return next, copyNone
 	default:
 		return m, copyNone
@@ -144,16 +154,19 @@ func (m copyMode) key(g grid, key string, viewRows int) (copyMode, copyAction) {
 	if rows > 0 {
 		c = normalizeCol(g, c)
 	}
+
 	m.cursor = c
 	if paged {
 		m.top = min(max(m.top, 0), maxTop)
 	}
+
 	m.top = m.viewTop(viewRows, m.top)
 	if m.sel != nil {
 		s := *m.sel
 		s.head = m.cursor
 		m.sel = &s
 	}
+
 	return m, copyNone
 }
 
@@ -164,9 +177,13 @@ func (m copyMode) search(g grid, query string, backward bool) (copyMode, bool) {
 	if query == "" || rows == 0 {
 		return m, false
 	}
+
 	cur := point{row: ((m.cursor.row % rows) + rows) % rows, col: m.cursor.col}
+
 	var hit point
+
 	found := false
+
 	if backward {
 		// The last match before the cursor, else the last one in the grid.
 		scanMatches(g, 0, cur.row+1, query, func(row int, cols []int) bool {
@@ -174,13 +191,17 @@ func (m copyMode) search(g grid, query string, backward bool) (copyMode, bool) {
 				if row == cur.row && c >= cur.col {
 					break
 				}
+
 				hit, found = point{row, c}, true
 			}
+
 			return true
 		})
+
 		if !found {
 			scanMatches(g, cur.row, rows, query, func(row int, cols []int) bool {
 				hit, found = point{row, cols[len(cols)-1]}, true
+
 				return true
 			})
 		}
@@ -191,28 +212,37 @@ func (m copyMode) search(g grid, query string, backward bool) (copyMode, bool) {
 				if row == cur.row && c <= cur.col {
 					continue
 				}
+
 				hit, found = point{row, c}, true
+
 				return false
 			}
+
 			return true
 		})
+
 		if !found {
 			scanMatches(g, 0, cur.row+1, query, func(row int, cols []int) bool {
 				hit, found = point{row, cols[0]}, true
+
 				return false
 			})
 		}
 	}
+
 	if !found {
 		return m, false
 	}
+
 	m.cursor = hit
+
 	m.lastSearch, m.backward = query, backward
 	if m.sel != nil {
 		s := *m.sel
 		s.head = m.cursor
 		m.sel = &s
 	}
+
 	return m, true
 }
 
@@ -231,45 +261,63 @@ type textScanner interface {
 // false. cols is valid only inside fn.
 func scanMatches(g grid, from, end int, query string, fn func(row int, cols []int) bool) {
 	mt := rowMatcher{query: []byte(query)}
+
 	if ts, ok := g.(textScanner); ok && from < ts.historyRows() {
 		hist := min(end, ts.historyRows())
 		stop := false
+
 		ts.scanText(from, hist, func(row int, cells []term.TextCell) bool {
 			mt.reset()
+
 			for col, c := range cells[:min(len(cells), g.Cols())] {
 				if c.Width == 0 && col > 0 && cells[col-1].Width >= 2 {
 					continue
 				}
+
 				mt.add(col, c.Content)
 			}
+
 			if cols := mt.matches(); len(cols) > 0 && !fn(row, cols) {
 				stop = true
+
 				return false
 			}
+
 			return true
 		})
+
 		if stop {
 			return
 		}
+
 		from = hist
 	}
+
 	for row := from; row < end; row++ {
 		mt.reset()
+
 		prevWidth := 0
+
 		for col := 0; col < g.Cols(); col++ {
 			c := g.Cell(row, col)
 			if c == nil {
 				prevWidth = 0
+
 				continue
 			}
+
 			w := c.Width
 			if w == 0 && col > 0 && prevWidth >= 2 {
 				prevWidth = 0
+
 				continue
 			}
+
 			prevWidth = w
+
 			mt.add(col, []byte(c.Content))
 		}
+
 		if cols := mt.matches(); len(cols) > 0 && !fn(row, cols) {
 			return
 		}
@@ -290,6 +338,7 @@ func (r *rowMatcher) reset() { r.text, r.offs, r.cols = r.text[:0], r.offs[:0], 
 // add appends the cell at col; an empty cell reads as a space.
 func (r *rowMatcher) add(col int, content []byte) {
 	r.offs = append(r.offs, len(r.text))
+
 	r.cols = append(r.cols, col)
 	if len(content) == 0 {
 		r.text = append(r.text, ' ')
@@ -304,11 +353,13 @@ func (r *rowMatcher) matches() []int {
 	if !bytes.Contains(r.text, r.query) {
 		return r.out
 	}
+
 	for i, off := range r.offs {
 		if bytes.HasPrefix(r.text[off:], r.query) {
 			r.out = append(r.out, r.cols[i])
 		}
 	}
+
 	return r.out
 }
 
@@ -317,6 +368,7 @@ func normalizeCol(g grid, p point) point {
 	if isContinuation(g, p.row, p.col) {
 		p.col--
 	}
+
 	return p
 }
 
@@ -326,6 +378,7 @@ func firstNonBlank(g grid, row int) int {
 			return col
 		}
 	}
+
 	return 0
 }
 
@@ -335,6 +388,7 @@ func lastNonBlank(g grid, row int) int {
 			return col
 		}
 	}
+
 	return 0
 }
 
@@ -342,9 +396,11 @@ func nextPos(g grid, p point) (point, bool) {
 	if p.col+1 < g.Cols() {
 		return point{p.row, p.col + 1}, true
 	}
+
 	if p.row+1 < g.Rows() {
 		return point{p.row + 1, 0}, true
 	}
+
 	return p, false
 }
 
@@ -352,9 +408,11 @@ func prevPos(g grid, p point) (point, bool) {
 	if p.col > 0 {
 		return point{p.row, p.col - 1}, true
 	}
+
 	if p.row > 0 {
 		return point{p.row - 1, g.Cols() - 1}, true
 	}
+
 	return p, false
 }
 
@@ -366,6 +424,7 @@ func runEnd(g grid, p point) point {
 	for p.col+1 < g.Cols() && cellClass(g, p.row, p.col+1) == cls {
 		p.col++
 	}
+
 	return p
 }
 
@@ -375,6 +434,7 @@ func runStart(g grid, p point) point {
 	for p.col > 0 && cellClass(g, p.row, p.col-1) == cls {
 		p.col--
 	}
+
 	return p
 }
 
@@ -384,18 +444,22 @@ func wordForward(g grid, p point) point {
 	if g.Rows() == 0 {
 		return p
 	}
+
 	cur := p
 	if classAt(g, p) != classBlank {
 		p = runEnd(g, p)
 	}
+
 	for {
 		next, ok := nextPos(g, p)
 		if !ok {
 			if classAt(g, cur) == classBlank {
 				return cur
 			}
+
 			return runEnd(g, cur)
 		}
+
 		p = next
 		if classAt(g, p) != classBlank {
 			return p
@@ -408,12 +472,14 @@ func wordEnd(g grid, p point) point {
 	if g.Rows() == 0 {
 		return p
 	}
+
 	q := p
 	for {
 		next, ok := nextPos(g, q)
 		if !ok {
 			return p
 		}
+
 		q = next
 		if classAt(g, q) != classBlank {
 			return runEnd(g, q)
@@ -426,12 +492,14 @@ func wordBack(g grid, p point) point {
 	if g.Rows() == 0 {
 		return p
 	}
+
 	q := p
 	for {
 		prev, ok := prevPos(g, q)
 		if !ok {
 			return p
 		}
+
 		q = prev
 		if classAt(g, q) != classBlank {
 			return runStart(g, q)

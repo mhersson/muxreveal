@@ -54,6 +54,7 @@ func (c *clipboard) copy(text string) tea.Cmd {
 	if text == "" {
 		return nil
 	}
+
 	var cmds []tea.Cmd
 	if c.cfg.OSC52 {
 		cmds = append(cmds, tea.SetClipboard(text))
@@ -61,14 +62,17 @@ func (c *clipboard) copy(text string) tea.Cmd {
 			cmds = append(cmds, tea.SetPrimaryClipboard(text))
 		}
 	}
+
 	if c.cfg.Native {
 		if argvs := nativeCommands(c.getenv, c.goos); len(argvs) > 0 {
 			cmds = append(cmds, func() tea.Msg {
 				c.writeNative(argvs, text)
+
 				return nil
 			})
 		}
 	}
+
 	return tea.Batch(cmds...)
 }
 
@@ -76,7 +80,9 @@ func (c *clipboard) writeNative(argvs [][]string, text string) {
 	for _, argv := range argvs {
 		ctx, cancel := context.WithTimeout(context.Background(), c.timeout)
 		err := c.run(ctx, argv, text)
+
 		cancel()
+
 		if err != nil {
 			c.logFailure(argv, err)
 		}
@@ -89,10 +95,12 @@ func (c *clipboard) logFailure(argv []string, err error) {
 		seen := c.missing[argv[0]]
 		c.missing[argv[0]] = true
 		c.mu.Unlock()
+
 		if seen {
 			return
 		}
 	}
+
 	c.log.Warn("native clipboard write failed", "cmd", strings.Join(argv, " "), "err", err)
 }
 
@@ -102,6 +110,7 @@ func nativeCommands(getenv func(string) string, goos string) [][]string {
 	if getenv("SSH_CONNECTION") != "" || getenv("SSH_TTY") != "" {
 		return nil
 	}
+
 	switch {
 	case goos == "darwin":
 		return [][]string{{"pbcopy"}}
@@ -113,6 +122,7 @@ func nativeCommands(getenv func(string) string, goos string) [][]string {
 			{"xclip", "-selection", "primary"},
 		}
 	}
+
 	return nil
 }
 
@@ -121,9 +131,11 @@ func nativeCommands(getenv func(string) string, goos string) [][]string {
 func runNative(ctx context.Context, argv []string, stdin string) error {
 	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
 	cmd.Stdin = strings.NewReader(stdin)
+
 	cmd.WaitDelay = nativeWaitDelay
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("run %s: %w", argv[0], err)
 	}
+
 	return nil
 }

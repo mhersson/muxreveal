@@ -839,7 +839,7 @@ A key written `> 1` is a two-key sequence: after the leader, a key that starts a
 
 ## Milestones and v2 backlog
 
-v1 ships in five milestones, preceded by a VT spike. Each ends on a gate you can try yourself, and the terminal core gates everything after it.
+v1 ships in six milestones, preceded by a VT spike. Each ends on a gate you can try yourself, and the terminal core gates everything after it.
 
 0. **Spike: VT.** Two to six `claude` PTYs side by side on `tuios.dev/vt` + Bubble Tea v2 in `spikes/vt`. Confirm which features the published module has (scrollback, Kitty graphics and keyboard, OSC 133) and which backend it uses; measure frame time and CPU while panes are busy; compare with `charmbracelet/x/vt`.
     - Gate: a written go/no-go with numbers.
@@ -852,7 +852,9 @@ v1 ships in five milestones, preceded by a VT spike. Each ends on a gate you can
 4. **M3 GitHub loop.** Agent PRs, PR diff, CI status, push, PR compose, approve and merge on github.com and GHE. Covers GH-1 (agents), GH-2, GH-4 (status), GH-5 to GH-7, GA-1 to GA-3, GA-5.
     - Gate: agent change → push → PR → green CI → approve → merge, without opening a browser.
 5. **M4 Markdown and polish.** Rendered markdown with images, PR conversation, compose preview, reviewed hunks, notifications, other PR tabs, CI log tail, remapping, worktree cleanup. Covers MD-1, MD-2, GH-1 (others), GH-3, GH-4 (logs), GA-4, DF-7, AG-6, UX-3, WT-3.
-    - Gate: v1 release on macOS and Linux, tested in Ghostty and Kitty.
+    - Gate: rendered markdown with images, the polish items and the requirements above work in Ghostty and Kitty on macOS and Linux.
+6. **M5 Docs and demo.** A README (what MuxReveal is, install, first run, the main keys and workflows) and user docs (keys, config, layouts, review, PRs), with screenshots and a short demo video or recording.
+    - Gate: the v1 release on macOS and Linux, tested in Ghostty and Kitty, with the README, user docs, screenshots and demo video done: someone new can install and run MuxReveal from the README alone, and the README shows it working.
 
 **v2 backlog**
 

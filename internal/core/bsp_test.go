@@ -10,32 +10,43 @@ import (
 // randomTree builds a tree of n leaves p1..pn with ratios on the 0.01 grid.
 func randomTree(r *rand.Rand, n int) *Node {
 	next := 0
+
 	var build func(n int) *Node
+
 	build = func(n int) *Node {
 		if n == 1 {
 			next++
+
 			return leaf(PaneID(fmt.Sprintf("p%d", next)))
 		}
+
 		k := 1 + r.IntN(n-1)
+
 		split := SplitVertical
 		if r.IntN(2) == 0 {
 			split = SplitHorizontal
 		}
+
 		ratio := float64(10+r.IntN(81)) / 100
+
 		return &Node{Split: split, Ratio: ratio, A: build(k), B: build(n - k)}
 	}
+
 	return build(n)
 }
 
 func treeLeaves(n *Node) []PaneID {
 	var out []PaneID
+
 	leaves(n, func(id PaneID) { out = append(out, id) })
+
 	return out
 }
 
 func tabOfTree(n *Node) Tab {
 	var t Tab
 	setLayout(&t, n)
+
 	return t
 }
 
@@ -44,13 +55,16 @@ func TestNodeTreeRoundTripsThroughTiling(t *testing.T) {
 	for i := range 200 {
 		n := 1 + r.IntN(12)
 		root := randomTree(r, n)
+
 		tree, err := toTiling(root)
 		if err != nil {
 			t.Fatalf("tree %d: toTiling: %v", i, err)
 		}
+
 		if tree.WindowCount() != n {
 			t.Fatalf("tree %d: %d windows, want %d", i, tree.WindowCount(), n)
 		}
+
 		if got := fromTiling(tree); show(got) != show(root) || !sameRatios(got, root) {
 			t.Fatalf("tree %d: round trip = %s, want %s", i, show(got), show(root))
 		}
@@ -61,6 +75,7 @@ func sameRatios(a, b *Node) bool {
 	if a.leaf() || b.leaf() {
 		return a.leaf() && b.leaf() && a.Pane == b.Pane
 	}
+
 	return a.Split == b.Split && a.Ratio == b.Ratio && sameRatios(a.A, b.A) && sameRatios(a.B, b.B)
 }
 
@@ -74,6 +89,7 @@ func TestToTilingRejectsBadPaneIDs(t *testing.T) {
 
 func TestArrangeOnePaneFillsBody(t *testing.T) {
 	inner := Rect{1, 1, 98, 27}
+
 	a := Arrange(tabOfTree(leaf("p1")), inner, LayoutConfig{})
 	if a.Rects["p1"] != inner || a.Sizes["p1"] != inner {
 		t.Errorf("Rects = %v, Sizes = %v, want %v", a.Rects, a.Sizes, inner)
@@ -91,6 +107,7 @@ func TestArrangeSplitsTouch(t *testing.T) {
 	t.Run("vertical", func(t *testing.T) {
 		inner := Rect{1, 1, 99, 27}
 		a := Arrange(tabOfTree(vsplit(leaf("p1"), leaf("p2"))), inner, LayoutConfig{})
+
 		l, r := a.Rects["p1"], a.Rects["p2"]
 		if l.Y != r.Y || l.H != r.H || l.X+l.W != r.X || l.W+r.W != inner.W {
 			t.Errorf("left %+v right %+v in %+v", l, r, inner)
@@ -99,6 +116,7 @@ func TestArrangeSplitsTouch(t *testing.T) {
 	t.Run("horizontal", func(t *testing.T) {
 		inner := Rect{1, 1, 99, 27}
 		a := Arrange(tabOfTree(hsplit(leaf("p1"), leaf("p2"))), inner, LayoutConfig{})
+
 		u, d := a.Rects["p1"], a.Rects["p2"]
 		if u.X != d.X || u.W != d.W || u.Y+u.H != d.Y || u.H+d.H != inner.H {
 			t.Errorf("top %+v bottom %+v in %+v", u, d, inner)
@@ -109,6 +127,7 @@ func TestArrangeSplitsTouch(t *testing.T) {
 func TestArrangeExactCells(t *testing.T) {
 	// The first child is floor(W*ratio) wide; the second takes the rest.
 	inner := Rect{1, 1, 80, 24}
+
 	tests := []struct {
 		name string
 		tree *Node
@@ -129,10 +148,12 @@ func TestArrangeExactCells(t *testing.T) {
 
 func TestArrangeNeverOverlaps(t *testing.T) {
 	r := rand.New(rand.NewPCG(3, 4))
+
 	sizes := [][2]int{{1, 1}, {1, 5}, {5, 1}, {2, 2}, {3, 3}, {4, 2}, {7, 3}, {20, 6}, {80, 24}, {240, 64}}
 	for range 150 {
 		sizes = append(sizes, [2]int{1 + r.IntN(60), 1 + r.IntN(30)})
 	}
+
 	for _, sz := range sizes {
 		for range 4 {
 			n := 1 + r.IntN(16)
@@ -140,22 +161,27 @@ func TestArrangeNeverOverlaps(t *testing.T) {
 			inner := Rect{X: r.IntN(3), Y: r.IntN(3), W: sz[0], H: sz[1]}
 			a := Arrange(tab, inner, LayoutConfig{})
 			cells := map[[2]int]PaneID{}
+
 			for id, rc := range a.Rects {
 				if rc.W < 1 || rc.H < 1 || rc.X < inner.X || rc.Y < inner.Y ||
 					rc.X+rc.W > inner.X+inner.W || rc.Y+rc.H > inner.Y+inner.H {
 					t.Fatalf("%dx%d: %s = %+v outside %+v", sz[0], sz[1], id, rc, inner)
 				}
+
 				for y := rc.Y; y < rc.Y+rc.H; y++ {
 					for x := rc.X; x < rc.X+rc.W; x++ {
 						if o, dup := cells[[2]int{x, y}]; dup {
 							t.Fatalf("%dx%d: %s and %s overlap at %d,%d", sz[0], sz[1], id, o, x, y)
 						}
+
 						cells[[2]int{x, y}] = id
 					}
 				}
 			}
+
 			for _, id := range tab.Panes {
 				_, inRects := a.Rects[id]
+
 				_, inSizes := a.Sizes[id]
 				if inRects != inSizes {
 					t.Fatalf("%dx%d: %s in Rects %v, in Sizes %v", sz[0], sz[1], id, inRects, inSizes)
@@ -168,6 +194,7 @@ func TestArrangeNeverOverlaps(t *testing.T) {
 func TestArrangeKeepsTabPanesAndTreeInStep(t *testing.T) {
 	st := NewStore(InitialState(Config{}))
 	area := Rect{1, 1, 100, 30}
+
 	acts := []Action{
 		OpenPane{Kind: KindShell, Area: area},
 		OpenPane{Kind: KindShell, Split: SplitVertical, Area: area},
@@ -180,10 +207,12 @@ func TestArrangeKeepsTabPanesAndTreeInStep(t *testing.T) {
 		if err := st.Dispatch(a); err != nil {
 			t.Fatalf("%T: %v", a, err)
 		}
+
 		tab := st.State().Tab()
 		if tab.Mode != ModeBSP {
 			t.Fatalf("Mode = %q", tab.Mode)
 		}
+
 		if !slices.Equal(tab.Panes, treeLeaves(tab.Layout)) {
 			t.Fatalf("after %T: Panes %v, tree leaves %v", a, tab.Panes, treeLeaves(tab.Layout))
 		}
@@ -205,10 +234,12 @@ func TestOpenPaneAutoSplitUsesTheArea(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			s := stateOf(leaf("p1"), "p1")
-			var tab = &s.Tabs[0]
+
+			tab := &s.Tabs[0]
 			if err := tab.placeBSP("p2", "", tt.area, LayoutConfig{}); err != nil {
 				t.Fatal(err)
 			}
+
 			if got := show(tab.Layout); got != tt.want {
 				t.Errorf("layout = %s, want %s", got, tt.want)
 			}
@@ -218,13 +249,16 @@ func TestOpenPaneAutoSplitUsesTheArea(t *testing.T) {
 
 func TestPlaceAndRemoveReportBadPaneIDs(t *testing.T) {
 	s := stateOf(leaf("p1"), "p1")
+
 	tab := &s.Tabs[0]
 	if err := tab.placeBSP("bogus", SplitVertical, Rect{}, LayoutConfig{}); err == nil {
 		t.Error("place of a bad id: want an error")
 	}
+
 	if _, err := tab.removeBSP("bogus"); err == nil {
 		t.Error("remove of a bad id: want an error")
 	}
+
 	if show(tab.Layout) != "p1" {
 		t.Errorf("layout changed to %s", show(tab.Layout))
 	}
@@ -240,16 +274,20 @@ func stackTree() *Node {
 
 func TestFocusDirUsesTheArea(t *testing.T) {
 	s := stateOf(stackTree(), "p1")
+
 	a := Arrange(s.Tab(), tinyArea, LayoutConfig{})
 	if _, ok := a.Rects["p2"]; ok || len(a.Rects) != 2 {
 		t.Fatalf("p2 should be left out of %+v: %v", tinyArea, a.Rects)
 	}
+
 	if got := dispatch(t, s, FocusDir{Dir: Down}); got.Tab().Focus != "p2" {
 		t.Errorf("virtual rect: Focus = %q, want p2", got.Tab().Focus)
 	}
+
 	if got := dispatch(t, s, FocusDir{Dir: Down, Area: tinyArea}); got.Tab().Focus != "p3" {
 		t.Errorf("tiny area: Focus = %q, want p3 (p2 has no rect there)", got.Tab().Focus)
 	}
+
 	if got := dispatch(t, stateOf(stackTree(), "p2"), FocusDir{Dir: Down, Area: tinyArea}); got.Tab().Focus != "p3" {
 		t.Errorf("undrawn focus: Focus = %q, want p3 (moves as on the virtual rect)", got.Tab().Focus)
 	}
@@ -257,10 +295,12 @@ func TestFocusDirUsesTheArea(t *testing.T) {
 
 func TestSwapDirUsesTheArea(t *testing.T) {
 	s := stateOf(stackTree(), "p1")
+
 	got := dispatch(t, s, SwapDir{Dir: Down, Area: tinyArea})
 	if show(got.Tab().Layout) != "h(p3,h(p2,p1))" {
 		t.Errorf("tiny area swapped with a pane that has no rect: %s", show(got.Tab().Layout))
 	}
+
 	got = dispatch(t, s, SwapDir{Dir: Down})
 	if show(got.Tab().Layout) != "h(p2,h(p1,p3))" || !slices.Equal(got.Tab().Panes, []PaneID{"p2", "p1", "p3"}) {
 		t.Errorf("virtual rect: %s %v", show(got.Tab().Layout), got.Tab().Panes)

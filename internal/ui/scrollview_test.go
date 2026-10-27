@@ -188,6 +188,7 @@ func TestScrollViewAcrossHistoryCap(t *testing.T) {
 
 	p.withGrid(func(g grid) {
 		var sb strings.Builder
+
 		for c := range g.Cols() {
 			if cell := g.Cell(0, c); cell != nil {
 				sb.WriteString(cell.Content)

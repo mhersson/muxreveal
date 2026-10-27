@@ -35,6 +35,7 @@ func startGate(t *testing.T, snap, mark snapshotFunc) *gateRig {
 
 	go func() {
 		defer close(r.done)
+
 		runTurnGate(ctx, r.in, r.out, snap, mark, discardLogger())
 	}()
 
@@ -92,7 +93,9 @@ func TestGateForwardsEventsInOrderWithoutWaiting(t *testing.T) {
 	turn, released := turnEvent("UserPromptSubmit", gateSession, "/repo")
 
 	r.in <- turn
+
 	r.in <- harness.Event{Name: "PreToolUse"}
+
 	r.in <- harness.Event{Name: "Stop"}
 
 	for _, want := range []string{"UserPromptSubmit", "PreToolUse", "Stop"} {
@@ -122,6 +125,7 @@ func TestGateSlowSnapshotIsCancelledAtTheBudget(t *testing.T) {
 
 	record := func(s string) {
 		mu.Lock()
+
 		order = append(order, s)
 		mu.Unlock()
 	}
@@ -148,6 +152,7 @@ func TestGateSlowSnapshotIsCancelledAtTheBudget(t *testing.T) {
 	r := startGate(t, snap, mark)
 	turn, released := turnEvent("UserPromptSubmit", gateSession, "/repo")
 	start := time.Now()
+
 	r.in <- turn
 
 	within(t, released, turnBudget+500*time.Millisecond, "Done at the budget")
@@ -183,6 +188,7 @@ func TestGateSerializesTurnsOfOneSession(t *testing.T) {
 		mu.Lock()
 		running++
 		maxRun = max(maxRun, running)
+
 		trace = append(trace, "snap-start")
 		mu.Unlock()
 
@@ -190,6 +196,7 @@ func TestGateSerializesTurnsOfOneSession(t *testing.T) {
 
 		mu.Lock()
 		running--
+
 		trace = append(trace, "snap-end")
 		mu.Unlock()
 
@@ -197,6 +204,7 @@ func TestGateSerializesTurnsOfOneSession(t *testing.T) {
 	}
 	mark := func(context.Context, string, string) error {
 		mu.Lock()
+
 		trace = append(trace, "mark")
 		mu.Unlock()
 
@@ -206,7 +214,9 @@ func TestGateSerializesTurnsOfOneSession(t *testing.T) {
 	r := startGate(t, snap, mark)
 	a, relA := turnEvent("UserPromptSubmit", gateSession, "/repo")
 	b, relB := turnEvent("UserPromptSubmit", strings.ToUpper(gateSession), "/repo")
+
 	r.in <- a
+
 	r.in <- b
 
 	within(t, relA, time.Second, "first Done")
@@ -254,7 +264,9 @@ func TestGateBudgetSpentWaitingForTheLockSkipsTheSnapshot(t *testing.T) {
 	r := startGate(t, snap, mark)
 	a, relA := turnEvent("UserPromptSubmit", gateSession, "/repo")
 	b, relB := turnEvent("UserPromptSubmit", gateSession, "/repo")
+
 	r.in <- a
+
 	r.in <- b
 
 	within(t, relA, turnBudget+500*time.Millisecond, "first Done")
@@ -307,6 +319,7 @@ func TestGateNoMarkerOutsideARepository(t *testing.T) {
 			return nil
 		}
 		r := startGate(t, snap, mark)
+
 		turn, released := turnEvent("UserPromptSubmit", gateSession, "/repo")
 		r.in <- turn
 
@@ -349,6 +362,7 @@ func TestGateCancelWaitsForSnapshotsAndWritesNoMarker(t *testing.T) {
 
 	go func() {
 		defer close(returned)
+
 		runTurnGate(ctx, in, out, snap, mark, discardLogger())
 	}()
 
@@ -606,6 +620,7 @@ func TestHookBudgetServerClosingMidSnapshot(t *testing.T) {
 	}
 
 	start := time.Now()
+
 	h.Stop()
 
 	if d := time.Since(start); d > 2*time.Second {

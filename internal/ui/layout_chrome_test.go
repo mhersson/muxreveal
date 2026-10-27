@@ -216,7 +216,14 @@ func TestPreselectTagColour(t *testing.T) {
 	ui := mochaUI(t)
 	row := strings.Split(a.View().Content, "\n")[2]
 	vt := lineVT(t, row, a.width)
-	x := ansi.StringWidth(ansi.Strip(row)[:strings.Index(ansi.Strip(row), "next")])
+	plain := ansi.Strip(row)
+
+	i := strings.Index(plain, "next")
+	if i < 0 {
+		t.Fatalf("row has no next tag: %q", plain)
+	}
+
+	x := ansi.StringWidth(plain[:i])
 
 	assertColours(t, vt, x, 0, "n", ui.Accent, ui.Bg, true)
 }

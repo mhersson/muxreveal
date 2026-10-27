@@ -45,6 +45,7 @@ func newLook(th theme.Theme) (look, error) {
 	if err != nil {
 		return look{}, fmt.Errorf("highlight welcome sample: %w", err)
 	}
+
 	return look{theme: th, styles: newStyles(th), sample: sample}, nil
 }
 
@@ -53,6 +54,7 @@ func (a *App) current() look {
 	if a.preview != nil {
 		return *a.preview
 	}
+
 	return look{theme: a.theme, styles: a.styles, sample: a.sample}
 }
 
@@ -61,6 +63,7 @@ func (a *App) openOverlay(kind overlayKind, title string, items []palette.Item) 
 	a.endLeader()
 	a.preview = nil
 	a.overlay = &overlay{kind: kind, items: items, pal: palette.New(title, items, a.theme)}
+
 	return a.overlay
 }
 
@@ -70,20 +73,24 @@ func (a *App) closeOverlay() {
 
 func (a *App) openCommandPalette() {
 	cmds := a.reg.all()
+
 	items := make([]palette.Item, len(cmds))
 	for i, c := range cmds {
 		hint, _ := a.keymap.keyFor(c.id)
 		items[i] = palette.Item{ID: c.id, Title: c.title, Hint: hint, Icon: a.glyph(c.icon)}
 	}
+
 	a.openOverlay(overlayCommands, a.titled(iconPalette, "Commands"), items)
 }
 
 func (a *App) openThemePicker() {
 	all := theme.All()
+
 	items := make([]palette.Item, len(all))
 	for i, th := range all {
 		items[i] = palette.Item{ID: th.Name, Title: th.Title}
 	}
+
 	o := a.openOverlay(overlayThemes, a.titled(iconTheme, "Theme"), items)
 	o.pal = o.pal.WithEnterLabel("apply")
 	o.pal.Select(a.theme.Name)
@@ -94,6 +101,7 @@ func (a *App) glyph(icon string) string {
 	if !a.icons {
 		return ""
 	}
+
 	return icon
 }
 
@@ -102,6 +110,7 @@ func (a *App) titled(icon, name string) string {
 	if !a.icons {
 		return name
 	}
+
 	return icon + " " + name
 }
 
@@ -109,6 +118,7 @@ func (a *App) titled(icon, name string) string {
 func (a *App) updateOverlay(msg tea.Msg) tea.Cmd {
 	pal, cmd := a.overlay.pal.Update(msg)
 	a.overlay.pal = pal
+
 	return cmd
 }
 
@@ -119,20 +129,25 @@ func (a *App) chosen(id string) tea.Cmd {
 	if a.overlay == nil || !slices.ContainsFunc(a.overlay.items, func(it palette.Item) bool { return it.ID == id }) {
 		return nil
 	}
+
 	kind := a.overlay.kind
 	a.closeOverlay()
+
 	switch kind {
 	case overlayCommands:
 		c, ok := a.reg.get(id)
 		if !ok {
 			a.log.Error("chosen command missing", "command", id)
+
 			return nil
 		}
+
 		return c.run(a)
 	case overlayThemes:
 		// dispatch logs its own failures.
 		_ = a.dispatch(core.SetTheme{Name: id})
 	}
+
 	return nil
 }
 
@@ -142,19 +157,25 @@ func (a *App) highlighted(id string) {
 	if a.overlay == nil || a.overlay.kind != overlayThemes {
 		return
 	}
+
 	if it, ok := a.overlay.pal.Selected(); !ok || it.ID != id {
 		return
 	}
+
 	th, err := theme.ByName(id)
 	if err != nil {
 		a.log.Warn("preview theme", "name", id, "err", err)
+
 		return
 	}
+
 	lk, err := newLook(th)
 	if err != nil {
 		a.log.Error("preview theme", "name", id, "err", err)
+
 		return
 	}
+
 	a.preview = &lk
 	a.overlay.pal.SetTheme(th)
 }
@@ -166,6 +187,7 @@ func overlayOver(base string, width, height int, pal palette.Model) string {
 	if pw < 2 || height < 2 {
 		return base
 	}
+
 	return overlayLines(base, width, height, height/4, strings.Split(pal.View(pw), "\n"), pw)
 }
 
@@ -175,9 +197,11 @@ func overlayLines(base string, width, height, y int, lines []string, pw int) str
 	if room := height - 1 - y; len(lines) > room {
 		lines = lines[:max(room, 0)]
 	}
+
 	for i, l := range lines {
 		lines[i] = ansi.Truncate(l, pw, "")
 	}
+
 	return overlayAt(base, width, height, (width-pw)/2, y, lines)
 }
 
@@ -186,10 +210,13 @@ func overlayAt(base string, width, height, x, y int, lines []string) string {
 	if width < 2 || height < 2 || len(lines) == 0 {
 		return base
 	}
+
 	layer := lipgloss.NewLayer(strings.Join(lines, "\n")).X(x).Y(y).Z(1)
+
 	comp := lipgloss.NewCompositor(lipgloss.NewLayer(base), layer)
 	if comp.Bounds() != image.Rect(0, 0, width, height) {
 		return base
 	}
+
 	return comp.Render()
 }

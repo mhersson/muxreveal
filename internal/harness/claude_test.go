@@ -19,10 +19,12 @@ const (
 
 func readFixture(t *testing.T, name string) []byte {
 	t.Helper()
+
 	b, err := os.ReadFile(filepath.Join("testdata", name+".json"))
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	return b
 }
 
@@ -63,6 +65,7 @@ func TestParseEvent(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+
 			want := Event{
 				Name:       tt.name,
 				Session:    testSession,
@@ -85,6 +88,7 @@ func TestParseEventSessionStartWithoutSession(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if ev.Start || ev.Session != "" || ev.State != core.AgentIdle {
 		t.Errorf("event = %+v, want no Start, no session, idle", ev)
 	}
@@ -98,6 +102,7 @@ func TestParseEventErrors(t *testing.T) {
 			}
 		})
 	}
+
 	if _, err := (Claude{}).ParseEvent(nil); err == nil {
 		t.Error("empty payload: want an error")
 	}
@@ -106,17 +111,21 @@ func TestParseEventErrors(t *testing.T) {
 func TestParseEventIgnoresLargeFields(t *testing.T) {
 	payload := `{"session_id":"s","transcript_path":"/t","hook_event_name":"PostToolUse","tool_name":"Bash",` +
 		`"tool_response":{"stdout":"` + strings.Repeat("x", 5<<20) + `"}}`
+
 	ev, err := Claude{}.ParseEvent([]byte(payload))
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if ev.State != core.AgentWorking || ev.Session != "s" || ev.Transcript != "/t" {
 		t.Errorf("event = %+v", ev)
 	}
+
 	enc, err := json.Marshal(ev)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if len(enc) > 256 {
 		t.Errorf("encoded event is %d bytes", len(enc))
 	}
@@ -144,6 +153,7 @@ func TestIdentity(t *testing.T) {
 	if got := (Claude{}).ID(); got != "claude-code" {
 		t.Errorf("ID = %q", got)
 	}
+
 	if got := (Claude{}).Program(); got != "claude" {
 		t.Errorf("Program = %q", got)
 	}
@@ -163,14 +173,17 @@ type settingsFile struct {
 
 func TestSettings(t *testing.T) {
 	const exe = "/opt/my tools/muxreveal"
+
 	raw, err := Claude{}.Settings(exe)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	var s settingsFile
 	if err := json.Unmarshal(raw, &s); err != nil {
 		t.Fatal(err)
 	}
+
 	events := []string{
 		"SessionStart", "SessionEnd", "UserPromptSubmit", "PostToolUse", "PostToolUseFailure",
 		"ElicitationResult", "PreToolUse", "PermissionRequest", "Elicitation", "Notification",
@@ -179,15 +192,19 @@ func TestSettings(t *testing.T) {
 	if len(s.Hooks) != len(events) {
 		t.Errorf("%d events registered, want %d", len(s.Hooks), len(events))
 	}
+
 	for _, name := range events {
 		groups := s.Hooks[name]
 		if len(groups) != 1 || len(groups[0].Hooks) != 1 {
 			t.Errorf("%s: groups = %+v, want one group with one handler", name, groups)
+
 			continue
 		}
+
 		if groups[0].Matcher != nil {
 			t.Errorf("%s: has a matcher", name)
 		}
+
 		h := groups[0].Hooks[0]
 		if h.Type != "command" || h.Command != exe || !slices.Equal(h.Args, []string{"hook", "claude-code"}) || h.Timeout != 5 {
 			t.Errorf("%s: handler = %+v", name, h)
@@ -213,6 +230,7 @@ func TestByID(t *testing.T) {
 	if !ok || h.ID() != "claude-code" {
 		t.Errorf("ByID(claude-code) = %v, %v", h, ok)
 	}
+
 	if h, ok := ByID("codex"); ok || h != nil {
 		t.Errorf("ByID(codex) = %v, %v", h, ok)
 	}

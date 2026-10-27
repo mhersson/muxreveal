@@ -50,6 +50,7 @@ func fixedState() core.State {
 func roundTripped() core.State {
 	st := fixedState()
 	st.Tabs[0].Layout.Ratio = 0.33
+
 	return st
 }
 
@@ -65,15 +66,19 @@ func TestEncodeDecodeRoundTrip(t *testing.T) {
 func TestEncodeGolden(t *testing.T) {
 	data, err := Encode(fixedState())
 	noErr(t, err)
+
 	path := filepath.Join("testdata", "state.golden.json")
 	if *update {
 		noErr(t, os.WriteFile(path, data, 0o644))
 	}
+
 	want, err := os.ReadFile(path)
 	noErr(t, err)
+
 	if string(data) != string(want) {
 		t.Fatalf("encoding differs from %s:\n%s", path, data)
 	}
+
 	if !strings.Contains(string(data), `"ratio": 0.33,`) {
 		t.Fatalf("ratio 0.333333 not written as 0.33:\n%s", data)
 	}
@@ -82,9 +87,11 @@ func TestEncodeGolden(t *testing.T) {
 func TestEncodeDeterministic(t *testing.T) {
 	a, err := Encode(fixedState())
 	noErr(t, err)
+
 	for range 5 {
 		b, err := Encode(fixedState())
 		noErr(t, err)
+
 		if string(a) != string(b) {
 			t.Fatal("two encodings of one state differ")
 		}
@@ -98,6 +105,7 @@ func TestEncodeNoTabs(t *testing.T) {
 	noErr(t, err)
 	eq(t, len(got.Tabs), 1)
 	eq(t, got.Tabs[0].ID, core.TabID("t1"))
+
 	if !got.Tabs[0].Empty() || len(got.Panes) != 0 {
 		t.Fatalf("empty state decoded to %+v", got)
 	}
@@ -137,6 +145,7 @@ func TestEncodeSkipsOrphanPanes(t *testing.T) {
 	st.Panes["p9"] = core.Pane{Kind: core.KindShell}
 	data, err := Encode(st)
 	noErr(t, err)
+
 	if _, _, err := decodeDefault(data); err != nil {
 		t.Fatalf("a pane in no tab broke the encoding: %v", err)
 	}
@@ -180,20 +189,25 @@ func TestDecodeVersions(t *testing.T) {
 			data := doc(tt.version, "0", tabDoc("t1", "p2", `"p1","p2"`, layout), twoPanes)
 			st, rep, err := decodeDefault([]byte(data))
 			noErr(t, err)
+
 			if strings.ContainsFunc(rep.Version, func(r rune) bool { return r < ' ' || r == 0x7f }) {
 				t.Fatalf("version %q has control characters", rep.Version)
 			}
+
 			if len([]rune(rep.Version)) > 16 {
 				t.Fatalf("version %q longer than 16 runes", rep.Version)
 			}
+
 			eq(t, rep.Version, tt.want)
 			eq(t, rep.Defaulted, 0)
 			eq(t, len(st.Panes), 2)
 			eq(t, st.Panes["p1"].Cwd, "/a")
+
 			wantLayout := defaultLayout([]core.PaneID{"p1", "p2"})
 			if tt.layout {
 				wantLayout = split(core.SplitVertical, 0.3, leaf("p1"), leaf("p2"))
 			}
+
 			eq(t, st.Tabs[0].Layout, wantLayout)
 			eq(t, st.Tabs[0].Focus, core.PaneID("p2"))
 		})
@@ -213,6 +227,7 @@ func TestDecodeKeepsSessionsOnNewerVersion(t *testing.T) {
 	data := doc(`2`, "0", tabDoc("t1", "p1", `"p1"`, `{"pane":"p1"}`), panes)
 	st, _, err := decodeDefault([]byte(data))
 	noErr(t, err)
+
 	p := st.Panes["p1"]
 	eq(t, p.Session, core.SessionID(sessionA))
 	eq(t, p.Transcript, "/t.jsonl")
@@ -222,6 +237,7 @@ func TestDecodeKeepsSessionsOnNewerVersion(t *testing.T) {
 func TestDecodeBrokenLayoutDefaultsThatTab(t *testing.T) {
 	panes := `"p1":{"kind":"shell"},"p2":{"kind":"shell"},"p3":{"kind":"shell"},"p4":{"kind":"shell"}`
 	good := `{"split":"horizontal","ratio":0.3,"children":[{"pane":"p3"},{"pane":"p4"}]}`
+
 	tests := []struct {
 		name   string
 		layout string
@@ -252,6 +268,7 @@ func optLayout(l string) string {
 	if l == "" {
 		return ""
 	}
+
 	return `,"layout":` + l
 }
 
@@ -265,6 +282,7 @@ func TestDecodeClampsRatio(t *testing.T) {
 
 func TestDecodeValidation(t *testing.T) {
 	one := tabDoc("t1", "p1", `"p1","p2"`, twoLayout)
+
 	tests := []struct {
 		name string
 		data string
@@ -320,6 +338,7 @@ func manyPanes(n int) string {
 		ids = append(ids, fmt.Sprintf("%q", fmt.Sprintf("p%d", i)))
 		panes = append(panes, fmt.Sprintf(`"p%d":{"kind":"shell"}`, i))
 	}
+
 	return doc("2", "0", tabDoc("t1", "p1", strings.Join(ids, ","), `null`), strings.Join(panes, ","))
 }
 
@@ -336,6 +355,7 @@ func TestDecodePaneCap(t *testing.T) {
 
 func TestDecodeFallbacks(t *testing.T) {
 	other := tabDoc("t2", "p3", `"p3"`, `{"pane":"p3"}`)
+
 	tests := []struct {
 		name  string
 		tabs  string
@@ -417,9 +437,11 @@ func TestDecodeFallbacks(t *testing.T) {
 			func(t *testing.T, st core.State) {
 				n := st.Tabs[0].Name
 				eq(t, len([]rune(n)), 32)
+
 				if strings.ContainsFunc(n, func(r rune) bool { return r < ' ' }) {
 					t.Fatalf("name %q has control characters", n)
 				}
+
 				eq(t, n, strings.Repeat("a", 5)+strings.Repeat("b", 27))
 			},
 		},
@@ -444,9 +466,11 @@ func TestDecodeFallbacks(t *testing.T) {
 			``,
 			func(t *testing.T, st core.State) {
 				eq(t, len(st.Tabs), 1)
+
 				if !st.Tabs[0].Empty() || st.Tabs[0].Focus != "" {
 					t.Fatalf("empty tab decoded to %+v", st.Tabs[0])
 				}
+
 				eq(t, st.NextTabID, 4)
 				eq(t, st.NextID, 0)
 			},
@@ -474,9 +498,11 @@ func TestDecodeFallbacks(t *testing.T) {
 func TestDecodeNeverPanics(t *testing.T) {
 	full, err := Encode(fixedState())
 	noErr(t, err)
+
 	for i := range len(full) + 1 {
 		_, _, _ = decodeDefault(full[:i])
 	}
+
 	for _, in := range []string{
 		`{"version":2,"active":0,"tabs":[{"id":"t1","pane_ids":["p1"],"layout":{"pane":"p1","children":[null]}}],"panes":{"p1":{"kind":"shell"}}}`,
 		`{"version":[[[[[[]]]]]],"tabs":{},"panes":[]}`,
@@ -498,6 +524,7 @@ func TestDecodeRejectsHugeInput(t *testing.T) {
 
 func TestLoad(t *testing.T) {
 	dir := t.TempDir()
+
 	_, _, err := Load(filepath.Join(dir, "state.json"), core.LayoutConfig{})
 	if !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("err = %v, want os.ErrNotExist", err)
@@ -505,6 +532,7 @@ func TestLoad(t *testing.T) {
 
 	data, err := Encode(fixedState())
 	noErr(t, err)
+
 	path := filepath.Join(dir, "state.json")
 	noErr(t, os.WriteFile(path, data, 0o600))
 	st, _, err := Load(path, core.LayoutConfig{})
@@ -512,6 +540,7 @@ func TestLoad(t *testing.T) {
 	eq(t, st, roundTripped())
 
 	noErr(t, os.WriteFile(path, []byte(`{"version":2`), 0o600))
+
 	_, _, err = Load(path, core.LayoutConfig{})
 	if !errors.Is(err, ErrInvalid) {
 		t.Fatalf("err = %v, want ErrInvalid", err)

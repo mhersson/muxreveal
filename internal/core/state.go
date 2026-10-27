@@ -30,12 +30,15 @@ func InitialState(cfg Config) State {
 
 func (s State) clone() State {
 	c := s
+
 	c.Tabs = make([]Tab, len(s.Tabs))
 	for i, t := range s.Tabs {
 		c.Tabs[i] = t.clone()
 	}
+
 	c.Panes = make(map[PaneID]Pane, len(s.Panes))
 	maps.Copy(c.Panes, s.Panes)
+
 	return c
 }
 
@@ -61,7 +64,9 @@ func (a SetTheme) apply(s *State) error {
 	if a.Name == "" {
 		return errors.New("core: SetTheme with an empty name")
 	}
+
 	s.Theme = a.Name
+
 	return nil
 }
 
@@ -82,7 +87,9 @@ func (s *Store) Dispatch(a Action) error {
 	if err := a.apply(&next); err != nil {
 		return err
 	}
+
 	s.state = next
+
 	return nil
 }
 
