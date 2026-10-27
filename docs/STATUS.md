@@ -434,6 +434,59 @@ The review pane (a layout pane of kind `review`), the ported `diffview` renderer
 
 Gate: a saved file shows in the open review pane within 300 ms; turn mode shows only the last turn's changes and `,`/`.` step through earlier turns; six-pane bench p99 at most 8 ms with one review pane open on a busy agent, and scrolling a 10,000-line file diff stays inside the frame budget; idle CPU at most 1 % of one core with a review pane open.
 
+## M3 GitHub loop
+
+Goal: agent PRs, PR diff, CI status, push, PR compose, approve and merge on github.com and GHE. Covers GH-1 (agents), GH-2, GH-4 (status), GH-5 to GH-7, GA-1 to GA-3, GA-5.
+
+Gate: agent change, push, PR, green CI, approve and merge, without opening a browser.
+
+M3 ships as two plans, one PR each.
+
+### M3a GitHub and push backend
+
+Headless, in `internal/github` and `internal/git`: repository and token resolution through `gh`'s login, the open-PR poller with check states, the focused PR's checks with ETags, creating, approving and merging PRs, the compose defaults, push with upstream on first push, and PR diffs from fetched refs. Covers the backends of GH-1 (agents), GH-2, GH-4 (status), GH-5, GH-6, GH-7, GA-1, GA-2, GA-3 and GA-5.
+
+- [x] Push with upstream on first push
+- [x] Pull request refs and the PR diff source
+- [x] Repositories, hosts and tokens
+- [x] API clients with conditional requests
+- [x] Pull requests and checks
+- [x] Create, approve and merge
+- [x] Compose defaults from templates and commits
+- [x] Poller
+- [x] Read-only live check and gate
+
+Gate: every query and action is covered by recorded-fixture tests; push and PR fetch are tested against local repositories; the read-only live test passes against a real repository; the poller leaves no goroutine behind after `Close`.
+
+#### M3a gate results
+
+| Gate line | Result |
+| --- | --- |
+| Every query and action is covered by recorded-fixture tests | pass: `internal/github` runs them against `httptest` servers with no network |
+| Push and PR fetch are tested against local repositories | pass: `internal/git` tests use bare and temporary repositories |
+| The read-only live test passes against a real repository | pass: see the live run below |
+| The poller leaves no goroutine behind after `Close` | pass: the poller tests check this |
+
+Live run: by the controller on 2026-10-27, read-only, on this branch before the history fold. Command: `MUXREVEAL_LIVE_REPO=mhersson/muxreveal MUXREVEAL_LIVE_BRANCH=chore/build-ci-lint go test -tags live ./internal/github -run '^TestLiveReadOnly$' -v -count=1`. PASS in 4.98 s.
+
+- Repository github.com/mhersson/muxreveal: default branch `main`, merge methods merge, squash and rebase, 1 open PR.
+- Open PR path, PR #14: OPEN, 5 checks, all success.
+- Branch path, `chore/build-ci-lint`, PR #13: MERGED, 5 checks, 4 success and 1 failure (go-checks, a known flaky test).
+- In both paths the second `Checks` call was answered entirely by 304s (2 of 2 responses).
+
+Test counts from `go test -count=1 -v`, counting `--- PASS` lines (top-level tests only, then top-level tests and subtests together); the `internal/git` figures cover that package alone, not `invisible` or `linediff`:
+
+| Package | Top-level tests | With subtests |
+| --- | --- | --- |
+| `internal/git` | 152 | 275 |
+| `internal/github` | 100 | 166 |
+
+`make check` passes.
+
+### M3b Pull requests on screen
+
+The PR list (agent branches), the PR view with its diff in the review pane, the CI view, the compose overlay with `$EDITOR`, the approve and merge confirms, the push command, the tray's PR and CI module, the PR and CI line on the rail's cards, and the core events and state behind them. Planned after M2b.
+
 ## Next
 
 M1e Tiling, tab moves and chrome is merged (PR #12); the reboot part of its gate is still the operator's check. The build, CI and lint tooling work (Makefile, GitHub Actions CI with Dependabot, stricter golangci-lint config) is complete; the macOS test step in CI is non-blocking until the macOS test failures listed in Later are fixed. The agents rail and M3a GitHub and push backend run next, in parallel, each on its own branch and PR; M2b Review pane follows the rail, and M3b follows M2b.
@@ -481,6 +534,12 @@ M1e Tiling, tab moves and chrome is merged (PR #12); the reboot part of its gate
 | 2026-10-27 | A Makefile and GitHub Actions CI with Dependabot: the Linux job runs the `make check` gates, a macOS job builds, vets, tests and scans natively (its tests are non-blocking until the macOS failures in Later are fixed), pull requests add govulncheck and a case-clash check, and a nightly run does the race tests at `-count=2` | One command locally and the same gates on every pull request; Dependabot keeps modules and actions current |
 | 2026-10-27 | The golangci-lint config is adapted from contextmatrix's and stricter; ported tuios code stays out of the style-only linters and formatters | The ports stay close to upstream; correctness linters still run on them |
 | 2026-10-27 | v1 ends with a docs and demo milestone | A new user needs a README and user docs that show MuxReveal working |
+| 2026-10-27 | M3 ships as M3a, a headless backend beside the agents rail, and M3b, the screens after M2b | New-package work runs beside the UI milestone; UI work stays serial |
+| 2026-10-27 | GraphQL goes through go-gh's struct-based client, not genqlient | genqlient needs GitHub's 1.5 MB schema in the repo; struct queries need no schema or codegen, and fixtures plus a read-only live test check the fields |
+| 2026-10-27 | go-gh is pinned at v2.16.2 | The newest release at least two weeks old |
+| 2026-10-27 | Live GitHub tests only read; create, approve and merge are covered by recorded fixtures | Tests never write to a real repository |
+| 2026-10-27 | Push and fetch run without a controlling terminal and with `GIT_TERMINAL_PROMPT=0` | A credential or ssh prompt fails with an error instead of taking over the TUI's terminal |
+| 2026-10-27 | A PR diff names the head commit it shows, and a merge passes that commit | You never merge a commit you have not seen |
 
 ## Later
 
@@ -537,3 +596,10 @@ Ideas and requests that came up outside the current milestone go here.
     - `TestListWorktrees`: no worktree records found, likely `/var` vs `/private/var`.
   - `internal/git` watcher on kqueue: `TestWatchWriteTrackedFile` and both `TestWatchSnapshotRefsDoNotWake` cases get a batch with `Git:true` from a plain write. This may be a real watcher bug on macOS, not only a test issue.
   - `internal/ui`: `TestToastGoesWithTheFirstKey` ("the key reached the pane as "", want "x"").
+- PRs from a fork: agent branches pushed to a fork and PRs opened against the upstream repository; the backend handles same-repository PRs only.
+- Live write tests (create, merge, branch delete) against a sandbox repository, run on request.
+- A GHE check of the poll query (`checkRunCountsByState`, `mergeStateStatus`) on older GHES versions.
+- More than the 100 most recently updated open PRs per repository in the poller.
+- A poller keeps a host's client after its token is revoked or expires, so every poll for that host fails with 401 until a restart; rebuild the client after a 401.
+- A persistent failure of the focused PR's checks (for example a fine-grained token without checks access) fails every poll while that PR is focused; report the checks error beside a fresh PR list.
+- A change of `Watch.Visible` alone neither polls nor recomputes the cadence, so a pending PR scrolled into view can wait up to the slow interval.

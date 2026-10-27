@@ -12,8 +12,8 @@ var (
 	ErrNoSnapshot = errors.New("git: turn has no snapshot")
 	// ErrNoTurns means the session has no recorded turns.
 	ErrNoTurns = errors.New("git: session has no turns")
-	// ErrNotImplemented means the source kind is not available yet.
-	ErrNotImplemented = errors.New("git: not implemented")
+	// ErrNotFetched means the pull request refs are not in the repository.
+	ErrNotFetched = errors.New("git: pull request refs not fetched")
 )
 
 // Source selects what Engine.Diff compares.
@@ -30,11 +30,11 @@ type TurnSource struct {
 	Turn              int
 }
 
-// PRSource compares a pull request's base and head.
+// PRSource compares the merge base of a pull request's base and head, as FetchPR
+// stored them, with its head.
 type PRSource struct {
-	Repo       string
-	Number     int
-	Base, Head string
+	Worktree string
+	Number   int
 }
 
 func (BranchSource) source() {}
@@ -100,6 +100,7 @@ type Result struct {
 	Live      bool   // New is the working tree
 	Turn      int    // turn sources: the turn shown
 	Through   int    // turn sources: the last turn the diff covers
+	Head      string // PR sources: the head commit shown; a merge passes it
 	Files     []FileDiff
 	Truncated bool
 }
@@ -147,7 +148,7 @@ func (e *Engine) Diff(ctx context.Context, src Source) (Result, error) {
 	case TurnSource:
 		return e.diffTurn(ctx, s)
 	case PRSource:
-		return Result{}, fmt.Errorf("diff pull request %s#%d: %w", s.Repo, s.Number, ErrNotImplemented)
+		return e.diffPR(ctx, s)
 	default:
 		return Result{}, fmt.Errorf("diff: unsupported source %T", src)
 	}
@@ -186,6 +187,27 @@ func (e *Engine) diffBranch(ctx context.Context, s BranchSource) (Result, error)
 	}
 
 	res.Live = true
+
+	return res, nil
+}
+
+func (e *Engine) diffPR(ctx context.Context, s PRSource) (Result, error) {
+	r, err := Open(ctx, s.Worktree)
+	if err != nil {
+		return Result{}, err
+	}
+
+	pr, err := resolvePR(ctx, r, s.Number)
+	if err != nil {
+		return Result{}, err
+	}
+
+	res, err := e.compare(ctx, r, pr.baseTree, WorkTree{Tree: pr.headTree})
+	if err != nil {
+		return Result{}, err
+	}
+
+	res.Head = pr.head
 
 	return res, nil
 }

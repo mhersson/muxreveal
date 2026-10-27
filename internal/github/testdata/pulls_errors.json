@@ -1,0 +1,20 @@
+{
+  "data": {
+    "repository": {
+      "defaultBranchRef": {"name": "main"},
+      "mergeCommitAllowed": true,
+      "squashMergeAllowed": true,
+      "rebaseMergeAllowed": true,
+      "deleteBranchOnMerge": false,
+      "pullRequests": null
+    },
+    "rateLimit": {"remaining": 4000, "resetAt": "2026-10-27T10:00:00Z"}
+  },
+  "errors": [
+    {
+      "type": "FORBIDDEN",
+      "path": ["repository", "pullRequests"],
+      "message": "Resource not accessible by personal access token"
+    }
+  ]
+}

@@ -244,3 +244,56 @@ func TestStreamCloseKillsEarly(t *testing.T) {
 		t.Fatal("Close did not return")
 	}
 }
+
+func TestNetCallHasNoTerminal(t *testing.T) {
+	for _, name := range []string{"GIT_TERMINAL_PROMPT", "GCM_INTERACTIVE"} {
+		t.Setenv(name, "")
+		os.Unsetenv(name)
+	}
+
+	hasEnv := func(cmdEnv []string, kv string) bool {
+		for _, e := range cmdEnv {
+			if e == kv {
+				return true
+			}
+		}
+
+		return false
+	}
+
+	netCmd := call{args: []string{"fetch"}, net: true}.command(context.Background())
+	if !netCmd.SysProcAttr.Setsid || netCmd.SysProcAttr.Setpgid {
+		t.Errorf("net call attr = %+v, want Setsid without Setpgid", netCmd.SysProcAttr)
+	}
+
+	for _, kv := range []string{"GIT_TERMINAL_PROMPT=0", "GCM_INTERACTIVE=never"} {
+		if !hasEnv(netCmd.Env, kv) {
+			t.Errorf("net call lacks %s", kv)
+		}
+	}
+
+	plain := call{args: []string{"status"}}.command(context.Background())
+	if !plain.SysProcAttr.Setpgid || plain.SysProcAttr.Setsid {
+		t.Errorf("plain call attr = %+v, want Setpgid without Setsid", plain.SysProcAttr)
+	}
+
+	for _, kv := range []string{"GIT_TERMINAL_PROMPT=0", "GCM_INTERACTIVE=never"} {
+		if hasEnv(plain.Env, kv) {
+			t.Errorf("plain call has %s", kv)
+		}
+	}
+}
+
+func TestHideURLs(t *testing.T) {
+	tests := []struct{ in, want string }{
+		{"", ""},
+		{"fatal: no url", "fatal: no url"},
+		{"fatal: unable to access 'https://user:secret@example.invalid/o/r.git/'", "fatal: unable to access '<url>'"},
+		{": ssh://host:22/o/r and git://h/x done", ": <url> and <url> done"},
+	}
+	for _, tt := range tests {
+		if got := hideURLs(tt.in); got != tt.want {
+			t.Errorf("hideURLs(%q) = %q, want %q", tt.in, got, tt.want)
+		}
+	}
+}

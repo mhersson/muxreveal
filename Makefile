@@ -8,7 +8,7 @@ help:
 	@echo "  run          run the app; pass arguments with ARGS=..."
 	@echo "  test         run the tests"
 	@echo "  test-race    run the tests with the race detector"
-	@echo "  vet          go vet, with and without the bench tag"
+	@echo "  vet          go vet, with and without the bench and live tags"
 	@echo "  lint         golangci-lint run"
 	@echo "  fmt          format the code with golangci-lint fmt"
 	@echo "  fmt-check    fail and show the diff if formatting is needed"
@@ -35,7 +35,7 @@ test-race:
 
 vet:
 	go vet ./...
-	go vet -tags bench ./...
+	go vet -tags bench,live ./...
 
 lint:
 	golangci-lint run

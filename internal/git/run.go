@@ -31,10 +31,11 @@ type call struct {
 	stdin io.Reader
 	read  bool  // adds GIT_OPTIONAL_LOCKS=0
 	limit int64 // stdout bytes kept; 0 = unlimited
+	net   bool  // network command: new session, no terminal prompts, URLs hidden in errors
 }
 
 // run executes git and returns its stdout. A non-zero exit carries the first
-// line of stderr in the error.
+// line of stderr in the error and also returns the stdout written so far.
 func run(ctx context.Context, c call) ([]byte, error) {
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -53,7 +54,7 @@ func run(ctx context.Context, c call) ([]byte, error) {
 	case ctx.Err() != nil:
 		return nil, fmt.Errorf("git %s: %w", c.name(), ctx.Err())
 	case err != nil:
-		return nil, fmt.Errorf("git %s: %w%s", c.name(), err, firstLine(stderr.Bytes()))
+		return out.Bytes(), fmt.Errorf("git %s: %w%s", c.name(), err, c.stderrSuffix(stderr.Bytes()))
 	}
 
 	return out.Bytes(), nil
@@ -93,8 +94,52 @@ func (c call) name() string {
 	return "command"
 }
 
+// stderrSuffix is firstLine of stderr. A network call also has every URL in it
+// replaced by "<url>", since a remote URL may carry credentials.
+func (c call) stderrSuffix(stderr []byte) string {
+	if c.net {
+		return hideURLs(firstLine(stderr))
+	}
+
+	return firstLine(stderr)
+}
+
+// hideURLs replaces each <scheme>://... token, up to whitespace or a quote.
+func hideURLs(s string) string {
+	var b strings.Builder
+
+	for {
+		i := strings.Index(s, "://")
+		if i < 0 {
+			b.WriteString(s)
+
+			return b.String()
+		}
+
+		start := i
+		for start > 0 && isSchemeByte(s[start-1]) {
+			start--
+		}
+
+		end := i + len("://")
+		for end < len(s) && !strings.ContainsRune(" \t\r\n'\"", rune(s[end])) {
+			end++
+		}
+
+		b.WriteString(s[:start])
+		b.WriteString("<url>")
+
+		s = s[end:]
+	}
+}
+
+func isSchemeByte(c byte) bool {
+	return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '+' || c == '-' || c == '.'
+}
+
 // command builds the process: config as -c arguments before the subcommand,
-// the cleaned environment, its own process group and a bounded wait.
+// the cleaned environment, its own process group (a network call: its own
+// session, so no controlling terminal) and a bounded wait.
 func (c call) command(ctx context.Context) *exec.Cmd {
 	args := append([]string{"-c", "core.fsmonitor=false", "-c", "core.quotePath=false"}, c.args...)
 	cmd := exec.CommandContext(ctx, "git", args...)
@@ -106,7 +151,12 @@ func (c call) command(ctx context.Context) *exec.Cmd {
 		cmd.Env = append(cmd.Env, "GIT_OPTIONAL_LOCKS=0")
 	}
 
-	setProcessGroup(cmd)
+	if c.net {
+		cmd.Env = append(cmd.Env, "GIT_TERMINAL_PROMPT=0", "GCM_INTERACTIVE=never")
+		setSession(cmd)
+	} else {
+		setProcessGroup(cmd)
+	}
 
 	cmd.Cancel = func() error { return killProcessGroup(cmd.Process) }
 	cmd.WaitDelay = waitDelay

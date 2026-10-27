@@ -1,0 +1,907 @@
+package github
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"runtime"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"testing"
+	"time"
+)
+
+const (
+	testFast = 20 * time.Millisecond
+	testSlow = 200 * time.Millisecond
+	// idle is the Slow value for tests that must never see a scheduled poll.
+	idle = time.Hour
+)
+
+var (
+	repoA = Repo{Host: "github.com", Owner: "octo", Name: "a"}
+	repoB = Repo{Host: "github.com", Owner: "octo", Name: "b"}
+)
+
+// pollServer serves two open pull requests (1 and 2) and their checks.
+type pollServer struct {
+	pendingPR atomic.Int64 // the PR number whose checks are pending; 0 = none
+	gql, rest atomic.Int64
+
+	// handle, when set, may answer the nth GraphQL request itself.
+	handle func(n int64, w http.ResponseWriter, r *http.Request) bool
+
+	mu       sync.Mutex
+	gqlTimes []time.Time
+	restPath []string
+}
+
+func (s *pollServer) arrivals() []time.Time {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	return append([]time.Time(nil), s.gqlTimes...)
+}
+
+func (s *pollServer) restPaths() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	return append([]string(nil), s.restPath...)
+}
+
+func (s *pollServer) node(n int) string {
+	counts := `{"state":"SUCCESS","count":2}`
+	state := "SUCCESS"
+
+	if int64(n) == s.pendingPR.Load() {
+		counts = `{"state":"IN_PROGRESS","count":1},{"state":"SUCCESS","count":1}`
+		state = "PENDING"
+	}
+
+	return fmt.Sprintf(`{"number":%d,"title":"pr","url":"u","state":"OPEN","headRefName":"b%d",
+"headRefOid":"aaa%d","baseRefName":"main","updatedAt":"2026-10-27T09:30:00Z",
+"commits":{"nodes":[{"commit":{"statusCheckRollup":{"state":%q,"contexts":{
+"checkRunCount":2,"checkRunCountsByState":[%s],"statusContextCount":0,"statusContextCountsByState":[]}}}}]}}`,
+		n, n, n, state, counts)
+}
+
+func (s *pollServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	// The server only notices a closed connection once the body is read.
+	_, _ = io.Copy(io.Discard, r.Body)
+
+	w.Header().Set("Content-Type", "application/json")
+
+	if strings.Contains(r.URL.Path, "graphql") {
+		n := s.gql.Add(1)
+
+		s.mu.Lock()
+		s.gqlTimes = append(s.gqlTimes, time.Now())
+		s.mu.Unlock()
+
+		if s.handle != nil && s.handle(n, w, r) {
+			return
+		}
+
+		fmt.Fprintf(w, `{"data":{"repository":{"defaultBranchRef":{"name":"main"},
+"mergeCommitAllowed":true,"squashMergeAllowed":false,"rebaseMergeAllowed":false,"deleteBranchOnMerge":false,
+"pullRequests":{"nodes":[%s,%s]}},"rateLimit":{"remaining":4999,"resetAt":"2026-10-27T10:00:00Z"}}}`,
+			s.node(1), s.node(2))
+
+		return
+	}
+
+	s.rest.Add(1)
+
+	s.mu.Lock()
+	s.restPath = append(s.restPath, r.URL.Path)
+	s.mu.Unlock()
+
+	if strings.HasSuffix(r.URL.Path, "/status") {
+		fmt.Fprint(w, `{"state":"success","statuses":[]}`)
+
+		return
+	}
+
+	fmt.Fprint(w, `{"total_count":1,"check_runs":[{"id":1,"name":"ci","status":"completed","conclusion":"success",
+"html_url":"h","details_url":"d"}]}`)
+}
+
+// collector drains Updates in a goroutine it owns.
+type collector struct {
+	t    *testing.T
+	done chan struct{}
+
+	mu    sync.Mutex
+	snaps []Snapshot
+}
+
+// startPoller builds a poller for srv, drains its updates and closes it when
+// the test ends.
+func startPoller(t *testing.T, srv *pollServer, o PollerOptions, each func(*Poller, Snapshot)) (*Poller, *collector) {
+	t.Helper()
+
+	if o.Client == nil {
+		c, _ := newTestClient(t, "github.com", srv)
+		o.Client = func(context.Context, string) (*Client, error) { return c, nil }
+	}
+
+	if o.Fast == 0 {
+		o.Fast = testFast
+	}
+
+	if o.Slow == 0 {
+		o.Slow = idle
+	}
+
+	if o.MaxBackoff == 0 {
+		o.MaxBackoff = time.Second
+	}
+
+	p := NewPoller(o)
+
+	col := &collector{t: t, done: make(chan struct{})}
+
+	go func() {
+		defer close(col.done)
+
+		for s := range p.Updates() {
+			col.mu.Lock()
+			col.snaps = append(col.snaps, s)
+			col.mu.Unlock()
+
+			if each != nil {
+				each(p, s)
+			}
+		}
+	}()
+
+	t.Cleanup(func() {
+		_ = p.Close()
+
+		select {
+		case <-col.done:
+		case <-time.After(5 * time.Second):
+			t.Error("Updates was not closed after Close")
+		}
+	})
+
+	return p, col
+}
+
+func (c *collector) all() []Snapshot {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	return append([]Snapshot(nil), c.snaps...)
+}
+
+// forRepo returns the snapshots of one repository.
+func (c *collector) forRepo(r Repo) []Snapshot {
+	var out []Snapshot
+
+	for _, s := range c.all() {
+		if s.Repo == r {
+			out = append(out, s)
+		}
+	}
+
+	return out
+}
+
+// waitFor polls until pred holds for the snapshots seen so far and returns
+// the first one that matched, failing the test after d.
+func (c *collector) waitFor(d time.Duration, desc string, pred func(Snapshot) bool) Snapshot {
+	c.t.Helper()
+
+	deadline := time.Now().Add(d)
+
+	for {
+		for _, s := range c.all() {
+			if pred(s) {
+				return s
+			}
+		}
+
+		if time.Now().After(deadline) {
+			c.t.Fatalf("no snapshot within %v: %s (saw %d)", d, desc, len(c.all()))
+		}
+
+		time.Sleep(5 * time.Millisecond)
+	}
+}
+
+func (c *collector) waitCount(d time.Duration, n int) {
+	c.t.Helper()
+
+	deadline := time.Now().Add(d)
+	for len(c.all()) < n {
+		if time.Now().After(deadline) {
+			c.t.Fatalf("saw %d snapshots within %v, want at least %d", len(c.all()), d, n)
+		}
+
+		time.Sleep(5 * time.Millisecond)
+	}
+}
+
+func anySnap(Snapshot) bool { return true }
+
+func TestPollerPollsOnSet(t *testing.T) {
+	srv := &pollServer{}
+	p, col := startPoller(t, srv, PollerOptions{}, nil)
+
+	p.Set([]Watch{{Repo: repoA}})
+
+	s := col.waitFor(5*time.Second, "first poll", anySnap)
+	if s.Err != nil {
+		t.Fatalf("Err = %v", s.Err)
+	}
+
+	if s.Repo != repoA || len(s.PRs) != 2 || s.Info.DefaultBranch != "main" || s.RateLimit.Remaining != 4999 || s.At.IsZero() {
+		t.Errorf("snapshot = %+v", s)
+	}
+
+	if s.Focused != nil {
+		t.Errorf("Focused = %+v, want nil without a focused PR", s.Focused)
+	}
+}
+
+func TestPollerFastWhilePending(t *testing.T) {
+	srv := &pollServer{}
+	srv.pendingPR.Store(1)
+
+	p, col := startPoller(t, srv, PollerOptions{Slow: 10 * time.Second}, nil)
+
+	p.Set([]Watch{{Repo: repoA, Visible: []int{1}}})
+	col.waitCount(3*time.Second, 4)
+}
+
+func TestPollerFocusedPendingIsFast(t *testing.T) {
+	srv := &pollServer{}
+	srv.pendingPR.Store(2)
+
+	p, col := startPoller(t, srv, PollerOptions{Slow: 10 * time.Second}, nil)
+
+	p.Set([]Watch{{Repo: repoA, Focused: 2}})
+	col.waitCount(3*time.Second, 4)
+}
+
+func TestPollerSlowOtherwise(t *testing.T) {
+	tests := []struct {
+		name    string
+		pending int64
+		visible []int
+	}{
+		{"nothing pending", 0, []int{1, 2}},
+		{"pending PR is not visible", 2, []int{1}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			srv := &pollServer{}
+			srv.pendingPR.Store(tt.pending)
+
+			p, col := startPoller(t, srv, PollerOptions{Slow: testSlow}, nil)
+
+			p.Set([]Watch{{Repo: repoA, Visible: tt.visible}})
+			col.waitCount(5*time.Second, 2)
+
+			got := col.all()
+			if gap := got[1].At.Sub(got[0].At); gap < 3*testFast {
+				t.Fatalf("second snapshot %v after the first, want none within Fast x3", gap)
+			}
+		})
+	}
+}
+
+func TestPollerFocusedFetchesChecks(t *testing.T) {
+	srv := &pollServer{}
+	p, col := startPoller(t, srv, PollerOptions{}, nil)
+
+	p.Set([]Watch{{Repo: repoA, Focused: 2}})
+
+	s := col.waitFor(5*time.Second, "focused poll", anySnap)
+	if s.Err != nil {
+		t.Fatalf("Err = %v", s.Err)
+	}
+
+	if s.Focused == nil || s.Focused.Number != 2 || s.Focused.HeadOID != "aaa2" || len(s.Focused.Checks) != 1 {
+		t.Fatalf("Focused = %+v", s.Focused)
+	}
+
+	var sawHead bool
+
+	for _, p := range srv.restPaths() {
+		sawHead = sawHead || strings.Contains(p, "/commits/aaa2/")
+	}
+
+	if !sawHead {
+		t.Errorf("no checks request for the focused head: %v", srv.restPaths())
+	}
+}
+
+func TestPollerFocusedMissingPR(t *testing.T) {
+	srv := &pollServer{}
+	p, col := startPoller(t, srv, PollerOptions{}, nil)
+
+	p.Set([]Watch{{Repo: repoA, Focused: 99}})
+
+	s := col.waitFor(5*time.Second, "poll", anySnap)
+	if s.Err != nil || s.Focused != nil || len(s.PRs) != 2 {
+		t.Errorf("snapshot = %+v, want PRs and no focused checks", s)
+	}
+
+	if n := srv.rest.Load(); n != 0 {
+		t.Errorf("%d checks requests for a PR that is not open", n)
+	}
+}
+
+func TestPollerFocusChangePollsNow(t *testing.T) {
+	srv := &pollServer{}
+	p, col := startPoller(t, srv, PollerOptions{}, nil)
+
+	p.Set([]Watch{{Repo: repoA}})
+	col.waitCount(5*time.Second, 1)
+
+	p.Set([]Watch{{Repo: repoA, Focused: 2}})
+
+	col.waitFor(5*time.Second, "focused snapshot", func(s Snapshot) bool {
+		return s.Focused != nil && s.Focused.Number == 2
+	})
+}
+
+func TestPollerRemovedRepoStops(t *testing.T) {
+	srv := &pollServer{}
+	srv.pendingPR.Store(1)
+
+	p, col := startPoller(t, srv, PollerOptions{Slow: 10 * time.Second}, nil)
+
+	p.Set([]Watch{{Repo: repoA, Visible: []int{1}}, {Repo: repoB, Visible: []int{1}}})
+	col.waitFor(5*time.Second, "repo a", func(s Snapshot) bool { return s.Repo == repoA })
+	col.waitFor(5*time.Second, "repo b", func(s Snapshot) bool { return s.Repo == repoB })
+
+	p.Set([]Watch{{Repo: repoB, Visible: []int{1}}})
+	time.Sleep(100 * time.Millisecond)
+
+	a := len(col.forRepo(repoA))
+	b := len(col.forRepo(repoB))
+
+	deadline := time.Now().Add(5 * time.Second)
+	for len(col.forRepo(repoB)) < b+3 {
+		if time.Now().After(deadline) {
+			t.Fatal("the remaining repository stopped polling")
+		}
+
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	if n := len(col.forRepo(repoA)); n != a {
+		t.Errorf("removed repository got %d more snapshots", n-a)
+	}
+}
+
+func TestPollerRateLimitWaitsForReset(t *testing.T) {
+	srv := &pollServer{}
+	srv.handle = func(n int64, w http.ResponseWriter, _ *http.Request) bool {
+		if n != 1 {
+			return false
+		}
+
+		w.Header().Set("Retry-After", "1")
+		w.WriteHeader(http.StatusForbidden)
+		fmt.Fprint(w, `{"message":"secondary rate limit"}`)
+
+		return true
+	}
+
+	p, col := startPoller(t, srv, PollerOptions{}, nil)
+
+	p.Set([]Watch{{Repo: repoA}})
+
+	s := col.waitFor(5*time.Second, "rate limited snapshot", anySnap)
+	if !errors.Is(s.Err, ErrRateLimited) {
+		t.Fatalf("Err = %v, want a rate limit", s.Err)
+	}
+
+	if len(s.PRs) != 0 || s.Focused != nil {
+		t.Errorf("a failed poll carries data: %+v", s)
+	}
+
+	col.waitFor(5*time.Second, "poll after the reset", func(s Snapshot) bool { return s.Err == nil })
+
+	at := srv.arrivals()
+	if len(at) < 2 {
+		t.Fatalf("%d requests, want at least 2", len(at))
+	}
+
+	if gap := at[1].Sub(at[0]); gap < 900*time.Millisecond {
+		t.Errorf("polled again after %v, want to wait for the reset", gap)
+	}
+}
+
+func TestPollerRefreshWaitsOutRateLimit(t *testing.T) {
+	srv := &pollServer{}
+	srv.handle = func(n int64, w http.ResponseWriter, _ *http.Request) bool {
+		if n != 1 {
+			return false
+		}
+
+		w.Header().Set("Retry-After", "1")
+		w.WriteHeader(http.StatusForbidden)
+
+		return true
+	}
+
+	p, col := startPoller(t, srv, PollerOptions{}, nil)
+
+	p.Set([]Watch{{Repo: repoA}})
+
+	s := col.waitFor(5*time.Second, "rate limited snapshot", anySnap)
+
+	var rl *RateLimitError
+	if !errors.As(s.Err, &rl) {
+		t.Fatalf("Err = %v, want a rate limit", s.Err)
+	}
+
+	p.Refresh(repoA)
+	p.Set([]Watch{{Repo: repoA, Focused: 1}})
+
+	col.waitFor(5*time.Second, "poll after the reset", func(s Snapshot) bool { return s.Err == nil })
+
+	if at := srv.arrivals(); len(at) < 2 || at[1].Before(rl.Reset) {
+		t.Errorf("requests at %v, want none before the reset %v", at, rl.Reset)
+	}
+}
+
+func TestPollerErrorBacksOff(t *testing.T) {
+	srv := &pollServer{}
+	srv.handle = func(_ int64, w http.ResponseWriter, _ *http.Request) bool {
+		w.Header().Set("Content-Type", "text/html")
+		w.WriteHeader(http.StatusBadGateway)
+		fmt.Fprint(w, "<html>bad gateway</html>")
+
+		return true
+	}
+
+	p, col := startPoller(t, srv, PollerOptions{MaxBackoff: 100 * time.Millisecond}, nil)
+
+	p.Set([]Watch{{Repo: repoA}})
+	col.waitCount(10*time.Second, 6)
+
+	for _, s := range col.all() {
+		if s.Err == nil {
+			t.Fatal("a failing server gave a snapshot without Err")
+		}
+	}
+
+	// Fast, 2 x Fast, 4 x Fast, then the cap: a fixed Fast would need ~100 ms.
+	at := srv.arrivals()
+	if span := at[5].Sub(at[0]); span < 300*time.Millisecond {
+		t.Errorf("six requests in %v, want the wait to grow", span)
+	}
+}
+
+func TestNextWait(t *testing.T) {
+	const (
+		fast    = 20 * time.Millisecond
+		slow    = 200 * time.Millisecond
+		maxWait = 100 * time.Millisecond
+	)
+
+	now := time.Date(2026, 10, 27, 9, 0, 0, 0, time.UTC)
+	fail := Snapshot{Err: errors.New("boom")}
+	ok := Snapshot{}
+	limited := func(d time.Duration) Snapshot {
+		return Snapshot{Err: fmt.Errorf("poll: %w", &RateLimitError{Reset: now.Add(d)})}
+	}
+
+	type step struct {
+		snap    Snapshot
+		pending bool
+		want    time.Duration
+	}
+
+	tests := []struct {
+		name  string
+		steps []step
+	}{
+		{"errors double up to the cap", []step{
+			{fail, false, fast},
+			{fail, false, 2 * fast},
+			{fail, false, 4 * fast},
+			{fail, false, maxWait},
+			{fail, false, maxWait},
+		}},
+		{"a success resets the backoff", []step{
+			{fail, false, fast},
+			{fail, false, 2 * fast},
+			{fail, false, 4 * fast},
+			{ok, true, fast},
+			{fail, false, fast},
+		}},
+		{"cadence follows pending checks", []step{
+			{ok, true, fast}, {ok, false, slow}, {ok, true, fast},
+		}},
+		{"a rate limit waits for the reset", []step{
+			{limited(50 * time.Millisecond), false, 50 * time.Millisecond},
+		}},
+		{"a rate limit waits at least Fast", []step{
+			{limited(time.Millisecond), false, fast}, {limited(-time.Minute), false, fast},
+		}},
+		{"a rate limit waits at most an hour", []step{
+			{limited(3 * time.Hour), false, time.Hour},
+		}},
+		{"a rate limit leaves the error backoff alone", []step{
+			{fail, false, fast},
+			{fail, false, 2 * fast},
+			{limited(time.Second), false, time.Second},
+			{fail, false, 4 * fast},
+		}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := NewPoller(PollerOptions{Fast: fast, Slow: slow, MaxBackoff: maxWait})
+
+			var failures int
+
+			for i, st := range tt.steps {
+				if got := p.nextWait(st.snap, st.pending, &failures, now); got != st.want {
+					t.Errorf("step %d: wait = %v, want %v", i, got, st.want)
+				}
+			}
+		})
+	}
+}
+
+func TestPollerClientErrorIsReported(t *testing.T) {
+	srv := &pollServer{}
+
+	var calls atomic.Int64
+
+	p, col := startPoller(t, srv, PollerOptions{
+		Client: func(context.Context, string) (*Client, error) {
+			calls.Add(1)
+
+			return nil, fmt.Errorf("no login: %w", ErrNoToken)
+		},
+	}, nil)
+
+	p.Set([]Watch{{Repo: repoA}})
+
+	s := col.waitFor(5*time.Second, "client error", anySnap)
+	if !errors.Is(s.Err, ErrNoToken) {
+		t.Fatalf("Err = %v, want ErrNoToken", s.Err)
+	}
+
+	if len(s.PRs) != 0 {
+		t.Errorf("PRs = %v on a failed poll", s.PRs)
+	}
+
+	col.waitCount(5*time.Second, 3)
+
+	if n := calls.Load(); n < 3 {
+		t.Errorf("factory called %d times, want it retried and not cached", n)
+	}
+
+	if srv.gql.Load() != 0 {
+		t.Error("a request was sent without a client")
+	}
+}
+
+func TestPollerClientKeptPerHost(t *testing.T) {
+	srv := &pollServer{}
+	srv.pendingPR.Store(1)
+
+	c, _ := newTestClient(t, "github.com", srv)
+
+	var calls atomic.Int64
+
+	p, col := startPoller(t, srv, PollerOptions{
+		Slow: 10 * time.Second,
+		Client: func(context.Context, string) (*Client, error) {
+			calls.Add(1)
+
+			return c, nil
+		},
+	}, nil)
+
+	p.Set([]Watch{{Repo: repoA, Visible: []int{1}}})
+	col.waitCount(5*time.Second, 4)
+
+	if n := calls.Load(); n != 1 {
+		t.Errorf("factory called %d times, want the client kept", n)
+	}
+}
+
+func TestPollerRefresh(t *testing.T) {
+	srv := &pollServer{}
+	p, col := startPoller(t, srv, PollerOptions{}, nil)
+
+	p.Set([]Watch{{Repo: repoA}})
+	col.waitCount(5*time.Second, 1)
+
+	p.Refresh(repoA)
+	col.waitCount(5*time.Second, 2)
+
+	n := srv.gql.Load()
+
+	p.Refresh(repoB)
+	time.Sleep(150 * time.Millisecond)
+
+	if got := srv.gql.Load(); got != n {
+		t.Errorf("refreshing an unwatched repository sent %d requests", got-n)
+	}
+}
+
+func TestPollerConsumerMayCallBack(t *testing.T) {
+	srv := &pollServer{}
+	srv.pendingPR.Store(1)
+
+	each := func(p *Poller, s Snapshot) {
+		p.Set([]Watch{{Repo: s.Repo, Visible: []int{1}}})
+		p.Refresh(s.Repo)
+	}
+
+	p, col := startPoller(t, srv, PollerOptions{}, each)
+
+	p.Set([]Watch{{Repo: repoA, Visible: []int{1}}})
+	col.waitCount(5*time.Second, 20)
+}
+
+// newUnpooledClient is newTestClient without idle connections, whose
+// goroutines would outlive the poller and blur a goroutine count.
+func newUnpooledClient(t *testing.T, h http.Handler) *Client {
+	t.Helper()
+
+	ts := httptest.NewServer(h)
+	t.Cleanup(ts.Close)
+
+	target, err := url.Parse(ts.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rt := &routeTransport{t: t, host: "api.github.com", target: target, next: &http.Transport{DisableKeepAlives: true}}
+
+	c, err := NewClient("github.com", Options{Token: testToken, Transport: rt})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return c
+}
+
+// settledGoroutines reads NumGoroutine until two reads a short time apart
+// agree, so goroutines of earlier tests have wound down.
+func settledGoroutines() int {
+	prev := -1
+
+	for i := 0; i < 200; i++ {
+		n := runtime.NumGoroutine()
+		if n == prev {
+			return n
+		}
+
+		prev = n
+
+		time.Sleep(20 * time.Millisecond)
+	}
+
+	return prev
+}
+
+func pollerGoroutines() bool {
+	buf := make([]byte, 1<<20)
+
+	return strings.Contains(string(buf[:runtime.Stack(buf, true)]), "(*Poller).run")
+}
+
+func TestPollerCloseStopsEverything(t *testing.T) {
+	started := make(chan struct{}, 1)
+	srv := &pollServer{}
+	srv.handle = func(_ int64, _ http.ResponseWriter, r *http.Request) bool {
+		select {
+		case started <- struct{}{}:
+		default:
+		}
+
+		<-r.Context().Done()
+
+		return true
+	}
+
+	c := newUnpooledClient(t, srv)
+	baseline := settledGoroutines()
+
+	p := NewPoller(PollerOptions{
+		Client: func(context.Context, string) (*Client, error) { return c, nil },
+		Fast:   testFast, Slow: testSlow,
+	})
+
+	t.Cleanup(func() { _ = p.Close() })
+
+	done := make(chan struct{})
+
+	go func() {
+		defer close(done)
+
+		for range p.Updates() { //nolint:revive // drained until closed
+		}
+	}()
+
+	p.Set([]Watch{{Repo: repoA}, {Repo: repoB}})
+
+	select {
+	case <-started:
+	case <-time.After(5 * time.Second):
+		t.Fatal("no request started")
+	}
+
+	begin := time.Now()
+
+	if err := p.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	if d := time.Since(begin); d > time.Second {
+		t.Errorf("Close took %v with a request in flight", d)
+	}
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("Updates was not closed")
+	}
+
+	if err := p.Close(); err != nil {
+		t.Errorf("second Close = %v", err)
+	}
+
+	p.Set([]Watch{{Repo: repoA}})
+	p.Refresh(repoA)
+
+	var now int
+
+	for deadline := time.Now().Add(3 * time.Second); time.Now().Before(deadline); time.Sleep(10 * time.Millisecond) {
+		if now = runtime.NumGoroutine(); now <= baseline && !pollerGoroutines() {
+			return
+		}
+	}
+
+	buf := make([]byte, 1<<16)
+	t.Errorf("%d goroutines after Close, baseline %d\n%s", now, baseline, buf[:runtime.Stack(buf, true)])
+}
+
+func TestPollerCloseWithoutConsumer(t *testing.T) {
+	p := NewPoller(PollerOptions{
+		Client: func(context.Context, string) (*Client, error) { return nil, ErrNoToken },
+		Fast:   time.Millisecond, Slow: time.Millisecond,
+	})
+
+	t.Cleanup(func() { _ = p.Close() })
+
+	p.Set([]Watch{{Repo: repoA}, {Repo: repoB}})
+
+	for i := 0; i < 40; i++ {
+		p.Refresh(repoA)
+		p.Refresh(repoB)
+		time.Sleep(2 * time.Millisecond)
+	}
+
+	if n := len(p.Updates()); n != updatesBuffer {
+		t.Fatalf("%d snapshots queued, want the buffer of %d full", n, updatesBuffer)
+	}
+
+	begin := time.Now()
+
+	if err := p.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	if d := time.Since(begin); d > time.Second {
+		t.Errorf("Close took %v with a full channel and no consumer", d)
+	}
+
+	closed := make(chan struct{})
+
+	go func() {
+		defer close(closed)
+
+		for range p.Updates() { //nolint:revive // drained until closed
+		}
+	}()
+
+	select {
+	case <-closed:
+	case <-time.After(time.Second):
+		t.Error("Updates was not closed")
+	}
+}
+
+func TestPollerRaceSetRefreshClose(t *testing.T) {
+	repos := []Repo{repoA, repoB, {Host: "github.com", Owner: "octo", Name: "c"}}
+
+	for round := 0; round < 20; round++ {
+		p := NewPoller(PollerOptions{
+			Client: func(context.Context, string) (*Client, error) { return nil, ErrNoToken },
+			Fast:   time.Millisecond, Slow: time.Millisecond,
+		})
+
+		t.Cleanup(func() { _ = p.Close() })
+
+		drained := make(chan struct{})
+
+		go func() {
+			defer close(drained)
+
+			for range p.Updates() { //nolint:revive // drained until closed
+			}
+		}()
+
+		var (
+			workers sync.WaitGroup
+			start   = make(chan struct{})
+			stop    = make(chan struct{})
+		)
+
+		for g := 0; g < 4; g++ {
+			workers.Add(1)
+
+			go func() {
+				defer workers.Done()
+
+				<-start
+
+				for i := 0; ; i++ {
+					select {
+					case <-stop:
+						return
+					default:
+					}
+
+					switch (g + i) % 3 {
+					case 0:
+						p.Set([]Watch{{Repo: repos[i%3], Visible: []int{1}, Focused: i % 3}})
+					case 1:
+						p.Refresh(repos[i%3])
+					default:
+						p.Set(nil)
+					}
+				}
+			}()
+		}
+
+		closeDone := make(chan struct{})
+
+		go func() {
+			defer close(closeDone)
+
+			<-start
+
+			_ = p.Close()
+		}()
+
+		close(start)
+
+		select {
+		case <-closeDone:
+		case <-time.After(time.Second):
+			t.Fatal("Close did not return within 1 s")
+		}
+
+		close(stop)
+		workers.Wait()
+
+		select {
+		case <-drained:
+		case <-time.After(time.Second):
+			t.Fatal("Updates was not closed")
+		}
+	}
+}
