@@ -36,6 +36,9 @@ type Server struct {
 	// Hold is how long a turn-start event's answer waits for its Done; 0 never
 	// holds. Set before Serve.
 	Hold time.Duration
+	// Budget is how long a held turn start has for its snapshot, counted from
+	// when the server reads it; 0 sets no Deadline. Set before Serve.
+	Budget time.Duration
 
 	ln   net.Listener
 	path string
@@ -168,6 +171,10 @@ func (s *Server) handle(ctx context.Context, conn net.Conn, out chan<- Event) {
 	if ev.TurnStart && s.Hold > 0 {
 		held = make(chan struct{})
 		ev.Done = sync.OnceFunc(func() { close(held) })
+
+		if s.Budget > 0 {
+			ev.Deadline = time.Now().Add(s.Budget)
+		}
 	}
 
 	timer := time.NewTimer(sendTimeout)

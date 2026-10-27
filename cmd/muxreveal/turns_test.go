@@ -114,6 +114,139 @@ func TestGateForwardsEventsInOrderWithoutWaiting(t *testing.T) {
 	within(t, released, time.Second, "Done after the snapshot")
 }
 
+// startUnreadGate runs a gate whose out channel is unbuffered and never read.
+func startUnreadGate(t *testing.T, snap snapshotFunc) chan<- harness.Event {
+	t.Helper()
+
+	in := make(chan harness.Event, 4)
+	done := make(chan struct{})
+	ctx, cancel := context.WithCancel(context.Background())
+
+	go func() {
+		defer close(done)
+
+		runTurnGate(ctx, in, make(chan harness.Event), snap, func(context.Context, string, string) error { return nil }, discardLogger())
+	}()
+
+	t.Cleanup(func() {
+		cancel()
+		<-done
+	})
+
+	return in
+}
+
+func TestGateUsesTheEventDeadline(t *testing.T) {
+	got := make(chan time.Time, 1)
+	snap := func(ctx context.Context, _, _ string) error {
+		dl, _ := ctx.Deadline()
+		got <- dl
+
+		return nil
+	}
+
+	r := startGate(t, snap, func(context.Context, string, string) error { return nil })
+	turn, _ := turnEvent("UserPromptSubmit", gateSession, "/repo")
+	turn.Deadline = time.Now().Add(300 * time.Millisecond)
+
+	r.in <- turn
+
+	select {
+	case dl := <-got:
+		if !dl.Equal(turn.Deadline) {
+			t.Errorf("snapshot deadline = %v, want the event's %v", dl, turn.Deadline)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("no snapshot")
+	}
+}
+
+func TestGateWithoutDeadlineUsesArrival(t *testing.T) {
+	got := make(chan time.Time, 1)
+	snap := func(ctx context.Context, _, _ string) error {
+		dl, _ := ctx.Deadline()
+		got <- dl
+
+		return nil
+	}
+
+	r := startGate(t, snap, func(context.Context, string, string) error { return nil })
+	turn, _ := turnEvent("UserPromptSubmit", gateSession, "/repo")
+
+	before := time.Now()
+
+	r.in <- turn
+
+	select {
+	case dl := <-got:
+		if dl.Before(before.Add(turnBudget)) || dl.After(time.Now().Add(turnBudget)) {
+			t.Errorf("snapshot deadline = %v, want arrival + %v", dl, turnBudget)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("no snapshot")
+	}
+}
+
+func TestGateSnapshotsBeforeTheAppReadsTheEvent(t *testing.T) {
+	snapped := make(chan struct{})
+	snap := func(context.Context, string, string) error {
+		close(snapped)
+
+		return nil
+	}
+
+	in := startUnreadGate(t, snap)
+	turn, released := turnEvent("UserPromptSubmit", gateSession, "/repo")
+
+	in <- turn
+
+	within(t, snapped, time.Second, "the snapshot with the app channel blocked")
+	within(t, released, time.Second, "the hold release with the app channel blocked")
+}
+
+func TestGateSnapshotsOfOneSessionStayInArrivalOrder(t *testing.T) {
+	var (
+		mu    sync.Mutex
+		order []string
+	)
+
+	snap := func(_ context.Context, cwd, _ string) error {
+		mu.Lock()
+
+		order = append(order, cwd)
+
+		mu.Unlock()
+
+		return nil
+	}
+
+	r := startGate(t, snap, func(context.Context, string, string) error { return nil })
+
+	var releases []<-chan struct{}
+
+	want := make([]string, 0, 12)
+
+	for i := range 12 {
+		cwd := "/repo" + string(rune('A'+i%26)) + string(rune('a'+i/26))
+		turn, released := turnEvent("UserPromptSubmit", gateSession, cwd)
+		want = append(want, cwd)
+		releases = append(releases, released)
+
+		r.in <- turn
+	}
+
+	for _, released := range releases {
+		within(t, released, 2*time.Second, "a snapshot")
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+
+	if strings.Join(order, ",") != strings.Join(want, ",") {
+		t.Errorf("snapshot order = %v, want %v", order, want)
+	}
+}
+
 func TestGateSlowSnapshotIsCancelledAtTheBudget(t *testing.T) {
 	var (
 		order      []string

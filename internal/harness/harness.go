@@ -1,7 +1,11 @@
 // Package harness adapts external coding-agent CLIs to MuxReveal.
 package harness
 
-import "github.com/mhersson/muxreveal/internal/core"
+import (
+	"time"
+
+	"github.com/mhersson/muxreveal/internal/core"
+)
 
 // Harness adapts one agent CLI: how to launch it, how to hook it, and how to
 // read what its hooks report.
@@ -41,6 +45,9 @@ type Event struct {
 	// Done releases the held answer. The server sets it on a held event; it is
 	// safe to call more than once and concurrently. Nil when nothing is held.
 	Done func() `json:"-"`
+	// Deadline is when the turn snapshot must be done, stamped by the server
+	// as it reads a held turn start; zero when unset.
+	Deadline time.Time `json:"-"`
 }
 
 // ByID returns the harness saved under id.

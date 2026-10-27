@@ -97,6 +97,7 @@ func setupHooks(logger *slog.Logger, stateDir string) (hookRuntime, error) {
 
 	srv.Log = logger
 	srv.Hold = turnHold
+	srv.Budget = turnBudget
 
 	raw := make(chan harness.Event, eventBuffer)
 	events := make(chan harness.Event, eventBuffer)
