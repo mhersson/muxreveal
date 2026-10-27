@@ -309,16 +309,36 @@ M2 ships as two plans, one PR each.
 
 Headless, in `internal/git`: worktrees, turn snapshots taken before the prompt hook is answered, the diff engine with branch and turn sources, and the directory watcher. Covers WT-1, WT-2, DF-1, DF-2, DF-3.
 
-- [ ] Port tuios's line diff and invisible-character marks
-- [ ] Git runner and repository discovery
-- [ ] Worktree discovery and creation
-- [ ] Turn snapshots
-- [ ] Hook answer after the turn snapshot
-- [ ] Diff engine with branch and turn sources
-- [ ] Directory watcher
-- [ ] Live recompute, gate checks and snapshot timing on a large repo
+- [x] Port tuios's line diff and invisible-character marks
+- [x] Git runner and repository discovery
+- [x] Worktree discovery and creation
+- [x] Turn snapshots
+- [x] Hook answer after the turn snapshot
+- [x] Diff engine with branch and turn sources
+- [x] Directory watcher
+- [x] Live recompute, gate checks and snapshot timing on a large repo
 
 Gate: a saved file is reported by the watcher and its diff recomputed within 300 ms; turn mode isolates exactly the last turn's changes in a test with three turns.
+
+#### M2a gate results
+
+Machine: as the Spike "Machine" section (AMD Ryzen 9 3950X, 16 cores / 32 threads, 31 GiB; Arch Linux, kernel 7.2.11; go1.27.3). Scratch directories were on tmpfs.
+
+| Gate line | Measured | Result |
+| --- | --- | --- |
+| Save to diff at most 300 ms (median), 2,000-file repo, 20 saves, watcher batch included (150 ms debounce) | median 186.5 ms, p95 191.7 ms | pass |
+| Snapshot of the 2,000-file repo within the 1.4 s hook budget | median 35.2 ms of 5 | pass |
+| Turn mode isolates exactly the last turn's changes (`TestTurnModeIsolatesTheLastTurn`: three turns, a delete, an untracked file, an agent commit mid-turn) | turns 3, 2 and 1 each list exactly their own files | pass |
+
+Large repo (`kubernetes/kubernetes`, `--depth 1`, 31,509 tracked files, 20 tracked files edited, scratch clone on tmpfs, OS file cache warm from the clone; cold is the first call, one sample; warm is the median of the next 5). A fresh clone's index entries are racily clean, so git re-hashes them on every call: our temporary index copy is discarded, so a refresh never sticks. After one `git status` in the clone (as a developer's own tools keep the index fresh) the same calls are about 17 times faster:
+
+| Operation | Fresh clone, cold / warm | Refreshed index, cold / warm |
+| --- | --- | --- |
+| `Snapshot` | 2.92 s / 2.88 s | 175 ms / 157 ms |
+| `WorkingTree` | 2.85 s / 2.88 s | 144 ms / 148 ms |
+| Branch `Diff` against `HEAD` (20 files, fresh engine per call) | 2.91 s / 2.90 s | 168 ms / 167 ms |
+
+In a fresh-clone snapshot `ls-files` takes 1.45 s and `update-index` 1.42 s; with a refreshed index they take 96 ms and 30 ms, `write-tree` is 20-30 ms in both, and every other subcommand is under 2 ms. A first snapshot in an unrefreshed clone is therefore over the 1.4 s hook budget: the gate cancels it and the turn gets a "no snapshot" marker; the watcher's unchanged hint (M2b) skips the snapshot when nothing changed.
 
 ### M2b Review pane
 
@@ -379,6 +399,8 @@ M1e Tiling, tab moves and chrome and M2a Worktrees and diff engine are in progre
 
 Ideas and requests that came up outside the current milestone go here.
 
+- Snapshots that fall back to `read-tree HEAD` (a split or unreadable index) lose skip-worktree bits, so a sparse checkout's snapshot shows the sparse files as deleted.
+- A tracked file inside a directory git ignores (force-added) gets no watch, so its edits show only after a full recompute.
 - Last-tab jump.
 - Per-tab attention marks: an agent needs you, a bell, unseen output.
 - A tab switcher with previews.
