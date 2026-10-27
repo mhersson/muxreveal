@@ -1,0 +1,48 @@
+{
+  "data": {
+    "repository": {
+      "defaultBranchRef": null,
+      "mergeCommitAllowed": false,
+      "squashMergeAllowed": false,
+      "rebaseMergeAllowed": true,
+      "deleteBranchOnMerge": false,
+      "pullRequests": {
+        "nodes": [
+          {
+            "number": 3,
+            "title": "No checks configured",
+            "url": "https://github.com/octo/repo/pull/3",
+            "isDraft": false,
+            "state": "OPEN",
+            "isCrossRepository": false,
+            "headRefName": "feat/plain",
+            "headRefOid": "3333333333333333333333333333333333333333",
+            "baseRefName": "main",
+            "updatedAt": "2026-10-27T08:00:00Z",
+            "reviewDecision": "REVIEW_REQUIRED",
+            "mergeStateStatus": "UNKNOWN",
+            "author": {"login": "octocat"},
+            "commits": {"nodes": [{"commit": {"statusCheckRollup": null}}]}
+          },
+          {
+            "number": 2,
+            "title": "No commits yet",
+            "url": "https://github.com/octo/repo/pull/2",
+            "isDraft": false,
+            "state": "OPEN",
+            "isCrossRepository": false,
+            "headRefName": "feat/empty",
+            "headRefOid": "4444444444444444444444444444444444444444",
+            "baseRefName": "main",
+            "updatedAt": "2026-10-27T07:00:00Z",
+            "reviewDecision": null,
+            "mergeStateStatus": "UNKNOWN",
+            "author": {"login": "octocat"},
+            "commits": {"nodes": []}
+          }
+        ]
+      }
+    },
+    "rateLimit": {"remaining": 4000, "resetAt": "2026-10-27T10:00:00Z"}
+  }
+}
