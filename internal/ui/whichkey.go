@@ -222,6 +222,54 @@ func whichKeyColumn(groups [][]hint, icons bool, st styles) column {
 	return column{rows: rows, width: contentW + 2}
 }
 
+// sequenceRows are the second keys a sequence prefix waits for, as key and title.
+func sequenceRows(prefix string) []hint {
+	switch prefix {
+	case ">":
+		return []hint{{key: "1-9", title: "Move pane to tab N"}, {key: "esc", title: "Cancel"}}
+	case ".":
+		return []hint{{key: "1-9", title: "Send pane to tab N"}, {key: "esc", title: "Cancel"}}
+	case ";":
+		return []hint{{key: "h j k l", title: "Preselect side"}, {key: "esc", title: "Clear preselection"}}
+	}
+	return nil
+}
+
+// sequencePopup draws the box a pending sequence shows: the leader's name and
+// the first key as its title, then one row per second key.
+func sequencePopup(leader, prefix string, icons bool, st styles) []string {
+	rows := sequenceRows(prefix)
+	if len(rows) == 0 {
+		return nil
+	}
+	title := " " + leader + " " + prefix + " "
+	if icons {
+		title = " " + iconLeader + " " + leader + " " + prefix + " "
+	}
+	keyW, contentW := 0, 0
+	for _, h := range rows {
+		keyW = max(keyW, lipgloss.Width(h.key))
+	}
+	for _, h := range rows {
+		contentW = max(contentW, keyW+2+lipgloss.Width(h.title))
+	}
+	// The title sits after the corner and one dash, with a dash left before the corner.
+	contentW = max(contentW, lipgloss.Width(title))
+	width := contentW + 2
+
+	border := func(s string) string { return st.popupBorder.Render(s) }
+	margin := st.popup.Render(" ")
+	lines := []string{border("┌─") + st.popupHead.Render(title) +
+		border(strings.Repeat("─", width-1-lipgloss.Width(title))+"┐")}
+	for _, h := range rows {
+		pad := keyW - lipgloss.Width(h.key) + 2
+		rest := contentW - keyW - 2 - lipgloss.Width(h.title)
+		lines = append(lines, border("│")+margin+st.popupKey.Render(h.key)+
+			st.popup.Render(strings.Repeat(" ", pad)+h.title+strings.Repeat(" ", rest))+margin+border("│"))
+	}
+	return append(lines, border("└"+strings.Repeat("─", width)+"┘"))
+}
+
 // whichKeyPopup draws the grouped hint list titled with the leader key: Panes
 // and Layout in a left column, the others in a right one.
 func whichKeyPopup(leader string, hints []hint, icons bool, st styles) []string {
@@ -298,16 +346,25 @@ func padColumn(c column, width int, st styles) column {
 }
 
 // overlayWhichKey draws the popup over base at the bottom-right, one cell
-// from the right edge and above the status bar row. It is clipped to the
+// from the right edge, its bottom border on the last row. It is clipped to the
 // body rows and the screen, never wrapped.
 func overlayWhichKey(base string, width, height int, leader string, hints []hint, icons bool, st styles) string {
-	if width <= 0 || height < 3 || len(hints) == 0 {
+	if len(hints) == 0 {
 		return base
 	}
-	lines := whichKeyPopup(leader, hints, icons, st)
-	y := height - 1 - len(lines)
-	if y < 1 {
-		lines, y = lines[:height-2], 1
+	return overlayCorner(base, width, height, whichKeyPopup(leader, hints, icons, st))
+}
+
+// overlayCorner draws popup lines over base at the bottom-right of the body,
+// one cell from the right edge and ending on the last row, clipped to the body
+// rows and the screen.
+func overlayCorner(base string, width, height int, lines []string) string {
+	if width <= 0 || height < 3 || len(lines) == 0 {
+		return base
+	}
+	y := height - len(lines)
+	if y < 2 {
+		lines, y = lines[:height-2], 2
 	}
 	w := 0
 	for _, l := range lines {

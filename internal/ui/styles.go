@@ -27,6 +27,10 @@ type styles struct {
 	kindAgent, kindShell lipgloss.Style
 	titleMuted, tagZoom  lipgloss.Style
 	tagScroll            lipgloss.Style
+	// tagCopy is the copy tag and the search prompt's mark; searchText is the query.
+	tagCopy, searchText lipgloss.Style
+	// The toast: its Warning border and icon, and its text, all on the panel colour.
+	toastBorder, toastIcon, toastText lipgloss.Style
 	// tagWorking, tagBlocked and tagIdle draw the state badge.
 	tagWorking, tagBlocked, tagIdle lipgloss.Style
 	// popupBorder draws the popup frame on the panel colour.
@@ -62,6 +66,11 @@ func newStyles(t theme.Theme) styles {
 		titleMuted:  onBg.Foreground(ui.Muted),
 		tagZoom:     onBg.Foreground(ui.Accent).Bold(true),
 		tagScroll:   onBg.Foreground(ui.Accent).Bold(true),
+		tagCopy:     onBg.Foreground(ui.Info).Bold(true),
+		searchText:  onBg,
+		toastBorder: onPanel.Foreground(ui.Warning),
+		toastIcon:   onPanel.Foreground(ui.Warning),
+		toastText:   onPanel,
 		tagWorking:  onBg.Foreground(ui.Working).Bold(true),
 		tagBlocked:  onBg.Foreground(ui.Blocked).Bold(true),
 		tagIdle:     onBg.Foreground(ui.Idle).Bold(true),

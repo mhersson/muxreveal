@@ -142,9 +142,9 @@ func TestNewTabStartsShell(t *testing.T) {
 		t.Errorf("command dir = %q, want /elsewhere", got.Dir)
 	}
 
-	// The body is 100x27; the frame takes one cell on every side.
-	if st.sizes[1] != [2]int{98, 25} {
-		t.Errorf("start size = %v, want [98 25]", st.sizes[1])
+	// The body is 100x28; the frame takes one cell on every side.
+	if st.sizes[1] != [2]int{98, 26} {
+		t.Errorf("start size = %v, want [98 26]", st.sizes[1])
 	}
 
 	if a.panes["p2"] == nil {
@@ -204,12 +204,8 @@ func TestRenamePrompt(t *testing.T) {
 		t.Fatalf("prompt = %+v, want one pre-filled with the empty custom name", a.prompt)
 	}
 
-	if got := lastRow(a); !strings.Contains(got, " "+iconRename+" Rename tab ") || !strings.Contains(got, "enter save   esc cancel   empty automatic name") {
-		t.Errorf("status bar = %q, want the rename mode and its legend", got)
-	}
-
-	if strings.Contains(lastRow(a), "ctrl+space then") {
-		t.Errorf("status bar keeps the lead-in while renaming: %q", lastRow(a))
+	if got := strings.Join(screenRows(a), "\n"); strings.Contains(got, "Rename tab") || strings.Contains(got, "enter save") {
+		t.Errorf("screen shows a rename label or legend:\n%s", got)
 	}
 
 	// " 1 " then the rename icon and a space.
@@ -293,10 +289,6 @@ func TestRenamePromptWithoutIcons(t *testing.T) {
 		t.Errorf("bar = %q, want ` 1 a `", got)
 	}
 
-	if got := lastRow(a); !strings.HasPrefix(got, " Rename tab ") {
-		t.Errorf("status bar = %q, want ` Rename tab ` first", got)
-	}
-
 	if got := a.View().Cursor; got == nil || got.X != 4 || got.Y != 0 {
 		t.Errorf("cursor = %+v, want column 4 on row 0", got)
 	}
@@ -317,9 +309,6 @@ func TestRenameSegmentColours(t *testing.T) {
 	assertColours(t, vt, 5, 0, "a", ui.Fg, ui.Bg, false)
 	assertColours(t, vt, 8, 0, " ", ui.Fg, ui.Bg, false)
 	assertColours(t, vt, 9, 0, edgeSolid, ui.Bg, ui.Bar, false)
-
-	vt = lineVT(t, a.statusBar(60, a.store.State()), 60)
-	assertColours(t, vt, 1, 0, iconRename, ui.OnAccent, ui.Accent, true)
 }
 
 func TestRenameGolden(t *testing.T) {

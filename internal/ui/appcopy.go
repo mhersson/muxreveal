@@ -126,7 +126,7 @@ func (a *App) handleCopyKey(msg tea.KeyPressMsg) tea.Cmd {
 	case copySearch, copySearchBack:
 		backward := act == copySearchBack
 
-		a.showPrompt(&prompt{kind: promptSearch, pane: cs.pane, done: func(a *App, query string) tea.Cmd {
+		a.showPrompt(&prompt{kind: promptSearch, pane: cs.pane, backward: backward, done: func(a *App, query string) tea.Cmd {
 			a.runSearch(query, backward)
 
 			return nil

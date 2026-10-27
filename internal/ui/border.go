@@ -19,49 +19,53 @@ const (
 	ownShell
 )
 
-// drawBox adds the rounded box around a pane rect: corners, sides and bottom,
-// and the top border with its title and tag segments set in. Every pane has its
-// own box, so neighbours touch without shared cells.
-func drawBox(add func(y int, s segment), r core.Rect, top []segment, own uint8, st styles) {
+// drawBox adds the rounded box around a pane rect: corners, sides, and the top
+// and bottom borders with their title, tag and prompt segments set in. Every
+// pane has its own box, so neighbours touch without shared cells.
+func drawBox(add func(y int, s segment), r core.Rect, top, bottom []segment, own uint8, st styles) {
 	if r.W < minFrame || r.H < minFrame {
 		return
 	}
 
 	right := r.X + r.W - 1
-	bottom := r.Y + r.H - 1
+	last := r.Y + r.H - 1
 
 	line := func(x, w int, glyphs string) segment { return segment{x, w, st.borderRun(own, glyphs)} }
 
-	// The top border is runs of corner and dashes between the title and tag
-	// segments; the last run ends in the other corner.
-	pos, prefix := r.X, "╭"
-	run := func(end int, tail string) {
-		if end > pos {
-			dashes := end - pos - utf8.RuneCountInString(prefix+tail)
-			add(r.Y, line(pos, end-pos, prefix+strings.Repeat("─", dashes)+tail))
-		}
-	}
-
-	slices.SortFunc(top, func(p, q segment) int { return p.x - q.x })
-
-	for _, s := range top {
-		if s.x < max(pos, r.X+1) || s.x+s.w > right {
-			continue
+	// A border is runs of corner and dashes between its segments; the last run
+	// ends in the other corner.
+	border := func(y int, segs []segment, left, rightCorner string) {
+		pos, prefix := r.X, left
+		run := func(end int, tail string) {
+			if end > pos {
+				dashes := end - pos - utf8.RuneCountInString(prefix+tail)
+				add(y, line(pos, end-pos, prefix+strings.Repeat("─", dashes)+tail))
+			}
 		}
 
-		run(s.x, "")
-		add(r.Y, s)
-		pos, prefix = s.x+s.w, ""
+		slices.SortFunc(segs, func(p, q segment) int { return p.x - q.x })
+
+		for _, s := range segs {
+			if s.x < max(pos, r.X+1) || s.x+s.w > right {
+				continue
+			}
+
+			run(s.x, "")
+			add(y, s)
+			pos, prefix = s.x+s.w, ""
+		}
+
+		run(right+1, rightCorner)
 	}
 
-	run(right+1, "╮")
+	border(r.Y, top, "╭", "╮")
 
-	for y := r.Y + 1; y < bottom; y++ {
+	for y := r.Y + 1; y < last; y++ {
 		add(y, line(r.X, 1, "│"))
 		add(y, line(right, 1, "│"))
 	}
 
-	add(bottom, line(r.X, r.W, "╰"+strings.Repeat("─", r.W-2)+"╯"))
+	border(last, bottom, "╰", "╯")
 }
 
 func kindOwner(k core.PaneKind) uint8 {
@@ -84,37 +88,30 @@ func (a *App) topBorder(s core.State, id core.PaneID, r core.Rect, focused bool,
 		titleStyle = kindStyle
 	}
 
-	// left is where the title must end; the first cell after the corner is a dash.
-	left, rightStart := r.X+r.W-1, r.X+1
+	// left is where the title must end.
+	left := r.X + r.W - 1
 
-	var segs []segment
-
-	// Tags sit right to left with one border cell between them and before the corner.
-	tagEnd := r.X + r.W - 2
-	place := func(tag string, style lipgloss.Style) {
-		tw := lipgloss.Width(tag)
-		x := tagEnd - tw
-		if x < rightStart {
-			return
-		}
-		segs = append(segs, segment{x, tw, style.Render(tag)})
-		left = x
-		tagEnd = x - 1
+	type tag struct {
+		text  string
+		style lipgloss.Style
 	}
 
+	var copyTag, scrollTag, zoomTag, badgeTag *tag
+
 	if meta.Kind == core.KindAgent {
-		if tag, style, ok := st.badge(meta.State, a.spin, a.icons); ok {
-			place(tag, style)
+		if text, style, ok := st.badge(meta.State, a.spin, a.icons); ok {
+			badgeTag = &tag{text, style}
 		}
 	}
 
 	_, focusExists := s.Panes[s.Tab().Focus]
 	if s.Tab().Zoomed && focusExists {
-		tag := " zoom "
+		text := " zoom "
 		if a.icons {
-			tag = " " + iconZoom + " zoom "
+			text = " " + iconZoom + " zoom "
 		}
-		place(tag, st.tagZoom)
+
+		zoomTag = &tag{text, st.tagZoom}
 	}
 
 	if p := a.panes[id]; p != nil {
@@ -123,8 +120,61 @@ func (a *App) topBorder(s core.State, id core.PaneID, r core.Rect, focused bool,
 			if a.icons {
 				arrow = iconScroll
 			}
-			place(fmt.Sprintf(" %s %d ", arrow, n), st.tagScroll)
+
+			scrollTag = &tag{fmt.Sprintf(" %s %d ", arrow, n), st.tagScroll}
 		}
+	}
+
+	if a.copy != nil && a.copy.pane == id {
+		text := " COPY "
+		if a.icons {
+			text = " " + iconCopy + " COPY "
+		}
+
+		copyTag = &tag{text, st.tagCopy}
+	}
+
+	// The tags fit between the corners with one border cell between two and one
+	// before the right corner; COPY claims room first, then the badge, zoom and
+	// scroll tags.
+	avail := r.W - 3
+	used := 0
+	claim := func(t *tag) *tag {
+		if t == nil {
+			return nil
+		}
+
+		need := lipgloss.Width(t.text)
+		if used > 0 {
+			need++
+		}
+
+		if used+need > avail {
+			return nil
+		}
+
+		used += need
+
+		return t
+	}
+
+	copyTag, badgeTag, zoomTag, scrollTag = claim(copyTag), claim(badgeTag), claim(zoomTag), claim(scrollTag)
+
+	var segs []segment
+
+	// Tags sit right to left with one border cell between them and before the corner.
+	tagEnd := r.X + r.W - 2
+
+	for _, t := range []*tag{badgeTag, zoomTag, scrollTag, copyTag} {
+		if t == nil {
+			continue
+		}
+
+		tw := lipgloss.Width(t.text)
+		x := tagEnd - tw
+		segs = append(segs, segment{x, tw, t.style.Render(t.text)})
+		left = x
+		tagEnd = x - 1
 	}
 
 	title := "shell"
@@ -162,6 +212,55 @@ func (a *App) topBorder(s core.State, id core.PaneID, r core.Rect, focused bool,
 	sb.WriteString(st.body.Render(" "))
 
 	return append(segs, segment{r.X + 2, w, sb.String()})
+}
+
+// searchChrome is the cells a search prompt takes besides its query: the
+// blank, the mark and the cell under the cursor.
+const searchChrome = 3
+
+// searchPrompt is the open search prompt drawn into the bottom border of the
+// pane at r: after the corner and its dash, a blank, the mark (/ or ?), the
+// query and the cell under the cursor. cursorX is the cursor's column, -1 when
+// the query is cut before it; ok is false when no prompt belongs to the pane or
+// the border has no room for one.
+func (a *App) searchPrompt(id core.PaneID, r core.Rect, st styles) (seg segment, cursorX int, ok bool) {
+	p := a.prompt
+	if p == nil || p.kind != promptSearch || p.pane != id {
+		return segment{}, 0, false
+	}
+
+	// The corner and its dash take two cells, the dash before the other corner one.
+	avail := r.W - 4
+	if avail < searchChrome {
+		return segment{}, 0, false
+	}
+
+	mark := "/"
+	if p.backward {
+		mark = "?"
+	}
+
+	text := ansi.Truncate(printable(p.input.Value()), avail-searchChrome, "")
+	body := st.body.Render(" ") + st.tagCopy.Render(mark) + st.searchText.Render(text) + st.body.Render(" ")
+	w := searchChrome + ansi.StringWidth(text)
+
+	cursorX = -1
+
+	before := ansi.StringWidth(printable(string([]rune(p.input.Value())[:p.input.Position()])))
+	if before <= ansi.StringWidth(text) {
+		cursorX = r.X + 4 + before
+	}
+
+	return segment{r.X + 2, w, body}, cursorX, true
+}
+
+// bottomBorder is what is set into the bottom border of the pane at r.
+func (a *App) bottomBorder(id core.PaneID, r core.Rect, st styles) []segment {
+	if seg, _, ok := a.searchPrompt(id, r, st); ok {
+		return []segment{seg}
+	}
+
+	return nil
 }
 
 func kindIcon(k core.PaneKind) string {

@@ -11,10 +11,9 @@ import (
 	"github.com/mhersson/muxreveal/internal/core"
 )
 
-// bodyRect is the area between the rule on row 1 and the status bar on the
-// last row.
+// bodyRect is the area under the rule on row 1, down to the last row.
 func bodyRect(width, height int) core.Rect {
-	return core.Rect{Y: 2, W: width, H: max(height-3, 0)}
+	return core.Rect{Y: 2, W: width, H: max(height-2, 0)}
 }
 
 // minFrame is the smallest pane rect, in rows and columns: a frame around one
@@ -112,10 +111,9 @@ type segment struct {
 	text string
 }
 
-// frameAt draws the whole screen: the workspace bar, the rule, the body and the
-// status bar, exactly height lines of exactly width cells. Height 1 is the
-// status bar only, height 2 the two bars and height 3 adds the rule. An empty
-// tab shows the welcome card.
+// frameAt draws the whole screen: the workspace bar, the rule and the body,
+// exactly height lines of exactly width cells. Height 1 is the workspace bar
+// only and height 2 adds the rule. An empty tab shows the welcome card.
 func (a *App) frameAt(g geometry) string {
 	if a.width <= 0 || a.height <= 0 {
 		return ""
@@ -125,15 +123,13 @@ func (a *App) frameAt(g geometry) string {
 	st := a.store.State()
 	lines := make([]string, 0, a.height)
 
-	if a.height >= 2 {
-		lines = append(lines, a.workspaceBar(a.width))
-	}
+	lines = append(lines, a.workspaceBar(a.width))
 
-	if a.height >= 3 {
+	if a.height >= 2 {
 		lines = append(lines, lk.styles.border.Render(strings.Repeat("─", a.width)))
 	}
 
-	if bodyH := a.height - 3; bodyH > 0 {
+	if bodyH := a.height - 2; bodyH > 0 {
 		if st.Tab().Empty() {
 			lines = append(lines, strings.Split(renderBody(a.width, bodyH, lk.styles, lk.sample, a.welcomeHints()), "\n")...)
 		} else {
@@ -141,13 +137,11 @@ func (a *App) frameAt(g geometry) string {
 		}
 	}
 
-	lines = append(lines, a.statusBar(a.width, st))
-
 	return strings.Join(lines, "\n")
 }
 
-// frameBody draws the body rows between the rule and the status bar: each
-// pane's box, title and content.
+// frameBody draws the body rows under the rule: each pane's box, title and
+// content.
 func (a *App) frameBody(g geometry, st core.State, lk look) []string {
 	rows := make([][]segment, a.height)
 	add := func(y int, s segment) {
@@ -164,7 +158,7 @@ func (a *App) frameBody(g geometry, st core.State, lk look) []string {
 			own = kindOwner(st.Panes[id].Kind)
 		}
 
-		drawBox(add, r, a.topBorder(st, id, r, id == focus, lk.styles), own, lk.styles)
+		drawBox(add, r, a.topBorder(st, id, r, id == focus, lk.styles), a.bottomBorder(id, r, lk.styles), own, lk.styles)
 	}
 
 	for id, r := range g.rects {
@@ -192,11 +186,11 @@ func (a *App) frameBody(g geometry, st core.State, lk look) []string {
 		}
 	}
 
-	lines := make([]string, 0, a.height-3)
+	lines := make([]string, 0, a.height-2)
 
 	var sb strings.Builder
 
-	for _, segs := range rows[2 : a.height-1] {
+	for _, segs := range rows[2:a.height] {
 		slices.SortFunc(segs, func(p, q segment) int { return p.x - q.x })
 		sb.Reset()
 
@@ -266,16 +260,16 @@ func printable(t string) string {
 }
 
 // cursorView places the focused pane's cursor on screen; nil when the guest
-// hides it, it falls outside the pane, or an overlay, a confirm or the which-key
-// popup is open. A prompt moves the cursor into the workspace bar or the status
-// bar, and copy mode shows its own block cursor.
+// hides it, it falls outside the pane, or an overlay, a confirm or a popup is
+// open. A prompt moves the cursor into the workspace bar or the searched pane's
+// bottom border, and copy mode shows its own block cursor.
 func (a *App) cursorView() *tea.Cursor { return a.cursorAt(a.geometry()) }
 
 func (a *App) cursorAt(g geometry) *tea.Cursor {
 	if a.prompt != nil {
-		return a.promptCursor()
+		return a.promptCursor(g)
 	}
-	if a.overlay != nil || a.popup || a.confirm != nil {
+	if a.overlay != nil || a.popup || a.sequenceOpen() || a.confirm != nil {
 		return nil
 	}
 	if a.copy != nil {

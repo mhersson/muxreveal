@@ -46,7 +46,7 @@ type Options struct {
 	HookSock string
 	// Events delivers hook events; nil means none arrive.
 	Events <-chan harness.Event
-	// Notice is shown in the status bar at start; empty for none.
+	// Notice is shown as a toast at start; empty for none.
 	Notice string
 	// Save is called with the state after every successful dispatch; nil saves nothing.
 	Save func(core.State)
@@ -62,9 +62,9 @@ type App struct {
 	keymap  keymap
 	pending bool   // leader pressed, awaiting a key
 	prefix  string // first key of a two-key sequence while pending; "" before it
-	popup   bool   // which-key popup visible; only while pending
+	popup   bool   // which-key popup visible; only while pending with no prefix
 	seq     int    // leader press counter; a whichKeyMsg with another seq is stale
-	notice  string // status-bar message until the next key press
+	notice  string // toast message until the next key press
 
 	// theme, styles and sample follow store.State().Theme; only sync updates them.
 	theme  theme.Theme
@@ -361,6 +361,10 @@ func bindingKey(msg tea.KeyPressMsg) string {
 	return msg.String()
 }
 
+// sequenceOpen reports whether a sequence prefix waits for its second key,
+// which shows the sequence popup at once.
+func (a *App) sequenceOpen() bool { return a.pending && a.prefix != "" }
+
 // endLeader drops a pending leader sequence and its which-key popup.
 func (a *App) endLeader() {
 	a.pending, a.popup, a.prefix = false, false, ""
@@ -418,7 +422,10 @@ func (a *App) runLeader(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 func (a *App) View() tea.View {
 	lk := a.current()
 	g := a.geometry()
-	content := a.frameAt(g)
+	content := overlayToast(a.frameAt(g), a.width, a.height, a.notice, a.icons, lk.styles)
+	if a.sequenceOpen() {
+		content = overlayCorner(content, a.width, a.height, sequencePopup(a.keymap.leader, a.prefix, a.icons, lk.styles))
+	}
 	if a.popup {
 		content = overlayWhichKey(content, a.width, a.height, a.keymap.leader, a.hints(), a.icons, lk.styles)
 	}

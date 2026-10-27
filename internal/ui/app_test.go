@@ -69,7 +69,7 @@ func TestAppViewSizes(t *testing.T) {
 	tests := []struct {
 		w, h     int
 		wantWord bool
-	}{{100, 30, true}, {20, 5, true}, {1, 1, false}}
+	}{{100, 30, true}, {20, 5, false}, {1, 1, false}}
 	for _, tt := range tests {
 		t.Run(fmt.Sprintf("%dx%d", tt.w, tt.h), func(t *testing.T) {
 			app := newTestApp(t)
@@ -393,8 +393,8 @@ func TestWhichKeySizes(t *testing.T) {
 			plain := ansi.Strip(content)
 			switch sz[0] {
 			case 100, 80:
-				// Fits whole: the bottom border sits on the row above the status bar, one cell from the edge.
-				bottom := ansi.Strip(lines[sz[1]-2])
+				// Fits whole: the bottom border sits on the last row, one cell from the edge.
+				bottom := ansi.Strip(lines[sz[1]-1])
 				if !strings.HasSuffix(bottom, "\u2518 ") || !strings.Contains(bottom, "\u2534") ||
 					!strings.Contains(plain, "Quit MuxReveal") || !strings.Contains(plain, "Jump to tab") {
 					t.Errorf("popup not drawn whole:\n%s", plain)

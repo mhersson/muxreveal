@@ -15,7 +15,7 @@ type promptKind int
 
 const (
 	promptRename promptKind = iota // the active tab's name, in the workspace bar
-	promptSearch                   // a copy-mode query, in the status bar
+	promptSearch                   // a copy-mode query, in the bottom border of the copy pane
 )
 
 // prompt is a single-line text input. It is a model only and draws nothing: its
@@ -25,7 +25,9 @@ type prompt struct {
 	kind  promptKind
 	tab   core.TabID  // promptRename: the tab it is about; it closes when that tab does
 	pane  core.PaneID // promptSearch: the pane it searches; it closes when that pane does
-	done  func(a *App, value string) tea.Cmd
+	// backward is a promptSearch for ?: shown as that mark instead of /.
+	backward bool
+	done     func(a *App, value string) tea.Cmd
 }
 
 // openPrompt shows a rename prompt pre-filled with value, with the cursor at
@@ -78,11 +80,16 @@ func (a *App) updatePrompt(msg tea.Msg) tea.Cmd {
 }
 
 // promptCursor places the terminal cursor in the input of the open prompt; nil
-// when its segment is shortened out of view.
-func (a *App) promptCursor() *tea.Cursor {
+// when the text is cut or scrolled out of view.
+func (a *App) promptCursor(g geometry) *tea.Cursor {
 	if a.prompt.kind == promptSearch {
-		if x, ok := a.searchCursorX(); ok {
-			return tea.NewCursor(x, a.height-1)
+		r, ok := g.rects[a.prompt.pane]
+		if !ok {
+			return nil
+		}
+
+		if _, x, ok := a.searchPrompt(a.prompt.pane, r, a.current().styles); ok && x >= 0 {
+			return tea.NewCursor(x, r.Y+r.H-1)
 		}
 
 		return nil

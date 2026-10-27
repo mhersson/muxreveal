@@ -134,10 +134,10 @@ native = true
 - The compositor gets every mouse event first, so selection lives in MuxReveal's own screen model. While a confirm, prompt, overlay, copy mode or the leader (with or without its popup) is open, every mouse event is ignored.
 - A plain left-button drag selects in every pane, without a modifier. The selection stays in the pane where the drag began and is clamped to that pane's content even when the pointer leaves it. A drag is a stream selection, `alt+drag` a rectangle, a double-click selects a word and a triple-click a line (same cell within 400 ms). Soft-wrapped lines copy as one line.
 - The selection is stored against the pane's scrollback by stable row, so it stays on the same text while output scrolls, and it is painted onto the rows as drawn, so a held synchronized update does not tear it; one selection exists at a time and it is drawn only while its pane is visible. A click in any pane's content, a new drag, a key or paste sent to its pane, or the pane closing, resizing or switching between the main and alt screen clears it. Opening copy mode (`leader [`) clears it; other leader commands and tab switches do not.
-- A click in a pane's content focuses it; a click on its top border only focuses; a click on a tab switches to it; a pane's side and bottom borders and the status bar ignore clicks.
+- A click in a pane's content focuses it; a click on its top border only focuses; a click on a tab switches to it; a pane's side and bottom borders, the rule and the toast ignore clicks, and a click on the toast reaches what is under it.
 - A program that asked for mouse reporting gets a click (press then release) when the button is released in the cell where it went down, the wheel, middle and right buttons, and button-less motion only while `focus_follows_mouse` is on (the outer terminal is in cell-motion mode otherwise). A drag never reaches it: it selects instead. Selection gestures belong to MuxReveal and single clicks to the program: the second and third press of a double or triple click select a word or line and the program gets nothing for them (it already got the first click).
 - `leader y` (`copy.selection`) copies the selection and keeps it. Every copy goes out as OSC 52 to the outer terminal (and as the primary selection on Linux); both Ghostty and Kitty accept it by default, and it works over SSH.
-- `leader [` (`copy.mode`) enters copy mode on the focused pane, with a block cursor at the bottom-left of its current view. Copy mode owns every key (and drops pastes) until it ends, and the program receives none of them. The cursor and selection stay on the same text while output arrives. `y` copies the selection and exits, `q` or `esc` exits and returns the view to live; it also ends when the pane closes, resizes or switches between the main and alt screen. Keys: `h j k l`, `w b e`, `0 ^ $`, `g g` / `G`, `ctrl+u` / `ctrl+d`, `ctrl+b` / `ctrl+f`, `H M L`; `v` stream, `V` line and `ctrl+v` block selection; `/` and `?` search forward and backward, `n` / `N` repeat.
+- `leader [` (`copy.mode`) enters copy mode on the focused pane, with a block cursor at the bottom-left of its current view. Copy mode owns every key (and drops pastes) until it ends, and the program receives none of them. The cursor and selection stay on the same text while output arrives, and the pane's top border carries the COPY tag. `y` copies the selection and exits, `q` or `esc` exits and returns the view to live; it also ends when the pane closes, resizes or switches between the main and alt screen. Keys: `h j k l`, `w b e`, `0 ^ $`, `g g` / `G`, `ctrl+u` / `ctrl+d`, `ctrl+b` / `ctrl+f`, `H M L`; `v` stream, `V` line and `ctrl+v` block selection; `/` and `?` search forward and backward, `n` / `N` repeat.
 - On a local session (neither `SSH_CONNECTION` nor `SSH_TTY` set) a copy also writes the native clipboard, off the update loop with a 2 s timeout: `pbcopy` on macOS; otherwise `wl-copy` (and `wl-copy --primary`) when `WAYLAND_DISPLAY` is set, else `xclip -selection clipboard` (and `primary`) when `DISPLAY` is set, else no native write. A missing tool is logged once.
 - A program's own OSC 52 write takes the same path, hidden tabs included. A program's clipboard read is never answered with the clipboard's content.
 
@@ -260,7 +260,7 @@ Go 1.27 (`tuios.dev/vt` needs 1.26 or later). The reason for Rust was a proven V
 ### Panes and layout
 
 - Each tab has its own layout mode, pane order, focus and zoom; the rules below apply per tab. The mode is `bsp`, `master-stack` or `scrolling`; a new tab starts in the configured `default_mode` (see Config), and `leader space` cycles it in that order (`layout.set.*` in the palette sets one). The layout code is `internal/core/tiling`, tuios's layout package ported with its tests; it knows window ids and rectangles and nothing of MuxReveal. Core keeps each tab's layout as plain values (the mode, the panes in order, the BSP tree, the master ratio, the scrolling columns), so a state copy stays a value copy, and one function, `core.Arrange`, turns a tab into the pane rects the UI draws and the sizes the PTYs get.
-- Geometry is integer cells. Tiles are laid out over the body (the rows between the rule under the workspace bar and the status bar, the full width) edge to edge, with no gap, and each tile is a pane's rect: the pane's rounded box is drawn on the rect's outline, so neighbouring boxes touch, and its content is the rect inset by one cell on every side. A BSP split of a box `W` wide at ratio `r` gives its first child `floor(W*r)` columns and the second child the rest; a horizontal split does the same with the height and rows. A pane is drawn only when its rect is at least 3x3 (a frame around one content cell), lies inside the body and is disjoint from the panes kept before it in the tab's pane order; every mode applies this rule. A pane that is not drawn is left out of the rects and sizes, so a tiny terminal drops panes instead of producing negative sizes; the UI gives it a 1x1 PTY. A body under 3x3 yields no rects and stays blank. A pane's PTY size is its content rect. Focus and swap moves read the same rects the UI draws, so a pane that is left out is never a target.
+- Geometry is integer cells. Tiles are laid out over the body (the rows from the one under the rule to the last, the full width) edge to edge, with no gap, and each tile is a pane's rect: the pane's rounded box is drawn on the rect's outline, so neighbouring boxes touch, and its content is the rect inset by one cell on every side. A BSP split of a box `W` wide at ratio `r` gives its first child `floor(W*r)` columns and the second child the rest; a horizontal split does the same with the height and rows. A pane is drawn only when its rect is at least 3x3 (a frame around one content cell), lies inside the body and is disjoint from the panes kept before it in the tab's pane order; every mode applies this rule. A pane that is not drawn is left out of the rects and sizes, so a tiny terminal drops panes instead of producing negative sizes; the UI gives it a 1x1 PTY. A body under 3x3 yields no rects and stays blank. A pane's PTY size is its content rect. Focus and swap moves read the same rects the UI draws, so a pane that is left out is never a target.
 - **BSP** keeps a binary tree. A leaf is a pane; a split has two children, A (left or top) and B (right or bottom), and a `ratio`, the share of the space A takes. `vertical` splits put the children side by side; `horizontal` splits stack them.
 - **Master-stack** lays the tab's panes out in their order: the first `master_count` are masters and the rest form the stack, placed by `master_position` (left, right, top, bottom or center) with `master_grid` as configured. The tab has its own master ratio, initially `master_ratio`.
 - **Scrolling** keeps columns of panes, each with a width (a share of the body). Only columns that fit whole are drawn, and the visible ones stretch to fill the body, so no pane is clipped and no space is left empty. The tab keeps its first visible column, `first`. The visible set starts at `first` and takes columns while their widths sum to at most 100 %; `first` moves only as far as needed to keep the focused column visible (a focused column left of `first` becomes `first`; one right of the visible set makes `first` the smallest value whose run to the focused column fits). The visible columns split the body width in proportion to their widths, and neighbouring columns' frames touch; the panes of a column split its height equally. Hidden panes are not drawn, not hit by the mouse and not reached by focus moves other than left and right; their PTYs are sized as if their column were shown alone at its nominal width (`round(width x body width)`, at least 3, minus the frame) with the column's height split equally. The bottom borders of the edge panes show how many columns are hidden (see Frames). A new column takes `column_width` percent of the body (50 by default, so two fit).
@@ -288,15 +288,15 @@ Go 1.27 (`tuios.dev/vt` needs 1.26 or later). The reason for Rust was a proven V
 
 ### Visual design
 
-The chrome is framed: every pane is its own rounded box with its title in its top border. A workspace bar runs along the top row, a rule under it, and a status bar along the bottom row. Colours come only from theme roles. Icons are single-cell Nerd Font glyphs (see Glyphs); `icons = false` drops every one of them, the segment edges included, while box drawing, block elements and braille stay.
+The chrome is framed: every pane is its own rounded box with its title in its top border. A workspace bar runs along the top row and a rule under it; the body takes every row below. There is no status bar: notices are a toast, and copy mode, the leader and a pending key sequence show in the pane's own borders and in popups. Colours come only from theme roles. Icons are single-cell Nerd Font glyphs (see Glyphs); `icons = false` drops every one of them, the segment edges included, while box drawing, block elements and braille stay.
 
 #### Screen rows
 
-- Row 0 is the workspace bar, row 1 is the rule and the last row is the status bar; the rows between are the body.
+- Row 0 is the workspace bar and row 1 is the rule; the rows from 2 to the last are the body.
 - The rule is a full-width `─` in `Border`; it takes no clicks.
-- Panes are laid out in the body `{X: 0, Y: 2, W: width, H: height-3}`; there is no outer frame.
+- Panes are laid out in the body `{X: 0, Y: 2, W: width, H: height-2}`; there is no outer frame.
 - Pane rects follow Panes and layout. A pane's frame is on its rect's outline; the first row of the rect is its top border, which is its header row, and its content is the rect inset by one cell on every side. Two neighbours' frames touch (`││`, `╮╭`) and share no cell.
-- A pane needs at least 3 rows and 3 columns for its frame, and so does the body; a smaller body stays blank. Height 1 shows the status bar only; height 2 shows the workspace bar and the status bar; height 3 adds the rule. Every row is exactly the terminal width.
+- A pane needs at least 3 rows and 3 columns for its frame, and so does the body; a smaller body stays blank. Height 1 shows the workspace bar only; height 2 adds the rule. Every row is exactly the terminal width.
 - An empty tab shows the welcome card in the body, without frames.
 
 #### Frames
@@ -305,7 +305,9 @@ The chrome is framed: every pane is its own rounded box with its title in its to
 - Unfocused borders are `Border`. The focused pane's whole box, all four sides, is its kind colour (`Agent` for agents, `Shell` for shells).
 - The title is set into the top border from the cell after the corner: `─`, space, kind icon (kind colour, bold), space, title, space. Focused: the title in the kind colour and bold. Unfocused: the title in `Muted`. The title is the guest's OSC title, else `claude` or `shell`.
 - Tags sit at the right end of the top border, ending one `─` before the corner, with one `─` between two tags: ` 󰊓 zoom ` (`Accent`, bold) on a zoomed pane, and ` 󰁝 N ` (the same style; ` ↑ N ` with icons off) on a scrolled pane, where N is the number of lines above the live screen, left of the zoom tag; and the state badge (` <icon> working `, ` <icon> blocked `, ` <icon> idle ` in `Working`, `Blocked`, `Idle`, bold), the rightmost tag, with the zoom tag and then the scroll tag to its left. The working icon is a braille spinner (`⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏`, about 8 frames a second) that animates only while the agent works, so idle CPU is unchanged; blocked is 󰀦 and idle is 󰗡. With `icons = false` the badge reads ` ⠋ working `, ` blocked ` or ` idle ` (braille stays). An agent pane with no state yet, because Claude has sent no hook, shows no badge.
-- While a preselection is set, the focused pane's top border carries the tag ` <arrow> next ` in `Accent`, bold, as the leftmost tag, to the left of the scroll tag. The arrows are 󰁍 (left), 󰁅 (down), 󰁝 (up) and 󰁔 (right); with `icons = false` they are `←`, `↓`, `↑` and `→`.
+- In copy mode the copy pane's top border carries the leftmost tag of the border, ` 󰆏 COPY ` (`Info`, bold; ` COPY ` with `icons = false`), left of the scroll tag. Tags that do not fit between the corners are left out, the badge, then the zoom tag, then the scroll tag, and COPY is the last to go.
+- While a copy-mode search is typed, that pane's bottom border shows, after `╰─` and a space, the mark `/` or `?` (`Info`, bold), the query (`Fg`, at most 32 characters, cut to the room the border has) and the terminal cursor on the cell after it. `enter` jumps to the next match (an empty query repeats the last search), `esc` closes the prompt and stays in copy mode, and a miss shows the toast `not found: <query>`. In a scrolling tab this prompt takes the place of a hidden-column count in that border.
+- While a preselection is set, the focused pane's top border carries the tag ` <arrow> next ` in `Accent`, bold, right of the COPY tag and left of the scroll tag. The arrows are 󰁍 (left), 󰁅 (down), 󰁝 (up) and 󰁔 (right); with `icons = false` they are `←`, `↓`, `↑` and `→`.
 - In a scrolling tab, the bottom border of the bottom pane of the leftmost visible column shows how many columns are hidden on the left, ` ‹ N ` after `╰─`, and that of the rightmost visible column shows the hidden count on the right, ` N › ` before `─╯`, in `Accent`, bold, only when N > 0 (the same with `icons = false`). Like a title, they are left out when they do not fit.
 - When the title does not fit, it shrinks with `…`, and with three cells or fewer left the whole title goes. The tags stay; a tag that does not fit between the corners is left out.
 - A title or tag never covers a corner: the title starts after `╭─`, the tags end before `─╮`, and a title with no tag may end right before the `╮`, cut to leave it.
@@ -329,29 +331,34 @@ Ground `Bar`.
 - **Narrow terminals** give way in this order: load, git, PR and CI leave the tray; inactive tab names shrink to ` N icon `, then to ` N ` (longest names first); the clock leaves; the active tab's name shrinks, to ` N icon ` and then ` N `; the agents leave. The active tab always stays visible: if the ` N ` segments still do not fit, the segments farthest from the active tab are left out.
 - With `icons = false`, segments are separated by one `Bar` cell, tray modules by `│` (`Bar` on `Surface`), and there are no edge cells. Text stands in for the module icons: the agents read `agents N` (`Fg`), the dirty marker is `*`, the load reads `cpu ` (`Muted`) before the sparkline and `  mem 9.8G` after the share, and the checks read `ci 3/5`.
 
-#### Status bar (last row)
+#### Notices and the status bar's contents
 
-Ground `Bar`.
+There is no status bar. What it showed has these homes:
 
-- **Mode segment** at column 0, followed by  in its colour on `Bar` and one `Bar` cell. Its text is `OnAccent` and bold:
-  - ` 󰕮 MuxReveal ` on `Accent` normally;
-  - ` 󰌌 ctrl+space ` on `Warning` while the leader waits for a key (the configured leader's name);
-  - ` 󰌌 ctrl+space > ` on `Warning` while a two-key sequence waits for its second key (the leader's name, then the first key, for example `ctrl+space ;`);
-  - ` 󰑕 Rename tab ` on `Accent` while a tab is being renamed;
-  - ` 󰆏 COPY ` on `Info` in copy mode;
-  - ` 󰍉 Search ` on `Info` while a copy-mode search is typed (for `/` and `?`).
-- **Key legend** after it: `ctrl+space then` in `Subtle`, then pairs of a key (`Key`, bold) and an action (`Muted`), three cells apart: `: palette`, `c new tab`, `, rename`, `z zoom`, `q quit`. While the leader waits: `esc cancel`. While a sequence waits: after `>` and `.`, `1-9 tab` and `esc cancel`; after `;`, `h j k l side` and `esc clear`. While renaming: `enter save`, `esc cancel`, `empty automatic name`. In copy mode: `v select`, `y copy`, `/ search`, `n next`, `q exit`. Only the normal legend has the `ctrl+space then` lead-in. While a search is typed, the input text (`Fg`, 32 characters at most) takes the legend's place, with the terminal cursor in it; `enter` jumps to the next match (an empty query repeats the last search), `esc` closes the prompt and stays in copy mode, and a miss shows the notice `not found: <query>`. Pairs that do not fit are dropped from the end.
-- **Right side**, one cell from the edge: the notice (`Warning`, with 󰀪) while there is one, else the tab's layout mode and the focused pane's cwd, as `<mode icon> <mode>  󰉋 <cwd>`: 󰕴 `bsp`, 󰛽 `master-stack` or 󰕭 `scrolling`, icon and text in `Muted`, then the cwd (`Muted`, with 󰉋) with the home directory shown as `~`. With `icons = false` it reads `bsp  ~/code/api`. The legend stops two cells before it. A notice takes the room it needs before the legend, whose pairs and then the lead-in give way. On a narrow terminal the legend gives way first, then the mode label leaves, then the cwd is cut with `…`; the cwd takes at most the room left after the mode segment, the lead-in and 40 cells for the legend.
+| It showed | Now |
+| --- | --- |
+| The notice (`Warning`, with 󰀪) | The toast, below |
+| The mode segment ` MuxReveal `, and the key legend with its `ctrl+space then` lead-in | Dropped: the leader's which-key popup lists the keys |
+| The leader waiting (` 󰌌 ctrl+space `, `esc cancel`) | Only the which-key popup, after its delay |
+| A pending sequence (` 󰌌 ctrl+space > `, `1-9 tab`, `esc cancel`) | The sequence popup, at once (see Overlays) |
+| Copy mode (` 󰆏 COPY `, `v select`, `y copy`, `/ search`, `n next`, `q exit`) | The COPY tag in the pane's top border; the legend is dropped, the keys are in the keymap |
+| The search prompt (` 󰍉 Search `, the query) | The pane's bottom border (see Frames) |
+| Rename (` 󰑕 Rename tab `, `enter save`, `esc cancel`, `empty automatic name`) | The in-place input in the workspace bar, without a legend |
+| The tab's layout mode | Not shown until the tray's layout module lands; the notice `layout: <mode>` still shows when it changes |
+| The focused pane's cwd | Dropped: no screen element shows the full cwd; a tab's automatic name is the basename of its focused pane's cwd, and titles do not carry it |
+
+- **Toast.** A rounded box at the bottom right of the body, one cell from the right edge, its bottom border on the last row. Ground `Panel`, border `Warning`, one row ` 󰀪 <notice> ` with the icon in `Warning` and the text in `Fg` (no icon with `icons = false`). The box is as wide as the text needs and at most the body width minus 2, with the text cut by `…`; it is left out when the body is under 3 rows or the text has no room. It shows while a notice is set and goes with the first key press. It never takes keys or mouse events, which reach what is under it, and the which-key popup and the other overlays draw over it. Notices are the ones the commands raise (`layout: bsp`, `ctrl+space > x is not bound`, `not found: <query>` and the rest).
 
 #### Overlays
 
-Square-cornered boxes (`┌ ┐ └ ┘`) on `Panel`. Each title is set into the top border two cells from the corner. Overlays are clipped to the screen, never wrapped.
+Square-cornered boxes (`┌ ┐ └ ┘`) on `Panel`. Each title is set into the top border two cells from the corner. Overlays are clipped to the screen, never wrapped, and draw over the toast.
 
-- **Which-key.** Placed bottom-right, one cell from the right edge, with its bottom border on the row above the status bar. Border `BorderFocus`; title ` 󰌌 ctrl+space ` in `Accent`, bold.
+- **Which-key.** Placed bottom-right, one cell from the right edge, with its bottom border on the last row. Border `BorderFocus`; title ` 󰌌 ctrl+space ` in `Accent`, bold.
   - Two columns, split by a `Border` rule that joins the top and bottom borders (`┬`, `┴`). Panes, then Layout, are on the left. Tabs, a blank row, then App are on the right.
   - Group heads `󰯌 Panes`, `󰕴 Layout`, `󰓩 Tabs` and `󰒓 App` are `Accent` and bold, followed by a `Border` rule to the column's end.
   - Rows: the key in `Key`, bold, padded to the column's widest key; two cells; the title in `Fg`.
-  - Directional commands collapse into one row each, their keys padded like any other row's: `h j k l` (Focus pane), `H J K L` (Resize pane), `^h^j^k^l` (Swap pane), `1-9` (Jump to tab), `> 1-9` (Move pane to tab), `. 1-9` (Send pane to tab) and `; hjkl` (Preselect). A key that starts a two-key sequence closes the popup while the sequence waits. The keys come from the bindings: a family collapses only when all its keys are bound (`1-9` only when they are consecutive); otherwise each bound key gets its own row.
+  - Directional commands collapse into one row each, their keys padded like any other row's: `h j k l` (Focus pane), `H J K L` (Resize pane), `^h^j^k^l` (Swap pane), `1-9` (Jump to tab), `> 1-9` (Move pane to tab), `. 1-9` (Send pane to tab) and `; hjkl` (Preselect). A key that starts a two-key sequence closes the popup and opens the sequence popup. The keys come from the bindings: a family collapses only when all its keys are bound (`1-9` only when they are consecutive); otherwise each bound key gets its own row.
+- **Sequence popup.** A sequence prefix (`>`, `.`, `;` after the leader) opens it at once, in the which-key box's place and style: a single column titled ` 󰌌 ctrl+space > ` (the leader's name, then the first key; no icon with `icons = false`) in `Accent`, bold, with one row per second key, laid out like which-key rows, with the key column padded to the widest key as there (`esc      Clear preselection`): after `>`, `1-9  Move pane to tab N` and `esc  Cancel`; after `.`, `1-9  Send pane to tab N` and `esc  Cancel`; after `;`, `h j k l  Preselect side` and `esc      Clear preselection`. The second key closes it, as does `esc`, a paste or an opened overlay.
 - **Palette and theme picker.** Centred, width min(64, width-4), top at a quarter of the height, border `BorderFocus`.
   - Title: `  Commands ` (the theme picker: ` 󰏘 Theme `), in `Accent`, bold.
   - Input row: `❯ ` in `Accent`, then the query.
@@ -362,7 +369,7 @@ Square-cornered boxes (`┌ ┐ └ ┘`) on `Panel`. Each title is set into the
   - Title: ` 󰀪 <action> ` in `Error`, bold.
   - Inside, two cells from the left border: a blank row, the question in `Fg` and bold, the detail in `Muted`, a blank row, then the answers.
   - Answers: `[y] <action>    [n] Cancel`, with the brackets in `Subtle`, the keys in `Key` and bold, and the labels in `Fg`.
-- **Rename.** Edits the tab in place. The active tab's segment becomes a text input on `Bg` of at most 32 characters that grows with the text: ` N 󰑕 name` with the number and the icon `Accent` and bold, the text `Fg`, the input's cursor, and one more `Bg` cell before the edge cell. The status bar shows the rename mode and its legend.
+- **Rename.** Edits the tab in place. The active tab's segment becomes a text input on `Bg` of at most 32 characters that grows with the text: ` N 󰑕 name` with the number and the icon `Accent` and bold, the text `Fg`, the input's cursor, and one more `Bg` cell before the edge cell.
 
 #### Theme roles
 
@@ -372,7 +379,7 @@ Existing roles keep their colours. New roles:
 | --- | --- | --- |
 | `Agent` | Mauve | agent frames, titles and icons; tray agent icons |
 | `Shell` | Blue | shell frames, titles and icons |
-| `Bar` | Base | ground of the workspace bar and the status bar |
+| `Bar` | Base | ground of the workspace bar |
 | `Dim` | Subtext0 | inactive tab text |
 | `Clock` | Lavender | clock segment |
 | `Git` | Flamingo | git icon |
@@ -389,9 +396,8 @@ All single cell (Nerd Fonts v3 names):
 | --- | --- | --- | --- |
 | 󱙺 | nf-md-robot_outline | U+F167A | agent panes, agent tabs, tray agents |
 |  | nf-oct-terminal | U+F489 | shell panes and tabs |
-| 󰕮 | nf-md-view_dashboard | U+F056E | MuxReveal mode segment |
-| 󰌌 | nf-md-keyboard | U+F030C | leader waiting |
-| 󰑕 | nf-md-rename_box | U+F0455 | rename mode, rename command |
+| 󰌌 | nf-md-keyboard | U+F030C | which-key and sequence popup titles |
+| 󰑕 | nf-md-rename_box | U+F0455 | rename command |
 | 󰊓 | nf-md-fullscreen | U+F0293 | zoom tag, zoom command |
 | 󰁝 | nf-md-arrow_up | U+F005D | scrolled pane tag, preselect up |
 | 󰥔 | nf-md-clock_outline | U+F0954 | clock |
@@ -399,8 +405,7 @@ All single cell (Nerd Fonts v3 names):
 |  | nf-oct-dot_fill | U+F444 | uncommitted changes |
 | 󰻠 | nf-md-cpu_64_bit | U+F0EE0 | load |
 | 󰍛 | nf-md-memory | U+F035B | memory |
-| 󰉋 | nf-md-folder | U+F024B | focused pane's path |
-| 󰀪 | nf-md-alert_outline | U+F002A | notices, confirm title |
+| 󰀪 | nf-md-alert_outline | U+F002A | toast, confirm title |
 | 󰯌 | nf-md-view_split_vertical | U+F0BCC | Panes group, split right |
 | 󰯋 | nf-md-view_split_horizontal | U+F0BCB | split below |
 | 󰓩 | nf-md-tab | U+F04E9 | Tabs group, next, previous and jump |
@@ -424,8 +429,7 @@ All single cell (Nerd Fonts v3 names):
 | 󰆥 | nf-md-crown | U+F01A5 | promote to master |
 | 󰅖 | nf-md-close | U+F0156 | close pane, close tab, clear preselection |
 | 󰈆 | nf-md-exit_to_app | U+F0206 | quit |
-| 󰆏 | nf-md-content_copy | U+F018F | copy commands, copy mode |
-| 󰍉 | nf-md-magnify | U+F0349 | search prompt |
+| 󰆏 | nf-md-content_copy | U+F018F | copy commands, copy tag |
 |  | nf-ple-upper_left_triangle | U+E0BC | segment edge |
 |  | nf-ple-lower_right_triangle | U+E0BA | tray edge |
 |  | nf-ple-forwardslash_separator | U+E0BB | thin segment divider |
@@ -803,7 +807,7 @@ Terminal panes pass every key through to the agent, so global actions sit behind
 | `.` then `1`–`9` | Move pane to tab N, stay on this tab |
 | `!` | Break pane into a new tab |
 
-A key written `> 1` is a two-key sequence: after the leader, a key that starts a sequence keeps the leader pending, the which-key popup closes, and the status bar shows the first key (`ctrl+space >`). The second key runs its binding; `esc` cancels unless it is bound (`; esc` clears the preselection); the leader key sends the leader to the pane; any other key shows the notice `ctrl+space > x is not bound`. A paste or an opened overlay ends the sequence, as it ends a pending leader. `leader enter` collides with `leader ctrl+j` only on terminals that send 0x0a for Enter without the Kitty keyboard protocol. Layout and move commands without a key (`layout.set.*`) are in the palette.
+A key written `> 1` is a two-key sequence: after the leader, a key that starts a sequence keeps the leader pending, the which-key popup closes and the sequence popup opens at once, titled with the leader and the first key (`ctrl+space >`). The second key runs its binding; `esc` cancels unless it is bound (`; esc` clears the preselection); the leader key sends the leader to the pane; any other key shows the notice `ctrl+space > x is not bound`. A paste or an opened overlay ends the sequence, as it ends a pending leader. `leader enter` collides with `leader ctrl+j` only on terminals that send 0x0a for Enter without the Kitty keyboard protocol. Layout and move commands without a key (`layout.set.*`) are in the palette.
 
 ### Review pane (agent diff and PR diff)
 

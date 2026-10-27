@@ -449,9 +449,9 @@ func TestHiddenTabsKeepSize(t *testing.T) {
 		}
 	}
 
-	// the zoomed tab 3 fills the body (80x24 -> 80x21, content 78x19)
-	if got := procs["p4"].resized(); len(got) == 0 || got[len(got)-1] != [2]int{78, 19} {
-		t.Errorf("zoomed pane resizes = %v, want 78x19 last", got)
+	// the zoomed tab 3 fills the body (80x24 -> 80x22, content 78x20)
+	if got := procs["p4"].resized(); len(got) == 0 || got[len(got)-1] != [2]int{78, 20} {
+		t.Errorf("zoomed pane resizes = %v, want 78x20 last", got)
 	}
 }
 
@@ -520,8 +520,8 @@ func TestHiddenResizeRendersOnSwitch(t *testing.T) {
 	}
 }
 
-// Height 1 is the status bar only, height 2 the two bars, height 3 adds the
-// rule; every line is the width and a body under 3 rows or columns stays blank.
+// Height 1 is the workspace bar only, height 2 adds the rule; every line is the
+// width and a body under 3 rows or columns stays blank.
 func TestScreenRows(t *testing.T) {
 	specs := []tabSpec{
 		{core.KindShell, "/w/a", "one"},
@@ -546,22 +546,16 @@ func TestScreenRows(t *testing.T) {
 
 		plain := strings.Split(ansi.Strip(a.View().Content), "\n")
 
-		if sz[1] == 1 && sz[0] >= 14 && !strings.Contains(plain[0], "MuxReveal") {
-			t.Errorf("%v: the single row is not the status bar: %q", sz, plain[0])
+		if sz[0] >= 14 && !strings.Contains(plain[0], " 1 ") {
+			t.Errorf("%v: row 0 is not the workspace bar: %q", sz, plain[0])
 		}
 
-		if sz[1] >= 2 && sz[0] >= 14 {
-			if !strings.Contains(plain[0], " 1 ") {
-				t.Errorf("%v: row 0 is not the workspace bar: %q", sz, plain[0])
-			}
-
-			if !strings.Contains(plain[len(plain)-1], "MuxReveal") {
-				t.Errorf("%v: the last row is not the status bar: %q", sz, plain[len(plain)-1])
-			}
+		if sz[1] >= 2 && sz[0] >= 14 && plain[1] != strings.Repeat("─", sz[0]) {
+			t.Errorf("%v: row 1 is not the rule: %q", sz, plain[1])
 		}
 
-		if sz[0] < minFrame || sz[1]-3 < minFrame {
-			for _, l := range plain[min(2, len(plain)):max(len(plain)-1, min(2, len(plain)))] {
+		if sz[0] < minFrame || sz[1]-2 < minFrame {
+			for _, l := range plain[min(2, len(plain)):] {
 				if strings.TrimSpace(l) != "" {
 					t.Errorf("%v: body row %q, want blank", sz, l)
 				}
@@ -601,50 +595,51 @@ func TestFrameSizesTabs(t *testing.T) {
 	}
 }
 
-// Both bars paint every cell, the last column included: the ground is Bar and
-// only the segments, the tray and the clock take other backgrounds.
+// The workspace bar paints every cell of row 0, the last column included: the
+// ground is Bar and only the segments, the tray and the clock take other
+// backgrounds. The real tray runs at each width; a narrow bar ends on the
+// tray's Surface, a wider one on the clock's own segment.
 func TestBarGroundReachesLastColumn(t *testing.T) {
 	ui := mochaUI(t)
 
-	for _, w := range []int{20, 40, 80, 100, 160} {
-		a := tabsApp(t, w, 12,
-			tabSpec{core.KindShell, "/w/a", "one"},
-			tabSpec{core.KindAgent, "/w/b", "two"},
-		)
-		a.icons = true
+	tests := []struct {
+		w    int
+		last theme.Hex
+	}{
+		{20, ui.Surface},
+		{40, ui.Clock},
+		{80, ui.Clock},
+		{100, ui.Clock},
+		{160, ui.Clock},
+	}
 
-		buf := uv.NewScreenBuffer(w, a.height)
-		uv.NewStyledString(a.View().Content).Draw(buf, buf.Bounds())
+	for _, icons := range []bool{true, false} {
+		for _, tt := range tests {
+			a := tabsApp(t, tt.w, 12,
+				tabSpec{core.KindShell, "/w/a", "one"},
+				tabSpec{core.KindAgent, "/w/b", "two"},
+			)
+			a.icons = icons
+			fixtureTray(a)
 
-		for _, y := range []int{0, a.height - 1} {
-			for x := range w {
-				if c := buf.CellAt(x, y); c == nil || c.Style.Bg == nil {
-					t.Errorf("width %d: bar cell (%d, %d) has no background", w, x, y)
+			buf := uv.NewScreenBuffer(tt.w, a.height)
+			uv.NewStyledString(a.View().Content).Draw(buf, buf.Bounds())
+
+			for x := range tt.w {
+				if c := buf.CellAt(x, 0); c == nil || c.Style.Bg == nil {
+					t.Errorf("icons=%v width %d: bar cell %d has no background", icons, tt.w, x)
 				}
 			}
-		}
 
-		last := func(y int) string {
-			c := buf.CellAt(w-1, y)
-			if c == nil || c.Style.Bg == nil {
-				return ""
+			c := buf.CellAt(tt.w-1, 0)
+			if c == nil || c.Style.Bg == nil || hexOf(c.Style.Bg) != string(tt.last) {
+				t.Errorf("icons=%v width %d: last column = %+v, want background %s", icons, tt.w, c, tt.last)
 			}
-
-			return hexOf(c.Style.Bg)
-		}
-
-		if got := last(a.height - 1); got != string(ui.Bar) {
-			t.Errorf("width %d: status bar last column = %s, want %s", w, got, ui.Bar)
-		}
-
-		if got := last(0); got != string(ui.Bar) && got != string(ui.Surface) && got != string(ui.Clock) {
-			t.Errorf("width %d: workspace bar last column = %s, want Bar, the tray's Surface or Clock", w, got)
 		}
 	}
 
-	// A bar with the tray: the clock is the last segment, and every cell before
-	// it is painted.
-	ground := func(line string, w int, last theme.Hex) {
+	// A bar without the tray ends on the Bar ground.
+	ground := func(line string, w int) {
 		t.Helper()
 
 		vt := lineVT(t, line, w)
@@ -654,15 +649,11 @@ func TestBarGroundReachesLastColumn(t *testing.T) {
 			}
 		}
 
-		if c := vt.CellAt(w-1, 0); c == nil || c.Style.Bg == nil || hexOf(c.Style.Bg) != string(last) {
-			t.Errorf("last cell = %+v, want background %s", c, last)
+		if c := vt.CellAt(w-1, 0); c == nil || c.Style.Bg == nil || hexOf(c.Style.Bg) != string(ui.Bar) {
+			t.Errorf("last cell = %+v, want background %s", c, ui.Bar)
 		}
 	}
 
-	ground(renderBar(planTabs(), 0, nil, 100, true, ui), 100, ui.Bar)
-	ground(renderBar(planTabs(), 0, nil, 100, false, ui), 100, ui.Bar)
-
-	for _, icons := range []bool{true, false} {
-		ground(trayApp(t, icons).workspaceBar(100), 100, ui.Clock)
-	}
+	ground(renderBar(planTabs(), 0, nil, 100, true, ui), 100)
+	ground(renderBar(planTabs(), 0, nil, 100, false, ui), 100)
 }

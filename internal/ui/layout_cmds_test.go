@@ -23,10 +23,11 @@ func seq(a *App, keys string) {
 	}
 }
 
-func statusLine(a *App) string {
+// toastLine is the text row of the toast: the row above the last.
+func toastLine(a *App) string {
 	lines := strings.Split(ansi.Strip(a.View().Content), "\n")
 
-	return lines[len(lines)-1]
+	return lines[len(lines)-2]
 }
 
 func tabIDs(a *App, i int) []core.PaneID { return a.store.State().Tabs[i].Panes }
@@ -193,8 +194,8 @@ func TestMoveNotices(t *testing.T) {
 				t.Errorf("notice = %q, want %q", a.notice, tt.want)
 			}
 
-			if !strings.Contains(statusLine(a), tt.want) {
-				t.Errorf("status bar lacks %q: %q", tt.want, statusLine(a))
+			if !strings.Contains(toastLine(a), tt.want) {
+				t.Errorf("toast lacks %q: %q", tt.want, toastLine(a))
 			}
 
 			if a.pending {
@@ -658,47 +659,6 @@ func TestPrefixSequences(t *testing.T) {
 			t.Errorf("pending %v prefix %q", a.pending, a.prefix)
 		}
 	})
-}
-
-func TestPrefixStatusBar(t *testing.T) {
-	tests := []struct {
-		first rune
-		want  []string
-	}{
-		{'>', []string{"1-9 tab", "esc cancel"}},
-		{'.', []string{"1-9 tab", "esc cancel"}},
-		{';', []string{"h j k l side", "esc clear"}},
-	}
-	for _, tt := range tests {
-		t.Run(string(tt.first), func(t *testing.T) {
-			a, _ := splitApp(t)
-			press(a, keyLeader, keyRune(tt.first))
-
-			bar := statusLine(a)
-			want := append([]string{" " + iconLeader + " ctrl+space " + string(tt.first) + " "}, tt.want...)
-
-			for _, w := range want {
-				if !strings.Contains(bar, w) {
-					t.Errorf("status bar lacks %q: %q", w, bar)
-				}
-			}
-
-			// The mode segment is on the Warning colour.
-			if !strings.Contains(a.View().Content, "48;2;249;226;175") {
-				t.Error("mode segment is not on the Warning colour")
-			}
-		})
-	}
-}
-
-func TestPrefixStatusBarNoIcons(t *testing.T) {
-	a, _ := splitApp(t)
-	a.icons = false
-	press(a, keyLeader, keyRune('>'))
-
-	if bar := statusLine(a); !strings.HasPrefix(bar, " ctrl+space > ") {
-		t.Errorf("status bar = %q", bar)
-	}
 }
 
 func TestLayoutCommandsInPalette(t *testing.T) {

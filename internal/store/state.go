@@ -417,7 +417,7 @@ func isNull(raw json.RawMessage) bool {
 }
 
 // versionText is the version as written, cut and cleaned because it reaches
-// the status bar.
+// the toast.
 func versionText(raw json.RawMessage) string {
 	if isNull(raw) {
 		return "unknown"

@@ -235,7 +235,7 @@ func TestFrameMinimumBody(t *testing.T) {
 		a, _ := framedApp(t, sz[0], sz[1], shellSpec("/a", "x"))
 
 		lines := strings.Split(ansi.Strip(a.View().Content), "\n")
-		for _, l := range lines[min(2, len(lines)):max(len(lines)-1, min(2, len(lines)))] {
+		for _, l := range lines[min(2, len(lines)):] {
 			if strings.TrimSpace(l) != "" {
 				t.Errorf("%v: body line %q, want blank", sz, l)
 			}
@@ -246,7 +246,7 @@ func TestFrameMinimumBody(t *testing.T) {
 // A 3x3 pane is a box around one content cell; a tile of 2x2 is left out.
 func TestSmallestPanes(t *testing.T) {
 	t.Run("3x3 draws a box with one content cell", func(t *testing.T) {
-		a, _ := framedApp(t, 3, 6, shellSpec("/a", "x"))
+		a, _ := framedApp(t, 3, 5, shellSpec("/a", "x"))
 
 		if got := a.layoutRects()["p1"]; got != (core.Rect{X: 0, Y: 2, W: 3, H: 3}) {
 			t.Fatalf("rect = %+v, want 3x3 at the body", got)
@@ -264,7 +264,7 @@ func TestSmallestPanes(t *testing.T) {
 
 	t.Run("a 2x2 tile is left out", func(t *testing.T) {
 		// A 5x3 body split into 2 and 3 columns: the 2-wide tile is too small.
-		a, _ := framedApp(t, 5, 6, shellSpec("/a", "x"), shellSpec("/b", "y"))
+		a, _ := framedApp(t, 5, 5, shellSpec("/a", "x"), shellSpec("/b", "y"))
 
 		rects := a.layoutRects()
 		if _, drawn := rects["p1"]; drawn || len(rects) != 1 {
@@ -656,13 +656,13 @@ func TestTitleCutBeforeCorner(t *testing.T) {
 	}
 }
 
-// Row 1 is a full-width rule in Border; the body starts under it and stays
-// above the status bar. The rule takes no clicks.
+// Row 1 is a full-width rule in Border; the body starts under it and runs to
+// the last row. The rule takes no clicks.
 func TestRuleUnderWorkspaceBar(t *testing.T) {
 	ui := mochaUI(t)
 	a, _ := framedApp(t, 40, 12, shellSpec("/a", "x"), shellSpec("/b", "y"))
 
-	if got, want := bodyRect(40, 12), (core.Rect{Y: 2, W: 40, H: 9}); got != want {
+	if got, want := bodyRect(40, 12), (core.Rect{Y: 2, W: 40, H: 10}); got != want {
 		t.Fatalf("bodyRect = %+v, want %+v", got, want)
 	}
 
@@ -690,14 +690,14 @@ func TestRuleUnderWorkspaceBar(t *testing.T) {
 	}
 }
 
-// Small heights: the status bar alone, then the bar and the status bar, then
-// the rule too; the body is what is left.
+// Small heights: the workspace bar alone, then the rule too; the body is what
+// is left.
 func TestRuleSmallHeights(t *testing.T) {
 	for _, tt := range []struct {
 		h    int
 		rule bool
 		body int
-	}{{1, false, 0}, {2, false, 0}, {3, true, 0}, {4, true, 1}, {6, true, 3}} {
+	}{{1, false, 0}, {2, true, 0}, {3, true, 1}, {4, true, 2}, {6, true, 4}} {
 		a, _ := framedApp(t, 20, tt.h, shellSpec("/a", "x"))
 		lines := strings.Split(ansi.Strip(a.View().Content), "\n")
 
@@ -705,7 +705,7 @@ func TestRuleSmallHeights(t *testing.T) {
 			t.Fatalf("height %d: %d lines", tt.h, len(lines))
 		}
 
-		if got := tt.h >= 3 && lines[1] == strings.Repeat("─", 20); got != tt.rule {
+		if got := tt.h >= 2 && lines[1] == strings.Repeat("─", 20); got != tt.rule {
 			t.Errorf("height %d: rule = %v, want %v", tt.h, got, tt.rule)
 		}
 
