@@ -8,7 +8,7 @@
 // directory, gzipped. Run it after changing the chroma version in go.mod or the
 // list below:
 //
-//	go run ./internal/diffview/lexers/gen.go
+//	go run ./internal/ui/diffview/lexers/gen.go
 //
 // chroma's lexers package embeds every one of its 279 definitions, about
 // 2.4 MB of XML, and registers them all at start. The review needs the

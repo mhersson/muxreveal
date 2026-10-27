@@ -20,7 +20,7 @@
 // The package draws; it does not lay out. The caller decides which rows are
 // on screen and asks for those only, so a file of five thousand lines costs
 // the rows that show. Tokenising is the expensive part, so the caller asks
-// for a chunk of lines at a time and keeps what Highlight returned for as
+// for a chunk of lines at a time and keeps what Highlighter.Highlight returned for as
 // long as the diff does not change.
 //
 // The browser build (GOOS=js) leaves chroma out and draws every line plain:
@@ -71,9 +71,11 @@ const (
 
 // ClassNames names each Class, in the order of their numbers, for a client
 // that is sent the numbers.
-var ClassNames = [NumClasses]string{
-	"plain", "keyword", "type", "func", "builtin", "string", "number",
-	"comment", "operator", "punct", "preproc", "tag", "attr", "heading", "meta",
+func ClassNames() [NumClasses]string {
+	return [NumClasses]string{
+		"plain", "keyword", "type", "func", "builtin", "string", "number",
+		"comment", "operator", "punct", "preproc", "tag", "attr", "heading", "meta",
+	}
 }
 
 // Span is a run of one class in a line, in bytes of the line's text.

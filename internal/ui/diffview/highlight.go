@@ -9,12 +9,10 @@ package diffview
 import (
 	"path/filepath"
 	"strings"
-	"sync"
 	"unicode/utf8"
 
 	"github.com/alecthomas/chroma/v2"
 
-	"github.com/mhersson/muxreveal/internal/ui/diffview/lexers"
 )
 
 // Limits past which a text is drawn plain rather than tokenised. chroma's
@@ -31,27 +29,18 @@ const (
 // the page.
 const Enabled = true
 
-// lexerCache holds the lexer for each file name, nil for none. Matching a
-// name runs every lexer's patterns, which is the slow part of a lookup, and
-// the answer for a name never changes.
-var lexerCache sync.Map // string -> chroma.Lexer (nil stored as noLexer)
-
-type noLexerT struct{}
-
-var noLexer noLexerT
-
 // lexerFor finds the lexer for a path by its name, then by the first line of
 // the text for a file with no extension (a script with a #! line). It is nil
 // when nothing matches.
-func lexerFor(path, text string) chroma.Lexer {
+func (h *Highlighter) lexerFor(path, text string) chroma.Lexer {
 	name := filepath.Base(path)
-	if v, ok := lexerCache.Load(name); ok {
+	if v, ok := h.lexers.Load(name); ok {
 		if l, ok := v.(chroma.Lexer); ok {
 			return l
 		}
 		return nil
 	}
-	reg := lexers.Registry()
+	reg := h.registry()
 	l := reg.Match(name)
 	if l == nil && filepath.Ext(name) == "" && strings.HasPrefix(text, "#!") {
 		first, _, _ := strings.Cut(text, "\n")
@@ -62,12 +51,12 @@ func lexerFor(path, text string) chroma.Lexer {
 		// only when it had one, so a later file of the same name with a
 		// different first line is asked again.
 		if filepath.Ext(name) != "" {
-			lexerCache.Store(name, noLexer)
+			h.lexers.Store(name, noLexerT{})
 		}
 		return nil
 	}
 	l = chroma.Coalesce(l)
-	lexerCache.Store(name, l)
+	h.lexers.Store(name, l)
 	return l
 }
 
@@ -81,9 +70,9 @@ func lexerFor(path, text string) chroma.Lexer {
 // string coloured on its later lines. A hunk starts wherever the diff does,
 // so a hunk that opens inside a comment is read as code until the comment
 // ends; that is the most a view of part of a file can do.
-func Highlight(path string, lines []string) [][]Span {
+func (h *Highlighter) Highlight(path string, lines []string) [][]Span {
 	out := make([][]Span, len(lines))
-	ok := tokenise(path, lines, func(line, start, end int, t chroma.TokenType) {
+	ok := h.tokenise(path, lines, func(line, start, end int, t chroma.TokenType) {
 		out[line] = addSpan(out[line], start, end, classOf(t))
 	})
 	if !ok {
@@ -100,57 +89,46 @@ func Highlight(path string, lines []string) [][]Span {
 	return out
 }
 
-// langCache holds the lexer for each language name a lexer answers to. The
-// names come from a fixed registry, so it stays small.
-var langCache sync.Map // string -> chroma.Lexer
-
-// langMisses holds names no lexer answers to, at most langMissMax of them:
-// the names come from agents' text, so the set is emptied when it fills.
-var (
-	langMissMu sync.Mutex
-	langMisses = map[string]bool{}
-)
-
 const langMissMax = 64
 
 // lexerForLang finds the lexer for a language as a Markdown code fence
 // names it: a name or alias such as "go", "python" or "sh", or a file
 // extension.
-func lexerForLang(lang string) chroma.Lexer {
+func (h *Highlighter) lexerForLang(lang string) chroma.Lexer {
 	lang = strings.ToLower(lang)
-	if v, ok := langCache.Load(lang); ok {
+	if v, ok := h.langs.Load(lang); ok {
 		return v.(chroma.Lexer)
 	}
-	langMissMu.Lock()
-	miss := langMisses[lang]
-	langMissMu.Unlock()
+	h.missMu.Lock()
+	miss := h.misses[lang]
+	h.missMu.Unlock()
 	if miss {
 		return nil
 	}
-	l := lexers.Registry().Get(lang)
+	l := h.registry().Get(lang)
 	if l == nil {
-		langMissMu.Lock()
-		if len(langMisses) >= langMissMax {
-			clear(langMisses)
+		h.missMu.Lock()
+		if h.misses == nil || len(h.misses) >= langMissMax {
+			h.misses = map[string]bool{}
 		}
-		langMisses[lang] = true
-		langMissMu.Unlock()
+		h.misses[lang] = true
+		h.missMu.Unlock()
 		return nil
 	}
 	l = chroma.Coalesce(l)
-	langCache.Store(lang, l)
+	h.langs.Store(lang, l)
 	return l
 }
 
 // HighlightLang is Highlight for a code block whose language is named, as
 // a Markdown fence names it, rather than known by its file name. It returns
 // nil for an empty or unknown name.
-func HighlightLang(lang string, lines []string) [][]Span {
+func (h *Highlighter) HighlightLang(lang string, lines []string) [][]Span {
 	if lang == "" || len(lang) > 32 {
 		return nil
 	}
 	out := make([][]Span, len(lines))
-	ok := tokeniseWith(func(string) chroma.Lexer { return lexerForLang(lang) }, lines, func(line, start, end int, t chroma.TokenType) {
+	ok := tokeniseWith(func(string) chroma.Lexer { return h.lexerForLang(lang) }, lines, func(line, start, end int, t chroma.TokenType) {
 		out[line] = addSpan(out[line], start, end, classOf(t))
 	})
 	if !ok {
@@ -178,7 +156,7 @@ type Token struct {
 // get no token. A line longer than skipLine characters is tokenised as
 // empty and gets no tokens, so one long line costs the others nothing; 0
 // keeps every line.
-func Tokens(path string, lines []string, skipLine int) [][]Token {
+func (h *Highlighter) Tokens(path string, lines []string, skipLine int) [][]Token {
 	text := lines
 	copied := false
 	for i, l := range lines {
@@ -190,7 +168,7 @@ func Tokens(path string, lines []string, skipLine int) [][]Token {
 		}
 	}
 	out := make([][]Token, len(lines))
-	ok := tokenise(path, text, func(line, start, end int, t chroma.TokenType) {
+	ok := h.tokenise(path, text, func(line, start, end int, t chroma.TokenType) {
 		class := cssClass(t)
 		if class == "" || class == "w" {
 			return
@@ -228,8 +206,8 @@ func cssClass(t chroma.TokenType) string {
 // each piece of a token on one line, in byte offsets of that line. It
 // reports false when the file type is not known, the text is past the
 // limits, or the lexer fails.
-func tokenise(path string, lines []string, add func(line, start, end int, t chroma.TokenType)) (ok bool) {
-	return tokeniseWith(func(text string) chroma.Lexer { return lexerFor(path, text) }, lines, add)
+func (h *Highlighter) tokenise(path string, lines []string, add func(line, start, end int, t chroma.TokenType)) (ok bool) {
+	return tokeniseWith(func(text string) chroma.Lexer { return h.lexerFor(path, text) }, lines, add)
 }
 
 // tokeniseWith is tokenise with the lexer found by find from the text.

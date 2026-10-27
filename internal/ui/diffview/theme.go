@@ -255,7 +255,7 @@ func grounds256(p Palette) [numKinds][2]grounds {
 // the terminal's own. The inks are slots the terminal paints from the user's
 // palette, so nothing is measured, and what a ground said at the other depths
 // is said by attributes and by the line numbers' colour. The cursor is the
-// same as the rest; the caller reverses the gutter (see Palette.Mark).
+// same as the rest; the caller reverses the gutter.
 func newTheme16(p Palette) *Theme {
 	p.Ground, p.Fg = NoColor, NoColor
 	p.Accent, p.Add, p.Delete = Slot(5), Slot(slotGreen), Slot(slotRed)

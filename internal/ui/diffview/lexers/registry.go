@@ -22,7 +22,6 @@ import (
 	"io"
 	"io/fs"
 	"path"
-	"sync"
 	"time"
 
 	"github.com/alecthomas/chroma/v2"
@@ -31,29 +30,21 @@ import (
 //go:embed *.xml.gz
 var lexerFiles embed.FS
 
-var (
-	registryOnce sync.Once
-	registry     *chroma.LexerRegistry
-)
-
-// Registry returns the registry of every lexer here, building it on first
-// use. It is safe to call from any goroutine.
-func Registry() *chroma.LexerRegistry {
-	registryOnce.Do(func() {
-		reg := chroma.NewLexerRegistry()
-		src := gzipFS{lexerFiles}
-		names, _ := fs.Glob(lexerFiles, "*.xml.gz")
-		for _, name := range names {
-			l, err := chroma.NewXMLLexer(src, name[:len(name)-len(".gz")])
-			if err != nil {
-				continue
-			}
-			reg.Register(l)
+// NewRegistry builds a registry of every lexer here. Each call parses the
+// definitions afresh, so the caller keeps the result.
+func NewRegistry() *chroma.LexerRegistry {
+	reg := chroma.NewLexerRegistry()
+	src := gzipFS{lexerFiles}
+	names, _ := fs.Glob(lexerFiles, "*.xml.gz")
+	for _, name := range names {
+		l, err := chroma.NewXMLLexer(src, name[:len(name)-len(".gz")])
+		if err != nil {
+			continue
 		}
-		registerCodedLexers(reg)
-		registry = reg
-	})
-	return registry
+		reg.Register(l)
+	}
+	registerCodedLexers(reg)
+	return reg
 }
 
 // gzipFS serves each name.xml as the decompressed name.xml.gz beside it.
