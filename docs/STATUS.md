@@ -121,6 +121,8 @@ What backs the last checklist item: the six-pane bench row "six working agents w
 
 Idle, re-checked with agents, hooks and persistence: same setup as above (six shell panes each running `sleep 3600`, 240x64 in a private tmux, 30 s after a 5 s warm-up, `/proc/<pid>/stat` utime+stime), two runs: **0.73 %** and **0.70 %** of one core.
 
+The 0.17 to 0.20 point gap to the 0.53 % above is likely measurement noise: nothing added runs while idle with no agents (the agent tick runs only while a pane works, probes run only after output, and the saver, the hook socket server and the event wait block).
+
 ## Spike - VT (done)
 
 Goal: prove that `tuios.dev/vt` + Bubble Tea v2 can host several busy Claude Code panes smoothly, before any real package depends on it. The spike code is kept on a local branch and is not on GitHub; M1 ports what it needs from it.
