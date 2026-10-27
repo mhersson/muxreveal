@@ -146,7 +146,7 @@ func TestDragThatLeavesItsPaneStaysClamped(t *testing.T) {
 			c := r(a, "p2")
 			return c.X + 1, c.Y - 1
 		}, "hello world", false},
-		{"onto the status bar", func(a *App) (int, int) {
+		{"onto the bottom border on the last row", func(a *App) (int, int) {
 			return r(a, "p1").X + 2, a.height - 1
 		}, "hello world\nsecond line\nthird", true},
 		{"onto its right border", func(a *App) (int, int) {
@@ -794,7 +794,7 @@ func TestHitAreas(t *testing.T) {
 		{"right border", r.X + r.W - 1, c.Y, hitNone, ""},
 		{"bottom border", c.X, r.Y + r.H - 1, hitNone, ""},
 		{"outside the screen on the left", r.X - 1, r.Y, hitNone, ""},
-		{"status bar", 3, a.height - 1, hitNone, ""},
+		{"bottom border on the last row", 3, a.height - 1, hitNone, ""},
 		{"tab", 2, 0, hitTab, ""},
 		{"off screen", -1, -1, hitNone, ""},
 	}

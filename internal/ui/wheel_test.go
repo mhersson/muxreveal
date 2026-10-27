@@ -163,7 +163,7 @@ func TestWheelIgnoredOutsideContent(t *testing.T) {
 		{"header", c1.X + 2, r1.Y},
 		{"left border", c1.X - 1, c1.Y + 2},
 		{"workspace bar", c1.X + 2, 0},
-		{"status bar", c1.X + 2, 13},
+		{"bottom border on the last row", c1.X + 2, 13},
 		{"off screen", 500, 500},
 		{"bottom border", c1.X + 2, c1.Y + c1.H},
 	}
