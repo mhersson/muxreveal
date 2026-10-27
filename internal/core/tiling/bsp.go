@@ -4,13 +4,6 @@
 
 package tiling
 
-import (
-	"sync/atomic"
-)
-
-// nodeIDCounter is used to generate unique node IDs
-var nodeIDCounter atomic.Uint64
-
 // SplitType represents the direction of a split in the BSP tree
 type SplitType int
 
@@ -109,15 +102,16 @@ type TileNode struct {
 	SplitRatio float64   // Position of split (0.0-1.0), 0.5 = middle
 }
 
-// newNodeID generates a unique node ID
-func newNodeID() uint64 {
-	return nodeIDCounter.Add(1)
+// newNodeID generates a node ID unique within the tree
+func (t *BSPTree) newNodeID() uint64 {
+	t.lastNodeID++
+	return t.lastNodeID
 }
 
 // NewLeafNode creates a new leaf node for a window
-func NewLeafNode(windowID int) *TileNode {
+func (t *BSPTree) NewLeafNode(windowID int) *TileNode {
 	return &TileNode{
-		ID:         newNodeID(),
+		ID:         t.newNodeID(),
 		WindowID:   windowID,
 		SplitType:  SplitNone,
 		SplitRatio: 0.5,
@@ -125,9 +119,9 @@ func NewLeafNode(windowID int) *TileNode {
 }
 
 // NewInternalNode creates a new internal node with the given split
-func NewInternalNode(splitType SplitType, ratio float64, left, right *TileNode) *TileNode {
+func (t *BSPTree) NewInternalNode(splitType SplitType, ratio float64, left, right *TileNode) *TileNode {
 	node := &TileNode{
-		ID:         newNodeID(),
+		ID:         t.newNodeID(),
 		WindowID:   -1,
 		SplitType:  splitType,
 		SplitRatio: ratio,
@@ -186,6 +180,8 @@ type BSPTree struct {
 	WindowToNode map[int]*TileNode // Quick lookup: windowID -> leaf node
 	AutoScheme   AutoScheme        // How to auto-insert new windows
 	DefaultRatio float64           // Default split ratio for new splits
+
+	lastNodeID uint64 // last node ID handed out; IDs are unique within one tree
 }
 
 // NewBSPTree creates a new empty BSP tree
@@ -228,7 +224,7 @@ func (t *BSPTree) InsertWindow(windowID int, focusedWindowID int, direction Spli
 		return
 	}
 
-	newLeaf := NewLeafNode(windowID)
+	newLeaf := t.NewLeafNode(windowID)
 
 	// First window: just make it the root
 	if t.Root == nil {
@@ -279,7 +275,7 @@ func (t *BSPTree) InsertWindowWithPreselection(windowID int, focusedWindowID int
 		return
 	}
 
-	newLeaf := NewLeafNode(windowID)
+	newLeaf := t.NewLeafNode(windowID)
 
 	// First window
 	if t.Root == nil {
@@ -336,12 +332,12 @@ func (t *BSPTree) splitRatio() float64 {
 // splitLeaf puts a split in target's place holding target's window and
 // newLeaf, newLeaf as the left (or top) child when first is set.
 func (t *BSPTree) splitLeaf(target, newLeaf *TileNode, direction SplitType, first bool, ratio float64) {
-	oldLeaf := NewLeafNode(target.WindowID)
+	oldLeaf := t.NewLeafNode(target.WindowID)
 	left, right := oldLeaf, newLeaf
 	if first {
 		left, right = newLeaf, oldLeaf
 	}
-	internalNode := NewInternalNode(direction, ratio, left, right)
+	internalNode := t.NewInternalNode(direction, ratio, left, right)
 
 	if target.Parent == nil {
 		t.Root = internalNode
@@ -968,7 +964,7 @@ func (t *BSPTree) MoveWindow(windowID, targetID int, dir PreselectionDir) bool {
 	t.RemoveWindow(windowID)
 	// RemoveWindow keeps the sibling's node, so the target's is still the one
 	// in the map even when the target was that sibling.
-	t.splitLeaf(t.WindowToNode[targetID], NewLeafNode(windowID), direction, first, t.splitRatio())
+	t.splitLeaf(t.WindowToNode[targetID], t.NewLeafNode(windowID), direction, first, t.splitRatio())
 	return true
 }
 
@@ -1148,25 +1144,25 @@ func (s *SerializedBSPTree) Deserialize() *BSPTree {
 		AutoScheme:   AutoScheme(s.AutoScheme),
 		DefaultRatio: s.DefaultRatio,
 	}
-	tree.Root = deserializeNode(s.Root, nil, tree.WindowToNode)
+	tree.Root = tree.deserializeNode(s.Root, nil)
 	return tree
 }
 
-func deserializeNode(s *SerializedNode, parent *TileNode, windowMap map[int]*TileNode) *TileNode {
+func (t *BSPTree) deserializeNode(s *SerializedNode, parent *TileNode) *TileNode {
 	if s == nil {
 		return nil
 	}
 	node := &TileNode{
-		ID:         newNodeID(),
+		ID:         t.newNodeID(),
 		Parent:     parent,
 		WindowID:   s.WindowID,
 		SplitType:  SplitType(s.SplitType),
 		SplitRatio: s.SplitRatio,
 	}
 	if node.IsLeaf() && node.WindowID >= 0 {
-		windowMap[node.WindowID] = node
+		t.WindowToNode[node.WindowID] = node
 	}
-	node.Left = deserializeNode(s.Left, node, windowMap)
-	node.Right = deserializeNode(s.Right, node, windowMap)
+	node.Left = t.deserializeNode(s.Left, node)
+	node.Right = t.deserializeNode(s.Right, node)
 	return node
 }

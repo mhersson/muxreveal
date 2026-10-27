@@ -36,7 +36,7 @@ func (e edge) String() string {
 
 // leaf builds a leaf and registers it with the tree.
 func (t *BSPTree) leaf(id int) *TileNode {
-	n := NewLeafNode(id)
+	n := t.NewLeafNode(id)
 	t.WindowToNode[id] = n
 	return n
 }
@@ -50,7 +50,7 @@ func treeOf(build func(t *BSPTree) *TileNode) *BSPTree {
 // twoPanes: 1 | 2
 func twoPanes() *BSPTree {
 	return treeOf(func(t *BSPTree) *TileNode {
-		return NewInternalNode(SplitVertical, 0.5, t.leaf(1), t.leaf(2))
+		return t.NewInternalNode(SplitVertical, 0.5, t.leaf(1), t.leaf(2))
 	})
 }
 
@@ -58,25 +58,25 @@ func twoPanes() *BSPTree {
 // right column split into top and bottom.
 func tallLeft() *BSPTree {
 	return treeOf(func(t *BSPTree) *TileNode {
-		right := NewInternalNode(SplitHorizontal, 0.5, t.leaf(2), t.leaf(3))
-		return NewInternalNode(SplitVertical, 0.5, t.leaf(1), right)
+		right := t.NewInternalNode(SplitHorizontal, 0.5, t.leaf(2), t.leaf(3))
+		return t.NewInternalNode(SplitVertical, 0.5, t.leaf(1), right)
 	})
 }
 
 // tallRight is the mirror image: the stacked column is on the left.
 func tallRight() *BSPTree {
 	return treeOf(func(t *BSPTree) *TileNode {
-		left := NewInternalNode(SplitHorizontal, 0.5, t.leaf(1), t.leaf(2))
-		return NewInternalNode(SplitVertical, 0.5, left, t.leaf(3))
+		left := t.NewInternalNode(SplitHorizontal, 0.5, t.leaf(1), t.leaf(2))
+		return t.NewInternalNode(SplitVertical, 0.5, left, t.leaf(3))
 	})
 }
 
 // grid is a 2x2 arrangement built from two horizontal splits under a vertical one.
 func grid() *BSPTree {
 	return treeOf(func(t *BSPTree) *TileNode {
-		left := NewInternalNode(SplitHorizontal, 0.5, t.leaf(1), t.leaf(2))
-		right := NewInternalNode(SplitHorizontal, 0.5, t.leaf(3), t.leaf(4))
-		return NewInternalNode(SplitVertical, 0.5, left, right)
+		left := t.NewInternalNode(SplitHorizontal, 0.5, t.leaf(1), t.leaf(2))
+		right := t.NewInternalNode(SplitHorizontal, 0.5, t.leaf(3), t.leaf(4))
+		return t.NewInternalNode(SplitVertical, 0.5, left, right)
 	})
 }
 
@@ -84,10 +84,10 @@ func grid() *BSPTree {
 // levels of bounds narrowing.
 func deepNest() *BSPTree {
 	return treeOf(func(t *BSPTree) *TileNode {
-		inner := NewInternalNode(SplitVertical, 0.5, t.leaf(3), t.leaf(4))
-		mid := NewInternalNode(SplitHorizontal, 0.5, t.leaf(2), inner)
-		right := NewInternalNode(SplitHorizontal, 0.6, mid, t.leaf(5))
-		return NewInternalNode(SplitVertical, 0.4, t.leaf(1), right)
+		inner := t.NewInternalNode(SplitVertical, 0.5, t.leaf(3), t.leaf(4))
+		mid := t.NewInternalNode(SplitHorizontal, 0.5, t.leaf(2), inner)
+		right := t.NewInternalNode(SplitHorizontal, 0.6, mid, t.leaf(5))
+		return t.NewInternalNode(SplitVertical, 0.4, t.leaf(1), right)
 	})
 }
 

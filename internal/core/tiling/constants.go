@@ -31,17 +31,19 @@ const (
 )
 
 // MasterPositions lists every master position.
-var MasterPositions = []string{
-	MasterPositionLeft,
-	MasterPositionRight,
-	MasterPositionTop,
-	MasterPositionBottom,
-	MasterPositionCenter,
+func MasterPositions() []string {
+	return []string{
+		MasterPositionLeft,
+		MasterPositionRight,
+		MasterPositionTop,
+		MasterPositionBottom,
+		MasterPositionCenter,
+	}
 }
 
 // ValidMasterPosition returns p when it is a master position, else left.
 func ValidMasterPosition(p string) string {
-	if slices.Contains(MasterPositions, p) {
+	if slices.Contains(MasterPositions(), p) {
 		return p
 	}
 	return MasterPositionLeft

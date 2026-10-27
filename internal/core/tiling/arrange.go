@@ -25,7 +25,9 @@ const (
 )
 
 // Arrangements is every name ArrangeTree accepts.
-var Arrangements = []string{ArrangeTiled, ArrangeEvenHorizontal, ArrangeEvenVertical}
+func Arrangements() []string {
+	return []string{ArrangeTiled, ArrangeEvenHorizontal, ArrangeEvenVertical}
+}
 
 // ArrangeTree replaces the tree's contents with windowIDs, in order, laid out
 // as kind:
@@ -38,11 +40,11 @@ func (t *BSPTree) ArrangeTree(kind string, windowIDs []int) error {
 	var root *TileNode
 	switch kind {
 	case ArrangeEvenHorizontal:
-		root = evenChain(SplitVertical, leaves(windowIDs))
+		root = t.evenChain(SplitVertical, t.leaves(windowIDs))
 	case ArrangeEvenVertical:
-		root = evenChain(SplitHorizontal, leaves(windowIDs))
+		root = t.evenChain(SplitHorizontal, t.leaves(windowIDs))
 	case ArrangeTiled:
-		root = tiledGrid(windowIDs)
+		root = t.tiledGrid(windowIDs)
 	default:
 		return fmt.Errorf("unknown layout %q (use tiled, even-horizontal or even-vertical)", kind)
 	}
@@ -52,16 +54,16 @@ func (t *BSPTree) ArrangeTree(kind string, windowIDs []int) error {
 	return nil
 }
 
-func leaves(ids []int) []*TileNode {
+func (t *BSPTree) leaves(ids []int) []*TileNode {
 	out := make([]*TileNode, len(ids))
 	for i, id := range ids {
-		out[i] = NewLeafNode(id)
+		out[i] = t.NewLeafNode(id)
 	}
 	return out
 }
 
 // evenChain cuts along one axis so each node gets the same share.
-func evenChain(split SplitType, nodes []*TileNode) *TileNode {
+func (t *BSPTree) evenChain(split SplitType, nodes []*TileNode) *TileNode {
 	switch len(nodes) {
 	case 0:
 		return nil
@@ -69,12 +71,12 @@ func evenChain(split SplitType, nodes []*TileNode) *TileNode {
 		nodes[0].Parent = nil
 		return nodes[0]
 	}
-	rest := evenChain(split, nodes[1:])
-	return NewInternalNode(split, 1/float64(len(nodes)), nodes[0], rest)
+	rest := t.evenChain(split, nodes[1:])
+	return t.NewInternalNode(split, 1/float64(len(nodes)), nodes[0], rest)
 }
 
 // tiledGrid is rows of up to cols panes, stacked evenly.
-func tiledGrid(ids []int) *TileNode {
+func (t *BSPTree) tiledGrid(ids []int) *TileNode {
 	n := len(ids)
 	if n == 0 {
 		return nil
@@ -83,9 +85,9 @@ func tiledGrid(ids []int) *TileNode {
 	var rows []*TileNode
 	for start := 0; start < n; start += cols {
 		end := min(start+cols, n)
-		rows = append(rows, evenChain(SplitVertical, leaves(ids[start:end])))
+		rows = append(rows, t.evenChain(SplitVertical, t.leaves(ids[start:end])))
 	}
-	return evenChain(SplitHorizontal, rows)
+	return t.evenChain(SplitHorizontal, rows)
 }
 
 // indexLeaves fills WindowToNode from the subtree at n.

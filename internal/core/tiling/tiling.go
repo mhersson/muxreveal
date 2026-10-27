@@ -128,7 +128,7 @@ func splitByRatio(origin, total int, ratio float64, gap int) (span, span) {
 // MinSplitRatio and MaxSplitRatio bound the master ratio and the stack ratio
 // the master-stack tiler accepts. They are the appearance.master_ratio range,
 // so the settings row, a percentage resize and the tiler agree on one range.
-var (
+const (
 	MinSplitRatio = float64(MasterRatioMin) / 100
 	MaxSplitRatio = float64(MasterRatioMax) / 100
 )

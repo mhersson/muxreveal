@@ -118,9 +118,12 @@ func TestNeighbourOnBSPSpirals(t *testing.T) {
 // inside a horizontal one inside a vertical one, and panes that do not line up
 // with anything on the far side of a split.
 func TestNeighbourOnNestedBSPTrees(t *testing.T) {
-	leaf := NewLeafNode
-	v := func(ratio float64, l, r *TileNode) *TileNode { return NewInternalNode(SplitVertical, ratio, l, r) }
-	h := func(ratio float64, l, r *TileNode) *TileNode { return NewInternalNode(SplitHorizontal, ratio, l, r) }
+	ids := NewBSPTree()
+	leaf := ids.NewLeafNode
+	v := func(ratio float64, l, r *TileNode) *TileNode { return ids.NewInternalNode(SplitVertical, ratio, l, r) }
+	h := func(ratio float64, l, r *TileNode) *TileNode {
+		return ids.NewInternalNode(SplitHorizontal, ratio, l, r)
+	}
 
 	trees := map[string]*TileNode{
 		// Left column of three, right column of two: the rows do not line up.
@@ -271,11 +274,12 @@ func TestNeighbourPrefersTheWiderOverlap(t *testing.T) {
 // leaves holes there, so no step is well defined.
 func TestNeighbourOnRandomBSPTrees(t *testing.T) {
 	r := rand.New(rand.NewSource(1))
+	ids := NewBSPTree()
 	var build func(n int, next *int) *TileNode
 	build = func(n int, next *int) *TileNode {
 		if n == 1 {
 			*next++
-			return NewLeafNode(*next)
+			return ids.NewLeafNode(*next)
 		}
 		k := 1 + r.Intn(n-1)
 		split := SplitVertical
@@ -283,7 +287,7 @@ func TestNeighbourOnRandomBSPTrees(t *testing.T) {
 			split = SplitHorizontal
 		}
 		ratio := 0.1 + r.Float64()*0.8
-		return NewInternalNode(split, ratio, build(k, next), build(n-k, next))
+		return ids.NewInternalNode(split, ratio, build(k, next), build(n-k, next))
 	}
 	sizes := []Rect{{0, 0, 81, 23}, {0, 0, 160, 46}, {0, 0, 200, 60}, {0, 0, 37, 11}}
 	checked := 0

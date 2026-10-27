@@ -77,9 +77,9 @@ func (t *BSPTree) pair(leaf, other *TileNode, side Side, ratio float64) {
 	parent := other.Parent
 	var node *TileNode
 	if side.near() {
-		node = NewInternalNode(side.split(), ratio, leaf, other)
+		node = t.NewInternalNode(side.split(), ratio, leaf, other)
 	} else {
-		node = NewInternalNode(side.split(), ratio, other, leaf)
+		node = t.NewInternalNode(side.split(), ratio, other, leaf)
 	}
 	node.Parent = parent
 	switch {
