@@ -111,7 +111,7 @@ Agent panes report working, blocked and idle through Claude Code hooks and show 
 - [x] Agent launch with hooks
 - [x] State badges on frames, tabs and the tray
 - [x] Restore, resume and the start-up notices
-- [x] Quit, bench check and gate
+- [x] Quit, bench and idle checks
 
 Gate: agent panes show working, blocked and idle; quitting and starting again brings back the tabs, layout and every agent session; six-pane bench p99 at most 8 ms and idle CPU at most 1 %.
 
@@ -346,3 +346,4 @@ Ideas and requests that came up outside the current milestone go here.
 - A CJK line soft-wrapped one column early copies with an extra space in the middle.
 - A button release outside the window leaves the press held until the next click, which blocks hover focus meanwhile.
 - With `focus_follows_mouse` on, every pointer move builds a frame (unmeasured).
+- `TestBenchKitOnSynth` times out waiting for pane read loops under `CGO_ENABLED=1 go test -race -count=2 ./internal/ui/` (also on main before agents and persistence); it passes at `-count=1` and on its own.
