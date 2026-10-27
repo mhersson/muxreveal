@@ -349,8 +349,8 @@ func TestViewFrame(t *testing.T) {
 	if len(lines) != 3+3+1 {
 		t.Fatalf("view has %d lines, want 7:\n%s", len(lines), strings.Join(lines, "\n"))
 	}
-	wantTop := "\u250c\u2500 \U000F03D8 Theme "
-	if !strings.HasPrefix(lines[0], wantTop) || !strings.HasSuffix(lines[0], "\u2510") {
+	wantTop := "\u256d\u2500 \U000F03D8 Theme "
+	if !strings.HasPrefix(lines[0], wantTop) || !strings.HasSuffix(lines[0], "\u256e") {
 		t.Errorf("top = %q, want prefix %q and a square corner", lines[0], wantTop)
 	}
 	if !strings.HasPrefix(lines[1], "\u2502 \u276f ") {
@@ -362,7 +362,7 @@ func TestViewFrame(t *testing.T) {
 	if !strings.Contains(lines[3], " \U000F0293 Zoom pane") || !strings.HasSuffix(lines[3], "ctrl+space z \u2502") {
 		t.Errorf("row = %q, want icon, title and a right-aligned hint", lines[3])
 	}
-	if want := " 2 of 3 \u2500\u2518"; !strings.HasSuffix(lines[6], want) || !strings.HasPrefix(lines[6], "\u2514") {
+	if want := " 2 of 3 \u2500\u256f"; !strings.HasSuffix(lines[6], want) || !strings.HasPrefix(lines[6], "\u2570") {
 		t.Errorf("bottom = %q, want it to end with %q", lines[6], want)
 	}
 }

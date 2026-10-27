@@ -190,7 +190,7 @@ func TestWhichKey(t *testing.T) {
 		t.Errorf("hints = %d, want %d:\n%s", got, before+1, plain)
 	}
 	for _, want := range []string{
-		"\u250c\u2500 " + iconLeader + " ctrl+space ",
+		"\u256d\u2500 " + iconLeader + " ctrl+space ",
 		iconPanes + " Panes", iconTabs + " Tabs", iconCog + " App",
 		"\u252c", "\u2534",
 	} {
@@ -217,7 +217,7 @@ func TestWhichKeyNoIcons(t *testing.T) {
 	press(a, keyLeader)
 	a.Update(whichKeyMsg{seq: a.seq})
 	plain := ansi.Strip(a.View().Content)
-	for _, want := range []string{"\u250c\u2500 ctrl+space \u2500", "Panes", "Tabs", "App"} {
+	for _, want := range []string{"\u256d\u2500 ctrl+space \u2500", "Panes", "Tabs", "App"} {
 		if !strings.Contains(plain, want) {
 			t.Errorf("popup lacks %q:\n%s", want, plain)
 		}
@@ -255,8 +255,8 @@ func TestWhichKeyColours(t *testing.T) {
 	}
 	rows := strings.Split(ansi.Strip(content), "\n")
 
-	x, y := cellOf(t, rows, "\u250c\u2500 "+iconLeader)
-	assertColours(t, vt, x, y, "\u250c", ui.BorderFocus, ui.Panel, false)
+	x, y := cellOf(t, rows, "\u256d\u2500 "+iconLeader)
+	assertColours(t, vt, x, y, "\u256d", ui.BorderFocus, ui.Panel, false)
 	assertColours(t, vt, x+2, y, " ", ui.Accent, ui.Panel, true)
 	assertColours(t, vt, x+3, y, iconLeader, ui.Accent, ui.Panel, true)
 	assertColours(t, vt, x+5, y, "c", ui.Accent, ui.Panel, true)
@@ -395,17 +395,17 @@ func TestWhichKeySizes(t *testing.T) {
 			case 100, 80:
 				// Fits whole: the bottom border sits on the last row, one cell from the edge.
 				bottom := ansi.Strip(lines[sz[1]-1])
-				if !strings.HasSuffix(bottom, "\u2518 ") || !strings.Contains(bottom, "\u2534") ||
+				if !strings.HasSuffix(bottom, "\u256f ") || !strings.Contains(bottom, "\u2534") ||
 					!strings.Contains(plain, "Quit MuxReveal") || !strings.Contains(plain, "Jump to tab") {
 					t.Errorf("popup not drawn whole:\n%s", plain)
 				}
 			case 40:
 				// The popup is taller than the body: its top rows show, the rest is clipped.
-				if !strings.Contains(plain, "\u250c\u2500 "+iconLeader+" ctrl+space") || !strings.Contains(plain, "Panes") {
+				if !strings.Contains(plain, "\u256d\u2500 "+iconLeader+" ctrl+space") || !strings.Contains(plain, "Panes") {
 					t.Errorf("popup top not drawn:\n%s", plain)
 				}
 			case 20:
-				if !strings.Contains(plain, "\u250c\u2500 "+iconLeader+" ctrl") || strings.Contains(plain, "\u2510") {
+				if !strings.Contains(plain, "\u256d\u2500 "+iconLeader+" ctrl") || strings.Contains(plain, "\u256e") {
 					t.Errorf("popup not clipped on the right:\n%s", plain)
 				}
 			}

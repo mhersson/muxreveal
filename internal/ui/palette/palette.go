@@ -240,9 +240,9 @@ func (m Model) View(width int) string {
 	// The title starts two cells from the corner: the corner, one dash, then the title.
 	dash := min(1, inner)
 	title := ansi.Truncate(" "+m.title+" ", inner-dash, "")
-	top := border.Render("┌"+strings.Repeat("─", dash)) +
+	top := border.Render("╭"+strings.Repeat("─", dash)) +
 		panel.Foreground(ui.Accent).Bold(true).Render(title) +
-		border.Render(strings.Repeat("─", inner-dash-lipgloss.Width(title))+"┐")
+		border.Render(strings.Repeat("─", inner-dash-lipgloss.Width(title))+"╮")
 	lines := []string{top}
 
 	in := m.input
@@ -262,10 +262,10 @@ func (m Model) View(width int) string {
 	count := " " + strconv.Itoa(max(m.sel+1, 0)) + " of " + strconv.Itoa(len(m.matches)) + " "
 	cw := lipgloss.Width(count)
 	if inner >= cw+1 {
-		lines = append(lines, border.Render("└"+strings.Repeat("─", inner-cw-1))+
-			panel.Foreground(ui.Muted).Render(count)+border.Render("─┘"))
+		lines = append(lines, border.Render("╰"+strings.Repeat("─", inner-cw-1))+
+			panel.Foreground(ui.Muted).Render(count)+border.Render("─╯"))
 	} else {
-		lines = append(lines, border.Render("└"+strings.Repeat("─", inner)+"┘"))
+		lines = append(lines, border.Render("╰"+strings.Repeat("─", inner)+"╯"))
 	}
 	for i, l := range lines {
 		lines[i] = ansi.Truncate(l, width, "")

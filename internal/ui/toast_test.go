@@ -399,7 +399,7 @@ func TestSequencePopup(t *testing.T) {
 
 			// Top border, one row per second key, bottom border on the last row.
 			top := rows[n-2-len(tt.rows)]
-			if !strings.Contains(top, "┌─"+title) {
+			if !strings.Contains(top, "╭─"+title) {
 				t.Errorf("popup top = %q, want the title %q", top, title)
 			}
 
@@ -409,7 +409,7 @@ func TestSequencePopup(t *testing.T) {
 				}
 			}
 
-			if got := cells(a, n-1, 138, 139); got != "┘" {
+			if got := cells(a, n-1, 138, 139); got != "╯" {
 				t.Errorf("last row cell 138 = %q, want the popup's corner one cell from the edge", got)
 			}
 
@@ -446,7 +446,7 @@ func TestSequencePopupNoIcons(t *testing.T) {
 
 	press(a, keyLeader, keyRune('>'))
 
-	if got := strings.Join(screenRows(a), "\n"); !strings.Contains(got, "┌─ ctrl+space > ") {
+	if got := strings.Join(screenRows(a), "\n"); !strings.Contains(got, "╭─ ctrl+space > ") {
 		t.Errorf("popup lacks its title:\n%s", got)
 	}
 }

@@ -259,15 +259,15 @@ func sequencePopup(leader, prefix string, icons bool, st styles) []string {
 
 	border := func(s string) string { return st.popupBorder.Render(s) }
 	margin := st.popup.Render(" ")
-	lines := []string{border("┌─") + st.popupHead.Render(title) +
-		border(strings.Repeat("─", width-1-lipgloss.Width(title))+"┐")}
+	lines := []string{border("╭─") + st.popupHead.Render(title) +
+		border(strings.Repeat("─", width-1-lipgloss.Width(title))+"╮")}
 	for _, h := range rows {
 		pad := keyW - lipgloss.Width(h.key) + 2
 		rest := contentW - keyW - 2 - lipgloss.Width(h.title)
 		lines = append(lines, border("│")+margin+st.popupKey.Render(h.key)+
 			st.popup.Render(strings.Repeat(" ", pad)+h.title+strings.Repeat(" ", rest))+margin+border("│"))
 	}
-	return append(lines, border("└"+strings.Repeat("─", width)+"┘"))
+	return append(lines, border("╰"+strings.Repeat("─", width)+"╯"))
 }
 
 // whichKeyPopup draws the grouped hint list titled with the leader key: Panes
@@ -312,16 +312,16 @@ func whichKeyPopup(leader string, hints []hint, icons bool, st styles) []string 
 	rule := func(s string) string { return st.popupRule.Render(s) }
 	split := len(cols) > 1
 
-	top := border("┌─") + st.popupHead.Render(title)
+	top := border("╭─") + st.popupHead.Render(title)
 	topFill := l.width - 1 - lipgloss.Width(title)
 	top += border(strings.Repeat("─", topFill))
-	bottom := border("└" + strings.Repeat("─", l.width))
+	bottom := border("╰" + strings.Repeat("─", l.width))
 	if split {
-		top += rule("┬") + border(strings.Repeat("─", cols[1].width)+"┐")
-		bottom += rule("┴") + border(strings.Repeat("─", cols[1].width)+"┘")
+		top += rule("┬") + border(strings.Repeat("─", cols[1].width)+"╮")
+		bottom += rule("┴") + border(strings.Repeat("─", cols[1].width)+"╯")
 	} else {
-		top += border("┐")
-		bottom += border("┘")
+		top += border("╮")
+		bottom += border("╯")
 	}
 
 	lines := []string{top}

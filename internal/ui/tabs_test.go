@@ -345,11 +345,11 @@ func TestConfirmBoxShape(t *testing.T) {
 	lines := strings.Split(ansi.Strip(a.View().Content), "\n")
 
 	top := 10 // a third of 30
-	if !strings.Contains(lines[top], "┌─ "+iconAlert+" Close pane ─") || !strings.Contains(lines[top+6], "└") {
+	if !strings.Contains(lines[top], "╭─ "+iconAlert+" Close pane ─") || !strings.Contains(lines[top+6], "╰") {
 		t.Errorf("box not at row %d:\n%s", top, strings.Join(lines, "\n"))
 	}
 
-	x := strings.Index(lines[top], "┌")
+	x := strings.Index(lines[top], "╭")
 	if w := len([]rune(lines[top][x:])); w < 46 {
 		t.Errorf("box row %q is narrower than 46 cells", lines[top][x:])
 	}

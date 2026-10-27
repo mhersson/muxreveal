@@ -103,9 +103,9 @@ func TestPaletteIcons(t *testing.T) {
 					t.Errorf("glyph %q present = %v, want %v:\n%s", g, got, icons, view)
 				}
 			}
-			title := "\u250c\u2500 " + iconPalette + " Commands "
+			title := "\u256d\u2500 " + iconPalette + " Commands "
 			if !icons {
-				title = "\u250c\u2500 Commands "
+				title = "\u256d\u2500 Commands "
 			}
 			if !strings.Contains(view, title) {
 				t.Errorf("palette lacks title %q:\n%s", title, view)

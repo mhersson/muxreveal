@@ -417,6 +417,7 @@ M2a Worktrees and diff engine is complete on `feat/diff-engine` and waits for re
 | 2026-10-27 | The status bar is hidden and its contents move: notices become a toast, copy mode and its search prompt go into the copy pane's borders, the sequence prefix opens a popup, the legends and the cwd are dropped, and the layout mode waits for the tray module (this replaces the layout-mode-in-the-status-bar row) | The operator's pick from the chrome comparison; the body gets the last row |
 | 2026-10-27 | A pane's title no longer shows its cwd | The operator's pick from the chrome comparison |
 | 2026-10-27 | The `Bar` role is Base, not Crust | The operator's pick from the chrome comparison |
+| 2026-10-27 | Overlay boxes (which-key, sequence popup, palette, theme picker, confirm) have rounded corners `╭ ╮ ╰ ╯`, not square ones | The operator's pick from the chrome comparison |
 
 ## Later
 
