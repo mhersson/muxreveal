@@ -3,9 +3,18 @@ package core
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
+
+func ptr[T any](v T) *T { return &v }
+
+func TestIconsOn(t *testing.T) {
+	if !DefaultConfig().IconsOn() || !(Config{Icons: ptr(true)}).IconsOn() || (Config{Icons: ptr(false)}).IconsOn() {
+		t.Error("IconsOn: want true for nil and true, false for false")
+	}
+}
 
 func TestLoadConfig(t *testing.T) {
 	tests := []struct {
@@ -22,6 +31,9 @@ func TestLoadConfig(t *testing.T) {
 		{name: "comments only", content: "# theme = \"x\"\n\n# more\n", want: DefaultConfig()},
 		{name: "theme set", content: "theme = \"catppuccin-latte\"\n", want: Config{Theme: "catppuccin-latte"}},
 		{name: "theme name not validated", content: "theme = \"no-such-theme\"\n", want: Config{Theme: "no-such-theme"}},
+		{name: "icons off", content: "icons = false\n", want: Config{Theme: DefaultTheme, Icons: ptr(false)}},
+		{name: "icons on", content: "icons = true\n", want: Config{Theme: DefaultTheme, Icons: ptr(true)}},
+		{name: "icons wrong type", content: "icons = \"no\"\n", wantErr: true, errHas: []string{"line 1", "icons"}},
 		{name: "invalid toml", content: "theme = \"x", wantErr: true, errHas: []string{"line 1"}},
 		{name: "unknown key", content: "them = \"x\"\n", wantErr: true, errHas: []string{"unknown key them"}},
 		{name: "wrong type", content: "theme = 3\n", wantErr: true, errHas: []string{"line 1", "theme"}},
@@ -50,7 +62,7 @@ func TestLoadConfig(t *testing.T) {
 				if err != nil {
 					t.Fatalf("LoadConfig() error = %v", err)
 				}
-				if got != tt.want {
+				if !reflect.DeepEqual(got, tt.want) {
 					t.Errorf("LoadConfig() = %+v, want %+v", got, tt.want)
 				}
 				return

@@ -1,15 +1,41 @@
 package core
 
-import "errors"
+import (
+	"errors"
+	"maps"
+)
 
-// State is the application state; only a Store changes it.
+// State is the application state; only a Store changes it. A State with no
+// tabs behaves as one empty tab.
 type State struct {
-	Theme  string
-	Layout *Node // nil when no pane is open
-	Panes  map[PaneID]Pane
-	Focus  PaneID // "" when no pane is open
-	Zoomed bool   // the focused pane fills the body
-	NextID int    // last pane number handed out
+	Theme     string
+	Tabs      []Tab // at least one once an action has run
+	Active    int   // index into Tabs
+	Panes     map[PaneID]Pane
+	NextID    int // last pane number handed out
+	NextTabID int // last tab number handed out
+}
+
+// InitialState returns the state of a fresh session: one empty tab.
+func InitialState(cfg Config) State {
+	return State{
+		Theme:     cfg.Theme,
+		Tabs:      []Tab{{ID: "t1"}},
+		Panes:     map[PaneID]Pane{},
+		NextTabID: 1,
+	}
+}
+
+func (s State) clone() State {
+	c := s
+	c.Tabs = make([]Tab, len(s.Tabs))
+	for i, t := range s.Tabs {
+		t.Layout = t.Layout.clone()
+		c.Tabs[i] = t
+	}
+	c.Panes = make(map[PaneID]Pane, len(s.Panes))
+	maps.Copy(c.Panes, s.Panes)
+	return c
 }
 
 // Action is a state change applied through Store.Dispatch.

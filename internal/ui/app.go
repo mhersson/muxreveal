@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"slices"
 	"sync"
 	"time"
 
@@ -29,6 +30,8 @@ type Options struct {
 	Cwd string
 	// RecordDir, when set, receives one recording per pane (diagnostics); empty means off.
 	RecordDir string
+	// Icons draws Nerd Font glyphs; false drops every one.
+	Icons bool
 }
 
 // App is the root Bubble Tea model.
@@ -54,15 +57,20 @@ type App struct {
 	// reportedFg and reportedBg are the colours last given to the panes.
 	reportedFg, reportedBg theme.Hex
 	confirm                *confirm // yes/no question; owns every key while open
+	prompt                 *prompt  // text input; owns every key and paste while open
 
 	panes        map[core.PaneID]*pane // runtime panes, keyed like State.Panes
+	later        []tea.Cmd             // commands raised outside the update's return path; Update batches them
 	outerFocused bool                  // the outer terminal has focus; true until a BlurMsg
 
 	getenv    func(string) string
 	cwd       string
 	recordDir string // empty unless recording
+	icons     bool   // draw Nerd Font glyphs
 	started   bool   // the first size message was handled; it opens the first pane only once
-	clock     clock  // the sync hold's time source
+	clock     clock  // the sync hold's and the tray's time source
+	tray      trayState
+	load      loadSampler // nil on platforms without a load reading
 	start     func(ctx context.Context, c term.Command, cols, rows int) (proc, error)
 
 	// ctx is the lifetime of the pane processes; Close cancels it.
@@ -109,8 +117,10 @@ func New(opts Options) (*App, error) {
 	a := &App{
 		log: opts.Logger, store: opts.Store, reg: reg, keymap: km,
 		panes: map[core.PaneID]*pane{}, outerFocused: true,
-		getenv: getenv, cwd: cwd, recordDir: opts.RecordDir, clock: realClock{}, start: termStart,
+		getenv: getenv, cwd: cwd, recordDir: opts.RecordDir, icons: opts.Icons, clock: realClock{}, start: termStart,
+		load: newSysLoad(),
 	}
+	a.tray.gitRun = runGit
 	if err := a.sync(); err != nil {
 		return nil, err
 	}
@@ -142,12 +152,20 @@ func (a *App) dispatch(act core.Action) error {
 			return err
 		}
 	}
-	before := a.store.State().Focus
+	prev := a.store.State().Tab()
 	if err := a.store.Dispatch(act); err != nil {
 		a.log.Error("dispatch action", "err", err)
 		return err
 	}
-	a.reportFocusChange(before, a.store.State().Focus)
+	st := a.store.State()
+	a.dropGoneTab(st)
+	a.reportFocusChange(prev.Focus, st.Tab().Focus)
+	if cmd := a.syncGit(); cmd != nil {
+		a.later = append(a.later, cmd)
+	}
+	if st.Tab().ID != prev.ID {
+		a.renderStale(st)
+	}
 	if _, ok := act.(core.SetTheme); !ok {
 		return nil
 	}
@@ -158,15 +176,35 @@ func (a *App) dispatch(act core.Action) error {
 	return nil
 }
 
+// dropGoneTab closes a confirm or prompt about a tab that no longer exists.
+func (a *App) dropGoneTab(st core.State) {
+	has := func(id core.TabID) bool {
+		return slices.ContainsFunc(st.Tabs, func(t core.Tab) bool { return t.ID == id })
+	}
+
+	if a.confirm != nil && a.confirm.tab != "" && !has(a.confirm.tab) {
+		a.confirm = nil
+	}
+
+	if a.prompt != nil && !has(a.prompt.tab) {
+		a.prompt = nil
+	}
+}
+
 // Init implements tea.Model.
 func (a *App) Init() tea.Cmd {
-	return nil
+	return a.initTray()
 }
 
 // Update implements tea.Model.
 func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	m, cmd := a.update(msg)
 	a.syncPaneColors()
+
+	if len(a.later) > 0 {
+		cmd = tea.Batch(append(a.later, cmd)...)
+		a.later = nil
+	}
 
 	return m, cmd
 }
@@ -194,7 +232,7 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var cmds []tea.Cmd
 		if !a.started {
 			a.started = true
-			if a.store.State().Layout == nil {
+			if a.store.State().Tab().Layout == nil {
 				cmds = append(cmds, a.openPane(core.KindShell, core.SplitVertical))
 			}
 		}
@@ -220,6 +258,14 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.onCwd(msg)
 	case paneCwdDueMsg:
 		return a, a.onCwdDue(msg.id)
+	case clockMsg:
+		return a, a.onClock(msg)
+	case gitTickMsg:
+		return a, a.onGitTick()
+	case gitMsg:
+		return a, a.onGit(msg)
+	case loadMsg:
+		return a, a.onLoad(msg)
 	case palette.ChosenMsg:
 		return a, a.chosen(msg.ID)
 	case palette.ClosedMsg:
@@ -229,7 +275,10 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case whichKeyMsg:
 		a.popup = a.pending && msg.seq == a.seq
 	default:
-		// The input's own messages belong to the open palette.
+		// The input's own messages belong to the open prompt or palette.
+		if a.prompt != nil {
+			return a, a.updatePrompt(msg)
+		}
 		if a.overlay != nil {
 			return a, a.updateOverlay(msg)
 		}
@@ -283,32 +332,20 @@ func (a *App) runLeader(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 	return c.run(a), true
 }
 
-// hints lists the bound commands with their command titles.
-func (a *App) hints() []hint {
-	hints := make([]hint, 0, len(a.keymap.bindings))
-	for _, b := range a.keymap.bindings {
-		if c, ok := a.reg.get(b.command); ok {
-			hints = append(hints, hint{key: b.key, title: c.title})
-		}
-	}
-	return hints
-}
-
 // View implements tea.Model. The shell is empty until the first
 // WindowSizeMsg, so nothing is drawn at a guessed size.
 func (a *App) View() tea.View {
-	hints := a.hints()
 	lk := a.current()
 	g := a.geometry()
 	content := a.frameAt(g)
 	if a.popup {
-		content = overlayWhichKey(content, a.width, a.height, a.keymap.leader, hints, lk.styles)
+		content = overlayWhichKey(content, a.width, a.height, a.keymap.leader, a.hints(), a.icons, lk.styles)
 	}
 	if a.overlay != nil {
 		content = overlayOver(content, a.width, a.height, a.overlay.pal)
 	}
 	if a.confirm != nil {
-		content = overlayConfirm(content, a.width, a.height, *a.confirm, lk.styles)
+		content = overlayConfirm(content, a.width, a.height, *a.confirm, a.icons, lk.styles)
 	}
 	v := tea.NewView(content)
 	v.AltScreen = true

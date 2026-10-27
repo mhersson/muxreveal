@@ -53,6 +53,7 @@ type pane struct {
 	cwdAt     time.Time // start of the last cwd lookup
 	cwdBusy   bool      // a lookup is running
 	cwdWait   bool      // a deferred lookup is scheduled
+	stale     bool      // output or a resize arrived while its tab was hidden; render when shown
 
 	mu         sync.Mutex
 	vt         term.VT

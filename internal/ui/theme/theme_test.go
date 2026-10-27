@@ -69,6 +69,29 @@ func TestUIRoles(t *testing.T) {
 		{"Accent", mocha.UI.Accent, "#cba6f7"},
 		{"BorderFocus", mocha.UI.BorderFocus, "#b4befe"},
 	}
+	latte, err := ByName("catppuccin-latte")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, th := range []Theme{mocha, latte} {
+		p := th.Palette
+		for _, r := range []struct {
+			role      string
+			got, want Hex
+		}{
+			{"Agent", th.UI.Agent, p.Mauve},
+			{"Shell", th.UI.Shell, p.Blue},
+			{"Bar", th.UI.Bar, p.Crust},
+			{"Dim", th.UI.Dim, p.Subtext0},
+			{"Clock", th.UI.Clock, p.Lavender},
+			{"Git", th.UI.Git, p.Flamingo},
+			{"Load", th.UI.Load, p.Teal},
+		} {
+			if r.got != r.want || r.got == "" {
+				t.Errorf("%s UI.%s = %q, want %q", th.Name, r.role, r.got, r.want)
+			}
+		}
+	}
 	for _, s := range spot {
 		if s.got != s.want {
 			t.Errorf("mocha UI.%s = %q, want %q", s.role, s.got, s.want)

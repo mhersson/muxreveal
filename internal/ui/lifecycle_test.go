@@ -97,6 +97,7 @@ func lifeApp(t *testing.T) (*App, *starts) {
 		Store:  core.NewStore(core.InitialState(core.Config{Theme: "catppuccin-mocha"})),
 		Getenv: testGetenv,
 		Cwd:    testCwd,
+		Icons:  true,
 	})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
@@ -187,12 +188,12 @@ func TestStartupOpensShell(t *testing.T) {
 		t.Errorf("command = %v in %q, want %v in %q", c.Argv, c.Dir, want.Argv, testCwd)
 	}
 
-	if st.sizes[0] != [2]int{100, 28} {
-		t.Errorf("start size = %v, want [100 28]", st.sizes[0])
+	if st.sizes[0] != [2]int{98, 26} {
+		t.Errorf("start size = %v, want [98 26]", st.sizes[0])
 	}
 
 	s := a.store.State()
-	if len(s.Panes) != 1 || s.Panes["p1"].Kind != core.KindShell || s.Panes["p1"].Cwd != testCwd || s.Focus != "p1" {
+	if len(s.Panes) != 1 || s.Panes["p1"].Kind != core.KindShell || s.Panes["p1"].Cwd != testCwd || s.Tab().Focus != "p1" {
 		t.Errorf("state = %+v, want one focused shell pane p1 in %s", s, testCwd)
 	}
 
@@ -206,8 +207,8 @@ func TestStartupOpensShell(t *testing.T) {
 		t.Errorf("second size message started a process (starts = %d)", st.count())
 	}
 
-	if got := st.proc(0).resized(); len(got) == 0 || got[len(got)-1] != [2]int{120, 38} {
-		t.Errorf("resizes = %v, want the last to be [120 38]", got)
+	if got := st.proc(0).resized(); len(got) == 0 || got[len(got)-1] != [2]int{118, 36} {
+		t.Errorf("resizes = %v, want the last to be [118 36]", got)
 	}
 }
 
@@ -273,11 +274,11 @@ func TestSplitCommands(t *testing.T) {
 			chord(a, tt.key)
 
 			s := a.store.State()
-			if s.Layout == nil || s.Layout.Split != tt.split || s.Layout.A.Pane != "p1" || s.Layout.B.Pane != "p2" {
-				t.Fatalf("layout = %+v, want a %s split of p1 and p2", s.Layout, tt.split)
+			if s.Tab().Layout == nil || s.Tab().Layout.Split != tt.split || s.Tab().Layout.A.Pane != "p1" || s.Tab().Layout.B.Pane != "p2" {
+				t.Fatalf("layout = %+v, want a %s split of p1 and p2", s.Tab().Layout, tt.split)
 			}
 
-			if s.Focus != "p2" || s.Panes["p2"].Kind != tt.kind || s.Panes["p2"].Cwd != "/elsewhere" {
+			if s.Tab().Focus != "p2" || s.Panes["p2"].Kind != tt.kind || s.Panes["p2"].Cwd != "/elsewhere" {
 				t.Errorf("state = %+v, want p2 (%s) focused in /elsewhere", s, tt.kind)
 			}
 
@@ -328,7 +329,7 @@ func assertSizes(t *testing.T, a *App) {
 		if r, ok := rects[id]; ok {
 			c := contentRect(r)
 			want = [2]int{max(c.W, 1), max(c.H, 1)}
-		} else if st.Zoomed {
+		} else if st.Tab().Zoomed {
 			continue
 		}
 
@@ -350,17 +351,17 @@ func TestFocusResizeZoom(t *testing.T) {
 		key   rune
 		check func(s core.State) bool
 	}{
-		{"focus up", 'k', func(s core.State) bool { return s.Focus == "p2" }},
-		{"focus down", 'j', func(s core.State) bool { return s.Focus == "p3" }},
-		{"focus left", 'h', func(s core.State) bool { return s.Focus == "p1" }},
-		{"focus right", 'l', func(s core.State) bool { return s.Focus == "p2" }},
-		{"focus down again", 'j', func(s core.State) bool { return s.Focus == "p3" }},
-		{"shrink up", 'K', func(s core.State) bool { return s.Layout.B.Ratio == 0.45 }},
-		{"grow down", 'J', func(s core.State) bool { return s.Layout.B.Ratio == 0.5 }},
-		{"shrink left", 'H', func(s core.State) bool { return s.Layout.Ratio == 0.45 }},
-		{"grow right", 'L', func(s core.State) bool { return s.Layout.Ratio == 0.5 }},
-		{"zoom", 'z', func(s core.State) bool { return s.Zoomed }},
-		{"unzoom", 'z', func(s core.State) bool { return !s.Zoomed }},
+		{"focus up", 'k', func(s core.State) bool { return s.Tab().Focus == "p2" }},
+		{"focus down", 'j', func(s core.State) bool { return s.Tab().Focus == "p3" }},
+		{"focus left", 'h', func(s core.State) bool { return s.Tab().Focus == "p1" }},
+		{"focus right", 'l', func(s core.State) bool { return s.Tab().Focus == "p2" }},
+		{"focus down again", 'j', func(s core.State) bool { return s.Tab().Focus == "p3" }},
+		{"shrink up", 'K', func(s core.State) bool { return s.Tab().Layout.B.Ratio == 0.45 }},
+		{"grow down", 'J', func(s core.State) bool { return s.Tab().Layout.B.Ratio == 0.5 }},
+		{"shrink left", 'H', func(s core.State) bool { return s.Tab().Layout.Ratio == 0.45 }},
+		{"grow right", 'L', func(s core.State) bool { return s.Tab().Layout.Ratio == 0.5 }},
+		{"zoom", 'z', func(s core.State) bool { return s.Tab().Zoomed }},
+		{"unzoom", 'z', func(s core.State) bool { return !s.Tab().Zoomed }},
 	}
 
 	for _, step := range steps {
@@ -373,17 +374,17 @@ func TestFocusResizeZoom(t *testing.T) {
 		assertSizes(t, a)
 	}
 
-	// Resizes reach the process: p1 shrank to 44 columns and grew back to 49.
+	// Resizes reach the process: p1 shrank to 43 columns and grew back to 48.
 	var sawNarrow bool
 
 	for _, r := range st.proc(0).resized() {
-		if r[0] == 44 {
+		if r[0] == 43 {
 			sawNarrow = true
 		}
 	}
 
 	if !sawNarrow {
-		t.Errorf("p1 resizes = %v, want one with 44 columns", st.proc(0).resized())
+		t.Errorf("p1 resizes = %v, want one with 43 columns", st.proc(0).resized())
 	}
 }
 
@@ -395,8 +396,8 @@ func TestZoomedPanesKeepTheirSize(t *testing.T) {
 
 	chord(a, 'z')
 
-	if got := paneSize(t, a, "p2"); got != [2]int{100, 28} {
-		t.Errorf("zoomed pane size = %v, want [100 28]", got)
+	if got := paneSize(t, a, "p2"); got != [2]int{98, 26} {
+		t.Errorf("zoomed pane size = %v, want [98 26]", got)
 	}
 
 	if got := len(st.proc(0).resized()); got != before {
@@ -414,7 +415,7 @@ func TestCloseShellAndAgent(t *testing.T) {
 		chord(a, 'x')
 
 		s := a.store.State()
-		if len(s.Panes) != 1 || s.Focus != "p1" || a.confirm != nil || a.panes["p2"] != nil {
+		if len(s.Panes) != 1 || s.Tab().Focus != "p1" || a.confirm != nil || a.panes["p2"] != nil {
 			t.Fatalf("state = %+v, confirm = %v, want only p1 and no confirm", s, a.confirm)
 		}
 
@@ -449,7 +450,7 @@ func TestCloseShellAndAgent(t *testing.T) {
 					t.Fatalf("panes before the answer = %d, want 2", got)
 				}
 
-				if v := ansi.Strip(a.View().Content); !strings.Contains(v, "y / n") {
+				if v := ansi.Strip(a.View().Content); !strings.Contains(v, "[y] Close pane") {
 					t.Errorf("view lacks the confirm prompt:\n%s", v)
 				}
 
@@ -566,7 +567,7 @@ func TestPaneExit(t *testing.T) {
 			t.Fatalf("panes after the exit = %+v", s.Panes)
 		}
 
-		if s.Focus == "p2" {
+		if s.Tab().Focus == "p2" {
 			t.Error("focus stayed on the exited pane")
 		}
 
@@ -589,7 +590,7 @@ func TestPaneExit(t *testing.T) {
 			t.Error("the confirm for the exited pane stayed open")
 		}
 
-		if s := a.store.State(); len(s.Panes) != 1 || s.Focus != "p1" {
+		if s := a.store.State(); len(s.Panes) != 1 || s.Tab().Focus != "p1" {
 			t.Errorf("state = %+v, want only p1 focused", s)
 		}
 
@@ -617,7 +618,7 @@ func TestPaneExit(t *testing.T) {
 
 		a.Update(exitOf(t, a, "p1", st.proc(0)))
 
-		if s := a.store.State(); s.Layout != nil || len(s.Panes) != 0 {
+		if s := a.store.State(); s.Tab().Layout != nil || len(s.Panes) != 0 {
 			t.Fatalf("state = %+v, want no panes", s)
 		}
 
@@ -1080,7 +1081,7 @@ func TestLeaderShiftedKeys(t *testing.T) {
 			chord(a, 'h')
 			press(a, keyLeader, tt.key)
 
-			if got := a.store.State().Layout.Ratio; got != 0.45 {
+			if got := a.store.State().Tab().Layout.Ratio; got != 0.45 {
 				t.Errorf("ratio after ctrl+space H = %v, want 0.45 (notice %q)", got, a.notice)
 			}
 		})
@@ -1109,7 +1110,7 @@ func TestSplitFallsBackToLaunchDir(t *testing.T) {
 		t.Fatalf("panes = %d, want 2", len(s.Panes))
 	}
 
-	if got := s.Panes[s.Focus].Cwd; got != testCwd {
+	if got := s.Panes[s.Tab().Focus].Cwd; got != testCwd {
 		t.Errorf("new pane cwd = %q, want the launch dir %q", got, testCwd)
 	}
 
@@ -1160,11 +1161,11 @@ func TestSwapCommands(t *testing.T) {
 		press(a, keyLeader, ctrl('l'))
 
 		s := a.store.State()
-		if l := s.Layout; l.A.Pane != "p2" || l.B.Pane != "p1" {
+		if l := s.Tab().Layout; l.A.Pane != "p2" || l.B.Pane != "p1" {
 			t.Fatalf("layout = %s | %s, want p2 | p1 (notice %q)", l.A.Pane, l.B.Pane, a.notice)
 		}
-		if s.Focus != "p1" {
-			t.Errorf("Focus = %q, want p1", s.Focus)
+		if s.Tab().Focus != "p1" {
+			t.Errorf("Focus = %q, want p1", s.Tab().Focus)
 		}
 		assertSizes(t, a)
 		if got := st.proc(0).resized(); len(got) <= before1 || got[len(got)-1] != paneSize(t, a, "p1") {

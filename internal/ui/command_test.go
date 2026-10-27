@@ -1,11 +1,10 @@
 package ui
 
 import (
-	"strings"
+	"fmt"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/charmbracelet/x/ansi"
 
 	"github.com/mhersson/muxreveal/internal/ui/theme"
 )
@@ -53,40 +52,48 @@ func TestRegistry(t *testing.T) {
 
 func TestDefaultCommands(t *testing.T) {
 	cmds := defaultCommands()
-	fixed := []struct{ id, title string }{
-		{"palette.open", "Open command palette"},
-		{"theme.pick", "Pick theme"},
-		{"agent.new", "New agent pane"},
-		{"pane.split.down", "Split: shell below"},
-		{"pane.split.right", "Split: shell right"},
-		{"pane.focus.left", "Focus left"},
-		{"pane.focus.down", "Focus down"},
-		{"pane.focus.up", "Focus up"},
-		{"pane.focus.right", "Focus right"},
-		{"pane.resize.left", "Resize left"},
-		{"pane.resize.down", "Resize down"},
-		{"pane.resize.up", "Resize up"},
-		{"pane.resize.right", "Resize right"},
-		{"pane.swap.left", "Swap left"},
-		{"pane.swap.down", "Swap down"},
-		{"pane.swap.up", "Swap up"},
-		{"pane.swap.right", "Swap right"},
-		{"pane.zoom", "Zoom pane"},
-		{"pane.close", "Close pane"},
-		{"app.quit", "Quit MuxReveal"},
+	type want struct{ id, title, icon string }
+	fixed := []want{
+		{"palette.open", "Open command palette", iconPalette},
+		{"theme.pick", "Pick theme", iconTheme},
+		{"agent.new", "New agent pane", iconAgent},
+		{"pane.split.down", "Split: shell below", iconSplitDown},
+		{"pane.split.right", "Split: shell right", iconPanes},
 	}
+	for _, d := range []string{"left", "down", "up", "right"} {
+		fixed = append(fixed, want{"pane.focus." + d, "Focus " + d, iconFocus})
+	}
+	for _, d := range []string{"left", "down", "up", "right"} {
+		fixed = append(fixed, want{"pane.resize." + d, "Resize " + d, iconResize})
+	}
+	for _, d := range []string{"left", "down", "up", "right"} {
+		fixed = append(fixed, want{"pane.swap." + d, "Swap " + d, iconSwap})
+	}
+	fixed = append(fixed,
+		want{"pane.zoom", "Zoom pane", iconZoom},
+		want{"pane.close", "Close pane", iconClose},
+		want{"tab.new", "New tab", iconTabNew},
+		want{"tab.rename", "Rename tab", iconRename},
+		want{"tab.close", "Close tab", iconClose},
+		want{"tab.next", "Next tab", iconTabs},
+		want{"tab.prev", "Previous tab", iconTabs},
+	)
+	for n := 1; n <= 9; n++ {
+		fixed = append(fixed, want{fmt.Sprintf("tab.jump.%d", n), fmt.Sprintf("Jump to tab %d", n), iconTabs})
+	}
+	fixed = append(fixed, want{"app.quit", "Quit MuxReveal", iconQuit})
 	if len(cmds) != len(fixed)+len(theme.All()) {
 		t.Fatalf("defaultCommands() has %d commands, want %d", len(cmds), len(fixed)+len(theme.All()))
 	}
 	for i, f := range fixed {
-		if cmds[i].id != f.id || cmds[i].title != f.title {
-			t.Errorf("command %d = %q %q, want %s %s", i, cmds[i].id, cmds[i].title, f.id, f.title)
+		if cmds[i].id != f.id || cmds[i].title != f.title || cmds[i].icon != f.icon {
+			t.Errorf("command %d = %q %q %q, want %s %s %q", i, cmds[i].id, cmds[i].title, cmds[i].icon, f.id, f.title, f.icon)
 		}
 	}
 	for i, th := range theme.All() {
 		c := cmds[len(fixed)+i]
-		if c.id != "theme.set."+th.Name || c.title != "Theme: "+th.Title {
-			t.Errorf("command %d = %q %q, want theme.set.%s Theme: %s", len(fixed)+i, c.id, c.title, th.Name, th.Title)
+		if c.id != "theme.set."+th.Name || c.title != "Theme: "+th.Title || c.icon != iconTheme {
+			t.Errorf("command %d = %q %q %q, want theme.set.%s Theme: %s %q", len(fixed)+i, c.id, c.title, c.icon, th.Name, th.Title, iconTheme)
 		}
 	}
 }
@@ -107,8 +114,5 @@ func TestThemeCommands(t *testing.T) {
 	v := a.View()
 	if want := mustTheme(t, "catppuccin-latte").UI.Bg; v.BackgroundColor != want {
 		t.Errorf("BackgroundColor = %v, want %v", v.BackgroundColor, want)
-	}
-	if !strings.Contains(ansi.Strip(v.Content), "Catppuccin Latte") {
-		t.Error("view lacks the new theme title")
 	}
 }

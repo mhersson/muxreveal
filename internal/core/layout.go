@@ -2,7 +2,6 @@ package core
 
 import (
 	"fmt"
-	"maps"
 	"math"
 	"sort"
 	"strconv"
@@ -100,26 +99,14 @@ const (
 	Right
 )
 
-// InitialState returns the state of a fresh session: no panes.
-func InitialState(cfg Config) State {
-	return State{Theme: cfg.Theme, Panes: map[PaneID]Pane{}}
-}
-
-// NewPaneID returns the ID the next OpenPane will use.
+// NewPaneID returns the ID the next OpenPane or NewTab will use.
 func (s State) NewPaneID() PaneID {
 	return PaneID("p" + strconv.Itoa(s.NextID+1))
 }
 
-func (s State) clone() State {
-	c := s
-	c.Layout = s.Layout.clone()
-	c.Panes = make(map[PaneID]Pane, len(s.Panes))
-	maps.Copy(c.Panes, s.Panes)
-	return c
-}
-
-// OpenPane splits the focused pane: A keeps it, B is the new pane. The first
-// pane becomes the root and ignores Split. The new pane gets focus.
+// OpenPane splits the active tab's focused pane: A keeps it, B is the new
+// pane. The first pane of a tab becomes the root and ignores Split. The new
+// pane gets focus.
 type OpenPane struct {
 	Kind  PaneKind
 	Cwd   string
@@ -132,51 +119,56 @@ func (a OpenPane) apply(s *State) error {
 	}
 	id := s.NewPaneID()
 	fresh := &Node{Pane: id}
-	if s.Layout == nil {
-		s.Layout = fresh
+	t := s.cur()
+	if t.Layout == nil {
+		t.Layout = fresh
 	} else {
 		if a.Split != SplitVertical && a.Split != SplitHorizontal {
 			return fmt.Errorf("core: OpenPane with unknown split %q", a.Split)
 		}
-		p := s.Layout.path(s.Focus)
+		p := t.Layout.path(t.Focus)
 		if p == nil {
-			return fmt.Errorf("core: focused pane %q is not in the layout", s.Focus)
+			return fmt.Errorf("core: focused pane %q is not in the layout", t.Focus)
 		}
 		target := p[len(p)-1]
 		*target = Node{Split: a.Split, Ratio: 0.5, A: &Node{Pane: target.Pane}, B: fresh}
 	}
 	s.NextID++
 	s.Panes[id] = Pane{Kind: a.Kind, Cwd: a.Cwd}
-	s.Focus = id
-	s.Zoomed = false
+	t.Focus = id
+	t.Zoomed = false
 	return nil
 }
 
-// ClosePane removes a pane; its sibling takes the parent's place. Closing the
-// focused pane focuses the first leaf of the sibling.
+// ClosePane removes a pane from its own tab; its sibling takes the parent's
+// place. Closing the focused pane focuses the first leaf of the sibling. The
+// last pane of a tab removes the tab unless it is the only one.
 type ClosePane struct {
 	ID PaneID
 }
 
 func (a ClosePane) apply(s *State) error {
-	p := s.Layout.path(a.ID)
-	if p == nil {
+	s.normalize()
+	i, ok := s.TabOf(a.ID)
+	if !ok {
 		return fmt.Errorf("core: no pane %q", a.ID)
 	}
-	delete(s.Panes, a.ID)
-	s.Zoomed = false
+	t := &s.Tabs[i]
+	p := t.Layout.path(a.ID)
 	if len(p) == 1 {
-		s.Layout, s.Focus = nil, ""
+		s.removeTab(i, true)
 		return nil
 	}
+	delete(s.Panes, a.ID)
+	t.Zoomed = false
 	parent := p[len(p)-2]
 	sibling := parent.A
 	if sibling == p[len(p)-1] {
 		sibling = parent.B
 	}
 	*parent = *sibling
-	if s.Focus == a.ID {
-		s.Focus = parent.firstLeaf()
+	if t.Focus == a.ID {
+		t.Focus = parent.firstLeaf()
 	}
 	return nil
 }
@@ -187,12 +179,13 @@ type FocusPane struct {
 }
 
 func (a FocusPane) apply(s *State) error {
-	if s.Layout.path(a.ID) == nil {
+	t := s.cur()
+	if t.Layout.path(a.ID) == nil {
 		return fmt.Errorf("core: no pane %q", a.ID)
 	}
-	if a.ID != s.Focus {
-		s.Focus = a.ID
-		s.Zoomed = false
+	if a.ID != t.Focus {
+		t.Focus = a.ID
+		t.Zoomed = false
 	}
 	return nil
 }
@@ -205,17 +198,18 @@ type FocusDir struct {
 }
 
 func (a FocusDir) apply(s *State) error {
-	if id, ok := neighbour(*s, a.Dir); ok {
-		s.Focus = id
-		s.Zoomed = false
+	t := s.cur()
+	if id, ok := neighbour(*t, a.Dir); ok {
+		t.Focus = id
+		t.Zoomed = false
 	}
 	return nil
 }
 
-// neighbour finds the pane nearest the focused one in a direction.
-func neighbour(s State, d Dir) (PaneID, bool) {
-	rects := Rects(s.Layout, Rect{0, 0, 10000, 10000})
-	cur, ok := rects[s.Focus]
+// neighbour finds the pane nearest the tab's focused one in a direction.
+func neighbour(t Tab, d Dir) (PaneID, bool) {
+	rects := Rects(t.Layout, Rect{0, 0, 10000, 10000})
+	cur, ok := rects[t.Focus]
 	if !ok {
 		return "", false
 	}
@@ -226,7 +220,7 @@ func neighbour(s State, d Dir) (PaneID, bool) {
 	}
 	var cands []cand
 	for id, r := range rects {
-		if id == s.Focus {
+		if id == t.Focus {
 			continue
 		}
 		var dist, overlap, pos int
@@ -270,16 +264,17 @@ type SwapDir struct {
 }
 
 func (a SwapDir) apply(s *State) error {
-	other, ok := neighbour(*s, a.Dir)
+	t := s.cur()
+	other, ok := neighbour(*t, a.Dir)
 	if !ok {
 		return nil
 	}
-	from, to := s.Layout.path(s.Focus), s.Layout.path(other)
+	from, to := t.Layout.path(t.Focus), t.Layout.path(other)
 	if from == nil || to == nil {
-		return fmt.Errorf("core: swap between %q and %q: pane not in the layout", s.Focus, other)
+		return fmt.Errorf("core: swap between %q and %q: pane not in the layout", t.Focus, other)
 	}
-	from[len(from)-1].Pane, to[len(to)-1].Pane = other, s.Focus
-	s.Zoomed = false
+	from[len(from)-1].Pane, to[len(to)-1].Pane = other, t.Focus
+	t.Zoomed = false
 	return nil
 }
 
@@ -305,7 +300,8 @@ func (a ResizeDir) apply(s *State) error {
 	case Left, Up:
 		delta = -ratioStep
 	}
-	p := s.Layout.path(s.Focus)
+	t := s.cur()
+	p := t.Layout.path(t.Focus)
 	for i := len(p) - 2; i >= 0; i-- {
 		if p[i].Split == axis {
 			r := math.Round((p[i].Ratio+delta)*100) / 100
@@ -316,14 +312,15 @@ func (a ResizeDir) apply(s *State) error {
 	return nil
 }
 
-// ToggleZoom zooms or unzooms the focused pane.
+// ToggleZoom zooms or unzooms the active tab's focused pane.
 type ToggleZoom struct{}
 
 func (ToggleZoom) apply(s *State) error {
-	if s.Focus == "" {
+	t := s.cur()
+	if t.Focus == "" {
 		return nil
 	}
-	s.Zoomed = !s.Zoomed
+	t.Zoomed = !t.Zoomed
 	return nil
 }
 

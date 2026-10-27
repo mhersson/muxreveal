@@ -12,7 +12,8 @@ import (
 // UI maps semantic roles to palette colours.
 type UI struct {
 	Bg, Fg, Muted, Subtle, Panel, Surface, Border, BorderFocus, Accent, OnAccent,
-	Key, Selection, Match, Error, Warning, Success, Info Hex
+	Key, Selection, Match, Error, Warning, Success, Info,
+	Agent, Shell, Bar, Dim, Clock, Git, Load Hex
 }
 
 // Theme is one Catppuccin flavor.
@@ -82,5 +83,12 @@ func uiRoles(p Palette) UI {
 		Warning:     p.Yellow,
 		Success:     p.Green,
 		Info:        p.Blue,
+		Agent:       p.Mauve,
+		Shell:       p.Blue,
+		Bar:         p.Crust,
+		Dim:         p.Subtext0,
+		Clock:       p.Lavender,
+		Git:         p.Flamingo,
+		Load:        p.Teal,
 	}
 }

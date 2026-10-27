@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"slices"
+	"strings"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -53,7 +55,7 @@ func (a *App) openPane(kind core.PaneKind, split core.Split) tea.Cmd {
 	st := a.store.State()
 
 	cwd := a.cwd
-	if m, ok := st.Panes[st.Focus]; ok && m.Cwd != "" {
+	if m, ok := st.Panes[st.Tab().Focus]; ok && m.Cwd != "" {
 		cwd = m.Cwd
 	}
 
@@ -65,12 +67,34 @@ func (a *App) openPane(kind core.PaneKind, split core.Split) tea.Cmd {
 
 	sim := core.NewStore(st)
 	if err := sim.Dispatch(act); err == nil {
-		body := bodyRect(a.width, a.height)
-		if r, ok := core.Rects(sim.State().Layout, body)[id]; ok {
+		area := innerRect(bodyRect(a.width, a.height))
+		if r, ok := core.Rects(sim.State().Tab().Layout, area)[id]; ok {
 			cols, rows = contentSize(r)
 		}
 	}
 
+	pn, cwd, err := a.startPane(id, kind, cwd, cols, rows)
+	if err != nil {
+		return nil
+	}
+
+	act.Cwd = cwd
+
+	if err := a.dispatch(act); err != nil {
+		delete(a.panes, id)
+		a.closeAsync(pn)
+		a.notice = fmt.Sprintf("cannot open %s: %v", kind, err)
+
+		return nil
+	}
+
+	return tea.Batch(pn.wait(), a.relayout())
+}
+
+// startPane starts the process of pane id at cols x rows and registers the
+// pane, in cwd or, when that directory is gone, the launch dir; it returns the
+// directory used. On failure it leaves a notice and registers nothing.
+func (a *App) startPane(id core.PaneID, kind core.PaneKind, cwd string, cols, rows int) (*pane, string, error) {
 	c := term.ShellCommand(a.getenv, cwd)
 	if kind == core.KindAgent {
 		c = term.AgentCommand(a.getenv, cwd)
@@ -86,7 +110,7 @@ func (a *App) openPane(kind core.PaneKind, split core.Split) tea.Cmd {
 		a.notice = fmt.Sprintf("%s is not available, started in %s", cwd, a.cwd)
 
 		c.Dir = a.cwd
-		act.Cwd = a.cwd
+		cwd = a.cwd
 		p, err = a.start(a.ctx, c, cols, rows)
 	}
 
@@ -94,7 +118,7 @@ func (a *App) openPane(kind core.PaneKind, split core.Split) tea.Cmd {
 		a.log.Error("start pane", "kind", kind, "err", err)
 		a.notice = fmt.Sprintf("cannot start %s: %v", kind, err)
 
-		return nil
+		return nil, cwd, err
 	}
 
 	a.log.Debug("pane started", "pane", id, "kind", kind, "took", time.Since(began))
@@ -116,15 +140,7 @@ func (a *App) openPane(kind core.PaneKind, split core.Split) tea.Cmd {
 	pn := newPane(id, p, cols, rows, a.clock, opts...)
 	a.panes[id] = pn
 
-	if err := a.dispatch(act); err != nil {
-		delete(a.panes, id)
-		a.closeAsync(pn)
-		a.notice = fmt.Sprintf("cannot open %s: %v", kind, err)
-
-		return nil
-	}
-
-	return tea.Batch(pn.wait(), a.relayout())
+	return pn, cwd, nil
 }
 
 // usableDir reports whether dir is an existing directory; exec reports a
@@ -177,24 +193,33 @@ func (a *App) act(act core.Action) tea.Cmd {
 	return a.relayout()
 }
 
-// relayout resizes every pane to its content rect (at least 1x1; panes the
-// layout drops get 1x1) and renders the resized ones at once. Panes hidden by
-// zoom keep their size.
+// relayout resizes every pane to its content rect in its own tab's layout,
+// hidden tabs included, and renders the visible resized ones at once. A pane the
+// layout drops gets 1x1; panes hidden by their tab's zoom keep their size.
 func (a *App) relayout() tea.Cmd {
 	st := a.store.State()
-	_, focused := st.Panes[st.Focus]
-	zoomed := st.Zoomed && focused
-	rects := a.geometry().rects
+	rects := make([]map[core.PaneID]core.Rect, len(st.Tabs))
+
+	for i := range st.Tabs {
+		rects[i] = a.layoutIn(st, i)
+	}
 
 	var cmds []tea.Cmd
 
 	for id, p := range a.panes {
+		i, ok := st.TabOf(id)
+		if !ok {
+			continue
+		}
+
 		cols, rows := 1, 1
 
-		if r, ok := rects[id]; ok {
+		if r, ok := rects[i][id]; ok {
 			cols, rows = contentSize(r)
-		} else if zoomed {
-			continue
+		} else if t := st.Tabs[i]; t.Zoomed {
+			if _, focused := st.Panes[t.Focus]; focused {
+				continue
+			}
 		}
 
 		if p.resize(cols, rows) {
@@ -205,9 +230,38 @@ func (a *App) relayout() tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
+// hiddenIn reports whether the pane belongs to a tab other than the active one.
+func hiddenIn(st core.State, id core.PaneID) bool {
+	i, ok := st.TabOf(id)
+
+	return ok && i != st.Active
+}
+
+// renderStale renders the panes of the active tab that changed while it was
+// hidden. The hold ticks it may arm run after the current update.
+func (a *App) renderStale(st core.State) {
+	for id, p := range a.panes {
+		if !p.stale || hiddenIn(st, id) {
+			continue
+		}
+
+		p.stale = false
+
+		if cmd := a.renderPane(p); cmd != nil {
+			a.later = append(a.later, cmd)
+		}
+	}
+}
+
 // renderPane renders p and, when a sync hold keeps it from drawing, arms one
-// tick for the hold's end.
+// tick for the hold's end. A pane in a hidden tab only notes that it is stale.
 func (a *App) renderPane(p *pane) tea.Cmd {
+	if st := a.store.State(); hiddenIn(st, p.id) {
+		p.stale = true
+
+		return nil
+	}
+
 	_, held := p.render()
 	if held.IsZero() || p.holdArmed {
 		return nil
@@ -319,7 +373,7 @@ func (a *App) hasAgents() bool {
 func (a *App) closeFocused() tea.Cmd {
 	st := a.store.State()
 
-	id := st.Focus
+	id := st.Tab().Focus
 	m, ok := st.Panes[id]
 
 	switch {
@@ -330,7 +384,9 @@ func (a *App) closeFocused() tea.Cmd {
 	}
 
 	a.openConfirm(confirm{
+		action: "Close pane",
 		prompt: "Close this agent pane?",
+		detail: "The agent stops running.",
 		pane:   id,
 		yes:    func(a *App) tea.Cmd { return a.closePane(id) },
 	})
@@ -345,8 +401,104 @@ func (a *App) quit() tea.Cmd {
 	}
 
 	a.openConfirm(confirm{
-		prompt: "Agent panes are running. Quit MuxReveal?",
+		action: "Quit",
+		prompt: "Quit MuxReveal?",
+		detail: "Agent panes are running and will stop.",
 		yes:    func(*App) tea.Cmd { return tea.Quit },
+	})
+
+	return nil
+}
+
+// newTab implements tab.new: a shell in the focused pane's cwd, in a new tab
+// that becomes active. Nothing changes when the process does not start.
+func (a *App) newTab() tea.Cmd {
+	if !a.started {
+		return nil
+	}
+
+	st := a.store.State()
+
+	cwd := a.cwd
+	if m, ok := st.Panes[st.Tab().Focus]; ok && m.Cwd != "" {
+		cwd = m.Cwd
+	}
+
+	id := st.NewPaneID()
+	cols, rows := contentSize(innerRect(bodyRect(a.width, a.height)))
+
+	pn, cwd, err := a.startPane(id, core.KindShell, cwd, cols, rows)
+	if err != nil {
+		return nil
+	}
+
+	if err := a.dispatch(core.NewTab{Kind: core.KindShell, Cwd: cwd}); err != nil {
+		delete(a.panes, id)
+		a.closeAsync(pn)
+		a.notice = fmt.Sprintf("cannot open tab: %v", err)
+
+		return nil
+	}
+
+	return tea.Batch(pn.wait(), a.relayout())
+}
+
+// closeTab implements tab.close: a tab with agents asks first.
+func (a *App) closeTab() tea.Cmd {
+	st := a.store.State()
+	id := st.Tab().ID
+
+	if !st.TabHasAgents(st.Active) {
+		return a.closeTabByID(id)
+	}
+
+	a.openConfirm(confirm{
+		action: "Close tab",
+		prompt: fmt.Sprintf("Close tab %d \"%s\"?", st.Active+1, a.tabInfos()[st.Active].name),
+		detail: "Its agent panes will stop running.",
+		tab:    id,
+		yes:    func(a *App) tea.Cmd { return a.closeTabByID(id) },
+	})
+
+	return nil
+}
+
+// closeTabByID removes the tab and its panes from the state and the registry
+// at once and closes the processes in the background.
+func (a *App) closeTabByID(id core.TabID) tea.Cmd {
+	st := a.store.State()
+
+	i := slices.IndexFunc(st.Tabs, func(t core.Tab) bool { return t.ID == id })
+	if i < 0 {
+		return nil
+	}
+
+	var closing []*pane
+
+	for pid, p := range a.panes {
+		if at, ok := st.TabOf(pid); ok && at == i {
+			closing = append(closing, p)
+
+			delete(a.panes, pid)
+		}
+	}
+
+	// dispatch logs its own failures.
+	_ = a.dispatch(core.CloseTab{ID: id})
+
+	for _, p := range closing {
+		a.closeAsync(p)
+	}
+
+	return a.relayout()
+}
+
+// renameTab implements tab.rename: edit the active tab's custom name in the bar.
+func (a *App) renameTab() tea.Cmd {
+	t := a.store.State().Tab()
+
+	a.openPrompt(t.ID, t.Name, func(a *App, value string) tea.Cmd {
+		return a.act(core.RenameTab{ID: t.ID, Name: strings.TrimSpace(value)})
 	})
 
 	return nil

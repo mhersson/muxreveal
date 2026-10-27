@@ -42,7 +42,7 @@ func leaves(n *Node, f func(PaneID)) {
 
 func stateOf(layout *Node, focus PaneID) State {
 	s := InitialState(DefaultConfig())
-	s.Layout, s.Focus = layout, focus
+	s.Tabs[0].Layout, s.Tabs[0].Focus = layout, focus
 	leaves(layout, func(id PaneID) {
 		s.Panes[id] = Pane{Kind: KindShell}
 		s.NextID++
@@ -64,7 +64,7 @@ func TestInitialState(t *testing.T) {
 	if s.Theme != "catppuccin-latte" {
 		t.Errorf("Theme = %q", s.Theme)
 	}
-	if s.Layout != nil || s.Focus != "" || len(s.Panes) != 0 || s.Zoomed {
+	if tab := s.Tab(); len(s.Tabs) != 1 || s.Active != 0 || tab.ID != "t1" || tab.Layout != nil || tab.Focus != "" || len(s.Panes) != 0 || tab.Zoomed {
 		t.Errorf("state not empty: %+v", s)
 	}
 }
@@ -84,15 +84,15 @@ func TestOpenPane(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tt.from.Zoomed = tt.from.Layout != nil
+			tt.from.Tabs[0].Zoomed = tt.from.Tabs[0].Layout != nil
 			got := dispatch(t, tt.from, tt.action)
-			if show(got.Layout) != tt.wantTree {
-				t.Errorf("tree = %s, want %s", show(got.Layout), tt.wantTree)
+			if show(got.Tab().Layout) != tt.wantTree {
+				t.Errorf("tree = %s, want %s", show(got.Tab().Layout), tt.wantTree)
 			}
-			if got.Focus != tt.wantFocus {
-				t.Errorf("Focus = %q, want %q", got.Focus, tt.wantFocus)
+			if got.Tab().Focus != tt.wantFocus {
+				t.Errorf("Focus = %q, want %q", got.Tab().Focus, tt.wantFocus)
 			}
-			if got.Zoomed {
+			if got.Tab().Zoomed {
 				t.Error("zoom not cleared")
 			}
 			if p := got.Panes[tt.wantFocus]; p.Kind != tt.action.Kind || p.Cwd != tt.action.Cwd {
@@ -101,7 +101,7 @@ func TestOpenPane(t *testing.T) {
 			if got.NextID != tt.from.NextID+1 {
 				t.Errorf("NextID = %d, want %d", got.NextID, tt.from.NextID+1)
 			}
-			if n := got.Layout.path(tt.wantFocus); len(n) > 1 {
+			if n := got.Tab().Layout.path(tt.wantFocus); len(n) > 1 {
 				if r := n[len(n)-2].Ratio; r != 0.5 {
 					t.Errorf("ratio = %v, want 0.5", r)
 				}
@@ -153,18 +153,18 @@ func TestClosePane(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tt.from.Zoomed = true
+			tt.from.Tabs[0].Zoomed = true
 			got := dispatch(t, tt.from, ClosePane{ID: tt.id})
-			if show(got.Layout) != tt.wantTree {
-				t.Errorf("tree = %s, want %s", show(got.Layout), tt.wantTree)
+			if show(got.Tab().Layout) != tt.wantTree {
+				t.Errorf("tree = %s, want %s", show(got.Tab().Layout), tt.wantTree)
 			}
-			if got.Focus != tt.wantFocus {
-				t.Errorf("Focus = %q, want %q", got.Focus, tt.wantFocus)
+			if got.Tab().Focus != tt.wantFocus {
+				t.Errorf("Focus = %q, want %q", got.Tab().Focus, tt.wantFocus)
 			}
 			if _, ok := got.Panes[tt.id]; ok {
 				t.Error("pane metadata not removed")
 			}
-			if got.Zoomed {
+			if got.Tab().Zoomed {
 				t.Error("zoom not cleared")
 			}
 		})
@@ -181,8 +181,8 @@ func TestDispatchKeepsStateOnError(t *testing.T) {
 		}
 	}
 	got := st.State()
-	if show(got.Layout) != "v(p1,p2)" || got.Focus != "p1" || len(got.Panes) != 2 || got.NextID != 2 {
-		t.Errorf("state changed: %s %+v", show(got.Layout), got)
+	if show(got.Tab().Layout) != "v(p1,p2)" || got.Tab().Focus != "p1" || len(got.Panes) != 2 || got.NextID != 2 {
+		t.Errorf("state changed: %s %+v", show(got.Tab().Layout), got)
 	}
 }
 
@@ -191,14 +191,14 @@ func TestStateIsCopied(t *testing.T) {
 	got := st.State()
 	got.Panes["p1"] = Pane{Kind: KindAgent, Cwd: "/x"}
 	delete(got.Panes, "p2")
-	got.Layout.Ratio = 0.9
-	got.Layout.A.Pane = "zz"
+	got.Tab().Layout.Ratio = 0.9
+	got.Tab().Layout.A.Pane = "zz"
 	again := st.State()
 	if len(again.Panes) != 2 || again.Panes["p1"].Kind != KindShell {
 		t.Errorf("Panes leaked: %+v", again.Panes)
 	}
-	if again.Layout.Ratio != 0.5 || again.Layout.A.Pane != "p1" {
-		t.Errorf("Layout leaked: %s", show(again.Layout))
+	if again.Tab().Layout.Ratio != 0.5 || again.Tab().Layout.A.Pane != "p1" {
+		t.Errorf("Layout leaked: %s", show(again.Tab().Layout))
 	}
 }
 
@@ -231,8 +231,8 @@ func TestFocusDir(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := dispatch(t, stateOf(tree(), tt.focus), FocusDir{Dir: tt.dir})
-			if got.Focus != tt.want {
-				t.Errorf("Focus = %q, want %q", got.Focus, tt.want)
+			if got.Tab().Focus != tt.want {
+				t.Errorf("Focus = %q, want %q", got.Tab().Focus, tt.want)
 			}
 		})
 	}
@@ -243,8 +243,8 @@ func TestFocusDirPrefersOverlap(t *testing.T) {
 	tree := hsplit(leaf("p1"), &Node{Split: SplitVertical, Ratio: 0.2, A: leaf("p2"), B: leaf("p3")})
 	tree.Ratio = 0.5
 	s := stateOf(tree, "p1")
-	if got := dispatch(t, s, FocusDir{Dir: Down}); got.Focus != "p3" {
-		t.Errorf("Focus = %q, want p3 (most overlap)", got.Focus)
+	if got := dispatch(t, s, FocusDir{Dir: Down}); got.Tab().Focus != "p3" {
+		t.Errorf("Focus = %q, want p3 (most overlap)", got.Tab().Focus)
 	}
 }
 
@@ -269,8 +269,8 @@ func TestResizeDir(t *testing.T) {
 			for _, d := range tt.dirs {
 				s = dispatch(t, s, ResizeDir{Dir: d})
 			}
-			if s.Layout.Ratio != tt.wantRatio {
-				t.Errorf("Ratio = %v, want %v", s.Layout.Ratio, tt.wantRatio)
+			if s.Tab().Layout.Ratio != tt.wantRatio {
+				t.Errorf("Ratio = %v, want %v", s.Tab().Layout.Ratio, tt.wantRatio)
 			}
 		})
 	}
@@ -279,21 +279,21 @@ func TestResizeDir(t *testing.T) {
 func TestResizeDirUsesNearestAncestor(t *testing.T) {
 	tree := vsplit(leaf("p1"), vsplit(leaf("p2"), leaf("p3")))
 	s := dispatch(t, stateOf(tree, "p3"), ResizeDir{Dir: Right})
-	if s.Layout.Ratio != 0.5 || s.Layout.B.Ratio != 0.55 {
-		t.Errorf("ratios = %v, %v", s.Layout.Ratio, s.Layout.B.Ratio)
+	if s.Tab().Layout.Ratio != 0.5 || s.Tab().Layout.B.Ratio != 0.55 {
+		t.Errorf("ratios = %v, %v", s.Tab().Layout.Ratio, s.Tab().Layout.B.Ratio)
 	}
 }
 
 func TestToggleZoom(t *testing.T) {
 	s := stateOf(vsplit(leaf("p1"), leaf("p2")), "p1")
 	s = dispatch(t, s, ToggleZoom{})
-	if !s.Zoomed {
+	if !s.Tab().Zoomed {
 		t.Fatal("not zoomed")
 	}
-	if s = dispatch(t, s, ToggleZoom{}); s.Zoomed {
+	if s = dispatch(t, s, ToggleZoom{}); s.Tab().Zoomed {
 		t.Error("still zoomed")
 	}
-	if s = dispatch(t, stateOf(nil, ""), ToggleZoom{}); s.Zoomed {
+	if s = dispatch(t, stateOf(nil, ""), ToggleZoom{}); s.Tab().Zoomed {
 		t.Error("zoomed with no pane")
 	}
 }
@@ -301,7 +301,7 @@ func TestToggleZoom(t *testing.T) {
 func TestZoomClearedBy(t *testing.T) {
 	zoomed := func(focus PaneID) State {
 		s := stateOf(vsplit(leaf("p1"), hsplit(leaf("p2"), leaf("p3"))), focus)
-		s.Zoomed = true
+		s.Tabs[0].Zoomed = true
 		return s
 	}
 	tests := []struct {
@@ -320,8 +320,8 @@ func TestZoomClearedBy(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := dispatch(t, tt.from, tt.action); got.Zoomed != tt.want {
-				t.Errorf("Zoomed = %v, want %v", got.Zoomed, tt.want)
+			if got := dispatch(t, tt.from, tt.action); got.Tab().Zoomed != tt.want {
+				t.Errorf("Zoomed = %v, want %v", got.Tab().Zoomed, tt.want)
 			}
 		})
 	}
@@ -359,20 +359,20 @@ func TestSwapDir(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			s := stateOf(tt.layout, tt.focus)
-			s.Zoomed = tt.zoomed
+			s.Tabs[0].Zoomed = tt.zoomed
 			before := maps.Clone(s.Panes)
 			got := dispatch(t, s, SwapDir{Dir: tt.dir})
-			if g := show(got.Layout); g != tt.want {
+			if g := show(got.Tab().Layout); g != tt.want {
 				t.Errorf("layout = %s, want %s", g, tt.want)
 			}
-			if got.Focus != tt.focus {
-				t.Errorf("Focus = %q, want %q", got.Focus, tt.focus)
+			if got.Tab().Focus != tt.focus {
+				t.Errorf("Focus = %q, want %q", got.Tab().Focus, tt.focus)
 			}
-			if got.Zoomed != tt.wantZoom {
-				t.Errorf("Zoomed = %v, want %v", got.Zoomed, tt.wantZoom)
+			if got.Tab().Zoomed != tt.wantZoom {
+				t.Errorf("Zoomed = %v, want %v", got.Tab().Zoomed, tt.wantZoom)
 			}
-			if tt.wantRatio != 0 && got.Layout.Ratio != tt.wantRatio {
-				t.Errorf("root ratio = %v, want %v", got.Layout.Ratio, tt.wantRatio)
+			if tt.wantRatio != 0 && got.Tab().Layout.Ratio != tt.wantRatio {
+				t.Errorf("root ratio = %v, want %v", got.Tab().Layout.Ratio, tt.wantRatio)
 			}
 			if !maps.Equal(got.Panes, before) {
 				t.Errorf("Panes = %v, want %v", got.Panes, before)

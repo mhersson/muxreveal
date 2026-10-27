@@ -1,7 +1,6 @@
 package ui
 
 import (
-	"path/filepath"
 	"slices"
 	"strings"
 
@@ -12,47 +11,74 @@ import (
 	"github.com/mhersson/muxreveal/internal/core"
 )
 
-const (
-	separatorGlyph = "│"
-	zoomTag        = " zoom "
-)
-
-// bodyRect is the area above the status bar.
+// bodyRect is the area between the workspace bar on row 0 and the status bar
+// on the last row.
 func bodyRect(width, height int) core.Rect {
-	return core.Rect{W: width, H: height - 1}
+	return core.Rect{Y: 1, W: width, H: max(height-2, 0)}
 }
 
-// contentRect is a pane rect without its header row.
+// minFrame is the smallest body, in rows and columns, that has room for a frame.
+const minFrame = 3
+
+// innerRect is the body inside its frame: the left and right frame columns and
+// the bottom frame row are outside it. A body under minFrame has no inner rect.
+func innerRect(body core.Rect) core.Rect {
+	if body.W < minFrame || body.H < minFrame {
+		return core.Rect{}
+	}
+
+	return core.Rect{X: body.X + 1, Y: body.Y, W: body.W - 2, H: body.H - 1}
+}
+
+// contentRect is a pane rect without its top border row.
 func contentRect(r core.Rect) core.Rect {
 	return core.Rect{X: r.X, Y: r.Y + 1, W: r.W, H: r.H - 1}
 }
 
-// geometry is the pane rects (header row included) and the separators of one
-// View, computed once.
+// geometry is the pane rects (top border row included) of one View, computed
+// once.
 type geometry struct {
 	rects map[core.PaneID]core.Rect
-	seps  []core.Rect
 }
 
 // layoutRects returns each visible pane's rect. A zoomed pane is the only one
-// and fills the body.
+// and fills the inner rect.
 func (a *App) layoutRects() map[core.PaneID]core.Rect {
 	return a.geometry().rects
 }
 
 func (a *App) geometry() geometry {
 	st := a.store.State()
-	body := bodyRect(a.width, a.height)
-	if st.Zoomed {
-		if _, ok := st.Panes[st.Focus]; ok {
-			g := geometry{rects: map[core.PaneID]core.Rect{}}
-			if body.W >= 1 && body.H >= 1 {
-				g.rects[st.Focus] = body
+
+	return geometry{rects: a.layoutIn(st, st.Active)}
+}
+
+// tabRects lays tab i out in the inner rect with its own zoom: a zoomed tab's
+// focused pane gets the whole inner rect.
+func (a *App) tabRects(i int) map[core.PaneID]core.Rect {
+	return a.layoutIn(a.store.State(), i)
+}
+
+func (a *App) layoutIn(st core.State, i int) map[core.PaneID]core.Rect {
+	if i < 0 || i >= len(st.Tabs) {
+		return nil
+	}
+
+	t := st.Tabs[i]
+	inner := innerRect(bodyRect(a.width, a.height))
+
+	if t.Zoomed {
+		if _, ok := st.Panes[t.Focus]; ok {
+			rects := map[core.PaneID]core.Rect{}
+			if inner.W >= 1 && inner.H >= 1 {
+				rects[t.Focus] = inner
 			}
-			return g
+
+			return rects
 		}
 	}
-	return geometry{rects: core.Rects(st.Layout, body), seps: core.Separators(st.Layout, body)}
+
+	return core.Rects(t.Layout, inner)
 }
 
 // segment is a run of cells already styled, starting at column x.
@@ -61,74 +87,114 @@ type segment struct {
 	text string
 }
 
-// frameAt draws the body and the status bar: exactly height lines of exactly
-// width cells. An empty layout shows the welcome card.
+// frameAt draws the whole screen: the workspace bar, the body and the status
+// bar, exactly height lines of exactly width cells. Height 1 is the status bar
+// only and height 2 the two bars. An empty tab shows the welcome card.
 func (a *App) frameAt(g geometry) string {
 	if a.width <= 0 || a.height <= 0 {
 		return ""
 	}
+
 	lk := a.current()
-	bar := barState{leader: a.keymap.leader, pending: a.pending, notice: printable(a.notice)}
 	st := a.store.State()
-	if st.Layout == nil {
-		return shell(a.width, a.height, a.theme, lk.styles, lk.sample, a.welcomeHints(), bar)
+	lines := make([]string, 0, a.height)
+
+	if a.height >= 2 {
+		lines = append(lines, a.workspaceBar(a.width))
 	}
 
-	rows := make([][]segment, max(a.height-1, 0))
+	if bodyH := a.height - 2; bodyH > 0 {
+		if st.Tab().Layout == nil {
+			lines = append(lines, strings.Split(renderBody(a.width, bodyH, lk.styles, lk.sample, a.welcomeHints()), "\n")...)
+		} else {
+			lines = append(lines, a.frameBody(g, st, lk)...)
+		}
+	}
+
+	lines = append(lines, a.statusBar(a.width, st))
+
+	return strings.Join(lines, "\n")
+}
+
+// frameBody draws the body rows between the two bars: the frames, titles and
+// pane content.
+func (a *App) frameBody(g geometry, st core.State, lk look) []string {
+	rows := make([][]segment, a.height)
 	add := func(y int, s segment) {
 		if y >= 0 && y < len(rows) && s.w > 0 {
 			rows[y] = append(rows[y], s)
 		}
 	}
+
+	grid := newBorderGrid(a.width, a.height)
+	focus := st.Tab().Focus
+
+	for _, r := range g.rects {
+		grid.addBox(r, ownNone)
+	}
+
+	if r, ok := g.rects[focus]; ok {
+		grid.addBox(r, kindOwner(st.Panes[focus].Kind))
+	}
+
 	for id, r := range g.rects {
-		hdr := a.header(id, r, lk.styles)
-		add(r.Y, segment{r.X, r.W, hdr})
+		for _, s := range a.topBorder(grid, st, id, r, id == focus, lk.styles) {
+			add(r.Y, s)
+		}
+	}
+
+	for id, r := range g.rects {
 		c := contentRect(r)
 		var lines []string
 		fit := false
+
 		if p := a.panes[id]; p != nil {
 			lines = p.lines()
 			cols, prows := p.size()
 			fit = cols != c.W || prows != c.H
 		}
+
 		for i := range c.H {
 			text := ""
 			if i < len(lines) {
 				text = lines[i]
 			}
+
 			if fit || i >= len(lines) {
 				text = fitWidth(text, c.W, lk.styles.body)
 			}
+
 			add(c.Y+i, segment{c.X, c.W, text})
 		}
 	}
-	if !st.Zoomed {
-		for _, s := range g.seps {
-			for y := s.Y; y < s.Y+s.H; y++ {
-				add(y, segment{s.X, 1, lk.styles.separator.Render(separatorGlyph)})
-			}
-		}
-	}
 
-	lines := make([]string, 0, a.height)
+	grid.runs(lk.styles, add)
+
+	lines := make([]string, 0, a.height-2)
+
 	var sb strings.Builder
-	for _, segs := range rows {
+
+	for _, segs := range rows[1 : a.height-1] {
 		slices.SortFunc(segs, func(p, q segment) int { return p.x - q.x })
 		sb.Reset()
+
 		x := 0
+
 		for _, s := range segs {
 			if s.x < x {
 				continue
 			}
+
 			sb.WriteString(spaces(lk.styles.body, s.x-x))
 			sb.WriteString(s.text)
 			x = s.x + s.w
 		}
+
 		sb.WriteString(spaces(lk.styles.body, a.width-x))
 		lines = append(lines, sb.String())
 	}
-	lines = append(lines, statusBar(a.width, a.theme, lk.styles, bar))
-	return strings.Join(lines, "\n")
+
+	return lines
 }
 
 // welcomeHints lists the commands that make sense with no pane open, with
@@ -167,37 +233,6 @@ func fitWidth(s string, w int, body lipgloss.Style) string {
 	return s + spaces(body, w-got)
 }
 
-// header draws the one-row pane header: " title · cwd" and, when zoomed, a
-// right-aligned zoom tag. The title is the guest's OSC title, else the kind.
-func (a *App) header(id core.PaneID, r core.Rect, st styles) string {
-	s := a.store.State()
-	meta := s.Panes[id]
-	title := "shell"
-	if meta.Kind == core.KindAgent {
-		title = "claude"
-	}
-	if p := a.panes[id]; p != nil {
-		if t := printable(p.title()); t != "" {
-			title = t
-		}
-	}
-	text := " " + title
-	if meta.Cwd != "" {
-		text += " · " + printable(filepath.Base(meta.Cwd))
-	}
-	style := st.paneHeader
-	if id == s.Focus {
-		style = st.paneHeaderFocus
-	}
-	tag := ""
-	if s.Zoomed && r.W > len(zoomTag) {
-		tag = zoomTag
-	}
-	text = ansi.Truncate(text, r.W-len(tag), "")
-	gap := r.W - lipgloss.Width(text) - len(tag)
-	return style.Render(text + strings.Repeat(" ", gap) + tag)
-}
-
 // printable drops control characters that guest or filesystem text may carry.
 func printable(t string) string {
 	return strings.Map(func(r rune) rune {
@@ -209,16 +244,24 @@ func printable(t string) string {
 }
 
 // cursorView places the focused pane's cursor on screen; nil when the guest
-// hides it, it falls outside the pane, or an overlay, a confirm or the which-key popup is open.
+// hides it, it falls outside the pane, or an overlay, a confirm or the which-key
+// popup is open. A prompt moves the cursor into the workspace bar.
 func (a *App) cursorView() *tea.Cursor { return a.cursorAt(a.geometry()) }
 
 func (a *App) cursorAt(g geometry) *tea.Cursor {
+	if a.prompt != nil {
+		if x, ok := a.renameCursorX(); ok {
+			return tea.NewCursor(x, 0)
+		}
+
+		return nil
+	}
 	if a.overlay != nil || a.popup || a.confirm != nil {
 		return nil
 	}
 	st := a.store.State()
-	p := a.panes[st.Focus]
-	r, ok := g.rects[st.Focus]
+	p := a.panes[st.Tab().Focus]
+	r, ok := g.rects[st.Tab().Focus]
 	if p == nil || !ok {
 		return nil
 	}

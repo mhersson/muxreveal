@@ -237,6 +237,7 @@ func newBenchApp(cfg benchConfig, clk clock) (*App, []core.PaneID, error) {
 		Store:  core.NewStore(core.InitialState(core.DefaultConfig())),
 		Getenv: func(string) string { return "" },
 		Cwd:    "/",
+		Icons:  true,
 	})
 	if err != nil {
 		return nil, nil, err
@@ -248,10 +249,10 @@ func newBenchApp(cfg benchConfig, clk clock) (*App, []core.PaneID, error) {
 	// The pane commands run on the update loop; their tea.Cmds are never run, so no wall time passes.
 	app.Update(tea.WindowSizeMsg{Width: cfg.Width, Height: cfg.Height})
 
-	ids := []core.PaneID{app.store.State().Focus}
+	ids := []core.PaneID{app.store.State().Tab().Focus}
 	open := func(split core.Split) {
 		app.openPane(core.KindShell, split)
-		ids = append(ids, app.store.State().Focus)
+		ids = append(ids, app.store.State().Tab().Focus)
 	}
 
 	cols, _ := benchGrid(cfg.Panes)

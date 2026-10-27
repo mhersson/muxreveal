@@ -1,8 +1,9 @@
 package ui
 
 import (
-	"image"
+	"slices"
 	"strings"
+	"unicode/utf8"
 
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
@@ -11,56 +12,287 @@ import (
 // whichKeyMsg fires after the leader delay; seq ties it to one leader press.
 type whichKeyMsg struct{ seq int }
 
-// hint is one key and the title of the command it runs.
-type hint struct{ key, title string }
+// hint is one key and the title of the command it runs, listed under group.
+type hint struct{ key, title, group string }
 
-// whichKeyPopup draws the bordered hint list titled with the leader key.
-func whichKeyPopup(leader string, hints []hint, st styles) []string {
-	keyW := 0
-	for _, h := range hints {
-		keyW = max(keyW, lipgloss.Width(h.key))
-	}
-	title := " " + leader + " "
-	// inner must fit the title segment: one dash plus the title.
-	inner := 1 + lipgloss.Width(title)
-	rows := make([]string, len(hints))
-	for i, h := range hints {
-		rows[i] = st.popup.Render(" ") + st.popupKey.Render(h.key) +
-			st.popup.Render(strings.Repeat(" ", keyW-lipgloss.Width(h.key)+2)) +
-			st.popup.Render(h.title+" ")
-		inner = max(inner, lipgloss.Width(rows[i]))
-	}
-	b := lipgloss.RoundedBorder()
-	lines := make([]string, 0, len(rows)+2)
-	lines = append(lines, st.popupBorder.Render(b.TopLeft+b.Top)+st.popupTitle.Render(title)+
-		st.popupBorder.Render(strings.Repeat(b.Top, inner-1-lipgloss.Width(title))+b.TopRight))
-	for _, r := range rows {
-		pad := st.popup.Render(strings.Repeat(" ", inner-lipgloss.Width(r)))
-		lines = append(lines, st.popupBorder.Render(b.Left)+r+pad+st.popupBorder.Render(b.Right))
-	}
-	return append(lines, st.popupBorder.Render(b.BottomLeft+strings.Repeat(b.Bottom, inner)+b.BottomRight))
+// hintFamily is a set of commands that share one which-key row when every
+// member is bound.
+type hintFamily struct {
+	prefix  string
+	members []string // command id suffixes, in the order their keys show
+	title   string
+	sep     string // between keys; "-" shows consecutive keys as first-last
 }
 
-// overlayWhichKey draws the popup over base at the bottom-right, above the
-// status bar row. The popup is clipped to the terminal, never wrapped.
-func overlayWhichKey(base string, width, height int, leader string, hints []hint, st styles) string {
-	if width <= 0 || height < 2 || len(hints) == 0 {
+func hintFamilies() []hintFamily {
+	return []hintFamily{
+		{"pane.focus.", []string{"left", "down", "up", "right"}, "Focus pane", " "},
+		{"pane.resize.", []string{"left", "down", "up", "right"}, "Resize pane", " "},
+		{"pane.swap.", []string{"left", "down", "up", "right"}, "Swap pane", ""},
+		{"tab.jump.", []string{"1", "2", "3", "4", "5", "6", "7", "8", "9"}, "Jump to tab", "-"},
+	}
+}
+
+// groupIcon is the glyph of a which-key group head, or "".
+func groupIcon(group string) string {
+	switch group {
+	case "Panes":
+		return iconPanes
+	case "Tabs":
+		return iconTabs
+	case "App":
+		return iconCog
+	}
+	return ""
+}
+
+// hintKey names a key for display: ctrl+h becomes ^h.
+func hintKey(key string) string {
+	if rest, ok := strings.CutPrefix(key, "ctrl+"); ok {
+		return "^" + rest
+	}
+	return key
+}
+
+// collapse returns the one row for f, or false when a member is unbound.
+func (f hintFamily) collapse(a *App) (hint, bool) {
+	keys := make([]string, len(f.members))
+	var group string
+	for i, m := range f.members {
+		key, ok := a.keymap.keyOf(f.prefix + m)
+		if !ok {
+			return hint{}, false
+		}
+		keys[i] = hintKey(key)
+		if i == 0 {
+			group = a.keymap.groupOf(f.prefix + m)
+		}
+	}
+	if f.sep == "-" {
+		if !consecutive(keys) {
+			return hint{key: strings.Join(keys, " "), title: f.title, group: group}, true
+		}
+		return hint{key: keys[0] + "-" + keys[len(keys)-1], title: f.title, group: group}, true
+	}
+	return hint{key: strings.Join(keys, f.sep), title: f.title, group: group}, true
+}
+
+// consecutive reports whether keys are single characters in ascending order.
+func consecutive(keys []string) bool {
+	for i, k := range keys {
+		r, n := utf8.DecodeRuneInString(k)
+		if n != len(k) {
+			return false
+		}
+		if i > 0 {
+			prev, _ := utf8.DecodeRuneInString(keys[i-1])
+			if r != prev+1 {
+				return false
+			}
+		}
+	}
+	return len(keys) > 0
+}
+
+// hints lists the bound commands with their titles. A family whose keys are
+// all bound shares one row; otherwise its bound keys get a row each.
+func (a *App) hints() []hint {
+	hints := make([]hint, 0, len(a.keymap.bindings))
+	done := map[string]bool{}
+	families := hintFamilies()
+	for _, b := range a.keymap.bindings {
+		c, ok := a.reg.get(b.command)
+		if !ok {
+			continue
+		}
+		var fam *hintFamily
+		for i := range families {
+			if strings.HasPrefix(b.command, families[i].prefix) {
+				fam = &families[i]
+			}
+		}
+		if fam != nil {
+			if row, ok := fam.collapse(a); ok {
+				if !done[fam.prefix] {
+					hints = append(hints, row)
+				}
+				done[fam.prefix] = true
+				continue
+			}
+		}
+		hints = append(hints, hint{key: b.key, title: c.title, group: b.group})
+	}
+	return hints
+}
+
+// groupOrder lists the which-key groups left to right and top to bottom;
+// any other group follows in the order it first appears.
+func groupOrder() []string { return []string{"Panes", "Tabs", "App"} }
+
+// groupHints splits hints by group, in groupOrder.
+func groupHints(hints []hint) [][]hint {
+	var groups [][]hint
+	index := map[string]int{}
+	for _, h := range hints {
+		i, ok := index[h.group]
+		if !ok {
+			i = len(groups)
+			index[h.group] = i
+			groups = append(groups, nil)
+		}
+		groups[i] = append(groups[i], h)
+	}
+	order := groupOrder()
+	rank := func(g []hint) int {
+		if i := slices.Index(order, g[0].group); i >= 0 {
+			return i
+		}
+		return len(order)
+	}
+	slices.SortStableFunc(groups, func(a, b []hint) int { return rank(a) - rank(b) })
+	return groups
+}
+
+// column is one which-key column: its rows, drawn at width cells including
+// the one-cell margin on each side.
+type column struct {
+	rows  []string
+	width int
+}
+
+// whichKeyColumn lays out the groups of hints one under another, a blank row
+// between them. Each row is exactly the column's width.
+func whichKeyColumn(groups [][]hint, icons bool, st styles) column {
+	keyW, contentW := 0, 0
+	headW := func(name string) int {
+		if icons && groupIcon(name) != "" {
+			return lipgloss.Width(groupIcon(name)) + 1 + lipgloss.Width(name)
+		}
+		return lipgloss.Width(name)
+	}
+	for _, g := range groups {
+		contentW = max(contentW, headW(g[0].group))
+		for _, h := range g {
+			keyW = max(keyW, lipgloss.Width(h.key))
+		}
+	}
+	for _, g := range groups {
+		for _, h := range g {
+			contentW = max(contentW, keyW+2+lipgloss.Width(h.title))
+		}
+	}
+	margin := st.popup.Render(" ")
+	var rows []string
+	for i, g := range groups {
+		if i > 0 {
+			rows = append(rows, st.popup.Render(strings.Repeat(" ", contentW+2)))
+		}
+		name := g[0].group
+		head := name
+		if icons && groupIcon(name) != "" {
+			head = groupIcon(name) + " " + name
+		}
+		rows = append(rows, margin+st.popupHead.Render(head)+st.popup.Render(" ")+
+			st.popupRule.Render(strings.Repeat("─", max(contentW-headW(name)-1, 0)))+margin)
+		for _, h := range g {
+			pad := keyW - lipgloss.Width(h.key) + 2
+			rest := contentW - keyW - 2 - lipgloss.Width(h.title)
+			rows = append(rows, margin+st.popupKey.Render(h.key)+st.popup.Render(strings.Repeat(" ", pad)+h.title+
+				strings.Repeat(" ", rest))+margin)
+		}
+	}
+	return column{rows: rows, width: contentW + 2}
+}
+
+// whichKeyPopup draws the grouped hint list titled with the leader key: the
+// first group in a left column, the others in a right one.
+func whichKeyPopup(leader string, hints []hint, icons bool, st styles) []string {
+	groups := groupHints(hints)
+	if len(groups) == 0 {
+		return nil
+	}
+	left, right := groups[:1], groups[1:]
+
+	title := " " + leader + " "
+	if icons {
+		title = " " + iconLeader + " " + leader + " "
+	}
+	l := whichKeyColumn(left, icons, st)
+	// The title sits after the corner and one dash, with a dash left before the column rule.
+	if need := lipgloss.Width(title) + 2; l.width < need {
+		l = padColumn(l, need, st)
+	}
+	cols := []column{l}
+	if len(right) > 0 {
+		cols = append(cols, whichKeyColumn(right, icons, st))
+	}
+	height := 0
+	for _, c := range cols {
+		height = max(height, len(c.rows))
+	}
+	for i, c := range cols {
+		for len(c.rows) < height {
+			c.rows = append(c.rows, st.popup.Render(strings.Repeat(" ", c.width)))
+		}
+		cols[i] = c
+	}
+
+	border := func(s string) string { return st.popupBorder.Render(s) }
+	rule := func(s string) string { return st.popupRule.Render(s) }
+	split := len(cols) > 1
+
+	top := border("┌─") + st.popupHead.Render(title)
+	topFill := l.width - 1 - lipgloss.Width(title)
+	top += border(strings.Repeat("─", topFill))
+	bottom := border("└" + strings.Repeat("─", l.width))
+	if split {
+		top += rule("┬") + border(strings.Repeat("─", cols[1].width)+"┐")
+		bottom += rule("┴") + border(strings.Repeat("─", cols[1].width)+"┘")
+	} else {
+		top += border("┐")
+		bottom += border("┘")
+	}
+
+	lines := []string{top}
+	for i := range height {
+		line := border("│") + cols[0].rows[i]
+		if split {
+			line += rule("│") + cols[1].rows[i]
+		}
+		lines = append(lines, line+border("│"))
+	}
+	return append(lines, bottom)
+}
+
+// padColumn widens c to width with blank cells on the right of every row.
+func padColumn(c column, width int, st styles) column {
+	extra := st.popup.Render(strings.Repeat(" ", width-c.width))
+	for i, r := range c.rows {
+		c.rows[i] = r + extra
+	}
+	c.width = width
+	return c
+}
+
+// overlayWhichKey draws the popup over base at the bottom-right, one cell
+// from the right edge and above the status bar row. It is clipped to the
+// body rows and the screen, never wrapped.
+func overlayWhichKey(base string, width, height int, leader string, hints []hint, icons bool, st styles) string {
+	if width <= 0 || height < 3 || len(hints) == 0 {
 		return base
 	}
-	lines := whichKeyPopup(leader, hints, st)
-	if len(lines) > height-1 {
-		lines = lines[:height-1]
+	lines := whichKeyPopup(leader, hints, icons, st)
+	y := height - 1 - len(lines)
+	if y < 1 {
+		lines, y = lines[:height-2], 1
 	}
 	w := 0
+	for _, l := range lines {
+		w = max(w, lipgloss.Width(l))
+	}
+	x := max(width-1-w, 0)
 	for i, l := range lines {
-		lines[i] = ansi.Truncate(l, width, "")
-		w = max(w, lipgloss.Width(lines[i]))
+		lines[i] = ansi.Truncate(l, width-x, "")
 	}
-	popup := lipgloss.NewLayer(strings.Join(lines, "\n")).
-		X(width - w).Y(height - 1 - len(lines)).Z(1)
-	comp := lipgloss.NewCompositor(lipgloss.NewLayer(base), popup)
-	if comp.Bounds() != image.Rect(0, 0, width, height) {
-		return base
-	}
-	return comp.Render()
+	return overlayAt(base, width, height, x, y, lines)
 }

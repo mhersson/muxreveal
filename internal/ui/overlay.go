@@ -16,7 +16,7 @@ import (
 )
 
 // maxOverlayWidth caps the palette overlay width.
-const maxOverlayWidth = 60
+const maxOverlayWidth = 64
 
 type overlayKind int
 
@@ -73,9 +73,9 @@ func (a *App) openCommandPalette() {
 	items := make([]palette.Item, len(cmds))
 	for i, c := range cmds {
 		hint, _ := a.keymap.keyFor(c.id)
-		items[i] = palette.Item{ID: c.id, Title: c.title, Hint: hint}
+		items[i] = palette.Item{ID: c.id, Title: c.title, Hint: hint, Icon: a.glyph(c.icon)}
 	}
-	a.openOverlay(overlayCommands, "Commands", items)
+	a.openOverlay(overlayCommands, a.titled(iconPalette, "Commands"), items)
 }
 
 func (a *App) openThemePicker() {
@@ -84,7 +84,23 @@ func (a *App) openThemePicker() {
 	for i, th := range all {
 		items[i] = palette.Item{ID: th.Name, Title: th.Title}
 	}
-	a.openOverlay(overlayThemes, "Theme", items).pal.Select(a.theme.Name)
+	a.openOverlay(overlayThemes, a.titled(iconTheme, "Theme"), items).pal.Select(a.theme.Name)
+}
+
+// glyph returns icon, or "" when icons are off.
+func (a *App) glyph(icon string) string {
+	if !a.icons {
+		return ""
+	}
+	return icon
+}
+
+// titled prefixes name with icon and a space, or is name alone with icons off.
+func (a *App) titled(icon, name string) string {
+	if !a.icons {
+		return name
+	}
+	return icon + " " + name
 }
 
 // updateOverlay forwards a message to the open overlay's palette.
@@ -144,30 +160,31 @@ func (a *App) highlighted(id string) {
 // overlayOver draws the palette over base, centred horizontally with its top
 // at a quarter of the height. It is clipped to the body rows, never wrapped.
 func overlayOver(base string, width, height int, pal palette.Model) string {
-	if width < 2 || height < 2 {
+	pw := min(maxOverlayWidth, width-4)
+	if pw < 2 || height < 2 {
 		return base
 	}
-	pw := min(maxOverlayWidth, width)
-	return overlayLines(base, width, height, strings.Split(pal.View(pw), "\n"), pw)
+	return overlayLines(base, width, height, height/4, strings.Split(pal.View(pw), "\n"), pw)
 }
 
 // overlayLines draws lines pw cells wide over base, centred horizontally with
-// the top at a quarter of the height, clipped to the body rows.
-func overlayLines(base string, width, height int, lines []string, pw int) string {
-	if width < 2 || height < 2 {
-		return base
-	}
-	y := height / 4
+// the top at row y, clipped to the body rows.
+func overlayLines(base string, width, height, y int, lines []string, pw int) string {
 	if room := height - 1 - y; len(lines) > room {
 		lines = lines[:max(room, 0)]
-	}
-	if len(lines) == 0 {
-		return base
 	}
 	for i, l := range lines {
 		lines[i] = ansi.Truncate(l, pw, "")
 	}
-	layer := lipgloss.NewLayer(strings.Join(lines, "\n")).X((width - pw) / 2).Y(y).Z(1)
+	return overlayAt(base, width, height, (width-pw)/2, y, lines)
+}
+
+// overlayAt draws lines over base with the top-left corner at x, y.
+func overlayAt(base string, width, height, x, y int, lines []string) string {
+	if width < 2 || height < 2 || len(lines) == 0 {
+		return base
+	}
+	layer := lipgloss.NewLayer(strings.Join(lines, "\n")).X(x).Y(y).Z(1)
 	comp := lipgloss.NewCompositor(lipgloss.NewLayer(base), layer)
 	if comp.Bounds() != image.Rect(0, 0, width, height) {
 		return base

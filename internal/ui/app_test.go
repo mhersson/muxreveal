@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
@@ -24,7 +26,7 @@ func testLogger() *slog.Logger {
 
 func newThemedApp(t *testing.T, name string) *App {
 	t.Helper()
-	app, err := New(Options{Logger: testLogger(), Store: core.NewStore(core.State{Theme: name})})
+	app, err := New(Options{Logger: testLogger(), Icons: true, Store: core.NewStore(core.State{Theme: name})})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -128,7 +130,7 @@ func TestLeader(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			a := newTestApp(t)
-			sized(t, a, 100, 30)
+			sized(t, a, 140, 30)
 			cmd := press(a, tt.keys...)
 			if (cmd != nil) != tt.wantCmd {
 				t.Fatalf("last cmd non-nil = %v, want %v", cmd != nil, tt.wantCmd)
@@ -169,7 +171,7 @@ func TestNoticeClearsOnNextKey(t *testing.T) {
 }
 
 func hintCount(a *App) int {
-	return strings.Count(ansi.Strip(a.View().Content), "Quit MuxReveal")
+	return strings.Count(ansi.Strip(a.View().Content), "Jump to tab")
 }
 
 func TestWhichKey(t *testing.T) {
@@ -182,15 +184,161 @@ func TestWhichKey(t *testing.T) {
 	}
 	a.Update(whichKeyMsg{seq: a.seq})
 	plain := ansi.Strip(a.View().Content)
-	if got := strings.Count(plain, "Quit MuxReveal"); got != before+1 {
+	if got := hintCount(a); got != before+1 {
 		t.Errorf("hints = %d, want %d:\n%s", got, before+1, plain)
 	}
-	if !strings.Contains(plain, "╭─ ctrl+space") || !strings.Contains(plain, "q  Quit MuxReveal") {
-		t.Errorf("popup lacks its title or row:\n%s", plain)
+	for _, want := range []string{
+		"\u250c\u2500 " + iconLeader + " ctrl+space ",
+		iconPanes + " Panes", iconTabs + " Tabs", iconCog + " App",
+		"\u252c", "\u2534",
+	} {
+		if !strings.Contains(plain, want) {
+			t.Errorf("popup lacks %q:\n%s", want, plain)
+		}
+	}
+	// Keys pad to the column's widest key, so the gap after a short key varies.
+	for _, row := range []string{`h j k l +Focus pane`, `H J K L +Resize pane`, `\^h\^j\^k\^l +Swap pane`, `1-9 +Jump to tab`} {
+		if !regexp.MustCompile(row).MatchString(plain) {
+			t.Errorf("popup lacks the row %q:\n%s", row, plain)
+		}
 	}
 	press(a, keyEsc)
 	if hintCount(a) != before {
 		t.Error("popup still visible after esc")
+	}
+}
+
+func TestWhichKeyNoIcons(t *testing.T) {
+	a := newTestApp(t)
+	a.icons = false
+	sized(t, a, 100, 30)
+	press(a, keyLeader)
+	a.Update(whichKeyMsg{seq: a.seq})
+	plain := ansi.Strip(a.View().Content)
+	for _, want := range []string{"\u250c\u2500 ctrl+space \u2500", "Panes", "Tabs", "App"} {
+		if !strings.Contains(plain, want) {
+			t.Errorf("popup lacks %q:\n%s", want, plain)
+		}
+	}
+	for _, ic := range []string{iconLeader, iconPanes, iconTabs, iconCog} {
+		if strings.Contains(plain, ic) {
+			t.Errorf("popup draws glyph %q with icons off", ic)
+		}
+	}
+}
+
+// cellOf finds the first cell of needle in the stripped screen rows.
+func cellOf(t *testing.T, rows []string, needle string) (x, y int) {
+	t.Helper()
+	for y, row := range rows {
+		if i := strings.Index(row, needle); i >= 0 {
+			return lipgloss.Width(row[:i]), y
+		}
+	}
+	t.Fatalf("screen lacks %q:\n%s", needle, strings.Join(rows, "\n"))
+	return 0, 0
+}
+
+func TestWhichKeyColours(t *testing.T) {
+	ui := mochaUI(t)
+	a := newTestApp(t)
+	sized(t, a, 100, 30)
+	press(a, keyLeader)
+	a.Update(whichKeyMsg{seq: a.seq})
+	content := a.View().Content
+	vt := term.NewVT(100, 30, io.Discard)
+	t.Cleanup(func() { _ = vt.Close() })
+	if _, err := vt.Write([]byte(strings.ReplaceAll(content, "\n", "\r\n"))); err != nil {
+		t.Fatal(err)
+	}
+	rows := strings.Split(ansi.Strip(content), "\n")
+
+	x, y := cellOf(t, rows, "\u250c\u2500 "+iconLeader)
+	assertColours(t, vt, x, y, "\u250c", ui.BorderFocus, ui.Panel, false)
+	assertColours(t, vt, x+2, y, " ", ui.Accent, ui.Panel, true)
+	assertColours(t, vt, x+3, y, iconLeader, ui.Accent, ui.Panel, true)
+	assertColours(t, vt, x+5, y, "c", ui.Accent, ui.Panel, true)
+
+	jx, jy := cellOf(t, rows, "\u252c")
+	assertColours(t, vt, jx, jy, "\u252c", ui.Border, ui.Panel, false)
+	bx, by := cellOf(t, rows, "\u2534")
+	assertColours(t, vt, bx, by, "\u2534", ui.Border, ui.Panel, false)
+
+	hx, hy := cellOf(t, rows, iconTabs+" Tabs")
+	assertColours(t, vt, hx, hy, iconTabs, ui.Accent, ui.Panel, true)
+	assertColours(t, vt, hx+2, hy, "T", ui.Accent, ui.Panel, true)
+	assertColours(t, vt, hx+7, hy, "\u2500", ui.Border, ui.Panel, false)
+
+	kx, ky := cellOf(t, rows, "\u2502 q ")
+	assertColours(t, vt, kx+2, ky, "q", ui.Key, ui.Panel, true)
+	tx, ty := cellOf(t, rows, "Quit MuxReveal")
+	assertColours(t, vt, tx, ty, "Q", ui.Fg, ui.Panel, false)
+}
+
+// bindingsWithout returns the default keymap minus the given keys.
+func bindingsWithout(keys ...string) keymap {
+	km := defaultKeymap()
+	km.bindings = slices.DeleteFunc(km.bindings, func(b binding) bool { return slices.Contains(keys, b.key) })
+	return km
+}
+
+func TestHintsDeriveFromBindings(t *testing.T) {
+	tests := []struct {
+		name    string
+		unbind  []string
+		want    []string
+		notWant []string
+	}{
+		{"all bound", nil,
+			[]string{"h j k l|Focus pane", "H J K L|Resize pane", "^h^j^k^l|Swap pane", "1-9|Jump to tab"},
+			[]string{"h|Focus left"}},
+		{"partial focus", []string{"j"},
+			[]string{"h|Focus left", "k|Focus up", "l|Focus right"},
+			[]string{"h j k l|Focus pane"}},
+		{"partial jump", []string{"5"},
+			[]string{"1|Jump to tab 1", "9|Jump to tab 9"},
+			[]string{"1-9|Jump to tab"}},
+		{"no swap", []string{"ctrl+h", "ctrl+j", "ctrl+k", "ctrl+l"}, nil,
+			[]string{"Swap pane", "Swap left"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			a := newTestApp(t)
+			a.keymap = bindingsWithout(tt.unbind...)
+			var got []string
+			for _, h := range a.hints() {
+				got = append(got, h.key+"|"+h.title)
+			}
+			for _, w := range tt.want {
+				if !slices.Contains(got, w) {
+					t.Errorf("hints lack %q: %q", w, got)
+				}
+			}
+			for _, w := range tt.notWant {
+				if slices.ContainsFunc(got, func(g string) bool { return strings.Contains(g, w) }) {
+					t.Errorf("hints contain %q: %q", w, got)
+				}
+			}
+		})
+	}
+}
+
+func TestHintGroups(t *testing.T) {
+	a := newTestApp(t)
+	groups := map[string]string{}
+	for _, h := range a.hints() {
+		if h.group == "" {
+			t.Errorf("hint %q has no group", h.title)
+		}
+		groups[h.title] = h.group
+	}
+	for title, want := range map[string]string{
+		"Focus pane": "Panes", "Zoom pane": "Panes", "New tab": "Tabs",
+		"Jump to tab": "Tabs", "Quit MuxReveal": "App", "Pick theme": "App",
+	} {
+		if groups[title] != want {
+			t.Errorf("group of %q = %q, want %q", title, groups[title], want)
+		}
 	}
 }
 
@@ -224,7 +372,7 @@ func TestStaleWhichKey(t *testing.T) {
 }
 
 func TestWhichKeySizes(t *testing.T) {
-	for _, sz := range [][2]int{{100, 30}, {40, 12}, {20, 5}, {1, 1}} {
+	for _, sz := range [][2]int{{100, 30}, {80, 24}, {40, 12}, {20, 5}, {1, 1}} {
 		t.Run(fmt.Sprintf("%dx%d", sz[0], sz[1]), func(t *testing.T) {
 			a := newTestApp(t)
 			sized(t, a, sz[0], sz[1])
@@ -242,17 +390,20 @@ func TestWhichKeySizes(t *testing.T) {
 			}
 			plain := ansi.Strip(content)
 			switch sz[0] {
-			case 100:
-				if !strings.Contains(plain, "╭─ ctrl+space") || !strings.Contains(plain, "│ q ") {
-					t.Errorf("popup not drawn:\n%s", plain)
+			case 100, 80:
+				// Fits whole: the bottom border sits on the row above the status bar, one cell from the edge.
+				bottom := ansi.Strip(lines[sz[1]-2])
+				if !strings.HasSuffix(bottom, "\u2518 ") || !strings.Contains(bottom, "\u2534") ||
+					!strings.Contains(plain, "Quit MuxReveal") || !strings.Contains(plain, "Jump to tab") {
+					t.Errorf("popup not drawn whole:\n%s", plain)
 				}
 			case 40:
 				// The popup is taller than the body: its top rows show, the rest is clipped.
-				if !strings.Contains(plain, "╭─ ctrl+space") || !strings.Contains(plain, "│ : ") {
+				if !strings.Contains(plain, "\u250c\u2500 "+iconLeader+" ctrl+space") || !strings.Contains(plain, "Panes") {
 					t.Errorf("popup top not drawn:\n%s", plain)
 				}
 			case 20:
-				if !strings.Contains(plain, "╭─ ctrl+space") || strings.Contains(plain, "╮") {
+				if !strings.Contains(plain, "\u250c\u2500 "+iconLeader+" ctrl") || strings.Contains(plain, "\u2510") {
 					t.Errorf("popup not clipped on the right:\n%s", plain)
 				}
 			}

@@ -90,6 +90,49 @@ func TestPaletteListsEveryCommand(t *testing.T) {
 	}
 }
 
+func TestPaletteIcons(t *testing.T) {
+	for _, icons := range []bool{true, false} {
+		t.Run(fmt.Sprintf("icons=%v", icons), func(t *testing.T) {
+			a := fastApp(t)
+			a.icons = icons
+			sized(t, a, 100, 30)
+			pressRun(a, keyLeader, keyRune(':'))
+			view := ansi.Strip(a.View().Content)
+			for _, g := range []string{iconPalette, iconTheme, iconAgent, iconSplitDown, iconPanes, iconFocus} {
+				if got := strings.Contains(view, g); got != icons {
+					t.Errorf("glyph %q present = %v, want %v:\n%s", g, got, icons, view)
+				}
+			}
+			title := "\u250c\u2500 " + iconPalette + " Commands "
+			if !icons {
+				title = "\u250c\u2500 Commands "
+			}
+			if !strings.Contains(view, title) {
+				t.Errorf("palette lacks title %q:\n%s", title, view)
+			}
+			if !strings.Contains(view, " 1 of ") {
+				t.Errorf("palette lacks its count:\n%s", view)
+			}
+		})
+	}
+}
+
+func TestThemePickerIcons(t *testing.T) {
+	for _, icons := range []bool{true, false} {
+		a := fastApp(t)
+		a.icons = icons
+		sized(t, a, 100, 30)
+		pressRun(a, keyLeader, keyRune('t'))
+		view := ansi.Strip(a.View().Content)
+		if got := strings.Contains(view, iconTheme); got != icons {
+			t.Errorf("icons=%v: theme glyph present = %v:\n%s", icons, got, view)
+		}
+		if !strings.Contains(view, " Theme ") || !strings.Contains(view, " of 4 ") {
+			t.Errorf("icons=%v: picker lacks its title or count:\n%s", icons, view)
+		}
+	}
+}
+
 func TestPaletteRunsCommand(t *testing.T) {
 	a := fastApp(t)
 	sized(t, a, 100, 30)
@@ -145,9 +188,6 @@ func TestThemePickerEscRestores(t *testing.T) {
 		if got := a.store.State().Theme; got != mocha.Name {
 			t.Errorf("after moving to %s: store theme = %q, want mocha", name, got)
 		}
-		if !strings.Contains(ansi.Strip(a.View().Content), mocha.Title) {
-			t.Errorf("after moving to %s: status bar lacks the committed title %q", name, mocha.Title)
-		}
 	}
 	pressRun(a, keyEsc)
 	if a.overlay != nil || a.preview != nil {
@@ -177,7 +217,7 @@ func TestOverlayOwnsKeys(t *testing.T) {
 			t.Error("q quit the app instead of typing into the query")
 		}
 	}
-	if view := ansi.Strip(a.View().Content); !strings.Contains(view, "> q") {
+	if view := ansi.Strip(a.View().Content); !strings.Contains(view, "\u276f q") {
 		t.Errorf("query does not show q:\n%s", view)
 	}
 }
@@ -214,6 +254,14 @@ func TestOverlaySizes(t *testing.T) {
 			})
 		}
 	}
+}
+
+func TestPaletteOverlayNoIconsGolden(t *testing.T) {
+	a := fastApp(t)
+	a.icons = false
+	sized(t, a, 100, 30)
+	pressRun(a, keyLeader, keyRune(':'))
+	golden.RequireEqual(t, []byte(a.View().Content))
 }
 
 func TestPaletteOverlayGolden(t *testing.T) {
@@ -271,7 +319,7 @@ func TestPasteReachesPalette(t *testing.T) {
 	_, cmd := a.Update(tea.PasteMsg{Content: "quit"})
 	run(a, cmd)
 	view := ansi.Strip(a.View().Content)
-	if !strings.Contains(view, "> quit") || strings.Contains(view, "Theme: Catppuccin") {
+	if !strings.Contains(view, "\u276f quit") || strings.Contains(view, "Theme: Catppuccin") {
 		t.Errorf("paste did not filter the palette:\n%s", view)
 	}
 }

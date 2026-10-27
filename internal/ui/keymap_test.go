@@ -1,6 +1,9 @@
 package ui
 
-import "testing"
+import (
+	"slices"
+	"testing"
+)
 
 func TestEveryBindingResolves(t *testing.T) {
 	reg, err := newRegistry(defaultCommands())
@@ -17,6 +20,9 @@ func TestEveryBindingResolves(t *testing.T) {
 			t.Errorf("key %q is bound twice", b.key)
 		}
 		seen[b.key] = true
+		if !slices.Contains([]string{"Panes", "Tabs", "App"}, b.group) {
+			t.Errorf("binding %q has group %q, want Panes, Tabs or App", b.key, b.group)
+		}
 	}
 }
 
