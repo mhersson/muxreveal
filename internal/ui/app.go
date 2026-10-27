@@ -285,7 +285,10 @@ func (a *App) Init() tea.Cmd {
 
 // Update implements tea.Model.
 func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	check := a.railFocusCheck(msg)
 	m, cmd := a.update(msg)
+
+	check()
 	a.syncPaneColors()
 	a.railAfterUpdate()
 
@@ -295,6 +298,39 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	return m, cmd
+}
+
+// railFocusCheck starts watching a user-input message and returns the check to
+// run once it is handled: if it moved the active tab or its focused pane, the
+// keyboard returns to the panes. Changes with other causes (a process exit, a
+// hook, a restore) leave the keyboard alone.
+func (a *App) railFocusCheck(msg tea.Msg) func() {
+	if !a.rail.focused || !isUserInput(msg) {
+		return func() {}
+	}
+
+	before, ver := a.store.State().Tab(), a.storeVer
+
+	return func() {
+		if a.storeVer == ver {
+			return
+		}
+
+		if now := a.store.State().Tab(); now.ID != before.ID || now.Focus != before.Focus {
+			a.railRelease()
+		}
+	}
+}
+
+// isUserInput reports whether msg comes from the operator: keys, pastes, mouse
+// events and a palette choice.
+func isUserInput(msg tea.Msg) bool {
+	switch msg.(type) {
+	case tea.KeyPressMsg, tea.PasteMsg, tea.MouseClickMsg, tea.MouseMotionMsg, tea.MouseReleaseMsg, tea.MouseWheelMsg, palette.ChosenMsg:
+		return true
+	}
+
+	return false
 }
 
 // syncPaneColors tells every pane the current look's colours, including a
@@ -467,7 +503,7 @@ func (a *App) runLeader(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 			return nil, true
 		}
 
-		return a.runLeaderCommand(id, c), true
+		return c.run(a), true
 	}
 
 	switch bindingKey(msg) {

@@ -1132,3 +1132,113 @@ func TestRailKeyboardAfterPaletteCommands(t *testing.T) {
 		})
 	}
 }
+
+func TestRailKeyboardAfterUserFocusChanges(t *testing.T) {
+	t.Run("a click on another tab", func(t *testing.T) {
+		f := newFlowApp(t)
+		f.twoTabs(t)
+		f.open(t)
+
+		x := -1
+
+		for cx := range f.width {
+			if h := f.hit(cx, 0); h.area == hitTab && h.tab == 0 {
+				x = cx
+
+				break
+			}
+		}
+
+		if x < 0 {
+			t.Fatal("no cell of the first tab")
+		}
+
+		click(f.App, x, 0)
+
+		if f.store.State().Active != 0 || f.rail.focused {
+			t.Errorf("active %d, rail focused %v, want tab 1 and the keyboard on the pane", f.store.State().Active, f.rail.focused)
+		}
+	})
+
+	t.Run("confirming the close of the focused agent", func(t *testing.T) {
+		f := newFlowApp(t)
+		f.twoTabs(t)
+		f.open(t)
+
+		chord(f.App, 'x')
+
+		if f.confirm == nil || !f.rail.focused {
+			t.Fatalf("setup: confirm %v, focused %v", f.confirm, f.rail.focused)
+		}
+
+		press(f.App, keyRune('y'))
+
+		if got := f.store.State().Tab().Focus; got != "p3" || f.rail.focused {
+			t.Errorf("focus %s, rail focused %v, want p3 and the keyboard on the pane", got, f.rail.focused)
+		}
+	})
+
+	t.Run("hover focus onto another pane", func(t *testing.T) {
+		f := newFlowApp(t)
+		f.twoTabs(t)
+		f.focusFollows = true
+		f.open(t)
+
+		c := contentRectOf(f.App, "p3")
+		hover(f.App, c.X+1, c.Y+1)
+
+		if got := f.store.State().Tab().Focus; got != "p3" || f.rail.focused {
+			t.Errorf("focus %s, rail focused %v, want p3 and the keyboard on the pane", got, f.rail.focused)
+		}
+	})
+
+	t.Run("a pane exit keeps the keyboard where it is", func(t *testing.T) {
+		f := newFlowApp(t)
+		f.twoTabs(t)
+		f.open(t)
+
+		f.Update(exitOf(t, f.App, "p4", f.st.proc(3)))
+
+		if got := f.store.State().Tab().Focus; got != "p3" || !f.rail.focused {
+			t.Errorf("focus %s, rail focused %v, want p3 and the rail still holding the keyboard", got, f.rail.focused)
+		}
+	})
+
+	t.Run("the toggle decides for itself", func(t *testing.T) {
+		f := newFlowApp(t)
+		f.twoTabs(t)
+		f.open(t)
+		press(f.App, keyEsc)
+		chord(f.App, 'a')
+
+		if !f.rail.focused {
+			t.Error("leader a did not give the rail the keyboard")
+		}
+	})
+}
+
+func TestRailLosingTheKeyboardEndsTyping(t *testing.T) {
+	f := newFlowApp(t)
+	f.twoTabs(t)
+	f.open(t)
+	press(f.App, keyRune('/'), keyRune('t'), keyRune('a'), keyRune('b'))
+
+	if !f.rail.searching {
+		t.Fatal("setup: not typing")
+	}
+
+	x, y := f.cardXY(t, "p4")
+	click(f.App, x, y)
+	click(f.App, x, y)
+
+	if f.rail.focused || f.rail.searching || f.rail.query != "tab" {
+		t.Fatalf("focused %v, searching %v, query %q, want the keyboard on the pane, typing ended and the filter kept", f.rail.focused, f.rail.searching, f.rail.query)
+	}
+
+	chord(f.App, 'a')
+	press(f.App, keyRune('j'))
+
+	if f.rail.query != "tab" || f.rail.sel != "p2" {
+		t.Errorf("query %q, selected %s, want j to move the selection and leave the query", f.rail.query, f.rail.sel)
+	}
+}

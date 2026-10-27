@@ -331,7 +331,7 @@ func (a *App) changeAgentState(id core.PaneID, s core.AgentState) error {
 func (a *App) railAfterUpdate() {
 	// A rail the width rule hides cannot hold the keyboard.
 	if a.rail.focused && !a.railVisible() {
-		a.rail.focused = false
+		a.railRelease()
 	}
 
 	if len(a.rail.panes) == 0 && !a.railIsOpen() {
@@ -422,6 +422,12 @@ func (a *App) railToggle() tea.Cmd {
 	cmds = append(cmds, a.relayout())
 
 	return tea.Batch(cmds...)
+}
+
+// railRelease gives the keyboard back to the panes and ends search typing; the
+// filter text stays.
+func (a *App) railRelease() {
+	a.rail.focused, a.rail.searching = false, false
 }
 
 // railClose closes the rail and forgets its search; the keyboard returns to the focused pane.

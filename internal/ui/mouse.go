@@ -180,7 +180,7 @@ func (a *App) handleClick(msg tea.MouseClickMsg) tea.Cmd {
 	}
 
 	if a.rail.focused && (h.area == hitContent || h.area == hitHeader) {
-		a.rail.focused = false
+		a.railRelease()
 	}
 
 	switch {

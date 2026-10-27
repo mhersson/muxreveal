@@ -8,19 +8,6 @@ import (
 	"github.com/mhersson/muxreveal/internal/core"
 )
 
-// runLeaderCommand runs a bound or palette-chosen command. One that changes the active tab
-// or its focused pane returns the keyboard to the panes; rail.toggle decides for itself.
-func (a *App) runLeaderCommand(id string, c command) tea.Cmd {
-	before := a.store.State().Tab()
-	cmd := c.run(a)
-
-	if now := a.store.State().Tab(); id != "rail.toggle" && (now.ID != before.ID || now.Focus != before.Focus) {
-		a.rail.focused = false
-	}
-
-	return cmd
-}
-
 // handleRailKey takes a key while the rail has the keyboard; keys it does not use are dropped.
 func (a *App) handleRailKey(msg tea.KeyPressMsg) tea.Cmd {
 	var cmd tea.Cmd
@@ -48,7 +35,7 @@ func (a *App) railNavKey(msg tea.KeyPressMsg) tea.Cmd {
 		if a.rail.query != "" {
 			a.railSetSearch(false, "")
 		} else {
-			a.rail.focused = false
+			a.railRelease()
 		}
 	}
 
@@ -95,7 +82,7 @@ func (a *App) railJump(id core.PaneID) tea.Cmd {
 
 	cmds = append(cmds, a.act(core.FocusPane{ID: id}))
 
-	a.rail.focused = false
+	a.railRelease()
 	a.rail.flashPane, a.rail.flashUntil = id, a.clock.Now().Add(railFlashFor)
 	a.rail.flashSeq++
 	seq := a.rail.flashSeq
