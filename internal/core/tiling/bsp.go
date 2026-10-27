@@ -458,12 +458,9 @@ func childBounds(node *TileNode, bounds Rect, gap int) (leftBounds, rightBounds 
 	// The reserved cells between the two children are the drawn separator's, so
 	// the far child starts gap cells past the divider line.
 	//
-	// The divider is kept far enough inside the rectangle that both children
-	// still have a cell of their own: the near one needs the line to be at least
-	// one past its origin, the far one needs at least one cell past the gap. The
-	// clamp used to reserve a single cell whatever the gap was, so at a gap of
-	// two the far child of a tight region came out zero cells wide and the
-	// layout's safety net had to shove it back inside, on top of its sibling.
+	// With a gap, the divider is clamped so each child keeps a cell: the near
+	// one starts at least one past its origin, the far one at least one cell
+	// past the gap. At gap 0 the divider is not clamped.
 	if node.SplitType == SplitVertical {
 		splitX := bounds.X + int(float64(bounds.W)*node.SplitRatio)
 		if gap > 0 {

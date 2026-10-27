@@ -184,11 +184,9 @@ func MasterStackSideBySide(screenWidth, usableHeight int) bool {
 // separator its own column that way, so neither pane's first column is painted
 // over by the line between them.
 //
-// Every rectangle it returns is inside the region and disjoint from every other
-// one, at any size and any pane count. That is the tiler's whole contract, and
-// it is what the fixed pane minimum this used to enforce broke: on a 51x37
-// terminal seven panes were each grown to twenty columns inside a region that
-// could give them seventeen, and the frame showed panes on top of each other.
+// Tiles are never grown to a minimum size, so while the region can give each
+// pane a cell they are inside it and disjoint. Smaller regions can still
+// produce tiles that overlap or fall short; callers drop those.
 func CalculateMasterStackLayout(n int, screenWidth int, usableHeight int, topMargin int, masterRatio, stackRatio float64, gap int) []TileLayout {
 	return CalculateMasterLayout(n, screenWidth, usableHeight, topMargin, MasterParams{
 		Position:   MasterPositionLeft,

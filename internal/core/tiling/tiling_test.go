@@ -37,15 +37,9 @@ func overlapping(layouts []TileLayout) [][2]TileLayout {
 	return out
 }
 
-// TestPanesShrinkRatherThanOverlap is the regression for the fixed pane minimum
-// this tiler used to enforce. Every tile was grown to DefaultWindowWidth
-// by DefaultWindowHeight and then shoved back inside the screen, so a
-// region that could not give every pane that much drew them on top of each
-// other.
-//
-// The two sizes named here are the ones it was found at: seven panes on a 51x37
-// terminal came out with four overlapping pairs, and 45x14 overlapped from five
-// panes up. Both are a comfortable half of a laptop screen.
+// TestPanesShrinkRatherThanOverlap checks that tiles shrink below the default
+// window size instead of overlapping or leaving the region, on sizes where
+// every pane still gets a cell.
 func TestPanesShrinkRatherThanOverlap(t *testing.T) {
 	for _, c := range []struct{ n, w, h int }{{7, 51, 35}, {5, 45, 12}} {
 		layouts := CalculateTilingLayout(c.n, c.w, c.h, 1, 0.5, 0)
@@ -58,18 +52,15 @@ func TestPanesShrinkRatherThanOverlap(t *testing.T) {
 		for _, r := range outside(layouts, c.w, c.h, 1) {
 			t.Errorf("%d panes on %dx%d: %+v is outside the region", c.n, c.w, c.h, r)
 		}
-		// At least one pane is smaller than the old minimum on at least one
-		// axis, which is the whole point: there was no room for it and the
-		// tiler used to take it anyway. Without this the two sizes could drift
-		// into ones the old minimum happened to fit, and the case above would
-		// stop demonstrating anything.
+		// At least one pane is below the default window size, so the case
+		// still exercises shrinking.
 		narrowest, shortest := layouts[0].Width, layouts[0].Height
 		for _, r := range layouts {
 			narrowest, shortest = min(narrowest, r.Width), min(shortest, r.Height)
 		}
 		if narrowest >= DefaultWindowWidth && shortest >= DefaultWindowHeight {
-			t.Errorf("%d panes on %dx%d leave the smallest at %dx%d, which the old minimum of %dx%d "+
-				"could have satisfied; this size no longer demonstrates anything",
+			t.Errorf("%d panes on %dx%d leave the smallest at %dx%d, which the default window size of %dx%d "+
+				"could have satisfied; this size no longer exercises shrinking",
 				c.n, c.w, c.h, narrowest, shortest, DefaultWindowWidth, DefaultWindowHeight)
 		}
 	}
