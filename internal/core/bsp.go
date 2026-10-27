@@ -2,6 +2,7 @@ package core
 
 import (
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -106,19 +107,46 @@ func (t *Tab) setTree(root *Node) {
 	t.Panes = leafOrder(root)
 }
 
-// place puts id into the tab beside the focused pane. A split of "" means the
-// auto scheme decides the axis. It touches no pane metadata.
-func (t *Tab) place(id PaneID, split Split, area Rect) error {
-	return t.placeBSP(id, split, area)
+// place puts id into the tab per its mode, which an empty tab takes from lc.
+// BSP splits the focused pane (split "" means the auto scheme decides the
+// axis); master-stack appends; scrolling adds a column after the focused one,
+// or a pane below the focused one for a horizontal split. It touches no pane
+// metadata and not Focus; the caller sets focus, then calls keepVisible.
+func (t *Tab) place(id PaneID, split Split, area Rect, lc LayoutConfig) error {
+	if slices.Contains(t.Panes, id) {
+		return fmt.Errorf("core: pane %q is already in the layout", id)
+	}
+	if t.Empty() {
+		mode := t.Mode
+		if mode == "" {
+			mode = lc.Mode()
+		}
+		t.start(id, mode, lc)
+		return nil
+	}
+	switch t.Mode {
+	case ModeMaster:
+		t.placeMaster(id)
+		return nil
+	case ModeScrolling:
+		return t.placeScrolling(id, split, lc)
+	}
+	return t.placeBSP(id, split, area, lc)
 }
 
 // remove takes id out of the tab and returns the pane to focus next: the
 // current focus unless id was focused. Removing the last pane empties the tab.
 func (t *Tab) remove(id PaneID) (PaneID, error) {
+	switch t.Mode {
+	case ModeMaster:
+		return t.removeMaster(id)
+	case ModeScrolling:
+		return t.removeScrolling(id)
+	}
 	return t.removeBSP(id)
 }
 
-func (t *Tab) placeBSP(id PaneID, split Split, area Rect) error {
+func (t *Tab) placeBSP(id PaneID, split Split, area Rect, lc LayoutConfig) error {
 	win, err := paneWindow(id)
 	if err != nil {
 		return err
@@ -133,6 +161,7 @@ func (t *Tab) placeBSP(id PaneID, split Split, area Rect) error {
 			return fmt.Errorf("core: focused pane %q is not in the layout", t.Focus)
 		}
 	}
+	tree.AutoScheme = lc.Scheme()
 	dir := tiling.SplitNone
 	if split != "" {
 		dir = splitType(split)
@@ -175,6 +204,12 @@ func (t *Tab) removeBSP(id PaneID) (PaneID, error) {
 
 // swap exchanges two panes' places in the tab.
 func (t *Tab) swap(a, b PaneID) error {
+	switch t.Mode {
+	case ModeMaster:
+		return t.swapMaster(a, b)
+	case ModeScrolling:
+		return t.swapScrolling(a, b)
+	}
 	wa, err := paneWindow(a)
 	if err != nil {
 		return err
@@ -214,8 +249,12 @@ func sideOf(d Dir) (tiling.Side, bool) {
 func virtualInner() Rect { return Rect{0, 0, 10000, 10000} }
 
 // neighbour finds the pane the focused one steps to in direction d, by the
-// tiles Arrange lays out in area (the virtual rect when area is zero).
+// tiles Arrange lays out in area (the virtual rect when area is zero), or by
+// the column rule in scrolling.
 func neighbour(t Tab, d Dir, area Rect, lc LayoutConfig) (PaneID, bool) {
+	if t.Mode == ModeScrolling {
+		return scrollNeighbour(t, d)
+	}
 	side, ok := sideOf(d)
 	if !ok {
 		return "", false
@@ -226,7 +265,11 @@ func neighbour(t Tab, d Dir, area Rect, lc LayoutConfig) (PaneID, bool) {
 	rects := Arrange(t, area, lc).Rects
 	cur, ok := rects[t.Focus]
 	if !ok {
-		return "", false
+		// A body too small to draw the focused pane: move as on the virtual rect.
+		rects = Arrange(t, virtualInner(), lc).Rects
+		if cur, ok = rects[t.Focus]; !ok {
+			return "", false
+		}
 	}
 	var ids []PaneID
 	var cands []tiling.Rect

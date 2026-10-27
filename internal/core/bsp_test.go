@@ -206,7 +206,7 @@ func TestOpenPaneAutoSplitUsesTheArea(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			s := stateOf(leaf("p1"), "p1")
 			var tab = &s.Tabs[0]
-			if err := tab.placeBSP("p2", "", tt.area); err != nil {
+			if err := tab.placeBSP("p2", "", tt.area, LayoutConfig{}); err != nil {
 				t.Fatal(err)
 			}
 			if got := show(tab.Layout); got != tt.want {
@@ -219,7 +219,7 @@ func TestOpenPaneAutoSplitUsesTheArea(t *testing.T) {
 func TestPlaceAndRemoveReportBadPaneIDs(t *testing.T) {
 	s := stateOf(leaf("p1"), "p1")
 	tab := &s.Tabs[0]
-	if err := tab.placeBSP("bogus", SplitVertical, Rect{}); err == nil {
+	if err := tab.placeBSP("bogus", SplitVertical, Rect{}, LayoutConfig{}); err == nil {
 		t.Error("place of a bad id: want an error")
 	}
 	if _, err := tab.removeBSP("bogus"); err == nil {

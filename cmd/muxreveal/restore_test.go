@@ -83,6 +83,20 @@ func TestLoadState(t *testing.T) {
 		}
 	})
 
+	t.Run("a restored state takes the layout settings from the config", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "state.json")
+		writeFile(t, path, stateDoc("1", good))
+
+		cfg := core.DefaultConfig()
+		cfg.Layout.DefaultMode, cfg.Layout.MasterCount = "scrolling", 3
+
+		st, _ := loadState(path, false, cfg)
+
+		if st.Layout != cfg.Layout || len(st.Panes) != 2 {
+			t.Errorf("Layout = %+v, panes = %d, want the config's layout and 2 panes", st.Layout, len(st.Panes))
+		}
+	})
+
 	t.Run("fresh ignores a valid file and leaves it", func(t *testing.T) {
 		path := filepath.Join(t.TempDir(), "state.json")
 		doc := stateDoc("1", good)

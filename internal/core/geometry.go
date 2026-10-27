@@ -7,10 +7,6 @@ type Rect struct {
 	X, Y, W, H int
 }
 
-// LayoutConfig holds the layout settings Arrange and the placement helpers
-// read.
-type LayoutConfig struct{}
-
 // Arrangement is a tab laid out in an inner rect.
 type Arrangement struct {
 	Rects                   map[PaneID]Rect // drawn panes, each including its title row
@@ -32,8 +28,15 @@ func Arrange(t Tab, inner Rect, lc LayoutConfig) Arrangement {
 	if area.W < 1 || area.H < 1 {
 		return a
 	}
-	if t.Layout != nil {
-		arrangeBSP(t.Layout, area, &a)
+	switch t.Mode {
+	case ModeMaster:
+		arrangeMaster(t, area, lc, &a)
+	case ModeScrolling:
+		arrangeScrolling(t, area, &a)
+	default:
+		if t.Layout != nil {
+			arrangeBSP(t.Layout, area, &a)
+		}
 	}
 	return a
 }

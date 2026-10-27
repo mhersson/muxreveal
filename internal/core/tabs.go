@@ -153,13 +153,17 @@ func (a NewTab) apply(s *State) error {
 	id := s.NewPaneID()
 	s.NextID++
 	if t := s.cur(); t.Empty() {
-		t.setTree(&Node{Pane: id})
+		mode := t.Mode
+		if mode == "" {
+			mode = s.Layout.Mode()
+		}
+		t.start(id, mode, s.Layout)
 		t.Focus = id
-		t.Zoomed = false
 	} else {
 		s.NextTabID++
-		nt := Tab{ID: TabID("t" + strconv.Itoa(s.NextTabID)), Focus: id}
-		nt.setTree(&Node{Pane: id})
+		nt := Tab{ID: TabID("t" + strconv.Itoa(s.NextTabID))}
+		nt.start(id, s.Layout.Mode(), s.Layout)
+		nt.Focus = id
 		s.Tabs = append(s.Tabs, nt)
 		s.Active = len(s.Tabs) - 1
 	}

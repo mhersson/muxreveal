@@ -39,8 +39,8 @@ func loadState(statePath string, fresh bool, cfg core.Config) (core.State, []str
 		return core.InitialState(cfg), []string{notice}
 	}
 
-	// The config decides the theme, not the file.
-	st.Theme = cfg.Theme
+	// The config decides the theme and layout settings, not the file.
+	st.Theme, st.Layout = cfg.Theme, cfg.Layout
 
 	var notices []string
 

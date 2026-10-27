@@ -135,7 +135,7 @@ func (a OpenPane) apply(s *State) error {
 	if !t.Empty() && a.Split != SplitVertical && a.Split != SplitHorizontal {
 		return fmt.Errorf("core: OpenPane with unknown split %q", a.Split)
 	}
-	if err := t.place(id, a.Split, a.Area); err != nil {
+	if err := t.place(id, a.Split, a.Area, s.Layout); err != nil {
 		return err
 	}
 	s.NextID++
@@ -144,7 +144,7 @@ func (a OpenPane) apply(s *State) error {
 		p.Harness = a.Harness
 	}
 	s.Panes[id] = p
-	t.Focus = id
+	t.setFocus(id)
 	t.Zoomed = false
 	return nil
 }
@@ -173,7 +173,7 @@ func (a ClosePane) apply(s *State) error {
 	}
 	delete(s.Panes, a.ID)
 	t.Zoomed = false
-	t.Focus = next
+	t.setFocus(next)
 	return nil
 }
 
@@ -188,7 +188,7 @@ func (a FocusPane) apply(s *State) error {
 		return fmt.Errorf("core: no pane %q", a.ID)
 	}
 	if a.ID != t.Focus {
-		t.Focus = a.ID
+		t.setFocus(a.ID)
 		t.Zoomed = false
 	}
 	return nil
@@ -204,7 +204,7 @@ type FocusDir struct {
 func (a FocusDir) apply(s *State) error {
 	t := s.cur()
 	if id, ok := neighbour(*t, a.Dir, a.Area, s.Layout); ok {
-		t.Focus = id
+		t.setFocus(id)
 		t.Zoomed = false
 	}
 	return nil
@@ -228,12 +228,14 @@ func (a SwapDir) apply(s *State) error {
 		return err
 	}
 	t.Zoomed = false
+	t.keepVisible()
 	return nil
 }
 
-// ResizeDir moves the nearest divider on the direction's axis by one step:
+// ResizeDir moves the nearest BSP divider on the direction's axis by one step:
 // Right and Down grow the first child, Left and Up shrink it. It does nothing
-// when the focused pane has no split on that axis.
+// when the focused pane has no split on that axis. Master-stack moves the
+// master ratio and scrolling the focused column's width.
 type ResizeDir struct {
 	Dir Dir
 }
@@ -249,6 +251,14 @@ func (a ResizeDir) apply(s *State) error {
 		delta = -ratioStep
 	}
 	t := s.cur()
+	switch t.Mode {
+	case ModeMaster:
+		t.resizeMaster(a.Dir, s.Layout)
+		return nil
+	case ModeScrolling:
+		t.resizeColumn(a.Dir)
+		return nil
+	}
 	p := t.Layout.path(t.Focus)
 	for i := len(p) - 2; i >= 0; i-- {
 		if p[i].Split == axis {

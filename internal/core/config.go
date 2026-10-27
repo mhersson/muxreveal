@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"slices"
 	"strings"
 
+	"github.com/mhersson/muxreveal/internal/core/tiling"
 	"github.com/pelletier/go-toml/v2"
 )
 
@@ -18,9 +20,103 @@ const DefaultTheme = "catppuccin-mocha"
 type Config struct {
 	Theme string `toml:"theme"`
 	// Icons is a pointer so an absent key (nil) can mean true.
-	Icons     *bool     `toml:"icons"`
-	Mouse     Mouse     `toml:"mouse"`
-	Clipboard Clipboard `toml:"clipboard"`
+	Icons     *bool        `toml:"icons"`
+	Mouse     Mouse        `toml:"mouse"`
+	Clipboard Clipboard    `toml:"clipboard"`
+	Layout    LayoutConfig `toml:"layout"`
+}
+
+// LayoutConfig is the [layout] section. Validate rejects an out-of-range value
+// from a file; the accessors read a zero field as its default so a
+// hand-built LayoutConfig behaves as the defaults.
+type LayoutConfig struct {
+	DefaultMode    string `toml:"default_mode"`    // bsp | master-stack | scrolling
+	AutoScheme     string `toml:"auto_scheme"`     // spiral | longest_side | alternate | smart_split
+	MasterRatio    int    `toml:"master_ratio"`    // percent, 10-90
+	MasterPosition string `toml:"master_position"` // left | right | top | bottom | center
+	MasterCount    int    `toml:"master_count"`    // 1-9
+	MasterGrid     *bool  `toml:"master_grid"`     // nil means true
+	ColumnWidth    int    `toml:"column_width"`    // percent, 10-100
+}
+
+// Bounds of the numeric [layout] keys.
+const (
+	minMasterRatio, maxMasterRatio = 10, 90
+	minMasterCount, maxMasterCount = 1, 9
+	minColumnWidth, maxColumnWidth = 10, 100
+)
+
+var layoutSchemes = []string{"spiral", "longest_side", "alternate", "smart_split"}
+
+// Validate names the first key that is out of range or unknown.
+func (c LayoutConfig) Validate() error {
+	if !slices.Contains([]string{string(ModeBSP), string(ModeMaster), string(ModeScrolling)}, c.DefaultMode) {
+		return fmt.Errorf("layout.default_mode: %q is not bsp, master-stack or scrolling", c.DefaultMode)
+	}
+	if !slices.Contains(layoutSchemes, c.AutoScheme) {
+		return fmt.Errorf("layout.auto_scheme: %q is not %s", c.AutoScheme, strings.Join(layoutSchemes, ", "))
+	}
+	if err := inRange("layout.master_ratio", c.MasterRatio, minMasterRatio, maxMasterRatio); err != nil {
+		return err
+	}
+	if !slices.Contains(tiling.MasterPositions(), c.MasterPosition) {
+		return fmt.Errorf("layout.master_position: %q is not %s", c.MasterPosition, strings.Join(tiling.MasterPositions(), ", "))
+	}
+	if err := inRange("layout.master_count", c.MasterCount, minMasterCount, maxMasterCount); err != nil {
+		return err
+	}
+	return inRange("layout.column_width", c.ColumnWidth, minColumnWidth, maxColumnWidth)
+}
+
+func inRange(key string, v, lo, hi int) error {
+	if v < lo || v > hi {
+		return fmt.Errorf("%s: %d is out of range %d-%d", key, v, lo, hi)
+	}
+	return nil
+}
+
+// Mode is the mode new tabs start in.
+func (c LayoutConfig) Mode() LayoutMode {
+	if c.DefaultMode == "" {
+		return ModeBSP
+	}
+	return LayoutMode(c.DefaultMode)
+}
+
+// Scheme is the auto split scheme for BSP.
+func (c LayoutConfig) Scheme() tiling.AutoScheme {
+	if c.AutoScheme == "" {
+		return tiling.SchemeSpiral
+	}
+	return tiling.ParseAutoScheme(c.AutoScheme)
+}
+
+func orDefault(v, def int) int {
+	if v == 0 {
+		return def
+	}
+	return v
+}
+
+// ratio is the masters' share of the body, 0.1-0.9.
+func (c LayoutConfig) ratio() float64 {
+	return float64(min(max(orDefault(c.MasterRatio, 50), minMasterRatio), maxMasterRatio)) / 100
+}
+
+func (c LayoutConfig) count() int { return orDefault(c.MasterCount, 1) }
+
+func (c LayoutConfig) position() string {
+	if c.MasterPosition == "" {
+		return tiling.MasterPositionLeft
+	}
+	return c.MasterPosition
+}
+
+func (c LayoutConfig) grid() bool { return c.MasterGrid == nil || *c.MasterGrid }
+
+// columnWidth is a new scrolling column's share of the body, 0.1-1.0.
+func (c LayoutConfig) columnWidth() float64 {
+	return float64(min(max(orDefault(c.ColumnWidth, 50), minColumnWidth), maxColumnWidth)) / 100
 }
 
 // Mouse is the [mouse] section; both switches are off by default.
@@ -50,7 +146,10 @@ func (c Config) IconsOn() bool {
 
 // DefaultConfig returns the config used for keys the file does not set.
 func DefaultConfig() Config {
-	return Config{Theme: DefaultTheme}
+	return Config{Theme: DefaultTheme, Layout: LayoutConfig{
+		DefaultMode: string(ModeBSP), AutoScheme: "spiral", MasterRatio: 50, MasterPosition: tiling.MasterPositionLeft,
+		MasterCount: 1, MasterGrid: new(true), ColumnWidth: 50,
+	}}
 }
 
 // LoadConfig reads the config file at path over the defaults. A missing file

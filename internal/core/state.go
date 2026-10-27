@@ -24,6 +24,7 @@ func InitialState(cfg Config) State {
 		Tabs:      []Tab{{ID: "t1"}},
 		Panes:     map[PaneID]Pane{},
 		NextTabID: 1,
+		Layout:    cfg.Layout,
 	}
 }
 
