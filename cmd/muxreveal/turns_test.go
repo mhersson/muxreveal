@@ -206,16 +206,30 @@ func TestGateSnapshotsBeforeTheAppReadsTheEvent(t *testing.T) {
 
 func TestGateSnapshotsOfOneSessionStayInArrivalOrder(t *testing.T) {
 	var (
-		mu    sync.Mutex
-		order []string
+		mu       sync.Mutex
+		order    []string
+		inFlight atomic.Int32
+		maxSeen  atomic.Int32
 	)
 
 	snap := func(_ context.Context, cwd, _ string) error {
+		n := inFlight.Add(1)
+
+		for {
+			m := maxSeen.Load()
+			if n <= m || maxSeen.CompareAndSwap(m, n) {
+				break
+			}
+		}
+
+		time.Sleep(5 * time.Millisecond)
+
 		mu.Lock()
 
 		order = append(order, cwd)
 
 		mu.Unlock()
+		inFlight.Add(-1)
 
 		return nil
 	}
@@ -244,6 +258,10 @@ func TestGateSnapshotsOfOneSessionStayInArrivalOrder(t *testing.T) {
 
 	if strings.Join(order, ",") != strings.Join(want, ",") {
 		t.Errorf("snapshot order = %v, want %v", order, want)
+	}
+
+	if m := maxSeen.Load(); m != 1 {
+		t.Errorf("snapshots in flight at once = %d, want 1", m)
 	}
 }
 
