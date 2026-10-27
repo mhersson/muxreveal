@@ -1,0 +1,142 @@
+version: "2"
+run:
+  build-tags:
+  - bench
+linters:
+  default: none
+  enable:
+  - errcheck
+  - govet
+  - ineffassign
+  - staticcheck
+  - unused
+  - containedctx
+  - gocritic
+  - godot
+  - gosec
+  - misspell
+  - nakedret
+  - nlreturn
+  - noctx
+  - revive
+  - testifylint
+  - unconvert
+  - unparam
+  - whitespace
+  - wsl_v5
+  settings:
+    nakedret:
+      max-func-lines: 5
+    wsl_v5:
+      allow-first-in-block: true
+      allow-whole-block: false
+      branch-max-lines: 2
+  exclusions:
+    generated: lax
+    presets:
+    - common-false-positives
+    - std-error-handling
+    - comments
+    rules:
+    # Code ported from tuios stays close to upstream: no style-only linters.
+    - linters: [wsl_v5, nlreturn, godot, whitespace]
+      path: "internal/core/tiling/|internal/git/linediff/|internal/git/invisible/"
+    # G703: src is the repo's own GitDir/index (GitDir comes from git) and the
+    # destination is the app's own temp index, so no user-typed path is joined.
+    - linters: [gosec]
+      text: "G703"
+      path: "internal/git/worktree_tree\\.go$"
+    # G703: bench-tagged tests open the repo and recordings an operator names in
+    # MUXREVEAL_BENCH_REPO and MUXREVEAL_BENCH_RECORDINGS.
+    - linters: [gosec]
+      text: "G703"
+      path: "internal/(git|ui)/bench_test\\.go$"
+    # Tests: int conversions (G115), explicit-argv tools (G204), fixture files
+    # and dirs under t.TempDir() with fixed modes (G301, G302, G306) and seeded
+    # RNGs (G404).
+    - linters: [gosec]
+      text: "G115|G204|G301|G302|G306|G404"
+      path: "_test\\.go$"
+    # G115: scrollback row and trim counters are non-negative and far below 2^63.
+    - linters: [gosec]
+      text: "G115"
+      path: "internal/ui/(appcopy|appselection|pane|scrollview)\\.go$|internal/term/vt\\.go$"
+    # G115: terminal sizes are clamped by clampSize before the uint16 conversion.
+    - linters: [gosec]
+      text: "G115"
+      path: "internal/term/process\\.go$"
+    # G115 in the recording codec. Write side: elapsed stamps are non-negative,
+    # chunk lengths are capped by MaxChunk, cols and rows are terminal sizes.
+    # Read side: a timestamp above MaxInt64 turns negative and fails the
+    # at < last check (last starts at 0).
+    - linters: [gosec]
+      text: "G115"
+      path: "internal/term/rec/rec\\.go$"
+    # G115: /proc/stat counters; cpuShare returns 0 unless total grew and busy
+    # did not shrink, so the percentage is at most about 100.
+    - linters: [gosec]
+      text: "G115"
+      path: "internal/ui/sysload_linux\\.go$"
+    # G115: ported from tuios and kept close to upstream; line ids are bounded by the line count.
+    - linters: [gosec]
+      text: "G115"
+      path: "internal/git/linediff/linediff\\.go$"
+    # G404/G115: seeded RNG for deterministic synthetic recordings; 'a'+IntN(26) fits a byte.
+    - linters: [gosec]
+      text: "G404|G115"
+      path: "internal/term/rec/synth\\.go$"
+    # G204: argv[0] is $SHELL (else /bin/sh) with constant flags. An agent's -c
+    # script single-quotes each harness argument; its only stored value, the
+    # resume session ID, loads from state.json only as a UUID.
+    - linters: [gosec]
+      text: "G204"
+      path: "internal/term/process\\.go$"
+    # G204: the commands come from a fixed table and the text goes on stdin.
+    - linters: [gosec]
+      text: "G204"
+      path: "internal/ui/clipboard\\.go$"
+    # G204: constant git, cwd is a separate argument, no shell, scrubbed environment.
+    - linters: [gosec]
+      text: "G204"
+      path: "internal/ui/tray\\.go$"
+    # G301/G302: git's own modes for .git/info and info/exclude; the path comes
+    # from git's reported git dir.
+    - linters: [gosec]
+      text: "G301|G302"
+      path: "internal/git/worktree\\.go$"
+    # G302: the 0700 run dir needs the exec bit and is owner-only.
+    - linters: [gosec]
+      text: "G302"
+      path: "cmd/muxreveal/hooks\\.go$"
+    # containedctx: the context is the pane-process lifetime, owned by the app
+    # and cancelled in Close.
+    - linters: [containedctx]
+      path: "internal/ui/app\\.go$"
+    # argOrder: the literal is the haystack on purpose.
+    - linters: [gocritic]
+      text: "argOrder"
+      path: "internal/ui/frame_test\\.go$"
+    # noctx in tests: git and socket helpers use exec.Command, net.Listen and
+    # net.Dial, which end with the test and need no cancellation.
+    - linters: [noctx]
+      path: "_test\\.go$"
+    # unused parameters in test fakes that must match a callback signature.
+    - linters: [revive]
+      text: "unused-parameter"
+      path: "_test\\.go$"
+    # unparam in tests: helpers and callbacks with fixed arguments, always-nil errors or unused results.
+    - linters: [unparam]
+      path: "_test\\.go$"
+issues:
+  max-issues-per-linter: 50
+  max-same-issues: 8
+  fix: false
+formatters:
+  enable:
+  - gofumpt
+  - goimports
+  exclusions:
+    paths:
+    - internal/core/tiling/
+    - internal/git/linediff/
+    - internal/git/invisible/

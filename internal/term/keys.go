@@ -169,7 +169,7 @@ func modParam(mod uv.KeyMod) int {
 	p := 1
 
 	if mod.Contains(uv.ModShift) {
-		p += 1
+		p++
 	}
 
 	if mod.Contains(uv.ModAlt) {

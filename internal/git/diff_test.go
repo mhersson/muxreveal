@@ -1003,7 +1003,7 @@ func TestDiffCacheSkipsTheHunkPass(t *testing.T) {
 }
 
 func TestHunkCacheEvictsLeastRecentlyUsed(t *testing.T) {
-	c := newHunkCache(cacheEntries, cacheBytes)
+	c := newHunkCache(cacheBytes)
 	hunks := []Hunk{{Lines: []Line{{Text: "x"}}}}
 	key := func(i int) hunkKey { return hunkKey{old: strconv.Itoa(i), new: "n"} }
 
@@ -1033,7 +1033,7 @@ func TestHunkCacheEvictsLeastRecentlyUsed(t *testing.T) {
 }
 
 func TestHunkCacheBoundsTheTextItHolds(t *testing.T) {
-	c := newHunkCache(cacheEntries, 1000)
+	c := newHunkCache(1000)
 	big := []Hunk{{Lines: []Line{{Text: strings.Repeat("x", 400)}}}}
 
 	for i := range 10 {

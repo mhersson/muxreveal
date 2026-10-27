@@ -29,9 +29,9 @@ type hunkCache struct {
 	items      map[hunkKey]*list.Element
 }
 
-func newHunkCache(maxEntries, maxBytes int) *hunkCache {
+func newHunkCache(maxBytes int) *hunkCache {
 	return &hunkCache{
-		maxEntries: maxEntries,
+		maxEntries: cacheEntries,
 		maxBytes:   maxBytes,
 		order:      list.New(),
 		items:      map[hunkKey]*list.Element{},

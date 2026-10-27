@@ -61,7 +61,7 @@ func Listen(path string) (*Server, error) {
 		}
 	}
 
-	ln, err := net.Listen("unix", path)
+	ln, err := (&net.ListenConfig{}).Listen(context.Background(), "unix", path)
 	if err != nil {
 		return nil, fmt.Errorf("harness: listen: %w", err)
 	}
