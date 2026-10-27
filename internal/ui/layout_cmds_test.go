@@ -205,6 +205,20 @@ func TestMoveNotices(t *testing.T) {
 	}
 }
 
+func TestBreakWithNineTabs(t *testing.T) {
+	a, _ := wideTabs(t, 9)
+	chord(a, 'v')
+	seq(a, "!")
+
+	if a.notice != "" {
+		t.Errorf("notice = %q", a.notice)
+	}
+
+	if got := len(a.store.State().Tabs); got != 10 || activeIndex(a) != 9 {
+		t.Errorf("tabs %d active %d", got, activeIndex(a))
+	}
+}
+
 func TestMoveToTabNineAndLeft(t *testing.T) {
 	t.Run("nine tabs", func(t *testing.T) {
 		a, _ := wideTabs(t, 9)

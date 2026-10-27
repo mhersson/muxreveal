@@ -354,3 +354,22 @@ func TestBreakPane(t *testing.T) {
 		})
 	}
 }
+
+func TestBreakPaneWithManyTabs(t *testing.T) {
+	for _, n := range []int{9, 10} {
+		modes := make([]LayoutMode, n)
+		counts := make([]int, n)
+		for i := range modes {
+			modes[i], counts[i] = ModeBSP, 1
+		}
+		counts[0] = 2
+		s := buildTabs(t, modes, counts)
+		got := dispatch(t, s, BreakPane{ID: "p2", Area: modeInner})
+		if len(got.Tabs) != n+1 || got.Active != n || !slices.Equal(got.Tabs[n].Panes, []PaneID{"p2"}) {
+			t.Errorf("%d tabs: tabs %d active %d", n, len(got.Tabs), got.Active)
+		}
+		if err := moveErr(s, MovePane{ID: "p2", Tab: n}); !errors.Is(err, ErrNoTab) {
+			t.Errorf("%d tabs: explicit new tab error = %v", n, err)
+		}
+	}
+}

@@ -34,11 +34,20 @@ type MovePane struct {
 
 func (a MovePane) apply(s *State) error {
 	s.normalize()
+	if a.Tab > maxMoveTab {
+		return ErrNoTab
+	}
+	return a.move(s)
+}
+
+// move is MovePane without the explicit-target limit, which only applies to a
+// tab number the user typed.
+func (a MovePane) move(s *State) error {
 	src, ok := s.TabOf(a.ID)
 	if !ok {
 		return fmt.Errorf("core: no pane %q", a.ID)
 	}
-	if a.Tab < 0 || a.Tab > len(s.Tabs) || a.Tab > maxMoveTab {
+	if a.Tab < 0 || a.Tab > len(s.Tabs) {
 		return ErrNoTab
 	}
 	if a.Tab == src {
@@ -95,5 +104,5 @@ type BreakPane struct {
 
 func (a BreakPane) apply(s *State) error {
 	s.normalize()
-	return MovePane{ID: a.ID, Tab: len(s.Tabs), Follow: true, Area: a.Area}.apply(s)
+	return MovePane{ID: a.ID, Tab: len(s.Tabs), Follow: true, Area: a.Area}.move(s)
 }

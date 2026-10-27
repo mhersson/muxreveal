@@ -121,11 +121,12 @@ func (a *App) moved(id core.PaneID, n int, act core.Action) tea.Cmd {
 	return a.relayout()
 }
 
+// moveNotice words a failed move; n is 0 for a break, which has no tab number.
 func moveNotice(err error, n int) string {
 	switch {
-	case errors.Is(err, core.ErrSameTab):
+	case n > 0 && errors.Is(err, core.ErrSameTab):
 		return fmt.Sprintf("the pane is already in tab %d", n)
-	case errors.Is(err, core.ErrNoTab):
+	case n > 0 && errors.Is(err, core.ErrNoTab):
 		return fmt.Sprintf("there is no tab %d", n)
 	case errors.Is(err, core.ErrAlone):
 		return "the pane is alone in its tab"
