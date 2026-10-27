@@ -1,0 +1,11 @@
+{
+  "number": 42,
+  "html_url": "https://github.com/octo/repo/pull/42",
+  "state": "open",
+  "title": "Add the thing",
+  "draft": false,
+  "updated_at": "2026-10-27T10:00:00Z",
+  "user": {"login": "monalisa"},
+  "head": {"ref": "feat/x", "sha": "abc123", "repo": {"full_name": "octo/repo"}},
+  "base": {"ref": "main", "sha": "def456", "repo": {"full_name": "octo/repo"}}
+}
