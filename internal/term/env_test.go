@@ -62,7 +62,7 @@ func TestCommands(t *testing.T) {
 		agent []string
 	}{
 		{"fish", "/usr/bin/fish", []string{"/usr/bin/fish", "-l"},
-			[]string{"/usr/bin/fish", "-l", "-i", "-c", `'claude'; exec "$SHELL" -l`}},
+			[]string{"/usr/bin/fish", "-l", "-i", "-c", `status job-control full; 'claude'; exec "$SHELL" -l`}},
 		{"fallback", "", []string{"/bin/sh", "-l"},
 			[]string{"/bin/sh", "-l", "-i", "-c", `'claude'; exec "$SHELL" -l`}},
 	}

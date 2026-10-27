@@ -172,6 +172,33 @@ func TestAgentCommandRunsArgvVerbatim(t *testing.T) {
 	}
 }
 
+func TestAgentCommandLeadsForeground(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("shell invocation is tested on Linux")
+	}
+
+	for _, name := range []string{"sh", "bash", "zsh", "fish"} {
+		t.Run(name, func(t *testing.T) {
+			sh, err := exec.LookPath(name)
+			if err != nil {
+				t.Skipf("%s not installed", name)
+			}
+
+			shellTestEnv(t)
+			t.Setenv("SHELL", sh)
+
+			fake := filepath.Join(t.TempDir(), "claude")
+			if err := os.WriteFile(fake, []byte("#!/bin/sh\nsleep 30\nexit 0\n"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+
+			p := startCommand(t, AgentCommand(os.Getenv, t.TempDir(), []string{fake}, nil))
+
+			waitForeground(t, p, "claude")
+		})
+	}
+}
+
 func waitFile(t *testing.T, path string) []byte {
 	t.Helper()
 

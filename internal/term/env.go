@@ -2,6 +2,7 @@ package term
 
 import (
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 )
@@ -41,8 +42,15 @@ func AgentCommand(env func(string) string, dir string, argv, extraEnv []string) 
 		quoted[i] = quote(a)
 	}
 
+	script := strings.Join(quoted, " ") + `; exec "$SHELL" -l`
+	if filepath.Base(sh) == "fish" {
+		// fish -c runs commands without job control, so the agent would not
+		// lead the terminal's foreground group.
+		script = "status job-control full; " + script
+	}
+
 	return Command{
-		Argv: []string{sh, "-l", "-i", "-c", strings.Join(quoted, " ") + `; exec "$SHELL" -l`},
+		Argv: []string{sh, "-l", "-i", "-c", script},
 		Dir:  dir,
 		Env:  shellEnv(sh, extraEnv),
 	}
