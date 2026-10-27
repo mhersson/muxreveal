@@ -189,7 +189,7 @@ One Go module, `github.com/mhersson/muxreveal`.
 | `internal/ui` | Compositor, widgets, keymap, themes, image placement |
 | `internal/term` | PTY plus the `VT` interface; `tuios.dev/vt` adapter (fallback `charmbracelet/x/vt`) |
 | `internal/harness` | `Harness` interface; Claude Code adapter (launch args, hook settings, resume) |
-| `internal/git` | Worktrees, turn snapshots, watcher, diff engine, highlighting; `linediff` and `invisible` (ported from tuios) |
+| `internal/git` | Worktrees, turn snapshots, watcher and watch set, diff engine, highlighting; `linediff` and `invisible` (ported from tuios) |
 | `internal/github` | Auth via `gh`, GraphQL and REST client, poller, PR actions |
 | `internal/md` | Markdown to styled cells plus image references |
 | `internal/store` | `state.json` and SQLite persistence |
@@ -297,7 +297,7 @@ The chrome is framed: every pane is its own rounded box with its title in its to
 
 - Row 0 is the workspace bar and row 1 is the rule; the rows from 2 to the last are the body.
 - The rule is a full-width `─` in `Border`; it takes no clicks.
-- Panes are laid out in the body `{X: 0, Y: 2, W: width, H: height-2}` less the agents rail's columns on the left while the rail shows (see Agents rail), so with the rail `X` is the rail's width and `W` is the width less it; there is no outer frame.
+- Panes are laid out in the body `{X: 0, Y: 2, W: width, H: height-2}` less the agents rail's columns on the left while the rail shows (see Agents rail), so with the rail `X` is the rail's width and `W` is the width less it; there is no outer frame. The review drawer is an overlay on the body and does not change these rects (see Review drawer).
 - Pane rects follow Panes and layout. A pane's frame is on its rect's outline; the first row of the rect is its top border, which is its header row, and its content is the rect inset by one cell on every side. Two neighbours' frames touch (`││`, `╮╭`) and share no cell.
 - A pane needs at least 3 rows and 3 columns for its frame, and so does the body; a smaller body stays blank. Height 1 shows the workspace bar only; height 2 adds the rule. Every row is exactly the terminal width.
 - An empty tab shows the welcome card in the body, without frames.
@@ -305,7 +305,7 @@ The chrome is framed: every pane is its own rounded box with its title in its to
 #### Frames
 
 - Lines are single-weight box drawing: every pane's box has `╭ ╮ ╰ ╯` at its four corners, `─` along the top and bottom and `│` on the sides. There are no junction glyphs.
-- Unfocused borders are `Border`. The focused pane's whole box, all four sides, is its kind colour (`Agent` for agents, `Shell` for shells), except while the agents rail has the keyboard (then it draws as an unfocused pane: `Border` frame, `Muted` title) and for the 600 ms `Match` flash of a pane jumped to from the agents rail (see Agents rail).
+- Unfocused borders are `Border`. The focused pane's whole box, all four sides, is its kind colour (`Agent` for agents, `Shell` for shells), except while the agents rail or the review drawer has the keyboard (then it draws as an unfocused pane: `Border` frame, `Muted` title) and for the 600 ms `Match` flash of a pane jumped to from the agents rail (see Agents rail).
 - The title is set into the top border from the cell after the corner: `─`, space, kind icon (kind colour, bold), space, title, space. Focused: the title in the kind colour and bold. Unfocused: the title in `Muted`. The title is the guest's OSC title, else `claude` or `shell`.
 - Tags sit at the right end of the top border, ending one `─` before the corner, with one `─` between two tags: ` 󰊓 zoom ` (`Accent`, bold) on a zoomed pane, and ` 󰁝 N ` (the same style; ` ↑ N ` with icons off) on a scrolled pane, where N is the number of lines above the live screen, left of the zoom tag; and the state badge (` <icon> working `, ` <icon> blocked `, ` <icon> idle ` in `Working`, `Blocked`, `Idle`, bold), the rightmost tag, with the zoom tag and then the scroll tag to its left. The working icon is a braille spinner (`⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏`, about 8 frames a second) that animates only while the agent works, so idle CPU is unchanged; blocked is 󰀦 and idle is 󰗡. With `icons = false` the badge reads ` ⠋ working `, ` blocked ` or ` idle ` (braille stays). An agent pane with no state yet, because Claude has sent no hook, shows no badge.
 - In copy mode the copy pane's top border carries the leftmost tag of the border, ` 󰆏 COPY ` (`Info`, bold; ` COPY ` with `icons = false`), left of the preselection and scroll tags. Tags that do not fit between the corners are left out in this order: the scroll tag, then the preselection tag, then the zoom tag, then the badge; COPY is the last to go.
@@ -339,7 +339,7 @@ A framed panel on the left of the body lists every agent pane in every tab as a 
 
 - **Place.** A rounded box under the rule, the full body height, 44 columns wide when the body is at least 84 wide; else the body width minus 40, at least 24. A body under 64 columns does not show the rail: it stays open, gives the panes the whole body and shows again when the terminal widens. While the rail shows, the active tab's panes, and every tab's PTY sizes, are laid out in the body to its right. Its border is `Accent` while it has the keyboard and `Border` otherwise; while it has the keyboard the focused pane draws as unfocused, so only one element shows the focus. The toast and the overlays draw over it.
 - **Open or closed** is `core.State.Rail`, saved in `state.json` (see Persisted state). Which of the rail or a pane has the keyboard, the selection, the search text and the probe results are UI state and are not saved.
-- **Keys.** `leader a` (`rail.toggle`, "Agents rail", group Panes): a closed rail opens and takes the keyboard when it shows; an open rail without the keyboard takes it; an open rail with the keyboard closes. On an open rail that is hidden by the width rule the key closes it. A hidden rail never holds the keyboard, and a resize that hides it while it has the keyboard returns the keyboard to the focused pane; closing the rail does the same. In the rail `j` / `k` and `down` / `up` move the selection, `/` opens the search, `enter` jumps, and `esc` ends a search (clearing its text) or, with no search, returns the keyboard to the focused pane. The leader works as everywhere. Any user action that changes the active tab or its focused pane returns the keyboard to the panes: a leader or palette command (focus moves, tab switches, new panes and tabs, pane moves and breaks), a confirmed close, a click on a tab or a pane, hover focus. Other leader commands (overlays, layout changes, zoom, resize, rename) leave the keyboard with the rail, and so does a change nobody asked for in the UI (a process exiting, a hook, a restore). Every other key is dropped. A paste goes to the search while it is open and is dropped otherwise. Keys are routed in this order: confirm, prompt, copy mode, overlay, leader, rail (while it has the keyboard), focused pane.
+- **Keys.** `leader a` (`rail.toggle`, "Agents rail", group Panes): a closed rail opens and takes the keyboard when it shows; an open rail without the keyboard takes it; an open rail with the keyboard closes. On an open rail that is hidden by the width rule the key closes it. A hidden rail never holds the keyboard, and a resize that hides it while it has the keyboard returns the keyboard to the focused pane; closing the rail does the same. In the rail `j` / `k` and `down` / `up` move the selection, `/` opens the search, `enter` jumps, and `esc` ends a search (clearing its text) or, with no search, returns the keyboard to the focused pane. The leader works as everywhere. Any user action that changes the active tab or its focused pane returns the keyboard to the panes: a leader or palette command (focus moves, tab switches, new panes and tabs, pane moves and breaks), a confirmed close, a click on a tab or a pane, hover focus. Other leader commands (overlays, layout changes, zoom, resize, rename) leave the keyboard with the rail, and so does a change nobody asked for in the UI (a process exiting, a hook, a restore). Every other key is dropped. A paste goes to the search while it is open and is dropped otherwise. Keys are routed in this order: confirm, prompt, copy mode, overlay, leader, rail (while it has the keyboard), review drawer (while it has the keyboard), focused pane. Giving the keyboard to the drawer takes it from the rail, and the other way round.
 - **Overflow.** When cards are hidden above or below the list, the rail's bottom border counts them, as a pane's bottom border counts hidden columns: ` ↑ N ` after `╰─` for the cards above and ` N ↓ ` before `─╯` for those below, in `Accent`, bold, with the plain arrows in both icon modes. A card cut off at an edge counts as hidden; a count that does not fit between the corners is left out.
 - **Mouse.** A click on a card gives the rail the keyboard and selects the card; a double click jumps; the wheel over the rail moves the selection by one card per notch and the list follows it; a click on a pane gives the keyboard back to the panes. The rail ignores the mouse in the states that ignore it elsewhere (see Mouse and clipboard).
 - **Header**, in the top border: ` 󱙺 Agents N ` (icon `Agent`; the word `Accent` while the rail has the keyboard, else `Fg`, bold; N `Muted`) and, at the right end, the count per state in the state colours, bold: ` 󰀦1 ⠙3 󰗡2 ` (blocked, working with the badge spinner, idle; a state with no agents is left out).
@@ -355,7 +355,45 @@ A framed panel on the left of the body lists every agent pane in every tab as a 
 - **Hints.** When the rail's inner height is at least 10, its last inner row reads `j/k move`, `enter jump`, `/ search`, `esc back` (keys `Key`, bold; labels `Muted`); pairs that do not fit are dropped from the end.
 - **Without icons.** With `icons = false` the rail drops its Nerd Font glyphs: the header reads ` Agents N `; the counts read ` blocked N ⠙N idle N ` (braille stays, and a state with no agents is left out); on card line 1 a working card keeps the braille spinner and the other states show no glyph, the cell left blank so projects stay aligned; the branch line starts where the icon was; the search row's icon becomes `/`. `●` and `▎` stay.
 - **Activity time and the unseen dot.** The UI keeps for each pane the later of its last PTY output and its last hook event. The dot is set when an agent's state changes, or it stops, while its pane is not the focused pane of the active tab, and cleared when that pane is focused. Neither is saved.
-- **Project, branch and diff stats** come from probes that run off the update loop, only while the rail is open. The project is the main checkout's directory name (`Repo.MainRoot`, so a repo's worktrees share it; for a bare repo the common dir's name without `.git`); outside a repo it is the cwd's base name, with no branch line. Per agent: a head probe (`git.Head`) when the rail opens, when a pane becomes an agent, when the pane's cwd changes, and on a hook that starts a session or moves the agent to idle, at most once every 5 s; a stats probe (`(*Engine).Stats` in branch mode against the default branch) when the rail opens, when a pane becomes an agent, when its cwd changes and on a hook that moves the agent to idle, at most once every 10 s. A trigger inside the interval, or while that probe runs, schedules one delayed probe for when the interval ends. At most 4 probes (head and stats together) run at once; the rest wait for a slot and give up when the rail closes. Each probe has a 2 s context, counted from the start of its run, and is cancelled when the rail closes; a result is dropped when stale (the pane closed or is no longer an agent, its cwd changed since, or the rail closed). A card keeps its last result until the probe for a new cwd answers, and loses it when that probe fails. The stats probe is off without the temp directory for the engine, which comes from the hooks' run directory under the state directory, so it is also off while agent hooks are off.
+- **Project, branch and diff stats** come from probes that run off the update loop, only while the rail is open. The project is the main checkout's directory name (`Repo.MainRoot`, so a repo's worktrees share it; for a bare repo the common dir's name without `.git`); outside a repo it is the cwd's base name, with no branch line. Per agent: a head probe (`git.Head`) when the rail opens, when a pane becomes an agent, when the pane's cwd changes, and on a hook that starts a session or moves the agent to idle, at most once every 5 s; a stats probe (`(*Engine).Stats` in branch mode against the default branch) when the rail opens, when a pane becomes an agent, when its cwd changes and on a hook that moves the agent to idle, at most once every 10 s. A trigger inside the interval, or while that probe runs, schedules one delayed probe for when the interval ends. At most 4 probes (head and stats together) run at once; the rest wait for a slot and give up when the rail closes. Each probe has a 2 s context, counted from the start of its run, and is cancelled when the rail closes; a result is dropped when stale (the pane closed or is no longer an agent, its cwd changed since, or the rail closed). A card keeps its last result until the probe for a new cwd answers, and loses it when that probe fails. The stats probe is off without the temp directory for the engine, which comes from the hooks' run directory under the state directory, so it is also off while agent hooks are off. While the rail is open, a watcher batch for an agent's worktree (see Watch set) also re-probes every agent in that root, within the intervals and limits above: head and stats on a git change or an overflow, stats on changed paths.
+
+#### Review drawer
+
+An overlay that slides in from the right over half the body and shows the focused pane's git diff: an agent's last turn, or its branch against the base. It is not a layout pane: the panes under it keep their rects and PTY sizes, `core.Arrange` does not know it, and their covered cells are not drawn (a pane partly under it draws its uncovered part). The toast and the overlays draw over it.
+
+- **Place.** It covers the right part of the body at its full height, under the rule; with the agents rail open the body is the part right of the rail. Its width is `body.W - body.W/2` (the size a half split would have), at least `min(body.W, 60)` columns. A body under 3 columns or 3 rows shows no drawer.
+- **Slide.** In from the right over 120 ms with a cubic ease-out, and out the same way on close. Frames come from a 16 ms tick that runs only during a slide, so idle CPU is unchanged. A resize, a tab switch or a second `leader d` ends the slide at once, and switching to a tab whose drawer is open shows it without a slide.
+- **One drawer per tab.** `core.Tab.Review` holds the reviewed pane and the mode (`turn` or `branch`) and is saved (see Persisted state). A pane that closes or moves out of the tab closes that tab's drawer. Whether the drawer has the keyboard, the cursor, the rows and the loaded diff are UI state and are not saved.
+- **Keyboard.** The drawer has the keyboard or the panes do (see the routing order under Agents rail). While the drawer has it, the tab's focused pane draws as unfocused (`Border` frame, `Muted` title), as with the rail, and the drawer's border is the `Review` role; otherwise `Border`.
+- **`leader d`** (`review.toggle`, "Review drawer", group Panes, icon ):
+  - With no drawer in the active tab it opens one for the focused pane and gives it the keyboard. A pane outside a git repository shows the notice `not a git repository`; the check runs off the update loop, and the drawer opens when it answers.
+  - With a drawer open and the keyboard elsewhere, it retargets to the tab's focused pane when that pane is not the drawer's pane and is in a repository, then gives the drawer the keyboard.
+  - With the keyboard, it closes the drawer (slide out) and the keyboard returns to the panes.
+  - The other drawer commands, with no drawer open in the active tab, show the notice `no review drawer is open`.
+- **Which panes.** Any pane whose cwd is inside a non-bare git worktree. An agent with a session gets turn and branch mode. A shell, or an agent without a session, gets branch mode only; `t` there shows the notice `no turns: this pane has no agent session`. A new drawer opens in the configured `[diff] mode` (default `turn`) when turns exist, else in branch mode.
+- **Covered panes.** A pane whose rect lies entirely inside the drawer's rect is covered while the drawer shows. `leader h/j/k/l` from a pane skips covered panes, and `leader l` with no visible pane to the right gives the drawer the keyboard. `leader h` from the drawer focuses the visible pane nearest its left edge, by the same neighbour rule. `esc` in the drawer (no search open, tree not focused) returns the keyboard as `leader h` does. Any user action that focuses a covered pane (a rail jump, a pane moved into the tab and focused) closes that tab's drawer without a slide.
+- **Source.** The drawer holds a `git.Source`, so the PR view can open a `git.PRSource` in the same drawer. Branch mode is `git.BranchSource{Worktree: root}`, with the base empty (the default branch) until a PR passes its base. Turn mode is `git.TurnSource{Worktree: root, Session: session, Turn: k}`, where `k` 0 is the latest.
+- **Frame.** A rounded box like a pane. The title is `  <project> · <branch> `: the icon in `Review`, bold; the text `Review` and bold while the drawer has the keyboard, else `Muted`. Project and branch are found as the rail finds them (`Repo.MainRoot` base name, and `git.Head`; a detached HEAD shows 7 characters).
+- **Tags** sit at the right end of the top border, rightmost first: the mode tag, ` 󰘬 branch ` or ` 󰋚 turn N/M `, in `Accent`, bold; then ` 󰣟 split ` (same style) while side by side is drawn. With `icons = false` they read ` branch `, ` turn 4/4 ` and ` split `.
+- **Mode and totals.** The top of the file tree holds two rows, then a blank row. The mode row is one of: `󰘬 branch vs <base>`; `󰋚 turn N of M, live` for the latest turn; `turn N of M` for a past turn; `turns N-K of M` when the diff covers later turns without a snapshot (`Result.Through > Result.Turn`); `turn N of M, no snapshot`. The icon is `Accent`, the first word bold `Fg`, the rest `Muted`. The totals row is `N files` (`Muted`), `+A` (`Success`), `-R` (`Error`). When the tree is hidden the mode shows only in the tag.
+- **Key hints.** On the last inner row while the inner height is at least 12, drawn as the rail draws them: keys `Key` and bold, labels `Muted`, three cells apart, pairs that do not fit dropped from the end. With the diff focused: `j/k line`, `]/[ hunk`, `}/{ file`, `tab tree`, `f full`, `u split`, `b/t mode`, `,/. turn`, `e edit`, `/ search`. With the tree focused: `j/k file`, `enter open`, `tab diff`.
+- **File tree.** On the left of the drawer, then a `│` rule in `Border`, then the diff column. Its width fits the widest row, at least 20 and at most 35 % of the inner width.
+  - Folders read `󰉖 name/` (`Muted`; `name/` with icons off), single-child chains are joined (`git/testdata/`), and folders come before files, both by name.
+  - A file row is `<status> <name>` with `+A -R` right-aligned. Status letters: `M` `Info`, `A` `Success`, `D` `Error`, `R` and `C` `Warning`; untracked counts as `A` and a mode change as `M`. A binary file shows `bin` (`Subtle`) in place of the counts. A file with hidden characters gets 󰀦 (`Warning`, bold) before its counts (`!` with icons off).
+  - The file under the cursor sits on `Surface` while the diff has the keyboard. While the tree has the keyboard, the selected file sits on `Selection` with a `▎` in `Accent` in its first cell.
+  - With an inner width under 80 the tree is hidden: `tab` shows it and gives it the keyboard, and leaving the tree hides it again.
+- **Diff column.** All files in one scroll. Each file starts with a header row on `Surface`: the status letter; the path in `Fg`, bold (a rename reads `old → new`); at the right the hidden-characters flag `󰀦 hidden characters` (just the icon when the column is under 90), `󰧮 full` (`Accent`) while the file is shown whole, and `+A -R`. When the top visible row belongs to a file whose header has scrolled off, that header is drawn on the first row instead, but not when the next row is itself a file header.
+  - A hunk header is git's `@@ -43,9 +43,9 @@` in `Info`, then the section in `Muted`, on a ground of `Info` mixed 10 % into the line ground.
+  - Lines are drawn by `diffview`. Tints: line 16 %, changed words 36 %, gutter 26 %; the cursor tint mixes `Accent` 24 %. Unified shows two number columns (old, new), the sign, then the code. Side by side uses `diffview.Pairs` with a `│` in `Border` between the sides; it falls back to unified when either side's code would be under 24 columns, and `u` then shows the notice `side by side needs a wider drawer`. The changed part of a paired line is `diffview.Changed`'s range on the stronger tint.
+  - The cursor is a row of the diff. While the diff, not the tree, has the keyboard it takes `diffview`'s cursor tint and a `▎` in `Accent` in its first cell.
+  - Hidden characters (`invisible.Rune`) and every C0 or C1 control except tab are drawn as `⟨U+XXXX⟩` (upper-case hex, at least four digits) in `Error`, bold, on the line's ground, so no byte of diff text reaches the terminal unescaped. Tabs expand to the next multiple of 4 columns. Long lines are cut with `…`; there is no horizontal scroll.
+  - Info rows, in `Subtle`, indented 4: `binary file, not shown`; `too large, press f for the full file`; `mode 100644 → 100755` (a mode change without content); `no changes against <base>`; `turn N changed nothing`; `turn N has no snapshot` and `, and . step through the turns; b shows the branch`; and the diff's error, cut to the width.
+- **Live.** After a watcher batch the result is recomputed with `Engine.Update` off the update loop. The cursor keeps its row, else its hunk (same file, the hunk overlapping the old hunk's new-side range), else its file, else the nearest index. Rows whose line was not in the previous result for that file flash `Match` mixed 35 % into their ground for 600 ms (one tick).
+- **Full file (`f`).** Per file: the new file's lines in order, added lines on the Add tint and sign. Removed lines are ghost lines where `linediff.LCS` puts them: `Muted` text on `Error` mixed 6 % into the ground, no syntax colours. Ghost blocks start shown; `enter` on a ghost line folds its block into one row, `󱙝 N removed lines` (`Muted`; no icon with icons off) and `   enter shows them` (`Subtle`), and `enter` on that row shows them again. `]` and `[` move between change blocks. A binary file shows the notice `a binary file has no full view`.
+- **Highlighting.** `diffview` tokenises each side of a hunk together (a whole file in the full view), only for rows within one screen of the visible ones and at most 2,000 lines per frame; rows not yet tokenised draw plain and a redraw is asked for. Spans are cached per result generation, file, hunk and side.
+- **Keys** while the drawer has the keyboard are in the keymap (see Review drawer under Keymap draft). Each is a named command, so it is in the palette. `/` opens a prompt in the drawer's bottom border like copy mode's: `╰─ /query▏` with the mark in `Info`, bold; `enter` jumps to the next row whose path or text holds the query, case-insensitively (an empty query repeats the last), matches are drawn in `Match`, bold, a miss shows the notice `not found: <query>`, and `esc` closes the prompt. `e` opens `$VISUAL`, else `$EDITOR`, else `vi`, with `+<line> <path>`, in a new shell pane placed as `leader v` places one beside the drawer's pane, in the worktree root: `$SHELL -l -i -c '<editor> +N <path>; exec "$SHELL" -l'`, with the editor, line and path single-quoted for the shell. The drawer closes so the editor shows. The line is the cursor line's new number (its old number on a removed line, the hunk's new start on a hunk header, 1 on a file header); a deleted file shows the notice `the file is deleted`.
+- **Mouse.** A click in the drawer gives it the keyboard; a click on a diff row moves the cursor there and a click on a tree file jumps to it. The wheel over the drawer scrolls 3 rows per notch, and the cursor follows when it would leave the view. A click on a visible pane gives the panes the keyboard and the drawer stays open. Nothing inside the drawer reaches a covered pane. The drawer ignores the mouse in the states that ignore it elsewhere (see Mouse and clipboard).
+- **Without icons.** `icons = false` drops the drawer's glyphs as the tags, the folder, the hidden-characters flag and the ghost row above say; `▎`, `│` and `⟨U+XXXX⟩` stay.
 
 #### Notices, prompts and pending keys
 
@@ -371,7 +409,7 @@ There is no status bar. Each of these has its own home:
 - **Layout mode:** the tray's layout module; the notice `layout: <mode>` also shows when it changes.
 - **Working directory:** no screen element shows a pane's full cwd; a tab's automatic name is the basename of its focused pane's cwd, and titles do not carry it.
 
-- **Toast.** A rounded box at the bottom right of the body, one cell from the right edge, its bottom border on the last row. Ground `Panel`, border `Warning`, one row ` 󰀪 <notice> ` with the icon in `Warning` and the text in `Fg` (no icon with `icons = false`). The box is as wide as the text needs and at most the body width minus 2, with the text cut by `…`; it is left out when the body is under 3 rows or the text has no room. It shows while a notice is set and goes with the first key press. It never takes keys or mouse events, which reach what is under it, and the which-key popup and the other overlays draw over it. The cursor (the pane's, copy mode's or a prompt's) is hidden while its cell is inside the box. Notices are the ones the commands raise (`layout: bsp`, `ctrl+space > x is not bound`, `not found: <query>` and the rest).
+- **Toast.** A rounded box at the bottom right of the body, one cell from the right edge, its bottom border on the last row. Ground `Panel`, border `Warning`, one row ` 󰀪 <notice> ` with the icon in `Warning` and the text in `Fg` (no icon with `icons = false`). The box is as wide as the text needs and at most the body width minus 2, with the text cut by `…`; it is left out when the body is under 3 rows or the text has no room. It shows while a notice is set and goes with the first key press. It never takes keys or mouse events, which reach what is under it, and the which-key popup and the other overlays draw over it. It draws over the review drawer. The cursor (the pane's, copy mode's or a prompt's) is hidden while its cell is inside the box. Notices are the ones the commands raise (`layout: bsp`, `ctrl+space > x is not bound`, `not found: <query>` and the rest).
 
 #### Overlays
 
@@ -391,6 +429,15 @@ Rounded boxes (`╭ ╮ ╰ ╯`, matching the pane frames; the which-key rule k
   - Result rows: the command's icon (`Muted`; `Accent` when selected), the title (`Fg`, matched runes in `Match` and bold), and the key hint right-aligned (`Key`, bold). The selected row is on `Selection` with a bold title.
   - A divider row joined to both sides (`├`, `┤`), then one hint row: `up/down move`, `enter run`, `esc close`, one cell in from the border, each key in `Key` bold and its label in `Muted`, the three pairs three cells apart. The theme picker has the same footer with `enter apply` in place of `enter run`.
   - ` N of M ` (`Muted`) sits in the bottom border at the right.
+- **Review drawer.** Not a centred box: it slides in over the right half of the body (see Review drawer).
+- **Worktree picker** (`leader n` in a git repository). Palette-style: centred, width min(64, width-4), top at a quarter of the height, border `BorderFocus`.
+  - Title: ` 󱙺 New agent ` in `Accent`, bold. Then an input row `❯ query`, a joined divider, the rows, a joined divider, a hint row (`up/down move`, `enter open`, `esc close`, drawn as the palette's) and ` N of M ` (`Muted`) in the bottom border.
+  - Opening: the focused pane's cwd is opened off the update loop. Outside a git repository, or in a bare one, the agent opens at once. Otherwise the picker opens on the `git.ListWorktrees` result.
+  - Rows: `  <branch>` (the icon in `Git`, `Accent` when selected; the branch `Fg`, bold when selected; a detached HEAD shows 7 characters). With icons off there is no icon. At the right: `● N agent(s)` in `Agent` (agent panes whose repo root is that worktree's path), `locked` in `Warning`, `prunable` in `Subtle`, and the path in `Muted`, relative to the main checkout when inside it, else with `~` for the home directory. The selected row is on `Selection`. Typing filters by `sahilm/fuzzy` over branch and path.
+  - The last row, always shown, is `󱓊 new worktree…` (`+ new worktree…` with icons off).
+  - `enter` on a worktree opens an agent pane in its path, placed as `leader n` places one. On a prunable worktree it shows the notice `that worktree is gone; git worktree prune removes it`.
+  - The new-worktree page, from the last row: title ` 󱓊 New worktree `. Fields: `branch` (focused first, `❯` in `Accent` and the terminal cursor on the focused field), `base` (prefilled with `git.DefaultBranch`) and `path`, computed from `[worktrees] root` and `git.WorktreeDir`; it reads `(from the branch name)` in `Subtle` while the branch is empty, and an invalid name shows its reason in `Error`. Then a blank row, the ignore warnings from `git.DetectTools` on the main checkout (`root = inside` only) as `󰀪 <Name>: <Hint>` in `Warning`, a divider, and the hints `tab next field`, `enter create`, `esc back`.
+  - `enter` on the page runs `git.CreateWorktree` off the update loop. On success an agent pane opens there with the notice `created <path>`. An error (`ErrExists`, `ErrBadBranch`, `ErrNoBase` or git's message) shows in `Error` in the page, which stays open.
 - **Confirm.** Centred, width min(46, width-2), seven rows tall, top at a third of the height, border `Error`.
   - Title: ` 󰀪 <action> ` in `Error`, bold.
   - Inside, two cells from the left border: a blank row, the question in `Fg` and bold, the detail in `Muted`, a blank row, then the answers.
@@ -410,6 +457,7 @@ Existing roles keep their colours. New roles:
 | `Clock` | Lavender | clock segment |
 | `Git` | Flamingo | the rail's branch icon |
 | `Load` | Teal | load icon and sparkline |
+| `Review` | Teal | the review drawer's border while it has the keyboard, and its title icon |
 | `Working`, `Blocked`, `Idle` | Peach, Red, Green | agent state badges, tab icons, and the rail's state glyphs, counts and group headers |
 
 The PR and CI slot (M3) uses the existing `Info` role for its icon.
@@ -420,17 +468,17 @@ All single cell (Nerd Fonts v3 names):
 
 | Glyph | Name | Code point | Use |
 | --- | --- | --- | --- |
-| 󱙺 | nf-md-robot_outline | U+F167A | agent panes, agent tabs, rail header, hook-less card, rail.toggle |
+| 󱙺 | nf-md-robot_outline | U+F167A | agent panes, agent tabs, rail header, hook-less card, rail.toggle, worktree picker title |
 |  | nf-oct-terminal | U+F489 | shell panes and tabs |
 | 󰌌 | nf-md-keyboard | U+F030C | which-key and sequence popup titles |
 | 󰑕 | nf-md-rename_box | U+F0455 | rename command |
 | 󰊓 | nf-md-fullscreen | U+F0293 | zoom tag, zoom command |
 | 󰁝 | nf-md-arrow_up | U+F005D | scrolled pane tag, preselect up |
 | 󰥔 | nf-md-clock_outline | U+F0954 | clock |
-|  | nf-dev-git_branch | U+E725 | the rail's card branch line |
+|  | nf-dev-git_branch | U+E725 | the rail's card branch line, worktree picker rows |
 | 󰻠 | nf-md-cpu_64_bit | U+F0EE0 | load |
 | 󰍛 | nf-md-memory | U+F035B | memory |
-| 󰀪 | nf-md-alert_outline | U+F002A | toast, confirm title |
+| 󰀪 | nf-md-alert_outline | U+F002A | toast, confirm title, the new-worktree page's ignore warnings |
 | 󰯌 | nf-md-view_split_vertical | U+F0BCC | Panes group, split right |
 | 󰯋 | nf-md-view_split_horizontal | U+F0BCB | split below |
 | 󰓩 | nf-md-tab | U+F04E9 | Tabs group, next, previous and jump |
@@ -459,14 +507,22 @@ All single cell (Nerd Fonts v3 names):
 |  | nf-ple-upper_left_triangle | U+E0BC | segment edge |
 |  | nf-ple-lower_right_triangle | U+E0BA | tray edge |
 |  | nf-ple-forwardslash_separator | U+E0BB | thin segment divider |
-| 󰀦, 󰗡 | nf-md-alert, nf-md-check_circle_outline | U+F0026, U+F05E1 | blocked and idle badges, card state glyphs and header counts |
+| 󰀦, 󰗡 | nf-md-alert, nf-md-check_circle_outline | U+F0026, U+F05E1 | blocked and idle badges, card state glyphs and header counts, the review drawer's hidden-characters flag |
+|  | nf-oct-file_diff | U+F4D2 | review drawer title, review.toggle |
+| 󰘬 | nf-md-source_branch | U+F062C | review drawer branch mode |
+| 󰋚 | nf-md-history | U+F02DA | review drawer turn mode |
+| 󰣟 | nf-md-format_columns | U+F08DF | review drawer split tag |
+| 󰧮 | nf-md-file_document_outline | U+F09EE | review drawer full-file flag |
+| 󱙝 | nf-md-ghost_outline | U+F165D | review drawer folded ghost lines |
+| 󰉖 | nf-md-folder_outline | U+F0256 | review drawer tree folders |
+| 󱓊 | nf-md-source_branch_plus | U+F14CA | new worktree row and page title |
 | , 󰔟 (M3) | nf-oct-git_pull_request, nf-md-timer_sand | U+F407, U+F051F | PR and CI slot |
 
 The rail also uses `●` (U+25CF, the unseen dot) and `▎` (U+258E, the blocked bar). They are plain Unicode, not Nerd Font glyphs, so `icons = false` keeps them.
 
 #### Command icons
 
-The palette shows each command's icon: `palette.open` , `theme.pick` and `theme.set.*` 󰏘, `agent.new` 󱙺, `pane.split.down` 󰯋, `pane.split.right` 󰯌, `pane.focus.*` 󰓾, `pane.resize.*` 󰘖, `pane.swap.*` 󰓡, `pane.zoom` 󰊓, `pane.close` and `tab.close` 󰅖, `copy.selection` and `copy.mode` 󰆏, `tab.new` 󰝜, `tab.rename` 󰑕, `tab.next`, `tab.prev` and `tab.jump.*` 󰓩, `pane.move.tab.*` and `pane.send.tab.*` 󰶭, `pane.break` 󰏌, `layout.cycle` and `layout.set.bsp` 󰕴, `layout.set.master-stack` 󰛽, `layout.set.scrolling` 󰕭, `pane.preselect.left` 󰁍, `pane.preselect.down` 󰁅, `pane.preselect.up` 󰁝, `pane.preselect.right` 󰁔, `pane.preselect.clear` 󰅖, `layout.rotate` 󰑧, `layout.equalize` 󰇼, `layout.promote` 󰆥, `app.quit` 󰈆, `rail.toggle` 󱙺.
+The palette shows each command's icon: `palette.open` , `theme.pick` and `theme.set.*` 󰏘, `agent.new` 󱙺, `pane.split.down` 󰯋, `pane.split.right` 󰯌, `pane.focus.*` 󰓾, `pane.resize.*` 󰘖, `pane.swap.*` 󰓡, `pane.zoom` 󰊓, `pane.close` and `tab.close` 󰅖, `copy.selection` and `copy.mode` 󰆏, `tab.new` 󰝜, `tab.rename` 󰑕, `tab.next`, `tab.prev` and `tab.jump.*` 󰓩, `pane.move.tab.*` and `pane.send.tab.*` 󰶭, `pane.break` 󰏌, `layout.cycle` and `layout.set.bsp` 󰕴, `layout.set.master-stack` 󰛽, `layout.set.scrolling` 󰕭, `pane.preselect.left` 󰁍, `pane.preselect.down` 󰁅, `pane.preselect.up` 󰁝, `pane.preselect.right` 󰁔, `pane.preselect.clear` 󰅖, `layout.rotate` 󰑧, `layout.equalize` 󰇼, `layout.promote` 󰆥, `app.quit` 󰈆, `rail.toggle` 󱙺, `review.toggle` .
 
 ### Claude Code integration via hooks
 
@@ -549,8 +605,9 @@ The commit is `git commit-tree --no-gpg-sign <tree> [-p HEAD]` with author and c
 - Trees are compared, not HEAD, so agent commits mid-turn don't break the diff.
 - `n` is one more than the highest number under `refs/muxreveal/<session>/`, 1 for the first. The refs live in the common dir, so every worktree of the repo sees them, and they keep snapshots safe from `git gc`.
 - The commit message is `muxreveal turn <n>`, a blank line, then trailers: `Session: <id>`, `Worktree: <absolute path>`, `Skipped-Count: <k>` and up to 20 `Skipped: <path>` lines when untracked files were skipped.
-- Budget: the snapshot runs under a 1.4 s context. One whose tree is not written within it is cancelled and writes no snapshot ref; once the tree exists, the commit and the ref are written under their own 2 s context, since a killed `update-ref` leaves its lock file behind, so a ref may land up to 2 s after the budget. A turn without a snapshot gets a marker from the gate under its turn number, a commit of the empty tree with the trailer `Snapshot: none` (own 5 s context), so later turns keep their numbers and the turn shows as having no snapshot. Snapshots of one session run one at a time.
-- `SnapshotOptions.Unchanged` (the watcher saw no change since the last snapshot) makes a snapshot reuse the previous turn's tree without staging anything. Every prompt takes a snapshot until the review pane wires watchers to panes.
+- Budget: the snapshot runs under a 1.4 s context. One whose tree is not written within it is cancelled and writes no snapshot ref; once the tree exists, the commit and the ref are written under their own 2 s context, since a killed `update-ref` leaves its lock file behind, so a ref may land up to 2 s after the budget. A turn without a snapshot gets a marker from the gate under its turn number, a commit of the empty tree with the trailer `Snapshot: none` (own 5 s context), so later turns keep their numbers and the turn shows as having no snapshot. Snapshots of one session run one at a time. The socket server stamps a turn start with a deadline, its arrival time plus this budget, as it reads the line; the gate runs the snapshot under that deadline (an event without one gets its own arrival time plus 1.4 s) and starts it before it forwards the event to the app, so a backed-up app channel cannot delay it.
+- `SnapshotOptions.Unchanged` (the watcher saw no change since the last snapshot) makes a snapshot reuse the previous turn's tree without staging anything. The turn gate sets it only when the worktree is watched and the watcher's change counter is what it was just before the session's last successful snapshot (see Watch set); a worktree with no watcher snapshots on every prompt.
+- Index refresh cache: `WorkingTree` keeps the refreshed temporary index of each worktree in `<cache dir>/index/<hex sha256(git dir)[:16]>-<size>-<mtime ns>-<inode>.idx`, named after the real index's stat when it was copied. The next call copies from that file when the real index still has that stat, else from the real index. After a successful staging it writes the temporary index back (temp file, rename) and removes the key's older files. The user's index is never written.
 - Pruning: removing a worktree deletes every `refs/muxreveal/<session>/<n>` whose commit names it, and a session's refs can be deleted on their own, each in one `git update-ref --stdin` transaction. Snapshots of old sessions in a repo's main checkout stay until then.
 - The temporary index lives in `<state dir>/run/` as `<pid>-index-<random>`; the run-dir sweep removes the files of dead instances.
 
@@ -645,14 +702,14 @@ func (e *Engine) Stats(ctx context.Context, src Source) (Stats, error) // Files,
 ```
 
 - Diffs compare two tree ids in two passes. The listing (`git diff --raw --numstat -z -M -C --histogram`) gives every file's status, modes, full blob ids, line counts and binary flag. The hunk pass is one `git diff --histogram -U3 -M -C --full-index` over the files that need hunks (a rename's or copy's old path goes in the pathspec too, so git detects it again), parsed with `gitdiff.Parse`. The working tree becomes a tree through the temporary-index machinery of a snapshot, without the ref, so agent commits mid-turn never break a diff.
-- Caps default to 400 files, 2 MiB of diff text and 5000 changed lines per file. The hunk pass reads up to the byte cap, then git is killed and the output is cut at the last whole file; hunks served from the cache do not count against it. Files past a cap keep their status and counts and are marked `Truncated`; `Result.Truncated` is set when any file is. The review pane shows "too large, press `f` for the full file".
+- Caps default to 400 files, 2 MiB of diff text and 5000 changed lines per file. The hunk pass reads up to the byte cap, then git is killed and the output is cut at the last whole file; hunks served from the cache do not count against it. Files past a cap keep their status and counts and are marked `Truncated`; `Result.Truncated` is set when any file is. The review drawer shows "too large, press `f` for the full file".
 - Hunks are cached by `(old blob id, new blob id)`, at most 2048 entries, least recently used out. Hunks are line hunks; intra-line spans are computed when rendering.
 - A branch source diffs the tree of `git merge-base <base> HEAD` against the working tree. An empty base means the default branch: the target of `refs/remotes/origin/HEAD`, else `main`, else `master`, else `ErrNoBase`; once a PR exists, its base is passed. Files that are untracked in the working tree are marked `Untracked`, whatever status git guessed (an untracked file can show as a rename or copy).
 - A PR source diffs the tree of the merge base of `refs/muxreveal/pr/<n>/base` and `.../head` against the head's tree, and its `Result.Head` is the head commit. Refs that are not fetched are `ErrNotFetched`.
 - A turn source's latest turn is live: its snapshot against the working tree. A past turn `k` is its snapshot against the next turn that has one, and `Result.Through` names the last turn the diff covers (`k`, or more when later turns have no snapshot). A turn without a snapshot is `ErrNoSnapshot`; a session with no turns is `ErrNoTurns`.
 - `Head(ctx, Repo) (HeadInfo, error)` gives `HeadInfo{Branch, Detached, OID}`: `Branch` without `refs/heads/`, `OID` empty on an unborn branch. `Stats{Files, Added, Removed}` counts the changed files and their added and removed lines; it runs the listing pass only, with no hunks and no working-tree snapshot cache: untracked files count as added, and binary files count as files without lines.
 - Diffs are computed off the UI goroutine.
-- Live mode: one watcher per worktree (see below). `Engine.Update(ctx, prev, src, batch)` rebuilds the working tree and re-lists only the touched paths (a vanished path stands for everything under it), keeping the other files of `prev`; the result equals a fresh `Diff`. It runs a full `Diff` instead when the source is not live or a newer turn exists, a rename or copy is involved (in `prev`, among the touched files, or possible between them and the others: a touched new file beside other retained changes, or a touched change beside a retained new file, always falls back, because git may pair them), more than 200 paths are touched, a `.gitignore` is touched, the batch reports git metadata changes or an overflow, any file of `prev` is `Truncated`, or the result is near the file or byte cap.
+- Live mode: one watcher per worktree, shared by every consumer through the watch set (see below). `Engine.Update(ctx, prev, src, batch)` rebuilds the working tree and re-lists only the touched paths (a vanished path stands for everything under it), keeping the other files of `prev`; the result equals a fresh `Diff`. It runs a full `Diff` instead when the source is not live or a newer turn exists, a rename or copy is involved (in `prev`, among the touched files, or possible between them and the others: a touched new file beside other retained changes, or a touched change beside a retained new file, always falls back, because git may pair them), more than 200 paths are touched, a `.gitignore` is touched, the batch reports git metadata changes or an overflow, any file of `prev` is `Truncated`, or the result is near the file or byte cap.
 - Full-file view shows the new file with added lines marked and deleted lines as collapsible ghost lines.
 - Large files are virtualized; highlighting is capped per frame.
 - Reviewed hunks are keyed by a hash of the hunk content, so they stay read across rebases.
@@ -665,6 +722,14 @@ func (e *Engine) Stats(ctx context.Context, src Source) (Stats, error) // Files,
 - A batch goes out 150 ms after the last event, or 1 s after the first unsent one while events keep coming. An `fsnotify` overflow sends `Batch{Overflow: true}`.
 - A change to a `.gitignore` re-walks to add directories that are no longer ignored; directories that became ignored stay watched until the watcher restarts.
 - Running out of watches is an error naming `fs.inotify.max_user_watches` on Linux. `Close` stops every goroutine and closes the batch channel within 1 s.
+
+**Watch set**
+
+- `git.WatchSet` owns one watcher per worktree root, shared and reference-counted. The UI acquires one for every agent pane whose cwd is in a worktree and for each open drawer's pane, and releases it when the pane closes, becomes a shell (unless a drawer reviews it), moves to another repo, or the drawer closes. The repo is resolved off the update loop with `git.Open` and compared by `Repo.Root`, never by the cwd string.
+- Batches: the rail re-probes head and stats for every agent in that root on `Batch.Git` or `Overflow`, and stats on paths, within its existing limits. The active tab's drawer recomputes when it reviews that root; a hidden tab's drawer is marked stale and recomputes when its tab shows.
+- Every watcher counts the events it accepts (`Watcher.Seq`, bumped before the debounce and seeded so a restarted watcher never repeats a value); the turn gate reads it for the snapshot skip.
+- A watch that cannot start (no repo, too many watches or open files) shows the notice `watching <project> failed: <reason>` once per root. The drawer then recomputes on opening, on its pane's hook events and on `b`/`t`, and snapshots never skip.
+- On macOS, git metadata counts only Create, Write, Remove and Rename events on `HEAD` and `index` (git dir), `packed-refs` (common dir) and ref files under `refs/`, outside `refs/muxreveal/` (the directory itself included) and not `*.lock`; events on directories and Chmod-only events never set `Git`. A Write event on a watched worktree directory itself (kqueue's directory note) is dropped, since its entries' own events report the change.
 
 ### GitHub and CI
 
@@ -701,6 +766,8 @@ The config file is `$XDG_CONFIG_HOME/muxreveal/config.toml` when `XDG_CONFIG_HOM
 - `theme` is one of `catppuccin-latte`, `catppuccin-frappe`, `catppuccin-macchiato` or `catppuccin-mocha` (default). It sets the startup theme; a live switch lasts for the session. An unknown name is an error.
 - `icons` is `true` by default; `false` drops every Nerd Font glyph (see Visual design).
 - `[layout]` has `default_mode`, `auto_scheme`, `master_ratio`, `master_position`, `master_count`, `master_grid` and `column_width` (see the example for the values; the meanings are tuios's `tiling_scheme`, `master_*` and `scroll_column_width`). A value out of range or an unknown name is an error that names the key. `auto_scheme` applies to the auto splits of new BSP tabs; a tab does not keep its own scheme.
+- `[diff]` has `layout` (`unified` or `split`, the layout a drawer starts in), `mode` (`turn` or `branch`: what a new review drawer opens in) and the engine's limits `max_files`, `max_bytes` and `max_lines` (positive integers, defaulting to 400, 2097152 and 5000). An unknown name or a non-positive limit is an error that names the key.
+- `[worktrees]` has `root`, `inside` (default) or `sibling`: where a new worktree goes (see Worktrees). An unknown name is an error that names the key.
 - `[mouse]` has `focus_follows_mouse` and `copy_on_select`, both `false` by default (see Mouse and clipboard).
 - `[clipboard]` has `osc52` and `native`, both `true` by default. `osc52 = false` stops copies from being sent to the outer terminal as OSC 52; `native = false` stops the native tool writes on a local session. Programs' own OSC 52 writes follow the same switches. Unknown keys in either section are errors.
 - `--fresh` starts with one shell for this run, ignoring the saved layout; the first change replaces the saved state (see Persisted state).
@@ -727,6 +794,16 @@ copy_on_select = false
 [clipboard]
 osc52 = true
 native = true
+
+[diff]
+layout = "unified"   # unified | split
+mode = "turn"        # turn | branch: what a new drawer opens in
+max_files = 400      # the engine's limits; positive integers
+max_bytes = 2097152
+max_lines = 5000
+
+[worktrees]
+root = "inside"      # inside | sibling: where a new worktree goes
 ```
 
 ### Persisted state
@@ -743,6 +820,7 @@ State lives in the platform state dir (`$XDG_STATE_HOME/muxreveal` on Linux, `~/
     "name": "api",
     "focused": "p1",
     "zoomed": true,
+    "review": { "pane": "p2", "mode": "turn" },
     "mode": "bsp",
     "pane_ids": ["p1", "p2"],
     "layout": { "split": "vertical", "ratio": 0.55, "children": [ { "pane": "p1" }, { "pane": "p2" } ] }
@@ -779,11 +857,12 @@ State lives in the platform state dir (`$XDG_STATE_HOME/muxreveal` on Linux, `~/
 }
 ```
 
-- A tab has `id`, `name` (omitted when the name is automatic), `focused`, `zoomed` (omitted when false), `mode` (`bsp`, `master-stack` or `scrolling`) and `pane_ids` (the tab's panes in layout order: BSP leaf order, master order, or columns left to right and top to bottom), then by mode: a `bsp` tab has `layout` (`null` for an empty tab), a `master-stack` tab has `master_ratio` (0.1 to 0.9), and a `scrolling` tab has `columns` (each `{ "panes": [ids], "width": 0.1 to 1.0 }`) and `first`, its first visible column (omitted when 0). A BSP layout node is either `{ "pane": id }` or a split: `split` is `"vertical"` (children side by side) or `"horizontal"` (children stacked), `ratio` is the first child's share, and `children` lists the first child (left or top) before the second. A pane has `kind` (`shell` or `agent`) and `cwd` (omitted when empty), and for agents `harness`, `session_id` and `transcript` (each omitted when empty).
+- A tab has `id`, `name` (omitted when the name is automatic), `focused`, `zoomed` (omitted when false), `review` (the open review drawer's `pane` and `mode`, `turn` or `branch`; omitted when closed), `mode` (`bsp`, `master-stack` or `scrolling`) and `pane_ids` (the tab's panes in layout order: BSP leaf order, master order, or columns left to right and top to bottom), then by mode: a `bsp` tab has `layout` (`null` for an empty tab), a `master-stack` tab has `master_ratio` (0.1 to 0.9), and a `scrolling` tab has `columns` (each `{ "panes": [ids], "width": 0.1 to 1.0 }`) and `first`, its first visible column (omitted when 0). A BSP layout node is either `{ "pane": id }` or a split: `split` is `"vertical"` (children side by side) or `"horizontal"` (children stacked), `ratio` is the first child's share, and `children` lists the first child (left or top) before the second. A pane has `kind` (`shell` or `agent`) and `cwd` (omitted when empty), and for agents `harness`, `session_id` and `transcript` (each omitted when empty).
+- `review` is additive, so the format stays version 2; a file without it has no drawer open.
 - `rail` is `true` while the agents rail is open and omitted when it is closed; a file without it opens closed, and the format stays version 2.
 - An agent pane without a harness is saved as a shell pane (its cwd kept), so the file always passes validation.
 - The layout's JSON form is read and written by one pair of functions in `internal/store/layout.go`; the JSON types are unexported and `core` has no JSON tags, so a layout change edits that file and the version only.
-- Saved: the version, the active tab, whether the agents rail is open, per tab its id, name, focused pane, zoom, mode, pane ids and the mode's layout (ratios and widths rounded to 0.01), and per pane its kind and cwd and, for agents, the harness, session id and transcript path. Not saved: the theme (the config decides), agent states, scrollback, and what a shell was running.
+- Saved: the version, the active tab, whether the agents rail is open, per tab its id, name, focused pane, zoom, review drawer, mode, pane ids and the mode's layout (ratios and widths rounded to 0.01), and per pane its kind and cwd and, for agents, the harness, session id and transcript path. Not saved: the theme (the config decides), the drawer's keyboard, cursor, scroll, folds, full-file set, split layout and the turn being stepped through (a restore shows the latest turn), agent states, scrollback, and what a shell was running.
 
 **Writing**
 
@@ -806,7 +885,7 @@ State lives in the platform state dir (`$XDG_STATE_HOME/muxreveal` on Linux, `~/
 
 - Decoding checks, and a failure makes the file invalid: at least one tab; `active` in range; tab ids `t<N>` and pane ids `p<N>` (a positive number without leading zeros) unique; every id in a tab's `pane_ids` names a pane in `panes`, no pane is in two tabs and every pane is in one; kind `shell` or `agent`, and an agent's harness `claude-code`; a tab with no panes only when it is the only tab; at most `core.MaxPanes` (64) panes, the same limit the app enforces; a file of at most 16 MiB; valid JSON (a syntax error, such as a bare `NaN`, is an invalid file).
 - The layout codec checks one tab's layout, and a failure there means the default layout with the per-tab notice, not an invalid file: an unknown or missing `mode` on a tab with panes; a `bsp` tab without a valid `layout`, where a node is a leaf (`pane`) or a split with `vertical` or `horizontal`, a finite `ratio` and exactly two children, and the leaves are exactly the tab's `pane_ids`, each once; `columns` whose panes are not exactly `pane_ids` in order, or an empty column; a width or ratio that is not a finite number (a string, for one). A finite ratio or width out of range is clamped without the notice and rounded to 0.01 (split and master ratios to [0.1, 0.9], widths to [0.1, 1.0]), and a `first` out of range becomes 0. A `master-stack` tab without `master_ratio` takes the configured ratio, and fields that belong to another mode are ignored.
-- These fall back instead of failing: a focused pane that is not a leaf of its tab's final layout becomes that tab's first leaf; a session id that is not a UUID is dropped, and so is that pane's transcript; a cwd that is not absolute becomes empty (the launch dir); a name is cut to 32 runes with control characters removed.
+- These fall back instead of failing: a tab's `review` is dropped without a notice when its pane is not in that tab or its mode is not `turn` or `branch`; a focused pane that is not a leaf of its tab's final layout becomes that tab's first leaf; a session id that is not a UUID is dropped, and so is that pane's transcript; a cwd that is not absolute becomes empty (the launch dir); a name is cut to 32 runes with control characters removed.
 - `NextID` and `NextTabID` become the highest numbers in the file, so ids are not reused. Nothing from the file reaches a shell unquoted.
 
 **Resume** (PR-2, PR-4)
@@ -822,7 +901,7 @@ State lives in the platform state dir (`$XDG_STATE_HOME/muxreveal` on Linux, `~/
 
 ## Keymap draft
 
-Terminal panes pass every key through to the agent, so global actions sit behind a leader key, `ctrl+space` by default, which few CLIs use. Review, PR and CI panes aren't terminals, so they take single keys directly. Pressing the leader and waiting 300 ms shows a which-key popup that groups the bindings under Panes, Layout, Tabs and App. Everything is remappable in `config.toml`.
+Terminal panes pass every key through to the agent, so global actions sit behind a leader key, `ctrl+space` by default, which few CLIs use. The review drawer and the PR and CI views aren't terminals, so they take single keys directly. Pressing the leader and waiting 300 ms shows a which-key popup that groups the bindings under Panes, Layout, Tabs and App. Everything is remappable in `config.toml`.
 
 ### Global (after leader)
 
@@ -830,10 +909,10 @@ Terminal panes pass every key through to the agent, so global actions sit behind
 | --- | --- |
 | `ctrl+space` | Send ctrl+space to the pane |
 | `q` | Quit |
-| `n` | New agent pane in the focused pane's cwd (worktree picker from M2) |
+| `n` | New agent pane in the focused pane's cwd; in a git repository the worktree picker opens first (see Overlays) |
 | `a` | Agents rail: open it, give it the keyboard, or close it (see Agents rail) |
 | `s` / `v` | Open a shell below / to the right of the focused pane (same cwd; `split_default` in config can flip this) |
-| `h` `j` `k` `l` | Focus pane left, down, up, right |
+| `h` `j` `k` `l` | Focus pane left, down, up, right (panes covered by the review drawer are skipped) |
 | `H` `J` `K` `L` | Resize pane |
 | `ctrl+h` `ctrl+j` `ctrl+k` `ctrl+l` | Swap pane left, down, up, right |
 | `z` | Zoom pane |
@@ -844,7 +923,7 @@ Terminal panes pass every key through to the agent, so global actions sit behind
 | `enter` | Promote the focused pane to master (master-stack) |
 | `x` | Close pane (confirms for agents) |
 | `y` | Copy the selection |
-| `d` | Toggle review pane for the focused agent |
+| `d` | Review drawer for the focused pane: open it, give it the keyboard, or close it (see Review drawer) |
 | `g` | PR list |
 | `p` | Push branch |
 | `o` | Open PR (compose overlay) |
@@ -874,22 +953,28 @@ A key written `> 1` is a two-key sequence: after the leader, a key that starts a
 
 The leader works as everywhere; every other key is dropped.
 
-### Review pane (agent diff and PR diff)
+### Review drawer (while it has the keyboard)
 
 | Key | Action |
 | --- | --- |
-| `j` / `k` | Next / previous line |
-| `]` / `[` | Next / previous hunk |
+| `j` / `k`, `down` / `up` | Next / previous line |
+| `]` / `[` | Next / previous hunk (change block in the full-file view) |
 | `}` / `{` | Next / previous file |
-| `tab` | Focus file tree |
-| `f` | Toggle diff and full file |
+| `ctrl+d` / `ctrl+u` | Half a page down / up |
+| `g` / `G` | Top / bottom |
+| `tab` | Focus file tree (in the tree: back to the diff) |
+| `f` | Toggle diff and full file for the file |
 | `u` | Toggle unified and side-by-side |
-| `b` / `t` | Branch mode / turn mode |
-| `,` / `.` | Previous / next turn |
-| `space` | Mark hunk reviewed |
-| `R` | Show reviewed hunks too |
-| `e` | Open file at line in `$EDITOR` |
-| `/` | Search in diff |
+| `enter` | Fold or show a block of ghost lines; in the tree, jump to the selected file |
+| `b` / `t` | Branch mode / turn mode (`t` returns to the latest turn) |
+| `,` / `.` | Previous / next turn (in branch mode, enter turn mode on the latest turn) |
+| `/` | Search paths and diff text (`enter` jumps, an empty query repeats, `esc` closes) |
+| `e` | Open the file at the cursor line in `$VISUAL`, else `$EDITOR`, else `vi`, in a new shell pane |
+| `esc` | Close the search; in the tree, jump to the selected file; else return the keyboard to the panes |
+| `space` (M4) | Mark hunk reviewed |
+| `R` (M4) | Show reviewed hunks too |
+
+In the tree, `j` / `k` select files and `enter`, `tab` or `esc` jump the diff to the selected file and give the diff the keyboard. The leader works as everywhere; every other key is dropped, and a paste goes to the search while it is open. Each key is a named command (`review.line.next`, `review.hunk.next`, `review.file.next`, `review.page.down`, `review.top`, `review.tree`, `review.full`, `review.split`, `review.fold`, `review.mode.branch`, `review.mode.turn`, `review.turn.prev`, `review.search` and the rest) in the palette.
 
 ### PR view
 
@@ -913,8 +998,8 @@ v1 ships in six milestones, preceded by a VT spike. Each ends on a gate you can 
     - Gate: the app launches and switches themes live.
 2. **M1 Terminal core.** PTYs, `tuios.dev/vt` adapter, compositor, splits, tabs, tiling layouts, tab moves, shell panes, copy mode, mouse and clipboard, hook socket, state badges, persistence and resume. Covers AG-1 to AG-5, AG-7, AG-8 (interface), AG-9 to AG-13, PR-1 to PR-4, UX-4 to UX-6.
     - Gate: six busy Claude panes stay smooth at 60 fps, and a reboot brings back the same layout with every session resumed.
-3. **M2 Worktrees and agent diff.** Worktree discovery and creation, branch and turn modes, live updates, file tree, full-file toggle. Covers WT-1, WT-2, DF-1 to DF-6.
-    - Gate: a saved file shows in the diff within 300 ms, and turn mode isolates the last turn's changes.
+3. **M2 Worktrees and agent diff.** Worktree discovery and creation, branch and turn modes, live updates, and the review drawer with its file tree and full-file toggle, the worktree picker, and per-agent watchers. Covers WT-1, WT-2, DF-1 to DF-6.
+    - Gate: a saved file shows in the open drawer within 300 ms, and turn mode isolates the last turn's changes.
 4. **M3 GitHub loop.** Agent PRs, PR diff, CI status, push, PR compose, approve and merge on github.com and GHE. Covers GH-1 (agents), GH-2, GH-4 (status), GH-5 to GH-7, GA-1 to GA-3, GA-5.
     - Gate: agent change → push → PR → green CI → approve → merge, without opening a browser.
 5. **M4 Markdown and polish.** Rendered markdown with images, PR conversation, compose preview, reviewed hunks, notifications, other PR tabs, CI log tail, remapping, worktree cleanup. Covers MD-1, MD-2, GH-1 (others), GH-3, GH-4 (logs), GA-4, DF-7, AG-6, UX-3, WT-3.
@@ -961,7 +1046,7 @@ The biggest risk is terminal-layer correctness and performance, so the spike and
 | Leader key | `ctrl+space` |
 | Worktree root | `<repo>/.worktrees/<branch>`, managed through `.git/info/exclude`; sibling layout is a config option |
 | Branch-mode base | The PR's base once a PR exists, else the repo default branch |
-| Review pane | A normal layout pane, persisted and splittable |
+| Review drawer (2026-10-27) | An overlay that slides over the right half of the body, one per tab in `core.Tab.Review`, saved with the tab; not a layout pane kind, so the panes keep their rects and `core.Arrange` is untouched |
 | Hand-typed `claude` | Becomes an agent by its foreground process; hooks for it (a shim or shell integration) come later |
 | New panes | `leader n` opens an agent; splits open a shell in the same cwd |
 | Pane kind | The terminal's foreground process, on the cwd probe |
