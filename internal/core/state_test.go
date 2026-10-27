@@ -27,3 +27,38 @@ func TestStoreSetTheme(t *testing.T) {
 		})
 	}
 }
+
+func TestStoreRail(t *testing.T) {
+	tests := []struct {
+		name   string
+		start  bool
+		action Action
+		want   bool
+	}{
+		{"toggle opens", false, ToggleRail{}, true},
+		{"toggle closes", true, ToggleRail{}, false},
+		{"set opens", false, SetRail{Open: true}, true},
+		{"set open again", true, SetRail{Open: true}, true},
+		{"set closes", true, SetRail{}, false},
+		{"set closed again", false, SetRail{}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := NewStore(State{Rail: tt.start})
+
+			if err := s.Dispatch(tt.action); err != nil {
+				t.Fatalf("Dispatch() error = %v", err)
+			}
+
+			if got := s.State().Rail; got != tt.want {
+				t.Errorf("State().Rail = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestStateCloneKeepsRail(t *testing.T) {
+	if !(State{Rail: true}).clone().Rail {
+		t.Error("clone dropped Rail")
+	}
+}

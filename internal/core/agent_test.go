@@ -33,7 +33,7 @@ func TestAgentStateString(t *testing.T) {
 }
 
 func TestSetPaneKind(t *testing.T) {
-	full := Pane{Kind: KindAgent, Cwd: "/w", Harness: "claude-code", Session: "s1", Transcript: "/t", State: AgentWorking}
+	full := Pane{Kind: KindAgent, Cwd: "/w", Harness: "claude-code", Session: "s1", Transcript: "/t", State: AgentWorking, Action: "Edit a.go"}
 
 	tests := []struct {
 		name string
@@ -76,6 +76,8 @@ func TestAgentActionErrors(t *testing.T) {
 		{"state out of range", SetAgentState{ID: "p2", State: AgentState(99)}},
 		{"state negative", SetAgentState{ID: "p2", State: AgentState(-1)}},
 		{"state of shell pane", SetAgentState{ID: "p1", State: AgentIdle}},
+		{"action of unknown pane", SetAgentAction{ID: "p9", Action: "x"}},
+		{"action of shell pane", SetAgentAction{ID: "p1", Action: "x"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -91,6 +93,32 @@ func TestAgentActionErrors(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestSetAgentAction(t *testing.T) {
+	s := agentState(map[PaneID]Pane{"p1": {Kind: KindAgent, Harness: "claude-code"}}, leaf("p1"), "p1")
+
+	s = dispatch(t, s, SetAgentAction{ID: "p1", Action: "Edit a.go"})
+	if got := s.Panes["p1"].Action; got != "Edit a.go" {
+		t.Fatalf("action = %q", got)
+	}
+
+	s = dispatch(t, s, SetAgentState{ID: "p1", State: AgentWorking})
+	if got := s.Panes["p1"].Action; got != "Edit a.go" {
+		t.Errorf("a state change cleared the action: %q", got)
+	}
+
+	s = dispatch(t, s, SetAgentAction{ID: "p1"})
+	if got := s.Panes["p1"].Action; got != "" {
+		t.Errorf("empty action did not clear: %q", got)
+	}
+
+	s = dispatch(t, s, SetAgentAction{ID: "p1", Action: "Bash ls"})
+	s = dispatch(t, s, SetPaneKind{ID: "p1", Kind: KindShell})
+
+	if got := s.Panes["p1"].Action; got != "" {
+		t.Errorf("a shell pane kept the action: %q", got)
 	}
 }
 

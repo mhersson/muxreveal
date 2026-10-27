@@ -128,7 +128,9 @@ type benchConfig struct {
 	// Agents makes every pane a working agent whose badge spinner advances every spinEvery.
 	Agents bool
 	// Mode is the bench tab's layout mode; "" is bsp.
-	Mode  core.LayoutMode
+	Mode core.LayoutMode
+	// Rail opens the agents rail before the run.
+	Rail  bool
 	Trace func(at time.Duration, drew bool) // tests only; nil in production
 }
 
@@ -148,6 +150,18 @@ func parseBenchMode(s string) (core.LayoutMode, error) {
 	}
 
 	return "", fmt.Errorf("MUXREVEAL_BENCH_MODE %q is not one of bsp, master-stack, scrolling", s)
+}
+
+// parseBenchRail maps MUXREVEAL_BENCH_RAIL to whether the rail is open; "" is closed.
+func parseBenchRail(s string) (bool, error) {
+	switch s {
+	case "", "0":
+		return false, nil
+	case "1":
+		return true, nil
+	}
+
+	return false, fmt.Errorf("MUXREVEAL_BENCH_RAIL %q is not 0 or 1", s)
 }
 
 type benchResult struct {
@@ -332,6 +346,12 @@ func newBenchApp(cfg benchConfig, clk clock) (*App, []core.PaneID, error) {
 				}
 			}
 		}
+	}
+
+	if cfg.Rail {
+		// The probe and relayout cmds are not run: the bench has no wall time.
+		_ = app.railToggle()
+		app.rail.focused = false
 	}
 
 	return app, ids, nil

@@ -250,3 +250,62 @@ func TestBenchAppLaysOutSixPanesInEveryMode(t *testing.T) {
 		})
 	}
 }
+
+func TestParseBenchRail(t *testing.T) {
+	tests := []struct {
+		in      string
+		want    bool
+		wantErr string
+	}{
+		{in: "", want: false},
+		{in: "0", want: false},
+		{in: "1", want: true},
+		{in: "true", wantErr: "0 or 1"},
+		{in: "yes", wantErr: "0 or 1"},
+	}
+
+	for _, tt := range tests {
+		got, err := parseBenchRail(tt.in)
+		if tt.wantErr != "" {
+			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+				t.Errorf("parseBenchRail(%q) error = %v, want one naming %q", tt.in, err, tt.wantErr)
+			}
+
+			continue
+		}
+
+		if err != nil || got != tt.want {
+			t.Errorf("parseBenchRail(%q) = %v, %v; want %v", tt.in, got, err, tt.want)
+		}
+	}
+}
+
+func TestBenchAppOpensTheRail(t *testing.T) {
+	size := func(rail bool) (open, visible bool, cols int) {
+		app, ids, err := newBenchApp(benchConfig{Panes: 6, Width: 240, Height: 64, Agents: true, Rail: rail}, &fakeClock{t: time.Unix(1_000_000, 0)})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		defer func() { _ = app.Close(context.Background()) }()
+
+		cols, _ = app.panes[ids[0]].size()
+
+		return app.store.State().Rail, app.railVisible(), cols
+	}
+
+	openOff, visibleOff, colsOff := size(false)
+	openOn, visibleOn, colsOn := size(true)
+
+	if openOff || visibleOff {
+		t.Errorf("rail without the knob: open %v, visible %v; want closed", openOff, visibleOff)
+	}
+
+	if !openOn || !visibleOn {
+		t.Errorf("rail with the knob: open %v, visible %v; want open and drawn", openOn, visibleOn)
+	}
+
+	if colsOn >= colsOff {
+		t.Errorf("first pane is %d columns with the rail and %d without; want it narrower", colsOn, colsOff)
+	}
+}

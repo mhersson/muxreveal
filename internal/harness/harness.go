@@ -30,6 +30,11 @@ type Event struct {
 	End        bool            `json:"end,omitempty"`   // the session ended
 	Cwd        string          `json:"cwd,omitempty"`   // the agent's working directory
 
+	// Action is the agent's current action, short and printable. ActionSet true
+	// replaces the pane's action with it (empty clears it); false leaves it.
+	Action    string `json:"action,omitempty"`
+	ActionSet bool   `json:"action_set,omitempty"`
+
 	// TurnStart marks a prompt submission: the agent starts working once the
 	// hook is answered, so the server holds the answer until Done.
 	TurnStart bool `json:"turn_start,omitempty"`

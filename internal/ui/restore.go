@@ -20,7 +20,7 @@ func (a *App) startRestored() tea.Cmd {
 	defer func() { a.restoring = false }()
 
 	st := a.store.State()
-	body := layoutBody(bodyRect(a.width, a.height))
+	body := a.bodyArea()
 
 	var notices []string
 	if a.notice != "" {

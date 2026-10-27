@@ -90,6 +90,13 @@ func (a *App) hit(x, y int) hitResult {
 	return hitResult{}
 }
 
+// inRail reports whether the cell lies inside the rail's box.
+func (a *App) inRail(x, y int) bool {
+	r := a.railRect()
+
+	return r.W > 0 && x >= r.X && x < r.X+r.W && y >= r.Y && y < r.Y+r.H
+}
+
 // hitTab maps a cell of row 0 to the tab segment drawn there; the edge cell
 // after each segment is nothing.
 func (a *App) hitTab(x int) hitResult {
@@ -158,8 +165,22 @@ func (a *App) handleClick(msg tea.MouseClickMsg) tea.Cmd {
 	a.releaseForwarded()
 	a.mouse.press = nil
 
+	if a.inRail(m.X, m.Y) {
+		if m.Button != tea.MouseLeft {
+			a.mouse.click = clickState{}
+
+			return nil
+		}
+
+		return a.railClick(m.X, m.Y)
+	}
+
 	if h.area != hitContent || m.Button != tea.MouseLeft {
 		a.mouse.click = clickState{}
+	}
+
+	if a.rail.focused && (h.area == hitContent || h.area == hitHeader) {
+		a.railRelease()
 	}
 
 	switch {
@@ -388,6 +409,17 @@ func (a *App) handleWheel(msg tea.MouseWheelMsg) {
 	}
 
 	m := msg.Mouse()
+
+	if a.inRail(m.X, m.Y) {
+		switch m.Button {
+		case tea.MouseWheelDown:
+			a.onRailWheel(1)
+		case tea.MouseWheelUp:
+			a.onRailWheel(-1)
+		}
+
+		return
+	}
 
 	h := a.hit(m.X, m.Y)
 

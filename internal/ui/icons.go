@@ -14,7 +14,6 @@ const (
 	iconRename  = "\U000F0455" // nf-md-rename_box
 	iconClock   = "\U000F0954" // nf-md-clock_outline
 	iconGit     = "\uE725"     // nf-dev-git_branch
-	iconDirty   = "\uF444"     // nf-oct-dot_fill
 	iconLoad    = "\U000F0EE0" // nf-md-cpu_64_bit
 	iconMem     = "\U000F035B" // nf-md-memory
 
@@ -55,3 +54,12 @@ const (
 
 // spinFrames are the working badge's braille spinner frames, one cell wide each.
 const spinFrames = "\u280B\u2819\u2839\u2838\u283C\u2834\u2826\u2827\u2807\u280F"
+
+// spinFrame is the working badge's spinner glyph for frame n.
+func spinFrame(n int) string {
+	const w = 3 // every frame is one three-byte rune
+
+	i := n % (len(spinFrames) / w)
+
+	return spinFrames[i*w : (i+1)*w]
+}

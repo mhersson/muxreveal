@@ -255,77 +255,7 @@ func TestInactiveTabIconTakesMostUrgentState(t *testing.T) {
 	assertColours(t, vt, 13, 0, iconAgent, ui.Working, ui.Surface, false)
 }
 
-func TestTrayAgentIcons(t *testing.T) {
-	ui := mochaUI(t)
-
-	a := newTestApp(t)
-	sized(t, a, 100, 30)
-	openIn(t, a,
-		core.OpenPane{Kind: core.KindAgent, Cwd: "/w/a", Split: core.SplitVertical},
-		core.OpenPane{Kind: core.KindAgent, Cwd: "/w/b", Split: core.SplitVertical},
-		core.NewTab{Kind: core.KindAgent, Cwd: "/w/c"},
-		core.NewTab{Kind: core.KindAgent, Cwd: "/w/d"},
-		core.NewTab{Kind: core.KindAgent, Cwd: "/w/e"},
-	)
-
-	ids := a.store.State().AgentPanes()
-	setAgentStates(t, a, map[core.PaneID]core.AgentState{
-		ids[0]: core.AgentWorking, ids[1]: core.AgentBlocked, ids[2]: core.AgentIdle, ids[3]: core.AgentBlocked,
-	})
-
-	m := trayModuleByID(a, modAgents)
-	if got, want := ansi.Strip(m.render()), " "+strings.Repeat(iconAgent, 5)+" "+iconBlocked+"2 "; got != want {
-		t.Errorf("agents module = %q, want %q", got, want)
-	}
-
-	if m.width != ansi.StringWidth(ansi.Strip(m.render())) {
-		t.Errorf("module width = %d, rendered %d", m.width, ansi.StringWidth(ansi.Strip(m.render())))
-	}
-
-	vt := lineVT(t, m.render(), m.width)
-	for i, fg := range []theme.Hex{ui.Working, ui.Blocked, ui.Idle, ui.Blocked, ui.Agent} {
-		assertColours(t, vt, 1+i, 0, iconAgent, fg, ui.Surface, false)
-	}
-
-	assertColours(t, vt, 7, 0, iconBlocked, ui.Blocked, ui.Surface, true)
-	assertColours(t, vt, 8, 0, "2", ui.Blocked, ui.Surface, true)
-}
-
-func TestTrayAgentCountWithoutIcons(t *testing.T) {
-	a := newTestApp(t)
-	a.icons = false
-	sized(t, a, 100, 30)
-	openIn(t, a,
-		core.OpenPane{Kind: core.KindAgent, Cwd: "/w/a", Split: core.SplitVertical},
-		core.OpenPane{Kind: core.KindAgent, Cwd: "/w/b", Split: core.SplitVertical},
-		core.OpenPane{Kind: core.KindAgent, Cwd: "/w/c", Split: core.SplitVertical},
-	)
-
-	got := func() string { return ansi.Strip(trayModuleByID(a, modAgents).render()) }
-
-	if want := " agents 3 "; got() != want {
-		t.Errorf("agents module = %q, want %q", got(), want)
-	}
-
-	ids := a.store.State().AgentPanes()
-	setAgentStates(t, a, map[core.PaneID]core.AgentState{ids[0]: core.AgentBlocked})
-
-	if want := " agents 3 blocked 1 "; got() != want {
-		t.Errorf("agents module = %q, want %q", got(), want)
-	}
-
-	m := trayModuleByID(a, modAgents)
-	if m.width != len(got()) {
-		t.Errorf("module width = %d, want %d", m.width, len(got()))
-	}
-
-	vt := lineVT(t, m.render(), m.width)
-	ui := mochaUI(t)
-	assertColours(t, vt, 1, 0, "a", ui.Fg, ui.Surface, false)
-	assertColours(t, vt, 10, 0, "b", ui.Blocked, ui.Surface, true)
-}
-
-func TestTrayAgentModuleGolden(t *testing.T) {
+func TestTrayBlockedAgentGolden(t *testing.T) {
 	for _, icons := range []bool{true, false} {
 		t.Run(fmt.Sprintf("icons=%v", icons), func(t *testing.T) {
 			a := trayApp(t, icons)

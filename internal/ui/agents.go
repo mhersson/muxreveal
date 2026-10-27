@@ -53,6 +53,13 @@ func (a *App) onHook(ev harness.Event) tea.Cmd {
 		return nil
 	}
 
+	a.railEntry(ev.Pane).hookAt = a.clock.Now()
+	probes := a.railHook(ev.Pane, ev.Start, ev.State == core.AgentIdle)
+
+	if ev.State == core.AgentIdle {
+		a.markUnseen(ev.Pane)
+	}
+
 	switch {
 	case ev.Start:
 		if p, ok := a.panes[ev.Pane]; ok {
@@ -63,20 +70,24 @@ func (a *App) onHook(ev harness.Event) tea.Cmd {
 		_ = a.dispatch(core.SetAgentSession{ID: ev.Pane, Session: ev.Session, Transcript: ev.Transcript})
 	case ev.End:
 		_ = a.dispatch(core.SetAgentSession{ID: ev.Pane})
-		_ = a.dispatch(core.SetAgentState{ID: ev.Pane, State: core.AgentUnknown})
+		_ = a.changeAgentState(ev.Pane, core.AgentUnknown)
+	}
+
+	if ev.ActionSet {
+		_ = a.dispatch(core.SetAgentAction{ID: ev.Pane, Action: ev.Action})
 	}
 
 	if ev.State == core.AgentUnknown {
-		return nil
+		return probes
 	}
 
-	return a.setAgentState(ev.Pane, ev.State)
+	return tea.Batch(probes, a.setAgentState(ev.Pane, ev.State))
 }
 
 // setAgentState records a state. Entering or staying in working restarts the
 // quiet timer and makes sure the agent tick runs.
 func (a *App) setAgentState(id core.PaneID, s core.AgentState) tea.Cmd {
-	if err := a.dispatch(core.SetAgentState{ID: id, State: s}); err != nil || s != core.AgentWorking {
+	if err := a.changeAgentState(id, s); err != nil || s != core.AgentWorking {
 		return nil
 	}
 
@@ -119,7 +130,7 @@ func (a *App) onAgentTick() tea.Cmd {
 
 		if now.Sub(quietSince) >= agentQuiet {
 			// dispatch logs its own failures.
-			_ = a.dispatch(core.SetAgentState{ID: id, State: core.AgentIdle})
+			_ = a.changeAgentState(id, core.AgentIdle)
 		}
 	}
 
@@ -129,6 +140,16 @@ func (a *App) onAgentTick() tea.Cmd {
 func (a *App) anyWorking() bool {
 	for _, m := range a.store.State().Panes {
 		if m.State == core.AgentWorking {
+			return true
+		}
+	}
+
+	return false
+}
+
+func anyBlocked(st core.State) bool {
+	for _, m := range st.Panes {
+		if m.Kind == core.KindAgent && m.State == core.AgentBlocked {
 			return true
 		}
 	}

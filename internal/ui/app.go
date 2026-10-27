@@ -15,6 +15,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/mhersson/muxreveal/internal/core"
+	"github.com/mhersson/muxreveal/internal/git"
 	"github.com/mhersson/muxreveal/internal/harness"
 	"github.com/mhersson/muxreveal/internal/term"
 	"github.com/mhersson/muxreveal/internal/ui/palette"
@@ -48,6 +49,9 @@ type Options struct {
 	Events <-chan harness.Event
 	// Notice is shown as a toast at start; empty for none.
 	Notice string
+	// GitTempDir is where the diff engine puts its temporary index for the
+	// rail's diff stats; empty turns the stats off.
+	GitTempDir string
 	// Save is called with the state after every successful dispatch; nil saves nothing.
 	Save func(core.State)
 }
@@ -91,6 +95,10 @@ type App struct {
 	save      func(core.State)
 	clock     clock // the sync hold's and the tray's time source
 	tray      trayState
+	rail      railState
+	storeVer  uint64        // counts the dispatches the store accepted
+	engine    *git.Engine   // nil when the rail's diff stats are off
+	probeSem  chan struct{} // its capacity bounds the rail's probes running at once
 	clip      *clipboard
 	sel       *paneSelection // the one selection; survives tab switches
 	copy      *copyState     // copy mode; owns every key and ignores the mouse while set
@@ -167,11 +175,15 @@ func New(opts Options) (*App, error) {
 		panes: map[core.PaneID]*pane{}, outerFocused: true,
 		getenv: getenv, cwd: cwd, recordDir: opts.RecordDir, icons: opts.Icons, clock: realClock{}, start: termStart,
 		load:         newSysLoad(),
+		probeSem:     make(chan struct{}, railProbeMax),
 		focusFollows: opts.FocusFollowsMouse, copyOnSelect: opts.CopyOnSelect,
 		clip: newClipboard(clipboardConfig{OSC52: !opts.NoOSC52, Native: !opts.NoNativeClipboard}, getenv, runtime.GOOS, opts.Logger),
 	}
 
-	a.tray.gitRun = runGit
+	if opts.GitTempDir != "" {
+		a.engine = git.NewEngine(git.Limits{}, opts.GitTempDir)
+	}
+
 	if err := a.sync(); err != nil {
 		return nil, err
 	}
@@ -221,6 +233,8 @@ func (a *App) dispatch(act core.Action) error {
 		return err
 	}
 
+	a.storeVer++
+
 	st := a.store.State()
 	if a.save != nil && !a.restoring {
 		a.save(st)
@@ -228,10 +242,6 @@ func (a *App) dispatch(act core.Action) error {
 
 	a.dropGoneTab(st)
 	a.reportFocusChange(prev.Focus, st.Tab().Focus)
-
-	if cmd := a.syncGit(); cmd != nil {
-		a.later = append(a.later, cmd)
-	}
 
 	if st.Tab().ID != prev.ID {
 		a.renderStale(st)
@@ -267,13 +277,22 @@ func (a *App) dropGoneTab(st core.State) {
 
 // Init implements tea.Model.
 func (a *App) Init() tea.Cmd {
-	return tea.Batch(a.initTray(), a.waitEvent())
+	var rail tea.Cmd
+	if a.store.State().Rail {
+		rail = a.railOpened()
+	}
+
+	return tea.Batch(a.initTray(), a.waitEvent(), rail)
 }
 
 // Update implements tea.Model.
 func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	check := a.railFocusCheck(msg)
 	m, cmd := a.update(msg)
+
+	check()
 	a.syncPaneColors()
+	a.railAfterUpdate()
 
 	if len(a.later) > 0 {
 		cmd = tea.Batch(append(a.later, cmd)...)
@@ -281,6 +300,39 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	return m, cmd
+}
+
+// railFocusCheck starts watching a user-input message and returns the check to
+// run once it is handled: if it moved the active tab or its focused pane, the
+// keyboard returns to the panes. Changes with other causes (a process exit, a
+// hook, a restore) leave the keyboard alone.
+func (a *App) railFocusCheck(msg tea.Msg) func() {
+	if !a.rail.focused || !isUserInput(msg) {
+		return func() {}
+	}
+
+	before, ver := a.store.State().Tab(), a.storeVer
+
+	return func() {
+		if a.storeVer == ver {
+			return
+		}
+
+		if now := a.store.State().Tab(); now.ID != before.ID || now.Focus != before.Focus {
+			a.railRelease()
+		}
+	}
+}
+
+// isUserInput reports whether msg comes from the operator: keys, pastes, mouse
+// events and a palette choice.
+func isUserInput(msg tea.Msg) bool {
+	switch msg.(type) {
+	case tea.KeyPressMsg, tea.PasteMsg, tea.MouseClickMsg, tea.MouseMotionMsg, tea.MouseReleaseMsg, tea.MouseWheelMsg, palette.ChosenMsg:
+		return true
+	}
+
+	return false
 }
 
 // syncPaneColors tells every pane the current look's colours, including a
@@ -354,12 +406,18 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, a.onAgentTick()
 	case clockMsg:
 		return a, a.onClock(msg)
-	case gitTickMsg:
-		return a, a.onGitTick()
-	case gitMsg:
-		return a, a.onGit(msg)
 	case loadMsg:
 		return a, a.onLoad(msg)
+	case railHeadMsg:
+		return a, a.onRailHead(msg)
+	case railStatsMsg:
+		return a, a.onRailStats(msg)
+	case railDueMsg:
+		return a, a.onRailDue(msg)
+	case railPulseMsg:
+		a.onRailPulse()
+	case railFlashMsg:
+		a.onRailFlash(msg)
 	case palette.ChosenMsg:
 		return a, a.chosen(msg.ID)
 	case palette.ClosedMsg:
@@ -454,7 +512,9 @@ func (a *App) runLeader(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 	case "esc":
 		return nil, true
 	case a.keymap.leader:
-		a.keyToFocused(msg)
+		if !a.rail.focused {
+			a.keyToFocused(msg)
+		}
 
 		return nil, true
 	}
