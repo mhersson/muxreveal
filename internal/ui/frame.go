@@ -153,9 +153,7 @@ func (a *App) frameAt(g geometry) string {
 		var rail []string
 
 		railW := 0
-		if v, ok := a.railViewOf(st); ok {
-			rail, railW = a.railLines(st, lk, v), v.geom.box.W
-		}
+		rail, railW = a.railFrame(st, lk)
 
 		if st.Tab().Empty() {
 			lines = append(lines, a.welcomeBody(bodyH, lk, rail, railW)...)

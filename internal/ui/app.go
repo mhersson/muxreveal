@@ -96,6 +96,7 @@ type App struct {
 	clock     clock // the sync hold's and the tray's time source
 	tray      trayState
 	rail      railState
+	storeVer  uint64      // counts the dispatches the store accepted
 	engine    *git.Engine // nil when the rail's diff stats are off
 	clip      *clipboard
 	sel       *paneSelection // the one selection; survives tab switches
@@ -230,6 +231,8 @@ func (a *App) dispatch(act core.Action) error {
 
 		return err
 	}
+
+	a.storeVer++
 
 	st := a.store.State()
 	if a.save != nil && !a.restoring {

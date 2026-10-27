@@ -96,8 +96,8 @@ func railLayout(groups []railGroup) []railRow {
 }
 
 // railClampTop is the first row shown in h rows: top moved the least that shows
-// the selected card with its blank rows and, for the first card of a group, the
-// group's header, then snapped to a group header or a card's blank row so the
+// the selected card with its blank rows and, when it fits, its group's header
+// (the blank rows win over the header), then snapped to a group header or a card's blank row so the
 // list never starts mid-card. When the card and its blank rows do not fit, the
 // card's first line wins. card is the selected card's index, -1 for none.
 func railClampTop(rows []railRow, h, top, card int) int {
@@ -128,6 +128,11 @@ func railClampTop(rows []railRow, h, top, card int) int {
 
 	if f >= 2 && rows[f-2].kind == railRowHeader {
 		lo = f - 2
+	}
+
+	// A header that makes the span overflow is given up before the blank rows.
+	if hi-lo+1 > h && lo < f-1 {
+		lo = f - 1
 	}
 
 	if hi-lo+1 > h {
@@ -289,24 +294,35 @@ func (v railView) cardAt(x, y int) (int, bool) {
 	return 0, false
 }
 
-// railAge is the time since active, floored: 8s, 4m, 2h, 3d; empty for no time.
-func railAge(active, now time.Time) string {
+// railAgeOf is the age as shown: its count and unit byte (s, m, h, d). The
+// count is -1 when there is no time.
+func railAgeOf(active, now time.Time) (n int, unit byte) {
 	if active.IsZero() {
-		return ""
+		return -1, 0
 	}
 
 	d := max(now.Sub(active), 0)
 
 	switch {
 	case d < time.Minute:
-		return strconv.Itoa(int(d/time.Second)) + "s"
+		return int(d / time.Second), 's'
 	case d < time.Hour:
-		return strconv.Itoa(int(d/time.Minute)) + "m"
+		return int(d / time.Minute), 'm'
 	case d < 24*time.Hour:
-		return strconv.Itoa(int(d/time.Hour)) + "h"
+		return int(d / time.Hour), 'h'
 	}
 
-	return strconv.Itoa(int(d/(24*time.Hour))) + "d"
+	return int(d / (24 * time.Hour)), 'd'
+}
+
+// railAge is the time since active, floored: 8s, 4m, 2h, 3d; empty for no time.
+func railAge(active, now time.Time) string {
+	n, unit := railAgeOf(active, now)
+	if n < 0 {
+		return ""
+	}
+
+	return strconv.Itoa(n) + string(unit)
 }
 
 // railHidden counts the cards not wholly inside the h rows shown from top: a

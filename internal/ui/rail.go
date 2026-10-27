@@ -105,6 +105,7 @@ type railState struct {
 	panes  map[core.PaneID]*railPane
 	ctx    context.Context //nolint:containedctx // the rail's lifetime, set while the rail is open; probes derive from it
 	cancel context.CancelFunc
+	cache  railCache
 	gen    int // bumps on every open, so late messages of an earlier open are dropped
 }
 
@@ -369,6 +370,14 @@ func (a *App) railAfterUpdate() {
 // railFit keeps the selection on a shown card and stores the list's first row
 // clamped to keep that card whole, so the drawing never has to.
 func (a *App) railFit(st core.State) {
+	c := &a.rail.cache
+	if k := a.railFitKeyOf(); a.rail.query == "" && c.fitValid && c.fit == k {
+		return
+	}
+
+	c.fits++
+	defer func() { c.fit, c.fitValid = a.railFitKeyOf(), true }()
+
 	v, ok := a.railViewOf(st)
 	if !ok {
 		a.railNormalize(st)
@@ -384,6 +393,14 @@ func (a *App) railFit(st core.State) {
 	}
 
 	a.rail.top = railClampTop(v.rows, v.geom.list.H, a.rail.top, sel)
+}
+
+func (a *App) railFitKeyOf() railFitKey {
+	return railFitKey{
+		storeVer: a.storeVer, w: a.width, h: a.height, searching: a.rail.searching,
+		filtered: a.rail.query != "",
+		sel:      a.rail.sel, selIdx: a.rail.selIdx, top: a.rail.top,
+	}
 }
 
 // railToggle is leader a: it opens the rail, or gives it the keyboard, or closes it.

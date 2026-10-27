@@ -657,3 +657,147 @@ func TestRailFocusedPaneDrawsUnfocused(t *testing.T) {
 
 	check("flashed", ui.Match, ui.Match)
 }
+
+// paneColours is the colour of a pane's frame corner and of the first cell of
+// its title, as the frame draws them.
+func paneColours(t *testing.T, a *App, id core.PaneID) (border, title string) {
+	t.Helper()
+
+	r := a.layoutRects()[id]
+	vt := lineVT(t, strings.Split(a.View().Content, "\n")[r.Y], a.width)
+
+	b, ti := vt.CellAt(r.X, 0), vt.CellAt(r.X+5, 0)
+	if b == nil || ti == nil {
+		t.Fatalf("pane %s: no cell at its corner or title", id)
+	}
+
+	return hexOf(b.Style.Fg), hexOf(ti.Style.Fg)
+}
+
+// frameCells is every cell right of the rail and below the bar, as colours and
+// content, leaving out the rect skip (the focused pane's).
+func frameCells(t *testing.T, a *App, skip core.Rect) map[[2]int]string {
+	t.Helper()
+
+	out := map[[2]int]string{}
+	railW := railWidthFor(bodyRect(a.width, a.height))
+
+	for y, line := range strings.Split(a.View().Content, "\n") {
+		if y < 2 {
+			continue
+		}
+
+		vt := lineVT(t, line, a.width)
+
+		for x := railW; x < a.width; x++ {
+			if x >= skip.X && x < skip.X+skip.W && y >= skip.Y && y < skip.Y+skip.H {
+				continue
+			}
+
+			c := vt.CellAt(x, 0)
+			if c == nil {
+				continue
+			}
+
+			fg, bg := "", ""
+			if c.Style.Fg != nil {
+				fg = hexOf(c.Style.Fg)
+			}
+
+			if c.Style.Bg != nil {
+				bg = hexOf(c.Style.Bg)
+			}
+
+			out[[2]int{x, y}] = c.Content + fg + bg
+		}
+	}
+
+	return out
+}
+
+func TestRailFocusRules(t *testing.T) {
+	t.Run("a rail the width rule hides cannot take the colours", func(t *testing.T) {
+		a := drawApp(t, "catppuccin-mocha", true, 63, 30, railFixtureAgents())
+		ui := a.current().theme.UI
+		a.relayout()
+
+		id := a.store.State().Tab().Focus
+		kindC := ui.Shell
+
+		if a.store.State().Panes[id].Kind == core.KindAgent {
+			kindC = ui.Agent
+		}
+
+		a.rail.focused = true
+
+		if a.railShows(true) {
+			t.Fatal("setup: the rail shows at 63 columns")
+		}
+
+		if border, title := paneColours(t, a, id); border != string(kindC) || title != string(kindC) {
+			t.Errorf("focused pane under a hidden rail: frame %s, title %s, want %s", border, title, kindC)
+		}
+	})
+
+	t.Run("other panes are unchanged while the rail has the keyboard", func(t *testing.T) {
+		a := drawApp(t, "catppuccin-mocha", true, 100, 30, railFixtureAgents())
+		a.relayout()
+
+		for tab := range a.store.State().Tabs {
+			openIn(t, a, core.SelectTab{Index: tab})
+			a.relayout()
+
+			a.rail.focused = false
+			skip := a.layoutRects()[a.store.State().Tab().Focus]
+			before := frameCells(t, a, skip)
+
+			a.rail.focused = true
+			after := frameCells(t, a, skip)
+
+			if len(after) != len(before) || len(before) == 0 {
+				t.Fatalf("tab %d: %d cells before, %d after", tab, len(before), len(after))
+			}
+
+			for pos, c := range before {
+				if after[pos] != c {
+					t.Errorf("tab %d: cell %v changed from %q to %q", tab, pos, c, after[pos])
+
+					break
+				}
+			}
+		}
+	})
+
+	t.Run("esc in the rail gives the colours back", func(t *testing.T) {
+		a := drawApp(t, "catppuccin-mocha", true, 100, 30, railFixtureAgents())
+		ui := a.current().theme.UI
+		a.relayout()
+
+		id := a.store.State().Tab().Focus
+		kindC := ui.Shell
+
+		if a.store.State().Panes[id].Kind == core.KindAgent {
+			kindC = ui.Agent
+		}
+
+		pressRun(a, keyLeader, keyRune('a'))
+
+		if !a.rail.focused {
+			t.Fatal("setup: leader a did not give the rail the keyboard")
+		}
+
+		if border, _ := paneColours(t, a, id); border != string(ui.Border) {
+			t.Fatalf("setup: frame %s while the rail has the keyboard, want %s", border, ui.Border)
+		}
+
+		pressRun(a, keyEsc)
+
+		if a.rail.focused {
+			t.Fatal("esc left the keyboard on the rail")
+		}
+
+		if border, title := paneColours(t, a, id); border != string(kindC) || title != string(kindC) {
+			t.Errorf("after esc: frame %s, title %s, want %s", border, title, kindC)
+		}
+	})
+}

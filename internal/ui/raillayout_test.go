@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -90,6 +91,71 @@ func TestRailClampTop(t *testing.T) {
 	for _, tt := range tests {
 		if got := railClampTop(rows, tt.h, tt.top, tt.card); got != tt.want {
 			t.Errorf("%s: railClampTop(h=%d, top=%d, card=%d) = %d, want %d", tt.name, tt.h, tt.top, tt.card, got, tt.want)
+		}
+	}
+}
+
+// The clamp is idempotent, keeps the selected card whole whenever a card and its
+// blank rows fit, and starts the list on a group header or a card's blank row.
+func TestRailClampTopProperties(t *testing.T) {
+	shapes := map[string][]int{
+		"no groups":      nil,
+		"one card":       {1},
+		"two groups":     {4, 2},
+		"three groups":   {1, 3, 2},
+		"a long group":   {9},
+		"singles":        {1, 1, 1, 1},
+		"empty then one": {0, 1},
+	}
+
+	// A card, the blank rows above and below it.
+	const roomy = railCardLines + 2
+
+	for name, shape := range shapes {
+		var groups []railGroup
+
+		cards := 0
+
+		for _, n := range shape {
+			g := railGroup{state: core.AgentWorking}
+			for range n {
+				g.cards = append(g.cards, railCard{pane: core.PaneID(fmt.Sprintf("p%d", cards))})
+				cards++
+			}
+
+			groups = append(groups, g)
+		}
+
+		rows := railLayout(groups)
+
+		for h := -1; h <= len(rows)+3; h++ {
+			for top := -3; top <= len(rows)+3; top++ {
+				for card := -1; card < cards; card++ {
+					got := railClampTop(rows, h, top, card)
+					id := fmt.Sprintf("%s: railClampTop(h=%d, top=%d, card=%d) = %d", name, h, top, card, got)
+
+					if again := railClampTop(rows, h, got, card); again != got {
+						t.Errorf("%s: clamping again gives %d", id, again)
+					}
+
+					if len(rows) == 0 || h <= 0 {
+						continue
+					}
+
+					first := -1
+					if card >= 0 {
+						first = slices.IndexFunc(rows, func(r railRow) bool { return r.kind == railRowCard && r.card == card && r.line == 0 })
+					}
+
+					if card >= 0 && h >= roomy && (first-1 < got || first+railCardLines > got+h-1) {
+						t.Errorf("%s: the selected card (rows %d to %d) or its blank rows are not visible in %d rows", id, first, first+railCardLines-1, h)
+					}
+
+					if (card < 0 || h >= roomy) && !railBoundary(rows, got) {
+						t.Errorf("%s: row %d (%v) is neither a header nor a card's blank row", id, got, rows[got].kind)
+					}
+				}
+			}
 		}
 	}
 }
