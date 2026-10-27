@@ -96,7 +96,7 @@ func (a *App) topBorder(s core.State, id core.PaneID, r core.Rect, focused bool,
 		style lipgloss.Style
 	}
 
-	var copyTag, scrollTag, zoomTag, badgeTag *tag
+	var copyTag, nextTag, scrollTag, zoomTag, badgeTag *tag
 
 	if meta.Kind == core.KindAgent {
 		if text, style, ok := st.badge(meta.State, a.spin, a.icons); ok {
@@ -125,6 +125,10 @@ func (a *App) topBorder(s core.State, id core.PaneID, r core.Rect, focused bool,
 		}
 	}
 
+	if dir := s.Tab().Preselect; focused && dir != core.NoDir {
+		nextTag = &tag{" " + a.preselectArrow(dir) + " next ", st.tagNext}
+	}
+
 	if a.copy != nil && a.copy.pane == id {
 		text := " COPY "
 		if a.icons {
@@ -135,8 +139,8 @@ func (a *App) topBorder(s core.State, id core.PaneID, r core.Rect, focused bool,
 	}
 
 	// The tags fit between the corners with one border cell between two and one
-	// before the right corner; COPY claims room first, then the badge, zoom and
-	// scroll tags.
+	// before the right corner; COPY claims room first, then the badge, zoom,
+	// preselection and scroll tags.
 	avail := r.W - 3
 	used := 0
 	claim := func(t *tag) *tag {
@@ -158,14 +162,14 @@ func (a *App) topBorder(s core.State, id core.PaneID, r core.Rect, focused bool,
 		return t
 	}
 
-	copyTag, badgeTag, zoomTag, scrollTag = claim(copyTag), claim(badgeTag), claim(zoomTag), claim(scrollTag)
+	copyTag, badgeTag, zoomTag, nextTag, scrollTag = claim(copyTag), claim(badgeTag), claim(zoomTag), claim(nextTag), claim(scrollTag)
 
 	var segs []segment
 
 	// Tags sit right to left with one border cell between them and before the corner.
 	tagEnd := r.X + r.W - 2
 
-	for _, t := range []*tag{badgeTag, zoomTag, scrollTag, copyTag} {
+	for _, t := range []*tag{badgeTag, zoomTag, scrollTag, nextTag, copyTag} {
 		if t == nil {
 			continue
 		}
@@ -254,13 +258,50 @@ func (a *App) searchPrompt(id core.PaneID, r core.Rect, st styles) (seg segment,
 	return segment{r.X + 2, w, body}, cursorX, true
 }
 
-// bottomBorder is what is set into the bottom border of the pane at r.
-func (a *App) bottomBorder(id core.PaneID, r core.Rect, st styles) []segment {
-	if seg, _, ok := a.searchPrompt(id, r, st); ok {
-		return []segment{seg}
+// preselectArrow is the arrow of a preselected side.
+func (a *App) preselectArrow(d core.Dir) string {
+	arrows := map[core.Dir][2]string{
+		core.Left:  {"\u2190", iconArrowLeft},
+		core.Down:  {"\u2193", iconArrowDown},
+		core.Up:    {"\u2191", iconArrowUp},
+		core.Right: {"\u2192", iconArrowRight},
 	}
 
-	return nil
+	if a.icons {
+		return arrows[d][1]
+	}
+
+	return arrows[d][0]
+}
+
+// bottomBorder is what is set into the bottom border of the pane at r: the
+// search prompt or the hidden-column count on the left, and the count on the
+// right. left and right are the hidden columns to count on each side; a count
+// that does not fit is left out.
+func (a *App) bottomBorder(id core.PaneID, r core.Rect, left, right int, st styles) []segment {
+	var segs []segment
+
+	// The last border cell before the corner is a dash.
+	edge := r.X + r.W - 2
+	end := r.X + 2
+
+	if seg, _, ok := a.searchPrompt(id, r, st); ok {
+		segs, end = append(segs, seg), seg.x+seg.w
+	} else if left > 0 {
+		text := fmt.Sprintf(" \u2039 %d ", left)
+		if w := lipgloss.Width(text); end+w <= edge {
+			segs, end = append(segs, segment{end, w, st.tagHidden.Render(text)}), end+w
+		}
+	}
+
+	if right > 0 {
+		text := fmt.Sprintf(" %d \u203a ", right)
+		if w, x := lipgloss.Width(text), edge-lipgloss.Width(text); x >= end+1 && x >= r.X+2 {
+			segs = append(segs, segment{x, w, st.tagHidden.Render(text)})
+		}
+	}
+
+	return segs
 }
 
 func kindIcon(k core.PaneKind) string {

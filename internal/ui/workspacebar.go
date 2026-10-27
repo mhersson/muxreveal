@@ -15,6 +15,7 @@ import (
 
 // Tray module IDs, left to right as the tray shows them.
 const (
+	modLayout = "layout"
 	modPR     = "pr"
 	modAgents = "agents"
 	modGit    = "git"
@@ -121,7 +122,7 @@ func trayWidth(mods []trayModule, icons bool) int {
 }
 
 // planBar decides what the bar shows in width cells. As the width shrinks it
-// gives way in DESIGN's order: load, git and PR leave the tray; inactive tab
+// gives way in DESIGN's order: load, git, PR and the layout mode leave the tray; inactive tab
 // names shrink to the icon and then the number, longest names first; the clock
 // leaves; the active name shrinks the same way; the agents leave; finally the
 // segments farthest from the active tab are left out.
@@ -198,7 +199,7 @@ func planBar(tabs []tabInfo, active int, mods []trayModule, width int, icons boo
 		return true
 	}
 
-	stages := []func() bool{drop(modLoad), drop(modGit), drop(modPR)}
+	stages := []func() bool{drop(modLoad), drop(modGit), drop(modPR), drop(modLayout)}
 	if icons {
 		stages = append(stages, shrink(levelIcon, false))
 	}

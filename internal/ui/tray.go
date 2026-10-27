@@ -504,6 +504,10 @@ func (a *App) trayModules() []trayModule {
 	var mods []trayModule
 
 	st := a.store.State()
+	if m := st.Tab().Mode; m != "" {
+		mods = append(mods, layoutModule(m, icons, ui))
+	}
+
 	if ids := st.AgentPanes(); len(ids) > 0 {
 		states := make([]core.AgentState, len(ids))
 		for i, id := range ids {
@@ -526,6 +530,29 @@ func (a *App) trayModules() []trayModule {
 	}
 
 	return mods
+}
+
+// layoutModule shows the active tab's layout mode: its icon in Accent, then the
+// name.
+func layoutModule(m core.LayoutMode, icons bool, ui theme.UI) trayModule {
+	if !icons {
+		return surfaceModule(modLayout, ui, trayRun{text: " layout " + string(m) + " ", fg: ui.Fg})
+	}
+
+	icon := iconLayoutBSP
+
+	switch m {
+	case core.ModeMaster:
+		icon = iconLayoutMaster
+	case core.ModeScrolling:
+		icon = iconLayoutScrolling
+	}
+
+	return surfaceModule(modLayout, ui,
+		trayRun{text: " ", fg: ui.Fg},
+		trayRun{text: icon, fg: ui.Accent},
+		trayRun{text: " " + string(m) + " ", fg: ui.Fg},
+	)
 }
 
 // agentsModule shows one icon per agent in its state's colour (Agent for no

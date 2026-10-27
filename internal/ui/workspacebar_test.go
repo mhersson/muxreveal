@@ -107,6 +107,7 @@ func assertColours(t *testing.T, vt term.VT, x, y int, content string, fg, bg th
 
 func TestWorkspaceBar(t *testing.T) {
 	agent, shellIcon := iconAgent, iconShell
+	layoutTray := trayOpen + " " + iconLayoutBSP + " bsp "
 
 	tests := []struct {
 		name  string
@@ -118,24 +119,24 @@ func TestWorkspaceBar(t *testing.T) {
 	}{
 		{
 			"one tab", []tabSpec{{core.KindShell, "/w/proj", ""}}, 0, true,
-			" 1 " + shellIcon + " proj " + edgeSolid, "",
+			" 1 " + shellIcon + " proj " + edgeSolid, layoutTray,
 		},
 		{
 			"three tabs, active in the middle",
 			[]tabSpec{{core.KindShell, "/w/a", "api"}, {core.KindAgent, "/w/web", ""}, {core.KindShell, "", ""}}, 1, true,
 			" 1 " + shellIcon + " api " + edgeSolid + " 2 " + agent + " web " + edgeSolid + " 3 " + shellIcon + " shell " + edgeSolid,
-			trayOpen + " " + agent + " ",
+			layoutTray + edgeThin + " " + agent + " ",
 		},
 		{
 			"inactive neighbours get a thin edge",
 			[]tabSpec{{core.KindShell, "/w/a", "one"}, {core.KindShell, "/w/b", "two"}, {core.KindShell, "/w/c", "three"}}, 2, true,
-			" 1 " + shellIcon + " one " + edgeThin + " 2 " + shellIcon + " two " + edgeSolid + " 3 " + shellIcon + " three " + edgeSolid, "",
+			" 1 " + shellIcon + " one " + edgeThin + " 2 " + shellIcon + " two " + edgeSolid + " 3 " + shellIcon + " three " + edgeSolid, layoutTray,
 		},
 		{
 			"icons off",
 			[]tabSpec{{core.KindShell, "/w/a", "one"}, {core.KindAgent, "/w/b", "two"}}, 0, false,
 			" 1 one   2 two ",
-			" agents 1 ",
+			" layout bsp │ agents 1 ",
 		},
 	}
 

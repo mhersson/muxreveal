@@ -38,6 +38,8 @@ func contentRect(r core.Rect) core.Rect {
 // geometry is the pane rects (frame included) of one View, computed once.
 type geometry struct {
 	rects map[core.PaneID]core.Rect
+	// hiddenLeft and hiddenRight are the scrolling columns off screen on each side.
+	hiddenLeft, hiddenRight int
 }
 
 // layoutRects returns each visible pane's rect. A zoomed pane is the only one
@@ -49,7 +51,9 @@ func (a *App) layoutRects() map[core.PaneID]core.Rect {
 func (a *App) geometry() geometry {
 	st := a.store.State()
 
-	return geometry{rects: a.layoutIn(st, st.Active)}
+	arr := a.arrangeIn(st, st.Active)
+
+	return geometry{rects: arr.Rects, hiddenLeft: arr.HiddenLeft, hiddenRight: arr.HiddenRight}
 }
 
 // tabRects lays tab i out in the body with its own zoom: a zoomed tab's
@@ -59,15 +63,21 @@ func (a *App) tabRects(i int) map[core.PaneID]core.Rect {
 }
 
 func (a *App) layoutIn(st core.State, i int) map[core.PaneID]core.Rect {
+	return a.arrangeIn(st, i).Rects
+}
+
+// arrangeIn is tab i's drawn rects and hidden-column counts; a zoomed tab has
+// its one pane and no hidden columns.
+func (a *App) arrangeIn(st core.State, i int) core.Arrangement {
 	if i < 0 || i >= len(st.Tabs) {
-		return nil
+		return core.Arrangement{}
 	}
 
 	if z, ok := a.zoomedRects(st, i); ok {
-		return z
+		return core.Arrangement{Rects: z}
 	}
 
-	return core.Arrange(st.Tabs[i], a.bodyArea(), st.Layout).Rects
+	return core.Arrange(st.Tabs[i], a.bodyArea(), st.Layout)
 }
 
 // sizesIn is the pane rects of tab i whose content is each PTY's size (the
@@ -151,6 +161,7 @@ func (a *App) frameBody(g geometry, st core.State, lk look) []string {
 	}
 
 	focus := st.Tab().Focus
+	leftPane, rightPane := edgePanes(g)
 
 	for id, r := range g.rects {
 		own := ownNone
@@ -158,7 +169,16 @@ func (a *App) frameBody(g geometry, st core.State, lk look) []string {
 			own = kindOwner(st.Panes[id].Kind)
 		}
 
-		drawBox(add, r, a.topBorder(st, id, r, id == focus, lk.styles), a.bottomBorder(id, r, lk.styles), own, lk.styles)
+		var hl, hr int
+		if id == leftPane {
+			hl = g.hiddenLeft
+		}
+
+		if id == rightPane {
+			hr = g.hiddenRight
+		}
+
+		drawBox(add, r, a.topBorder(st, id, r, id == focus, lk.styles), a.bottomBorder(id, r, hl, hr, lk.styles), own, lk.styles)
 	}
 
 	for id, r := range g.rects {
@@ -211,6 +231,28 @@ func (a *App) frameBody(g geometry, st core.State, lk look) []string {
 	}
 
 	return lines
+}
+
+// edgePanes are the bottom panes of the leftmost and rightmost visible columns,
+// where the hidden-column counts go; both are empty without hidden columns.
+func edgePanes(g geometry) (left, right core.PaneID) {
+	if g.hiddenLeft == 0 && g.hiddenRight == 0 {
+		return "", ""
+	}
+
+	var lr, rr core.Rect
+
+	for id, r := range g.rects {
+		if left == "" || r.X < lr.X || r.X == lr.X && r.Y+r.H > lr.Y+lr.H {
+			left, lr = id, r
+		}
+
+		if right == "" || r.X+r.W > rr.X+rr.W || r.X+r.W == rr.X+rr.W && r.Y+r.H > rr.Y+rr.H {
+			right, rr = id, r
+		}
+	}
+
+	return left, right
 }
 
 // welcomeHints lists the commands that make sense with no pane open, with

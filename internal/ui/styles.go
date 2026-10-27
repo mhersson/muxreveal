@@ -26,7 +26,8 @@ type styles struct {
 	// kindAgent and kindShell are bold in the kind colour: icon and focused title.
 	kindAgent, kindShell lipgloss.Style
 	titleMuted, tagZoom  lipgloss.Style
-	tagScroll            lipgloss.Style
+	// tagScroll, tagNext and tagHidden are the scroll, preselection and hidden-column tags.
+	tagScroll, tagNext, tagHidden lipgloss.Style
 	// tagCopy is the copy tag and the search prompt's mark; searchText is the query.
 	tagCopy, searchText lipgloss.Style
 	// The toast: its Warning border and icon, and its text, all on the panel colour.
@@ -66,6 +67,8 @@ func newStyles(t theme.Theme) styles {
 		titleMuted:  onBg.Foreground(ui.Muted),
 		tagZoom:     onBg.Foreground(ui.Accent).Bold(true),
 		tagScroll:   onBg.Foreground(ui.Accent).Bold(true),
+		tagNext:     onBg.Foreground(ui.Accent).Bold(true),
+		tagHidden:   onBg.Foreground(ui.Accent).Bold(true),
 		tagCopy:     onBg.Foreground(ui.Info).Bold(true),
 		searchText:  onBg,
 		toastBorder: onPanel.Foreground(ui.Warning),
