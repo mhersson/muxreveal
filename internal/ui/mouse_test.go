@@ -270,6 +270,35 @@ func TestRightButtonIsForwardedAndNeverSelects(t *testing.T) {
 	}
 }
 
+func TestNewPressReleasesAHeldForwardedButton(t *testing.T) {
+	a, procs, _ := trackingShells(t)
+	c := contentRectOf(a, "p1")
+
+	mdown(a, c.X+1, c.Y+1, tea.MouseMiddle, 0)
+	mdown(a, c.X+3, c.Y+2, tea.MouseLeft, 0)
+
+	eventually(t, "middle release", func() bool { return strings.Contains(procs["p1"].sent(), "\x1b[<1;2;2m") })
+
+	if a.mouse.fwd != nil {
+		t.Errorf("forwarded button still held: %+v", *a.mouse.fwd)
+	}
+}
+
+func TestModalOpeningReleasesAHeldForwardedButton(t *testing.T) {
+	a, procs, _ := trackingShells(t)
+	c := contentRectOf(a, "p1")
+
+	mdown(a, c.X+1, c.Y+1, tea.MouseRight, 0)
+	a.pending = true
+	mmove(a, c.X+4, c.Y+1, tea.MouseRight)
+
+	eventually(t, "right release", func() bool { return strings.Contains(procs["p1"].sent(), "\x1b[<2;2;2m") })
+
+	if a.mouse.fwd != nil {
+		t.Errorf("forwarded button still held: %+v", *a.mouse.fwd)
+	}
+}
+
 func TestDoubleAndTripleClickSelectWordAndLine(t *testing.T) {
 	a, _, f := shellsWith(t, sampleText, "")
 	clk := &fakeClock{t: time.Unix(1000, 0)}

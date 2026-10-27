@@ -261,3 +261,33 @@ func TestOptionsReachTheApp(t *testing.T) {
 			a.focusFollows, a.copyOnSelect, a.clip.cfg)
 	}
 }
+
+func TestOptionsSetEachFlagOnItsOwnField(t *testing.T) {
+	tests := []struct {
+		name string
+		opts Options
+		want [4]bool // focusFollows, copyOnSelect, OSC52, Native
+	}{
+		{"focus follows mouse", Options{FocusFollowsMouse: true}, [4]bool{true, false, true, true}},
+		{"copy on select", Options{CopyOnSelect: true}, [4]bool{false, true, true, true}},
+		{"no OSC 52", Options{NoOSC52: true}, [4]bool{false, false, false, true}},
+		{"no native clipboard", Options{NoNativeClipboard: true}, [4]bool{false, false, true, false}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.opts.Logger = testLogger()
+			tt.opts.Store = core.NewStore(core.State{Theme: "catppuccin-mocha"})
+
+			a, err := New(tt.opts)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			got := [4]bool{a.focusFollows, a.copyOnSelect, a.clip.cfg.OSC52, a.clip.cfg.Native}
+			if got != tt.want {
+				t.Errorf("focusFollows, copyOnSelect, OSC52, Native = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}

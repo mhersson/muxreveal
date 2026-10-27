@@ -200,3 +200,11 @@ func TestClipboardOtherFailuresLoggedEachTime(t *testing.T) {
 		t.Fatalf("failure logged %d times, want 2:\n%s", got, buf.String())
 	}
 }
+
+// Only a binary that cannot exist runs, so no real clipboard tool is touched.
+func TestRunNativeReportsAMissingTool(t *testing.T) {
+	err := runNative(context.Background(), []string{"muxreveal-no-such-clipboard-tool", "-x"}, "text")
+	if !errors.Is(err, exec.ErrNotFound) {
+		t.Errorf("runNative error = %v, want exec.ErrNotFound", err)
+	}
+}

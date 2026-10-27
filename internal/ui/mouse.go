@@ -53,8 +53,9 @@ type heldPress struct {
 
 // forwarded is a middle or right button whose press went to a guest.
 type forwarded struct {
-	pane   core.PaneID
-	button tea.MouseButton
+	pane     core.PaneID
+	button   tea.MouseButton
+	col, row int // last cell sent, in pane content coordinates
 }
 
 type mouseState struct {
@@ -108,13 +109,14 @@ func (a *App) hitTab(x int) hitResult {
 
 // mouseBlocked reports whether modal UI owns the pointer: a confirm, a prompt,
 // an overlay, copy mode, or a pending leader (with or without its popup). It also drops
-// any held button, whose release the modal would swallow.
+// any held button, releasing a forwarded one in its guest, since the modal would swallow the release.
 func (a *App) mouseBlocked() bool {
 	if a.confirm == nil && a.prompt == nil && a.overlay == nil && a.copy == nil && !a.pending {
 		return false
 	}
 
-	a.mouse.press, a.mouse.fwd = nil, nil
+	a.releaseForwarded()
+	a.mouse.press = nil
 
 	return true
 }
@@ -151,7 +153,8 @@ func (a *App) handleClick(msg tea.MouseClickMsg) tea.Cmd {
 	m := msg.Mouse()
 	h := a.hit(m.X, m.Y)
 
-	a.mouse.press, a.mouse.fwd = nil, nil
+	a.releaseForwarded()
+	a.mouse.press = nil
 
 	if h.area != hitContent || m.Button != tea.MouseLeft {
 		a.mouse.click = clickState{}
@@ -183,7 +186,7 @@ func (a *App) otherPress(h hitResult, m tea.Mouse) tea.Cmd {
 
 	if tracking, _ := p.inputModes(); tracking {
 		p.sendMouse(uv.MouseClickEvent(uv.Mouse{X: h.local.col, Y: h.local.row, Button: m.Button, Mod: m.Mod}))
-		a.mouse.fwd = &forwarded{pane: h.pane, button: m.Button}
+		a.mouse.fwd = &forwarded{pane: h.pane, button: m.Button, col: h.local.col, row: h.local.row}
 	}
 
 	return cmd
@@ -355,7 +358,23 @@ func (a *App) forwardHeld(f *forwarded, m tea.Mouse, ev func(uv.Mouse) uv.MouseE
 		return
 	}
 
+	f.col, f.row = col, row
 	p.sendMouse(ev(uv.Mouse{X: col, Y: row, Button: f.button, Mod: m.Mod}))
+}
+
+// releaseForwarded ends a forwarded button still held, so the guest does not
+// see it stuck down, and forgets it.
+func (a *App) releaseForwarded() {
+	f := a.mouse.fwd
+	a.mouse.fwd = nil
+
+	if f == nil {
+		return
+	}
+
+	if p := a.panes[f.pane]; p != nil {
+		p.sendMouse(uv.MouseReleaseEvent(uv.Mouse{X: f.col, Y: f.row, Button: f.button}))
+	}
 }
 
 // handleWheel acts on the pane under the pointer without moving focus: a guest

@@ -91,28 +91,26 @@ func TestExtract(t *testing.T) {
 	}
 }
 
-func TestRowSpanAndContains(t *testing.T) {
+func TestRowSpan(t *testing.T) {
 	const cols = 10
 	tests := []struct {
-		name       string
-		sel        selection
-		row        int
-		from, to   int
-		ok         bool
-		inFrom     int // a column that must be contained
-		outOfRange int // a column that must not be contained (-1: skip)
+		name     string
+		sel      selection
+		row      int
+		from, to int
+		ok       bool
 	}{
-		{"stream first row", selection{selStream, point{1, 4}, point{3, 2}}, 1, 4, 9, true, 4, 3},
-		{"stream middle row", selection{selStream, point{1, 4}, point{3, 2}}, 2, 0, 9, true, 0, -1},
-		{"stream last row", selection{selStream, point{1, 4}, point{3, 2}}, 3, 0, 2, true, 2, 3},
-		{"stream single row", selection{selStream, point{1, 4}, point{1, 6}}, 1, 4, 6, true, 5, 7},
-		{"stream reversed", selection{selStream, point{3, 2}, point{1, 4}}, 1, 4, 9, true, 9, 3},
-		{"line mode", selection{selLine, point{1, 4}, point{2, 2}}, 2, 0, 9, true, 0, -1},
-		{"block mode", selection{selBlock, point{1, 6}, point{3, 2}}, 2, 2, 6, true, 4, 7},
-		{"above", selection{selStream, point{1, 4}, point{3, 2}}, 0, 0, 0, false, -1, 0},
-		{"below", selection{selStream, point{1, 4}, point{3, 2}}, 4, 0, 0, false, -1, 0},
-		{"start past the columns", selection{selStream, point{1, 40}, point{3, 2}}, 1, 0, 0, false, -1, -1},
-		{"end clamped to the columns", selection{selStream, point{1, 4}, point{1, 40}}, 1, 4, 9, true, 9, 3},
+		{"stream first row", selection{selStream, point{1, 4}, point{3, 2}}, 1, 4, 9, true},
+		{"stream middle row", selection{selStream, point{1, 4}, point{3, 2}}, 2, 0, 9, true},
+		{"stream last row", selection{selStream, point{1, 4}, point{3, 2}}, 3, 0, 2, true},
+		{"stream single row", selection{selStream, point{1, 4}, point{1, 6}}, 1, 4, 6, true},
+		{"stream reversed", selection{selStream, point{3, 2}, point{1, 4}}, 1, 4, 9, true},
+		{"line mode", selection{selLine, point{1, 4}, point{2, 2}}, 2, 0, 9, true},
+		{"block mode", selection{selBlock, point{1, 6}, point{3, 2}}, 2, 2, 6, true},
+		{"above", selection{selStream, point{1, 4}, point{3, 2}}, 0, 0, 0, false},
+		{"below", selection{selStream, point{1, 4}, point{3, 2}}, 4, 0, 0, false},
+		{"start past the columns", selection{selStream, point{1, 40}, point{3, 2}}, 1, 0, 0, false},
+		{"end clamped to the columns", selection{selStream, point{1, 4}, point{1, 40}}, 1, 4, 9, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -120,27 +118,11 @@ func TestRowSpanAndContains(t *testing.T) {
 			if ok != tt.ok || (ok && (from != tt.from || to != tt.to)) {
 				t.Fatalf("rowSpan = (%d, %d, %v), want (%d, %d, %v)", from, to, ok, tt.from, tt.to, tt.ok)
 			}
-			if ok {
-				for c := from; c <= to; c++ {
-					if !tt.sel.contains(tt.row, c) {
-						t.Errorf("contains(%d, %d) = false inside the span", tt.row, c)
-					}
-				}
-			}
-			if tt.inFrom >= 0 && !tt.sel.contains(tt.row, tt.inFrom) {
-				t.Errorf("contains(%d, %d) = false, want true", tt.row, tt.inFrom)
-			}
-			if tt.outOfRange >= 0 && tt.sel.contains(tt.row, tt.outOfRange) {
-				t.Errorf("contains(%d, %d) = true, want false", tt.row, tt.outOfRange)
-			}
 		})
 	}
 
 	if _, _, ok := (selection{}).rowSpan(0, 0); ok {
 		t.Error("rowSpan with zero columns reported ok")
-	}
-	if (selection{selStream, point{0, 0}, point{1, 1}}).contains(0, -1) {
-		t.Error("contains accepted a negative column")
 	}
 }
 

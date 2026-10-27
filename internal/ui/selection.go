@@ -109,26 +109,6 @@ func (s selection) rowSpan(row, cols int) (from, to int, ok bool) {
 	return from, to, true
 }
 
-// contains reports whether the cell is selected. Without a column count the
-// first stream row has no right edge, so it only checks col >= from there.
-func (s selection) contains(row, col int) bool {
-	first, last := s.rowBounds()
-	if row < first || row > last || col < 0 {
-		return false
-	}
-	switch s.mode {
-	case selBlock:
-		return col >= min(s.anchor.col, s.head.col) && col <= max(s.anchor.col, s.head.col)
-	case selLine:
-		return true
-	}
-	start, end := s.ordered()
-	if row == start.row && col < start.col {
-		return false
-	}
-	return row != end.row || col <= end.col
-}
-
 // cellClass classifies the cell at (row, col); a wide char's continuation cell
 // takes the class of the character before it.
 func cellClass(g grid, row, col int) int {
