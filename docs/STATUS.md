@@ -664,8 +664,8 @@ Ideas and requests that came up outside the current milestone go here.
   - `internal/git` on APFS:
     - `TestSnapshotTreeContent`: an invalid-UTF-8 file name is refused ("illegal byte sequence").
     - `TestDiffOddPaths`: the golden differs.
-    - `TestListWorktrees`: no worktree records found, likely `/var` vs `/private/var`.
-  - `internal/git` watcher on kqueue: `TestWatchWriteTrackedFile` and both `TestWatchSnapshotRefsDoNotWake` cases get a batch with `Git:true` from a plain write. This may be a real watcher bug on macOS, not only a test issue.
+    - `TestListWorktrees`: no worktree records found, likely `/var` vs `/private/var`; the test now resolves its temp dir's symlinks, pending a macOS CI run.
+  - `internal/git` watcher on kqueue: `TestWatchWriteTrackedFile` and both `TestWatchSnapshotRefsDoNotWake` cases got a batch with `Git:true` from a plain write; the watcher now ignores kqueue's directory Write and Chmod notes in the git dirs (tested with synthetic events on Linux), pending a macOS CI run. Any that still fail stay here with their output.
   - `internal/ui`: `TestToastGoesWithTheFirstKey` ("the key reached the pane as "", want "x"").
 - PRs from a fork: agent branches pushed to a fork and PRs opened against the upstream repository; the backend handles same-repository PRs only.
 - Live write tests (create, merge, branch delete) against a sandbox repository, run on request.

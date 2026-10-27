@@ -59,7 +59,11 @@ func TestWorktreeDir(t *testing.T) {
 
 func TestListWorktrees(t *testing.T) {
 	dir, r := seededRepo(t)
-	base := t.TempDir()
+
+	base, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	branchWT := filepath.Join(base, "on-branch")
 	gitOut(t, dir, "worktree", "add", "-b", "feat/x", branchWT)

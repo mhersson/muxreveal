@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -40,6 +41,7 @@ type Batch struct {
 type WatchOptions struct {
 	Debounce time.Duration // quiet time before a batch goes out; 150 ms when zero
 	MaxDelay time.Duration // longest an unsent change waits while events keep coming; 1 s when zero
+	SeqBase  uint64        // Seq's starting value, so a restarted watcher never repeats one
 }
 
 // Watcher reports debounced changes of one worktree. Directories git ignores,
@@ -56,6 +58,8 @@ type Watcher struct {
 	done      chan struct{}
 	closeOnce sync.Once
 	closeErr  error
+
+	seq atomic.Uint64
 
 	skipWorktrees bool
 	refsDir       string
@@ -108,6 +112,7 @@ func Watch(ctx context.Context, r Repo, opts WatchOptions) (*Watcher, error) {
 		ownRefsDir: filepath.Join(r.CommonDir, "refs", "muxreveal"),
 		watched:    map[string]struct{}{},
 	}
+	w.seq.Store(opts.SeqBase)
 
 	if main, err := r.MainRoot(); err == nil && main == r.Root {
 		w.skipWorktrees = true
@@ -139,6 +144,10 @@ func (w *Watcher) start(ctx context.Context) error {
 
 	return w.walk(ctx, []string{w.repo.Root}, false, nil)
 }
+
+// Seq counts the events the watcher accepted, from SeqBase, before they are
+// debounced into a batch. It is safe to call from any goroutine.
+func (w *Watcher) Seq() uint64 { return w.seq.Load() }
 
 // Batches delivers the changes. It is closed by Close or when the context ends.
 func (w *Watcher) Batches() <-chan Batch { return w.batches }
@@ -283,6 +292,16 @@ func mergeBatches(a, b Batch) Batch {
 
 // handle records one event and reports whether it left something to send.
 func (w *Watcher) handle(ev fsnotify.Event, p *pending) bool {
+	if !w.classify(ev, p) {
+		return false
+	}
+
+	w.seq.Add(1)
+
+	return true
+}
+
+func (w *Watcher) classify(ev fsnotify.Event, p *pending) bool {
 	name := ev.Name
 
 	if w.inGitDir(name) {
@@ -291,6 +310,12 @@ func (w *Watcher) handle(ev fsnotify.Event, p *pending) bool {
 
 	rel, ok := w.relPath(name)
 	if !ok {
+		return false
+	}
+
+	// kqueue notes a directory's own entry changes as a Write on the directory;
+	// the entries' events report the change.
+	if ev.Op == fsnotify.Write && w.isWatchedDir(name) {
 		return false
 	}
 
@@ -309,6 +334,12 @@ func (w *Watcher) handle(ev fsnotify.Event, p *pending) bool {
 	p.paths[rel] = struct{}{}
 
 	return true
+}
+
+func (w *Watcher) isWatchedDir(name string) bool {
+	_, ok := w.watched[name]
+
+	return ok
 }
 
 func (w *Watcher) inGitDir(name string) bool {
@@ -343,22 +374,32 @@ func (w *Watcher) relPath(name string) (string, bool) {
 	return filepath.ToSlash(rel), true
 }
 
-// handleMeta classifies an event inside the git dirs: only HEAD, the index,
-// packed-refs and refs outside refs/muxreveal count.
+// handleMeta classifies an event inside the git dirs: only a Create, Write,
+// Remove or Rename of HEAD, the index, packed-refs or a ref outside
+// refs/muxreveal counts. Chmod-only events and events on directories do not.
 func (w *Watcher) handleMeta(ev fsnotify.Event, p *pending) bool {
 	name, base := ev.Name, filepath.Base(ev.Name)
+
+	if !ev.Has(fsnotify.Create) && !ev.Has(fsnotify.Write) && !ev.Has(fsnotify.Remove) && !ev.Has(fsnotify.Rename) {
+		return false
+	}
 
 	switch {
 	case within(w.ownRefsDir, name):
 		return false
 	case strings.HasPrefix(name, w.refsDir+string(filepath.Separator)):
-		if strings.HasSuffix(base, ".lock") {
+		if strings.HasSuffix(base, ".lock") || (ev.Op == fsnotify.Write && w.isWatchedDir(name)) {
 			return false
 		}
 
-		if ev.Has(fsnotify.Create) {
+		if ev.Has(fsnotify.Create) && isDir(name) {
 			if err := w.addRefs(name); err != nil {
 				w.report(err)
+			}
+
+			// Refs already inside the new directory have no event of their own.
+			if !hasRefFile(name, w.ownRefsDir) {
+				return false
 			}
 		}
 	case filepath.Dir(name) == w.repo.GitDir && (base == "HEAD" || base == "index"):
@@ -370,6 +411,39 @@ func (w *Watcher) handleMeta(ev fsnotify.Event, p *pending) bool {
 	p.git = true
 
 	return true
+}
+
+func isDir(name string) bool {
+	info, err := os.Lstat(name)
+
+	return err == nil && info.IsDir()
+}
+
+// hasRefFile reports whether dir holds a ref file below it, outside skip.
+func hasRefFile(dir, skip string) bool {
+	if within(skip, dir) {
+		return false
+	}
+
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return false
+	}
+
+	for _, e := range entries {
+		path := filepath.Join(dir, e.Name())
+
+		switch {
+		case e.IsDir():
+			if hasRefFile(path, skip) {
+				return true
+			}
+		case !strings.HasSuffix(e.Name(), ".lock"):
+			return true
+		}
+	}
+
+	return false
 }
 
 // forget drops the bookkeeping for a removed or renamed directory and its
