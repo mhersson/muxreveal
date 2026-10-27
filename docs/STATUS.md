@@ -415,6 +415,7 @@ M2a Worktrees and diff engine is complete on `feat/diff-engine` and waits for re
 | 2026-10-27 | Each pane gets its own rounded frame and frames touch, with no gap, no junctions and no outer frame | The operator's pick from the chrome comparison |
 | 2026-10-27 | A full-width rule in `Border` sits on row 1, under the workspace bar | The operator's pick from the chrome comparison |
 | 2026-10-27 | A pane's title no longer shows its cwd | The operator's pick from the chrome comparison |
+| 2026-10-27 | The `Bar` role is Base, not Crust | The operator's pick from the chrome comparison |
 
 ## Later
 

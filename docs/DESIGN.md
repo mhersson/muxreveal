@@ -372,7 +372,7 @@ Existing roles keep their colours. New roles:
 | --- | --- | --- |
 | `Agent` | Mauve | agent frames, titles and icons; tray agent icons |
 | `Shell` | Blue | shell frames, titles and icons |
-| `Bar` | Crust | ground of the workspace bar and the status bar |
+| `Bar` | Base | ground of the workspace bar and the status bar |
 | `Dim` | Subtext0 | inactive tab text |
 | `Clock` | Lavender | clock segment |
 | `Git` | Flamingo | git icon |

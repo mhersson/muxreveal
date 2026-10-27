@@ -600,3 +600,69 @@ func TestFrameSizesTabs(t *testing.T) {
 		}
 	}
 }
+
+// Both bars paint every cell, the last column included: the ground is Bar and
+// only the segments, the tray and the clock take other backgrounds.
+func TestBarGroundReachesLastColumn(t *testing.T) {
+	ui := mochaUI(t)
+
+	for _, w := range []int{20, 40, 80, 100, 160} {
+		a := tabsApp(t, w, 12,
+			tabSpec{core.KindShell, "/w/a", "one"},
+			tabSpec{core.KindAgent, "/w/b", "two"},
+		)
+		a.icons = true
+
+		buf := uv.NewScreenBuffer(w, a.height)
+		uv.NewStyledString(a.View().Content).Draw(buf, buf.Bounds())
+
+		for _, y := range []int{0, a.height - 1} {
+			for x := range w {
+				if c := buf.CellAt(x, y); c == nil || c.Style.Bg == nil {
+					t.Errorf("width %d: bar cell (%d, %d) has no background", w, x, y)
+				}
+			}
+		}
+
+		last := func(y int) string {
+			c := buf.CellAt(w-1, y)
+			if c == nil || c.Style.Bg == nil {
+				return ""
+			}
+
+			return hexOf(c.Style.Bg)
+		}
+
+		if got := last(a.height - 1); got != string(ui.Bar) {
+			t.Errorf("width %d: status bar last column = %s, want %s", w, got, ui.Bar)
+		}
+
+		if got := last(0); got != string(ui.Bar) && got != string(ui.Surface) && got != string(ui.Clock) {
+			t.Errorf("width %d: workspace bar last column = %s, want Bar, the tray's Surface or Clock", w, got)
+		}
+	}
+
+	// A bar with the tray: the clock is the last segment, and every cell before
+	// it is painted.
+	ground := func(line string, w int, last theme.Hex) {
+		t.Helper()
+
+		vt := lineVT(t, line, w)
+		for x := range w {
+			if c := vt.CellAt(x, 0); c == nil || c.Style.Bg == nil {
+				t.Errorf("cell %d has no background", x)
+			}
+		}
+
+		if c := vt.CellAt(w-1, 0); c == nil || c.Style.Bg == nil || hexOf(c.Style.Bg) != string(last) {
+			t.Errorf("last cell = %+v, want background %s", c, last)
+		}
+	}
+
+	ground(renderBar(planTabs(), 0, nil, 100, true, ui), 100, ui.Bar)
+	ground(renderBar(planTabs(), 0, nil, 100, false, ui), 100, ui.Bar)
+
+	for _, icons := range []bool{true, false} {
+		ground(trayApp(t, icons).workspaceBar(100), 100, ui.Clock)
+	}
+}
