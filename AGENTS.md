@@ -17,7 +17,7 @@ design; propose an edit to DESIGN.md instead.
 
 ## Workflow
 
-- Work only on the current milestone in STATUS.md. Anything else goes in its
+- Work only on the current milestones in STATUS.md. Anything else goes in its
   "Later" list.
 - Start each task in plan mode: list the requirement IDs it covers, the packages
   and files you'll touch, and how you'll test it. Wait for approval.
