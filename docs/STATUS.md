@@ -81,7 +81,7 @@ Tabs, each with its own split layout, focus and zoom, with new, rename, close, j
 
 Gate: hidden tabs keep their panes running at their own size, the six-pane bench p99 stays at most 8 ms and idle CPU at most 1 % of one core with the tray on.
 
-### M1c Copy, mouse and clipboard
+### M1c Copy, mouse and clipboard (done, PR #9)
 
 Mouse selection inside panes, copy to the system clipboard (OSC 52 and native tools), scrollback with the mouse wheel, copy mode with vim motions, mouse forwarding to programs that ask for it, focus follows mouse and copy on select as options, and guests' clipboard writes passed through. Covers AG-3 (mouse, OSC 52), AG-4, UX-4, UX-5, UX-6.
 
@@ -98,7 +98,19 @@ Gate: selection, copy mode and the clipboard work in shell panes and in programs
 
 ### M1d Agents and persistence
 
-After M1b and M1c. Saves the tabs and adds the AG-5 state badges to pane frames and tabs. Covers AG-5, AG-7 shim, AG-8, PR-1 to PR-4.
+Agent panes report working, blocked and idle through Claude Code hooks and show it on frames, tabs and the tray; a pane's kind follows Claude both ways; tabs, layout, cwds and agent sessions are saved on every change and restored on start with `claude --resume`. Covers AG-5, AG-7, AG-8, PR-1 to PR-4.
+
+- [ ] Agent fields and actions in core
+- [ ] Harness interface and the Claude Code adapter
+- [ ] Hook socket and the hook command
+- [ ] State file encoding, validation and the saver
+- [ ] Pane kind from the foreground process
+- [ ] Agent launch with hooks
+- [ ] State badges on frames, tabs and the tray
+- [ ] Restore, resume and the start-up notices
+- [ ] Quit, bench check and gate
+
+Gate: agent panes show working, blocked and idle; quitting and starting again brings back the tabs, layout and every agent session; six-pane bench p99 at most 8 ms and idle CPU at most 1 %.
 
 ## Spike - VT (done)
 
@@ -272,7 +284,7 @@ Build M1's terminal layer on `tuios.dev/vt` v0.3.1 (pure Go) behind the `VT` int
 
 ## Next
 
-M1c Copy, mouse and clipboard is done on `feat/copy-mouse-clipboard` and waits for review. Then M1d Agents and persistence.
+M1d Agents and persistence on `feat/agents-persistence`.
 
 ## Done
 
@@ -294,12 +306,17 @@ M1c Copy, mouse and clipboard is done on `feat/copy-mouse-clipboard` and waits f
 | 2026-10-26 | Tabs join M1 as M1b; copy/mouse/clipboard becomes M1c, agents and persistence M1d | Tabs change the state shape that persistence saves |
 | 2026-10-27 | A plain drag selects in every pane; programs that report the mouse get single clicks only | Replaces shift+drag: a drag is for selecting everywhere, and the program still gets the click when the button is released in the cell it went down in |
 | 2026-10-27 | Native clipboard by direct exec of `wl-copy`, `xclip` or `pbcopy`, not `atotto/clipboard` | Its primary-selection switch is global state and it drops the clipboard arguments |
+| 2026-10-27 | A pane's kind comes from the terminal's foreground process | Follows Claude both ways without hooks or a shim; hooks never change the kind |
+| 2026-10-27 | No `claude` shim yet | A hand-typed `claude` becomes an agent by kind but has no hooks; startup files that prepend `~/.local/bin` shadow a PATH-only shim |
+| 2026-10-27 | A second instance runs unsaved | One state file per user, held under a lock; the second instance never overwrites it |
+| 2026-10-27 | Always restore, with `--fresh` to start clean | A reboot brings back the same layout without a flag |
+| 2026-10-27 | A working pane quiet for 3 s becomes idle | No hook fires when a permission prompt is dismissed with `esc`; the longest output gap observed while Claude worked was 0.24 s |
 
 ## Later
 
 Ideas and requests that came up outside the current milestone go here.
 
-- A pane's kind is fixed when it opens: `claude` started in a shell pane does not make it an agent, and an agent pane whose Claude exits stays an agent (frame colour, tab icon, tray robots). M1d makes the kind follow Claude both ways (shim and hooks, or the terminal's foreground process).
+- Hooks for a hand-typed `claude` (a PATH shim or shell integration for zsh, bash and fish): startup files that prepend `~/.local/bin` shadow a PATH-only shim.
 - Build and run the spike on the operator's Mac; all numbers so far are from Linux.
 - Kitty and Ghostty key pass by the operator: Kitty keyboard keys (shift+enter, ctrl combinations) through a real Kitty-protocol terminal, which tmux cannot carry.
 - tuios's `ghostty` build-tag backend (libghostty-vt through cgo, built with Zig).

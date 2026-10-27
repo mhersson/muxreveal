@@ -38,7 +38,7 @@ IDs are referenced by milestones, commits and PRs. Priority: **P0** blocks v1, *
 | AG-4 | Scrollback and copy mode with vim motions | P0 |
 | AG-5 | Per-pane state badge (working, blocked, idle) from Claude Code hooks | P0 |
 | AG-6 | Desktop notification when an agent becomes blocked or finishes | P1 |
-| AG-7 | Plain shell panes (non-agent), the default for splits; typing `claude` in one adopts it as an agent through the PATH shim | P0 |
+| AG-7 | Plain shell panes (non-agent), the default for splits; running `claude` in one makes it an agent pane, and an agent pane whose Claude exits becomes a shell again; the kind comes from the terminal's foreground process | P0 |
 | AG-8 | Harness adapter interface so other agents (Codex, opencode) can be added | P0 (interface), P2 (adapters) |
 | AG-9 | Tabs: each with its own split layout, focus and zoom; new, rename, close, jump and cycle; the tabs shown in the workspace bar | P0 |
 
@@ -192,12 +192,25 @@ One Go module, `github.com/mhersson/muxreveal`.
 
 ```go
 type Harness interface {
-	ID() string // "claude-code"
-	Launch(cwd string, resume *SessionID) CommandSpec
-	HookSettings(pane PaneID, sock string) (path string, err error)
-	ParseEvent(raw json.RawMessage) (Event, bool)
+	ID() string                                             // saved with each agent pane: "claude-code"
+	Program() string                                        // foreground process name of a running agent: "claude"
+	Launch(settings string, resume core.SessionID) []string // agent argv; settings "" omits --settings, resume "" starts fresh
+	Settings(exe string) ([]byte, error)                    // the --settings file whose hooks run `exe hook <ID()>`
+	ParseEvent(payload []byte) (Event, error)               // one hook payload as read from stdin
+}
+
+type Event struct {
+	Pane       core.PaneID     `json:"pane"`
+	Name       string          `json:"name"`                 // the harness's hook event name, for logs
+	Session    core.SessionID  `json:"session,omitempty"`
+	Transcript string          `json:"transcript,omitempty"`
+	State      core.AgentState `json:"state,omitempty"`      // AgentUnknown leaves the state as it is
+	Start      bool            `json:"start,omitempty"`      // Session is now the pane's current session
+	End        bool            `json:"end,omitempty"`        // the session ended
 }
 ```
+
+`internal/harness` also holds the hook socket, server and client (see Claude Code integration via hooks).
 
 ## Tech stack
 
@@ -219,7 +232,7 @@ Go 1.27 (`tuios.dev/vt` needs 1.26 or later). The reason for Rust was a proven V
 | Config and state | `pelletier/go-toml/v2`; `encoding/json`; `modernc.org/sqlite` | TOML config, JSON layout state, pure Go SQLite (no cgo) for turns, reviewed hunks and caches |
 | Clipboard | OSC 52 plus direct exec of `wl-copy`, `xclip` or `pbcopy` with explicit arguments | No cgo and no shell; `atotto/clipboard` is not used because its primary-selection switch is global state and it drops the clipboard arguments |
 | Notifications | Terminal escapes (OSC 99 for Kitty, OSC 9 or 777 for Ghostty); fallback `gen2brain/beeep` | No extra daemon; native to both terminals |
-| CLI | `spf13/cobra` | `muxreveal`, `muxreveal hook <event>`, future subcommands |
+| CLI | `spf13/cobra` | `muxreveal`, `muxreveal hook claude-code`, future subcommands |
 | Diagnostics | `log/slog` to a file | Structured logs, never to the screen |
 
 ## Key technical designs
@@ -247,9 +260,13 @@ Go 1.27 (`tuios.dev/vt` needs 1.26 or later). The reason for Rust was a proven V
 - Closing a pane gives its space to its sibling, in the pane's own tab even when that tab is hidden. Closing the focused pane focuses the first leaf of that sibling; closing another pane keeps focus. Pane and tab IDs (`p1`, `t1`, ...) are never reused within a session.
 - At least one tab always exists. Closing a tab's last pane removes the tab unless it is the only one, which stays and shows the welcome card. Closing the active tab activates the tab to its left, or the new first tab; closing a hidden tab keeps the active tab. Switching tabs changes only which tab is active; each tab keeps its focus and zoom.
 - MuxReveal starts with one shell pane in the launch directory, in the first tab. It never quits by itself.
-- Shell panes run `$SHELL -l`. `leader n` opens an agent pane to the right of the focused pane, in its cwd, running `$SHELL -l -i -c 'claude; exec "$SHELL" -l'`, so leaving Claude leaves a shell in the pane. `$SHELL` falls back to `/bin/sh`.
+- Shell panes run `$SHELL -l`. `leader n` opens an agent pane to the right of the focused pane, in its cwd, running `$SHELL -l -i -c 'claude --settings <file>; exec "$SHELL" -l'`, with the settings path and any session id single-quoted for the shell (a restore adds `--resume <id>`), so leaving Claude leaves a shell in the pane. `$SHELL` falls back to `/bin/sh`. Shell panes and agent panes both get `MUXREVEAL_PANE` and `MUXREVEAL_SOCK` in their environment.
 - `leader x` closes the focused pane at once; for an agent pane it first asks in a confirm overlay (`y` or `enter` confirms, `n` or `esc` cancels). `leader q` quits and asks first when any agent pane is open. `leader X` closes the active tab with all its panes, asking first when it holds an agent pane. A pane whose process exits closes without asking, and so does an open confirm about it or about its tab once the tab is gone. The confirm owns every key while it is open.
 - The cwd a pane shows and its splits inherit is the last OSC 7 path the pane reported, else on Linux the `/proc` cwd of the terminal's foreground process group, else the cwd the pane started in. It is looked up off the UI loop, at most every 500 ms per pane.
+- A pane's kind follows its terminal's foreground process. The same probe reads the name of the foreground process group leader (`/proc/<pgrp>/comm` on Linux, the `kinfo_proc` `p_comm` on macOS). The harness's program (`claude`) makes the pane an agent; anything else makes it a shell. Becoming a shell clears the pane's harness, session, transcript and state. Hooks never change the kind, and hook events for a pane that is not an agent are ignored.
+- Claude is the foreground leader only when it runs under a shell with job control, which `$SHELL -l -i -c` and an interactive shell pane both give.
+- A pane that MuxReveal launched as an agent (`leader n` or a restore) stays an agent until Claude has been seen in the foreground and has left it, or has not appeared within 10 s of the launch (one extra probe fires at 10 s), so a slow shell start-up or a missing `claude` never demotes the pane early. A pane launched with `--resume` that has had no `SessionStart` yet is also exempt from the kind rule until that probe (see Persisted state, Resume).
+- A hand-typed `claude` makes the pane an agent by this rule but has no hooks, so it shows no badge and has no session id; restored, it gets a fresh `claude` and a notice.
 
 ### Visual design
 
@@ -268,7 +285,7 @@ The chrome is framed: every pane sits inside one connected grid of rounded borde
 - Lines are single-weight box drawing: `╭ ╮ ╰ ╯` at the outer corners, and `┬ ┴ ├ ┤ ┼` wherever borders meet, so the frames read as one connected grid.
 - Unfocused borders are `Border`. The focused pane's whole border, all four sides, is its kind colour (`Agent` for agents, `Shell` for shells) and wins in every cell it shares with a neighbour.
 - The title is set into the top border from the cell after the corner: `─`, space, kind icon (kind colour, bold), space, title, ` · ` (`Subtle`), cwd basename, space. Focused: the title in the kind colour and bold, the cwd in `Fg`. Unfocused: the title in `Muted`, the cwd in `Subtle`. The title is the guest's OSC title, else `claude` or `shell`.
-- Tags sit at the right end of the top border, ending one `─` before the corner, with one `─` between two tags: ` 󰊓 zoom ` (`Accent`, bold) on a zoomed pane, and ` 󰁝 N ` (the same style; ` ↑ N ` with icons off) on a scrolled pane, where N is the number of lines above the live screen, left of the zoom tag; and from M1d the state badge (` <icon> working `, ` <icon> blocked `, ` <icon> idle ` in `Working`, `Blocked`, `Idle`, bold). The working icon is a braille spinner (`⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏`, about 8 frames a second) that animates only while the agent works, so idle CPU is unchanged; blocked is 󰀦 and idle is 󰗡.
+- Tags sit at the right end of the top border, ending one `─` before the corner, with one `─` between two tags: ` 󰊓 zoom ` (`Accent`, bold) on a zoomed pane, and ` 󰁝 N ` (the same style; ` ↑ N ` with icons off) on a scrolled pane, where N is the number of lines above the live screen, left of the zoom tag; and from M1d the state badge (` <icon> working `, ` <icon> blocked `, ` <icon> idle ` in `Working`, `Blocked`, `Idle`, bold), the rightmost tag, with the zoom tag and then the scroll tag to its left. The working icon is a braille spinner (`⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏`, about 8 frames a second) that animates only while the agent works, so idle CPU is unchanged; blocked is 󰀦 and idle is 󰗡. With `icons = false` the badge reads ` ⠋ working `, ` blocked ` or ` idle ` (braille stays). An agent pane with no state yet, because Claude has sent no hook, shows no badge.
 - When the title does not fit, the cwd goes first (it shows whole or not at all), then the title shrinks with `…`, and with three cells or fewer left the whole title goes. The tags stay; a tag that does not fit between the corners is left out.
 - A title or tag never covers a junction: the title stays within the border run after the left corner, the tags within the run before the right corner.
 - A zoomed pane fills the inner rect inside its own frame.
@@ -284,7 +301,7 @@ Ground `Bar`.
 - **Tray**, right-aligned to the last column, at least two cells from the tabs. One `Surface` region opens with  (U+E0BA, `Surface` on `Bar`); its modules are separated by  (`Bar` on `Surface`), and each reads ` icon value `. The clock closes the bar on its own `Clock` segment, opened by  (`Clock` on `Surface`, or on `Bar` when it is the only module): ` 󰥔 14:32 ` in `OnAccent`, bold.
 - Modules, left to right:
   - **PR and CI** (M3; hidden until then) for the focused pane's branch: icon  (U+F407) in `Info`, the number (` #8`, `Fg`, bold), then the checks: 󰔟 and done/total (` 3/5`) in `Warning` while any check runs. M3 settles the passed and failed forms in the same slot.
-  - **Agents** (absent while no agent pane is open): one 󰚩 per agent pane across all tabs, in `Agent`. From M1d each robot takes its state colour (`Working`, `Blocked`, `Idle`), followed by ` 󰀦N` in `Blocked`, bold, when N agents are blocked.
+  - **Agents** (absent while no agent pane is open): one 󰚩 per agent pane across all tabs, in `Agent`. From M1d each robot takes its state colour (`Working`, `Blocked`, `Idle`), followed by ` 󰀦N` in `Blocked`, bold, when N agents are blocked. With `icons = false` the text `agents N` is followed by ` blocked N` in `Blocked`, bold, when N > 0.
   - **Git** of the focused pane (absent outside a repo): icon  in `Git`, the branch in `Fg` (at most 18 cells, cut with `…`), then a space and the dirty marker  (U+F444) in `Warning` when there are changes; a detached HEAD shows the first 7 characters of the commit. The probe runs with fsmonitor off and without the inherited repository variables; repository-configured filters can still run, as they do for a shell prompt's git integration.
   - **Load:** icon 󰻠 in `Load`, a braille sparkline of the last 10 CPU samples (5 cells, two samples per cell, `Load`; a sample fills 1 to 4 dots of its braille column from the bottom, one per started quarter of CPU), the CPU share (` 12%`, `Fg`) (on macOS the one-minute load average over the cores), then `  󰍛 9.8G` of memory in use (`Muted`).
   - **Clock:** `HH:MM`, minute resolution.
@@ -388,26 +405,53 @@ The palette shows each command's icon: `palette.open` , `theme.pick` and `the
 
 ### Claude Code integration via hooks
 
-MuxReveal never edits the user's Claude settings. Each agent is launched with a generated settings file passed through `--settings`, plus `MUXREVEAL_PANE` and `MUXREVEAL_SOCK` in the PTY environment.
+MuxReveal never edits the user's Claude settings. Every agent it launches runs `claude --settings <file>` (plus `--resume <id>` on a restore) with `MUXREVEAL_PANE` and `MUXREVEAL_SOCK` in the PTY environment. The settings file is generated per instance at `<state dir>/run/<pid>-claude.json` (mode 0600). Each event in the state table below gets one synchronous command handler, `timeout` 5, in the exec form, so no shell parses the path of the running binary:
 
 ```json
 {
   "hooks": {
-    "SessionStart":     [{"hooks": [{"type": "command", "command": "muxreveal hook session-start"}]}],
-    "UserPromptSubmit": [{"hooks": [{"type": "command", "command": "muxreveal hook turn-start"}]}],
-    "Stop":             [{"hooks": [{"type": "command", "command": "muxreveal hook turn-end"}]}],
-    "Notification":     [{"hooks": [{"type": "command", "command": "muxreveal hook notify"}]}]
+    "SessionStart":     [{"hooks": [{"type": "command", "command": "/opt/muxreveal/bin/muxreveal", "args": ["hook", "claude-code"], "timeout": 5}]}],
+    "UserPromptSubmit": [{"hooks": [{"type": "command", "command": "/opt/muxreveal/bin/muxreveal", "args": ["hook", "claude-code"], "timeout": 5}]}],
+    "Stop":             [{"hooks": [{"type": "command", "command": "/opt/muxreveal/bin/muxreveal", "args": ["hook", "claude-code"], "timeout": 5}]}]
   }
 }
 ```
 
-- `muxreveal hook` is a subcommand of the same binary. It reads the hook JSON from stdin, tags it with the pane id and sends one line over the Unix socket.
-- `session-start` stores the latest `session_id` every time. That covers fresh starts, resumes, `/clear` and compaction, which can all change the id.
-- `turn-start` waits for the snapshot ack (2 s timeout) so the snapshot lands before the agent edits anything.
-- `turn-end` and `notify` drive the working, blocked and idle badges.
-- Restore runs `claude --resume <session_id> --settings <generated>` in the saved cwd.
-- Agent panes run `claude` inside the user's shell, so exiting Claude leaves a shell in the worktree instead of closing the pane.
-- Shell panes get a `claude` shim first on their PATH that adds the `--settings` file, so a hand-typed `claude` becomes a full agent pane (AG-7).
+The example shows three events; the generated file has the same handler for every event in the table. The command is the absolute path of the running binary. Synchronous handlers keep the events in order, and the hook answers in milliseconds.
+
+**State rules**
+
+| Claude hook (`hook_event_name`) | Effect |
+| --- | --- |
+| `SessionStart` | session id and transcript recorded; state idle, except `source: "compact"`, which leaves the state |
+| `SessionEnd` | session, transcript and state cleared |
+| `UserPromptSubmit`, `PostToolUse`, `PostToolUseFailure`, `ElicitationResult` | working |
+| `PreToolUse` | blocked when `tool_name` is `AskUserQuestion`, else working |
+| `PermissionRequest`, `Elicitation` | blocked |
+| `Notification` | blocked for `notification_type` `permission_prompt`, `elicitation_dialog`, `elicitation_url_dialog` and `agent_needs_input`; idle for `idle_prompt`; any other type changes nothing |
+| `Stop`, `StopFailure` | idle |
+
+An agent pane whose Claude has sent no hook has no state and shows no badge. The saved session follows every `SessionStart`, which covers `/clear` and fork (they change the id); a plain `--resume` keeps it.
+
+**Quiet output.** Claude redraws its spinner several times a second while it works, and no hook fires when a denied permission prompt is dismissed with `esc`. So a working pane that has printed nothing for 3 s becomes idle, and a key that answers a dialog (`enter`, `esc` or a digit `1`-`9`) sent to a blocked pane makes it working, with the 3 s counted from that key. Hooks always win over these two rules. One app tick of 125 ms runs only while some pane is working; it advances the spinner and applies the quiet rule.
+
+**Hook command and socket**
+
+- `muxreveal hook claude-code` is a subcommand of the same binary. It reads the hook JSON from stdin, parses it with the harness, adds the pane id from `MUXREVEAL_PANE` and sends one compact event (pane, event name, session id, transcript path, state, start and end flags) as one JSON line over the Unix socket in `MUXREVEAL_SOCK`.
+- The server listens on `<state dir>/run/<pid>.sock` (mode 0600; the `run` directory is mode 0700). Both the socket and the settings file are removed on exit. The client waits up to 2 s for the server's `ok` line, which the server writes after the event is queued. `UserPromptSubmit` waits for that answer; from M2 the server answers after the turn snapshot, so the snapshot lands before the agent edits anything.
+- `muxreveal hook` always exits 0 and prints nothing to stdout or stderr, also when the environment variables are missing, the socket is gone or the payload is bad. Claude adds the stdout of `SessionStart` and `UserPromptSubmit` hooks to the model's context, so any output would leak into the conversation.
+- If the socket or the settings file cannot be set up, MuxReveal runs agents without `--settings` and shows the notice `agent hooks are off: <error>`.
+- Events are applied by the core. An event for a closed pane, an unknown pane id or a pane that is not an agent is ignored, as is an event after `SessionEnd` that has nothing to change.
+
+**Observed on Claude Code 2.1.311**
+
+- The exec form runs: a handler with `command` and `args` ran with its arguments.
+- The project's hooks kept running alongside the `--settings` hooks; per the Claude Code hooks docs, settings levels merge rather than replace. Handlers of one event run in parallel.
+- A denied permission prompt (`esc`) fires no hook. `Notification` with `notification_type` `permission_prompt` follows `PermissionRequest` after about 6 s. A mid-stream `esc` interrupt of a running turn was not observed live; the quiet rule covers it either way.
+- A plain `--resume` fires `SessionStart` with `source: "resume"` and the same session id.
+- A refused resume prints `No conversation found with session ID: <id>`, exits 1 within about a second, fires `SessionEnd` (reason `other`) and no `SessionStart`.
+- The longest gap in Claude's PTY output while it worked was 0.24 s, so 3 s is a wide margin for the quiet rule.
+- Claude's comm is `claude`; see Panes and layout for when it is the foreground leader.
 
 ### Turn snapshots
 
@@ -485,6 +529,7 @@ The config file is `$XDG_CONFIG_HOME/muxreveal/config.toml` when `XDG_CONFIG_HOM
 - `icons` is `true` by default; `false` drops every Nerd Font glyph (see Visual design).
 - `[mouse]` has `focus_follows_mouse` and `copy_on_select`, both `false` by default (see Mouse and clipboard).
 - `[clipboard]` has `osc52` and `native`, both `true` by default. `osc52 = false` stops copies from being sent to the outer terminal as OSC 52; `native = false` stops the native tool writes on a local session. Programs' own OSC 52 writes follow the same switches. Unknown keys in either section are errors.
+- `--fresh` starts with one shell for this run, ignoring the saved layout; the first change replaces the saved state (see Persisted state).
 - The hidden `--record <dir>` flag (diagnostics, not shown in `--help`) writes each pane's PTY output and resizes to `<dir>/<pane id>.rec`. It creates the directory with mode 0700 and each file with mode 0600, never overwrites an existing file, writes from a goroutine per pane (a full queue drops records and a write error stops the recording, each logged once). The files hold everything the guest printed. They exist for replay bench inputs and VT fixtures.
 - The log is `muxreveal.log` in the state dir (see Persisted state). At startup the previous run's log is kept as `muxreveal.log.1`, replacing any older one.
 
@@ -503,7 +548,7 @@ native = true
 
 ### Persisted state
 
-State lives in the platform state dir (`$XDG_STATE_HOME/muxreveal` on Linux, `~/Library/Application Support/muxreveal` on macOS). It's written atomically (temp file, then rename) on every layout or session change.
+State lives in the platform state dir (`$XDG_STATE_HOME/muxreveal` on Linux, `~/Library/Application Support/muxreveal` on macOS).
 
 ```json
 {
@@ -513,16 +558,56 @@ State lives in the platform state dir (`$XDG_STATE_HOME/muxreveal` on Linux, `~/
     "id": "t1",
     "name": "api",
     "focused": "p1",
+    "zoomed": true,
     "layout": { "split": "vertical", "ratio": 0.55, "children": [ { "pane": "p1" }, { "pane": "p2" } ] }
   }],
   "panes": {
-    "p1": { "kind": "agent", "harness": "claude-code", "cwd": "/home/me/code/api/.worktrees/feat-auth", "session_id": "…" },
-    "p2": { "kind": "review", "source": { "type": "branch", "pane": "p1" } }
+    "p1": {
+      "kind": "agent",
+      "harness": "claude-code",
+      "cwd": "/home/me/code/api/.worktrees/feat-auth",
+      "session_id": "7c0b6f1e-3a52-4d8e-9b41-2f5e8a1d0c37",
+      "transcript": "/home/me/.claude/projects/-home-me-code-api--worktrees-feat-auth/7c0b6f1e-3a52-4d8e-9b41-2f5e8a1d0c37.jsonl"
+    },
+    "p2": { "kind": "shell", "cwd": "/home/me/code/api" }
   }
 }
 ```
 
-A layout node is either `{ "pane": id }` or a split: `split` is `"vertical"` (children side by side) or `"horizontal"` (children stacked), `ratio` is the first child's share, and `children` lists the first child (left or top) before the second.
+- A tab has `id`, `name` (omitted when the name is automatic), `focused`, `zoomed` (omitted when false) and `layout` (absent for an empty tab). A layout node is either `{ "pane": id }` or a split: `split` is `"vertical"` (children side by side) or `"horizontal"` (children stacked), `ratio` is the first child's share, and `children` lists the first child (left or top) before the second. A pane has `kind` (`shell` or `agent`) and `cwd`, and for agents `harness`, `session_id` and `transcript`.
+- Saved: the version, the active tab, per tab its id, name, focused pane, zoom and layout (ratios rounded to 0.01), and per pane its kind and cwd and, for agents, the harness, session id and transcript path. Not saved: the theme (the config decides), agent states, scrollback, and what a shell was running.
+
+**Writing**
+
+- A saver goroutine gets the state after every successful dispatch and writes `state.json` atomically: a temp file in the same directory, fsync, then rename, mode 0600. The latest state wins, and a state that encodes to the bytes last written is skipped. Every successful dispatch counts as a change, cwd probes included, so a restored or `--fresh` state is rewritten within a probe of the start.
+- Dispatches made while the restored panes start are not saved; the next change saves the state as it then is.
+
+**Two instances**
+
+- The first instance holds an exclusive non-blocking `flock` on `<state dir>/state.lock`. A second instance starts fresh, never saves, and shows the notice `another MuxReveal is running; this one does not save its layout`.
+
+**Start-up**
+
+- MuxReveal always restores. `--fresh` starts with one shell for this run and replaces the saved state at the first change. No file, or one with no panes, starts as without a state: one shell in the launch dir.
+- A file that does not decode or validate is renamed to `state.json.bad` (replacing an older one) and the start is fresh, with the notice `the saved layout could not be read; it was kept as state.json.bad`.
+- A restored pane that fails to start is closed as `ClosePane` does, so a tab whose panes all fail goes away; if no pane is left, one shell opens in the launch dir.
+- The start-up notices (from the command, then any from starting the restored panes, such as a missing cwd) are collected in order and shown as one notice joined with `; `. It stays until the first key press like any notice; after start a new notice replaces the current one.
+
+**Validation**
+
+- Version 1; at least one tab; `active` in range; tab ids `t<N>` and pane ids `p<N>` unique; a node is a leaf (`pane`) or a split with `vertical` or `horizontal` and exactly two children; a ratio that is not finite fails, else it is clamped to [0.1, 0.9] and rounded to 0.01; every leaf names a pane in `panes` and every pane sits in exactly one leaf; kind `shell` or `agent`, and an agent's harness `claude-code`; a tab with no layout only when it is the only tab.
+- These fall back instead of failing: a focused pane that is not a leaf of its tab becomes the tab's first leaf; a session id that is not a UUID is dropped, and so is that pane's transcript; a cwd that is not absolute becomes empty (the launch dir); a name is cut to 32 runes with control characters removed.
+- `NextID` and `NextTabID` become the highest numbers in the file, so ids are not reused. Nothing from the file reaches a shell unquoted.
+
+**Resume** (PR-2, PR-4)
+
+- Before the TUI starts, an agent whose session is empty, or whose transcript file does not exist (`os.Stat` of the path Claude reported), starts a fresh `claude` with a notice. Every other agent starts `claude --settings <file> --resume <id>` in its saved cwd.
+- A resumed pane stays marked resuming until its `SessionStart` arrives. A refused resume (Claude exits 1 within about a second and fires `SessionEnd`, no `SessionStart`) clears the session as the state table says, but the pane stays marked resuming, and the kind rule does not turn it into a shell before its 10 s probe. At that probe the resume check runs first: no `SessionStart` and Claude not in the foreground (which includes a Claude that was never seen in the foreground) means the pane restarts once, not demoted, in place, with a fresh `claude` and the notice; then the kind rule applies. The restarted pane is a new launch (launched now, not yet seen, not resuming), so the kind rule treats it as any agent launch.
+- Notices: `started a fresh claude in <cwd basename>: its session could not be resumed`, or `started N fresh claudes: their sessions could not be resumed` when several panes fall back at start-up. A restart at the probe always shows the single form.
+
+**Quit**
+
+- The saver is closed (the pending state is written, later saves are dropped) before any pane is closed, so agents that die on quit, `SIGHUP` or `SIGTERM` are not saved as shells.
 
 ## Keymap draft
 
@@ -642,8 +727,10 @@ The biggest risk is terminal-layer correctness and performance, so the spike and
 | Worktree root | `<repo>/.worktrees/<branch>`, managed through `.git/info/exclude`; sibling layout is a config option |
 | Branch-mode base | The PR's base once a PR exists, else the repo default branch |
 | Review pane | A normal layout pane, persisted and splittable |
-| Hand-typed `claude` | `claude` shim on shell panes' PATH adds hooks; pane becomes an agent pane |
+| Hand-typed `claude` | Becomes an agent by its foreground process; hooks for it (a shim or shell integration) come later |
 | New panes | `leader n` opens an agent; splits open a shell in the same cwd |
+| Pane kind | The terminal's foreground process, on the cwd probe |
+| State file | One per user, locked; a second instance runs unsaved |
 | Terminals | Ghostty and Kitty on macOS and Linux; Kitty graphics protocol only |
 | GitHub | github.com and GHE via `gh` tokens; approve and merge only in v1 |
 | Third-party code | Porting TUIOS pieces (MIT) is allowed with attribution in `THIRD_PARTY.md` |
