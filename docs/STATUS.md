@@ -127,6 +127,23 @@ Idle, re-checked with agents, hooks and persistence: same setup as above (six sh
 
 The 0.17 to 0.20 point gap to the 0.53 % above is likely measurement noise: nothing added runs while idle with no agents (the agent tick runs only while a pane works, probes run only after output, and the saver, the hook socket server and the event wait block).
 
+### M1e Tiling, tab moves and chrome
+
+Tabs lay out their panes with tuios's tiling layouts (BSP with auto-split and preselection, master-stack, scrolling columns), panes move between tabs or break into their own, and the chrome comes closer to tuios's look. Covers AG-10, AG-11, AG-12.
+
+- [ ] Port tuios's tiling layouts
+- [ ] BSP behind the core actions
+- [ ] Master-stack and scrolling modes, and the `[layout]` config
+- [ ] Preselect, rotate, equalize and promote
+- [ ] Move and break panes
+- [ ] Layout state file version 2
+- [ ] Keys, commands and which-key for layouts and moves
+- [ ] Layout mode, hidden columns and preselection on screen
+- [ ] Chrome pass against tuios
+- [ ] Bench in every layout mode and idle check
+
+Gate: six-pane bench p99 at most 8 ms in every layout mode (runs a, b and c), idle CPU at most 1 % of one core with the tray on, and a reboot restores every tab's layout mode and tree with every agent session resumed.
+
 ## Spike - VT (done)
 
 Goal: prove that `tuios.dev/vt` + Bubble Tea v2 can host several busy Claude Code panes smoothly, before any real package depends on it. The spike code is kept on a local branch and is not on GitHub; M1 ports what it needs from it.
