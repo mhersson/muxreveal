@@ -4,7 +4,7 @@ Update this file at the end of every session: tick what's done, set the next ste
 
 ## Current milestones
 
-M1e Tiling, tab moves and chrome is merged (PR #12) and M2a Worktrees and diff engine is merged (PR #11); the reboot part of the M1e gate is still the operator's check. The build, CI and lint tooling plan runs now, then the agents rail, then M2b Review pane.
+M1e Tiling, tab moves and chrome is merged (PR #12) and M2a Worktrees and diff engine is merged (PR #11); the reboot part of the M1e gate is still the operator's check. The build, CI and lint tooling work (Makefile, GitHub Actions CI with Dependabot, stricter golangci-lint config) is complete. The agents rail and M3a GitHub and push backend run next, in parallel, each on its own branch and PR; M2b Review pane follows the rail, and M3b follows M2b.
 
 ## M1 Terminal core
 
@@ -436,7 +436,7 @@ Gate: a saved file shows in the open review pane within 300 ms; turn mode shows 
 
 ## Next
 
-M1e Tiling, tab moves and chrome is merged (PR #12); the reboot part of its gate is still the operator's check. The build, CI and lint tooling plan runs now: a Makefile, GitHub Actions CI with Dependabot, and a stricter golangci-lint config. The agents rail comes next, then M2b Review pane.
+M1e Tiling, tab moves and chrome is merged (PR #12); the reboot part of its gate is still the operator's check. The build, CI and lint tooling work (Makefile, GitHub Actions CI with Dependabot, stricter golangci-lint config) is complete; the first CI run decides whether the macOS test step becomes non-blocking with its failures listed in Later. The agents rail and M3a GitHub and push backend run next, in parallel, each on its own branch and PR; M2b Review pane follows the rail, and M3b follows M2b.
 
 ## Done
 
