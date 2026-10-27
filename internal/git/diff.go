@@ -155,30 +155,9 @@ func (e *Engine) Diff(ctx context.Context, src Source) (Result, error) {
 }
 
 func (e *Engine) diffBranch(ctx context.Context, s BranchSource) (Result, error) {
-	r, err := Open(ctx, s.Worktree)
+	r, oldTree, wt, err := e.branchTrees(ctx, s)
 	if err != nil {
 		return Result{}, err
-	}
-
-	base := s.Base
-	if base == "" {
-		if base, err = DefaultBranch(ctx, r); err != nil {
-			return Result{}, err
-		}
-	}
-
-	if strings.HasPrefix(base, "-") {
-		return Result{}, fmt.Errorf("diff: base %q looks like an option", base)
-	}
-
-	oldTree, err := mergeBaseTree(ctx, r, base)
-	if err != nil {
-		return Result{}, err
-	}
-
-	wt, err := WorkingTree(ctx, r, e.tempDir, 0)
-	if err != nil {
-		return Result{}, fmt.Errorf("diff: %w", err)
 	}
 
 	res, err := e.compare(ctx, r, oldTree, wt)
@@ -189,6 +168,38 @@ func (e *Engine) diffBranch(ctx context.Context, s BranchSource) (Result, error)
 	res.Live = true
 
 	return res, nil
+}
+
+// branchTrees resolves the two sides of a branch source: the merge base's tree
+// and a snapshot of the working tree.
+func (e *Engine) branchTrees(ctx context.Context, s BranchSource) (Repo, string, WorkTree, error) {
+	r, err := Open(ctx, s.Worktree)
+	if err != nil {
+		return Repo{}, "", WorkTree{}, err
+	}
+
+	base := s.Base
+	if base == "" {
+		if base, err = DefaultBranch(ctx, r); err != nil {
+			return Repo{}, "", WorkTree{}, err
+		}
+	}
+
+	if strings.HasPrefix(base, "-") {
+		return Repo{}, "", WorkTree{}, fmt.Errorf("diff: base %q looks like an option", base)
+	}
+
+	oldTree, err := mergeBaseTree(ctx, r, base)
+	if err != nil {
+		return Repo{}, "", WorkTree{}, err
+	}
+
+	wt, err := WorkingTree(ctx, r, e.tempDir, 0)
+	if err != nil {
+		return Repo{}, "", WorkTree{}, fmt.Errorf("diff: %w", err)
+	}
+
+	return r, oldTree, wt, nil
 }
 
 func (e *Engine) diffPR(ctx context.Context, s PRSource) (Result, error) {
