@@ -66,7 +66,7 @@ type mouseState struct {
 
 // hit finds what lies under the screen cell (x, y): a pane's content or top
 // border, a tab segment of the workspace bar, or nothing. A pane's side and
-// bottom borders are nothing.
+// bottom borders and the rule under the workspace bar are nothing.
 func (a *App) hit(x, y int) hitResult {
 	if y == 0 && a.height >= 2 {
 		return a.hitTab(x)

@@ -235,7 +235,7 @@ func TestFrameMinimumBody(t *testing.T) {
 		a, _ := framedApp(t, sz[0], sz[1], shellSpec("/a", "x"))
 
 		lines := strings.Split(ansi.Strip(a.View().Content), "\n")
-		for _, l := range lines[1 : len(lines)-1] {
+		for _, l := range lines[min(2, len(lines)):max(len(lines)-1, min(2, len(lines)))] {
 			if strings.TrimSpace(l) != "" {
 				t.Errorf("%v: body line %q, want blank", sz, l)
 			}
@@ -246,9 +246,9 @@ func TestFrameMinimumBody(t *testing.T) {
 // A 3x3 pane is a box around one content cell; a tile of 2x2 is left out.
 func TestSmallestPanes(t *testing.T) {
 	t.Run("3x3 draws a box with one content cell", func(t *testing.T) {
-		a, _ := framedApp(t, 3, 5, shellSpec("/a", "x"))
+		a, _ := framedApp(t, 3, 6, shellSpec("/a", "x"))
 
-		if got := a.layoutRects()["p1"]; got != (core.Rect{X: 0, Y: 1, W: 3, H: 3}) {
+		if got := a.layoutRects()["p1"]; got != (core.Rect{X: 0, Y: 2, W: 3, H: 3}) {
 			t.Fatalf("rect = %+v, want 3x3 at the body", got)
 		}
 
@@ -256,7 +256,7 @@ func TestSmallestPanes(t *testing.T) {
 			t.Errorf("PTY = %dx%d, want 1x1", cols, rows)
 		}
 
-		got := strings.Split(ansi.Strip(a.View().Content), "\n")[1:4]
+		got := strings.Split(ansi.Strip(a.View().Content), "\n")[2:5]
 		if want := []string{"╭─╮", "│x│", "╰─╯"}; !slices.Equal(got, want) {
 			t.Errorf("box = %q, want %q", got, want)
 		}
@@ -264,7 +264,7 @@ func TestSmallestPanes(t *testing.T) {
 
 	t.Run("a 2x2 tile is left out", func(t *testing.T) {
 		// A 5x3 body split into 2 and 3 columns: the 2-wide tile is too small.
-		a, _ := framedApp(t, 5, 5, shellSpec("/a", "x"), shellSpec("/b", "y"))
+		a, _ := framedApp(t, 5, 6, shellSpec("/a", "x"), shellSpec("/b", "y"))
 
 		rects := a.layoutRects()
 		if _, drawn := rects["p1"]; drawn || len(rects) != 1 {
@@ -275,7 +275,7 @@ func TestSmallestPanes(t *testing.T) {
 			t.Errorf("left-out PTY = %dx%d, want 1x1", cols, rows)
 		}
 
-		got := strings.Split(ansi.Strip(a.View().Content), "\n")[1:4]
+		got := strings.Split(ansi.Strip(a.View().Content), "\n")[2:5]
 		if want := []string{"  ╭─╮", "  │y│", "  ╰─╯"}; !slices.Equal(got, want) {
 			t.Errorf("body = %q, want %q", got, want)
 		}
@@ -284,7 +284,7 @@ func TestSmallestPanes(t *testing.T) {
 
 // topBorder is the top row of the frame, under the workspace bar, without styling.
 func topBorder(a *App) string {
-	return ansi.Strip(strings.Split(a.View().Content, "\n")[1])
+	return ansi.Strip(strings.Split(a.View().Content, "\n")[2])
 }
 
 // fill pads prefix with border cells to w cells.
@@ -379,13 +379,13 @@ func TestTitleColours(t *testing.T) {
 			start := func(r core.Rect) int { return r.X + 5 } // after "╭─ icon "
 
 			// Focused p1: icon and title bold in the kind colour, cwd Fg.
-			assertCell(t, vt, start(p1)-2, 1, tt.kindC, true)
-			assertCell(t, vt, start(p1), 1, tt.kindC, true)
-			assertCell(t, vt, start(p1)+len(title)+3, 1, ui.Fg, false)
+			assertCell(t, vt, start(p1)-2, 2, tt.kindC, true)
+			assertCell(t, vt, start(p1), 2, tt.kindC, true)
+			assertCell(t, vt, start(p1)+len(title)+3, 2, ui.Fg, false)
 			// Unfocused p2: Muted title, Subtle cwd, the icon still in the kind colour.
-			assertCell(t, vt, start(p2)-2, 1, tt.kindC, true)
-			assertCell(t, vt, start(p2), 1, ui.Muted, false)
-			assertCell(t, vt, start(p2)+len(title)+3, 1, ui.Subtle, false)
+			assertCell(t, vt, start(p2)-2, 2, tt.kindC, true)
+			assertCell(t, vt, start(p2), 2, ui.Muted, false)
+			assertCell(t, vt, start(p2)+len(title)+3, 2, ui.Subtle, false)
 		})
 	}
 }
@@ -500,8 +500,8 @@ func TestCursorView(t *testing.T) {
 		t.Fatal("cursorView() = nil, want the focused pane's cursor")
 	}
 
-	if cur.X != 51+5 || cur.Y != 2+2 {
-		t.Errorf("cursor = (%d, %d), want (56, 4)", cur.X, cur.Y)
+	if cur.X != 51+5 || cur.Y != 3+2 {
+		t.Errorf("cursor = (%d, %d), want (56, 5)", cur.X, cur.Y)
 	}
 
 	if err := a.dispatch(core.ToggleZoom{}); err != nil {
@@ -509,8 +509,8 @@ func TestCursorView(t *testing.T) {
 	}
 
 	// Zoomed, p2 fills the body, so the cursor is offset by the left frame column and the top border.
-	if cur := a.cursorView(); cur == nil || cur.X != 6 || cur.Y != 4 {
-		t.Errorf("zoomed cursor = %+v, want (6, 4)", cur)
+	if cur := a.cursorView(); cur == nil || cur.X != 6 || cur.Y != 5 {
+		t.Errorf("zoomed cursor = %+v, want (6, 5)", cur)
 	}
 
 	a.overlay = &overlay{}
@@ -656,5 +656,64 @@ func TestTitleCutBeforeCorner(t *testing.T) {
 	row := []rune(ansi.Strip(strings.Split(a.View().Content, "\n")[r.Y]))
 	if len(row) != 40 || row[39] != '╮' || !strings.Contains(string(row), "…") {
 		t.Errorf("top border = %q, want a cut title and a closing corner", string(row))
+	}
+}
+
+// Row 1 is a full-width rule in Border; the body starts under it and stays
+// above the status bar. The rule takes no clicks.
+func TestRuleUnderWorkspaceBar(t *testing.T) {
+	ui := mochaUI(t)
+	a, _ := framedApp(t, 40, 12, shellSpec("/a", "x"), shellSpec("/b", "y"))
+
+	if got, want := bodyRect(40, 12), (core.Rect{Y: 2, W: 40, H: 9}); got != want {
+		t.Fatalf("bodyRect = %+v, want %+v", got, want)
+	}
+
+	if got := a.layoutRects()["p1"]; got.Y != 2 {
+		t.Errorf("first pane starts on row %d, want 2", got.Y)
+	}
+
+	if got, want := screenText(a, 1), strings.Repeat("─", 40); got != want {
+		t.Errorf("row 1 = %q, want the rule", got)
+	}
+
+	vt := viewVT(t, a)
+	for x := range 40 {
+		assertCell(t, vt, x, 1, ui.Border, false)
+	}
+
+	for x := range 40 {
+		if h := a.hit(x, 1); h.area != hitNone {
+			t.Errorf("click on the rule at column %d hit %v", x, h.area)
+		}
+	}
+
+	if h := a.hit(5, 2); h.area != hitHeader {
+		t.Errorf("click on the top border = %v, want hitHeader", h.area)
+	}
+}
+
+// Small heights: the status bar alone, then the bar and the status bar, then
+// the rule too; the body is what is left.
+func TestRuleSmallHeights(t *testing.T) {
+	for _, tt := range []struct {
+		h    int
+		rule bool
+		body int
+	}{{1, false, 0}, {2, false, 0}, {3, true, 0}, {4, true, 1}, {6, true, 3}} {
+		a, _ := framedApp(t, 20, tt.h, shellSpec("/a", "x"))
+		lines := strings.Split(ansi.Strip(a.View().Content), "\n")
+
+		if len(lines) != tt.h {
+			t.Fatalf("height %d: %d lines", tt.h, len(lines))
+		}
+
+		if got := tt.h >= 3 && lines[1] == strings.Repeat("─", 20); got != tt.rule {
+			t.Errorf("height %d: rule = %v, want %v", tt.h, got, tt.rule)
+		}
+
+		if got := bodyRect(20, tt.h).H; got != tt.body {
+			t.Errorf("height %d: body rows = %d, want %d", tt.h, got, tt.body)
+		}
 	}
 }

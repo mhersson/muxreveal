@@ -45,7 +45,7 @@ func TestRecordFlag(t *testing.T) {
 
 	t.Cleanup(func() { _ = app.Close(context.Background()) })
 
-	app.Update(tea.WindowSizeMsg{Width: 40, Height: 10})
+	app.Update(tea.WindowSizeMsg{Width: 40, Height: 11})
 
 	pn := app.panes["p1"]
 	if pn == nil {
@@ -277,7 +277,7 @@ func TestRecordDirCollisionSetsNotice(t *testing.T) {
 
 	t.Cleanup(func() { _ = app.Close(context.Background()) })
 
-	app.Update(tea.WindowSizeMsg{Width: 40, Height: 10})
+	app.Update(tea.WindowSizeMsg{Width: 40, Height: 11})
 
 	if app.panes["p1"] == nil || !strings.Contains(app.notice, "recording is off for p1") {
 		t.Fatalf("pane = %v, notice = %q; want the pane running and a recording notice", app.panes["p1"], app.notice)

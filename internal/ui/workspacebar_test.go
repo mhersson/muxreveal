@@ -449,9 +449,9 @@ func TestHiddenTabsKeepSize(t *testing.T) {
 		}
 	}
 
-	// the zoomed tab 3 fills the body (80x24 -> 80x22, content 78x20)
-	if got := procs["p4"].resized(); len(got) == 0 || got[len(got)-1] != [2]int{78, 20} {
-		t.Errorf("zoomed pane resizes = %v, want 78x20 last", got)
+	// the zoomed tab 3 fills the body (80x24 -> 80x21, content 78x19)
+	if got := procs["p4"].resized(); len(got) == 0 || got[len(got)-1] != [2]int{78, 19} {
+		t.Errorf("zoomed pane resizes = %v, want 78x19 last", got)
 	}
 }
 
@@ -520,8 +520,8 @@ func TestHiddenResizeRendersOnSwitch(t *testing.T) {
 	}
 }
 
-// Height 1 is the status bar only, height 2 the two bars; every line is the
-// width and a body under 3 rows or columns stays blank.
+// Height 1 is the status bar only, height 2 the two bars, height 3 adds the
+// rule; every line is the width and a body under 3 rows or columns stays blank.
 func TestScreenRows(t *testing.T) {
 	specs := []tabSpec{
 		{core.KindShell, "/w/a", "one"},
@@ -529,7 +529,7 @@ func TestScreenRows(t *testing.T) {
 		{core.KindShell, "/w/c", "three"},
 	}
 
-	for _, sz := range [][2]int{{1, 1}, {2, 2}, {100, 2}, {20, 5}, {40, 1}, {40, 3}, {2, 12}, {3, 12}, {3, 3}} {
+	for _, sz := range [][2]int{{1, 1}, {2, 2}, {100, 2}, {20, 5}, {20, 6}, {40, 1}, {40, 3}, {40, 4}, {2, 12}, {3, 12}, {3, 3}} {
 		a := tabsApp(t, sz[0], sz[1], specs...)
 		attachTabPanes(t, a)
 
@@ -560,8 +560,8 @@ func TestScreenRows(t *testing.T) {
 			}
 		}
 
-		if sz[0] < minFrame || sz[1]-2 < minFrame {
-			for _, l := range plain[min(1, len(plain)):max(len(plain)-1, 1)] {
+		if sz[0] < minFrame || sz[1]-3 < minFrame {
+			for _, l := range plain[min(2, len(plain)):max(len(plain)-1, min(2, len(plain)))] {
 				if strings.TrimSpace(l) != "" {
 					t.Errorf("%v: body row %q, want blank", sz, l)
 				}

@@ -11,10 +11,10 @@ import (
 	"github.com/mhersson/muxreveal/internal/core"
 )
 
-// bodyRect is the area between the workspace bar on row 0 and the status bar
-// on the last row.
+// bodyRect is the area between the rule on row 1 and the status bar on the
+// last row.
 func bodyRect(width, height int) core.Rect {
-	return core.Rect{Y: 1, W: width, H: max(height-2, 0)}
+	return core.Rect{Y: 2, W: width, H: max(height-3, 0)}
 }
 
 // minFrame is the smallest pane rect, in rows and columns: a frame around one
@@ -112,9 +112,10 @@ type segment struct {
 	text string
 }
 
-// frameAt draws the whole screen: the workspace bar, the body and the status
-// bar, exactly height lines of exactly width cells. Height 1 is the status bar
-// only and height 2 the two bars. An empty tab shows the welcome card.
+// frameAt draws the whole screen: the workspace bar, the rule, the body and the
+// status bar, exactly height lines of exactly width cells. Height 1 is the
+// status bar only, height 2 the two bars and height 3 adds the rule. An empty
+// tab shows the welcome card.
 func (a *App) frameAt(g geometry) string {
 	if a.width <= 0 || a.height <= 0 {
 		return ""
@@ -128,7 +129,11 @@ func (a *App) frameAt(g geometry) string {
 		lines = append(lines, a.workspaceBar(a.width))
 	}
 
-	if bodyH := a.height - 2; bodyH > 0 {
+	if a.height >= 3 {
+		lines = append(lines, lk.styles.border.Render(strings.Repeat("─", a.width)))
+	}
+
+	if bodyH := a.height - 3; bodyH > 0 {
 		if st.Tab().Empty() {
 			lines = append(lines, strings.Split(renderBody(a.width, bodyH, lk.styles, lk.sample, a.welcomeHints()), "\n")...)
 		} else {
@@ -141,8 +146,8 @@ func (a *App) frameAt(g geometry) string {
 	return strings.Join(lines, "\n")
 }
 
-// frameBody draws the body rows between the two bars: each pane's box, title
-// and content.
+// frameBody draws the body rows between the rule and the status bar: each
+// pane's box, title and content.
 func (a *App) frameBody(g geometry, st core.State, lk look) []string {
 	rows := make([][]segment, a.height)
 	add := func(y int, s segment) {
@@ -187,11 +192,11 @@ func (a *App) frameBody(g geometry, st core.State, lk look) []string {
 		}
 	}
 
-	lines := make([]string, 0, a.height-2)
+	lines := make([]string, 0, a.height-3)
 
 	var sb strings.Builder
 
-	for _, segs := range rows[1 : a.height-1] {
+	for _, segs := range rows[2 : a.height-1] {
 		slices.SortFunc(segs, func(p, q segment) int { return p.x - q.x })
 		sb.Reset()
 

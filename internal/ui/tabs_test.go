@@ -142,9 +142,9 @@ func TestNewTabStartsShell(t *testing.T) {
 		t.Errorf("command dir = %q, want /elsewhere", got.Dir)
 	}
 
-	// The body is 100x28; the frame takes one cell on every side.
-	if st.sizes[1] != [2]int{98, 26} {
-		t.Errorf("start size = %v, want [98 26]", st.sizes[1])
+	// The body is 100x27; the frame takes one cell on every side.
+	if st.sizes[1] != [2]int{98, 25} {
+		t.Errorf("start size = %v, want [98 25]", st.sizes[1])
 	}
 
 	if a.panes["p2"] == nil {

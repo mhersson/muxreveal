@@ -191,8 +191,8 @@ func TestStartupOpensShell(t *testing.T) {
 		t.Errorf("command = %v in %q, want %v in %q", c.Argv, c.Dir, want.Argv, testCwd)
 	}
 
-	if st.sizes[0] != [2]int{98, 26} {
-		t.Errorf("start size = %v, want [98 26]", st.sizes[0])
+	if st.sizes[0] != [2]int{98, 25} {
+		t.Errorf("start size = %v, want [98 25]", st.sizes[0])
 	}
 
 	s := a.store.State()
@@ -210,8 +210,8 @@ func TestStartupOpensShell(t *testing.T) {
 		t.Errorf("second size message started a process (starts = %d)", st.count())
 	}
 
-	if got := st.proc(0).resized(); len(got) == 0 || got[len(got)-1] != [2]int{118, 36} {
-		t.Errorf("resizes = %v, want the last to be [118 36]", got)
+	if got := st.proc(0).resized(); len(got) == 0 || got[len(got)-1] != [2]int{118, 35} {
+		t.Errorf("resizes = %v, want the last to be [118 35]", got)
 	}
 }
 
@@ -343,7 +343,7 @@ func assertSizes(t *testing.T, a *App) {
 }
 
 // Each PTY is its pane's rect minus the frame: two panes side by side in a
-// 100x30 terminal are 50x28 rects, so 48x26 PTYs; scrolling's hidden column
+// 100x30 terminal are 50x27 rects, so 48x25 PTYs; scrolling's hidden column
 // is sized as if shown alone.
 func TestPaneSizesAreRectsMinusFrame(t *testing.T) {
 	a, _ := lifeAppSized(t, 100, 30)
@@ -351,12 +351,12 @@ func TestPaneSizesAreRectsMinusFrame(t *testing.T) {
 	chord(a, 'v')
 
 	for id, r := range a.layoutRects() {
-		if r.W != 50 || r.H != 28 {
-			t.Fatalf("%s rect = %+v, want 50x28", id, r)
+		if r.W != 50 || r.H != 27 {
+			t.Fatalf("%s rect = %+v, want 50x27", id, r)
 		}
 
-		if cols, rows := paneSizeOf(a, id); cols != 48 || rows != 26 {
-			t.Errorf("%s PTY = %dx%d, want 48x26", id, cols, rows)
+		if cols, rows := paneSizeOf(a, id); cols != 48 || rows != 25 {
+			t.Errorf("%s PTY = %dx%d, want 48x25", id, cols, rows)
 		}
 	}
 
@@ -373,14 +373,15 @@ func TestPaneSizesAreRectsMinusFrame(t *testing.T) {
 	}
 
 	for _, id := range []core.PaneID{"p1", "p2", "p3"} {
-		if cols, rows := paneSizeOf(a, id); cols != 48 || rows != 26 {
-			t.Errorf("%s PTY = %dx%d, want 48x26", id, cols, rows)
+		if cols, rows := paneSizeOf(a, id); cols != 48 || rows != 25 {
+			t.Errorf("%s PTY = %dx%d, want 48x25", id, cols, rows)
 		}
 	}
 }
 
 func TestFocusResizeZoom(t *testing.T) {
-	a, st := lifeAppSized(t, 100, 30)
+	// 31 rows give an even body, so p2 and p3 overlap p1 equally.
+	a, st := lifeAppSized(t, 100, 31)
 
 	chord(a, 'v')
 	chord(a, 's')
@@ -436,8 +437,8 @@ func TestZoomedPanesKeepTheirSize(t *testing.T) {
 
 	chord(a, 'z')
 
-	if got := paneSize(t, a, "p2"); got != [2]int{98, 26} {
-		t.Errorf("zoomed pane size = %v, want [98 26]", got)
+	if got := paneSize(t, a, "p2"); got != [2]int{98, 25} {
+		t.Errorf("zoomed pane size = %v, want [98 25]", got)
 	}
 
 	if got := len(st.proc(0).resized()); got != before {
@@ -1236,7 +1237,7 @@ func TestSwapCommands(t *testing.T) {
 
 // A pane the tiny body leaves out has no rect, so focus never steps onto it.
 func TestFocusSkipsPanesLeftOutOfATinyBody(t *testing.T) {
-	a, _ := lifeAppSized(t, 12, 11)
+	a, _ := lifeAppSized(t, 12, 12)
 
 	chord(a, 's')
 	chord(a, 's')
@@ -1247,7 +1248,7 @@ func TestFocusSkipsPanesLeftOutOfATinyBody(t *testing.T) {
 	}
 
 	if _, drawn := a.layoutRects()["p2"]; drawn {
-		t.Fatalf("p2 is drawn in a 12x11 terminal: %v", a.layoutRects())
+		t.Fatalf("p2 is drawn in a 12x12 terminal: %v", a.layoutRects())
 	}
 
 	if err := a.dispatch(core.FocusPane{ID: "p1"}); err != nil {
