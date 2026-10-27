@@ -1,11 +1,13 @@
 package ui
 
 import (
+	"context"
 	"runtime"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/mhersson/muxreveal/internal/core"
 	"github.com/mhersson/muxreveal/internal/term/rec"
 )
 
@@ -193,5 +195,58 @@ func TestBenchKitRunsWithASelection(t *testing.T) {
 
 	if res.Frames.Count == 0 {
 		t.Error("no frames were drawn with a selection")
+	}
+}
+
+func TestParseBenchMode(t *testing.T) {
+	tests := []struct {
+		in      string
+		want    core.LayoutMode
+		wantErr string
+	}{
+		{in: "", want: core.ModeBSP},
+		{in: "bsp", want: core.ModeBSP},
+		{in: "master-stack", want: core.ModeMaster},
+		{in: "scrolling", want: core.ModeScrolling},
+		{in: "tabs", wantErr: "bsp, master-stack, scrolling"},
+		{in: "BSP", wantErr: "bsp, master-stack, scrolling"},
+	}
+
+	for _, tt := range tests {
+		got, err := parseBenchMode(tt.in)
+		if tt.wantErr != "" {
+			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+				t.Errorf("parseBenchMode(%q) error = %v, want one naming %q", tt.in, err, tt.wantErr)
+			}
+
+			continue
+		}
+
+		if err != nil || got != tt.want {
+			t.Errorf("parseBenchMode(%q) = %q, %v; want %q", tt.in, got, err, tt.want)
+		}
+	}
+}
+
+func TestBenchAppLaysOutSixPanesInEveryMode(t *testing.T) {
+	for _, mode := range []core.LayoutMode{core.ModeBSP, core.ModeMaster, core.ModeScrolling} {
+		t.Run(string(mode), func(t *testing.T) {
+			app, ids, err := newBenchApp(benchConfig{Panes: 6, Width: 240, Height: 64, Mode: mode}, &fakeClock{t: time.Unix(1_000_000, 0)})
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			defer func() { _ = app.Close(context.Background()) }()
+
+			st := app.store.State()
+			if got := st.Tab().Mode; got != mode {
+				t.Errorf("tab mode = %q, want %q", got, mode)
+			}
+
+			a := core.Arrange(st.Tab(), app.bodyArea(), st.Layout)
+			if len(ids) != 6 || len(a.Sizes) != 6 || a.HiddenLeft+a.HiddenRight != 0 {
+				t.Errorf("panes %d, drawn %d, hidden %d+%d; want six drawn and none hidden", len(ids), len(a.Sizes), a.HiddenLeft, a.HiddenRight)
+			}
+		})
 	}
 }
