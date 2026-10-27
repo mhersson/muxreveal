@@ -6,8 +6,11 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
+
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/mhersson/muxreveal/internal/core"
 	"github.com/mhersson/muxreveal/internal/harness"
@@ -445,5 +448,203 @@ func TestRailFailedProbeOfTheSameCwdKeepsTheResult(t *testing.T) {
 
 	if c, _ := r.card(id); c.branch != "main" || !c.statsKnown {
 		t.Errorf("card = %+v, want the previous result", c)
+	}
+}
+
+// gate replaces the fake git with one that logs its start, holds a marker file
+// while it waits and blocks until the block file is removed.
+type gate struct {
+	block, running string
+}
+
+func (r *railApp) gate(t *testing.T) gate {
+	t.Helper()
+
+	dir := t.TempDir()
+	g := gate{block: filepath.Join(dir, "block"), running: filepath.Join(dir, "running")}
+
+	if err := os.Mkdir(g.running, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	write(t, g.block, "")
+
+	script := "#!/bin/sh\necho \"$PWD $*\" >> '" + r.log + "'\ntouch '" + g.running + "'/$$\n" +
+		"while [ -e '" + g.block + "' ]; do sleep 0.02; done\nrm -f '" + g.running + "'/$$\nexec '" + r.real + "' \"$@\"\n"
+
+	if err := os.WriteFile(filepath.Join(filepath.Dir(r.log), "git"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	return g
+}
+
+func (g gate) alive() int {
+	ents, _ := os.ReadDir(g.running)
+
+	return len(ents)
+}
+
+// runAll runs the commands of a batch at once and sends each message on the channel.
+func runAll(cmd tea.Cmd) <-chan tea.Msg {
+	out := make(chan tea.Msg, 64)
+
+	b, ok := cmd().(tea.BatchMsg)
+	if !ok {
+		close(out)
+
+		return out
+	}
+
+	var wg sync.WaitGroup
+
+	for _, c := range b {
+		wg.Add(1)
+
+		go func() {
+			defer wg.Done()
+
+			out <- c()
+		}()
+	}
+
+	go func() {
+		wg.Wait()
+		close(out)
+	}()
+
+	return out
+}
+
+func agentsInOneRepo(t *testing.T, r *railApp, n int) {
+	t.Helper()
+
+	dir := r.repo(t, "proj")
+	for i := range n {
+		r.addAgent(t, i%2 == 0, dir)
+	}
+
+	_ = os.Remove(r.log)
+}
+
+func TestRailProbesRunFourAtATime(t *testing.T) {
+	r := newRailApp(t, true)
+	agentsInOneRepo(t, r, 10)
+	g := r.gate(t)
+
+	msgs := runAll(r.railOpened())
+
+	deadline := time.Now().Add(5 * time.Second)
+	for g.alive() < railProbeMax && time.Now().Before(deadline) {
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	if g.alive() != railProbeMax {
+		t.Fatalf("running probes = %d, want %d", g.alive(), railProbeMax)
+	}
+
+	peak := 0
+
+	for end := time.Now().Add(300 * time.Millisecond); time.Now().Before(end); time.Sleep(5 * time.Millisecond) {
+		peak = max(peak, g.alive())
+	}
+
+	if peak != railProbeMax {
+		t.Errorf("peak concurrent probes = %d while blocked, want %d", peak, railProbeMax)
+	}
+
+	if err := os.Remove(g.block); err != nil {
+		t.Fatal(err)
+	}
+
+	got := 0
+
+	for {
+		select {
+		case <-msgs:
+			got++
+		case <-time.After(20 * time.Second):
+			t.Fatalf("only %d of 20 probes finished after the release", got)
+		}
+
+		if got == 20 {
+			break
+		}
+	}
+
+	if peak = max(peak, g.alive()); peak > railProbeMax {
+		t.Errorf("peak = %d, want at most %d", peak, railProbeMax)
+	}
+}
+
+func TestRailClosingFreesWaitingProbes(t *testing.T) {
+	r := newRailApp(t, true)
+	agentsInOneRepo(t, r, 10)
+	g := r.gate(t)
+
+	msgs := runAll(r.railOpened())
+
+	deadline := time.Now().Add(5 * time.Second)
+	for g.alive() < railProbeMax && time.Now().Before(deadline) {
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	r.railClosed()
+
+	got := 0
+
+	for got < 20 {
+		select {
+		case <-msgs:
+			got++
+		case <-time.After(5 * time.Second):
+			t.Fatalf("%d of 20 probes returned after the rail closed; waiting probes were not cancelled", got)
+		}
+	}
+
+	if n := r.gitCalls(); n > railProbeMax {
+		t.Errorf("git started %d times, want the waiting probes never to start it (at most %d)", n, railProbeMax)
+	}
+}
+
+func TestRailNonRepoAgentDoesNotRefireItsStatsProbe(t *testing.T) {
+	r := newRailApp(t, true)
+	first, second := t.TempDir(), t.TempDir()
+	id := r.addAgent(t, false, first)
+	r.deliver(r.railOpened())
+
+	if rp := r.rail.panes[id]; !rp.probe.known || rp.probe.repo {
+		t.Fatalf("setup: probe = %+v, want a known non-repo", rp.probe)
+	}
+
+	// Past the head interval but inside the stats one: the head probe answers
+	// before the delayed stats probe comes due.
+	r.clk.Advance(6 * time.Second)
+	openIn(t, r.App, core.SetPaneCwd{ID: id, Cwd: second})
+	r.deliver(r.settle())
+
+	// The head probe of the new cwd answered; the stats probe has nothing to count.
+	if got := r.rail.panes[id].stats.cwd; got != second {
+		t.Errorf("stats slot cwd = %q, want %q so that no update asks again", got, second)
+	}
+}
+
+func TestRailStatsProbeRunsWhenAnAgentMovesIntoARepo(t *testing.T) {
+	r := newRailApp(t, true)
+	plain := t.TempDir()
+	repo := r.repo(t, "proj")
+	id := r.addAgent(t, false, plain)
+	r.deliver(r.railOpened())
+	r.clk.Advance(11 * time.Second)
+
+	openIn(t, r.App, core.SetPaneCwd{ID: id, Cwd: repo})
+
+	msgs := r.deliver(r.settle())
+	if countOf[railStatsMsg](msgs) != 1 {
+		t.Fatalf("moving into a repo ran %v, want one stats probe", msgs)
+	}
+
+	if c, _ := r.card(id); !c.statsKnown || c.stats.Files != 1 {
+		t.Errorf("card = %+v, want the repo's stats", c)
 	}
 }

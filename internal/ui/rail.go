@@ -356,12 +356,12 @@ func (a *App) railAfterUpdate() {
 
 	a.railFit(st)
 
-	if cmd := a.railPulseCmd(); cmd != nil {
+	if cmd := a.railPulseCmd(st); cmd != nil {
 		a.later = append(a.later, cmd)
 	}
 
 	for _, id := range st.AgentPanes() {
-		if cmd := a.railSync(id, st.Panes[id].Cwd); cmd != nil {
+		if cmd := a.railSync(st, id, st.Panes[id].Cwd); cmd != nil {
 			a.later = append(a.later, cmd)
 		}
 	}
@@ -371,12 +371,25 @@ func (a *App) railAfterUpdate() {
 // clamped to keep that card whole, so the drawing never has to.
 func (a *App) railFit(st core.State) {
 	c := &a.rail.cache
-	if k := a.railFitKeyOf(); a.rail.query == "" && c.fitValid && c.fit == k {
+
+	// A kept filter matches on the cards' text, so what the line cache keys on
+	// counts too; without one only which agents exist matters.
+	var agents []railAgentKey
+
+	if a.rail.query != "" {
+		c.fitSpare = a.railAgentKeys(c.fitSpare[:0], st.AgentPanes(), a.clock.Now())
+		agents = c.fitSpare
+	}
+
+	if c.fitValid && c.fit == a.railFitKeyOf() && slices.Equal(agents, c.fitAgents) {
 		return
 	}
 
 	c.fits++
-	defer func() { c.fit, c.fitValid = a.railFitKeyOf(), true }()
+	defer func() {
+		c.fit, c.fitValid = a.railFitKeyOf(), true
+		c.fitAgents = append(c.fitAgents[:0], agents...)
+	}()
 
 	v, ok := a.railViewOf(st)
 	if !ok {
@@ -398,8 +411,8 @@ func (a *App) railFit(st core.State) {
 func (a *App) railFitKeyOf() railFitKey {
 	return railFitKey{
 		storeVer: a.storeVer, w: a.width, h: a.height, searching: a.rail.searching,
-		filtered: a.rail.query != "",
-		sel:      a.rail.sel, selIdx: a.rail.selIdx, top: a.rail.top,
+		query: a.rail.query,
+		sel:   a.rail.sel, selIdx: a.rail.selIdx, top: a.rail.top,
 	}
 }
 

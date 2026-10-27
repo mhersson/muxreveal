@@ -18,6 +18,8 @@ const (
 	headEvery        = 5 * time.Second
 	statsEvery       = 10 * time.Second
 	shortOIDLen      = 7
+	// railProbeMax bounds the rail's probes running at once.
+	railProbeMax = 4
 )
 
 type railProbeKind int
@@ -77,7 +79,7 @@ func (a *App) railOpened() tea.Cmd {
 	var cmds []tea.Cmd
 
 	for _, id := range st.AgentPanes() {
-		cmds = append(cmds, a.railFire(id, probeHead), a.railFire(id, probeStats))
+		cmds = append(cmds, a.railFire(st, id, probeHead), a.railFire(st, id, probeStats))
 	}
 
 	return tea.Batch(cmds...)
@@ -99,7 +101,7 @@ func (a *App) railClosed() {
 }
 
 // railSync probes an agent whose cwd differs from the one its probes last ran for.
-func (a *App) railSync(id core.PaneID, cwd string) tea.Cmd {
+func (a *App) railSync(st core.State, id core.PaneID, cwd string) tea.Cmd {
 	if cwd == "" || !a.railIsOpen() {
 		return nil
 	}
@@ -109,11 +111,11 @@ func (a *App) railSync(id core.PaneID, cwd string) tea.Cmd {
 	var cmds []tea.Cmd
 
 	if rp.head.cwd != cwd {
-		cmds = append(cmds, a.railFire(id, probeHead))
+		cmds = append(cmds, a.railFire(st, id, probeHead))
 	}
 
 	if rp.stats.cwd != cwd && a.engine != nil {
-		cmds = append(cmds, a.railFire(id, probeStats))
+		cmds = append(cmds, a.railFire(st, id, probeStats))
 	}
 
 	return tea.Batch(cmds...)
@@ -123,12 +125,14 @@ func (a *App) railSync(id core.PaneID, cwd string) tea.Cmd {
 func (a *App) railHook(id core.PaneID, start, idle bool) tea.Cmd {
 	var cmds []tea.Cmd
 
+	st := a.store.State()
+
 	if start || idle {
-		cmds = append(cmds, a.railFire(id, probeHead))
+		cmds = append(cmds, a.railFire(st, id, probeHead))
 	}
 
 	if idle {
-		cmds = append(cmds, a.railFire(id, probeStats))
+		cmds = append(cmds, a.railFire(st, id, probeStats))
 	}
 
 	return tea.Batch(cmds...)
@@ -144,8 +148,8 @@ func (rp *railPane) slot(k railProbeKind) *probeSlot {
 
 // railFire starts a probe, or schedules one delayed probe when the interval has
 // not passed or one is running.
-func (a *App) railFire(id core.PaneID, k railProbeKind) tea.Cmd {
-	m := a.store.State().Panes[id]
+func (a *App) railFire(st core.State, id core.PaneID, k railProbeKind) tea.Cmd {
+	m := st.Panes[id]
 	if !a.railIsOpen() || m.Kind != core.KindAgent || m.Cwd == "" {
 		return nil
 	}
@@ -155,8 +159,11 @@ func (a *App) railFire(id core.PaneID, k railProbeKind) tea.Cmd {
 			return nil
 		}
 
-		// Outside a repository there is nothing to count.
-		if known := a.rail.panes[id]; known != nil && known.probe.known && !known.probe.repo {
+		// Outside a repository there is nothing to count. Only a head result for
+		// this cwd says so; the cwd is recorded so that railSync does not ask again.
+		if known := a.rail.panes[id]; known != nil && known.probe.known && !known.probe.repo && known.probe.headCwd == m.Cwd {
+			known.stats.cwd = m.Cwd
+
 			return nil
 		}
 	}
@@ -191,12 +198,17 @@ func (a *App) railFire(id core.PaneID, k railProbeKind) tea.Cmd {
 
 	ctx, cwd, gen := a.rail.ctx, m.Cwd, a.rail.gen
 
+	sem := a.probeSem
+
 	if k == probeStats {
 		eng := a.engine
 
 		return func() tea.Msg {
-			ctx, cancel := context.WithTimeout(ctx, railProbeTimeout)
-			defer cancel()
+			ctx, done, err := admit(ctx, sem)
+			if err != nil {
+				return railStatsMsg{pane: id, cwd: cwd, gen: gen, err: err}
+			}
+			defer done()
 
 			st, err := eng.Stats(ctx, git.BranchSource{Worktree: cwd})
 
@@ -205,13 +217,34 @@ func (a *App) railFire(id core.PaneID, k railProbeKind) tea.Cmd {
 	}
 
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(ctx, railProbeTimeout)
-		defer cancel()
+		ctx, done, err := admit(ctx, sem)
+		if err != nil {
+			return railHeadMsg{pane: id, cwd: cwd, gen: gen, err: err}
+		}
+		defer done()
 
 		res, err := probeHeadOf(ctx, cwd)
 
 		return railHeadMsg{pane: id, cwd: cwd, gen: gen, res: res, err: err}
 	}
+}
+
+// admit waits for a free probe slot, honouring ctx, and returns the probe's
+// context with its timeout (counted from the start of the run, not the wait)
+// and the function that frees the slot.
+func admit(ctx context.Context, sem chan struct{}) (context.Context, func(), error) {
+	select {
+	case sem <- struct{}{}:
+	case <-ctx.Done():
+		return nil, nil, ctx.Err()
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, railProbeTimeout)
+
+	return ctx, func() {
+		cancel()
+		<-sem
+	}, nil
 }
 
 // onRailDue runs the delayed probe if a trigger is still waiting.
@@ -228,7 +261,7 @@ func (a *App) onRailDue(msg railDueMsg) tea.Cmd {
 		return nil
 	}
 
-	return a.railFire(msg.pane, msg.kind)
+	return a.railFire(a.store.State(), msg.pane, msg.kind)
 }
 
 // railFresh reports whether an answer still applies, and frees the slot.
@@ -271,7 +304,7 @@ func (a *App) onRailHead(msg railHeadMsg) tea.Cmd {
 	}
 
 	if rp.head.pending {
-		return a.railFire(msg.pane, probeHead)
+		return a.railFire(a.store.State(), msg.pane, probeHead)
 	}
 
 	return nil
@@ -299,7 +332,7 @@ func (a *App) onRailStats(msg railStatsMsg) tea.Cmd {
 	}
 
 	if rp.stats.pending {
-		return a.railFire(msg.pane, probeStats)
+		return a.railFire(a.store.State(), msg.pane, probeStats)
 	}
 
 	return nil

@@ -105,8 +105,8 @@ func (a *App) onRailFlash(msg railFlashMsg) {
 type railPulseMsg struct{}
 
 // railPulseCmd arms the pulse tick while the rail shows and some agent is blocked.
-func (a *App) railPulseCmd() tea.Cmd {
-	if a.rail.pulsing || !a.railVisible() || !a.anyBlocked() {
+func (a *App) railPulseCmd(st core.State) tea.Cmd {
+	if a.rail.pulsing || !a.railShows(st.Rail) || !anyBlocked(st) {
 		return nil
 	}
 
@@ -119,7 +119,7 @@ func (a *App) railPulseCmd() tea.Cmd {
 func (a *App) onRailPulse() {
 	a.rail.pulsing = false
 
-	if a.railVisible() && a.anyBlocked() {
+	if st := a.store.State(); a.railShows(st.Rail) && anyBlocked(st) {
 		a.rail.pulseDim = !a.rail.pulseDim
 	} else {
 		a.rail.pulseDim = false

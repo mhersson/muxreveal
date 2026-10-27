@@ -96,8 +96,9 @@ type App struct {
 	clock     clock // the sync hold's and the tray's time source
 	tray      trayState
 	rail      railState
-	storeVer  uint64      // counts the dispatches the store accepted
-	engine    *git.Engine // nil when the rail's diff stats are off
+	storeVer  uint64        // counts the dispatches the store accepted
+	engine    *git.Engine   // nil when the rail's diff stats are off
+	probeSem  chan struct{} // its capacity bounds the rail's probes running at once
 	clip      *clipboard
 	sel       *paneSelection // the one selection; survives tab switches
 	copy      *copyState     // copy mode; owns every key and ignores the mouse while set
@@ -174,6 +175,7 @@ func New(opts Options) (*App, error) {
 		panes: map[core.PaneID]*pane{}, outerFocused: true,
 		getenv: getenv, cwd: cwd, recordDir: opts.RecordDir, icons: opts.Icons, clock: realClock{}, start: termStart,
 		load:         newSysLoad(),
+		probeSem:     make(chan struct{}, railProbeMax),
 		focusFollows: opts.FocusFollowsMouse, copyOnSelect: opts.CopyOnSelect,
 		clip: newClipboard(clipboardConfig{OSC52: !opts.NoOSC52, Native: !opts.NoNativeClipboard}, getenv, runtime.GOOS, opts.Logger),
 	}

@@ -345,3 +345,32 @@ func TestRailFitRunsOnlyWhenItsInputsChange(t *testing.T) {
 		t.Error("a probe change under a search did not refit")
 	}
 }
+
+func TestRailFitUnderAKeptFilterSkipsOutputOnlyUpdates(t *testing.T) {
+	a := cacheApp(t)
+	a.railOpened()
+	a.railSetSearch(false, "api")
+	a.Update(struct{}{})
+
+	fits := a.rail.cache.fits
+
+	// Output and hook times that do not change what a card shows.
+	rp := a.railEntry("p2")
+	rp.hookAt = rp.hookAt.Add(-time.Second)
+
+	for range 3 {
+		a.Update(struct{}{})
+	}
+
+	if got := a.rail.cache.fits; got != fits {
+		t.Errorf("updates with nothing new ran the fit %d times under a kept filter", got-fits)
+	}
+
+	before := a.rail.cache.fits
+	a.clockSet(10 * time.Minute)
+	a.Update(struct{}{})
+
+	if a.rail.cache.fits == before {
+		t.Error("a card's age changing did not refit under a kept filter")
+	}
+}

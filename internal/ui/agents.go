@@ -147,8 +147,8 @@ func (a *App) anyWorking() bool {
 	return false
 }
 
-func (a *App) anyBlocked() bool {
-	for _, m := range a.store.State().Panes {
+func anyBlocked(st core.State) bool {
+	for _, m := range st.Panes {
 		if m.Kind == core.KindAgent && m.State == core.AgentBlocked {
 			return true
 		}
