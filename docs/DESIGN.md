@@ -328,11 +328,10 @@ Ground `Bar`.
 - Modules, left to right:
   - **Layout mode** (absent while the active tab has no mode): ` <icon> <mode> `, with the icon in `Accent` and the name in `Fg`: 󰕴 bsp, 󰛽 master-stack, 󰕭 scrolling. It shows the active tab's mode, and with `icons = false` it reads `layout bsp`.
   - **PR and CI** (M3; hidden until then) for the focused pane's branch: icon  (U+F407) in `Info`, the number (` #8`, `Fg`, bold), then the checks: 󰔟 and done/total (` 3/5`) in `Warning` while any check runs. M3 settles the passed and failed forms in the same slot.
-  - **Git** of the focused pane (absent outside a repo): icon  in `Git`, the branch in `Fg` (at most 18 cells, cut with `…`), then a space and the dirty marker  (U+F444) in `Warning` when there are changes; a detached HEAD shows the first 7 characters of the commit. The probe runs with fsmonitor off and without the inherited repository variables; repository-configured filters can still run, as they do for a shell prompt's git integration.
   - **Load:** icon 󰻠 in `Load`, a braille sparkline of the last 10 CPU samples (5 cells, two samples per cell, `Load`; a sample fills 1 to 4 dots of its braille column from the bottom, one per started quarter of CPU), the CPU share (` 12%`, `Fg`) (on macOS the one-minute load average over the cores), then `  󰍛 9.8G` of memory in use (`Muted`).
   - **Clock:** `HH:MM`, minute resolution.
-- **Narrow terminals** give way in this order: load, git, PR and CI leave the tray, then the layout mode; inactive tab names shrink to ` N icon `, then to ` N ` (longest names first); the clock leaves; the active tab's name shrinks, to ` N icon ` and then ` N `. The active tab always stays visible: if the ` N ` segments still do not fit, the segments farthest from the active tab are left out.
-- With `icons = false`, segments are separated by one `Bar` cell, tray modules by `│` (`Bar` on `Surface`), and there are no edge cells. Text stands in for the module icons: the dirty marker is `*`, the load reads `cpu ` (`Muted`) before the sparkline and `  mem 9.8G` after the share, and the checks read `ci 3/5`.
+- **Narrow terminals** give way in this order: load, PR and CI leave the tray, then the layout mode; inactive tab names shrink to ` N icon `, then to ` N ` (longest names first); the clock leaves; the active tab's name shrinks, to ` N icon ` and then ` N `. The active tab always stays visible: if the ` N ` segments still do not fit, the segments farthest from the active tab are left out.
+- With `icons = false`, segments are separated by one `Bar` cell, tray modules by `│` (`Bar` on `Surface`), and there are no edge cells. Text stands in for the module icons: the load reads `cpu ` (`Muted`) before the sparkline and `  mem 9.8G` after the share, and the checks read `ci 3/5`.
 
 #### Agents rail
 
@@ -356,7 +355,7 @@ A framed panel on the left of the body lists every agent pane in every tab as a 
 - **Hints.** The rail's last inner row reads `j/k move`, `enter jump`, `/ search`, `esc back` (keys `Key`, bold; labels `Muted`); pairs that do not fit are dropped from the end.
 - **Without icons.** With `icons = false` the rail drops its Nerd Font glyphs: the header reads ` Agents N `; the counts read ` blocked N ⠙N idle N ` (braille stays, and a state with no agents is left out); on card line 1 a working card keeps the braille spinner and the other states show no glyph, the cell left blank so projects stay aligned; the branch line starts where the icon was; the search row's icon becomes `/`. `●` and `▎` stay.
 - **Activity time and the unseen dot.** The UI keeps for each pane the later of its last PTY output and its last hook event. The dot is set when an agent's state changes, or it stops, while its pane is not the focused pane of the active tab, and cleared when that pane is focused. Neither is saved.
-- **Project, branch and diff stats** come from probes that run off the update loop, only while the rail is open. The project is the main checkout's directory name (`Repo.MainRoot`, so a repo's worktrees share it; for a bare repo the common dir's name without `.git`); outside a repo it is the cwd's base name, with no branch line. Per agent: a head probe (`git.Head`) when the rail opens, when a pane becomes an agent, when the pane's cwd changes, and on a hook that starts a session or moves the agent to idle, at most once every 5 s; a stats probe (`(*Engine).Stats` in branch mode against the default branch) when the rail opens, when a pane becomes an agent, when its cwd changes and on a hook that moves the agent to idle, at most once every 10 s. A trigger inside the interval, or while that probe runs, schedules one delayed probe for when the interval ends. Each probe has a 2 s context and is cancelled when the rail closes; a result is dropped when stale (the pane closed or is no longer an agent, its cwd changed since, or the rail closed). A card keeps its last result until the probe for a new cwd answers, and loses it when that probe fails. The stats probe is off without the state directory's temp directory for the engine. The tray's own git probe is separate.
+- **Project, branch and diff stats** come from probes that run off the update loop, only while the rail is open. The project is the main checkout's directory name (`Repo.MainRoot`, so a repo's worktrees share it; for a bare repo the common dir's name without `.git`); outside a repo it is the cwd's base name, with no branch line. Per agent: a head probe (`git.Head`) when the rail opens, when a pane becomes an agent, when the pane's cwd changes, and on a hook that starts a session or moves the agent to idle, at most once every 5 s; a stats probe (`(*Engine).Stats` in branch mode against the default branch) when the rail opens, when a pane becomes an agent, when its cwd changes and on a hook that moves the agent to idle, at most once every 10 s. A trigger inside the interval, or while that probe runs, schedules one delayed probe for when the interval ends. Each probe has a 2 s context and is cancelled when the rail closes; a result is dropped when stale (the pane closed or is no longer an agent, its cwd changed since, or the rail closed). A card keeps its last result until the probe for a new cwd answers, and loses it when that probe fails. The stats probe is off without the state directory's temp directory for the engine.
 
 #### Notices, prompts and pending keys
 
@@ -409,7 +408,7 @@ Existing roles keep their colours. New roles:
 | `Bar` | Base | ground of the workspace bar |
 | `Dim` | Subtext0 | inactive tab text |
 | `Clock` | Lavender | clock segment |
-| `Git` | Flamingo | git icon |
+| `Git` | Flamingo | the rail's branch icon |
 | `Load` | Teal | load icon and sparkline |
 | `Working`, `Blocked`, `Idle` | Peach, Red, Green | agent state badges, tab icons, and the rail's state glyphs, counts and group headers |
 
@@ -428,8 +427,7 @@ All single cell (Nerd Fonts v3 names):
 | 󰊓 | nf-md-fullscreen | U+F0293 | zoom tag, zoom command |
 | 󰁝 | nf-md-arrow_up | U+F005D | scrolled pane tag, preselect up |
 | 󰥔 | nf-md-clock_outline | U+F0954 | clock |
-|  | nf-dev-git_branch | U+E725 | git, card branch line |
-|  | nf-oct-dot_fill | U+F444 | uncommitted changes |
+|  | nf-dev-git_branch | U+E725 | the rail's card branch line |
 | 󰻠 | nf-md-cpu_64_bit | U+F0EE0 | load |
 | 󰍛 | nf-md-memory | U+F035B | memory |
 | 󰀪 | nf-md-alert_outline | U+F002A | toast, confirm title |

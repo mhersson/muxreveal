@@ -213,7 +213,7 @@ func testModules() []trayModule {
 		return trayModule{id: id, width: w, render: func() string { return strings.Repeat("x", w) }}
 	}
 
-	return []trayModule{mk(modPR, 8), mk(modGit, 14), mk(modLoad, 20), mk(modClock, 9)}
+	return []trayModule{mk(modPR, 8), mk(modLoad, 20), mk(modClock, 9)}
 }
 
 func planTabs() []tabInfo {
@@ -243,19 +243,18 @@ func signature(p barPlan) string {
 // The drop order of DESIGN's narrow-terminal rule, stage by stage.
 func TestWorkspaceBarPlan(t *testing.T) {
 	want := []string{
-		"pr,git,load,clock | 1:0 2:0 3:0",
-		"pr,git,clock | 1:0 2:0 3:0", // load leaves
-		"pr,clock | 1:0 2:0 3:0",     // git leaves
-		"clock | 1:0 2:0 3:0",        // pr leaves
-		"clock | 1:0 2:0 3:1",        // the longest inactive name goes first
-		"clock | 1:1 2:0 3:1",        //
-		"clock | 1:1 2:0 3:2",        // then down to the number
-		"clock | 1:2 2:0 3:2",        //
-		" | 1:2 2:0 3:2",             // the clock leaves
-		" | 1:2 2:1 3:2",             // the active name shrinks
-		" | 1:2 2:2 3:2",             //
-		" | 1:2 2:2",                 // the farthest segment goes
-		" | 2:2",                     //
+		"pr,load,clock | 1:0 2:0 3:0",
+		"pr,clock | 1:0 2:0 3:0", // load leaves
+		"clock | 1:0 2:0 3:0",    // pr leaves
+		"clock | 1:0 2:0 3:1",    // the longest inactive name goes first
+		"clock | 1:1 2:0 3:1",    //
+		"clock | 1:1 2:0 3:2",    // then down to the number
+		"clock | 1:2 2:0 3:2",    //
+		" | 1:2 2:0 3:2",         // the clock leaves
+		" | 1:2 2:1 3:2",         // the active name shrinks
+		" | 1:2 2:2 3:2",         //
+		" | 1:2 2:2",             // the farthest segment goes
+		" | 2:2",                 //
 	}
 
 	var got []string
@@ -360,10 +359,10 @@ func TestTrayWidth(t *testing.T) {
 	}{
 		{"none", nil, true, 0},
 		{"clock alone", mk(modClock), true, 1 + 9},
-		{"one module", mk(modGit), true, 1 + 14},
-		{"module and clock", mk(modGit, modClock), true, 1 + 14 + 1 + 9},
-		{"three", mk(modPR, modGit, modClock), true, 1 + 8 + 1 + 14 + 1 + 9},
-		{"icons off, separated by one cell", mk(modPR, modGit, modClock), false, 8 + 1 + 14 + 1 + 9},
+		{"one module", mk(modLoad), true, 1 + 20},
+		{"module and clock", mk(modLoad, modClock), true, 1 + 20 + 1 + 9},
+		{"three", mk(modPR, modLoad, modClock), true, 1 + 8 + 1 + 20 + 1 + 9},
+		{"icons off, separated by one cell", mk(modPR, modLoad, modClock), false, 8 + 1 + 20 + 1 + 9},
 	}
 
 	for _, tt := range tests {

@@ -1,12 +1,8 @@
 package ui
 
 import (
-	"bytes"
 	"context"
-	"errors"
 	"fmt"
-	"os"
-	"os/exec"
 	"slices"
 	"strings"
 	"time"
@@ -19,21 +15,12 @@ import (
 )
 
 const (
-	gitEvery   = 5 * time.Second
-	gitTimeout = 2 * time.Second
-	loadEvery  = 2 * time.Second
+	loadEvery = 2 * time.Second
 
 	// loadHistory is the CPU samples the sparkline covers: two per cell.
-	loadHistory  = 10
-	sparkCells   = loadHistory / 2
-	maxBranchLen = 18
+	loadHistory = 10
+	sparkCells  = loadHistory / 2
 )
-
-// gitInfo is the focused pane's repository state.
-type gitInfo struct {
-	Branch string
-	Dirty  bool
-}
 
 // loadSample is one reading of the machine: CPU percent and memory in use.
 type loadSample struct {
@@ -52,41 +39,17 @@ type loadSampler interface {
 	Sample(ctx context.Context) (loadSample, error)
 }
 
-// gitRunner returns the output of `git status` for cwd.
-type gitRunner func(ctx context.Context, cwd string) ([]byte, error)
-
 // trayState is the sampled data behind the tray. Only Update changes it; the
 // samplers run in commands and report back by message.
 type trayState struct {
 	on    bool // sampling is armed; set by Init
 	clock string
-	git   *gitInfo
 	load  *loadInfo
-
-	gitRun  gitRunner
-	gitCwd  string // the cwd of the latest probe
-	gitFor  string // the cwd git was read for
-	gitBusy bool   // a probe is in flight
-	// gitSlow is the focus whose probe timed out: periodic probes stop until
-	// the focused pane or its cwd changes.
-	gitSlow gitFocus
-}
-
-// gitFocus is the pane and cwd a probe was made for.
-type gitFocus struct {
-	pane core.PaneID
-	cwd  string
 }
 
 type (
-	clockMsg   struct{ text string }
-	gitTickMsg struct{}
-	gitMsg     struct {
-		cwd  string
-		info *gitInfo
-		err  error // the probe failed; info says nothing about the repository
-	}
-	loadMsg struct {
+	clockMsg struct{ text string }
+	loadMsg  struct {
 		sample loadSample
 		err    error
 	}
@@ -117,7 +80,7 @@ func untilNextMinute(now time.Time) time.Duration {
 func (a *App) initTray() tea.Cmd {
 	a.tray.on = true
 
-	cmds := []tea.Cmd{a.clockCmd(false), a.gitTickCmd(), a.syncGit()}
+	cmds := []tea.Cmd{a.clockCmd(false)}
 	if a.load != nil {
 		cmds = append(cmds, a.loadCmd(false))
 	}
@@ -165,101 +128,6 @@ func (a *App) onClock(msg clockMsg) tea.Cmd {
 	a.tray.clock = msg.text
 
 	return a.clockCmd(true)
-}
-
-func (a *App) gitTickCmd() tea.Cmd {
-	return tea.Tick(gitEvery, func(time.Time) tea.Msg { return gitTickMsg{} })
-}
-
-func (a *App) onGitTick() tea.Cmd {
-	if a.tray.gitSlow == a.gitFocus() {
-		return a.gitTickCmd()
-	}
-
-	return tea.Batch(a.gitTickCmd(), a.probeGit())
-}
-
-// focusCwd is the working directory of the focused pane.
-func (a *App) focusCwd() string {
-	return a.gitFocus().cwd
-}
-
-func (a *App) gitFocus() gitFocus {
-	st := a.store.State()
-	pane := st.Tab().Focus
-
-	return gitFocus{pane: pane, cwd: st.Panes[pane].Cwd}
-}
-
-// syncGit probes at once when the focused pane's cwd differs from the last
-// probe's, or when the focus moved off a probe that timed out.
-func (a *App) syncGit() tea.Cmd {
-	if !a.tray.on {
-		return nil
-	}
-
-	if slow := a.tray.gitSlow; slow != (gitFocus{}) && slow != a.gitFocus() {
-		a.tray.gitSlow = gitFocus{}
-
-		return a.probeGit()
-	}
-
-	if a.focusCwd() == a.tray.gitCwd {
-		return nil
-	}
-
-	return a.probeGit()
-}
-
-// probeGit starts a probe of the focused cwd unless one is already in flight.
-func (a *App) probeGit() tea.Cmd {
-	if !a.tray.on || a.tray.gitBusy {
-		return nil
-	}
-
-	cwd := a.focusCwd()
-	a.tray.gitCwd = cwd
-
-	if cwd == "" {
-		a.tray.git = nil
-
-		return nil
-	}
-
-	a.tray.gitBusy = true
-	ctx, run := a.ctx, a.tray.gitRun
-
-	return func() tea.Msg {
-		info, err := statusInfo(ctx, run, cwd)
-		if err != nil && ctx.Err() == nil {
-			a.log.Debug("git probe", "cwd", cwd, "err", err)
-		}
-
-		return gitMsg{cwd: cwd, info: info, err: err}
-	}
-}
-
-func (a *App) onGit(msg gitMsg) tea.Cmd {
-	a.tray.gitBusy = false
-
-	if msg.cwd != a.focusCwd() {
-		// The focus moved while the probe ran; its answer is for another directory.
-		return a.probeGit()
-	}
-
-	if errors.Is(msg.err, context.DeadlineExceeded) {
-		a.tray.gitSlow = a.gitFocus()
-	}
-
-	// A failed probe keeps what was read for this directory; elsewhere it
-	// leaves nothing to show. Outside a repository the module goes away.
-	if msg.err != nil && a.tray.gitFor == msg.cwd {
-		return nil
-	}
-
-	a.tray.git, a.tray.gitFor = msg.info, msg.cwd
-
-	return nil
 }
 
 // loadCmd waits loadEvery (not at all when !wait) and takes one sample.
@@ -362,112 +230,6 @@ func sparkline(samples []int) string {
 	return sb.String()
 }
 
-// statusInfo runs git for cwd within gitTimeout. A directory outside a
-// repository gives no info and no error.
-func statusInfo(ctx context.Context, run gitRunner, cwd string) (*gitInfo, error) {
-	ctx, cancel := context.WithTimeout(ctx, gitTimeout)
-	defer cancel()
-
-	out, err := run(ctx, cwd)
-	if err != nil {
-		var exit *exec.ExitError
-		if errors.As(err, &exit) && ctx.Err() == nil {
-			return nil, nil
-		}
-
-		return nil, fmt.Errorf("git status in %s: %w", cwd, err)
-	}
-
-	return parseGitStatus(out), nil
-}
-
-// runGit is the production gitRunner: explicit arguments, no shell, and an
-// environment free of repository-local variables.
-func runGit(ctx context.Context, cwd string) ([]byte, error) {
-	cmd := exec.CommandContext(ctx, "git", gitStatusArgs(cwd)...)
-	cmd.Env = gitProbeEnv(os.Environ())
-
-	out, err := cmd.Output()
-	if err != nil {
-		return nil, fmt.Errorf("run git: %w", err)
-	}
-
-	return out, nil
-}
-
-// gitStatusArgs turns fsmonitor off so a repository cannot run a program from
-// its config; the -c value also reaches child gits through GIT_CONFIG_PARAMETERS.
-func gitStatusArgs(cwd string) []string {
-	return []string{"-c", "core.fsmonitor=false", "-C", cwd, "status", "--porcelain=v2", "--branch", "-z"}
-}
-
-// gitProbeEnv drops git's repository-local variables from inherited and sets
-// GIT_OPTIONAL_LOCKS=0. The list is from `git rev-parse --local-env-vars`
-// (git 2.56); GIT_CONFIG_COUNT also removes its KEY_<n> and VALUE_<n> pairs.
-func gitProbeEnv(inherited []string) []string {
-	local := map[string]bool{}
-	for _, name := range []string{
-		"GIT_ALTERNATE_OBJECT_DIRECTORIES", "GIT_CONFIG", "GIT_CONFIG_PARAMETERS",
-		"GIT_CONFIG_COUNT", "GIT_OBJECT_DIRECTORY", "GIT_DIR", "GIT_WORK_TREE",
-		"GIT_IMPLICIT_WORK_TREE", "GIT_GRAFT_FILE", "GIT_INDEX_FILE",
-		"GIT_NO_REPLACE_OBJECTS", "GIT_REPLACE_REF_BASE", "GIT_PREFIX",
-		"GIT_SHALLOW_FILE", "GIT_COMMON_DIR", "GIT_OPTIONAL_LOCKS",
-	} {
-		local[name] = true
-	}
-
-	env := make([]string, 0, len(inherited)+1)
-
-	for _, kv := range inherited {
-		name, _, _ := strings.Cut(kv, "=")
-		if local[name] || strings.HasPrefix(name, "GIT_CONFIG_KEY_") || strings.HasPrefix(name, "GIT_CONFIG_VALUE_") {
-			continue
-		}
-
-		env = append(env, kv)
-	}
-
-	return append(env, "GIT_OPTIONAL_LOCKS=0")
-}
-
-// parseGitStatus reads `status --porcelain=v2 --branch -z`: the header records,
-// then one record per changed path. A detached HEAD reads as the first seven
-// characters of its commit. It returns nil without a branch header.
-func parseGitStatus(out []byte) *gitInfo {
-	var branch, oid string
-
-	var info gitInfo
-
-	for rec := range bytes.SplitSeq(out, []byte{0}) {
-		s := string(rec)
-
-		switch {
-		case s == "":
-		case !strings.HasPrefix(s, "#"):
-			info.Dirty = true
-		case strings.HasPrefix(s, "# branch.head "):
-			branch = strings.TrimPrefix(s, "# branch.head ")
-		case strings.HasPrefix(s, "# branch.oid "):
-			oid = strings.TrimPrefix(s, "# branch.oid ")
-		}
-
-		if info.Dirty {
-			break
-		}
-	}
-
-	switch branch {
-	case "":
-		return nil
-	case "(detached)":
-		branch = oid[:min(len(oid), 7)]
-	}
-
-	info.Branch = branch
-
-	return &info
-}
-
 // trayRun is a piece of text in one colour on the Surface ground.
 type trayRun struct {
 	text string
@@ -505,10 +267,6 @@ func (a *App) trayModules() []trayModule {
 		mods = append(mods, layoutModule(m, icons, ui))
 	}
 
-	if g := a.tray.git; g != nil {
-		mods = append(mods, gitModule(*g, icons, ui))
-	}
-
 	if l := a.tray.load; l != nil && len(l.CPU) > 0 {
 		mods = append(mods, loadModule(*l, icons, ui))
 	}
@@ -541,26 +299,6 @@ func layoutModule(m core.LayoutMode, icons bool, ui theme.UI) trayModule {
 		trayRun{text: icon, fg: ui.Accent},
 		trayRun{text: " " + string(m) + " ", fg: ui.Fg},
 	)
-}
-
-func gitModule(g gitInfo, icons bool, ui theme.UI) trayModule {
-	runs := []trayRun{{text: " ", fg: ui.Fg}}
-	if icons {
-		runs = append(runs, trayRun{text: iconGit, fg: ui.Git}, trayRun{text: " ", fg: ui.Fg})
-	}
-
-	runs = append(runs, trayRun{text: ansi.Truncate(printable(g.Branch), maxBranchLen, "…"), fg: ui.Fg})
-
-	if g.Dirty {
-		marker := "*"
-		if icons {
-			marker = iconDirty
-		}
-
-		runs = append(runs, trayRun{text: " ", fg: ui.Fg}, trayRun{text: marker, fg: ui.Warning})
-	}
-
-	return surfaceModule(modGit, ui, append(runs, trayRun{text: " ", fg: ui.Fg})...)
 }
 
 func loadModule(l loadInfo, icons bool, ui theme.UI) trayModule {

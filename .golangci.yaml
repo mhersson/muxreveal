@@ -103,10 +103,6 @@ linters:
     - linters: [gosec]
       text: "G204"
       path: "internal/ui/clipboard\\.go$"
-    # G204: constant git, cwd is a separate argument, no shell, scrubbed environment.
-    - linters: [gosec]
-      text: "G204"
-      path: "internal/ui/tray\\.go$"
     # G301/G302: git's own modes for .git/info and info/exclude; the path comes
     # from git's reported git dir.
     - linters: [gosec]

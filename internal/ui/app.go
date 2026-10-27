@@ -178,7 +178,6 @@ func New(opts Options) (*App, error) {
 		clip: newClipboard(clipboardConfig{OSC52: !opts.NoOSC52, Native: !opts.NoNativeClipboard}, getenv, runtime.GOOS, opts.Logger),
 	}
 
-	a.tray.gitRun = runGit
 	if opts.GitTempDir != "" {
 		a.engine = git.NewEngine(git.Limits{}, opts.GitTempDir)
 	}
@@ -241,10 +240,6 @@ func (a *App) dispatch(act core.Action) error {
 
 	a.dropGoneTab(st)
 	a.reportFocusChange(prev.Focus, st.Tab().Focus)
-
-	if cmd := a.syncGit(); cmd != nil {
-		a.later = append(a.later, cmd)
-	}
 
 	if st.Tab().ID != prev.ID {
 		a.renderStale(st)
@@ -373,10 +368,6 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, a.onAgentTick()
 	case clockMsg:
 		return a, a.onClock(msg)
-	case gitTickMsg:
-		return a, a.onGitTick()
-	case gitMsg:
-		return a, a.onGit(msg)
 	case loadMsg:
 		return a, a.onLoad(msg)
 	case railHeadMsg:

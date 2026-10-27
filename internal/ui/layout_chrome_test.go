@@ -337,7 +337,7 @@ func TestLayoutModuleColours(t *testing.T) {
 
 // The layout module leaves after load, git and PR and before any tab name
 // shrinks.
-func TestLayoutModuleGivesWayAfterGitAndBeforeTabNames(t *testing.T) {
+func TestLayoutModuleGivesWayAfterLoadAndBeforeTabNames(t *testing.T) {
 	for _, icons := range []bool{true, false} {
 		a := trayApp(t, icons)
 		tabs := a.tabInfos()
@@ -351,8 +351,8 @@ func TestLayoutModuleGivesWayAfterGitAndBeforeTabNames(t *testing.T) {
 			if !slices.Contains(kept, modLayout) {
 				gone = true
 
-				if slices.Contains(kept, modLoad) || slices.Contains(kept, modGit) {
-					t.Fatalf("icons=%v width %d: load or git stayed after the layout left (kept %v)", icons, w, kept)
+				if slices.Contains(kept, modLoad) {
+					t.Fatalf("icons=%v width %d: load stayed after the layout left (kept %v)", icons, w, kept)
 				}
 
 				continue

@@ -594,6 +594,7 @@ M1e Tiling, tab moves and chrome is merged (PR #12); the reboot part of its gate
 | 2026-10-27 | Push and fetch run without a controlling terminal and with `GIT_TERMINAL_PROMPT=0` | A credential or ssh prompt fails with an error instead of taking over the TUI's terminal |
 | 2026-10-27 | A PR diff names the head commit it shows, and a merge passes that commit | You never merge a commit you have not seen |
 | 2026-10-27 | The agents rail is 44 columns wide on a body of at least 84 columns, else the body less 40 (at least 24), and is not shown on a body under 64 (it stays open and the panes get the whole body); the wheel over it moves the selection; a hidden rail never holds the keyboard; with icons off it drops its glyphs but keeps the braille spinner, `●` and `▎`; a leader command that changes the active tab or its focused pane returns the keyboard to the panes while the rest leave it with the rail; the blocked bar sits under the selection outline (the operator's playground pick); hidden cards are counted in the bottom border (` ↑ N ` and ` N ↓ `) | The rail must leave room for the panes at any size and never trap the keys; moving focus is the signal that the user is done with the rail; the outline and the pulse must not fight for the same cells; the counts say what scrolled out of sight |
+| 2026-10-27 | The tray's git module is removed | The agents rail shows each agent's branch, and a shell's own prompt shows its branch |
 
 ## Later
 
