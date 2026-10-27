@@ -24,6 +24,7 @@ type paneRepoMsg struct {
 	cwd  string
 	repo git.Repo
 	err  error
+	gone bool // err is set and cwd is no directory
 }
 
 // watchAcquiredMsg carries the reference a finished Acquire took.
@@ -205,7 +206,7 @@ func (a *App) resolveCmd(id core.PaneID, cwd string) tea.Cmd {
 
 		r, err := open(ctx, cwd)
 
-		return paneRepoMsg{id: id, cwd: cwd, repo: r, err: err}
+		return paneRepoMsg{id: id, cwd: cwd, repo: r, err: err, gone: err != nil && !usableDir(cwd)}
 	}
 }
 
@@ -218,8 +219,10 @@ func (a *App) onPaneRepo(msg paneRepoMsg) tea.Cmd {
 	}
 
 	switch {
-	case errors.Is(msg.err, git.ErrNotRepo), msg.err != nil && !usableDir(msg.cwd):
+	case errors.Is(msg.err, git.ErrNotRepo), msg.err != nil && msg.gone:
 		w.clear(a)
+
+		w.failed = false
 
 		return nil
 	case msg.err != nil:
@@ -234,6 +237,7 @@ func (a *App) onPaneRepo(msg paneRepoMsg) tea.Cmd {
 	}
 
 	w.failed = false
+	delete(a.watches.failed, "project "+filepath.Base(msg.cwd))
 
 	w.want = msg.repo.Root
 	if w.root == msg.repo.Root {

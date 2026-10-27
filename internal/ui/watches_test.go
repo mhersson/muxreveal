@@ -321,7 +321,9 @@ func TestIndexOnlyChangeCostsNoStatsProbe(t *testing.T) {
 		}
 	}
 
-	// Staging rewrites the index and moves no head.
+	// Staging rewrites the index and moves no head. The clock stands just
+	// inside the stats interval, so only a forced probe could run.
+	w.clk.Advance(statsEvery - time.Second)
 	w.gitIn(t, dir, "add", "a.txt")
 	w.until(t, "the head probe the index change caused", seen, func() bool { return heads >= 1 })
 
@@ -384,6 +386,18 @@ func TestFailedResolveNotifiesOnceAndRetriesOnAHook(t *testing.T) {
 
 	w.pm.run(hook(w.App, harness.Event{Pane: first, Name: "Stop"}))
 	w.until(t, "the retry to acquire", nil, func() bool { return w.held(first) == root })
+
+	// A failure after a success is shown again, also for another project of the same name.
+	w.watches.open = func(context.Context, string) (git.Repo, error) { return git.Repo{}, errors.New("too slow again") }
+	w.notice = ""
+
+	openIn(t, w.App, core.SetPaneCwd{ID: first, Cwd: w.repo(t, "proj")})
+	w.pm.run(w.settle())
+	w.until(t, "the second notice", nil, func() bool { return w.notice != "" })
+
+	if want := "watching proj failed: too slow again"; w.notice != want {
+		t.Errorf("notice = %q, want %q", w.notice, want)
+	}
 }
 
 func TestRailStatsFollowAFileWrite(t *testing.T) {
