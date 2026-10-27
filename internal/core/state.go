@@ -15,6 +15,7 @@ type State struct {
 	NextID    int          // last pane number handed out
 	NextTabID int          // last tab number handed out
 	Layout    LayoutConfig // settings Arrange and the placement helpers read
+	Rail      bool         // the agents rail is open; it narrows every pane's body
 }
 
 // InitialState returns the state of a fresh session: one empty tab.
@@ -66,6 +67,26 @@ func (a SetTheme) apply(s *State) error {
 	}
 
 	s.Theme = a.Name
+
+	return nil
+}
+
+// ToggleRail opens the agents rail when it is closed and closes it when open.
+type ToggleRail struct{}
+
+func (ToggleRail) apply(s *State) error {
+	s.Rail = !s.Rail
+
+	return nil
+}
+
+// SetRail opens or closes the agents rail.
+type SetRail struct {
+	Open bool
+}
+
+func (a SetRail) apply(s *State) error {
+	s.Rail = a.Open
 
 	return nil
 }

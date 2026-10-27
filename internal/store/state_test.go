@@ -567,3 +567,49 @@ func TestRoundTripAtPaneLimit(t *testing.T) {
 func decodeDefault(data []byte) (core.State, Report, error) {
 	return Decode(data, core.LayoutConfig{})
 }
+
+func TestRailPersistence(t *testing.T) {
+	open := fixedState()
+	open.Rail = true
+
+	data, err := Encode(open)
+	noErr(t, err)
+
+	if !strings.Contains(string(data), "\"rail\": true") {
+		t.Errorf("open rail is not written:\n%s", data)
+	}
+
+	got, rep, err := decodeDefault(data)
+	noErr(t, err)
+	eq(t, rep, Report{})
+	eq(t, got.Rail, true)
+
+	data, err = Encode(fixedState())
+	noErr(t, err)
+
+	if strings.Contains(string(data), "rail") {
+		t.Errorf("closed rail is written:\n%s", data)
+	}
+}
+
+func TestDecodeRailByVersion(t *testing.T) {
+	tests := []struct {
+		name, version, rail string
+		want                bool
+	}{
+		{"v2 without the field", "2", "", false},
+		{"v2 open", "2", `"rail":true,`, true},
+		{"v2 explicitly closed", "2", `"rail":false,`, false},
+		{"v1 without the field", "1", "", false},
+		{"v1 ignores the field", "1", `"rail":true,`, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			body := doc(tt.version, "0", tabDoc("t1", "p1", `"p1","p2"`, twoLayout), twoPanes)
+			data := strings.Replace(body, `"active"`, tt.rail+`"active"`, 1)
+			st, _, err := decodeDefault([]byte(data))
+			noErr(t, err)
+			eq(t, st.Rail, tt.want)
+		})
+	}
+}

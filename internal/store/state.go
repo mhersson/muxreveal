@@ -39,6 +39,7 @@ var uuidRE = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[
 type fileJSON struct {
 	Version json.RawMessage     `json:"version"`
 	Active  int                 `json:"active"`
+	Rail    bool                `json:"rail,omitempty"`
 	Tabs    []tabJSON           `json:"tabs"`
 	Panes   map[string]paneJSON `json:"panes"`
 }
@@ -87,6 +88,7 @@ func Encode(st core.State) ([]byte, error) {
 	f := fileJSON{
 		Version: json.RawMessage(strconv.Itoa(Version)),
 		Active:  st.Active,
+		Rail:    st.Rail,
 		Panes:   map[string]paneJSON{},
 	}
 	for _, t := range tabs {
@@ -284,6 +286,7 @@ func Decode(data []byte, lc core.LayoutConfig) (core.State, Report, error) {
 	}
 
 	st.Active = f.Active
+	st.Rail = current && f.Rail
 
 	owner := map[core.PaneID]string{}
 	tabIDs := map[string]bool{}
