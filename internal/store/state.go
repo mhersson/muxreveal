@@ -27,7 +27,6 @@ var ErrInvalid = errors.New("invalid state file")
 
 const (
 	maxFileSize   = 16 << 20
-	maxPanes      = 64
 	maxNameRunes  = 32
 	maxVersionLen = 16
 	maxNumber     = 999_999_999 // keeps NextID + 1 far from overflow
@@ -159,8 +158,8 @@ func Decode(data []byte) (core.State, Report, error) {
 	if err := json.Unmarshal(data, &f); err != nil {
 		return invalid("%v", err)
 	}
-	if len(f.Panes) > maxPanes {
-		return invalid("%d panes, at most %d", len(f.Panes), maxPanes)
+	if len(f.Panes) > core.MaxPanes {
+		return invalid("%d panes, at most %d", len(f.Panes), core.MaxPanes)
 	}
 	var rep Report
 	v1 := isVersion1(f.Version)

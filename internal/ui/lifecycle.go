@@ -72,6 +72,9 @@ func (a *App) openPane(kind core.PaneKind, split core.Split) tea.Cmd {
 	}
 
 	st := a.store.State()
+	if a.panesFull(st) {
+		return nil
+	}
 
 	cwd := a.cwd
 	if m, ok := st.Panes[st.Tab().Focus]; ok && m.Cwd != "" {
@@ -116,6 +119,18 @@ func (a *App) openPane(kind core.PaneKind, split core.Split) tea.Cmd {
 	}
 
 	return tea.Batch(cmds...)
+}
+
+// panesFull sets the pane-limit notice and reports true when st holds
+// core.MaxPanes panes, before any process is started.
+func (a *App) panesFull(st core.State) bool {
+	if len(st.Panes) < core.MaxPanes {
+		return false
+	}
+
+	a.notice = fmt.Sprintf("at most %d panes", core.MaxPanes)
+
+	return true
 }
 
 // kindDueCmd schedules the probe at the end of the pane's grace period.
@@ -577,6 +592,9 @@ func (a *App) newTab() tea.Cmd {
 	}
 
 	st := a.store.State()
+	if a.panesFull(st) {
+		return nil
+	}
 
 	cwd := a.cwd
 	if m, ok := st.Panes[st.Tab().Focus]; ok && m.Cwd != "" {

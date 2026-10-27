@@ -695,3 +695,35 @@ func TestResumeRestartFailureIsNotRetried(t *testing.T) {
 		t.Errorf("notice = %q, kind = %q, want no retry and a shell", r.a.notice, kindOf(r.a, "p1"))
 	}
 }
+
+func TestPaneLimitNotice(t *testing.T) {
+	r := resumeApp(t)
+
+	for len(r.a.store.State().Panes) < core.MaxPanes {
+		if err := r.a.dispatch(core.OpenPane{Kind: core.KindShell, Split: core.SplitVertical}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	panes, starts := len(r.a.store.State().Panes), r.st.count()
+
+	for name, open := range map[string]func() tea.Cmd{
+		"split":    func() tea.Cmd { return r.a.openPane(core.KindShell, core.SplitVertical) },
+		"agent":    func() tea.Cmd { return r.a.openPane(core.KindAgent, core.SplitVertical) },
+		"new tab":  r.a.newTab,
+		"leader n": func() tea.Cmd { return press(r.a, keyLeader, keyRune('n')) },
+	} {
+		t.Run(name, func(t *testing.T) {
+			r.a.notice = ""
+			open()
+
+			if r.a.notice != "at most 64 panes" {
+				t.Errorf("notice = %q, want the pane limit", r.a.notice)
+			}
+
+			if got := len(r.a.store.State().Panes); got != panes || r.st.count() != starts {
+				t.Errorf("panes = %d (want %d), starts = %d (want %d)", got, panes, r.st.count(), starts)
+			}
+		})
+	}
+}

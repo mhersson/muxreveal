@@ -123,6 +123,9 @@ type NewTab struct {
 }
 
 func (a NewTab) apply(s *State) error {
+	if len(s.Panes) >= MaxPanes {
+		return ErrTooManyPanes
+	}
 	if a.Kind != KindShell && a.Kind != KindAgent {
 		return fmt.Errorf("core: NewTab with unknown kind %q", a.Kind)
 	}

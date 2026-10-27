@@ -515,3 +515,20 @@ func TestLoad(t *testing.T) {
 		t.Fatalf("err = %v, want ErrInvalid", err)
 	}
 }
+
+func TestRoundTripAtPaneLimit(t *testing.T) {
+	s := core.NewStore(core.InitialState(core.Config{}))
+	for len(s.State().Panes) < core.MaxPanes {
+		noErr(t, s.Dispatch(core.OpenPane{Kind: core.KindShell, Split: core.SplitVertical}))
+	}
+
+	data, err := Encode(s.State())
+	noErr(t, err)
+
+	got, _, err := Decode(data)
+	noErr(t, err)
+
+	if len(got.Panes) != core.MaxPanes {
+		t.Errorf("panes = %d, want %d", len(got.Panes), core.MaxPanes)
+	}
+}

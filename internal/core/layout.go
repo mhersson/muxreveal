@@ -119,6 +119,9 @@ type OpenPane struct {
 }
 
 func (a OpenPane) apply(s *State) error {
+	if len(s.Panes) >= MaxPanes {
+		return ErrTooManyPanes
+	}
 	if a.Kind != KindShell && a.Kind != KindAgent {
 		return fmt.Errorf("core: OpenPane with unknown kind %q", a.Kind)
 	}
