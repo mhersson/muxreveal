@@ -1,0 +1,99 @@
+{
+  "version": 2,
+  "active": 2,
+  "tabs": [
+    {
+      "id": "t1",
+      "focused": "p2",
+      "mode": "bsp",
+      "pane_ids": [
+        "p1",
+        "p2",
+        "p3"
+      ],
+      "layout": {
+        "split": "vertical",
+        "ratio": 0.25,
+        "children": [
+          {
+            "pane": "p1"
+          },
+          {
+            "split": "horizontal",
+            "ratio": 0.5,
+            "children": [
+              {
+                "pane": "p2"
+              },
+              {
+                "pane": "p3"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "t2",
+      "focused": "p5",
+      "mode": "master-stack",
+      "pane_ids": [
+        "p4",
+        "p5"
+      ],
+      "master_ratio": 0.65
+    },
+    {
+      "id": "t3",
+      "focused": "p8",
+      "mode": "scrolling",
+      "pane_ids": [
+        "p6",
+        "p7",
+        "p8"
+      ],
+      "columns": [
+        {
+          "panes": [
+            "p6"
+          ],
+          "width": 0.5
+        },
+        {
+          "panes": [
+            "p7",
+            "p8"
+          ],
+          "width": 1
+        }
+      ],
+      "first": 1
+    }
+  ],
+  "panes": {
+    "p1": {
+      "kind": "shell"
+    },
+    "p2": {
+      "kind": "shell"
+    },
+    "p3": {
+      "kind": "shell"
+    },
+    "p4": {
+      "kind": "shell"
+    },
+    "p5": {
+      "kind": "shell"
+    },
+    "p6": {
+      "kind": "shell"
+    },
+    "p7": {
+      "kind": "shell"
+    },
+    "p8": {
+      "kind": "shell"
+    }
+  }
+}

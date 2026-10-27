@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"io"
+	"slices"
 	"strings"
 	"testing"
 
@@ -234,7 +235,7 @@ func TestFrameMinimumBody(t *testing.T) {
 		a, _ := framedApp(t, sz[0], sz[1], shellSpec("/a", "x"))
 
 		lines := strings.Split(ansi.Strip(a.View().Content), "\n")
-		for _, l := range lines[1 : len(lines)-1] {
+		for _, l := range lines[min(2, len(lines)):] {
 			if strings.TrimSpace(l) != "" {
 				t.Errorf("%v: body line %q, want blank", sz, l)
 			}
@@ -242,9 +243,48 @@ func TestFrameMinimumBody(t *testing.T) {
 	}
 }
 
+// A 3x3 pane is a box around one content cell; a tile of 2x2 is left out.
+func TestSmallestPanes(t *testing.T) {
+	t.Run("3x3 draws a box with one content cell", func(t *testing.T) {
+		a, _ := framedApp(t, 3, 5, shellSpec("/a", "x"))
+
+		if got := a.layoutRects()["p1"]; got != (core.Rect{X: 0, Y: 2, W: 3, H: 3}) {
+			t.Fatalf("rect = %+v, want 3x3 at the body", got)
+		}
+
+		if cols, rows := paneSizeOf(a, "p1"); cols != 1 || rows != 1 {
+			t.Errorf("PTY = %dx%d, want 1x1", cols, rows)
+		}
+
+		got := strings.Split(ansi.Strip(a.View().Content), "\n")[2:5]
+		if want := []string{"╭─╮", "│x│", "╰─╯"}; !slices.Equal(got, want) {
+			t.Errorf("box = %q, want %q", got, want)
+		}
+	})
+
+	t.Run("a 2x2 tile is left out", func(t *testing.T) {
+		// A 5x3 body split into 2 and 3 columns: the 2-wide tile is too small.
+		a, _ := framedApp(t, 5, 5, shellSpec("/a", "x"), shellSpec("/b", "y"))
+
+		rects := a.layoutRects()
+		if _, drawn := rects["p1"]; drawn || len(rects) != 1 {
+			t.Fatalf("rects = %v, want only p2", rects)
+		}
+
+		if cols, rows := paneSizeOf(a, "p1"); cols != 1 || rows != 1 {
+			t.Errorf("left-out PTY = %dx%d, want 1x1", cols, rows)
+		}
+
+		got := strings.Split(ansi.Strip(a.View().Content), "\n")[2:5]
+		if want := []string{"  ╭─╮", "  │y│", "  ╰─╯"}; !slices.Equal(got, want) {
+			t.Errorf("body = %q, want %q", got, want)
+		}
+	})
+}
+
 // topBorder is the top row of the frame, under the workspace bar, without styling.
 func topBorder(a *App) string {
-	return ansi.Strip(strings.Split(a.View().Content, "\n")[1])
+	return ansi.Strip(strings.Split(a.View().Content, "\n")[2])
 }
 
 // fill pads prefix with border cells to w cells.
@@ -267,18 +307,18 @@ func TestTitle(t *testing.T) {
 		zoom  bool
 		want  string
 	}{
-		{"shell", core.KindShell, "/home/u/proj", "", 40, true, false, dashes("╭─ "+iconShell+" shell · proj ", 40)},
-		{"agent", core.KindAgent, "/home/u/proj", "", 40, true, false, dashes("╭─ "+iconAgent+" claude · proj ", 40)},
-		{"osc title", core.KindShell, "/home/u/proj", "\x1b]2;vim main.go\x07", 40, true, false, dashes("╭─ "+iconShell+" vim main.go · proj ", 40)},
-		{"no cwd", core.KindShell, "", "", 40, true, false, dashes("╭─ "+iconShell+" shell ", 40)},
-		{"no icons", core.KindAgent, "/home/u/proj", "", 40, false, false, dashes("╭─ claude · proj ", 40)},
-		{"cwd fits exactly", core.KindAgent, "/home/u/proj", "", 20, true, false, dashes("╭─ "+iconAgent+" claude · proj ", 20)},
-		{"cwd goes first", core.KindAgent, "/home/u/proj", "", 19, true, false, dashes("╭─ "+iconAgent+" claude ", 19)},
+		{"shell", core.KindShell, "/home/u/proj", "", 40, true, false, dashes("╭─ "+iconShell+" shell ", 40)},
+		{"agent", core.KindAgent, "/home/u/proj", "", 40, true, false, dashes("╭─ "+iconAgent+" claude ", 40)},
+		{"osc title", core.KindShell, "/home/u/proj", "\x1b]2;vim main.go\x07", 40, true, false, dashes("╭─ "+iconShell+" vim main.go ", 40)},
+		{"no icons", core.KindAgent, "/home/u/proj", "", 40, false, false, dashes("╭─ claude ", 40)},
+		{"no cwd in the title", core.KindShell, "", "", 40, true, false, dashes("╭─ "+iconShell+" shell ", 40)},
+		{"title fits exactly", core.KindAgent, "/home/u/proj", "", 13, true, false, dashes("╭─ "+iconAgent+" claude ", 13)},
+		{"title shrinks first", core.KindAgent, "/home/u/proj", "", 12, true, false, dashes("╭─ "+iconAgent+" clau… ", 12)},
 		{"title shrinks", core.KindShell, "/home/u/proj", "\x1b]2;abcdefghij\x07", 14, true, false, dashes("╭─ "+iconShell+" abcdef… ", 14)},
 		{"title shrinks to one", core.KindShell, "/home/u/proj", "\x1b]2;abcdefghij\x07", 11, true, false, dashes("╭─ "+iconShell+" abc… ", 11)},
 		{"title goes", core.KindShell, "/home/u/proj", "\x1b]2;abcdefghij\x07", 10, true, false, dashes("╭", 10)},
-		{"zoom tag", core.KindShell, "/home/u/proj", "", 40, true, true, fill("╭─ "+iconShell+" shell · proj ", 30) + zoom + "─╮"},
-		{"zoom tag no icons", core.KindShell, "/home/u/proj", "", 40, false, true, fill("╭─ shell · proj ", 32) + " zoom ─╮"},
+		{"zoom tag", core.KindShell, "/home/u/proj", "", 40, true, true, fill("╭─ "+iconShell+" shell ", 30) + zoom + "─╮"},
+		{"zoom tag no icons", core.KindShell, "/home/u/proj", "", 40, false, true, fill("╭─ shell ", 32) + " zoom ─╮"},
 		{"zoom tag takes the title room", core.KindShell, "/home/u/proj", "", 21, true, true, "╭─ " + iconShell + " shell " + zoom + "─╮"},
 		{"zoom tag alone", core.KindShell, "/home/u/proj", "", 11, true, true, "╭" + zoom + "─╮"},
 		{"zoom tag does not fit", core.KindShell, "/home/u/proj", "", 10, true, true, dashes("╭", 10)},
@@ -303,15 +343,15 @@ func TestTitle(t *testing.T) {
 }
 
 func TestTitleControlCharacters(t *testing.T) {
-	a, _ := framedApp(t, 40, 6, paneSpec{kind: core.KindShell, cwd: "/home/u/a\nb\x1b[31mc", split: core.SplitVertical})
+	a, _ := framedApp(t, 40, 6, paneSpec{kind: core.KindShell, cwd: "/home/u/a", split: core.SplitVertical, text: "\x1b]2;a\x01b\x7fc\x07"})
 
-	if got, want := topBorder(a), dashes("╭─ "+iconShell+" shell · ab[31mc ", 40); got != want {
+	if got, want := topBorder(a), dashes("╭─ "+iconShell+" abc ", 40); got != want {
 		t.Errorf("top border = %q, want %q", got, want)
 	}
 }
 
-// An unfocused pane's title is Muted and its cwd Subtle; the focused pane's
-// title is bold in its kind colour and its cwd Fg.
+// An unfocused pane's title is Muted; the focused pane's title is bold in its
+// kind colour. The icon is in the kind colour either way.
 func TestTitleColours(t *testing.T) {
 	ui := mochaUI(t)
 	tests := []struct {
@@ -335,23 +375,20 @@ func TestTitleColours(t *testing.T) {
 
 			vt := viewVT(t, a)
 			p1, p2 := a.layoutRects()["p1"], a.layoutRects()["p2"]
-			title := map[core.PaneKind]string{core.KindShell: "shell", core.KindAgent: "claude"}[tt.kind]
-			start := func(r core.Rect) int { return r.X + 1 + 1 + 2 } // after "─ icon "
+			start := func(r core.Rect) int { return r.X + 5 } // after "╭─ icon "
 
-			// Focused p1: icon and title bold in the kind colour, cwd Fg.
-			assertCell(t, vt, start(p1)-2, 1, tt.kindC, true)
-			assertCell(t, vt, start(p1), 1, tt.kindC, true)
-			assertCell(t, vt, start(p1)+len(title)+3, 1, ui.Fg, false)
-			// Unfocused p2: Muted title, Subtle cwd, the icon still in the kind colour.
-			assertCell(t, vt, start(p2)-2, 1, tt.kindC, true)
-			assertCell(t, vt, start(p2), 1, ui.Muted, false)
-			assertCell(t, vt, start(p2)+len(title)+3, 1, ui.Subtle, false)
+			// Focused p1: icon and title bold in the kind colour.
+			assertCell(t, vt, start(p1)-2, 2, tt.kindC, true)
+			assertCell(t, vt, start(p1), 2, tt.kindC, true)
+			// Unfocused p2: Muted title, the icon still in the kind colour.
+			assertCell(t, vt, start(p2)-2, 2, tt.kindC, true)
+			assertCell(t, vt, start(p2), 2, ui.Muted, false)
 		})
 	}
 }
 
-// The focused pane's four sides are in its kind colour, shared cells included;
-// every other border cell is Border.
+// The focused pane's whole box is in its kind colour; every other border cell
+// is Border.
 func TestBorderColours(t *testing.T) {
 	ui := mochaUI(t)
 
@@ -372,14 +409,14 @@ func TestBorderColours(t *testing.T) {
 			}
 
 			onFocus := func(x, y int) bool {
-				return (x == r.X-1 || x == r.X+r.W) && y >= r.Y && y <= r.Y+r.H ||
-					(y == r.Y || y == r.Y+r.H) && x >= r.X-1 && x <= r.X+r.W
+				return (x == r.X || x == r.X+r.W-1) && y >= r.Y && y < r.Y+r.H ||
+					(y == r.Y || y == r.Y+r.H-1) && x >= r.X && x < r.X+r.W
 			}
 
 			for y := range a.height - 1 {
 				for x := range a.width {
 					c := vt.CellAt(x, y)
-					if c == nil || !strings.Contains("─│╭╮╰╯┬┴├┤┼", c.Content) || c.Content == "" {
+					if c == nil || !strings.Contains("─│╭╮╰╯", c.Content) || c.Content == "" {
 						continue
 					}
 
@@ -418,8 +455,9 @@ func TestNoIconsNoGlyphs(t *testing.T) {
 	}
 }
 
-// A junction in the top border is never covered by the title or a tag.
-func TestTitleKeepsJunctions(t *testing.T) {
+// Every pane is its own rounded box: the corners sit on the rect's corners,
+// neighbours touch, and no junction glyph or shared cell exists.
+func TestFramesAreOneBoxPerPane(t *testing.T) {
 	for w := 8; w <= 40; w++ {
 		a, _ := framedApp(t, w, 12,
 			paneSpec{kind: core.KindShell, cwd: "/w/top", split: core.SplitVertical},
@@ -427,17 +465,25 @@ func TestTitleKeepsJunctions(t *testing.T) {
 			paneSpec{kind: core.KindShell, cwd: "/w/right", split: core.SplitVertical})
 
 		lines := strings.Split(ansi.Strip(a.View().Content), "\n")
-		// The bottom row's top border is the line above its content; find it by its junction.
-		var found bool
-
 		for _, l := range lines {
-			if strings.Contains(l, "┬") {
-				found = true
+			if strings.ContainsAny(l, "┬┴├┤┼") {
+				t.Fatalf("width %d: junction glyph in\n%s", w, strings.Join(lines, "\n"))
 			}
 		}
 
-		if !found {
-			t.Errorf("width %d: no ┬ junction in\n%s", w, strings.Join(lines, "\n"))
+		cell := func(x, y int) string { return string([]rune(lines[y])[x]) }
+
+		for id, r := range a.layoutRects() {
+			for _, c := range []struct {
+				x, y int
+				want string
+			}{
+				{r.X, r.Y, "╭"}, {r.X + r.W - 1, r.Y, "╮"}, {r.X, r.Y + r.H - 1, "╰"}, {r.X + r.W - 1, r.Y + r.H - 1, "╯"},
+			} {
+				if got := cell(c.x, c.y); got != c.want {
+					t.Errorf("width %d: %s corner (%d, %d) = %q, want %q", w, id, c.x, c.y, got, c.want)
+				}
+			}
 		}
 	}
 }
@@ -445,23 +491,23 @@ func TestTitleKeepsJunctions(t *testing.T) {
 func TestCursorView(t *testing.T) {
 	a, procs := framedApp(t, 100, 30, shellSpec("/a", ""), shellSpec("/b", "\x1b[3;5Hx"))
 
-	// p2 is focused and sits right of p1: A gets floor(97*0.5) = 48 columns after the left frame column, so p2 starts at x=50.
+	// p2 is focused and sits right of p1: p1 takes floor(100*0.5) = 50 columns, so p2 starts at x=50 and its content at x=51.
 	cur := a.cursorView()
 	if cur == nil {
 		t.Fatal("cursorView() = nil, want the focused pane's cursor")
 	}
 
-	if cur.X != 50+5 || cur.Y != 2+2 {
-		t.Errorf("cursor = (%d, %d), want (55, 4)", cur.X, cur.Y)
+	if cur.X != 51+5 || cur.Y != 3+2 {
+		t.Errorf("cursor = (%d, %d), want (56, 5)", cur.X, cur.Y)
 	}
 
 	if err := a.dispatch(core.ToggleZoom{}); err != nil {
 		t.Fatal(err)
 	}
 
-	// Zoomed, p2 fills the inner rect, so the cursor is offset by the left frame column and the top border.
-	if cur := a.cursorView(); cur == nil || cur.X != 6 || cur.Y != 4 {
-		t.Errorf("zoomed cursor = %+v, want (6, 4)", cur)
+	// Zoomed, p2 fills the body, so the cursor is offset by the left frame column and the top border.
+	if cur := a.cursorView(); cur == nil || cur.X != 6 || cur.Y != 5 {
+		t.Errorf("zoomed cursor = %+v, want (6, 5)", cur)
 	}
 
 	a.overlay = &overlay{}
@@ -581,9 +627,8 @@ func assertCell(t *testing.T, vt term.VT, x, y int, want theme.Hex, bold bool) {
 	}
 }
 
-// A full-width pane under a vertical split has a junction in its top border;
-// its title is cut before it.
-func TestTitleCutAtJunction(t *testing.T) {
+// A full-width pane's long title is cut with an ellipsis before its right corner.
+func TestTitleCutBeforeCorner(t *testing.T) {
 	a := newTestApp(t)
 	sized(t, a, 40, 12)
 
@@ -600,28 +645,72 @@ func TestTitleCutAtJunction(t *testing.T) {
 
 	attachPanes(t, a, map[core.PaneID]string{"p2": "\x1b]2;a-very-long-title-for-the-bottom-pane\x07"})
 
-	sep := a.layoutRects()["p3"].X - 1
-	if got := a.layoutRects()["p2"].W; got != 38 {
-		t.Fatalf("p2 width = %d, want the full inner width 38", got)
+	r := a.layoutRects()["p2"]
+	if r.W != 40 {
+		t.Fatalf("p2 width = %d, want the full body width 40", r.W)
 	}
 
-	var row []rune
+	row := []rune(ansi.Strip(strings.Split(a.View().Content, "\n")[r.Y]))
+	if len(row) != 40 || row[39] != '╮' || !strings.Contains(string(row), "…") {
+		t.Errorf("top border = %q, want a cut title and a closing corner", string(row))
+	}
+}
 
-	for _, l := range strings.Split(a.View().Content, "\n") {
-		if p := []rune(ansi.Strip(l)); sep < len(p) && p[sep] == '┴' {
-			row = p
+// Row 1 is a full-width rule in Border; the body starts under it and runs to
+// the last row. The rule takes no clicks.
+func TestRuleUnderWorkspaceBar(t *testing.T) {
+	ui := mochaUI(t)
+	a, _ := framedApp(t, 40, 12, shellSpec("/a", "x"), shellSpec("/b", "y"))
+
+	if got, want := bodyRect(40, 12), (core.Rect{Y: 2, W: 40, H: 10}); got != want {
+		t.Fatalf("bodyRect = %+v, want %+v", got, want)
+	}
+
+	if got := a.layoutRects()["p1"]; got.Y != 2 {
+		t.Errorf("first pane starts on row %d, want 2", got.Y)
+	}
+
+	if got, want := screenText(a, 1), strings.Repeat("─", 40); got != want {
+		t.Errorf("row 1 = %q, want the rule", got)
+	}
+
+	vt := viewVT(t, a)
+	for x := range 40 {
+		assertCell(t, vt, x, 1, ui.Border, false)
+	}
+
+	for x := range 40 {
+		if h := a.hit(x, 1); h.area != hitNone {
+			t.Errorf("click on the rule at column %d hit %v", x, h.area)
 		}
 	}
 
-	if row == nil {
-		t.Fatalf("no ┴ at column %d", sep)
+	if h := a.hit(5, 2); h.area != hitHeader {
+		t.Errorf("click on the top border = %v, want hitHeader", h.area)
 	}
+}
 
-	if len(row) != 40 {
-		t.Errorf("row has %d cells, want 40: %q", len(row), string(row))
-	}
+// Small heights: the workspace bar alone, then the rule too; the body is what
+// is left.
+func TestRuleSmallHeights(t *testing.T) {
+	for _, tt := range []struct {
+		h    int
+		rule bool
+		body int
+	}{{1, false, 0}, {2, true, 0}, {3, true, 1}, {4, true, 2}, {6, true, 4}} {
+		a, _ := framedApp(t, 20, tt.h, shellSpec("/a", "x"))
+		lines := strings.Split(ansi.Strip(a.View().Content), "\n")
 
-	if text := string(row[:sep]); !strings.Contains(text, "…") || strings.Contains(string(row[sep+1:]), "title") {
-		t.Errorf("title not cut before the junction: %q", string(row))
+		if len(lines) != tt.h {
+			t.Fatalf("height %d: %d lines", tt.h, len(lines))
+		}
+
+		if got := tt.h >= 2 && lines[1] == strings.Repeat("─", 20); got != tt.rule {
+			t.Errorf("height %d: rule = %v, want %v", tt.h, got, tt.rule)
+		}
+
+		if got := bodyRect(20, tt.h).H; got != tt.body {
+			t.Errorf("height %d: body rows = %d, want %d", tt.h, got, tt.body)
+		}
 	}
 }

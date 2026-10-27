@@ -1,9 +1,10 @@
 package core
 
 import (
+	"errors"
 	"fmt"
 	"math"
-	"sort"
+	"slices"
 	"strconv"
 )
 
@@ -92,12 +93,14 @@ type Pane struct {
 	State      AgentState // not persisted
 }
 
-// Dir is a direction for focus and resize.
+// Dir is a direction for focus, resize and preselection. The zero value is
+// NoDir, so a Tab literal has no preselection.
 type Dir int
 
 // Directions, in the order of the h j k l keys.
 const (
-	Left Dir = iota
+	NoDir Dir = iota
+	Left
 	Down
 	Up
 	Right
@@ -108,14 +111,17 @@ func (s State) NewPaneID() PaneID {
 	return PaneID("p" + strconv.Itoa(s.NextID+1))
 }
 
-// OpenPane splits the active tab's focused pane: A keeps it, B is the new
-// pane. The first pane of a tab becomes the root and ignores Split. The new
-// pane gets focus. Harness is kept only for an agent.
+// OpenPane puts a new pane beside the active tab's focused pane and focuses
+// it; in BSP a split divides the focused pane with the new pane as child B. The
+// first pane of a tab ignores Split. Area is the body rect the UI lays out in;
+// a zero Area decides auto splits as on a wide screen. Harness is kept only
+// for an agent.
 type OpenPane struct {
 	Kind    PaneKind
 	Cwd     string
 	Split   Split
 	Harness string
+	Area    Rect
 }
 
 func (a OpenPane) apply(s *State) error {
@@ -126,20 +132,12 @@ func (a OpenPane) apply(s *State) error {
 		return fmt.Errorf("core: OpenPane with unknown kind %q", a.Kind)
 	}
 	id := s.NewPaneID()
-	fresh := &Node{Pane: id}
 	t := s.cur()
-	if t.Layout == nil {
-		t.Layout = fresh
-	} else {
-		if a.Split != SplitVertical && a.Split != SplitHorizontal {
-			return fmt.Errorf("core: OpenPane with unknown split %q", a.Split)
-		}
-		p := t.Layout.path(t.Focus)
-		if p == nil {
-			return fmt.Errorf("core: focused pane %q is not in the layout", t.Focus)
-		}
-		target := p[len(p)-1]
-		*target = Node{Split: a.Split, Ratio: 0.5, A: &Node{Pane: target.Pane}, B: fresh}
+	if !t.Empty() && a.Split != SplitVertical && a.Split != SplitHorizontal {
+		return fmt.Errorf("core: OpenPane with unknown split %q", a.Split)
+	}
+	if err := t.place(id, a.Split, a.Area, s.Layout); err != nil {
+		return err
 	}
 	s.NextID++
 	p := Pane{Kind: a.Kind, Cwd: a.Cwd}
@@ -147,14 +145,14 @@ func (a OpenPane) apply(s *State) error {
 		p.Harness = a.Harness
 	}
 	s.Panes[id] = p
-	t.Focus = id
+	t.setFocus(id)
 	t.Zoomed = false
 	return nil
 }
 
-// ClosePane removes a pane from its own tab; its sibling takes the parent's
-// place. Closing the focused pane focuses the first leaf of the sibling. The
-// last pane of a tab removes the tab unless it is the only one.
+// ClosePane removes a pane from its own tab, giving its space to the rest.
+// Closing the focused pane focuses the pane that took its place. The last
+// pane of a tab removes the tab unless it is the only one.
 type ClosePane struct {
 	ID PaneID
 }
@@ -166,22 +164,17 @@ func (a ClosePane) apply(s *State) error {
 		return fmt.Errorf("core: no pane %q", a.ID)
 	}
 	t := &s.Tabs[i]
-	p := t.Layout.path(a.ID)
-	if len(p) == 1 {
+	if len(t.Panes) == 1 {
 		s.removeTab(i, true)
 		return nil
 	}
+	next, err := t.remove(a.ID)
+	if err != nil {
+		return err
+	}
 	delete(s.Panes, a.ID)
 	t.Zoomed = false
-	parent := p[len(p)-2]
-	sibling := parent.A
-	if sibling == p[len(p)-1] {
-		sibling = parent.B
-	}
-	*parent = *sibling
-	if t.Focus == a.ID {
-		t.Focus = parent.firstLeaf()
-	}
+	t.setFocus(next)
 	return nil
 }
 
@@ -192,112 +185,58 @@ type FocusPane struct {
 
 func (a FocusPane) apply(s *State) error {
 	t := s.cur()
-	if t.Layout.path(a.ID) == nil {
+	if !slices.Contains(t.Panes, a.ID) {
 		return fmt.Errorf("core: no pane %q", a.ID)
 	}
 	if a.ID != t.Focus {
-		t.Focus = a.ID
+		t.setFocus(a.ID)
 		t.Zoomed = false
 	}
 	return nil
 }
 
-// FocusDir focuses the nearest pane in a direction: least edge distance, then
-// most perpendicular overlap, then top-most or left-most. It does nothing at
-// an edge.
+// FocusDir focuses the pane Neighbour picks on the tiles Arrange lays out in
+// Area; a zero Area uses a fixed large rect. It does nothing at an edge.
 type FocusDir struct {
-	Dir Dir
+	Dir  Dir
+	Area Rect
 }
 
 func (a FocusDir) apply(s *State) error {
 	t := s.cur()
-	if id, ok := neighbour(*t, a.Dir); ok {
-		t.Focus = id
+	if id, ok := neighbour(*t, a.Dir, a.Area, s.Layout); ok {
+		t.setFocus(id)
 		t.Zoomed = false
 	}
 	return nil
 }
 
-// neighbour finds the pane nearest the tab's focused one in a direction.
-func neighbour(t Tab, d Dir) (PaneID, bool) {
-	rects := Rects(t.Layout, Rect{0, 0, 10000, 10000})
-	cur, ok := rects[t.Focus]
-	if !ok {
-		return "", false
-	}
-	type cand struct {
-		id            PaneID
-		dist, overlap int
-		pos           int
-	}
-	var cands []cand
-	for id, r := range rects {
-		if id == t.Focus {
-			continue
-		}
-		var dist, overlap, pos int
-		switch d {
-		case Left:
-			dist, overlap, pos = cur.X-(r.X+r.W), span(cur.Y, cur.H, r.Y, r.H), r.Y
-		case Right:
-			dist, overlap, pos = r.X-(cur.X+cur.W), span(cur.Y, cur.H, r.Y, r.H), r.Y
-		case Up:
-			dist, overlap, pos = cur.Y-(r.Y+r.H), span(cur.X, cur.W, r.X, r.W), r.X
-		case Down:
-			dist, overlap, pos = r.Y-(cur.Y+cur.H), span(cur.X, cur.W, r.X, r.W), r.X
-		}
-		if dist >= 0 && overlap > 0 {
-			cands = append(cands, cand{id, dist, overlap, pos})
-		}
-	}
-	if len(cands) == 0 {
-		return "", false
-	}
-	sort.Slice(cands, func(i, j int) bool {
-		x, y := cands[i], cands[j]
-		switch {
-		case x.dist != y.dist:
-			return x.dist < y.dist
-		case x.overlap != y.overlap:
-			return x.overlap > y.overlap
-		case x.pos != y.pos:
-			return x.pos < y.pos
-		}
-		return x.id < y.id
-	})
-	return cands[0].id, true
-}
-
-// SwapDir exchanges the focused pane with its FocusDir neighbour. The tree
-// keeps its shape and ratios, so each position keeps its size; focus stays on
-// the moved pane. It does nothing at an edge.
+// SwapDir exchanges the focused pane with its FocusDir neighbour. In BSP the
+// tree keeps its shape and ratios, so each position keeps its size; focus
+// stays on the moved pane. It does nothing at an edge.
 type SwapDir struct {
-	Dir Dir
+	Dir  Dir
+	Area Rect
 }
 
 func (a SwapDir) apply(s *State) error {
 	t := s.cur()
-	other, ok := neighbour(*t, a.Dir)
+	other, ok := neighbour(*t, a.Dir, a.Area, s.Layout)
 	if !ok {
 		return nil
 	}
-	from, to := t.Layout.path(t.Focus), t.Layout.path(other)
-	if from == nil || to == nil {
-		return fmt.Errorf("core: swap between %q and %q: pane not in the layout", t.Focus, other)
+	if err := t.swap(t.Focus, other); err != nil {
+		return err
 	}
-	from[len(from)-1].Pane, to[len(to)-1].Pane = other, t.Focus
 	t.Zoomed = false
+	t.keepVisible()
 	return nil
 }
 
-// span is the overlap of [a, a+al) and [b, b+bl).
-func span(a, al, b, bl int) int {
-	return max(min(a+al, b+bl)-max(a, b), 0)
-}
-
-// ResizeDir moves the nearest divider on the direction's axis by one step:
+// ResizeDir moves the nearest BSP divider on the direction's axis by one step:
 // Right and Down grow the first child, Left and Up shrink it. It does nothing
-// when the focused pane has no split on that axis.
+// when the focused pane has no split on that axis. Master-stack moves the
+// master ratio and scrolling the focused column's width.
 type ResizeDir struct {
 	Dir Dir
 }
@@ -313,6 +252,14 @@ func (a ResizeDir) apply(s *State) error {
 		delta = -ratioStep
 	}
 	t := s.cur()
+	switch t.Mode {
+	case ModeMaster:
+		t.resizeMaster(a.Dir, s.Layout)
+		return nil
+	case ModeScrolling:
+		t.resizeColumn(a.Dir)
+		return nil
+	}
 	p := t.Layout.path(t.Focus)
 	for i := len(p) - 2; i >= 0; i-- {
 		if p[i].Split == axis {
@@ -321,6 +268,122 @@ func (a ResizeDir) apply(s *State) error {
 			return nil
 		}
 	}
+	return nil
+}
+
+// Errors the layout actions return when the tab's mode or shape does not fit.
+var (
+	ErrNeedsBSP        = errors.New("core: needs a BSP layout")
+	ErrNeedsMaster     = errors.New("core: needs a master-stack layout")
+	ErrNothingToRotate = errors.New("core: nothing to rotate")
+)
+
+func (t Tab) isBSP() bool { return t.Mode == ModeBSP || t.Mode == "" }
+
+// Preselect makes the next pane opened in the active BSP tab go to the given
+// side of the focused pane at ratio 0.5. Focus moves keep it; a mode switch
+// and the pane it places clear it.
+type Preselect struct {
+	Dir Dir
+}
+
+func (a Preselect) apply(s *State) error {
+	t := s.cur()
+	if !t.isBSP() {
+		return ErrNeedsBSP
+	}
+	if _, ok := sideOf(a.Dir); !ok {
+		return fmt.Errorf("core: Preselect with no direction")
+	}
+	t.Preselect = a.Dir
+	return nil
+}
+
+// ClearPreselect drops the active BSP tab's preselection, set or not.
+type ClearPreselect struct{}
+
+func (ClearPreselect) apply(s *State) error {
+	t := s.cur()
+	if !t.isBSP() {
+		return ErrNeedsBSP
+	}
+	t.Preselect = NoDir
+	return nil
+}
+
+// RotateSplit flips the axis of the focused pane's parent split in BSP and
+// keeps its ratio. A lone pane has nothing to rotate.
+type RotateSplit struct{}
+
+func (RotateSplit) apply(s *State) error {
+	t := s.cur()
+	if !t.isBSP() {
+		return ErrNeedsBSP
+	}
+	p := t.Layout.path(t.Focus)
+	if len(p) < 2 {
+		return ErrNothingToRotate
+	}
+	parent := p[len(p)-2]
+	if parent.Split == SplitVertical {
+		parent.Split = SplitHorizontal
+	} else {
+		parent.Split = SplitVertical
+	}
+	t.Zoomed = false
+	return nil
+}
+
+// Equalize evens out the active tab's layout: BSP panes become equal along
+// each axis, master-stack goes back to master_ratio and every scrolling column
+// to column_width. It changes nothing for fewer than two panes.
+type Equalize struct{}
+
+func (Equalize) apply(s *State) error {
+	t := s.cur()
+	if len(t.Panes) < 2 {
+		return nil
+	}
+	switch t.Mode {
+	case ModeMaster:
+		t.Master = s.Layout.ratio()
+	case ModeScrolling:
+		for i := range t.Columns {
+			t.Columns[i].Width = s.Layout.columnWidth()
+		}
+		t.keepVisible()
+	default:
+		equalizeNode(t.Layout)
+	}
+	t.Zoomed = false
+	return nil
+}
+
+// Promote swaps the focused pane with the first pane of a master-stack tab, or
+// with the second when it is first, and focuses the pane now first.
+type Promote struct{}
+
+func (Promote) apply(s *State) error {
+	t := s.cur()
+	if t.Mode != ModeMaster {
+		return ErrNeedsMaster
+	}
+	if len(t.Panes) < 2 {
+		return nil
+	}
+	i := slices.Index(t.Panes, t.Focus)
+	if i < 0 {
+		return fmt.Errorf("core: focused pane %q is not in the layout", t.Focus)
+	}
+	other := t.Panes[0]
+	if i == 0 {
+		other = t.Panes[1]
+	}
+	if err := t.swapMaster(t.Focus, other); err != nil {
+		return err
+	}
+	t.setFocus(t.Panes[0])
+	t.Zoomed = false
 	return nil
 }
 

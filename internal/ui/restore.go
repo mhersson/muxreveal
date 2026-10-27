@@ -10,18 +10,6 @@ import (
 	"github.com/mhersson/muxreveal/internal/core"
 )
 
-// leafIDs lists a layout's panes in leaf order.
-func leafIDs(n *core.Node) []core.PaneID {
-	switch {
-	case n == nil:
-		return nil
-	case n.Pane != "":
-		return []core.PaneID{n.Pane}
-	}
-
-	return append(leafIDs(n.A), leafIDs(n.B)...)
-}
-
 // startRestored starts every pane of every tab at its own rect: shells in
 // their cwd, agents with their session resumed. A pane that fails to start is
 // closed as ClosePane does; if none is left, one shell opens in the launch dir.
@@ -32,7 +20,7 @@ func (a *App) startRestored() tea.Cmd {
 	defer func() { a.restoring = false }()
 
 	st := a.store.State()
-	inner := innerRect(bodyRect(a.width, a.height))
+	body := layoutBody(bodyRect(a.width, a.height))
 
 	var notices []string
 	if a.notice != "" {
@@ -50,14 +38,14 @@ func (a *App) startRestored() tea.Cmd {
 	var cmds []tea.Cmd
 
 	for _, t := range st.Tabs {
-		rects := core.Rects(t.Layout, inner)
+		rects := core.Arrange(t, body, st.Layout).Sizes
 		if t.Zoomed {
 			if _, ok := st.Panes[t.Focus]; ok {
-				rects[t.Focus] = inner
+				rects[t.Focus] = body
 			}
 		}
 
-		for _, id := range leafIDs(t.Layout) {
+		for _, id := range t.Panes {
 			cols, rows := 1, 1
 			if r, ok := rects[id]; ok {
 				cols, rows = contentSize(r)

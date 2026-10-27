@@ -24,9 +24,14 @@ type styles struct {
 	// focused pane's.
 	border, borderAgent, borderShell lipgloss.Style
 	// kindAgent and kindShell are bold in the kind colour: icon and focused title.
-	kindAgent, kindShell                          lipgloss.Style
-	titleMuted, cwdFocus, cwdSubtle, dot, tagZoom lipgloss.Style
-	tagScroll                                     lipgloss.Style
+	kindAgent, kindShell lipgloss.Style
+	titleMuted, tagZoom  lipgloss.Style
+	// tagScroll, tagNext and tagHidden are the scroll, preselection and hidden-column tags.
+	tagScroll, tagNext, tagHidden lipgloss.Style
+	// tagCopy is the copy tag and the search prompt's mark; searchText is the query.
+	tagCopy, searchText lipgloss.Style
+	// The toast: its Warning border and icon, and its text, all on the panel colour.
+	toastBorder, toastIcon, toastText lipgloss.Style
 	// tagWorking, tagBlocked and tagIdle draw the state badge.
 	tagWorking, tagBlocked, tagIdle lipgloss.Style
 	// popupBorder draws the popup frame on the panel colour.
@@ -60,11 +65,15 @@ func newStyles(t theme.Theme) styles {
 		kindAgent:   onBg.Foreground(ui.Agent).Bold(true),
 		kindShell:   onBg.Foreground(ui.Shell).Bold(true),
 		titleMuted:  onBg.Foreground(ui.Muted),
-		cwdFocus:    onBg,
-		cwdSubtle:   onBg.Foreground(ui.Subtle),
-		dot:         onBg.Foreground(ui.Subtle),
 		tagZoom:     onBg.Foreground(ui.Accent).Bold(true),
 		tagScroll:   onBg.Foreground(ui.Accent).Bold(true),
+		tagNext:     onBg.Foreground(ui.Accent).Bold(true),
+		tagHidden:   onBg.Foreground(ui.Accent).Bold(true),
+		tagCopy:     onBg.Foreground(ui.Info).Bold(true),
+		searchText:  onBg,
+		toastBorder: onPanel.Foreground(ui.Warning),
+		toastIcon:   onPanel.Foreground(ui.Warning),
+		toastText:   onPanel,
 		tagWorking:  onBg.Foreground(ui.Working).Bold(true),
 		tagBlocked:  onBg.Foreground(ui.Blocked).Bold(true),
 		tagIdle:     onBg.Foreground(ui.Idle).Bold(true),

@@ -85,7 +85,7 @@ func uiRoles(p Palette) UI {
 		Info:        p.Blue,
 		Agent:       p.Mauve,
 		Shell:       p.Blue,
-		Bar:         p.Crust,
+		Bar:         p.Base,
 		Dim:         p.Subtext0,
 		Clock:       p.Lavender,
 		Git:         p.Flamingo,

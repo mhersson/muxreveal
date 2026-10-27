@@ -4,11 +4,11 @@ Update this file at the end of every session: tick what's done, set the next ste
 
 ## Current milestones
 
-M1e Tiling, tab moves and chrome and M2a Worktrees and diff engine run in parallel, each on its own branch and PR; M2b Review pane follows once both have merged.
+M1e Tiling, tab moves and chrome is complete and waits for review; M2a Worktrees and diff engine is done (PR #11). The agents rail comes next, then M2b Review pane.
 
 ## M1 Terminal core
 
-Goal: PTYs, the `tuios.dev/vt` adapter, compositor, splits, tabs, shell panes, copy mode, mouse and clipboard, hook socket, state badges, persistence and resume. Covers AG-1 to AG-5, AG-7, AG-8 (interface), AG-9, PR-1 to PR-4, UX-4 to UX-6. It builds on the spike findings below.
+Goal: PTYs, the `tuios.dev/vt` adapter, compositor, splits, tabs, tiling layouts, tab moves, shell panes, copy mode, mouse and clipboard, hook socket, state badges, persistence and resume. Covers AG-1 to AG-5, AG-7, AG-8 (interface), AG-9 to AG-12, PR-1 to PR-4, UX-4 to UX-6. It builds on the spike findings below.
 
 Gate: six busy Claude panes stay smooth at 60 fps, and a reboot brings back the same layout with every session resumed.
 
@@ -126,6 +126,82 @@ What backs the last checklist item: the six-pane bench row "six working agents w
 Idle, re-checked with agents, hooks and persistence: same setup as above (six shell panes each running `sleep 3600`, 240x64 in a private tmux, 30 s after a 5 s warm-up, `/proc/<pid>/stat` utime+stime), two runs: **0.73 %** and **0.70 %** of one core.
 
 The 0.17 to 0.20 point gap to the 0.53 % above is likely measurement noise: nothing added runs while idle with no agents (the agent tick runs only while a pane works, probes run only after output, and the saver, the hook socket server and the event wait block).
+
+### M1e Tiling, tab moves and chrome
+
+Tabs lay out their panes with tuios's tiling layouts (BSP with auto-split and preselection, master-stack, scrolling columns), panes move between tabs or break into their own, and the chrome comes closer to tuios's look. Covers AG-10, AG-11, AG-12.
+
+- [x] Port tuios's tiling layouts
+- [x] BSP behind the core actions
+- [x] Master-stack and scrolling modes, and the `[layout]` config
+- [x] Preselect, rotate, equalize and promote
+- [x] Move and break panes
+- [x] Layout state file version 2
+- [x] Keys, commands and which-key for layouts and moves
+- [x] Layout mode, hidden columns and preselection on screen
+- [x] Chrome pass against tuios
+- [x] Bench in every layout mode and idle check
+
+Gate: six-pane bench p99 at most 8 ms in every layout mode (runs a, b and c), idle CPU at most 1 % of one core with the tray on, and a reboot restores every tab's layout mode and tree with every agent session resumed.
+
+#### M1e gate results
+
+Gate: six-pane bench p99 <= 8 ms in every layout mode and idle CPU <= 1 % of one core. **Both met in all three modes.** The reboot part of the gate is the operator's check and is still open.
+
+Bench: the same setup as the M1a gate results (runs a, b and c with the same recordings, windows and staggers, 240x64, 60 FPS virtual clock, median of 3 per row), run once per mode with `MUXREVEAL_BENCH_MODE=bsp|master-stack|scrolling` (`CGO_ENABLED=1 go test -tags bench ./internal/ui -run 'TestBench$' -v`). Every pane is a working agent with an animated badge, as in the M1a agents row, so a run draws more frames than the M1a table (798 against 593 in run a at six panes). Scrolling uses `column_width` 16 so all six panes are visible; master-stack uses its default grid. Six-pane p99 per run, each the median of 3:
+
+| Run | bsp | master-stack | scrolling |
+| --- | --- | --- | --- |
+| a | **6.49 ms** | **6.29 ms** | **6.18 ms** |
+| b | **6.49 ms** | **6.34 ms** | **6.90 ms** |
+| c | **6.88 ms** | **6.22 ms** | **6.58 ms** |
+
+Full rows (each the run whose p99 is the median of the 3):
+
+| Mode | Run | Panes | Frames | Bytes fed | p50 | p95 | p99 | max | CPU % | feed / update+view / present p99 | GCs |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| bsp | a | 2 | 462 | 386,215 | 2.41 ms | 4.82 ms | 6.03 ms | 8.02 ms | 4.3 | 0.10 / 1.11 / 4.82 ms | 13 |
+| bsp | a | 4 | 634 | 781,212 | 2.50 ms | 5.14 ms | 6.10 ms | 7.98 ms | 6.3 | 0.14 / 1.03 / 5.17 ms | 16 |
+| bsp | a | 6 | 798 | 1,127,049 | 2.55 ms | 5.23 ms | **6.49 ms** | 8.14 ms | 8.2 | 0.19 / 1.24 / 5.46 ms | 22 |
+| bsp | b | 2 | 106 | 111,141 | 2.43 ms | 5.09 ms | 6.09 ms | 6.15 ms | 4.1 | 0.09 / 1.17 / 5.54 ms | 3 |
+| bsp | b | 4 | 141 | 225,640 | 2.52 ms | 5.25 ms | 6.15 ms | 8.50 ms | 6.2 | 0.18 / 1.03 / 5.48 ms | 4 |
+| bsp | b | 6 | 161 | 330,780 | 2.66 ms | 5.56 ms | **6.49 ms** | 6.97 ms | 7.3 | 0.18 / 1.25 / 4.99 ms | 4 |
+| bsp | c | 2 | 69 | 91,262 | 2.74 ms | 4.98 ms | 5.84 ms | 5.84 ms | 5.5 | 0.15 / 1.62 / 4.07 ms | 2 |
+| bsp | c | 4 | 100 | 188,627 | 2.42 ms | 4.34 ms | 6.39 ms | 6.68 ms | 6.8 | 0.28 / 1.45 / 4.66 ms | 2 |
+| bsp | c | 6 | 124 | 284,741 | 2.59 ms | 5.60 ms | **6.88 ms** | 7.52 ms | 10.1 | 0.21 / 1.32 / 5.96 ms | 3 |
+| master-stack | a | 2 | 462 | 386,215 | 2.38 ms | 4.63 ms | 5.47 ms | 5.91 ms | 4.0 | 0.08 / 1.08 / 4.28 ms | 13 |
+| master-stack | a | 4 | 634 | 781,212 | 2.45 ms | 4.89 ms | 5.71 ms | 7.80 ms | 5.8 | 0.12 / 1.08 / 5.01 ms | 16 |
+| master-stack | a | 6 | 798 | 1,127,049 | 2.42 ms | 5.15 ms | **6.29 ms** | 8.08 ms | 7.9 | 0.19 / 1.16 / 5.12 ms | 19 |
+| master-stack | b | 2 | 106 | 111,141 | 2.36 ms | 4.74 ms | 6.12 ms | 6.69 ms | 4.1 | 0.11 / 1.28 / 5.21 ms | 3 |
+| master-stack | b | 4 | 141 | 225,640 | 2.56 ms | 5.21 ms | 5.77 ms | 6.02 ms | 6.3 | 0.17 / 1.34 / 4.52 ms | 3 |
+| master-stack | b | 6 | 161 | 330,780 | 2.55 ms | 5.15 ms | **6.34 ms** | 6.78 ms | 7.1 | 0.18 / 1.08 / 5.56 ms | 4 |
+| master-stack | c | 2 | 69 | 91,262 | 2.46 ms | 5.26 ms | 6.70 ms | 6.70 ms | 4.9 | 0.19 / 1.56 / 5.63 ms | 2 |
+| master-stack | c | 4 | 100 | 188,627 | 2.44 ms | 5.21 ms | 6.30 ms | 6.99 ms | 7.0 | 0.20 / 1.33 / 4.66 ms | 2 |
+| master-stack | c | 6 | 124 | 284,741 | 2.52 ms | 5.21 ms | **6.22 ms** | 8.08 ms | 9.7 | 0.26 / 1.22 / 5.58 ms | 3 |
+| scrolling | a | 2 | 462 | 386,215 | 2.46 ms | 5.09 ms | 6.14 ms | 7.24 ms | 4.5 | 0.11 / 1.26 / 5.06 ms | 14 |
+| scrolling | a | 4 | 634 | 781,212 | 2.43 ms | 5.18 ms | 6.04 ms | 7.75 ms | 6.1 | 0.16 / 1.10 / 5.17 ms | 16 |
+| scrolling | a | 6 | 798 | 1,127,049 | 2.49 ms | 5.02 ms | **6.18 ms** | 8.25 ms | 7.8 | 0.19 / 1.22 / 4.77 ms | 21 |
+| scrolling | b | 2 | 106 | 111,141 | 2.44 ms | 4.80 ms | 6.11 ms | 6.60 ms | 4.3 | 0.08 / 1.51 / 4.54 ms | 3 |
+| scrolling | b | 4 | 141 | 225,640 | 2.52 ms | 5.39 ms | 5.74 ms | 6.28 ms | 6.2 | 0.16 / 1.22 / 4.73 ms | 3 |
+| scrolling | b | 6 | 161 | 330,780 | 2.55 ms | 5.30 ms | **6.90 ms** | 9.36 ms | 7.0 | 0.19 / 1.47 / 5.26 ms | 4 |
+| scrolling | c | 2 | 69 | 91,262 | 2.37 ms | 5.70 ms | 6.25 ms | 6.25 ms | 5.2 | 0.24 / 1.64 / 4.68 ms | 2 |
+| scrolling | c | 4 | 100 | 188,627 | 2.38 ms | 4.18 ms | 5.76 ms | 6.57 ms | 6.5 | 0.19 / 1.26 / 4.31 ms | 2 |
+| scrolling | c | 6 | 124 | 284,741 | 2.51 ms | 5.74 ms | **6.58 ms** | 7.13 ms | 9.5 | 0.27 / 1.48 / 5.23 ms | 3 |
+
+Replay sizes at six panes: bsp 82 or 76 columns by 29 rows, master-stack 118 columns by 18 or 19 rows (two columns of three), scrolling 78 columns by 29 rows (three columns of two at 16 % each). The max column sits above 8 ms in a few rows (bsp a six panes 8.14 ms, scrolling a 8.25 ms, scrolling b 9.36 ms); the gate is the p99.
+
+Idle: six shell panes each running `sleep 3600`, 240x64 in a private tmux, 30 s after a 5 s warm-up, `/proc/<pid>/stat` utime+stime, two runs per mode, tray on, the default mode set through `[layout] default_mode` in a scratch config (scrolling with `column_width = 16`) and the panes opened with `leader v` and `leader s` in turn. The binary was built from a `git archive` of the commit below.
+
+| Mode | Run 1 | Run 2 |
+| --- | --- | --- |
+| bsp | **0.53 %** (16 ticks in 30 s) | **0.57 %** (17 ticks) |
+| master-stack | **0.53 %** (16 ticks) | **0.57 %** (17 ticks) |
+| scrolling | **0.63 %** (19 ticks) | **0.63 %** (19 ticks) |
+
+The tick resolution is 0.033 point (100 ticks per second), so bsp and master-stack are the same within a tick; scrolling reads about 0.1 point higher in both runs, still well under the gate.
+
+Inputs: recordings `~/.cache/muxreveal-spike/recordings/pane-2.rec` (run a), `~/.cache/muxreveal/recordings/20261026-200408/p3.rec` (run b) and `p2.rec` (run c), none of them in the repo; AMD Ryzen 9 3950X, Linux 7.2.11, go1.27.3, tmux 3.8; commit `d77d5de` (the bench mode knob on top of the tiling and chrome work).
+
 
 ## Spike - VT (done)
 
@@ -305,7 +381,7 @@ Gate: a saved file shows in the diff within 300 ms, and turn mode isolates the l
 
 M2 ships as two plans, one PR each.
 
-### M2a Worktrees and diff engine
+### M2a Worktrees and diff engine (done, PR #11)
 
 Headless, in `internal/git`: worktrees, turn snapshots taken before the prompt hook is answered, the diff engine with branch and turn sources, and the directory watcher. Covers WT-1, WT-2, DF-1, DF-2, DF-3.
 
@@ -360,7 +436,7 @@ Gate: a saved file shows in the open review pane within 300 ms; turn mode shows 
 
 ## Next
 
-M2a Worktrees and diff engine is complete on `feat/diff-engine` and waits for review. M1e Tiling, tab moves and chrome is in progress; the agents rail follows it, then M2b Review pane.
+M1e Tiling, tab moves and chrome is complete on `feat/tiling-tab-moves` and waits for review; the reboot part of its gate is the operator's check. The agents rail comes next, then M2b Review pane.
 
 ## Done
 
@@ -395,6 +471,13 @@ M2a Worktrees and diff engine is complete on `feat/diff-engine` and waits for re
 | 2026-10-27 | The directory watcher is `fsnotify` with our own walk instead of `rjeczalik/notify` | notify is unmaintained since 2023 and uses FSEvents on macOS only with cgo; our walk skips ignored directories |
 | 2026-10-27 | Turn snapshots copy the worktree's index to a temporary index and stage only what changed | A fresh index rehashes every file; the copy keeps git's stat cache (about 100 ms on 50k files) |
 | 2026-10-27 | Every prompt takes a snapshot until the review pane wires watchers to panes; the snapshotter already takes an "unchanged" hint | The watcher's lifecycle belongs to the pane, which the parallel UI milestone owns |
+| 2026-10-27 | Each pane gets its own rounded frame and frames touch, with no gap, no junctions and no outer frame | The operator's pick from the chrome comparison |
+| 2026-10-27 | A full-width rule in `Border` sits on row 1, under the workspace bar | The operator's pick from the chrome comparison |
+| 2026-10-27 | The status bar is hidden and its contents move: notices become a toast, copy mode and its search prompt go into the copy pane's borders, the sequence prefix opens a popup, the legends and the cwd are dropped, and the layout mode waits for the tray module (this replaces the layout-mode-in-the-status-bar row) | The operator's pick from the chrome comparison; the body gets the last row |
+| 2026-10-27 | A pane's title no longer shows its cwd | The operator's pick from the chrome comparison |
+| 2026-10-27 | The `Bar` role is Base, not Crust | The operator's pick from the chrome comparison |
+| 2026-10-27 | Overlay boxes (which-key, sequence popup, palette, theme picker, confirm) have rounded corners `╭ ╮ ╰ ╯`, not square ones | The operator's pick from the chrome comparison |
+| 2026-10-27 | The palette and the theme picker end in a joined divider and a hint row (`up/down move`, `enter run`, `esc close`), two rows taller | The operator's pick from the chrome comparison |
 
 ## Later
 
@@ -439,3 +522,4 @@ Ideas and requests that came up outside the current milestone go here.
 - With `focus_follows_mouse` on, every pointer move builds a frame (unmeasured).
 - `TestBenchKitOnSynth` times out waiting for pane read loops under `CGO_ENABLED=1 go test -race -count=2 ./internal/ui/` (also on main before agents and persistence); it passes at `-count=1` and on its own.
 - In a reftable repository the watcher does not watch `.git/reftable/`, so a fetch or another ref change sets no git flag in its batch.
+- An agents rail like herdr's Agents sidebar: every running agent with its project and branch, opened on command and kept open until closed, focused with its own key, searchable, and Enter jumps to the agent in any tab or pane; planned as its own plan after this milestone.

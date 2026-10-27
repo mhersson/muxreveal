@@ -34,7 +34,7 @@ func TestSaverLatestWins(t *testing.T) {
 		s.Save(named(string(rune('a' + i))))
 	}
 	closeSaver(t, s)
-	st, _, err := Load(path)
+	st, _, err := Load(path, core.LayoutConfig{})
 	noErr(t, err)
 	eq(t, st.Tabs[0].Name, "j")
 }

@@ -2,19 +2,60 @@ package core
 
 import (
 	"fmt"
+	"slices"
 	"strconv"
 )
 
 // TabID names a tab for the session: "t1", "t2", ... and never reused.
 type TabID string
 
-// Tab is one workspace: its own split layout, focus and zoom.
+// LayoutMode is how a tab arranges its panes.
+type LayoutMode string
+
+// Layout modes.
+const (
+	ModeBSP       LayoutMode = "bsp"
+	ModeMaster    LayoutMode = "master-stack"
+	ModeScrolling LayoutMode = "scrolling"
+)
+
+// Column is one scrolling column.
+type Column struct {
+	Panes []PaneID
+	Width float64 // share of the content width, 0.1-1.0
+}
+
+// Tab is one workspace: its own layout, focus and zoom, kept as plain values
+// so a state copy is a value copy.
 type Tab struct {
-	ID     TabID
-	Name   string // "" for the automatic name
-	Layout *Node  // nil when the tab has no pane
-	Focus  PaneID // "" when the tab has no pane
-	Zoomed bool   // the focused pane fills the body
+	ID        TabID
+	Name      string     // "" for the automatic name
+	Focus     PaneID     // "" when the tab has no pane
+	Zoomed    bool       // the focused pane fills the body
+	Mode      LayoutMode // never "" once a pane exists
+	Panes     []PaneID   // layout order; empty for an empty tab
+	Layout    *Node      // the BSP tree; nil outside BSP and for an empty tab
+	Master    float64    // master-stack ratio, 0.1-0.9
+	Columns   []Column   // scrolling columns, left to right
+	First     int        // first visible scrolling column
+	Preselect Dir        // NoDir when none; BSP only, not saved
+}
+
+// Empty reports whether the tab has no pane.
+func (t Tab) Empty() bool { return len(t.Panes) == 0 }
+
+func (t Tab) clone() Tab {
+	t.Panes = slices.Clone(t.Panes)
+	t.Layout = t.Layout.clone()
+	if t.Columns != nil {
+		cols := make([]Column, len(t.Columns))
+		for i, c := range t.Columns {
+			c.Panes = slices.Clone(c.Panes)
+			cols[i] = c
+		}
+		t.Columns = cols
+	}
+	return t
 }
 
 // normalize gives a State with no tabs its one empty tab.
@@ -46,7 +87,7 @@ func (s State) Tab() Tab {
 // TabOf returns the index of the tab holding a pane.
 func (s State) TabOf(id PaneID) (int, bool) {
 	for i, t := range s.Tabs {
-		if t.Layout.path(id) != nil {
+		if slices.Contains(t.Panes, id) {
 			return i, true
 		}
 	}
@@ -58,20 +99,9 @@ func (s State) TabHasAgents(i int) bool {
 	if i < 0 || i >= len(s.Tabs) {
 		return false
 	}
-	var found bool
-	var walk func(*Node)
-	walk = func(n *Node) {
-		switch {
-		case n == nil || found:
-		case n.leaf():
-			found = s.Panes[n.Pane].Kind == KindAgent
-		default:
-			walk(n.A)
-			walk(n.B)
-		}
-	}
-	walk(s.Tabs[i].Layout)
-	return found
+	return slices.ContainsFunc(s.Tabs[i].Panes, func(id PaneID) bool {
+		return s.Panes[id].Kind == KindAgent
+	})
 }
 
 func (s State) tabIndex(id TabID) (int, bool) {
@@ -87,19 +117,9 @@ func (s State) tabIndex(id TabID) (int, bool) {
 // keepName keeps its custom name (a closed pane, not a closed tab).
 // The active tab stays the same one, or moves left when it was removed.
 func (s *State) removeTab(i int, keepName bool) {
-	var drop func(*Node)
-	drop = func(n *Node) {
-		if n == nil {
-			return
-		}
-		if n.leaf() {
-			delete(s.Panes, n.Pane)
-			return
-		}
-		drop(n.A)
-		drop(n.B)
+	for _, id := range s.Tabs[i].Panes {
+		delete(s.Panes, id)
 	}
-	drop(s.Tabs[i].Layout)
 	name := s.Tabs[i].Name
 	if len(s.Tabs) == 1 {
 		s.Tabs[0] = Tab{ID: s.Tabs[0].ID}
@@ -132,17 +152,19 @@ func (a NewTab) apply(s *State) error {
 	s.normalize()
 	id := s.NewPaneID()
 	s.NextID++
-	if t := s.cur(); t.Layout == nil {
-		t.Layout = &Node{Pane: id}
+	if t := s.cur(); t.Empty() {
+		mode := t.Mode
+		if mode == "" {
+			mode = s.Layout.Mode()
+		}
+		t.start(id, mode, s.Layout)
 		t.Focus = id
-		t.Zoomed = false
 	} else {
 		s.NextTabID++
-		s.Tabs = append(s.Tabs, Tab{
-			ID:     TabID("t" + strconv.Itoa(s.NextTabID)),
-			Layout: &Node{Pane: id},
-			Focus:  id,
-		})
+		nt := Tab{ID: TabID("t" + strconv.Itoa(s.NextTabID))}
+		nt.start(id, s.Layout.Mode(), s.Layout)
+		nt.Focus = id
+		s.Tabs = append(s.Tabs, nt)
 		s.Active = len(s.Tabs) - 1
 	}
 	s.Panes[id] = Pane{Kind: a.Kind, Cwd: a.Cwd}

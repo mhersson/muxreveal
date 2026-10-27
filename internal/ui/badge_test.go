@@ -38,7 +38,7 @@ func setAgentStates(t *testing.T, a *App, states map[core.PaneID]core.AgentState
 
 // topRow is the first pane border row, below the workspace bar, without styling.
 func topRow(a *App) string {
-	return ansi.Strip(strings.Split(a.View().Content, "\n")[1])
+	return ansi.Strip(strings.Split(a.View().Content, "\n")[2])
 }
 
 func TestAgentGlyphs(t *testing.T) {
@@ -178,8 +178,8 @@ func TestStateBadgeColours(t *testing.T) {
 
 			// The row has only single-width runes before the badge.
 			x = len([]rune(topRow(a)[:x]))
-			assertColours(t, vt, x, 1, tt.icon, tt.fg, ui.Bg, true)
-			assertColours(t, vt, x+2, 1, tt.text[:1], tt.fg, ui.Bg, true)
+			assertColours(t, vt, x, 2, tt.icon, tt.fg, ui.Bg, true)
+			assertColours(t, vt, x+2, 2, tt.text[:1], tt.fg, ui.Bg, true)
 		})
 	}
 }

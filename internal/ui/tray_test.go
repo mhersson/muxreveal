@@ -336,7 +336,7 @@ func TestTrayModuleWidths(t *testing.T) {
 		a := trayApp(t, icons)
 		mods := a.trayModules()
 
-		if want := []string{modAgents, modGit, modLoad, modClock}; !slices.Equal(modIDs(mods), want) {
+		if want := []string{modLayout, modAgents, modGit, modLoad, modClock}; !slices.Equal(modIDs(mods), want) {
 			t.Fatalf("icons=%v modules = %v, want %v", icons, modIDs(mods), want)
 		}
 
@@ -377,7 +377,7 @@ func TestBarLinesStayExactWidth(t *testing.T) {
 
 // The tray gives way in DESIGN's order as the bar narrows.
 func TestTrayDropOrder(t *testing.T) {
-	rank := map[string]int{modLoad: 0, modGit: 1, modPR: 2, modClock: 3, modAgents: 4}
+	rank := map[string]int{modLoad: 0, modGit: 1, modPR: 2, modLayout: 3, modClock: 4, modAgents: 5}
 
 	for _, icons := range []bool{true, false} {
 		a := trayApp(t, icons)
@@ -462,8 +462,12 @@ func TestTrayColours(t *testing.T) {
 
 	agW := trayModuleByID(a, modAgents).width
 	ax := gx - 1 - agW
-	assertColours(t, vt, ax-1, 0, trayOpen, ui.Surface, ui.Bar, false)
+	assertColours(t, vt, ax-1, 0, edgeThin, ui.Bar, ui.Surface, false)
 	assertColours(t, vt, ax+1, 0, iconAgent, ui.Agent, ui.Surface, false)
+
+	lyW := trayModuleByID(a, modLayout).width
+	yx := ax - 1 - lyW
+	assertColours(t, vt, yx-1, 0, trayOpen, ui.Surface, ui.Bar, false)
 }
 
 func trayModuleByID(a *App, id string) trayModule {

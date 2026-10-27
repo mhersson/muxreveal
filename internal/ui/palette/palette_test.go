@@ -346,12 +346,12 @@ func TestViewFrame(t *testing.T) {
 	m := New("\U000F03D8 Theme", iconItems(), mustTheme(t, "catppuccin-mocha"))
 	m, _ = press(m, keyDown)
 	lines := strings.Split(ansi.Strip(m.View(40)), "\n")
-	if len(lines) != 3+3+1 {
-		t.Fatalf("view has %d lines, want 7:\n%s", len(lines), strings.Join(lines, "\n"))
+	if len(lines) != 3+3+3 {
+		t.Fatalf("view has %d lines, want 9:\n%s", len(lines), strings.Join(lines, "\n"))
 	}
-	wantTop := "\u250c\u2500 \U000F03D8 Theme "
-	if !strings.HasPrefix(lines[0], wantTop) || !strings.HasSuffix(lines[0], "\u2510") {
-		t.Errorf("top = %q, want prefix %q and a square corner", lines[0], wantTop)
+	wantTop := "\u256d\u2500 \U000F03D8 Theme "
+	if !strings.HasPrefix(lines[0], wantTop) || !strings.HasSuffix(lines[0], "\u256e") {
+		t.Errorf("top = %q, want prefix %q and a rounded corner", lines[0], wantTop)
 	}
 	if !strings.HasPrefix(lines[1], "\u2502 \u276f ") {
 		t.Errorf("input row = %q, want the \u276f prompt", lines[1])
@@ -362,8 +362,37 @@ func TestViewFrame(t *testing.T) {
 	if !strings.Contains(lines[3], " \U000F0293 Zoom pane") || !strings.HasSuffix(lines[3], "ctrl+space z \u2502") {
 		t.Errorf("row = %q, want icon, title and a right-aligned hint", lines[3])
 	}
-	if want := " 2 of 3 \u2500\u2518"; !strings.HasSuffix(lines[6], want) || !strings.HasPrefix(lines[6], "\u2514") {
-		t.Errorf("bottom = %q, want it to end with %q", lines[6], want)
+	if lines[6] != "\u251c"+strings.Repeat("\u2500", 38)+"\u2524" {
+		t.Errorf("footer divider = %q", lines[6])
+	}
+	if want := "\u2502 up/down move   enter run   esc close"; !strings.HasPrefix(lines[7], want) || !strings.HasSuffix(lines[7], "\u2502") {
+		t.Errorf("hint row = %q, want prefix %q", lines[7], want)
+	}
+	if want := " 2 of 3 \u2500\u256f"; !strings.HasSuffix(lines[8], want) || !strings.HasPrefix(lines[8], "\u2570") {
+		t.Errorf("bottom = %q, want it to end with %q", lines[8], want)
+	}
+}
+
+func TestFooterColours(t *testing.T) {
+	th := mustTheme(t, "catppuccin-mocha")
+	view := New("Commands", iconItems(), th).View(40)
+	panel := lipgloss.NewStyle().Background(th.UI.Panel).Foreground(th.UI.Fg)
+	for name, want := range map[string]string{
+		"key":   panel.Foreground(th.UI.Key).Bold(true).Render("enter"),
+		"label": panel.Foreground(th.UI.Muted).Render(" run"),
+		"gap":   panel.Render("   "),
+	} {
+		if !strings.Contains(view, want) {
+			t.Errorf("footer %s is not drawn as %q:\n%q", name, want, view)
+		}
+	}
+}
+
+func TestFooterWithNoMatches(t *testing.T) {
+	m, _ := typeText(newModel(t), "zzz")
+	lines := strings.Split(ansi.Strip(m.View(40)), "\n")
+	if len(lines) != 3+1+3 || !strings.Contains(lines[5], "esc close") {
+		t.Errorf("no-match view has %d lines, hint row %q", len(lines), lines[len(lines)-2])
 	}
 }
 
@@ -437,5 +466,21 @@ func TestMultibyteTitle(t *testing.T) {
 	hit := lipgloss.NewStyle().Background(th.UI.Selection).Foreground(th.UI.Match).Bold(true)
 	if want := hit.Render("Frap"); !strings.Contains(view, want) {
 		t.Errorf("view lacks the highlighted run %q:\n%q", want, view)
+	}
+}
+
+func TestFooterEnterLabel(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		m    Model
+		want string
+	}{
+		{"default", newModel(t), "enter run"},
+		{"labelled", newModel(t).WithEnterLabel("apply"), "enter apply"},
+	} {
+		view := ansi.Strip(tc.m.View(60))
+		if !strings.Contains(view, tc.want) {
+			t.Errorf("%s: footer lacks %q:\n%s", tc.name, tc.want, view)
+		}
 	}
 }

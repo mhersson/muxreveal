@@ -25,7 +25,7 @@ type confirm struct {
 
 // openConfirm shows c and ends a pending leader sequence.
 func (a *App) openConfirm(c confirm) {
-	a.pending, a.popup = false, false
+	a.endLeader()
 	a.confirm = &c
 }
 
@@ -45,7 +45,7 @@ func (a *App) handleConfirmKey(msg tea.KeyPressMsg) tea.Cmd {
 	return nil
 }
 
-// confirmBox draws the box w cells wide: a square border in Error with the
+// confirmBox draws the box w cells wide: a rounded border in Error with the
 // action set into the top edge, the question, its detail and the answer keys.
 func confirmBox(c confirm, w int, icons bool, st styles) []string {
 	inner := w - 2
@@ -65,8 +65,8 @@ func confirmBox(c confirm, w int, icons bool, st styles) []string {
 
 	// The title starts two cells from the corner: the corner, one dash, then the title.
 	title = ansi.Truncate(title, max(inner-1, 0), "")
-	top := st.confirmBorder.Render("┌─") + st.confirmTitle.Render(title) +
-		st.confirmBorder.Render(strings.Repeat("─", max(inner-1-ansi.StringWidth(title), 0))+"┐")
+	top := st.confirmBorder.Render("╭─") + st.confirmTitle.Render(title) +
+		st.confirmBorder.Render(strings.Repeat("─", max(inner-1-ansi.StringWidth(title), 0))+"╮")
 
 	answer := func(key, label string) string {
 		return st.popupSubtle.Render("[") + st.confirmKey.Render(key) + st.popupSubtle.Render("]") +
@@ -80,7 +80,7 @@ func confirmBox(c confirm, w int, icons bool, st styles) []string {
 		row(st.popupMuted.Render(c.detail)),
 		row(""),
 		row(answer("y", c.action) + st.popup.Render("    ") + answer("n", "Cancel")),
-		st.confirmBorder.Render("└" + strings.Repeat("─", inner) + "┘"),
+		st.confirmBorder.Render("╰" + strings.Repeat("─", inner) + "╯"),
 	}
 }
 

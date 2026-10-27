@@ -342,7 +342,45 @@ func assertSizes(t *testing.T, a *App) {
 	}
 }
 
+// Each PTY is its pane's rect minus the frame: two panes side by side in a
+// 100x30 terminal are 50x28 rects, so 48x26 PTYs; scrolling's hidden column
+// is sized as if shown alone.
+func TestPaneSizesAreRectsMinusFrame(t *testing.T) {
+	a, _ := lifeAppSized(t, 100, 30)
+
+	chord(a, 'v')
+
+	for id, r := range a.layoutRects() {
+		if r.W != 50 || r.H != 28 {
+			t.Fatalf("%s rect = %+v, want 50x28", id, r)
+		}
+
+		if cols, rows := paneSizeOf(a, id); cols != 48 || rows != 26 {
+			t.Errorf("%s PTY = %dx%d, want 48x26", id, cols, rows)
+		}
+	}
+
+	chord(a, 'v')
+
+	if err := a.dispatch(core.SetLayoutMode{Mode: core.ModeScrolling, Area: a.bodyArea()}); err != nil {
+		t.Fatal(err)
+	}
+
+	run(a, a.relayout())
+
+	if _, drawn := a.layoutRects()["p1"]; drawn {
+		t.Fatal("p1 should be hidden")
+	}
+
+	for _, id := range []core.PaneID{"p1", "p2", "p3"} {
+		if cols, rows := paneSizeOf(a, id); cols != 48 || rows != 26 {
+			t.Errorf("%s PTY = %dx%d, want 48x26", id, cols, rows)
+		}
+	}
+}
+
 func TestFocusResizeZoom(t *testing.T) {
+	// 30 rows give an even body, so p2 and p3 overlap p1 equally.
 	a, st := lifeAppSized(t, 100, 30)
 
 	chord(a, 'v')
@@ -621,7 +659,7 @@ func TestPaneExit(t *testing.T) {
 
 		a.Update(exitOf(t, a, "p1", st.proc(0)))
 
-		if s := a.store.State(); s.Tab().Layout != nil || len(s.Panes) != 0 {
+		if s := a.store.State(); !s.Tab().Empty() || len(s.Panes) != 0 {
 			t.Fatalf("state = %+v, want no panes", s)
 		}
 
@@ -1195,4 +1233,70 @@ func TestSwapCommands(t *testing.T) {
 			}
 		}
 	})
+}
+
+// A pane the tiny body leaves out has no rect, so focus never steps onto it.
+func TestFocusSkipsPanesLeftOutOfATinyBody(t *testing.T) {
+	a, _ := lifeAppSized(t, 12, 12)
+
+	chord(a, 's')
+	chord(a, 's')
+
+	st := a.store.State()
+	if len(st.Panes) != 3 {
+		t.Fatalf("panes = %d, want 3", len(st.Panes))
+	}
+
+	if _, drawn := a.layoutRects()["p2"]; drawn {
+		t.Fatalf("p2 is drawn in a 12x12 terminal: %v", a.layoutRects())
+	}
+
+	if err := a.dispatch(core.FocusPane{ID: "p1"}); err != nil {
+		t.Fatal(err)
+	}
+
+	chord(a, 'j')
+
+	if got := a.store.State().Tab().Focus; got != "p3" {
+		t.Errorf("Focus = %q after focus down, want p3 (p2 has no rect)", got)
+	}
+}
+
+func TestWindowResizeThroughTinyAndBack(t *testing.T) {
+	a, _ := lifeAppSized(t, 240, 64)
+
+	for _, k := range "svsvs" {
+		chord(a, k)
+	}
+
+	for _, sz := range [][2]int{{20, 6}, {1, 1}, {3, 3}, {240, 64}} {
+		sized(t, a, sz[0], sz[1])
+		assertSizes(t, a)
+
+		inner := a.bodyArea()
+		cells := map[[2]int]core.PaneID{}
+
+		for id, r := range a.layoutRects() {
+			if r.W < minFrame || r.H < minFrame || r.X < inner.X || r.Y < inner.Y ||
+				r.X+r.W > inner.X+inner.W || r.Y+r.H > inner.Y+inner.H {
+				t.Fatalf("%dx%d: %s = %+v outside %+v", sz[0], sz[1], id, r, inner)
+			}
+
+			for y := r.Y; y < r.Y+r.H; y++ {
+				for x := r.X; x < r.X+r.W; x++ {
+					if o, dup := cells[[2]int{x, y}]; dup {
+						t.Fatalf("%dx%d: %s and %s overlap at %d,%d", sz[0], sz[1], id, o, x, y)
+					}
+
+					cells[[2]int{x, y}] = id
+				}
+			}
+		}
+
+		for id, p := range a.panes {
+			if c, r := p.size(); c < 1 || r < 1 {
+				t.Fatalf("%dx%d: pane %s is %dx%d", sz[0], sz[1], id, c, r)
+			}
+		}
+	}
 }

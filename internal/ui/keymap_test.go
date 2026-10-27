@@ -2,6 +2,7 @@ package ui
 
 import (
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -20,8 +21,8 @@ func TestEveryBindingResolves(t *testing.T) {
 			t.Errorf("key %q is bound twice", b.key)
 		}
 		seen[b.key] = true
-		if !slices.Contains([]string{"Panes", "Tabs", "App"}, b.group) {
-			t.Errorf("binding %q has group %q, want Panes, Tabs or App", b.key, b.group)
+		if !slices.Contains([]string{"Panes", "Layout", "Tabs", "App"}, b.group) {
+			t.Errorf("binding %q has group %q, want Panes, Layout, Tabs or App", b.key, b.group)
 		}
 	}
 }
@@ -81,5 +82,54 @@ func TestKeymapKeyFor(t *testing.T) {
 				t.Errorf("keyFor(%q) = %q, %v, want %q, %v", tt.command, got, ok, tt.want, tt.wantOK)
 			}
 		})
+	}
+}
+
+func TestKeymapSequences(t *testing.T) {
+	km := defaultKeymap()
+
+	for key, want := range map[string]string{
+		"> 1": "pane.move.tab.1", "> 9": "pane.move.tab.9", ". 3": "pane.send.tab.3",
+		"; h": "pane.preselect.left", "; esc": "pane.preselect.clear",
+		"!": "pane.break", "space": "layout.cycle", "r": "layout.rotate", "=": "layout.equalize", "enter": "layout.promote",
+	} {
+		if got, ok := km.lookup(key); !ok || got != want {
+			t.Errorf("lookup(%q) = %q, %v, want %q", key, got, ok, want)
+		}
+	}
+
+	for _, key := range []string{">", ".", ";"} {
+		if !km.isPrefix(key) {
+			t.Errorf("isPrefix(%q) = false", key)
+		}
+	}
+
+	for _, key := range []string{"q", "1", "h", "!", ""} {
+		if km.isPrefix(key) {
+			t.Errorf("isPrefix(%q) = true", key)
+		}
+	}
+}
+
+func TestNoKeyIsBothSingleAndPrefix(t *testing.T) {
+	km := defaultKeymap()
+
+	for _, b := range km.bindings {
+		first, _, seq := strings.Cut(b.key, " ")
+		if !seq {
+			if km.isPrefix(b.key) {
+				t.Errorf("%q is both a binding and a prefix", b.key)
+			}
+
+			continue
+		}
+
+		if strings.Contains(strings.TrimPrefix(b.key, first+" "), " ") {
+			t.Errorf("binding %q has more than two keys", b.key)
+		}
+
+		if _, ok := km.lookup(first); ok {
+			t.Errorf("prefix %q is also bound as a single key", first)
+		}
 	}
 }

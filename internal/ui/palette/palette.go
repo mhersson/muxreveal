@@ -46,7 +46,8 @@ type Model struct {
 	sel     int // index into matches, -1 when nothing matches
 	top     int // first visible row of matches
 	theme   theme.Theme
-	icons   bool // some item has an icon, so every row reserves its column
+	icons   bool   // some item has an icon, so every row reserves its column
+	enter   string // label of the enter hint in the footer
 }
 
 type titles []Item
@@ -62,11 +63,17 @@ func New(title string, items []Item, t theme.Theme) Model {
 	// A static cursor keeps View independent of blink timing.
 	in.SetStyles(inputStyles(t))
 	in.Focus()
-	m := Model{title: title, items: items, input: in, theme: t}
+	m := Model{title: title, items: items, input: in, theme: t, enter: "run"}
 	for _, it := range items {
 		m.icons = m.icons || it.Icon != ""
 	}
 	m.refilter()
+	return m
+}
+
+// WithEnterLabel returns m with the footer's enter hint labelled label.
+func (m Model) WithEnterLabel(label string) Model {
+	m.enter = label
 	return m
 }
 
@@ -240,9 +247,9 @@ func (m Model) View(width int) string {
 	// The title starts two cells from the corner: the corner, one dash, then the title.
 	dash := min(1, inner)
 	title := ansi.Truncate(" "+m.title+" ", inner-dash, "")
-	top := border.Render("┌"+strings.Repeat("─", dash)) +
+	top := border.Render("╭"+strings.Repeat("─", dash)) +
 		panel.Foreground(ui.Accent).Bold(true).Render(title) +
-		border.Render(strings.Repeat("─", inner-dash-lipgloss.Width(title))+"┐")
+		border.Render(strings.Repeat("─", inner-dash-lipgloss.Width(title))+"╮")
 	lines := []string{top}
 
 	in := m.input
@@ -258,19 +265,37 @@ func (m Model) View(width int) string {
 		lines = append(lines, m.row(i, inner))
 	}
 
+	lines = append(lines, border.Render("├"+strings.Repeat("─", inner)+"┤"), fit(m.footer(panel), panel))
+
 	// The count ends one dash before the corner; it is left out when it does not fit.
 	count := " " + strconv.Itoa(max(m.sel+1, 0)) + " of " + strconv.Itoa(len(m.matches)) + " "
 	cw := lipgloss.Width(count)
 	if inner >= cw+1 {
-		lines = append(lines, border.Render("└"+strings.Repeat("─", inner-cw-1))+
-			panel.Foreground(ui.Muted).Render(count)+border.Render("─┘"))
+		lines = append(lines, border.Render("╰"+strings.Repeat("─", inner-cw-1))+
+			panel.Foreground(ui.Muted).Render(count)+border.Render("─╯"))
 	} else {
-		lines = append(lines, border.Render("└"+strings.Repeat("─", inner)+"┘"))
+		lines = append(lines, border.Render("╰"+strings.Repeat("─", inner)+"╯"))
 	}
 	for i, l := range lines {
 		lines[i] = ansi.Truncate(l, width, "")
 	}
 	return strings.Join(lines, "\n")
+}
+
+// footer is the key hint row: each key in Key bold, its label in Muted, the
+// pairs three cells apart, after one cell of margin.
+func (m Model) footer(panel lipgloss.Style) string {
+	ui := m.theme.UI
+	var sb strings.Builder
+	sb.WriteString(panel.Render(" "))
+	for i, h := range [][2]string{{"up/down", "move"}, {"enter", m.enter}, {"esc", "close"}} {
+		if i > 0 {
+			sb.WriteString(panel.Render("   "))
+		}
+		sb.WriteString(panel.Foreground(ui.Key).Bold(true).Render(h[0]))
+		sb.WriteString(panel.Foreground(ui.Muted).Render(" " + h[1]))
+	}
+	return sb.String()
 }
 
 // row draws match i: icon, title with matched runes emphasised, and the hint

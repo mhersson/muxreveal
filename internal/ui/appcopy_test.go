@@ -290,63 +290,6 @@ func TestCopyModeSearchEscKeepsCopyMode(t *testing.T) {
 	}
 }
 
-func TestCopyModeStatusBar(t *testing.T) {
-	a, _, _ := copyApp(t)
-	st := a.store.State()
-
-	enterCopy(a)
-
-	bar := ansi.Strip(a.statusBar(100, st))
-	for _, want := range []string{
-		" \U000F018F COPY ", "v select", "y copy", "/ search", "n next", "q exit",
-	} {
-		if !strings.Contains(bar, want) {
-			t.Errorf("status bar %q lacks %q", bar, want)
-		}
-	}
-
-	if strings.Contains(bar, "then") {
-		t.Errorf("status bar %q has the leader lead-in", bar)
-	}
-
-	a.icons = false
-
-	if bar := ansi.Strip(a.statusBar(100, st)); !strings.Contains(bar, " COPY ") || strings.Contains(bar, "\U000F018F") {
-		t.Errorf("icons off status bar = %q", bar)
-	}
-}
-
-func TestCopyModeSearchStatusBarAndCursor(t *testing.T) {
-	a, _, _ := copyApp(t)
-	st := a.store.State()
-
-	enterCopy(a)
-	keys(a, "/")
-	typeText(a, "ab")
-
-	bar := ansi.Strip(a.statusBar(100, st))
-	if !strings.HasPrefix(bar, " \U000F0349 Search ") || !strings.Contains(bar, "ab") {
-		t.Errorf("search status bar = %q", bar)
-	}
-
-	if strings.Contains(bar, "v select") {
-		t.Errorf("search status bar %q still lists the copy legend", bar)
-	}
-
-	wantX := ansi.StringWidth(bar[:strings.Index(bar, "ab")]) + 2
-
-	x, y, ok := cursorOf(a)
-	if !ok || y != a.height-1 || x != wantX {
-		t.Errorf("cursor = (%d,%d,%v), want the status bar row after the text at %d", x, y, ok, wantX)
-	}
-
-	keys(a, "esc", "?")
-
-	if a.prompt == nil || !strings.HasPrefix(ansi.Strip(a.statusBar(100, st)), " \U000F0349 Search ") {
-		t.Error("? is not the same Search mode")
-	}
-}
-
 func TestCopyModeSearchPromptStopsAtLimit(t *testing.T) {
 	a, _, _ := copyApp(t)
 

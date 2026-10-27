@@ -127,7 +127,27 @@ type benchConfig struct {
 	Selection bool
 	// Agents makes every pane a working agent whose badge spinner advances every spinEvery.
 	Agents bool
-	Trace  func(at time.Duration, drew bool) // tests only; nil in production
+	// Mode is the bench tab's layout mode; "" is bsp.
+	Mode  core.LayoutMode
+	Trace func(at time.Duration, drew bool) // tests only; nil in production
+}
+
+// benchScrollingColumnWidth is the column width (percent) that keeps all six
+// bench panes visible in scrolling mode.
+const benchScrollingColumnWidth = 16
+
+// parseBenchMode maps MUXREVEAL_BENCH_MODE to a layout mode; "" is bsp.
+func parseBenchMode(s string) (core.LayoutMode, error) {
+	switch s {
+	case "", string(core.ModeBSP):
+		return core.ModeBSP, nil
+	case string(core.ModeMaster):
+		return core.ModeMaster, nil
+	case string(core.ModeScrolling):
+		return core.ModeScrolling, nil
+	}
+
+	return "", fmt.Errorf("MUXREVEAL_BENCH_MODE %q is not one of bsp, master-stack, scrolling", s)
 }
 
 type benchResult struct {
@@ -237,9 +257,18 @@ func benchGrid(n int) (cols, rows int) {
 // and returns the pane ids in open order. Columns come first (side by side),
 // then each top pane is split to open a row below it.
 func newBenchApp(cfg benchConfig, clk clock) (*App, []core.PaneID, error) {
+	conf := core.DefaultConfig()
+	if cfg.Mode != "" {
+		conf.Layout.DefaultMode = string(cfg.Mode)
+	}
+
+	if cfg.Mode == core.ModeScrolling {
+		conf.Layout.ColumnWidth = benchScrollingColumnWidth
+	}
+
 	app, err := New(Options{
 		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
-		Store:  core.NewStore(core.InitialState(core.DefaultConfig())),
+		Store:  core.NewStore(core.InitialState(conf)),
 		Getenv: func(string) string { return "" },
 		Cwd:    "/",
 		Icons:  true,
@@ -268,8 +297,9 @@ func newBenchApp(cfg benchConfig, clk clock) (*App, []core.PaneID, error) {
 		open(core.SplitVertical)
 	}
 
-	// Three columns: the first takes about a third instead of half.
-	if cols == 3 {
+	// Three columns: the first takes about a third instead of half. The
+	// other modes keep their own default sizes.
+	if cols == 3 && (cfg.Mode == "" || cfg.Mode == core.ModeBSP) {
 		_ = app.dispatch(core.FocusPane{ID: ids[0]})
 
 		for range 3 {

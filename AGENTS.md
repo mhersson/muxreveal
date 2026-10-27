@@ -47,8 +47,8 @@ All of formatting, vet, lint and tests must pass before a commit.
 | Package            | Responsibility                                                    |
 | ------------------ | ----------------------------------------------------------------- |
 | `cmd/muxreveal`    | Binary: CLI, `hook` subcommand, wiring                            |
-| `internal/core`    | Event bus, state store, actions, config                           |
-| `internal/ui`      | Compositor, layout tree, widgets, keymap, themes, image placement |
+| `internal/core`    | Event bus, state store, actions, config, tab layouts (`internal/core/tiling` holds the ported tuios layouts) |
+| `internal/ui`      | Compositor, frames and chrome, widgets, keymap, themes, image placement |
 | `internal/term`    | PTY plus the `VT` interface; `tuios.dev/vt` adapter               |
 | `internal/harness` | `Harness` interface; Claude Code adapter                          |
 | `internal/git`     | Worktrees, turn snapshots, watcher, diff engine, highlighting     |

@@ -45,7 +45,7 @@ func TestRecordFlag(t *testing.T) {
 
 	t.Cleanup(func() { _ = app.Close(context.Background()) })
 
-	app.Update(tea.WindowSizeMsg{Width: 40, Height: 10})
+	app.Update(tea.WindowSizeMsg{Width: 40, Height: 11})
 
 	pn := app.panes["p1"]
 	if pn == nil {
@@ -83,8 +83,8 @@ func TestRecordFlag(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if recs[0].Data != nil || recs[0].Cols != 38 || recs[0].Rows != 6 {
-		t.Fatalf("initial record = %+v, want a 38x6 resize", recs[0])
+	if recs[0].Data != nil || recs[0].Cols != 38 || recs[0].Rows != 7 {
+		t.Fatalf("initial record = %+v, want a 38x7 resize", recs[0])
 	}
 
 	vt := term.NewVT(recs[0].Cols, recs[0].Rows, io.Discard)
@@ -277,7 +277,7 @@ func TestRecordDirCollisionSetsNotice(t *testing.T) {
 
 	t.Cleanup(func() { _ = app.Close(context.Background()) })
 
-	app.Update(tea.WindowSizeMsg{Width: 40, Height: 10})
+	app.Update(tea.WindowSizeMsg{Width: 40, Height: 11})
 
 	if app.panes["p1"] == nil || !strings.Contains(app.notice, "recording is off for p1") {
 		t.Fatalf("pane = %v, notice = %q; want the pane running and a recording notice", app.panes["p1"], app.notice)

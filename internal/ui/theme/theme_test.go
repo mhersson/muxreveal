@@ -81,7 +81,7 @@ func TestUIRoles(t *testing.T) {
 		}{
 			{"Agent", th.UI.Agent, p.Mauve},
 			{"Shell", th.UI.Shell, p.Blue},
-			{"Bar", th.UI.Bar, p.Crust},
+			{"Bar", th.UI.Bar, p.Base},
 			{"Dim", th.UI.Dim, p.Subtext0},
 			{"Clock", th.UI.Clock, p.Lavender},
 			{"Git", th.UI.Git, p.Flamingo},
@@ -126,6 +126,15 @@ func TestUIRoles(t *testing.T) {
 			} else if !inPalette[h] {
 				t.Errorf("%s: UI.%s = %q is not a palette colour", th.Name, role, h)
 			}
+		}
+	}
+}
+
+// The bars sit on Base in every flavor, the same ground as the body.
+func TestBarIsBase(t *testing.T) {
+	for _, th := range All() {
+		if th.UI.Bar != th.Palette.Base || th.UI.Bar == th.Palette.Crust || th.UI.Bar == "" {
+			t.Errorf("%s UI.Bar = %q, want Base %q", th.Name, th.UI.Bar, th.Palette.Base)
 		}
 	}
 }

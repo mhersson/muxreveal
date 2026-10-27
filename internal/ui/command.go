@@ -90,7 +90,7 @@ func defaultCommands() []command {
 			id:    "pane.focus." + d.name,
 			icon:  iconFocus,
 			title: "Focus " + d.name,
-			run:   func(a *App) tea.Cmd { return a.act(core.FocusDir{Dir: d.dir}) },
+			run:   func(a *App) tea.Cmd { return a.act(core.FocusDir{Dir: d.dir, Area: a.bodyArea()}) },
 		})
 	}
 	for _, d := range dirs {
@@ -106,7 +106,7 @@ func defaultCommands() []command {
 			id:    "pane.swap." + d.name,
 			icon:  iconSwap,
 			title: "Swap " + d.name,
-			run:   func(a *App) tea.Cmd { return a.act(core.SwapDir{Dir: d.dir}) },
+			run:   func(a *App) tea.Cmd { return a.act(core.SwapDir{Dir: d.dir, Area: a.bodyArea()}) },
 		})
 	}
 	cmds = append(cmds, command{
@@ -163,6 +163,7 @@ func defaultCommands() []command {
 			run:   func(a *App) tea.Cmd { return a.act(core.SelectTab{Index: n - 1}) },
 		})
 	}
+	cmds = append(cmds, layoutCommands()...)
 	cmds = append(cmds, command{
 		id:    "app.quit",
 		icon:  iconQuit,

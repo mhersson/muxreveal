@@ -46,7 +46,7 @@ type Options struct {
 	HookSock string
 	// Events delivers hook events; nil means none arrive.
 	Events <-chan harness.Event
-	// Notice is shown in the status bar at start; empty for none.
+	// Notice is shown as a toast at start; empty for none.
 	Notice string
 	// Save is called with the state after every successful dispatch; nil saves nothing.
 	Save func(core.State)
@@ -61,9 +61,10 @@ type App struct {
 	reg     *registry
 	keymap  keymap
 	pending bool   // leader pressed, awaiting a key
-	popup   bool   // which-key popup visible; only while pending
+	prefix  string // first key of a two-key sequence while pending; "" before it
+	popup   bool   // which-key popup visible; only while pending with no prefix
 	seq     int    // leader press counter; a whichKeyMsg with another seq is stale
-	notice  string // status-bar message until the next key press
+	notice  string // toast message until the next key press
 
 	// theme, styles and sample follow store.State().Theme; only sync updates them.
 	theme  theme.Theme
@@ -194,7 +195,11 @@ func (a *App) dispatch(act core.Action) error {
 	}
 	prev := a.store.State().Tab()
 	if err := a.store.Dispatch(act); err != nil {
-		a.log.Error("dispatch action", "err", err)
+		if expectedError(err) {
+			a.log.Debug("dispatch refused", "err", err)
+		} else {
+			a.log.Error("dispatch action", "err", err)
+		}
 		return err
 	}
 	st := a.store.State()
@@ -277,7 +282,7 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a.started = true
 			if len(a.store.State().Panes) > 0 {
 				cmds = append(cmds, a.startRestored())
-			} else if a.store.State().Tab().Layout == nil {
+			} else if a.store.State().Tab().Empty() {
 				cmds = append(cmds, a.openPane(core.KindShell, core.SplitVertical))
 			}
 		}
@@ -332,7 +337,7 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case palette.HighlightMsg:
 		a.highlighted(msg.ID)
 	case whichKeyMsg:
-		a.popup = a.pending && msg.seq == a.seq
+		a.popup = a.pending && a.prefix == "" && msg.seq == a.seq
 	default:
 		// The input's own messages belong to the open prompt or palette.
 		if a.prompt != nil {
@@ -356,6 +361,15 @@ func bindingKey(msg tea.KeyPressMsg) string {
 	return msg.String()
 }
 
+// sequenceOpen reports whether a sequence prefix waits for its second key,
+// which shows the sequence popup at once.
+func (a *App) sequenceOpen() bool { return a.pending && a.prefix != "" }
+
+// endLeader drops a pending leader sequence and its which-key popup.
+func (a *App) endLeader() {
+	a.pending, a.popup, a.prefix = false, false, ""
+}
+
 // runLeader handles a key press in the leader state machine. It reports
 // whether the key was consumed; a key outside a pending sequence that is not
 // the leader is not.
@@ -365,30 +379,42 @@ func (a *App) runLeader(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 		if key != a.keymap.leader {
 			return nil, false
 		}
-		a.pending = true
+		a.pending, a.prefix = true, ""
 		a.seq++
 		seq := a.seq
 		return tea.Tick(a.keymap.delay, func(time.Time) tea.Msg { return whichKeyMsg{seq: seq} }), true
 	}
-	a.pending, a.popup = false, false
-	if key == "esc" {
+	prefix := a.prefix
+	if prefix == "" && a.keymap.isPrefix(key) {
+		if key == ";" && !a.tabIsBSP() {
+			a.notice = noticePreselectBSP
+			a.endLeader()
+			return nil, true
+		}
+		a.prefix, a.popup = key, false
 		return nil, true
 	}
-	if key == a.keymap.leader {
+	a.endLeader()
+	if prefix != "" {
+		key = prefix + " " + key
+	}
+	if id, ok := a.keymap.lookup(key); ok {
+		c, ok := a.reg.get(id)
+		if !ok {
+			a.log.Error("bound command missing", "key", key, "command", id)
+			return nil, true
+		}
+		return c.run(a), true
+	}
+	switch bindingKey(msg) {
+	case "esc":
+		return nil, true
+	case a.keymap.leader:
 		a.keyToFocused(msg)
 		return nil, true
 	}
-	id, ok := a.keymap.lookup(key)
-	if !ok {
-		a.notice = a.keymap.leader + " " + key + " is not bound"
-		return nil, true
-	}
-	c, ok := a.reg.get(id)
-	if !ok {
-		a.log.Error("bound command missing", "key", key, "command", id)
-		return nil, true
-	}
-	return c.run(a), true
+	a.notice = a.keymap.leader + " " + key + " is not bound"
+	return nil, true
 }
 
 // View implements tea.Model. The shell is empty until the first
@@ -396,7 +422,10 @@ func (a *App) runLeader(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 func (a *App) View() tea.View {
 	lk := a.current()
 	g := a.geometry()
-	content := a.frameAt(g)
+	content := overlayToast(a.frameAt(g), a.width, a.height, a.notice, a.icons, lk.styles)
+	if a.sequenceOpen() {
+		content = overlayCorner(content, a.width, a.height, sequencePopup(a.keymap.leader, a.prefix, a.icons, lk.styles))
+	}
 	if a.popup {
 		content = overlayWhichKey(content, a.width, a.height, a.keymap.leader, a.hints(), a.icons, lk.styles)
 	}

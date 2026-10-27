@@ -45,7 +45,7 @@ func (a *App) handlePaste(msg tea.PasteMsg) tea.Cmd {
 	if a.overlay != nil {
 		return a.updateOverlay(msg)
 	}
-	a.pending, a.popup = false, false
+	a.endLeader()
 	a.sendToFocused(func(p *pane) {
 		a.clearSelectionOf(p.id)
 		p.sendPaste(msg.Content)

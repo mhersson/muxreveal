@@ -2,8 +2,9 @@ package ui
 
 import (
 	"fmt"
-	"path/filepath"
+	"slices"
 	"strings"
+	"unicode/utf8"
 
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
@@ -11,132 +12,60 @@ import (
 	"github.com/mhersson/muxreveal/internal/core"
 )
 
-// Border directions a cell's line leaves in.
-const (
-	dirU uint8 = 1 << iota
-	dirD
-	dirL
-	dirR
-)
-
-// Who owns a border cell's colour: the focused pane's kind wins over a neighbour.
+// Who owns a box's colour: the focused pane's kind, or nobody (Border).
 const (
 	ownNone uint8 = iota
 	ownAgent
 	ownShell
 )
 
-// borderGrid collects the directions of every border cell so that panes that
-// share an edge draw one connected line.
-type borderGrid struct {
-	w, h int
-	dirs []uint8
-	own  []uint8
-}
-
-func newBorderGrid(w, h int) *borderGrid {
-	return &borderGrid{w: w, h: h, dirs: make([]uint8, w*h), own: make([]uint8, w*h)}
-}
-
-// addBox adds the border around a pane rect, on columns r.X-1..r.X+r.W and rows
-// r.Y..r.Y+r.H, and sets the colour owner of every cell on it to own unless
-// own is ownNone.
-func (g *borderGrid) addBox(r core.Rect, own uint8) {
-	x1, x2, y1, y2 := r.X-1, r.X+r.W, r.Y, r.Y+r.H
-	set := func(x, y int, d uint8) {
-		if x < 0 || y < 0 || x >= g.w || y >= g.h {
-			return
-		}
-		i := y*g.w + x
-		g.dirs[i] |= d
-		if own != ownNone {
-			g.own[i] = own
-		}
+// drawBox adds the rounded box around a pane rect: corners, sides, and the top
+// and bottom borders with their title, tag and prompt segments set in. Every
+// pane has its own box, so neighbours touch without shared cells.
+func drawBox(add func(y int, s segment), r core.Rect, top, bottom []segment, own uint8, st styles) {
+	if r.W < minFrame || r.H < minFrame {
+		return
 	}
-	for x := x1; x <= x2; x++ {
-		d := dirL | dirR
-		switch x {
-		case x1:
-			d = dirR
-		case x2:
-			d = dirL
+
+	right := r.X + r.W - 1
+	last := r.Y + r.H - 1
+
+	line := func(x, w int, glyphs string) segment { return segment{x, w, st.borderRun(own, glyphs)} }
+
+	// A border is runs of corner and dashes between its segments; the last run
+	// ends in the other corner.
+	border := func(y int, segs []segment, left, rightCorner string) {
+		pos, prefix := r.X, left
+		run := func(end int, tail string) {
+			if end > pos {
+				dashes := end - pos - utf8.RuneCountInString(prefix+tail)
+				add(y, line(pos, end-pos, prefix+strings.Repeat("─", dashes)+tail))
+			}
 		}
-		set(x, y1, d)
-		set(x, y2, d)
-	}
-	for y := y1; y <= y2; y++ {
-		d := dirU | dirD
-		switch y {
-		case y1:
-			d = dirD
-		case y2:
-			d = dirU
-		}
-		set(x1, y, d)
-		set(x2, y, d)
-	}
-}
 
-// straight reports whether (x, y) is a plain horizontal run.
-func (g *borderGrid) straight(x, y int) bool { return g.dirs[y*g.w+x] == dirL|dirR }
+		slices.SortFunc(segs, func(p, q segment) int { return p.x - q.x })
 
-// clear removes the border from cells [x0, x1) of row y: text sits there.
-func (g *borderGrid) clear(y, x0, x1 int) {
-	for x := x0; x < x1; x++ {
-		g.dirs[y*g.w+x] = 0
-	}
-}
-
-// runs emits the remaining border cells, one styled string per run of cells
-// with the same owner.
-func (g *borderGrid) runs(st styles, add func(y int, s segment)) {
-	var sb strings.Builder
-	for y := range g.h {
-		x := 0
-		for x < g.w {
-			i := y*g.w + x
-			if g.dirs[i] == 0 {
-				x++
+		for _, s := range segs {
+			if s.x < max(pos, r.X+1) || s.x+s.w > right {
 				continue
 			}
-			start, own := x, g.own[i]
-			sb.Reset()
-			for x < g.w && g.dirs[y*g.w+x] != 0 && g.own[y*g.w+x] == own {
-				sb.WriteString(borderGlyph(g.dirs[y*g.w+x]))
-				x++
-			}
-			add(y, segment{start, x - start, st.borderRun(own, sb.String())})
-		}
-	}
-}
 
-// borderGlyph is the rounded box-drawing character for the directions a cell
-// connects.
-func borderGlyph(d uint8) string {
-	switch d {
-	case dirU | dirD:
-		return "│"
-	case dirR | dirD:
-		return "╭"
-	case dirL | dirD:
-		return "╮"
-	case dirR | dirU:
-		return "╰"
-	case dirL | dirU:
-		return "╯"
-	case dirL | dirR | dirD:
-		return "┬"
-	case dirL | dirR | dirU:
-		return "┴"
-	case dirU | dirD | dirR:
-		return "├"
-	case dirU | dirD | dirL:
-		return "┤"
-	case dirU | dirD | dirL | dirR:
-		return "┼"
-	default:
-		return "─"
+			run(s.x, "")
+			add(y, s)
+			pos, prefix = s.x+s.w, ""
+		}
+
+		run(right+1, rightCorner)
 	}
+
+	border(r.Y, top, "╭", "╮")
+
+	for y := r.Y + 1; y < last; y++ {
+		add(y, line(r.X, 1, "│"))
+		add(y, line(right, 1, "│"))
+	}
+
+	border(last, bottom, "╰", "╯")
 }
 
 func kindOwner(k core.PaneKind) uint8 {
@@ -150,57 +79,39 @@ func kindOwner(k core.PaneKind) uint8 {
 const titleRoomMin = 4
 
 // topBorder returns the title and tags set into the top border of the pane at
-// r, and removes the border cells they cover from the grid. The title uses the
-// plain run of border that starts after the left corner and the tags the one
-// that ends before the right corner, so neither covers a junction.
-func (a *App) topBorder(grid *borderGrid, s core.State, id core.PaneID, r core.Rect, focused bool, st styles) []segment {
+// r: the title after the left corner and a dash, the tags before the right
+// corner. The cells between them stay border.
+func (a *App) topBorder(s core.State, id core.PaneID, r core.Rect, focused bool, st styles) []segment {
 	meta := s.Panes[id]
-	kindStyle, titleStyle, cwdStyle := st.kind(meta.Kind), st.titleMuted, st.cwdSubtle
+	kindStyle, titleStyle := st.kind(meta.Kind), st.titleMuted
 	if focused {
-		titleStyle, cwdStyle = kindStyle, st.cwdFocus
+		titleStyle = kindStyle
 	}
 
-	left, right := r.X, r.X+r.W
-	for left < right && grid.straight(left, r.Y) {
-		left++
-	}
-	rightStart := right
-	for rightStart > r.X && grid.straight(rightStart-1, r.Y) {
-		rightStart--
-	}
-	whole := left == right
+	// left is where the title must end.
+	left := r.X + r.W - 1
 
-	var segs []segment
-
-	// Tags sit right to left with one border cell between them and before the corner.
-	tagEnd := right - 1
-	place := func(tag string, style lipgloss.Style) {
-		tw := lipgloss.Width(tag)
-		x := tagEnd - tw
-		if x < rightStart {
-			return
-		}
-		segs = append(segs, segment{x, tw, style.Render(tag)})
-		grid.clear(r.Y, x, x+tw)
-		if whole {
-			left = x
-		}
-		tagEnd = x - 1
+	type tag struct {
+		text  string
+		style lipgloss.Style
 	}
+
+	var copyTag, nextTag, scrollTag, zoomTag, badgeTag *tag
 
 	if meta.Kind == core.KindAgent {
-		if tag, style, ok := st.badge(meta.State, a.spin, a.icons); ok {
-			place(tag, style)
+		if text, style, ok := st.badge(meta.State, a.spin, a.icons); ok {
+			badgeTag = &tag{text, style}
 		}
 	}
 
 	_, focusExists := s.Panes[s.Tab().Focus]
 	if s.Tab().Zoomed && focusExists {
-		tag := " zoom "
+		text := " zoom "
 		if a.icons {
-			tag = " " + iconZoom + " zoom "
+			text = " " + iconZoom + " zoom "
 		}
-		place(tag, st.tagZoom)
+
+		zoomTag = &tag{text, st.tagZoom}
 	}
 
 	if p := a.panes[id]; p != nil {
@@ -209,8 +120,65 @@ func (a *App) topBorder(grid *borderGrid, s core.State, id core.PaneID, r core.R
 			if a.icons {
 				arrow = iconScroll
 			}
-			place(fmt.Sprintf(" %s %d ", arrow, n), st.tagScroll)
+
+			scrollTag = &tag{fmt.Sprintf(" %s %d ", arrow, n), st.tagScroll}
 		}
+	}
+
+	if dir := s.Tab().Preselect; focused && dir != core.NoDir {
+		nextTag = &tag{" " + a.preselectArrow(dir) + " next ", st.tagNext}
+	}
+
+	if a.copy != nil && a.copy.pane == id {
+		text := " COPY "
+		if a.icons {
+			text = " " + iconCopy + " COPY "
+		}
+
+		copyTag = &tag{text, st.tagCopy}
+	}
+
+	// The tags fit between the corners with one border cell between two and one
+	// before the right corner; COPY claims room first, then the badge, zoom,
+	// preselection and scroll tags.
+	avail := r.W - 3
+	used := 0
+	claim := func(t *tag) *tag {
+		if t == nil {
+			return nil
+		}
+
+		need := lipgloss.Width(t.text)
+		if used > 0 {
+			need++
+		}
+
+		if used+need > avail {
+			return nil
+		}
+
+		used += need
+
+		return t
+	}
+
+	copyTag, badgeTag, zoomTag, nextTag, scrollTag = claim(copyTag), claim(badgeTag), claim(zoomTag), claim(nextTag), claim(scrollTag)
+
+	var segs []segment
+
+	// Tags sit right to left with one border cell between them and before the corner.
+	tagEnd := r.X + r.W - 2
+
+	for _, t := range []*tag{badgeTag, zoomTag, scrollTag, nextTag, copyTag} {
+		if t == nil {
+			continue
+		}
+
+		tw := lipgloss.Width(t.text)
+		x := tagEnd - tw
+		segs = append(segs, segment{x, tw, t.style.Render(t.text)})
+		left = x
+		tagEnd = x - 1
 	}
 
 	title := "shell"
@@ -222,22 +190,16 @@ func (a *App) topBorder(grid *borderGrid, s core.State, id core.PaneID, r core.R
 			title = t
 		}
 	}
-	cwd := ""
-	if meta.Cwd != "" {
-		cwd = printable(filepath.Base(meta.Cwd))
-	}
 
 	lead := 2
 	if a.icons {
 		lead = 4
 	}
-	room := left - r.X - lead - 1
+	room := left - (r.X + 1) - lead - 1
 	if room < titleRoomMin {
 		return segs
 	}
 	tw := ansi.StringWidth(title)
-	cw := ansi.StringWidth(cwd)
-	showCwd := cwd != "" && tw+3+cw <= room
 	if tw > room {
 		title = ansi.Truncate(title, room, "…")
 		tw = ansi.StringWidth(title)
@@ -251,15 +213,95 @@ func (a *App) topBorder(grid *borderGrid, s core.State, id core.PaneID, r core.R
 	}
 	sb.WriteString(titleStyle.Render(title))
 	w := lead - 1 + tw + 1
-	if showCwd {
-		sb.WriteString(st.dot.Render(" · "))
-		sb.WriteString(cwdStyle.Render(cwd))
-		w += 3 + cw
-	}
 	sb.WriteString(st.body.Render(" "))
-	grid.clear(r.Y, r.X+1, r.X+1+w)
 
-	return append(segs, segment{r.X + 1, w, sb.String()})
+	return append(segs, segment{r.X + 2, w, sb.String()})
+}
+
+// searchChrome is the cells a search prompt takes besides its query: the
+// blank, the mark and the cell under the cursor.
+const searchChrome = 3
+
+// searchPrompt is the open search prompt drawn into the bottom border of the
+// pane at r: after the corner and its dash, a blank, the mark (/ or ?), the
+// query and the cell under the cursor. cursorX is the cursor's column, -1 when
+// the query is cut before it; ok is false when no prompt belongs to the pane or
+// the border has no room for one.
+func (a *App) searchPrompt(id core.PaneID, r core.Rect, st styles) (seg segment, cursorX int, ok bool) {
+	p := a.prompt
+	if p == nil || p.kind != promptSearch || p.pane != id {
+		return segment{}, 0, false
+	}
+
+	// The corner and its dash take two cells, the dash before the other corner one.
+	avail := r.W - 4
+	if avail < searchChrome {
+		return segment{}, 0, false
+	}
+
+	mark := "/"
+	if p.backward {
+		mark = "?"
+	}
+
+	text := ansi.Truncate(printable(p.input.Value()), avail-searchChrome, "")
+	body := st.body.Render(" ") + st.tagCopy.Render(mark) + st.searchText.Render(text) + st.body.Render(" ")
+	w := searchChrome + ansi.StringWidth(text)
+
+	cursorX = -1
+
+	before := ansi.StringWidth(printable(string([]rune(p.input.Value())[:p.input.Position()])))
+	if before <= ansi.StringWidth(text) {
+		cursorX = r.X + 4 + before
+	}
+
+	return segment{r.X + 2, w, body}, cursorX, true
+}
+
+// preselectArrow is the arrow of a preselected side.
+func (a *App) preselectArrow(d core.Dir) string {
+	arrows := map[core.Dir][2]string{
+		core.Left:  {"\u2190", iconArrowLeft},
+		core.Down:  {"\u2193", iconArrowDown},
+		core.Up:    {"\u2191", iconArrowUp},
+		core.Right: {"\u2192", iconArrowRight},
+	}
+
+	if a.icons {
+		return arrows[d][1]
+	}
+
+	return arrows[d][0]
+}
+
+// bottomBorder is what is set into the bottom border of the pane at r: the
+// search prompt or the hidden-column count on the left, and the count on the
+// right. left and right are the hidden columns to count on each side; a count
+// that does not fit is left out.
+func (a *App) bottomBorder(id core.PaneID, r core.Rect, left, right int, st styles) []segment {
+	var segs []segment
+
+	// The last border cell before the corner is a dash.
+	edge := r.X + r.W - 2
+	end := r.X + 2
+
+	if seg, _, ok := a.searchPrompt(id, r, st); ok {
+		segs, end = append(segs, seg), seg.x+seg.w
+	} else if left > 0 {
+		text := fmt.Sprintf(" \u2039 %d ", left)
+		if w := lipgloss.Width(text); end+w <= edge {
+			segs, end = append(segs, segment{end, w, st.tagHidden.Render(text)}), end+w
+		}
+	}
+
+	if right > 0 {
+		text := fmt.Sprintf(" %d \u203a ", right)
+		if w, x := lipgloss.Width(text), edge-lipgloss.Width(text); x >= end+1 && x >= r.X+2 {
+			segs = append(segs, segment{x, w, st.tagHidden.Render(text)})
+		}
+	}
+
+	return segs
 }
 
 func kindIcon(k core.PaneKind) string {

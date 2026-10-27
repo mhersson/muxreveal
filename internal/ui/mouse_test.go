@@ -136,24 +136,33 @@ func TestDragThatLeavesItsPaneStaysClamped(t *testing.T) {
 		name string
 		to   func(a *App) (x, y int)
 		want string
+		pad  bool // the rows below the text are blank lines up to the pane's last row
 	}{
 		{"into the neighbour", func(a *App) (int, int) {
 			c := r(a, "p2")
 			return c.X + 3, r(a, "p1").Y + 1
-		}, "hello world\nsecond line"},
+		}, "hello world\nsecond line", false},
 		{"onto the header", func(a *App) (int, int) {
 			c := r(a, "p2")
 			return c.X + 1, c.Y - 1
-		}, "hello world"},
-		{"onto the status bar", func(a *App) (int, int) {
+		}, "hello world", false},
+		{"onto the bottom border on the last row", func(a *App) (int, int) {
 			return r(a, "p1").X + 2, a.height - 1
-		}, "hello world\nsecond line\nthird"},
+		}, "hello world\nsecond line\nthird", true},
+		{"onto its right border", func(a *App) (int, int) {
+			c := r(a, "p1")
+			return c.X + c.W, c.Y
+		}, "hello world", false},
+		{"onto its bottom border", func(a *App) (int, int) {
+			c := r(a, "p1")
+			return c.X + 2, c.Y + c.H
+		}, "hello world\nsecond line\nthird", true},
 		{"onto the tab bar", func(a *App) (int, int) {
 			return r(a, "p1").X + 2, 0
-		}, "hel"},
+		}, "hel", false},
 		{"off screen", func(a *App) (int, int) {
 			return -9, -9
-		}, "h"},
+		}, "h", false},
 	}
 
 	for _, tt := range tests {
@@ -170,8 +179,7 @@ func TestDragThatLeavesItsPaneStaysClamped(t *testing.T) {
 			}
 
 			want := tt.want
-			if tt.name == "onto the status bar" {
-				// The rows below the text are blank lines up to the pane's last row.
+			if tt.pad {
 				want += strings.Repeat("\n", c.H-3)
 			}
 
@@ -390,16 +398,16 @@ func TestHeaderClickFocusesOnly(t *testing.T) {
 	}
 }
 
-func TestSeparatorAndStatusClicksAreIgnored(t *testing.T) {
+func TestBorderAndStatusClicksAreIgnored(t *testing.T) {
 	a, _, _ := shellsWith(t, sampleText, "")
 	r1 := a.layoutRects()["p1"]
 
-	// The column right of p1 is the separator between the two panes.
-	if h := a.hit(r1.X+r1.W, r1.Y+3); h.area != hitNone {
-		t.Fatalf("separator hit = %+v, want none", h)
+	// The last column of p1's frame is its right border; p2's frame starts after it.
+	if h := a.hit(r1.X+r1.W-1, r1.Y+3); h.area != hitNone {
+		t.Fatalf("border hit = %+v, want none", h)
 	}
 
-	click(a, r1.X+r1.W, r1.Y+3)
+	click(a, r1.X+r1.W-1, r1.Y+3)
 	click(a, 5, a.height-1)
 
 	if got := a.store.State().Tab().Focus; got != "p2" {
@@ -707,6 +715,53 @@ func TestSelectionStaysOnItsTextWhileOutputScrolls(t *testing.T) {
 	}
 }
 
+// A click on a pane's top border focuses it, as its header did; its side and
+// bottom borders do nothing of their own, and no click there reaches the guest.
+func TestPaneBorderClicks(t *testing.T) {
+	a, _, _ := trackingShells(t)
+	r := a.layoutRects()["p1"]
+	c := contentRect(r)
+
+	tests := []struct {
+		name     string
+		x, y     int
+		wantPane core.PaneID
+	}{
+		{"left border", r.X, c.Y + 1, "p2"},
+		{"right border", r.X + r.W - 1, c.Y + 1, "p2"},
+		{"bottom border", c.X + 2, r.Y + r.H - 1, "p2"},
+		{"bottom corner", r.X, r.Y + r.H - 1, "p2"},
+		{"top border", c.X + 2, r.Y, "p1"},
+		{"top corner", r.X + r.W - 1, r.Y, "p1"},
+		{"content", c.X + 2, c.Y + 1, "p1"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			a, procs, _ := trackingShells(t)
+			if err := a.dispatch(core.FocusPane{ID: "p2"}); err != nil {
+				t.Fatal(err)
+			}
+
+			click(a, tt.x, tt.y)
+
+			if got := a.store.State().Tab().Focus; got != tt.wantPane {
+				t.Errorf("focus = %q, want %q", got, tt.wantPane)
+			}
+
+			if a.sel != nil {
+				t.Errorf("click selected %+v", a.sel)
+			}
+
+			if tt.name != "content" {
+				if got := settle(t, a, procs["p1"], c); got != "" {
+					t.Errorf("border click reached the guest: %q", got)
+				}
+			}
+		})
+	}
+}
+
 func TestWheelUsesTheSharedHitTest(t *testing.T) {
 	a, _, _ := shellsWith(t, manyLines(30), "")
 	r := a.layoutRects()["p1"]
@@ -731,9 +786,15 @@ func TestHitAreas(t *testing.T) {
 		pane core.PaneID
 	}{
 		{"content", c.X + 2, c.Y + 1, hitContent, "p1"},
-		{"header", r.X + 1, r.Y, hitHeader, "p1"},
-		{"header corner is shared", r.X - 1, r.Y, hitNone, ""},
-		{"status bar", 3, a.height - 1, hitNone, ""},
+		{"first content cell", c.X, c.Y, hitContent, "p1"},
+		{"last content cell", c.X + c.W - 1, c.Y + c.H - 1, hitContent, "p1"},
+		{"top border", r.X + 1, r.Y, hitHeader, "p1"},
+		{"top corner", r.X, r.Y, hitHeader, "p1"},
+		{"left border", r.X, c.Y, hitNone, ""},
+		{"right border", r.X + r.W - 1, c.Y, hitNone, ""},
+		{"bottom border", c.X, r.Y + r.H - 1, hitNone, ""},
+		{"outside the screen on the left", r.X - 1, r.Y, hitNone, ""},
+		{"bottom border on the last row", 3, a.height - 1, hitNone, ""},
 		{"tab", 2, 0, hitTab, ""},
 		{"off screen", -1, -1, hitNone, ""},
 	}

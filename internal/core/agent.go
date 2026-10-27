@@ -1,6 +1,9 @@
 package core
 
-import "fmt"
+import (
+	"fmt"
+	"slices"
+)
 
 // SessionID names a harness session, e.g. a Claude Code session UUID.
 type SessionID string
@@ -136,20 +139,8 @@ func (s State) AgentPanes() []PaneID {
 	return out
 }
 
-// tabLeaves lists tab i's panes, first leaf first.
+// tabLeaves lists tab i's panes in layout order. The copy keeps callers from
+// editing the tab.
 func (s State) tabLeaves(i int) []PaneID {
-	var out []PaneID
-	var walk func(*Node)
-	walk = func(n *Node) {
-		switch {
-		case n == nil:
-		case n.leaf():
-			out = append(out, n.Pane)
-		default:
-			walk(n.A)
-			walk(n.B)
-		}
-	}
-	walk(s.Tabs[i].Layout)
-	return out
+	return slices.Clone(s.Tabs[i].Panes)
 }

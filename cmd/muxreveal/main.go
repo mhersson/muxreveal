@@ -83,6 +83,9 @@ func run(ctx context.Context, env core.Env, configPath, recordDir string, fresh 
 	if _, err := theme.ByName(cfg.Theme); err != nil {
 		return fmt.Errorf("config %s: %w", configPath, err)
 	}
+	if err := cfg.Layout.Validate(); err != nil {
+		return fmt.Errorf("config %s: %w", configPath, err)
+	}
 	f, err := openLog(core.StateDir(env))
 	if err != nil {
 		return err

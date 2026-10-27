@@ -7,12 +7,10 @@ const (
 	iconShell   = "\uF489"     // nf-oct-terminal
 	iconZoom    = "\U000F0293" // nf-md-fullscreen
 	iconScroll  = "\U000F005D" // nf-md-arrow_up
-	iconApp     = "\U000F056E" // nf-md-view_dashboard
 	iconLeader  = "\U000F030C" // nf-md-keyboard
 	iconAlert   = "\U000F002A" // nf-md-alert_outline
 	iconBlocked = "\U000F0026" // nf-md-alert
 	iconIdle    = "\U000F05E1" // nf-md-check_circle_outline
-	iconFolder  = "\U000F024B" // nf-md-folder
 	iconRename  = "\U000F0455" // nf-md-rename_box
 	iconClock   = "\U000F0954" // nf-md-clock_outline
 	iconGit     = "\uE725"     // nf-dev-git_branch
@@ -33,7 +31,19 @@ const (
 	iconClose     = "\U000F0156" // nf-md-close
 	iconQuit      = "\U000F0206" // nf-md-exit_to_app
 	iconCopy      = "\U000F018F" // nf-md-content_copy
-	iconSearch    = "\U000F0349" // nf-md-magnify
+
+	iconMove            = "\U000F0DAD" // nf-md-application_export
+	iconBreak           = "\U000F03CC" // nf-md-open_in_new
+	iconLayoutBSP       = "\U000F0574" // nf-md-view_quilt
+	iconLayoutMaster    = "\U000F06FD" // nf-md-page_layout_sidebar_left
+	iconLayoutScrolling = "\U000F056D" // nf-md-view_column
+	iconArrowLeft       = "\U000F004D" // nf-md-arrow_left
+	iconArrowDown       = "\U000F0045" // nf-md-arrow_down
+	iconArrowUp         = "\U000F005D" // nf-md-arrow_up
+	iconArrowRight      = "\U000F0054" // nf-md-arrow_right
+	iconRotate          = "\U000F0467" // nf-md-rotate_right
+	iconEqualize        = "\U000F01FC" // nf-md-equal
+	iconPromote         = "\U000F01A5" // nf-md-crown
 )
 
 // Powerline edges and dividers.

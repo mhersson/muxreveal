@@ -146,7 +146,9 @@ func TestAgentPanes(t *testing.T) {
 		"p4": {Kind: KindAgent, Harness: "claude-code"},
 		"p5": {Kind: KindShell},
 	}, vsplit(hsplit(leaf("p3"), leaf("p1")), leaf("p2")), "p3")
-	s.Tabs = append(s.Tabs, Tab{ID: "t2", Layout: hsplit(leaf("p5"), leaf("p4")), Focus: "p4"})
+	t2 := Tab{ID: "t2", Focus: "p4"}
+	setLayout(&t2, hsplit(leaf("p5"), leaf("p4")))
+	s.Tabs = append(s.Tabs, t2)
 	got := s.AgentPanes()
 	want := []PaneID{"p3", "p2", "p4"}
 	if len(got) != len(want) {

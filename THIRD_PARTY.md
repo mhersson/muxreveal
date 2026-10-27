@@ -20,6 +20,12 @@ MuxReveal includes material copied from the projects below, each under the MIT L
 - Copyright (c) 2025 Gaurav Gosain
 - Used in `internal/git/linediff/linediff.go`, `internal/git/invisible/invisible.go` and `internal/git/invisible/invisible_test.go`: the line edit script by longest common subsequence and the invisible-character checks.
 
+## tuios tiling layouts
+
+- Source: https://github.com/Gaurav-Gosain/tuios (`internal/layout/`, commit `aaaa128cd35b38ba8aa08a5f69e688f01385ec3e`)
+- Copyright (c) 2025 Gaurav Gosain
+- Used in `internal/core/tiling/`: `arrange.go`, `bsp.go`, `bsp_move.go`, `master.go`, `neighbour.go`, `scrolling.go`, `tiling.go` and their tests (`arrange_test.go`, `bsp_test.go`, `bsp_split_close_test.go`, `bsp_resize_axis_test.go`, `master_test.go`, `neighbour_test.go`, `tiling_test.go`, `export_test.go`).
+
 ## MIT License
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:

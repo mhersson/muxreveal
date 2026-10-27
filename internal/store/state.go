@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -20,7 +21,7 @@ import (
 )
 
 // Version is the file format Encode writes and Decode reads without fallback.
-const Version = 1
+const Version = 2
 
 // ErrInvalid reports a state file whose tabs or panes cannot be used.
 var ErrInvalid = errors.New("invalid state file")
@@ -47,8 +48,14 @@ type tabJSON struct {
 	Name    string          `json:"name,omitempty"`
 	Focused string          `json:"focused"`
 	Zoomed  bool            `json:"zoomed,omitempty"`
+	Mode    json.RawMessage `json:"mode,omitempty"` // raw so a non-string reads as unknown
 	PaneIDs []string        `json:"pane_ids"`
-	Layout  json.RawMessage `json:"layout"`
+	Layout  json.RawMessage `json:"layout,omitempty"` // bsp only; null for an empty tab
+
+	// Per-mode fields stay raw so a bad one defaults only its tab.
+	MasterRatio json.RawMessage `json:"master_ratio,omitempty"`
+	Columns     json.RawMessage `json:"columns,omitempty"`
+	First       json.RawMessage `json:"first,omitempty"`
 }
 
 type paneJSON struct {
@@ -61,8 +68,8 @@ type paneJSON struct {
 
 // Report says which fallbacks Decode used, for the start-up notices.
 type Report struct {
-	Version   string // "" for version 1; else the version as written, or "unknown" when missing
-	Defaulted int    // version 1 tabs whose layout could not be read and got the default
+	Version   string // "" for the current version; else the version as written, or "unknown" when missing
+	Defaulted int    // tabs whose layout could not be read and got the default
 }
 
 // Encode returns the state file for st: indented, deterministic, ratios
@@ -81,14 +88,13 @@ func Encode(st core.State) ([]byte, error) {
 		Panes:   map[string]paneJSON{},
 	}
 	for _, t := range tabs {
-		layout, err := encodeLayout(t.Layout)
-		if err != nil {
-			return nil, fmt.Errorf("tab %s: %w", t.ID, err)
-		}
-		ids := leafOrder(t.Layout)
+		ids := t.Panes
 		jt := tabJSON{
 			ID: string(t.ID), Name: t.Name, Focused: string(t.Focus), Zoomed: t.Zoomed,
-			PaneIDs: make([]string, 0, len(ids)), Layout: layout,
+			PaneIDs: make([]string, 0, len(ids)),
+		}
+		if err := encodeMode(&jt, t); err != nil {
+			return nil, fmt.Errorf("tab %s: %w", t.ID, err)
 		}
 		for _, id := range ids {
 			p, ok := st.Panes[id]
@@ -111,6 +117,63 @@ func Encode(st core.State) ([]byte, error) {
 	return append(data, '\n'), nil
 }
 
+// encodeMode writes the tab's mode and the fields that belong to it. A tab
+// that has panes but no mode is BSP when it has a tree.
+func encodeMode(jt *tabJSON, t core.Tab) error {
+	mode := t.Mode
+	if mode == "" && t.Layout != nil {
+		mode = core.ModeBSP
+	}
+	if mode != "" {
+		if err := setRaw(&jt.Mode, string(mode)); err != nil {
+			return err
+		}
+	}
+	switch mode {
+	case core.ModeBSP:
+		layout, err := encodeLayout(t.Layout)
+		jt.Layout = layout
+		return err
+	case core.ModeMaster:
+		if t.Master == 0 {
+			return nil
+		}
+		if !finite(t.Master) {
+			return errors.New("master ratio is not a finite number")
+		}
+		return setRaw(&jt.MasterRatio, normRatio(t.Master))
+	case core.ModeScrolling:
+		cols, err := encodeColumns(t.Columns)
+		if err != nil {
+			return err
+		}
+		if len(cols) > 0 {
+			if err := setRaw(&jt.Columns, cols); err != nil {
+				return err
+			}
+		}
+		if t.First != 0 {
+			return setRaw(&jt.First, t.First)
+		}
+		return nil
+	case "":
+		if t.Empty() {
+			jt.Layout = json.RawMessage("null")
+			return nil
+		}
+	}
+	return fmt.Errorf("unknown layout mode %q", mode)
+}
+
+func setRaw(dst *json.RawMessage, v any) error {
+	raw, err := json.Marshal(v)
+	if err != nil {
+		return fmt.Errorf("encoding layout: %w", err)
+	}
+	*dst = raw
+	return nil
+}
+
 func encodePane(p core.Pane) (paneJSON, error) {
 	switch p.Kind {
 	case core.KindShell:
@@ -130,7 +193,7 @@ func encodePane(p core.Pane) (paneJSON, error) {
 
 // Load reads and decodes the state file at path. A missing file wraps
 // os.ErrNotExist.
-func Load(path string) (core.State, Report, error) {
+func Load(path string, lc core.LayoutConfig) (core.State, Report, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return core.State{}, Report{}, fmt.Errorf("opening state file: %w", err)
@@ -140,14 +203,14 @@ func Load(path string) (core.State, Report, error) {
 	if err != nil {
 		return core.State{}, Report{}, fmt.Errorf("reading state file: %w", err)
 	}
-	return Decode(data)
+	return Decode(data, lc)
 }
 
 // Decode parses and validates a state file. Tab and pane failures wrap
-// ErrInvalid; a version other than 1 or a layout that cannot be read falls back
-// to the default layout and is counted in the Report. Theme is left empty and
-// every pane's State is AgentUnknown.
-func Decode(data []byte) (core.State, Report, error) {
+// ErrInvalid; a version other than the current one, or a tab whose mode or
+// layout cannot be read, falls back to the default layout from lc and is
+// reported. Theme is left empty and every pane's State is AgentUnknown.
+func Decode(data []byte, lc core.LayoutConfig) (core.State, Report, error) {
 	invalid := func(format string, args ...any) (core.State, Report, error) {
 		return core.State{}, Report{}, fmt.Errorf("%w: %s", ErrInvalid, fmt.Sprintf(format, args...))
 	}
@@ -162,8 +225,8 @@ func Decode(data []byte) (core.State, Report, error) {
 		return invalid("%d panes, at most %d", len(f.Panes), core.MaxPanes)
 	}
 	var rep Report
-	v1 := isVersion1(f.Version)
-	if !v1 {
+	current := isCurrentVersion(f.Version)
+	if !current {
 		rep.Version = versionText(f.Version)
 	}
 
@@ -218,29 +281,24 @@ func Decode(data []byte) (core.State, Report, error) {
 			return invalid("tab %s has no panes", jt.ID)
 		}
 
-		var layout *core.Node
-		if v1 {
-			layout, err = decodeLayout(jt.Layout, ids)
-			if err != nil {
-				layout = defaultLayout(ids)
+		tab := core.Tab{ID: core.TabID(jt.ID), Name: cleanName(jt.Name), Panes: ids}
+		if current {
+			var ok bool
+			if tab, ok = decodeTab(jt, tab, lc); !ok {
 				rep.Defaulted++
 			}
 		} else {
-			layout = defaultLayout(ids)
+			tab = core.DefaultLayout(tab, lc)
 		}
 		focus := core.PaneID(jt.Focused)
-		if order := leafOrder(layout); len(order) == 0 {
+		if len(tab.Panes) == 0 {
 			focus = ""
 		} else if owner[focus] != jt.ID {
-			focus = order[0]
+			focus = tab.Panes[0]
 		}
-		st.Tabs = append(st.Tabs, core.Tab{
-			ID:     core.TabID(jt.ID),
-			Name:   cleanName(jt.Name),
-			Layout: layout,
-			Focus:  focus,
-			Zoomed: jt.Zoomed && focus != "",
-		})
+		tab.Focus, tab.Zoomed = focus, jt.Zoomed && focus != ""
+		tab.KeepVisible()
+		st.Tabs = append(st.Tabs, tab)
 	}
 	for id := range st.Panes {
 		if _, ok := owner[id]; !ok {
@@ -248,6 +306,64 @@ func Decode(data []byte) (core.State, Report, error) {
 		}
 	}
 	return st, rep, nil
+}
+
+// tabMode reads the mode; anything but a string is "", which no mode matches.
+func tabMode(raw json.RawMessage) core.LayoutMode {
+	var m string
+	if json.Unmarshal(raw, &m) != nil {
+		return ""
+	}
+	return core.LayoutMode(m)
+}
+
+// decodeTab builds the tab's layout from its mode and fields; base carries the
+// identity and the panes. ok is false when the layout was unusable and the tab
+// got the default. A valid saved first column is kept and an invalid one
+// becomes 0; Decode then scrolls the focused column into view.
+func decodeTab(jt tabJSON, base core.Tab, lc core.LayoutConfig) (tab core.Tab, ok bool) {
+	ids := base.Panes
+	mode := tabMode(jt.Mode)
+	if len(ids) == 0 {
+		tab = core.DefaultLayout(base, lc)
+		if mode == core.ModeBSP || mode == core.ModeMaster || mode == core.ModeScrolling {
+			tab.Mode = mode
+		}
+		return tab, true
+	}
+	tab = base
+	switch mode {
+	case core.ModeBSP:
+		root, err := decodeLayout(jt.Layout, ids)
+		if err != nil {
+			return core.DefaultLayout(base, lc), false
+		}
+		tab.Mode, tab.Layout, tab.Panes = core.ModeBSP, root, leafOrder(root)
+	case core.ModeMaster:
+		tab.Mode = core.ModeMaster
+		if isNull(jt.MasterRatio) {
+			lc.DefaultMode = string(core.ModeMaster)
+			tab.Master = core.DefaultLayout(base, lc).Master
+		} else {
+			r, good := finiteNumber(jt.MasterRatio)
+			if !good {
+				return core.DefaultLayout(base, lc), false
+			}
+			tab.Master = normRatio(r)
+		}
+	case core.ModeScrolling:
+		cols, err := decodeColumns(jt.Columns, ids)
+		if err != nil {
+			return core.DefaultLayout(base, lc), false
+		}
+		tab.Mode, tab.Columns = core.ModeScrolling, cols
+		if f, good := finiteNumber(jt.First); good && f == math.Trunc(f) && f >= 0 && f < float64(len(cols)) {
+			tab.First = int(f)
+		}
+	default:
+		return core.DefaultLayout(base, lc), false
+	}
+	return tab, true
 }
 
 func decodePane(jp paneJSON) (core.Pane, error) {
@@ -291,7 +407,7 @@ func parseNumbered(s, prefix string) (int, error) {
 	return n, nil
 }
 
-func isVersion1(raw json.RawMessage) bool {
+func isCurrentVersion(raw json.RawMessage) bool {
 	var v float64
 	return json.Unmarshal(raw, &v) == nil && v == Version
 }
@@ -302,7 +418,7 @@ func isNull(raw json.RawMessage) bool {
 }
 
 // versionText is the version as written, cut and cleaned because it reaches
-// the status bar.
+// the toast.
 func versionText(raw json.RawMessage) string {
 	if isNull(raw) {
 		return "unknown"

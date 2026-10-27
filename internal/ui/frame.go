@@ -11,38 +11,39 @@ import (
 	"github.com/mhersson/muxreveal/internal/core"
 )
 
-// bodyRect is the area between the workspace bar on row 0 and the status bar
-// on the last row.
+// bodyRect is the area under the rule on row 1, down to the last row.
 func bodyRect(width, height int) core.Rect {
-	return core.Rect{Y: 1, W: width, H: max(height-2, 0)}
+	return core.Rect{Y: 2, W: width, H: max(height-2, 0)}
 }
 
-// minFrame is the smallest body, in rows and columns, that has room for a frame.
+// minFrame is the smallest pane rect, in rows and columns: a frame around one
+// content cell.
 const minFrame = 3
 
-// innerRect is the body inside its frame: the left and right frame columns and
-// the bottom frame row are outside it. A body under minFrame has no inner rect.
-func innerRect(body core.Rect) core.Rect {
+// layoutBody is the rect panes are laid out in: the body itself, or the zero
+// rect when it is under minFrame square and stays blank.
+func layoutBody(body core.Rect) core.Rect {
 	if body.W < minFrame || body.H < minFrame {
 		return core.Rect{}
 	}
 
-	return core.Rect{X: body.X + 1, Y: body.Y, W: body.W - 2, H: body.H - 1}
+	return body
 }
 
-// contentRect is a pane rect without its top border row.
+// contentRect is a pane rect inside its frame: inset by one cell on every side.
 func contentRect(r core.Rect) core.Rect {
-	return core.Rect{X: r.X, Y: r.Y + 1, W: r.W, H: r.H - 1}
+	return core.Rect{X: r.X + 1, Y: r.Y + 1, W: max(r.W-2, 0), H: max(r.H-2, 0)}
 }
 
-// geometry is the pane rects (top border row included) of one View, computed
-// once.
+// geometry is the pane rects (frame included) of one View, computed once.
 type geometry struct {
 	rects map[core.PaneID]core.Rect
+	// hiddenLeft and hiddenRight are the scrolling columns off screen on each side.
+	hiddenLeft, hiddenRight int
 }
 
 // layoutRects returns each visible pane's rect. A zoomed pane is the only one
-// and fills the inner rect.
+// and fills the body.
 func (a *App) layoutRects() map[core.PaneID]core.Rect {
 	return a.geometry().rects
 }
@@ -50,35 +51,68 @@ func (a *App) layoutRects() map[core.PaneID]core.Rect {
 func (a *App) geometry() geometry {
 	st := a.store.State()
 
-	return geometry{rects: a.layoutIn(st, st.Active)}
+	arr := a.arrangeIn(st, st.Active)
+
+	return geometry{rects: arr.Rects, hiddenLeft: arr.HiddenLeft, hiddenRight: arr.HiddenRight}
 }
 
-// tabRects lays tab i out in the inner rect with its own zoom: a zoomed tab's
-// focused pane gets the whole inner rect.
+// tabRects lays tab i out in the body with its own zoom: a zoomed tab's
+// focused pane gets the whole body.
 func (a *App) tabRects(i int) map[core.PaneID]core.Rect {
 	return a.layoutIn(a.store.State(), i)
 }
 
 func (a *App) layoutIn(st core.State, i int) map[core.PaneID]core.Rect {
+	return a.arrangeIn(st, i).Rects
+}
+
+// arrangeIn is tab i's drawn rects and hidden-column counts; a zoomed tab has
+// its one pane and no hidden columns.
+func (a *App) arrangeIn(st core.State, i int) core.Arrangement {
 	if i < 0 || i >= len(st.Tabs) {
-		return nil
+		return core.Arrangement{}
 	}
 
+	if z, ok := a.zoomedRects(st, i); ok {
+		return core.Arrangement{Rects: z}
+	}
+
+	return core.Arrange(st.Tabs[i], a.bodyArea(), st.Layout)
+}
+
+// sizesIn is the pane rects of tab i whose content is each PTY's size (the
+// caller insets them), or the zoomed pane's alone when the tab is zoomed.
+func (a *App) sizesIn(st core.State, i int) map[core.PaneID]core.Rect {
+	if z, ok := a.zoomedRects(st, i); ok {
+		return z
+	}
+
+	return core.Arrange(st.Tabs[i], a.bodyArea(), st.Layout).Sizes
+}
+
+// zoomedRects is the one rect of a zoomed tab: its focused pane fills the
+// body.
+func (a *App) zoomedRects(st core.State, i int) (map[core.PaneID]core.Rect, bool) {
 	t := st.Tabs[i]
-	inner := innerRect(bodyRect(a.width, a.height))
-
-	if t.Zoomed {
-		if _, ok := st.Panes[t.Focus]; ok {
-			rects := map[core.PaneID]core.Rect{}
-			if inner.W >= 1 && inner.H >= 1 {
-				rects[t.Focus] = inner
-			}
-
-			return rects
-		}
+	if !t.Zoomed {
+		return nil, false
 	}
 
-	return core.Rects(t.Layout, inner)
+	if _, ok := st.Panes[t.Focus]; !ok {
+		return nil, false
+	}
+
+	rects := map[core.PaneID]core.Rect{}
+	if body := a.bodyArea(); body.W >= minFrame && body.H >= minFrame {
+		rects[t.Focus] = body
+	}
+
+	return rects, true
+}
+
+// bodyArea is the rect panes are laid out in.
+func (a *App) bodyArea() core.Rect {
+	return layoutBody(bodyRect(a.width, a.height))
 }
 
 // segment is a run of cells already styled, starting at column x.
@@ -87,9 +121,9 @@ type segment struct {
 	text string
 }
 
-// frameAt draws the whole screen: the workspace bar, the body and the status
-// bar, exactly height lines of exactly width cells. Height 1 is the status bar
-// only and height 2 the two bars. An empty tab shows the welcome card.
+// frameAt draws the whole screen: the workspace bar, the rule and the body,
+// exactly height lines of exactly width cells. Height 1 is the workspace bar
+// only and height 2 adds the rule. An empty tab shows the welcome card.
 func (a *App) frameAt(g geometry) string {
 	if a.width <= 0 || a.height <= 0 {
 		return ""
@@ -99,25 +133,25 @@ func (a *App) frameAt(g geometry) string {
 	st := a.store.State()
 	lines := make([]string, 0, a.height)
 
+	lines = append(lines, a.workspaceBar(a.width))
+
 	if a.height >= 2 {
-		lines = append(lines, a.workspaceBar(a.width))
+		lines = append(lines, lk.styles.border.Render(strings.Repeat("─", a.width)))
 	}
 
 	if bodyH := a.height - 2; bodyH > 0 {
-		if st.Tab().Layout == nil {
+		if st.Tab().Empty() {
 			lines = append(lines, strings.Split(renderBody(a.width, bodyH, lk.styles, lk.sample, a.welcomeHints()), "\n")...)
 		} else {
 			lines = append(lines, a.frameBody(g, st, lk)...)
 		}
 	}
 
-	lines = append(lines, a.statusBar(a.width, st))
-
 	return strings.Join(lines, "\n")
 }
 
-// frameBody draws the body rows between the two bars: the frames, titles and
-// pane content.
+// frameBody draws the body rows under the rule: each pane's box, title and
+// content.
 func (a *App) frameBody(g geometry, st core.State, lk look) []string {
 	rows := make([][]segment, a.height)
 	add := func(y int, s segment) {
@@ -126,21 +160,25 @@ func (a *App) frameBody(g geometry, st core.State, lk look) []string {
 		}
 	}
 
-	grid := newBorderGrid(a.width, a.height)
 	focus := st.Tab().Focus
-
-	for _, r := range g.rects {
-		grid.addBox(r, ownNone)
-	}
-
-	if r, ok := g.rects[focus]; ok {
-		grid.addBox(r, kindOwner(st.Panes[focus].Kind))
-	}
+	leftPane, rightPane := edgePanes(g)
 
 	for id, r := range g.rects {
-		for _, s := range a.topBorder(grid, st, id, r, id == focus, lk.styles) {
-			add(r.Y, s)
+		own := ownNone
+		if id == focus {
+			own = kindOwner(st.Panes[id].Kind)
 		}
+
+		var hl, hr int
+		if id == leftPane {
+			hl = g.hiddenLeft
+		}
+
+		if id == rightPane {
+			hr = g.hiddenRight
+		}
+
+		drawBox(add, r, a.topBorder(st, id, r, id == focus, lk.styles), a.bottomBorder(id, r, hl, hr, lk.styles), own, lk.styles)
 	}
 
 	for id, r := range g.rects {
@@ -168,13 +206,11 @@ func (a *App) frameBody(g geometry, st core.State, lk look) []string {
 		}
 	}
 
-	grid.runs(lk.styles, add)
-
 	lines := make([]string, 0, a.height-2)
 
 	var sb strings.Builder
 
-	for _, segs := range rows[1 : a.height-1] {
+	for _, segs := range rows[2:a.height] {
 		slices.SortFunc(segs, func(p, q segment) int { return p.x - q.x })
 		sb.Reset()
 
@@ -195,6 +231,28 @@ func (a *App) frameBody(g geometry, st core.State, lk look) []string {
 	}
 
 	return lines
+}
+
+// edgePanes are the bottom panes of the leftmost and rightmost visible columns,
+// where the hidden-column counts go; both are empty without hidden columns.
+func edgePanes(g geometry) (left, right core.PaneID) {
+	if g.hiddenLeft == 0 && g.hiddenRight == 0 {
+		return "", ""
+	}
+
+	var lr, rr core.Rect
+
+	for id, r := range g.rects {
+		if left == "" || r.X < lr.X || r.X == lr.X && r.Y+r.H > lr.Y+lr.H {
+			left, lr = id, r
+		}
+
+		if right == "" || r.X+r.W > rr.X+rr.W || r.X+r.W == rr.X+rr.W && r.Y+r.H > rr.Y+rr.H {
+			right, rr = id, r
+		}
+	}
+
+	return left, right
 }
 
 // welcomeHints lists the commands that make sense with no pane open, with
@@ -243,17 +301,24 @@ func printable(t string) string {
 	}, t)
 }
 
-// cursorView places the focused pane's cursor on screen; nil when the guest
-// hides it, it falls outside the pane, or an overlay, a confirm or the which-key
-// popup is open. A prompt moves the cursor into the workspace bar or the status
-// bar, and copy mode shows its own block cursor.
+// cursorView places the cursor on screen: the prompt's, copy mode's block or
+// the focused pane's. It is nil under an overlay, confirm, popup or the toast.
 func (a *App) cursorView() *tea.Cursor { return a.cursorAt(a.geometry()) }
 
 func (a *App) cursorAt(g geometry) *tea.Cursor {
-	if a.prompt != nil {
-		return a.promptCursor()
+	cur := a.cursorBase(g)
+	if cur != nil && toastCovers(a.width, a.height, a.notice, a.icons, cur.X, cur.Y) {
+		return nil
 	}
-	if a.overlay != nil || a.popup || a.confirm != nil {
+
+	return cur
+}
+
+func (a *App) cursorBase(g geometry) *tea.Cursor {
+	if a.prompt != nil {
+		return a.promptCursor(g)
+	}
+	if a.overlay != nil || a.popup || a.sequenceOpen() || a.confirm != nil {
 		return nil
 	}
 	if a.copy != nil {
