@@ -27,13 +27,53 @@ const (
 var sessionIDRE = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 
 // snapshotFunc records something about the repository containing dir for a session.
-type snapshotFunc func(ctx context.Context, dir, session string) error
+// unchanged says nothing changed since the session's last successful snapshot;
+// a marker ignores it.
+type snapshotFunc func(ctx context.Context, dir, session string, unchanged bool) error
+
+// seqFunc resolves the worktree containing dir and reads its watcher's change
+// counter; ok is false when that worktree is not watched.
+type seqFunc func(ctx context.Context, dir string) (root string, n uint64, ok bool)
+
+type rootSeq struct {
+	root string
+	n    uint64
+}
+
+// seqMemory holds the (root, counter) read before each session's last
+// successful snapshot. Snapshot goroutines of different sessions share it.
+type seqMemory struct {
+	mu   sync.Mutex
+	last map[string]rootSeq
+}
+
+func (m *seqMemory) get(session string) (rootSeq, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	v, ok := m.last[session]
+
+	return v, ok
+}
+
+func (m *seqMemory) set(session string, v rootSeq, ok bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if ok {
+		m.last[session] = v
+	} else {
+		delete(m.last, session)
+	}
+}
 
 // runTurnGate forwards every event from in to out in order and, for a turn
 // start, snapshots the working tree before releasing the held hook answer. The
 // snapshot starts before the event is forwarded, so a full out channel cannot
-// delay it. It returns when in closes or ctx ends, after its snapshot goroutines.
-func runTurnGate(ctx context.Context, in <-chan harness.Event, out chan<- harness.Event, snap, mark snapshotFunc, log *slog.Logger) {
+// delay it. A snapshot passes unchanged when seq reports the worktree watched
+// and its counter is what it was just before the session's last successful
+// snapshot. It returns when in closes or ctx ends, after its snapshot goroutines.
+func runTurnGate(ctx context.Context, in <-chan harness.Event, out chan<- harness.Event, snap, mark snapshotFunc, seq seqFunc, log *slog.Logger) {
 	var wg sync.WaitGroup
 	defer wg.Wait()
 
@@ -41,6 +81,7 @@ func runTurnGate(ctx context.Context, in <-chan harness.Event, out chan<- harnes
 	// Each snapshot waits for its predecessor, so a session's snapshots run
 	// one at a time in arrival order.
 	tails := make(map[string]chan struct{})
+	memory := &seqMemory{last: map[string]rootSeq{}}
 
 	for {
 		var ev harness.Event
@@ -74,7 +115,7 @@ func runTurnGate(ctx context.Context, in <-chan harness.Event, out chan<- harnes
 				wg.Go(func() {
 					defer close(done)
 
-					snapshotTurn(ctx, deadline, prev, ev, snap, mark, log)
+					snapshotTurn(ctx, deadline, prev, ev, snap, mark, seq, memory, log)
 				})
 			}
 		}
@@ -101,7 +142,7 @@ func release(ev harness.Event) {
 // and releases the held answer when it returns or the budget ends, whichever is
 // first. A turn that gets no snapshot gets a marker so later turns keep their
 // numbers.
-func snapshotTurn(gate context.Context, deadline time.Time, prev <-chan struct{}, ev harness.Event, snap, mark snapshotFunc, log *slog.Logger) {
+func snapshotTurn(gate context.Context, deadline time.Time, prev <-chan struct{}, ev harness.Event, snap, mark snapshotFunc, seq seqFunc, memory *seqMemory, log *slog.Logger) {
 	snapCtx, cancel := context.WithDeadline(gate, deadline)
 	defer cancel()
 
@@ -119,7 +160,7 @@ func snapshotTurn(gate context.Context, deadline time.Time, prev <-chan struct{}
 	// A snapshot taken after the budget could already hold the agent's edits.
 	err := snapCtx.Err()
 	if err == nil {
-		err = snap(snapCtx, ev.Cwd, session)
+		err = snapshotUnchanged(snapCtx, ev, session, snap, seq, memory)
 	}
 
 	release(ev)
@@ -138,7 +179,22 @@ func snapshotTurn(gate context.Context, deadline time.Time, prev <-chan struct{}
 	markCtx, markCancel := context.WithTimeout(gate, markerBudget)
 	defer markCancel()
 
-	if err := mark(markCtx, ev.Cwd, session); err != nil {
+	if err := mark(markCtx, ev.Cwd, session, false); err != nil {
 		log.Warn("turn marker failed", "session", session, "err", err)
 	}
+}
+
+// snapshotUnchanged reads the counter before the snapshot starts, so a change
+// during it makes the next snapshot a full one; the counter is remembered only
+// when the snapshot succeeds.
+func snapshotUnchanged(ctx context.Context, ev harness.Event, session string, snap snapshotFunc, seq seqFunc, memory *seqMemory) error {
+	key := strings.ToLower(session)
+	root, n, watched := seq(ctx, ev.Cwd)
+	cur := rootSeq{root: root, n: n}
+	prev, had := memory.get(key)
+
+	err := snap(ctx, ev.Cwd, session, watched && had && prev == cur)
+	memory.set(key, cur, err == nil && watched)
+
+	return err
 }

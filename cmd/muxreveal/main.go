@@ -18,6 +18,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/mhersson/muxreveal/internal/core"
+	"github.com/mhersson/muxreveal/internal/git"
 	"github.com/mhersson/muxreveal/internal/store"
 	"github.com/mhersson/muxreveal/internal/ui"
 	"github.com/mhersson/muxreveal/internal/ui/theme"
@@ -113,7 +114,14 @@ func run(ctx context.Context, env core.Env, configPath, recordDir string, fresh 
 
 	indexCache := indexCacheDir(logger)
 
-	hooks := startHooks(logger, stateDir, indexCache)
+	watches := git.NewWatchSet(context.Background(), git.WatchOptions{})
+	defer func() {
+		if cerr := watches.Close(); cerr != nil {
+			logger.Warn("close watch set", "err", cerr)
+		}
+	}()
+
+	hooks := startHooks(logger, stateDir, indexCache, watches)
 	defer hooks.Stop()
 
 	st, saver, notices, unlock, err := openState(logger, stateDir, cfg, fresh)

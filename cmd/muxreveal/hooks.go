@@ -59,8 +59,8 @@ func indexCacheDir(logger *slog.Logger) string {
 // startHooks prepares <stateDir>/run: it sweeps files of dead instances, writes
 // this instance's settings file and serves its socket. A failure leaves nothing
 // behind and yields a runtime with a notice, so agents start without hooks.
-func startHooks(logger *slog.Logger, stateDir, indexCache string) hookRuntime {
-	h, err := setupHooks(logger, stateDir, indexCache)
+func startHooks(logger *slog.Logger, stateDir, indexCache string, watches *git.WatchSet) hookRuntime {
+	h, err := setupHooks(logger, stateDir, indexCache, watches)
 	if err != nil {
 		logger.Warn("agent hooks are off", "err", err)
 
@@ -70,7 +70,7 @@ func startHooks(logger *slog.Logger, stateDir, indexCache string) hookRuntime {
 	return h
 }
 
-func setupHooks(logger *slog.Logger, stateDir, indexCache string) (hookRuntime, error) {
+func setupHooks(logger *slog.Logger, stateDir, indexCache string, watches *git.WatchSet) (hookRuntime, error) {
 	runDir := filepath.Join(stateDir, "run")
 	if err := os.MkdirAll(runDir, 0o700); err != nil {
 		return hookRuntime{}, fmt.Errorf("run dir: %w", err)
@@ -128,7 +128,7 @@ func setupHooks(logger *slog.Logger, stateDir, indexCache string) (hookRuntime, 
 	})
 
 	wg.Go(func() {
-		runTurnGate(ctx, raw, events, gitSnapshot(runDir, indexCache), gitMarker, logger)
+		runTurnGate(ctx, raw, events, gitSnapshot(runDir, indexCache), gitMarker, watchSeq(watches), logger)
 	})
 
 	stop := sync.OnceFunc(func() {
@@ -151,17 +151,32 @@ func setupHooks(logger *slog.Logger, stateDir, indexCache string) (hookRuntime, 
 // gitSnapshot snapshots the working tree with its temporary index in tempDir
 // and the refreshed index copies in indexCache.
 func gitSnapshot(tempDir, indexCache string) snapshotFunc {
-	return func(ctx context.Context, dir, session string) error {
-		_, err := git.Snapshot(ctx, dir, session, git.SnapshotOptions{TempDir: tempDir, IndexCache: indexCache})
+	return func(ctx context.Context, dir, session string, unchanged bool) error {
+		_, err := git.Snapshot(ctx, dir, session, git.SnapshotOptions{TempDir: tempDir, IndexCache: indexCache, Unchanged: unchanged})
 
 		return err
 	}
 }
 
-func gitMarker(ctx context.Context, dir, session string) error {
+func gitMarker(ctx context.Context, dir, session string, _ bool) error {
 	_, err := git.MarkMissing(ctx, dir, session)
 
 	return err
+}
+
+// watchSeq reads the change counter of the worktree containing dir. The root is
+// resolved with git, never by comparing cwd strings.
+func watchSeq(watches *git.WatchSet) seqFunc {
+	return func(ctx context.Context, dir string) (string, uint64, bool) {
+		r, err := git.Open(ctx, dir)
+		if err != nil {
+			return "", 0, false
+		}
+
+		n, ok := watches.Seq(r.Root)
+
+		return r.Root, n, ok
+	}
 }
 
 // sweepRunDir removes the socket, settings file and temporary indexes of
