@@ -81,7 +81,7 @@ func (a *App) openPane(kind core.PaneKind, split core.Split) tea.Cmd {
 		cwd = m.Cwd
 	}
 
-	act := core.OpenPane{Kind: kind, Cwd: cwd, Split: split}
+	act := core.OpenPane{Kind: kind, Cwd: cwd, Split: split, Area: a.innerArea()}
 	if kind == core.KindAgent {
 		act.Harness = a.harness.ID()
 	}
@@ -92,8 +92,7 @@ func (a *App) openPane(kind core.PaneKind, split core.Split) tea.Cmd {
 
 	sim := core.NewStore(st)
 	if err := sim.Dispatch(act); err == nil {
-		area := innerRect(bodyRect(a.width, a.height))
-		if r, ok := core.Rects(sim.State().Tab().Layout, area)[id]; ok {
+		if r, ok := core.Arrange(sim.State().Tab(), act.Area, st.Layout).Sizes[id]; ok {
 			cols, rows = contentSize(r)
 		}
 	}
@@ -262,7 +261,7 @@ func (a *App) relayout() tea.Cmd {
 	rects := make([]map[core.PaneID]core.Rect, len(st.Tabs))
 
 	for i := range st.Tabs {
-		rects[i] = a.layoutIn(st, i)
+		rects[i] = a.sizesIn(st, i)
 	}
 
 	var cmds []tea.Cmd

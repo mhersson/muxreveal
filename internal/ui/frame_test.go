@@ -445,14 +445,14 @@ func TestTitleKeepsJunctions(t *testing.T) {
 func TestCursorView(t *testing.T) {
 	a, procs := framedApp(t, 100, 30, shellSpec("/a", ""), shellSpec("/b", "\x1b[3;5Hx"))
 
-	// p2 is focused and sits right of p1: A gets floor(97*0.5) = 48 columns after the left frame column, so p2 starts at x=50.
+	// p2 is focused and sits right of p1: A gets floor(98*0.5) = 49 columns after the left frame column and a border column follows, so p2 starts at x=51.
 	cur := a.cursorView()
 	if cur == nil {
 		t.Fatal("cursorView() = nil, want the focused pane's cursor")
 	}
 
-	if cur.X != 50+5 || cur.Y != 2+2 {
-		t.Errorf("cursor = (%d, %d), want (55, 4)", cur.X, cur.Y)
+	if cur.X != 51+5 || cur.Y != 2+2 {
+		t.Errorf("cursor = (%d, %d), want (56, 4)", cur.X, cur.Y)
 	}
 
 	if err := a.dispatch(core.ToggleZoom{}); err != nil {

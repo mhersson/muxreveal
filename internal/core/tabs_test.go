@@ -11,7 +11,8 @@ func tabsOf(active int, agents []PaneID, layouts ...*Node) State {
 	s := InitialState(DefaultConfig())
 	s.Tabs = nil
 	for i, l := range layouts {
-		t := Tab{ID: TabID("t" + string(rune('1'+i))), Layout: l}
+		t := Tab{ID: TabID("t" + string(rune('1'+i)))}
+		setLayout(&t, l)
 		if l != nil {
 			t.Focus = l.firstLeaf()
 		}
@@ -75,7 +76,7 @@ func TestTabIDsNeverReused(t *testing.T) {
 
 func TestNilTabsBehaveAsOneEmptyTab(t *testing.T) {
 	s := State{Theme: "a"}
-	if tab := s.Tab(); tab.ID != "t1" || tab.Layout != nil {
+	if tab := s.Tab(); tab.ID != "t1" || !tab.Empty() {
 		t.Errorf("Tab() = %+v", tab)
 	}
 	if _, ok := s.TabOf("p1"); ok || s.TabHasAgents(0) {
@@ -334,7 +335,7 @@ func TestOnlyTabNameWhenEmptied(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := dispatch(t, named(), tt.action)
-			if len(got.Tabs) != 1 || got.Tab().Layout != nil || got.Tab().Name != tt.want {
+			if len(got.Tabs) != 1 || !got.Tab().Empty() || got.Tab().Name != tt.want {
 				t.Errorf("tab = %+v, want empty with name %q", got.Tab(), tt.want)
 			}
 		})

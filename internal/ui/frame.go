@@ -64,21 +64,46 @@ func (a *App) layoutIn(st core.State, i int) map[core.PaneID]core.Rect {
 		return nil
 	}
 
-	t := st.Tabs[i]
-	inner := innerRect(bodyRect(a.width, a.height))
-
-	if t.Zoomed {
-		if _, ok := st.Panes[t.Focus]; ok {
-			rects := map[core.PaneID]core.Rect{}
-			if inner.W >= 1 && inner.H >= 1 {
-				rects[t.Focus] = inner
-			}
-
-			return rects
-		}
+	if z, ok := a.zoomedRects(st, i); ok {
+		return z
 	}
 
-	return core.Rects(t.Layout, inner)
+	return core.Arrange(st.Tabs[i], a.innerArea(), st.Layout).Rects
+}
+
+// sizesIn is the rect each pane of tab i is sized to, or the zoomed pane's
+// alone when the tab is zoomed.
+func (a *App) sizesIn(st core.State, i int) map[core.PaneID]core.Rect {
+	if z, ok := a.zoomedRects(st, i); ok {
+		return z
+	}
+
+	return core.Arrange(st.Tabs[i], a.innerArea(), st.Layout).Sizes
+}
+
+// zoomedRects is the one rect of a zoomed tab: its focused pane fills the
+// inner rect.
+func (a *App) zoomedRects(st core.State, i int) (map[core.PaneID]core.Rect, bool) {
+	t := st.Tabs[i]
+	if !t.Zoomed {
+		return nil, false
+	}
+
+	if _, ok := st.Panes[t.Focus]; !ok {
+		return nil, false
+	}
+
+	rects := map[core.PaneID]core.Rect{}
+	if inner := a.innerArea(); inner.W >= 1 && inner.H >= 1 {
+		rects[t.Focus] = inner
+	}
+
+	return rects, true
+}
+
+// innerArea is the rect panes are laid out in.
+func (a *App) innerArea() core.Rect {
+	return innerRect(bodyRect(a.width, a.height))
 }
 
 // segment is a run of cells already styled, starting at column x.
@@ -104,7 +129,7 @@ func (a *App) frameAt(g geometry) string {
 	}
 
 	if bodyH := a.height - 2; bodyH > 0 {
-		if st.Tab().Layout == nil {
+		if st.Tab().Empty() {
 			lines = append(lines, strings.Split(renderBody(a.width, bodyH, lk.styles, lk.sample, a.welcomeHints()), "\n")...)
 		} else {
 			lines = append(lines, a.frameBody(g, st, lk)...)

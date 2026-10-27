@@ -277,7 +277,7 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a.started = true
 			if len(a.store.State().Panes) > 0 {
 				cmds = append(cmds, a.startRestored())
-			} else if a.store.State().Tab().Layout == nil {
+			} else if a.store.State().Tab().Empty() {
 				cmds = append(cmds, a.openPane(core.KindShell, core.SplitVertical))
 			}
 		}

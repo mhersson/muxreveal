@@ -377,17 +377,17 @@ func TestFocusResizeZoom(t *testing.T) {
 		assertSizes(t, a)
 	}
 
-	// Resizes reach the process: p1 shrank to 43 columns and grew back to 48.
+	// Resizes reach the process: p1 shrank to 44 columns and grew back to 49.
 	var sawNarrow bool
 
 	for _, r := range st.proc(0).resized() {
-		if r[0] == 43 {
+		if r[0] == 44 {
 			sawNarrow = true
 		}
 	}
 
 	if !sawNarrow {
-		t.Errorf("p1 resizes = %v, want one with 43 columns", st.proc(0).resized())
+		t.Errorf("p1 resizes = %v, want one with 44 columns", st.proc(0).resized())
 	}
 }
 
@@ -621,7 +621,7 @@ func TestPaneExit(t *testing.T) {
 
 		a.Update(exitOf(t, a, "p1", st.proc(0)))
 
-		if s := a.store.State(); s.Tab().Layout != nil || len(s.Panes) != 0 {
+		if s := a.store.State(); !s.Tab().Empty() || len(s.Panes) != 0 {
 			t.Fatalf("state = %+v, want no panes", s)
 		}
 
@@ -1195,4 +1195,70 @@ func TestSwapCommands(t *testing.T) {
 			}
 		}
 	})
+}
+
+// A pane the tiny body leaves out has no tile, so focus never steps onto it.
+func TestFocusSkipsPanesLeftOutOfATinyBody(t *testing.T) {
+	a, _ := lifeAppSized(t, 12, 7)
+
+	chord(a, 's')
+	chord(a, 's')
+
+	st := a.store.State()
+	if len(st.Panes) != 3 {
+		t.Fatalf("panes = %d, want 3", len(st.Panes))
+	}
+
+	if _, drawn := a.layoutRects()["p3"]; drawn {
+		t.Fatalf("p3 is drawn in a 12x7 terminal: %v", a.layoutRects())
+	}
+
+	if err := a.dispatch(core.FocusPane{ID: "p2"}); err != nil {
+		t.Fatal(err)
+	}
+
+	chord(a, 'j')
+
+	if got := a.store.State().Tab().Focus; got != "p2" {
+		t.Errorf("Focus = %q after focus down, want p2 (p3 has no tile)", got)
+	}
+}
+
+func TestWindowResizeThroughTinyAndBack(t *testing.T) {
+	a, _ := lifeAppSized(t, 240, 64)
+
+	for _, k := range "svsvs" {
+		chord(a, k)
+	}
+
+	for _, sz := range [][2]int{{20, 6}, {1, 1}, {3, 3}, {240, 64}} {
+		sized(t, a, sz[0], sz[1])
+		assertSizes(t, a)
+
+		inner := a.innerArea()
+		cells := map[[2]int]core.PaneID{}
+
+		for id, r := range a.layoutRects() {
+			if r.W < 1 || r.H < 1 || r.X < inner.X || r.Y < inner.Y ||
+				r.X+r.W > inner.X+inner.W || r.Y+r.H > inner.Y+inner.H {
+				t.Fatalf("%dx%d: %s = %+v outside %+v", sz[0], sz[1], id, r, inner)
+			}
+
+			for y := r.Y; y < r.Y+r.H; y++ {
+				for x := r.X; x < r.X+r.W; x++ {
+					if o, dup := cells[[2]int{x, y}]; dup {
+						t.Fatalf("%dx%d: %s and %s overlap at %d,%d", sz[0], sz[1], id, o, x, y)
+					}
+
+					cells[[2]int{x, y}] = id
+				}
+			}
+		}
+
+		for id, p := range a.panes {
+			if c, r := p.size(); c < 1 || r < 1 {
+				t.Fatalf("%dx%d: pane %s is %dx%d", sz[0], sz[1], id, c, r)
+			}
+		}
+	}
 }

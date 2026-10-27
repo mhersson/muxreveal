@@ -41,9 +41,19 @@ func leaves(n *Node, f func(PaneID)) {
 	leaves(n.B, f)
 }
 
+// setLayout installs a BSP tree on a tab the way core does: Panes in leaf order.
+func setLayout(t *Tab, n *Node) {
+	if n == nil {
+		t.Layout, t.Panes = nil, nil
+		return
+	}
+	t.setTree(n)
+}
+
 func stateOf(layout *Node, focus PaneID) State {
 	s := InitialState(DefaultConfig())
-	s.Tabs[0].Layout, s.Tabs[0].Focus = layout, focus
+	setLayout(&s.Tabs[0], layout)
+	s.Tabs[0].Focus = focus
 	leaves(layout, func(id PaneID) {
 		s.Panes[id] = Pane{Kind: KindShell}
 		s.NextID++
@@ -65,7 +75,7 @@ func TestInitialState(t *testing.T) {
 	if s.Theme != "catppuccin-latte" {
 		t.Errorf("Theme = %q", s.Theme)
 	}
-	if tab := s.Tab(); len(s.Tabs) != 1 || s.Active != 0 || tab.ID != "t1" || tab.Layout != nil || tab.Focus != "" || len(s.Panes) != 0 || tab.Zoomed {
+	if tab := s.Tab(); len(s.Tabs) != 1 || s.Active != 0 || tab.ID != "t1" || !tab.Empty() || tab.Layout != nil || tab.Focus != "" || len(s.Panes) != 0 || tab.Zoomed {
 		t.Errorf("state not empty: %+v", s)
 	}
 }

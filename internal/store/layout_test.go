@@ -181,7 +181,8 @@ func TestDefaultLayout(t *testing.T) {
 				return // the 0.1 floor makes the columns unequal
 			}
 			const width = 120
-			rects := core.Rects(root, core.Rect{W: width, H: 10})
+			tab := core.Tab{Mode: core.ModeBSP, Panes: panes, Layout: root}
+			rects := core.Arrange(tab, core.Rect{W: width, H: 11}, core.LayoutConfig{}).Rects
 			ws := make([]int, 0, n)
 			for _, id := range panes {
 				ws = append(ws, rects[id].W)

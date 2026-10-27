@@ -27,11 +27,12 @@ func fixedState() core.State {
 		Tabs: []core.Tab{
 			{
 				ID: "t1", Name: "api", Focus: "p2", Zoomed: true,
+				Mode: core.ModeBSP, Panes: []core.PaneID{"p1", "p2", "p3"},
 				Layout: split(core.SplitVertical, 0.333333,
 					leaf("p1"),
 					split(core.SplitHorizontal, 0.5, leaf("p2"), leaf("p3"))),
 			},
-			{ID: "t2", Focus: "p4", Layout: leaf("p4")},
+			{ID: "t2", Focus: "p4", Mode: core.ModeBSP, Panes: []core.PaneID{"p4"}, Layout: leaf("p4")},
 		},
 		Panes: map[core.PaneID]core.Pane{
 			"p1": {
@@ -97,7 +98,7 @@ func TestEncodeNoTabs(t *testing.T) {
 	noErr(t, err)
 	eq(t, len(got.Tabs), 1)
 	eq(t, got.Tabs[0].ID, core.TabID("t1"))
-	if got.Tabs[0].Layout != nil || len(got.Panes) != 0 {
+	if !got.Tabs[0].Empty() || len(got.Panes) != 0 {
 		t.Fatalf("empty state decoded to %+v", got)
 	}
 }
@@ -442,7 +443,7 @@ func TestDecodeFallbacks(t *testing.T) {
 			``,
 			func(t *testing.T, st core.State) {
 				eq(t, len(st.Tabs), 1)
-				if st.Tabs[0].Layout != nil || st.Tabs[0].Focus != "" {
+				if !st.Tabs[0].Empty() || st.Tabs[0].Focus != "" {
 					t.Fatalf("empty tab decoded to %+v", st.Tabs[0])
 				}
 				eq(t, st.NextTabID, 4)

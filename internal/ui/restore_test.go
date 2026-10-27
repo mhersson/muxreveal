@@ -31,8 +31,8 @@ func restoreState() core.State {
 	return core.State{
 		Theme: "catppuccin-mocha", Active: 1, NextID: 3, NextTabID: 2,
 		Tabs: []core.Tab{
-			{ID: "t1", Focus: "p1", Layout: vsplit("p1", "p2")},
-			{ID: "t2", Focus: "p3", Layout: &core.Node{Pane: "p3"}},
+			{ID: "t1", Focus: "p1", Mode: core.ModeBSP, Panes: []core.PaneID{"p1", "p2"}, Layout: vsplit("p1", "p2")},
+			{ID: "t2", Focus: "p3", Mode: core.ModeBSP, Panes: []core.PaneID{"p3"}, Layout: &core.Node{Pane: "p3"}},
 		},
 		Panes: map[core.PaneID]core.Pane{
 			"p1": {Kind: core.KindAgent, Cwd: "/srv/api", Harness: "claude-code", Session: restoreSession, Transcript: "/x/t.jsonl"},
@@ -313,7 +313,7 @@ func TestRestoreFailingPanes(t *testing.T) {
 	t.Run("no pane left opens one shell in the launch dir", func(t *testing.T) {
 		one := core.State{
 			Theme: "catppuccin-mocha", NextID: 2, NextTabID: 1,
-			Tabs:  []core.Tab{{ID: "t1", Focus: "p1", Layout: vsplit("p1", "p2")}},
+			Tabs:  []core.Tab{{ID: "t1", Focus: "p1", Mode: core.ModeBSP, Panes: []core.PaneID{"p1", "p2"}, Layout: vsplit("p1", "p2")}},
 			Panes: map[core.PaneID]core.Pane{"p1": {Kind: core.KindShell, Cwd: "/srv/a"}, "p2": {Kind: core.KindShell, Cwd: "/srv/b"}},
 		}
 		r := restoreApp(t, one)

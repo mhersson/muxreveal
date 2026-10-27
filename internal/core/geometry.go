@@ -1,71 +1,72 @@
 package core
 
-import "math"
+import "github.com/mhersson/muxreveal/internal/core/tiling"
 
 // Rect is a cell rectangle.
 type Rect struct {
 	X, Y, W, H int
 }
 
-// Rects lays the tree out in area. A vertical split gives A floor((W-1)*Ratio)
-// columns, one separator column and B the rest; a horizontal split gives A
-// floor(H*Ratio) rows and B the rest. A side below 1 gets 0 and its panes are
-// omitted, so no returned Rect is empty or negative.
-func Rects(root *Node, area Rect) map[PaneID]Rect {
-	rects, _ := layout(root, area)
-	return rects
+// LayoutConfig holds the layout settings Arrange and the placement helpers
+// read.
+type LayoutConfig struct{}
+
+// Arrangement is a tab laid out in an inner rect.
+type Arrangement struct {
+	Rects                   map[PaneID]Rect // drawn panes, each including its title row
+	Sizes                   map[PaneID]Rect // every placed pane of the tab, hidden columns included: PTY sizes
+	HiddenLeft, HiddenRight int             // scrolling columns hidden on each side
 }
 
-// Separators returns the one-column separators between side-by-side children
-// that both have room.
-func Separators(root *Node, area Rect) []Rect {
-	_, seps := layout(root, area)
-	return seps
+// gap is the cells between two tiles, on both axes.
+const gap = 1
+
+// Arrange lays t out in inner, the rect inside the outer frame. Tiles fill the
+// content area, which is inner without its first row, with a one-cell gap; a
+// pane's rect is its tile grown one row up into the border row that holds its
+// title. A pane whose tile would be empty is in neither map. Zoom is the
+// caller's.
+func Arrange(t Tab, inner Rect, lc LayoutConfig) Arrangement {
+	a := Arrangement{Rects: map[PaneID]Rect{}, Sizes: map[PaneID]Rect{}}
+	area := contentArea(inner)
+	if area.W < 1 || area.H < 1 {
+		return a
+	}
+	if t.Layout != nil {
+		arrangeBSP(t.Layout, area, &a)
+	}
+	return a
 }
 
-// share is floor(n*ratio) computed in hundredths, so ratios such as 0.7 do not
-// lose a cell to float rounding.
-func share(n int, ratio float64) int {
-	return n * int(math.Round(ratio*100)) / 100
+// contentArea is where tiles go: inner without its first row, which is the top
+// border of the topmost panes. A zero inner gives zero bounds.
+func contentArea(inner Rect) tiling.Rect {
+	if inner == (Rect{}) {
+		return tiling.Rect{}
+	}
+	return tiling.Rect{X: inner.X, Y: inner.Y + 1, W: inner.W, H: max(inner.H-1, 0)}
 }
 
-func layout(root *Node, area Rect) (map[PaneID]Rect, []Rect) {
-	rects := map[PaneID]Rect{}
-	var seps []Rect
-	place(root, area, rects, &seps)
-	return rects, seps
+// paneRect is a tile grown one row up.
+func paneRect(tile tiling.Rect) Rect {
+	return Rect{X: tile.X, Y: tile.Y - 1, W: tile.W, H: tile.H + 1}
 }
 
-func place(n *Node, area Rect, rects map[PaneID]Rect, seps *[]Rect) {
-	if n == nil || area.W < 1 || area.H < 1 {
+// tileOf is a pane rect without its title row.
+func tileOf(r Rect) tiling.Rect {
+	return tiling.Rect{X: r.X, Y: r.Y + 1, W: r.W, H: r.H - 1}
+}
+
+func arrangeBSP(n *Node, bounds tiling.Rect, a *Arrangement) {
+	if bounds.W < 1 || bounds.H < 1 {
 		return
 	}
 	if n.leaf() {
-		rects[n.Pane] = area
+		r := paneRect(bounds)
+		a.Rects[n.Pane], a.Sizes[n.Pane] = r, r
 		return
 	}
-	switch n.Split {
-	case SplitVertical:
-		a := max(share(area.W-1, n.Ratio), 0)
-		b := area.W - 1 - a
-		if a < 1 {
-			a = 0
-		}
-		if b < 1 {
-			b = 0
-		}
-		place(n.A, Rect{area.X, area.Y, a, area.H}, rects, seps)
-		place(n.B, Rect{area.X + a + 1, area.Y, b, area.H}, rects, seps)
-		if a > 0 && b > 0 {
-			*seps = append(*seps, Rect{area.X + a, area.Y, 1, area.H})
-		}
-	case SplitHorizontal:
-		a := max(share(area.H, n.Ratio), 0)
-		b := area.H - a
-		if a < 1 {
-			a = 0
-		}
-		place(n.A, Rect{area.X, area.Y, area.W, a}, rects, seps)
-		place(n.B, Rect{area.X, area.Y + a, area.W, b}, rects, seps)
-	}
+	near, far := tiling.SplitBounds(&tiling.TileNode{SplitType: splitType(n.Split), SplitRatio: n.Ratio}, bounds, gap)
+	arrangeBSP(n.A, near, a)
+	arrangeBSP(n.B, far, a)
 }

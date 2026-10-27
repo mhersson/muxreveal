@@ -464,7 +464,7 @@ func TestCloseTabConfirm(t *testing.T) {
 		chord(a, 'X')
 
 		s := a.store.State()
-		if len(s.Tabs) != 1 || s.Tab().Layout != nil || len(s.Panes) != 0 || len(a.panes) != 0 {
+		if len(s.Tabs) != 1 || !s.Tab().Empty() || len(s.Panes) != 0 || len(a.panes) != 0 {
 			t.Errorf("state = %+v, want one empty tab", s)
 		}
 
@@ -495,7 +495,7 @@ func TestHiddenPaneExit(t *testing.T) {
 		a.Update(exitOf(t, a, "p3", st.proc(2)))
 
 		s := a.store.State()
-		if len(s.Tabs) != 2 || s.Active != 0 || s.Tab().Focus != "p1" || s.Tabs[1].Focus != "p2" || s.Tabs[1].Layout == nil || a.panes["p3"] != nil {
+		if len(s.Tabs) != 2 || s.Active != 0 || s.Tab().Focus != "p1" || s.Tabs[1].Focus != "p2" || s.Tabs[1].Empty() || a.panes["p3"] != nil {
 			t.Fatalf("state = %+v, want tab 2 left with p2 and tab 1 untouched", s)
 		}
 

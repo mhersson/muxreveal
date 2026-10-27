@@ -12,8 +12,9 @@ type State struct {
 	Tabs      []Tab // at least one once an action has run
 	Active    int   // index into Tabs
 	Panes     map[PaneID]Pane
-	NextID    int // last pane number handed out
-	NextTabID int // last tab number handed out
+	NextID    int          // last pane number handed out
+	NextTabID int          // last tab number handed out
+	Layout    LayoutConfig // settings Arrange and the placement helpers read
 }
 
 // InitialState returns the state of a fresh session: one empty tab.
@@ -30,8 +31,7 @@ func (s State) clone() State {
 	c := s
 	c.Tabs = make([]Tab, len(s.Tabs))
 	for i, t := range s.Tabs {
-		t.Layout = t.Layout.clone()
-		c.Tabs[i] = t
+		c.Tabs[i] = t.clone()
 	}
 	c.Panes = make(map[PaneID]Pane, len(s.Panes))
 	maps.Copy(c.Panes, s.Panes)

@@ -85,7 +85,7 @@ func Encode(st core.State) ([]byte, error) {
 		if err != nil {
 			return nil, fmt.Errorf("tab %s: %w", t.ID, err)
 		}
-		ids := leafOrder(t.Layout)
+		ids := t.Panes
 		jt := tabJSON{
 			ID: string(t.ID), Name: t.Name, Focused: string(t.Focus), Zoomed: t.Zoomed,
 			PaneIDs: make([]string, 0, len(ids)), Layout: layout,
@@ -234,13 +234,16 @@ func Decode(data []byte) (core.State, Report, error) {
 		} else if owner[focus] != jt.ID {
 			focus = order[0]
 		}
-		st.Tabs = append(st.Tabs, core.Tab{
+		tab := core.Tab{
 			ID:     core.TabID(jt.ID),
 			Name:   cleanName(jt.Name),
-			Layout: layout,
 			Focus:  focus,
 			Zoomed: jt.Zoomed && focus != "",
-		})
+		}
+		if layout != nil {
+			tab.Mode, tab.Layout, tab.Panes = core.ModeBSP, layout, leafOrder(layout)
+		}
+		st.Tabs = append(st.Tabs, tab)
 	}
 	for id := range st.Panes {
 		if _, ok := owner[id]; !ok {

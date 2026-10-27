@@ -1,12 +1,12 @@
  1 󱙺 third                          󱙺 
-╭─  shell · proj ─┬─  shell · other ─╮
-│left              │right              │
-│                  │                   │
-│                  │                   │
-│                  ├─ 󱙺 claude · third ┤
-│                  │                   │
-│                  │                   │
-│                  │                   │
-│                  │                   │
-╰──────────────────┴───────────────────╯
+╭─  shell · proj ──┬─  shell · other ╮
+│left               │right             │
+│                   │                  │
+│                   │                  │
+│                   │                  │
+│                   ├─ 󱙺 claude ───────┤
+│                   │                  │
+│                   │                  │
+│                   │                  │
+╰───────────────────┴──────────────────╯
  󰕮 MuxReveal  ctrl+space then          
