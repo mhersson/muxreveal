@@ -23,14 +23,17 @@ func copyTestGrid() *fakeGrid {
 
 func pressKeys(t *testing.T, g grid, m copyMode, viewRows int, keys ...string) copyMode {
 	t.Helper()
+
 	for _, k := range keys {
 		m, _ = m.key(g, k, viewRows)
 	}
+
 	return m
 }
 
 func TestCopyModeStart(t *testing.T) {
 	g := copyTestGrid()
+
 	tests := []struct {
 		name          string
 		viewTop, rows int
@@ -50,6 +53,7 @@ func TestCopyModeStart(t *testing.T) {
 
 func TestCopyModeMotions(t *testing.T) {
 	g := copyTestGrid()
+
 	tests := []struct {
 		name  string
 		start point
@@ -98,6 +102,7 @@ func TestCopyModeMotions(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			m := copyMode{cursor: tt.start}
+
 			got := pressKeys(t, g, m, 8, tt.keys...)
 			if got.cursor != tt.want {
 				t.Errorf("cursor %v, want %v", got.cursor, tt.want)
@@ -111,6 +116,7 @@ func TestCopyModeViewJumps(t *testing.T) {
 		"r0", "r1", "r2", "r3", "r4", "r5", "r6", "r7", "r8", "r9",
 		" r10", "r11",
 	)
+
 	tests := []struct {
 		name     string
 		top      int
@@ -142,6 +148,7 @@ func TestCopyModeViewJumps(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			m := copyMode{cursor: tt.cursor, top: tt.top}
+
 			got, act := m.key(g, tt.key, tt.viewRows)
 			if act != copyNone || got.cursor != tt.want || got.top != tt.wantTop {
 				t.Errorf("cursor %v top %d act %v, want %v top %d", got.cursor, got.top, act, tt.want, tt.wantTop)
@@ -156,15 +163,23 @@ func TestCopyModeTopStaysConsistent(t *testing.T) {
 		for i := range rows {
 			g.cells = append(g.cells, newFakeGrid(6, nil, fmt.Sprintf("r%d", i)).cells[0])
 		}
+
 		for _, viewRows := range []int{1, 4, 12, 30} {
 			for _, start := range []int{0, rows / 2, rows - 1} {
 				for _, keys := range [][]string{
-					{"ctrl+u"}, {"ctrl+d"}, {"ctrl+b"}, {"ctrl+f"}, {"G"}, {"g", "g"},
-					{"ctrl+d", "ctrl+d", "ctrl+d"}, {"ctrl+u", "ctrl+u", "ctrl+u"},
+					{"ctrl+u"},
+					{"ctrl+d"},
+					{"ctrl+b"},
+					{"ctrl+f"},
+					{"G"},
+					{"g", "g"},
+					{"ctrl+d", "ctrl+d", "ctrl+d"},
+					{"ctrl+u", "ctrl+u", "ctrl+u"},
 				} {
 					m := copyMode{cursor: point{start, 0}, top: min(start, max(0, rows-viewRows))}
 					m = pressKeys(t, g, m, viewRows, keys...)
 					maxTop := max(0, rows-viewRows)
+
 					c := m.cursor
 					switch {
 					case c.row < 0 || c.row >= rows:
@@ -200,6 +215,7 @@ func TestCopyModeViewTop(t *testing.T) {
 
 func TestCopyModeSelection(t *testing.T) {
 	g := copyTestGrid()
+
 	tests := []struct {
 		name string
 		keys []string
@@ -227,6 +243,7 @@ func TestCopyModeSelection(t *testing.T) {
 
 func TestCopyModeActions(t *testing.T) {
 	g := copyTestGrid()
+
 	tests := []struct {
 		key  string
 		want copyAction
@@ -249,6 +266,7 @@ func TestCopyModeActions(t *testing.T) {
 	if got, _ := m.key(g, "F13", 4); got != m {
 		t.Errorf("unknown key changed state: %+v", got)
 	}
+
 	if _, act := m.key(g, "y", 4); act != copyYank {
 		t.Errorf("y without a selection: action %v", act)
 	}
@@ -256,6 +274,7 @@ func TestCopyModeActions(t *testing.T) {
 
 func TestCopyModeSearch(t *testing.T) {
 	g := newFakeGrid(12, nil, "foo bar", "中foo", "xx foo", "none")
+
 	tests := []struct {
 		name     string
 		start    point
@@ -280,13 +299,16 @@ func TestCopyModeSearch(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			m := copyMode{cursor: tt.start}
+
 			got, ok := m.search(g, tt.query, tt.backward)
 			if ok != tt.found || got.cursor != tt.want {
 				t.Errorf("cursor %v found %v, want %v %v", got.cursor, ok, tt.want, tt.found)
 			}
+
 			if ok && (got.lastSearch != tt.query || got.backward != tt.backward) {
 				t.Errorf("lastSearch %q backward %v", got.lastSearch, got.backward)
 			}
+
 			if !ok && got.lastSearch != "" {
 				t.Errorf("failed search stored %q", got.lastSearch)
 			}
@@ -296,10 +318,12 @@ func TestCopyModeSearch(t *testing.T) {
 
 func TestCopyModeRepeatSearch(t *testing.T) {
 	g := newFakeGrid(12, nil, "foo", "bar", "foo x", "baz", "foo")
+
 	m, ok := (copyMode{}).search(g, "foo", false)
 	if !ok || m.cursor != (point{2, 0}) {
 		t.Fatalf("first search: %v %v", m.cursor, ok)
 	}
+
 	tests := []struct {
 		key      string
 		want     point
@@ -315,6 +339,7 @@ func TestCopyModeRepeatSearch(t *testing.T) {
 		if m.cursor != tt.want || m.backward != tt.backward {
 			t.Fatalf("step %d %s: cursor %v backward %v, want %v", i, tt.key, m.cursor, m.backward, tt.want)
 		}
+
 		if m.cursor.row < m.top || m.cursor.row > m.top+1 {
 			t.Fatalf("step %d: cursor %v outside view top %d", i, m.cursor, m.top)
 		}
@@ -324,10 +349,12 @@ func TestCopyModeRepeatSearch(t *testing.T) {
 	if back.cursor != (point{2, 0}) {
 		t.Fatalf("backward search: %v", back.cursor)
 	}
+
 	n, _ := back.key(g, "n", 5)
 	if n.cursor != (point{0, 0}) || !n.backward {
 		t.Errorf("n after backward search: %v backward %v", n.cursor, n.backward)
 	}
+
 	nn, _ := back.key(g, "N", 5)
 	if nn.cursor != (point{4, 0}) || !nn.backward {
 		t.Errorf("N after backward search: %v backward %v", nn.cursor, nn.backward)
@@ -342,6 +369,7 @@ func TestCopyModeRepeatSearch(t *testing.T) {
 func TestCopyModeSearchMovesSelectionHead(t *testing.T) {
 	g := newFakeGrid(8, nil, "ab", "cd ab")
 	m := pressKeys(t, g, copyMode{}, 4, "v")
+
 	m, ok := m.search(g, "ab", false)
 	if !ok || m.sel == nil || m.sel.head != (point{1, 3}) || m.sel.anchor != (point{0, 0}) {
 		t.Errorf("sel %+v ok %v", m.sel, ok)

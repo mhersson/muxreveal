@@ -309,6 +309,7 @@ func newBenchApp(cfg benchConfig, clk clock) (*App, []core.PaneID, error) {
 
 	for i := range cfg.Panes - cols {
 		_ = app.dispatch(core.FocusPane{ID: ids[i]})
+
 		open(core.SplitHorizontal)
 	}
 

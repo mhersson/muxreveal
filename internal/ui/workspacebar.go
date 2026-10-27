@@ -321,6 +321,7 @@ func renderTabs(p barPlan, tabs []tabInfo, active int, icons bool, ui theme.UI) 
 
 		if !icons {
 			sb.WriteString(ground.Render(" "))
+
 			continue
 		}
 

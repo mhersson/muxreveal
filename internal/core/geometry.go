@@ -28,10 +28,12 @@ const gap = 0
 // map. A body under minPane square stays blank. Zoom is the caller's.
 func Arrange(t Tab, body Rect, lc LayoutConfig) Arrangement {
 	a := Arrangement{Rects: map[PaneID]Rect{}, Sizes: map[PaneID]Rect{}}
+
 	area := tileArea(body)
 	if area.W < minPane || area.H < minPane {
 		return a
 	}
+
 	switch t.Mode {
 	case ModeMaster:
 		arrangeMaster(t, area, lc, &a)
@@ -43,6 +45,7 @@ func Arrange(t Tab, body Rect, lc LayoutConfig) Arrangement {
 			arrangeBSP(t.Layout, area, &k, &a)
 		}
 	}
+
 	return a
 }
 
@@ -55,13 +58,16 @@ func arrangeBSP(n *Node, bounds tiling.Rect, k *keeper, a *Arrangement) {
 	if bounds.W < 1 || bounds.H < 1 {
 		return
 	}
+
 	if n.leaf() {
 		r := Rect{X: bounds.X, Y: bounds.Y, W: bounds.W, H: bounds.H}
 		if k.keep(r) {
 			a.Rects[n.Pane], a.Sizes[n.Pane] = r, r
 		}
+
 		return
 	}
+
 	near, far := tiling.SplitBounds(&tiling.TileNode{SplitType: splitType(n.Split), SplitRatio: n.Ratio}, bounds, gap)
 	arrangeBSP(n.A, near, k, a)
 	arrangeBSP(n.B, far, k, a)

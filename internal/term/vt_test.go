@@ -51,6 +51,7 @@ func newTestVT(t *testing.T, cols, rows int) (VT, *safeBuf) {
 
 	reply := &safeBuf{}
 	v := NewVT(cols, rows, reply)
+
 	t.Cleanup(func() { _ = v.Close() })
 
 	return v, reply
@@ -627,7 +628,11 @@ func TestScrollbackTextMatchesScrollbackLine(t *testing.T) {
 
 	calls := 0
 
-	v.ScrollbackText(0, n, func(int, []TextCell) bool { calls++; return false })
+	v.ScrollbackText(0, n, func(int, []TextCell) bool {
+		calls++
+
+		return false
+	})
 
 	if calls > 1 {
 		t.Errorf("fn called %d times after returning false", calls)

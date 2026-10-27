@@ -20,9 +20,11 @@ func (e syntaxEntry) style() string {
 	if e.attrs != "" {
 		parts = append(parts, e.attrs)
 	}
+
 	if e.bg != "" {
 		parts = append(parts, "bg:"+string(e.bg))
 	}
+
 	if e.fg != "" {
 		parts = append(parts, string(e.fg))
 	}
@@ -124,6 +126,7 @@ func (t Theme) Syntax() (*chroma.Style, error) {
 	for _, e := range syntaxEntries(t.Palette) {
 		b.Add(e.tt, e.style())
 	}
+
 	style, err := b.Build()
 	if err != nil {
 		return nil, fmt.Errorf("build syntax style %s: %w", t.Name, err)

@@ -12,13 +12,16 @@ func (h Hex) RGBA() (r, g, b, a uint32) {
 	if len(h) != 7 || h[0] != '#' {
 		return 0, 0, 0, 0xffff
 	}
+
 	var rgb [3]uint32
 	for i := range rgb {
 		hi, okHi := hexDigit(h[1+2*i])
+
 		lo, okLo := hexDigit(h[2+2*i])
 		if !okHi || !okLo {
 			return 0, 0, 0, 0xffff
 		}
+
 		v := hi<<4 | lo
 		rgb[i] = v<<8 | v
 	}

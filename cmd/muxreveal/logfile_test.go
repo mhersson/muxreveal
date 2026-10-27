@@ -9,9 +9,11 @@ import (
 func TestOpenLog(t *testing.T) {
 	writeFile := func(t *testing.T, path, content string) {
 		t.Helper()
+
 		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 			t.Fatal(err)
 		}
+
 		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 			t.Fatal(err)
 		}
@@ -55,13 +57,17 @@ func TestOpenLog(t *testing.T) {
 			if tt.wantErr {
 				if err == nil {
 					_ = f.Close()
+
 					t.Fatal("openLog() succeeded, want an error")
 				}
+
 				return
 			}
+
 			if err != nil {
 				t.Fatalf("openLog() error = %v", err)
 			}
+
 			t.Cleanup(func() {
 				if err := f.Close(); err != nil {
 					t.Error(err)
@@ -72,8 +78,10 @@ func TestOpenLog(t *testing.T) {
 			if f.Name() != logPath {
 				t.Errorf("log file = %q, want %q", f.Name(), logPath)
 			}
+
 			assertMode(t, dir, 0o700)
 			assertMode(t, logPath, 0o600)
+
 			if got, err := os.ReadFile(logPath); err != nil || len(got) != 0 {
 				t.Errorf("new log = %q, %v; want empty", got, err)
 			}
@@ -91,10 +99,12 @@ func TestOpenLog(t *testing.T) {
 
 func assertMode(t *testing.T, path string, want os.FileMode) {
 	t.Helper()
+
 	info, err := os.Stat(path)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if got := info.Mode().Perm(); got != want {
 		t.Errorf("mode of %s = %o, want %o", path, got, want)
 	}

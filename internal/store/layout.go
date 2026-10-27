@@ -44,14 +44,17 @@ func encodeLayout(n *core.Node) (json.RawMessage, error) {
 	if n == nil {
 		return json.RawMessage("null"), nil
 	}
+
 	j, err := nodeToJSON(n, 0)
 	if err != nil {
 		return nil, err
 	}
+
 	raw, err := json.Marshal(j)
 	if err != nil {
 		return nil, fmt.Errorf("encoding layout: %w", err)
 	}
+
 	return raw, nil
 }
 
@@ -59,27 +62,35 @@ func nodeToJSON(n *core.Node, depth int) (*layoutJSON, error) {
 	if depth > maxLayoutDepth {
 		return nil, errors.New("layout is nested too deeply")
 	}
+
 	if n == nil {
 		return nil, errors.New("layout node is missing")
 	}
+
 	if n.Pane != "" {
 		return &layoutJSON{Pane: string(n.Pane)}, nil
 	}
+
 	if !validSplit(n.Split) {
 		return nil, fmt.Errorf("layout split %q is not vertical or horizontal", n.Split)
 	}
+
 	if math.IsNaN(n.Ratio) || math.IsInf(n.Ratio, 0) {
 		return nil, errors.New("layout ratio is not a finite number")
 	}
+
 	a, err := nodeToJSON(n.A, depth+1)
 	if err != nil {
 		return nil, err
 	}
+
 	b, err := nodeToJSON(n.B, depth+1)
 	if err != nil {
 		return nil, err
 	}
+
 	r := normRatio(n.Ratio)
+
 	return &layoutJSON{Split: string(n.Split), Ratio: &r, Children: []*layoutJSON{a, b}}, nil
 }
 
@@ -91,26 +102,34 @@ func decodeLayout(raw json.RawMessage, panes []core.PaneID) (*core.Node, error) 
 		if want[id] {
 			return nil, fmt.Errorf("pane %q listed twice", id)
 		}
+
 		want[id] = true
 	}
+
 	if t := bytes.TrimSpace(raw); len(t) == 0 || bytes.Equal(t, []byte("null")) {
 		if len(panes) > 0 {
 			return nil, errors.New("tab has panes but no layout")
 		}
+
 		return nil, nil
 	}
+
 	var j layoutJSON
 	if err := json.Unmarshal(raw, &j); err != nil {
 		return nil, fmt.Errorf("parsing layout: %w", err)
 	}
+
 	seen := make(map[core.PaneID]bool, len(panes))
+
 	root, err := nodeFromJSON(&j, 0, want, seen)
 	if err != nil {
 		return nil, err
 	}
+
 	if len(seen) != len(want) {
 		return nil, fmt.Errorf("layout has %d panes, tab has %d", len(seen), len(want))
 	}
+
 	return root, nil
 }
 
@@ -118,41 +137,53 @@ func nodeFromJSON(j *layoutJSON, depth int, want, seen map[core.PaneID]bool) (*c
 	if depth > maxLayoutDepth {
 		return nil, errors.New("layout is nested too deeply")
 	}
+
 	if j == nil {
 		return nil, errors.New("layout node is null")
 	}
+
 	if j.Pane != "" {
 		if j.Split != "" || j.Ratio != nil || len(j.Children) > 0 {
 			return nil, fmt.Errorf("layout leaf %q has split fields", j.Pane)
 		}
+
 		id := core.PaneID(j.Pane)
 		if !want[id] {
 			return nil, fmt.Errorf("layout names pane %q outside the tab", id)
 		}
+
 		if seen[id] {
 			return nil, fmt.Errorf("layout names pane %q twice", id)
 		}
+
 		seen[id] = true
+
 		return &core.Node{Pane: id}, nil
 	}
+
 	split := core.Split(j.Split)
 	if !validSplit(split) {
 		return nil, fmt.Errorf("layout split %q is not vertical or horizontal", j.Split)
 	}
+
 	if j.Ratio == nil || math.IsNaN(*j.Ratio) || math.IsInf(*j.Ratio, 0) {
 		return nil, errors.New("layout split has no finite ratio")
 	}
+
 	if len(j.Children) != 2 {
 		return nil, fmt.Errorf("layout split has %d children, want 2", len(j.Children))
 	}
+
 	a, err := nodeFromJSON(j.Children[0], depth+1, want, seen)
 	if err != nil {
 		return nil, err
 	}
+
 	b, err := nodeFromJSON(j.Children[1], depth+1, want, seen)
 	if err != nil {
 		return nil, err
 	}
+
 	return &core.Node{Split: split, Ratio: normRatio(*j.Ratio), A: a, B: b}, nil
 }
 
@@ -164,6 +195,7 @@ func leafOrder(n *core.Node) []core.PaneID {
 	case n.Pane != "":
 		return []core.PaneID{n.Pane}
 	}
+
 	return append(leafOrder(n.A), leafOrder(n.B)...)
 }
 
@@ -193,6 +225,7 @@ func finiteNumber(raw json.RawMessage) (float64, bool) {
 	if json.Unmarshal(raw, &v) != nil || !finite(v) || isNull(raw) {
 		return 0, false
 	}
+
 	return v, true
 }
 
@@ -202,12 +235,15 @@ func encodeColumns(cols []core.Column) ([]columnOut, error) {
 		if !finite(c.Width) {
 			return nil, errors.New("column width is not a finite number")
 		}
+
 		ids := make([]string, len(c.Panes))
 		for i, id := range c.Panes {
 			ids[i] = string(id)
 		}
+
 		out = append(out, columnOut{Panes: ids, Width: normWidth(c.Width)})
 	}
+
 	return out, nil
 }
 
@@ -217,25 +253,33 @@ func decodeColumns(raw json.RawMessage, panes []core.PaneID) ([]core.Column, err
 	if err := json.Unmarshal(raw, &in); err != nil {
 		return nil, fmt.Errorf("parsing columns: %w", err)
 	}
+
 	cols := make([]core.Column, 0, len(in))
+
 	var flat []core.PaneID
+
 	for i, c := range in {
 		if len(c.Panes) == 0 {
 			return nil, fmt.Errorf("column %d is empty", i)
 		}
+
 		w, ok := finiteNumber(c.Width)
 		if !ok {
 			return nil, fmt.Errorf("column %d width is not a finite number", i)
 		}
+
 		col := core.Column{Width: normWidth(w)}
 		for _, s := range c.Panes {
 			col.Panes = append(col.Panes, core.PaneID(s))
 		}
+
 		flat = append(flat, col.Panes...)
 		cols = append(cols, col)
 	}
+
 	if !slices.Equal(flat, panes) {
 		return nil, errors.New("columns do not hold the tab's panes in order")
 	}
+
 	return cols, nil
 }

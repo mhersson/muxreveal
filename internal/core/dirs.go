@@ -22,6 +22,7 @@ func DefaultEnv() (Env, error) {
 	if err != nil {
 		return Env{}, fmt.Errorf("home dir: %w", err)
 	}
+
 	return Env{GOOS: runtime.GOOS, Home: home, Getenv: os.Getenv}, nil
 }
 
@@ -35,6 +36,7 @@ func StateDir(env Env) string {
 	if env.GOOS == "darwin" {
 		return filepath.Join(env.Home, "Library", "Application Support", appName)
 	}
+
 	return filepath.Join(xdgDir(env, "XDG_STATE_HOME", filepath.Join(".local", "state")), appName)
 }
 
@@ -44,5 +46,6 @@ func xdgDir(env Env, key, fallback string) string {
 	if dir := env.Getenv(key); filepath.IsAbs(dir) {
 		return dir
 	}
+
 	return filepath.Join(env.Home, fallback)
 }

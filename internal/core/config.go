@@ -53,18 +53,23 @@ func (c LayoutConfig) Validate() error {
 	if !slices.Contains([]string{string(ModeBSP), string(ModeMaster), string(ModeScrolling)}, c.DefaultMode) {
 		return fmt.Errorf("layout.default_mode: %q is not bsp, master-stack or scrolling", c.DefaultMode)
 	}
+
 	if !slices.Contains(layoutSchemes, c.AutoScheme) {
 		return fmt.Errorf("layout.auto_scheme: %q is not %s", c.AutoScheme, strings.Join(layoutSchemes, ", "))
 	}
+
 	if err := inRange("layout.master_ratio", c.MasterRatio, minMasterRatio, maxMasterRatio); err != nil {
 		return err
 	}
+
 	if !slices.Contains(tiling.MasterPositions(), c.MasterPosition) {
 		return fmt.Errorf("layout.master_position: %q is not %s", c.MasterPosition, strings.Join(tiling.MasterPositions(), ", "))
 	}
+
 	if err := inRange("layout.master_count", c.MasterCount, minMasterCount, maxMasterCount); err != nil {
 		return err
 	}
+
 	return inRange("layout.column_width", c.ColumnWidth, minColumnWidth, maxColumnWidth)
 }
 
@@ -72,6 +77,7 @@ func inRange(key string, v, lo, hi int) error {
 	if v < lo || v > hi {
 		return fmt.Errorf("%s: %d is out of range %d-%d", key, v, lo, hi)
 	}
+
 	return nil
 }
 
@@ -80,6 +86,7 @@ func (c LayoutConfig) Mode() LayoutMode {
 	if c.DefaultMode == "" {
 		return ModeBSP
 	}
+
 	return LayoutMode(c.DefaultMode)
 }
 
@@ -88,6 +95,7 @@ func (c LayoutConfig) Scheme() tiling.AutoScheme {
 	if c.AutoScheme == "" {
 		return tiling.SchemeSpiral
 	}
+
 	return tiling.ParseAutoScheme(c.AutoScheme)
 }
 
@@ -95,6 +103,7 @@ func orDefault(v, def int) int {
 	if v == 0 {
 		return def
 	}
+
 	return v
 }
 
@@ -109,6 +118,7 @@ func (c LayoutConfig) position() string {
 	if c.MasterPosition == "" {
 		return tiling.MasterPositionLeft
 	}
+
 	return c.MasterPosition
 }
 
@@ -160,6 +170,7 @@ func LoadConfig(path string) (Config, error) {
 	if errors.Is(err, fs.ErrNotExist) {
 		return DefaultConfig(), nil
 	}
+
 	if err != nil {
 		return Config{}, fmt.Errorf("config: %w", err)
 	}
@@ -168,8 +179,10 @@ func LoadConfig(path string) (Config, error) {
 	err = toml.NewDecoder(bytes.NewReader(data)).DisallowUnknownFields().Decode(&cfg)
 
 	// StrictMissingError unwraps to DecodeErrors, so it is matched first.
-	var strictErr *toml.StrictMissingError
-	var decodeErr *toml.DecodeError
+	var (
+		strictErr *toml.StrictMissingError
+		decodeErr *toml.DecodeError
+	)
 	switch {
 	case err == nil:
 		return cfg, nil
@@ -178,13 +191,16 @@ func LoadConfig(path string) (Config, error) {
 		for i := range strictErr.Errors {
 			keys[i] = strings.Join(strictErr.Errors[i].Key(), ".")
 		}
+
 		return Config{}, fmt.Errorf("config %s: unknown key %s", path, strings.Join(keys, ", "))
 	case errors.As(err, &decodeErr):
 		line, _ := decodeErr.Position()
+
 		msg := strings.TrimPrefix(decodeErr.Error(), "toml: ")
 		if key := decodeErr.Key(); len(key) > 0 {
 			msg = strings.Join(key, ".") + ": " + msg
 		}
+
 		return Config{}, fmt.Errorf("config %s: line %d: %s", path, line, msg)
 	default:
 		return Config{}, fmt.Errorf("config %s: %w", path, err)

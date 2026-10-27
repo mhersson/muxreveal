@@ -46,6 +46,7 @@ func (t Tab) Empty() bool { return len(t.Panes) == 0 }
 
 func (t Tab) clone() Tab {
 	t.Panes = slices.Clone(t.Panes)
+
 	t.Layout = t.Layout.clone()
 	if t.Columns != nil {
 		cols := make([]Column, len(t.Columns))
@@ -53,8 +54,10 @@ func (t Tab) clone() Tab {
 			c.Panes = slices.Clone(c.Panes)
 			cols[i] = c
 		}
+
 		t.Columns = cols
 	}
+
 	return t
 }
 
@@ -65,6 +68,7 @@ func (s *State) normalize() {
 		s.Active = 0
 		s.NextTabID = max(s.NextTabID, 1)
 	}
+
 	if s.Panes == nil {
 		s.Panes = map[PaneID]Pane{}
 	}
@@ -73,6 +77,7 @@ func (s *State) normalize() {
 // cur returns the active tab for in-place change.
 func (s *State) cur() *Tab {
 	s.normalize()
+
 	return &s.Tabs[s.Active]
 }
 
@@ -81,6 +86,7 @@ func (s State) Tab() Tab {
 	if len(s.Tabs) == 0 {
 		return Tab{ID: "t1"}
 	}
+
 	return s.Tabs[s.Active]
 }
 
@@ -91,6 +97,7 @@ func (s State) TabOf(id PaneID) (int, bool) {
 			return i, true
 		}
 	}
+
 	return 0, false
 }
 
@@ -99,6 +106,7 @@ func (s State) TabHasAgents(i int) bool {
 	if i < 0 || i >= len(s.Tabs) {
 		return false
 	}
+
 	return slices.ContainsFunc(s.Tabs[i].Panes, func(id PaneID) bool {
 		return s.Panes[id].Kind == KindAgent
 	})
@@ -110,6 +118,7 @@ func (s State) tabIndex(id TabID) (int, bool) {
 			return i, true
 		}
 	}
+
 	return 0, false
 }
 
@@ -120,14 +129,17 @@ func (s *State) removeTab(i int, keepName bool) {
 	for _, id := range s.Tabs[i].Panes {
 		delete(s.Panes, id)
 	}
+
 	name := s.Tabs[i].Name
 	if len(s.Tabs) == 1 {
 		s.Tabs[0] = Tab{ID: s.Tabs[0].ID}
 		if keepName {
 			s.Tabs[0].Name = name
 		}
+
 		return
 	}
+
 	s.Tabs = append(s.Tabs[:i], s.Tabs[i+1:]...)
 	if i <= s.Active && s.Active > 0 {
 		s.Active--
@@ -146,17 +158,21 @@ func (a NewTab) apply(s *State) error {
 	if len(s.Panes) >= MaxPanes {
 		return ErrTooManyPanes
 	}
+
 	if a.Kind != KindShell && a.Kind != KindAgent {
 		return fmt.Errorf("core: NewTab with unknown kind %q", a.Kind)
 	}
+
 	s.normalize()
 	id := s.NewPaneID()
+
 	s.NextID++
 	if t := s.cur(); t.Empty() {
 		mode := t.Mode
 		if mode == "" {
 			mode = s.Layout.Mode()
 		}
+
 		t.start(id, mode, s.Layout)
 		t.Focus = id
 	} else {
@@ -167,7 +183,9 @@ func (a NewTab) apply(s *State) error {
 		s.Tabs = append(s.Tabs, nt)
 		s.Active = len(s.Tabs) - 1
 	}
+
 	s.Panes[id] = Pane{Kind: a.Kind, Cwd: a.Cwd}
+
 	return nil
 }
 
@@ -180,11 +198,14 @@ type CloseTab struct {
 
 func (a CloseTab) apply(s *State) error {
 	s.normalize()
+
 	i, ok := s.tabIndex(a.ID)
 	if !ok {
 		return fmt.Errorf("core: no tab %q", a.ID)
 	}
+
 	s.removeTab(i, false)
+
 	return nil
 }
 
@@ -196,11 +217,14 @@ type RenameTab struct {
 
 func (a RenameTab) apply(s *State) error {
 	s.normalize()
+
 	i, ok := s.tabIndex(a.ID)
 	if !ok {
 		return fmt.Errorf("core: no tab %q", a.ID)
 	}
+
 	s.Tabs[i].Name = a.Name
+
 	return nil
 }
 
@@ -211,9 +235,11 @@ type SelectTab struct {
 
 func (a SelectTab) apply(s *State) error {
 	s.normalize()
+
 	if a.Index >= 0 && a.Index < len(s.Tabs) {
 		s.Active = a.Index
 	}
+
 	return nil
 }
 
@@ -226,5 +252,6 @@ func (a CycleTab) apply(s *State) error {
 	s.normalize()
 	n := len(s.Tabs)
 	s.Active = ((s.Active+a.Delta)%n + n) % n
+
 	return nil
 }

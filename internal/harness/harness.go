@@ -43,5 +43,6 @@ func ByID(id string) (Harness, bool) {
 	if id == (Claude{}).ID() {
 		return Claude{}, true
 	}
+
 	return nil, false
 }

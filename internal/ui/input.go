@@ -13,20 +13,26 @@ func (a *App) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 	if a.confirm != nil {
 		return a.handleConfirmKey(msg)
 	}
+
 	if a.prompt != nil {
 		return a.handlePromptKey(msg)
 	}
+
 	if a.copy != nil {
 		return a.handleCopyKey(msg)
 	}
+
 	if a.overlay != nil {
 		return a.updateOverlay(msg)
 	}
+
 	a.notice = ""
 	if cmd, ok := a.runLeader(msg); ok {
 		return cmd
 	}
+
 	a.keyToFocused(msg)
+
 	return nil
 }
 
@@ -36,20 +42,25 @@ func (a *App) handlePaste(msg tea.PasteMsg) tea.Cmd {
 	if a.confirm != nil {
 		return nil
 	}
+
 	if a.prompt != nil {
 		return a.updatePrompt(msg)
 	}
+
 	if a.copy != nil {
 		return nil
 	}
+
 	if a.overlay != nil {
 		return a.updateOverlay(msg)
 	}
+
 	a.endLeader()
 	a.sendToFocused(func(p *pane) {
 		a.clearSelectionOf(p.id)
 		p.sendPaste(msg.Content)
 	})
+
 	return nil
 }
 
@@ -75,9 +86,11 @@ func (a *App) reportFocusChange(from, to core.PaneID) {
 	if from == to || !a.outerFocused {
 		return
 	}
+
 	if p, ok := a.panes[from]; ok {
 		p.sendFocus(false)
 	}
+
 	if p, ok := a.panes[to]; ok {
 		p.sendFocus(true)
 	}

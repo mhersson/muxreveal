@@ -48,6 +48,7 @@ func groupIcon(group string) string {
 	case "App":
 		return iconCog
 	}
+
 	return ""
 }
 
@@ -56,18 +57,22 @@ func hintKey(key string) string {
 	if rest, ok := strings.CutPrefix(key, "ctrl+"); ok {
 		return "^" + rest
 	}
+
 	return key
 }
 
 // collapse returns the one row for f, or false when a member is unbound.
 func (f hintFamily) collapse(a *App) (hint, bool) {
 	keys := make([]string, len(f.members))
+
 	var group string
+
 	for i, m := range f.members {
 		key, ok := a.keymap.keyOf(f.prefix + m)
 		if !ok {
 			return hint{}, false
 		}
+
 		keys[i] = hintKey(key)
 		if i == 0 {
 			group = a.keymap.groupOf(f.prefix + m)
@@ -82,16 +87,20 @@ func (f hintFamily) collapse(a *App) (hint, bool) {
 			if !ok || strings.Contains(rest, " ") {
 				return hint{}, false
 			}
+
 			keys[i] = rest
 		}
 	}
+
 	if f.sep == "-" && consecutive(keys) {
 		return hint{key: lead + keys[0] + "-" + keys[len(keys)-1], title: f.title, group: group}, true
 	}
+
 	sep := f.sep
 	if sep == "-" {
 		sep = " "
 	}
+
 	return hint{key: lead + strings.Join(keys, sep), title: f.title, group: group}, true
 }
 
@@ -102,6 +111,7 @@ func consecutive(keys []string) bool {
 		if n != len(k) {
 			return false
 		}
+
 		if i > 0 {
 			prev, _ := utf8.DecodeRuneInString(keys[i-1])
 			if r != prev+1 {
@@ -109,6 +119,7 @@ func consecutive(keys []string) bool {
 			}
 		}
 	}
+
 	return len(keys) > 0
 }
 
@@ -118,28 +129,36 @@ func (a *App) hints() []hint {
 	hints := make([]hint, 0, len(a.keymap.bindings))
 	done := map[string]bool{}
 	families := hintFamilies()
+
 	for _, b := range a.keymap.bindings {
 		c, ok := a.reg.get(b.command)
 		if !ok {
 			continue
 		}
+
 		var fam *hintFamily
+
 		for i := range families {
 			if rest, ok := strings.CutPrefix(b.command, families[i].prefix); ok && slices.Contains(families[i].members, rest) {
 				fam = &families[i]
 			}
 		}
+
 		if fam != nil {
 			if row, ok := fam.collapse(a); ok {
 				if !done[fam.prefix] {
 					hints = append(hints, row)
 				}
+
 				done[fam.prefix] = true
+
 				continue
 			}
 		}
+
 		hints = append(hints, hint{key: b.key, title: c.title, group: b.group})
 	}
+
 	return hints
 }
 
@@ -150,24 +169,31 @@ func groupOrder() []string { return []string{"Panes", "Layout", "Tabs", "App"} }
 // groupHints splits hints by group, in groupOrder.
 func groupHints(hints []hint) [][]hint {
 	var groups [][]hint
+
 	index := map[string]int{}
 	for _, h := range hints {
 		i, ok := index[h.group]
 		if !ok {
 			i = len(groups)
 			index[h.group] = i
+
 			groups = append(groups, nil)
 		}
+
 		groups[i] = append(groups[i], h)
 	}
+
 	order := groupOrder()
 	rank := func(g []hint) int {
 		if i := slices.Index(order, g[0].group); i >= 0 {
 			return i
 		}
+
 		return len(order)
 	}
+
 	slices.SortStableFunc(groups, func(a, b []hint) int { return rank(a) - rank(b) })
+
 	return groups
 }
 
@@ -182,10 +208,12 @@ type column struct {
 // between them. Each row is exactly the column's width.
 func whichKeyColumn(groups [][]hint, icons bool, st styles) column {
 	keyW, contentW := 0, 0
+
 	headW := func(name string) int {
 		if icons && groupIcon(name) != "" {
 			return lipgloss.Width(groupIcon(name)) + 1 + lipgloss.Width(name)
 		}
+
 		return lipgloss.Width(name)
 	}
 	for _, g := range groups {
@@ -194,24 +222,32 @@ func whichKeyColumn(groups [][]hint, icons bool, st styles) column {
 			keyW = max(keyW, lipgloss.Width(h.key))
 		}
 	}
+
 	for _, g := range groups {
 		for _, h := range g {
 			contentW = max(contentW, keyW+2+lipgloss.Width(h.title))
 		}
 	}
+
 	margin := st.popup.Render(" ")
+
 	var rows []string
+
 	for i, g := range groups {
 		if i > 0 {
 			rows = append(rows, st.popup.Render(strings.Repeat(" ", contentW+2)))
 		}
+
 		name := g[0].group
+
 		head := name
 		if icons && groupIcon(name) != "" {
 			head = groupIcon(name) + " " + name
 		}
+
 		rows = append(rows, margin+st.popupHead.Render(head)+st.popup.Render(" ")+
 			st.popupRule.Render(strings.Repeat("─", max(contentW-headW(name)-1, 0)))+margin)
+
 		for _, h := range g {
 			pad := keyW - lipgloss.Width(h.key) + 2
 			rest := contentW - keyW - 2 - lipgloss.Width(h.title)
@@ -219,6 +255,7 @@ func whichKeyColumn(groups [][]hint, icons bool, st styles) column {
 				strings.Repeat(" ", rest))+margin)
 		}
 	}
+
 	return column{rows: rows, width: contentW + 2}
 }
 
@@ -232,6 +269,7 @@ func sequenceRows(prefix string) []hint {
 	case ";":
 		return []hint{{key: "h j k l", title: "Preselect side"}, {key: "esc", title: "Clear preselection"}}
 	}
+
 	return nil
 }
 
@@ -242,14 +280,17 @@ func sequencePopup(leader, prefix string, icons bool, st styles) []string {
 	if len(rows) == 0 {
 		return nil
 	}
+
 	title := " " + leader + " " + prefix + " "
 	if icons {
 		title = " " + iconLeader + " " + leader + " " + prefix + " "
 	}
+
 	keyW, contentW := 0, 0
 	for _, h := range rows {
 		keyW = max(keyW, lipgloss.Width(h.key))
 	}
+
 	for _, h := range rows {
 		contentW = max(contentW, keyW+2+lipgloss.Width(h.title))
 	}
@@ -259,6 +300,7 @@ func sequencePopup(leader, prefix string, icons bool, st styles) []string {
 
 	border := func(s string) string { return st.popupBorder.Render(s) }
 	margin := st.popup.Render(" ")
+
 	lines := []string{border("╭─") + st.popupHead.Render(title) +
 		border(strings.Repeat("─", width-1-lipgloss.Width(title))+"╮")}
 	for _, h := range rows {
@@ -267,6 +309,7 @@ func sequencePopup(leader, prefix string, icons bool, st styles) []string {
 		lines = append(lines, border("│")+margin+st.popupKey.Render(h.key)+
 			st.popup.Render(strings.Repeat(" ", pad)+h.title+strings.Repeat(" ", rest))+margin+border("│"))
 	}
+
 	return append(lines, border("╰"+strings.Repeat("─", width)+"╯"))
 }
 
@@ -282,29 +325,35 @@ func whichKeyPopup(leader string, hints []hint, icons bool, st styles) []string 
 	if len(groups) > 1 && groups[0][0].group == "Panes" && groups[1][0].group == "Layout" {
 		nLeft = 2
 	}
+
 	left, right := groups[:nLeft], groups[nLeft:]
 
 	title := " " + leader + " "
 	if icons {
 		title = " " + iconLeader + " " + leader + " "
 	}
+
 	l := whichKeyColumn(left, icons, st)
 	// The title sits after the corner and one dash, with a dash left before the column rule.
 	if need := lipgloss.Width(title) + 2; l.width < need {
 		l = padColumn(l, need, st)
 	}
+
 	cols := []column{l}
 	if len(right) > 0 {
 		cols = append(cols, whichKeyColumn(right, icons, st))
 	}
+
 	height := 0
 	for _, c := range cols {
 		height = max(height, len(c.rows))
 	}
+
 	for i, c := range cols {
 		for len(c.rows) < height {
 			c.rows = append(c.rows, st.popup.Render(strings.Repeat(" ", c.width)))
 		}
+
 		cols[i] = c
 	}
 
@@ -315,6 +364,7 @@ func whichKeyPopup(leader string, hints []hint, icons bool, st styles) []string 
 	top := border("╭─") + st.popupHead.Render(title)
 	topFill := l.width - 1 - lipgloss.Width(title)
 	top += border(strings.Repeat("─", topFill))
+
 	bottom := border("╰" + strings.Repeat("─", l.width))
 	if split {
 		top += rule("┬") + border(strings.Repeat("─", cols[1].width)+"╮")
@@ -325,13 +375,16 @@ func whichKeyPopup(leader string, hints []hint, icons bool, st styles) []string 
 	}
 
 	lines := []string{top}
+
 	for i := range height {
 		line := border("│") + cols[0].rows[i]
 		if split {
 			line += rule("│") + cols[1].rows[i]
 		}
+
 		lines = append(lines, line+border("│"))
 	}
+
 	return append(lines, bottom)
 }
 
@@ -341,7 +394,9 @@ func padColumn(c column, width int, st styles) column {
 	for i, r := range c.rows {
 		c.rows[i] = r + extra
 	}
+
 	c.width = width
+
 	return c
 }
 
@@ -352,6 +407,7 @@ func overlayWhichKey(base string, width, height int, leader string, hints []hint
 	if len(hints) == 0 {
 		return base
 	}
+
 	return overlayCorner(base, width, height, whichKeyPopup(leader, hints, icons, st))
 }
 
@@ -362,17 +418,21 @@ func overlayCorner(base string, width, height int, lines []string) string {
 	if width <= 0 || height < 3 || len(lines) == 0 {
 		return base
 	}
+
 	y := height - len(lines)
 	if y < 2 {
 		lines, y = lines[:height-2], 2
 	}
+
 	w := 0
 	for _, l := range lines {
 		w = max(w, lipgloss.Width(l))
 	}
+
 	x := max(width-1-w, 0)
 	for i, l := range lines {
 		lines[i] = ansi.Truncate(l, width-x, "")
 	}
+
 	return overlayAt(base, width, height, x, y, lines)
 }

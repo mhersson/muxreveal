@@ -175,6 +175,7 @@ func TestRestoreStartsEveryPane(t *testing.T) {
 		c, rw := paneSizeOf(r.a, id)
 		size := [2]int{c, rw}
 		i, _ := st.TabOf(id)
+
 		rect, ok := r.a.layoutIn(st, i)[id]
 		if !ok {
 			t.Fatalf("no rect for %s", id)
@@ -715,6 +716,7 @@ func TestPaneLimitNotice(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			r.a.notice = ""
+
 			open()
 
 			if r.a.notice != "at most 64 panes" {

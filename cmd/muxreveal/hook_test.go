@@ -69,6 +69,7 @@ func TestRunHookDelivers(t *testing.T) {
 
 	t.Cleanup(func() {
 		_ = srv.Close()
+
 		if err := <-done; err != nil {
 			t.Errorf("Serve() error = %v", err)
 		}
@@ -114,6 +115,7 @@ func TestRunHookIsSilentAndQuick(t *testing.T) {
 			}
 
 			mu.Lock()
+
 			conns = append(conns, c)
 			mu.Unlock()
 		}
@@ -121,6 +123,7 @@ func TestRunHookIsSilentAndQuick(t *testing.T) {
 
 	t.Cleanup(func() {
 		_ = ln.Close()
+
 		<-accepted
 
 		mu.Lock()
@@ -238,6 +241,7 @@ func TestRunHookDrainsStdinWithoutEnvironment(t *testing.T) {
 	go func() {
 		_, err := pw.Write(payload)
 		_ = pw.Close()
+
 		written <- err
 	}()
 
@@ -272,6 +276,7 @@ func TestRunHookDrainsPayloadOverLimit(t *testing.T) {
 	go func() {
 		_, err := io.Copy(pw, io.LimitReader(zeroReader{}, int64(total)))
 		_ = pw.Close()
+
 		written <- err
 	}()
 

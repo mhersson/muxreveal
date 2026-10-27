@@ -56,6 +56,7 @@ func (s *starts) start(_ context.Context, c term.Command, cols, rows int) (proc,
 	}
 
 	fp := newFakeProc()
+
 	s.cmds = append(s.cmds, c)
 	s.sizes = append(s.sizes, [2]int{cols, rows})
 	s.procs = append(s.procs, fp)
@@ -248,6 +249,7 @@ func TestStartFailure(t *testing.T) {
 	}
 
 	st.err = nil
+
 	chord(a, 'v')
 
 	if got := len(a.store.State().Panes); got != 1 {
@@ -433,6 +435,7 @@ func TestZoomedPanesKeepTheirSize(t *testing.T) {
 	a, st := lifeAppSized(t, 100, 30)
 
 	chord(a, 'v')
+
 	before := len(st.proc(0).resized())
 
 	chord(a, 'z')
@@ -685,8 +688,11 @@ func TestMessagesForUnknownPane(t *testing.T) {
 	a, _ := lifeAppSized(t, 100, 30)
 
 	for _, m := range []tea.Msg{
-		paneDirtyMsg{id: "p9", p: a.panes["p9"]}, holdExpiredMsg{id: "p9"}, paneExitedMsg{id: "p9"},
-		paneCwdMsg{id: "p9", p: a.panes["p9"], cwd: "/x"}, paneCwdDueMsg{id: "p9"},
+		paneDirtyMsg{id: "p9", p: a.panes["p9"]},
+		holdExpiredMsg{id: "p9"},
+		paneExitedMsg{id: "p9"},
+		paneCwdMsg{id: "p9", p: a.panes["p9"], cwd: "/x"},
+		paneCwdDueMsg{id: "p9"},
 	} {
 		if _, cmd := a.Update(m); cmd != nil {
 			t.Errorf("%T for an unknown pane returned a command", m)
@@ -765,6 +771,7 @@ func TestCwdTracking(t *testing.T) {
 	}
 
 	st.proc(0).cwd = "/again"
+
 	a.Update(cmd())
 
 	if got := a.store.State().Panes["p1"].Cwd; got != "/again" {
@@ -962,6 +969,7 @@ func newPump(t *testing.T) *pump {
 	t.Helper()
 
 	p := &pump{msgs: make(chan tea.Msg, 64), done: make(chan struct{})}
+
 	t.Cleanup(func() { close(p.done) })
 
 	return p
@@ -1200,6 +1208,7 @@ func TestSwapCommands(t *testing.T) {
 		chord(a, 'h')
 		chord(a, 'L')
 		chord(a, 'L')
+
 		before1, before2 := len(st.proc(0).resized()), len(st.proc(1).resized())
 
 		press(a, keyLeader, ctrl('l'))
@@ -1208,16 +1217,21 @@ func TestSwapCommands(t *testing.T) {
 		if l := s.Tab().Layout; l.A.Pane != "p2" || l.B.Pane != "p1" {
 			t.Fatalf("layout = %s | %s, want p2 | p1 (notice %q)", l.A.Pane, l.B.Pane, a.notice)
 		}
+
 		if s.Tab().Focus != "p1" {
 			t.Errorf("Focus = %q, want p1", s.Tab().Focus)
 		}
+
 		assertSizes(t, a)
+
 		if got := st.proc(0).resized(); len(got) <= before1 || got[len(got)-1] != paneSize(t, a, "p1") {
 			t.Errorf("p1 resizes = %v, want a new one with %v", got, paneSize(t, a, "p1"))
 		}
+
 		if got := st.proc(1).resized(); len(got) <= before2 || got[len(got)-1] != paneSize(t, a, "p2") {
 			t.Errorf("p2 resizes = %v, want a new one with %v", got, paneSize(t, a, "p2"))
 		}
+
 		for i := range 2 {
 			if got := st.proc(i).sent(); got != "" {
 				t.Errorf("pane %d received %q, want nothing", i, got)

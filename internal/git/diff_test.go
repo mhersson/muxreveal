@@ -34,6 +34,7 @@ func goldenJSON(t *testing.T, res Result) []byte {
 	}
 
 	var walk func(any)
+
 	walk = func(n any) {
 		switch n := n.(type) {
 		case map[string]any:

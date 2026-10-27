@@ -91,6 +91,7 @@ func TestWheelForwardsToMouseTrackingGuest(t *testing.T) {
 
 	// Pane-relative, 1-based: (4, 2) -> (5, 3). Wheel up is button 64.
 	want := "\x1b[<64;5;3M"
+
 	eventually(t, "forwarded wheel", func() bool { return strings.Contains(procs["p1"].sent(), want) })
 
 	if got := p.linesAbove(); got != 0 {
@@ -100,6 +101,7 @@ func TestWheelForwardsToMouseTrackingGuest(t *testing.T) {
 	wheelAt(a, c.X+4, c.Y+2, tea.MouseWheelDown)
 
 	want = "\x1b[<65;5;3M"
+
 	eventually(t, "forwarded wheel down", func() bool { return strings.Contains(procs["p1"].sent(), want) })
 }
 

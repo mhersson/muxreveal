@@ -13,6 +13,7 @@ import (
 
 func noErr(t *testing.T, err error) {
 	t.Helper()
+
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -20,6 +21,7 @@ func noErr(t *testing.T, err error) {
 
 func wantErr(t *testing.T, err error) {
 	t.Helper()
+
 	if err == nil {
 		t.Fatal("expected an error, got nil")
 	}
@@ -27,6 +29,7 @@ func wantErr(t *testing.T, err error) {
 
 func eq(t *testing.T, got, want any) {
 	t.Helper()
+
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %+v, want %+v", got, want)
 	}
@@ -42,6 +45,7 @@ func TestLayoutRoundTrip(t *testing.T) {
 	deep := split(core.SplitVertical, 0.5,
 		split(core.SplitHorizontal, 0.25, leaf("p1"), split(core.SplitVertical, 0.75, leaf("p2"), leaf("p3"))),
 		leaf("p4"))
+
 	tests := []struct {
 		name  string
 		in    *core.Node
@@ -49,15 +53,27 @@ func TestLayoutRoundTrip(t *testing.T) {
 		want  *core.Node
 	}{
 		{"leaf", leaf("p1"), []core.PaneID{"p1"}, leaf("p1")},
-		{"split", split(core.SplitHorizontal, 0.4, leaf("p1"), leaf("p2")), []core.PaneID{"p1", "p2"},
-			split(core.SplitHorizontal, 0.4, leaf("p1"), leaf("p2"))},
+		{
+			"split", split(core.SplitHorizontal, 0.4, leaf("p1"), leaf("p2")),
+			[]core.PaneID{"p1", "p2"},
+			split(core.SplitHorizontal, 0.4, leaf("p1"), leaf("p2")),
+		},
 		{"three levels", deep, []core.PaneID{"p4", "p3", "p2", "p1"}, deep},
-		{"ratio rounded", split(core.SplitVertical, 0.333333, leaf("p1"), leaf("p2")), []core.PaneID{"p1", "p2"},
-			split(core.SplitVertical, 0.33, leaf("p1"), leaf("p2"))},
-		{"ratio clamped high", split(core.SplitVertical, 5, leaf("p1"), leaf("p2")), []core.PaneID{"p1", "p2"},
-			split(core.SplitVertical, 0.9, leaf("p1"), leaf("p2"))},
-		{"ratio clamped low", split(core.SplitVertical, -3, leaf("p1"), leaf("p2")), []core.PaneID{"p1", "p2"},
-			split(core.SplitVertical, 0.1, leaf("p1"), leaf("p2"))},
+		{
+			"ratio rounded", split(core.SplitVertical, 0.333333, leaf("p1"), leaf("p2")),
+			[]core.PaneID{"p1", "p2"},
+			split(core.SplitVertical, 0.33, leaf("p1"), leaf("p2")),
+		},
+		{
+			"ratio clamped high", split(core.SplitVertical, 5, leaf("p1"), leaf("p2")),
+			[]core.PaneID{"p1", "p2"},
+			split(core.SplitVertical, 0.9, leaf("p1"), leaf("p2")),
+		},
+		{
+			"ratio clamped low", split(core.SplitVertical, -3, leaf("p1"), leaf("p2")),
+			[]core.PaneID{"p1", "p2"},
+			split(core.SplitVertical, 0.1, leaf("p1"), leaf("p2")),
+		},
 		{"none", nil, nil, nil},
 	}
 	for _, tt := range tests {
@@ -97,6 +113,7 @@ func TestEncodeLayoutRejects(t *testing.T) {
 
 func TestDecodeLayoutRejects(t *testing.T) {
 	two := []core.PaneID{"p1", "p2"}
+
 	tests := []struct {
 		name  string
 		raw   string
@@ -126,6 +143,7 @@ func TestDecodeLayoutRejects(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			n, err := decodeLayout(json.RawMessage(tt.raw), tt.panes)
 			wantErr(t, err)
+
 			if n != nil {
 				t.Fatalf("got %+v with an error", n)
 			}
@@ -135,14 +153,17 @@ func TestDecodeLayoutRejects(t *testing.T) {
 
 func TestDecodeLayoutDeepNesting(t *testing.T) {
 	const depth = 5000
+
 	raw := ""
 	for range depth {
 		raw += `{"split":"vertical","ratio":0.5,"children":[{"pane":"p1"},`
 	}
+
 	raw += `{"pane":"p2"}`
 	for range depth {
 		raw += `]}`
 	}
+
 	_, err := decodeLayout(json.RawMessage(raw), []core.PaneID{"p1", "p2"})
 	wantErr(t, err)
 }
@@ -151,27 +172,34 @@ func TestDefaultLayout(t *testing.T) {
 	if defaultLayout(nil) != nil {
 		t.Fatal("defaultLayout(nil) is not nil")
 	}
+
 	for _, n := range []int{1, 2, 3, 6, 10, 11} {
 		panes := make([]core.PaneID, n)
 		for i := range panes {
 			panes[i] = core.PaneID("p" + strconv.Itoa(i+1))
 		}
+
 		t.Run(strconv.Itoa(n), func(t *testing.T) {
 			root := defaultLayout(panes)
 			eq(t, leafOrder(root), panes)
 
 			var check func(*core.Node)
+
 			check = func(nd *core.Node) {
 				if nd.Pane != "" {
 					return
 				}
+
 				eq(t, nd.Split, core.SplitVertical)
+
 				if math.Abs(math.Round(nd.Ratio*100)/100-nd.Ratio) > 1e-12 {
 					t.Fatalf("ratio %v is off the 0.01 grid", nd.Ratio)
 				}
+
 				if nd.Ratio < 0.1 || nd.Ratio > 0.9 {
 					t.Fatalf("ratio %v is outside [0.1, 0.9]", nd.Ratio)
 				}
+
 				check(nd.A)
 				check(nd.B)
 			}
@@ -180,19 +208,24 @@ func TestDefaultLayout(t *testing.T) {
 			if n > 10 {
 				return // the 0.1 floor makes the columns unequal
 			}
+
 			const width = 120
+
 			tab := core.Tab{Mode: core.ModeBSP, Panes: panes, Layout: root}
 			rects := core.Arrange(tab, core.Rect{W: width, H: 11}, core.LayoutConfig{}).Rects
+
 			ws := make([]int, 0, n)
 			for _, id := range panes {
 				ws = append(ws, rects[id].W)
 			}
+
 			avail := float64(width-(n-1)) / float64(n)
 			for i, w := range ws {
 				if math.Abs(avail-float64(w)) > 2 {
 					t.Fatalf("pane %d width in %v, want about %.1f", i, ws, avail)
 				}
 			}
+
 			if !slices.IsSorted(sortedX(rects, panes)) {
 				t.Fatal("columns do not run left to right")
 			}
@@ -210,5 +243,6 @@ func sortedX(rects map[core.PaneID]core.Rect, order []core.PaneID) []int {
 	for i, id := range order {
 		xs[i] = rects[id].X
 	}
+
 	return xs
 }

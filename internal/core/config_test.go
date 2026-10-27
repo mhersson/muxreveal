@@ -23,9 +23,11 @@ func TestClipboardDefaultsOn(t *testing.T) {
 	if !d.Clipboard.OSC52On() || !d.Clipboard.NativeOn() {
 		t.Error("clipboard: want OSC 52 and native on by default")
 	}
+
 	if d.Mouse.FocusFollowsMouse || d.Mouse.CopyOnSelect {
 		t.Error("mouse: want both options off by default")
 	}
+
 	off := Clipboard{OSC52: ptr(false), Native: ptr(false)}
 	if off.OSC52On() || off.NativeOn() {
 		t.Error("clipboard: want false to turn both off")
@@ -50,23 +52,34 @@ func TestLoadConfig(t *testing.T) {
 		{name: "icons off", content: "icons = false\n", want: Config{Theme: DefaultTheme, Icons: ptr(false)}},
 		{name: "icons on", content: "icons = true\n", want: Config{Theme: DefaultTheme, Icons: ptr(true)}},
 		{name: "icons wrong type", content: "icons = \"no\"\n", wantErr: true, errHas: []string{"line 1", "icons"}},
-		{name: "mouse options", content: "[mouse]\nfocus_follows_mouse = true\ncopy_on_select = true\n",
-			want: Config{Theme: DefaultTheme, Mouse: Mouse{FocusFollowsMouse: true, CopyOnSelect: true}}},
-		{name: "mouse partly set", content: "[mouse]\ncopy_on_select = true\n",
-			want: Config{Theme: DefaultTheme, Mouse: Mouse{CopyOnSelect: true}}},
-		{name: "clipboard off", content: "[clipboard]\nosc52 = false\nnative = false\n",
-			want: Config{Theme: DefaultTheme, Clipboard: Clipboard{OSC52: ptr(false), Native: ptr(false)}}},
-		{name: "clipboard native only off", content: "[clipboard]\nnative = false\n",
-			want: Config{Theme: DefaultTheme, Clipboard: Clipboard{Native: ptr(false)}}},
+		{
+			name: "mouse options", content: "[mouse]\nfocus_follows_mouse = true\ncopy_on_select = true\n",
+			want: Config{Theme: DefaultTheme, Mouse: Mouse{FocusFollowsMouse: true, CopyOnSelect: true}},
+		},
+		{
+			name: "mouse partly set", content: "[mouse]\ncopy_on_select = true\n",
+			want: Config{Theme: DefaultTheme, Mouse: Mouse{CopyOnSelect: true}},
+		},
+		{
+			name: "clipboard off", content: "[clipboard]\nosc52 = false\nnative = false\n",
+			want: Config{Theme: DefaultTheme, Clipboard: Clipboard{OSC52: ptr(false), Native: ptr(false)}},
+		},
+		{
+			name: "clipboard native only off", content: "[clipboard]\nnative = false\n",
+			want: Config{Theme: DefaultTheme, Clipboard: Clipboard{Native: ptr(false)}},
+		},
 		{name: "unknown mouse key", content: "[mouse]\nfocus = true\n", wantErr: true, errHas: []string{"unknown key mouse.focus"}},
 		{name: "unknown clipboard key", content: "[clipboard]\nosc = true\n", wantErr: true, errHas: []string{"unknown key clipboard.osc"}},
 		{name: "mouse wrong type", content: "[mouse]\ncopy_on_select = \"yes\"\n", wantErr: true, errHas: []string{"copy_on_select"}},
-		{name: "layout section", content: "[layout]\ndefault_mode = \"scrolling\"\nmaster_count = 3\n",
+		{
+			name: "layout section", content: "[layout]\ndefault_mode = \"scrolling\"\nmaster_count = 3\n",
 			want: func() Config {
 				c := DefaultConfig()
 				c.Layout.DefaultMode, c.Layout.MasterCount = "scrolling", 3
+
 				return c
-			}()},
+			}(),
+		},
 		{name: "unknown layout key", content: "[layout]\nmaster = 3\n", wantErr: true, errHas: []string{"unknown key layout.master"}},
 		{name: "layout wrong type", content: "[layout]\nmaster_ratio = \"half\"\n", wantErr: true, errHas: []string{"master_ratio"}},
 		{name: "invalid toml", content: "theme = \"x", wantErr: true, errHas: []string{"line 1"}},
@@ -79,12 +92,14 @@ func TestLoadConfig(t *testing.T) {
 			if tt.unreadable && os.Geteuid() == 0 {
 				t.Skip("root can read a mode 0o000 file")
 			}
+
 			path := filepath.Join(t.TempDir(), "config.toml")
 			if !tt.missing {
 				if err := os.WriteFile(path, []byte(tt.content), 0o600); err != nil {
 					t.Fatal(err)
 				}
 			}
+
 			if tt.unreadable {
 				if err := os.Chmod(path, 0o000); err != nil {
 					t.Fatal(err)
@@ -97,18 +112,23 @@ func TestLoadConfig(t *testing.T) {
 			if tt.want.Layout == (LayoutConfig{}) {
 				tt.want.Layout = DefaultConfig().Layout
 			}
+
 			if !tt.wantErr {
 				if err != nil {
 					t.Fatalf("LoadConfig() error = %v", err)
 				}
+
 				if !reflect.DeepEqual(got, tt.want) {
 					t.Errorf("LoadConfig() = %+v, want %+v", got, tt.want)
 				}
+
 				return
 			}
+
 			if err == nil {
 				t.Fatalf("LoadConfig() = %+v, want an error", got)
 			}
+
 			for _, s := range append([]string{path}, tt.errHas...) {
 				if !strings.Contains(err.Error(), s) {
 					t.Errorf("error %q does not contain %q", err, s)
@@ -120,6 +140,7 @@ func TestLoadConfig(t *testing.T) {
 
 func TestLayoutDefaults(t *testing.T) {
 	got := DefaultConfig().Layout
+
 	want := LayoutConfig{
 		DefaultMode: "bsp", AutoScheme: "spiral", MasterRatio: 50, MasterPosition: "left",
 		MasterCount: 1, MasterGrid: ptr(true), ColumnWidth: 50,
@@ -127,6 +148,7 @@ func TestLayoutDefaults(t *testing.T) {
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("default layout = %+v, want %+v", got, want)
 	}
+
 	if err := got.Validate(); err != nil {
 		t.Errorf("default layout: Validate() = %v", err)
 	}
@@ -139,8 +161,11 @@ func TestLayoutZeroValueMeansDefaults(t *testing.T) {
 		t.Errorf("zero layout accessors: %v %v %v %v %v %v %v",
 			z.Mode(), z.Scheme(), z.ratio(), z.count(), z.position(), z.grid(), z.columnWidth())
 	}
-	set := LayoutConfig{DefaultMode: "master-stack", AutoScheme: "alternate", MasterRatio: 70, MasterCount: 2,
-		MasterPosition: "top", MasterGrid: ptr(false), ColumnWidth: 25}
+
+	set := LayoutConfig{
+		DefaultMode: "master-stack", AutoScheme: "alternate", MasterRatio: 70, MasterCount: 2,
+		MasterPosition: "top", MasterGrid: ptr(false), ColumnWidth: 25,
+	}
 	if set.Mode() != ModeMaster || set.Scheme() != tiling.SchemeAlternate || set.ratio() != 0.7 || set.count() != 2 ||
 		set.position() != "top" || set.grid() || set.columnWidth() != 0.25 {
 		t.Errorf("set layout accessors: %v %v %v %v %v %v %v",
@@ -152,8 +177,10 @@ func TestLayoutValidate(t *testing.T) {
 	with := func(f func(*LayoutConfig)) LayoutConfig {
 		c := DefaultConfig().Layout
 		f(&c)
+
 		return c
 	}
+
 	good := []struct {
 		name string
 		c    LayoutConfig
@@ -180,6 +207,7 @@ func TestLayoutValidate(t *testing.T) {
 			t.Errorf("%s: Validate() = %v", tt.name, err)
 		}
 	}
+
 	bad := []struct {
 		name string
 		c    LayoutConfig
@@ -208,10 +236,12 @@ func TestLoadConfigLayoutOutOfRangeFailsValidate(t *testing.T) {
 	if err := os.WriteFile(path, []byte("[layout]\nmaster_count = 0\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
+
 	cfg, err := LoadConfig(path)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if err := cfg.Layout.Validate(); err == nil || !strings.Contains(err.Error(), "layout.master_count") {
 		t.Errorf("Validate() = %v, want an error naming layout.master_count", err)
 	}

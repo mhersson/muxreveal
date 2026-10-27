@@ -117,40 +117,49 @@ func New(opts Options) (*App, error) {
 	if opts.Logger == nil {
 		return nil, errors.New("ui: Options.Logger is nil")
 	}
+
 	if opts.Store == nil {
 		return nil, errors.New("ui: Options.Store is nil")
 	}
+
 	getenv := opts.Getenv
 	if getenv == nil {
 		getenv = os.Getenv
 	}
+
 	cwd := opts.Cwd
 	if cwd == "" {
 		wd, err := os.Getwd()
 		if err != nil {
 			return nil, fmt.Errorf("ui: launch directory: %w", err)
 		}
+
 		cwd = wd
 	}
+
 	if opts.RecordDir != "" {
 		if err := os.MkdirAll(opts.RecordDir, recordDirMode); err != nil {
 			return nil, fmt.Errorf("ui: recording directory: %w", err)
 		}
 	}
+
 	reg, err := newRegistry(defaultCommands())
 	if err != nil {
 		return nil, fmt.Errorf("build command registry: %w", err)
 	}
+
 	km := defaultKeymap()
 	for _, b := range km.bindings {
 		if _, ok := reg.get(b.command); !ok {
 			return nil, fmt.Errorf("ui: binding %q names unknown command %q", b.key, b.command)
 		}
 	}
+
 	h := opts.Harness
 	if h == nil {
 		h = harness.Claude{}
 	}
+
 	a := &App{
 		harness: h, tick: tea.Tick, hookSettings: opts.HookSettings, hookSock: opts.HookSock,
 		events: opts.Events, notice: opts.Notice, save: opts.Save,
@@ -161,11 +170,14 @@ func New(opts Options) (*App, error) {
 		focusFollows: opts.FocusFollowsMouse, copyOnSelect: opts.CopyOnSelect,
 		clip: newClipboard(clipboardConfig{OSC52: !opts.NoOSC52, Native: !opts.NoNativeClipboard}, getenv, runtime.GOOS, opts.Logger),
 	}
+
 	a.tray.gitRun = runGit
 	if err := a.sync(); err != nil {
 		return nil, err
 	}
+
 	a.ctx, a.cancel = context.WithCancel(context.Background())
+
 	return a, nil
 }
 
@@ -175,11 +187,14 @@ func (a *App) sync() error {
 	if err != nil {
 		return err
 	}
+
 	lk, err := newLook(th)
 	if err != nil {
 		return err
 	}
+
 	a.theme, a.styles, a.sample = lk.theme, lk.styles, lk.sample
+
 	return nil
 }
 
@@ -190,9 +205,11 @@ func (a *App) dispatch(act core.Action) error {
 	if st, ok := act.(core.SetTheme); ok {
 		if _, err := theme.ByName(st.Name); err != nil {
 			a.log.Warn("unknown theme", "name", st.Name, "err", err)
+
 			return err
 		}
 	}
+
 	prev := a.store.State().Tab()
 	if err := a.store.Dispatch(act); err != nil {
 		if expectedError(err) {
@@ -200,27 +217,36 @@ func (a *App) dispatch(act core.Action) error {
 		} else {
 			a.log.Error("dispatch action", "err", err)
 		}
+
 		return err
 	}
+
 	st := a.store.State()
 	if a.save != nil && !a.restoring {
 		a.save(st)
 	}
+
 	a.dropGoneTab(st)
 	a.reportFocusChange(prev.Focus, st.Tab().Focus)
+
 	if cmd := a.syncGit(); cmd != nil {
 		a.later = append(a.later, cmd)
 	}
+
 	if st.Tab().ID != prev.ID {
 		a.renderStale(st)
 	}
+
 	if _, ok := act.(core.SetTheme); !ok {
 		return nil
 	}
+
 	if err := a.sync(); err != nil {
 		a.log.Error("sync theme", "err", err)
+
 		return err
 	}
+
 	return nil
 }
 
@@ -277,7 +303,9 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		a.width, a.height = msg.Width, msg.Height
 		a.log.Debug("window size", "width", msg.Width, "height", msg.Height)
+
 		var cmds []tea.Cmd
+
 		if !a.started {
 			a.started = true
 			if len(a.store.State().Panes) > 0 {
@@ -286,7 +314,9 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				cmds = append(cmds, a.openPane(core.KindShell, core.SplitVertical))
 			}
 		}
+
 		cmds = append(cmds, a.relayout())
+
 		return a, tea.Batch(cmds...)
 	case tea.KeyPressMsg:
 		return a, a.handleKey(msg)
@@ -343,10 +373,12 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if a.prompt != nil {
 			return a, a.updatePrompt(msg)
 		}
+
 		if a.overlay != nil {
 			return a, a.updateOverlay(msg)
 		}
 	}
+
 	return a, nil
 }
 
@@ -379,41 +411,56 @@ func (a *App) runLeader(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 		if key != a.keymap.leader {
 			return nil, false
 		}
+
 		a.pending, a.prefix = true, ""
 		a.seq++
 		seq := a.seq
+
 		return tea.Tick(a.keymap.delay, func(time.Time) tea.Msg { return whichKeyMsg{seq: seq} }), true
 	}
+
 	prefix := a.prefix
 	if prefix == "" && a.keymap.isPrefix(key) {
 		if key == ";" && !a.tabIsBSP() {
 			a.notice = noticePreselectBSP
 			a.endLeader()
+
 			return nil, true
 		}
+
 		a.prefix, a.popup = key, false
+
 		return nil, true
 	}
+
 	a.endLeader()
+
 	if prefix != "" {
 		key = prefix + " " + key
 	}
+
 	if id, ok := a.keymap.lookup(key); ok {
 		c, ok := a.reg.get(id)
 		if !ok {
 			a.log.Error("bound command missing", "key", key, "command", id)
+
 			return nil, true
 		}
+
 		return c.run(a), true
 	}
+
 	switch bindingKey(msg) {
 	case "esc":
 		return nil, true
 	case a.keymap.leader:
 		a.keyToFocused(msg)
+
 		return nil, true
 	}
+
 	a.notice = a.keymap.leader + " " + key + " is not bound"
+
 	return nil, true
 }
 
@@ -422,30 +469,38 @@ func (a *App) runLeader(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 func (a *App) View() tea.View {
 	lk := a.current()
 	g := a.geometry()
+
 	content := overlayToast(a.frameAt(g), a.width, a.height, a.notice, a.icons, lk.styles)
 	if a.sequenceOpen() {
 		content = overlayCorner(content, a.width, a.height, sequencePopup(a.keymap.leader, a.prefix, a.icons, lk.styles))
 	}
+
 	if a.popup {
 		content = overlayWhichKey(content, a.width, a.height, a.keymap.leader, a.hints(), a.icons, lk.styles)
 	}
+
 	if a.overlay != nil {
 		content = overlayOver(content, a.width, a.height, a.overlay.pal)
 	}
+
 	if a.confirm != nil {
 		content = overlayConfirm(content, a.width, a.height, *a.confirm, a.icons, lk.styles)
 	}
+
 	v := tea.NewView(content)
 	v.AltScreen = true
+
 	v.MouseMode = tea.MouseModeCellMotion
 	if a.focusFollows {
 		v.MouseMode = tea.MouseModeAllMotion
 	}
+
 	v.ReportFocus = true
 	// Modified keys arrive with their shifted character, which the legacy encoder needs.
 	v.KeyboardEnhancements.ReportAlternateKeys = true
 	v.Cursor = a.cursorAt(g)
 	v.BackgroundColor = lk.theme.UI.Bg
 	v.ForegroundColor = lk.theme.UI.Fg
+
 	return v
 }

@@ -26,6 +26,7 @@ func show(n *Node) string {
 	case n.Split == SplitVertical:
 		return "v(" + show(n.A) + "," + show(n.B) + ")"
 	}
+
 	return "h(" + show(n.A) + "," + show(n.B) + ")"
 }
 
@@ -33,10 +34,13 @@ func leaves(n *Node, f func(PaneID)) {
 	if n == nil {
 		return
 	}
+
 	if n.leaf() {
 		f(n.Pane)
+
 		return
 	}
+
 	leaves(n.A, f)
 	leaves(n.B, f)
 }
@@ -45,8 +49,10 @@ func leaves(n *Node, f func(PaneID)) {
 func setLayout(t *Tab, n *Node) {
 	if n == nil {
 		t.Layout, t.Panes = nil, nil
+
 		return
 	}
+
 	t.setTree(n)
 }
 
@@ -54,19 +60,23 @@ func stateOf(layout *Node, focus PaneID) State {
 	s := InitialState(DefaultConfig())
 	setLayout(&s.Tabs[0], layout)
 	s.Tabs[0].Focus = focus
+
 	leaves(layout, func(id PaneID) {
 		s.Panes[id] = Pane{Kind: KindShell}
 		s.NextID++
 	})
+
 	return s
 }
 
 func dispatch(t *testing.T, s State, a Action) State {
 	t.Helper()
+
 	st := NewStore(s)
 	if err := st.Dispatch(a); err != nil {
 		t.Fatalf("Dispatch(%T) error = %v", a, err)
 	}
+
 	return st.State()
 }
 
@@ -75,6 +85,7 @@ func TestInitialState(t *testing.T) {
 	if s.Theme != "catppuccin-latte" {
 		t.Errorf("Theme = %q", s.Theme)
 	}
+
 	if tab := s.Tab(); len(s.Tabs) != 1 || s.Active != 0 || tab.ID != "t1" || !tab.Empty() || tab.Layout != nil || tab.Focus != "" || len(s.Panes) != 0 || tab.Zoomed {
 		t.Errorf("state not empty: %+v", s)
 	}
@@ -96,22 +107,28 @@ func TestOpenPane(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tt.from.Tabs[0].Zoomed = tt.from.Tabs[0].Layout != nil
+
 			got := dispatch(t, tt.from, tt.action)
 			if show(got.Tab().Layout) != tt.wantTree {
 				t.Errorf("tree = %s, want %s", show(got.Tab().Layout), tt.wantTree)
 			}
+
 			if got.Tab().Focus != tt.wantFocus {
 				t.Errorf("Focus = %q, want %q", got.Tab().Focus, tt.wantFocus)
 			}
+
 			if got.Tab().Zoomed {
 				t.Error("zoom not cleared")
 			}
+
 			if p := got.Panes[tt.wantFocus]; p.Kind != tt.action.Kind || p.Cwd != tt.action.Cwd {
 				t.Errorf("pane = %+v", p)
 			}
+
 			if got.NextID != tt.from.NextID+1 {
 				t.Errorf("NextID = %d, want %d", got.NextID, tt.from.NextID+1)
 			}
+
 			if n := got.Tab().Layout.path(tt.wantFocus); len(n) > 1 {
 				if r := n[len(n)-2].Ratio; r != 0.5 {
 					t.Errorf("ratio = %v, want 0.5", r)
@@ -161,6 +178,7 @@ func TestOpenPaneErrors(t *testing.T) {
 
 func TestNewPaneIDNeverReused(t *testing.T) {
 	s := dispatch(t, stateOf(nil, ""), OpenPane{Kind: KindShell})
+
 	s = dispatch(t, s, ClosePane{ID: "p1"})
 	if got := s.NewPaneID(); got != "p2" {
 		t.Errorf("NewPaneID() = %q, want p2", got)
@@ -169,6 +187,7 @@ func TestNewPaneIDNeverReused(t *testing.T) {
 
 func TestClosePane(t *testing.T) {
 	tree := func() *Node { return vsplit(leaf("p1"), hsplit(leaf("p2"), leaf("p3"))) }
+
 	tests := []struct {
 		name      string
 		from      State
@@ -185,16 +204,20 @@ func TestClosePane(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tt.from.Tabs[0].Zoomed = true
+
 			got := dispatch(t, tt.from, ClosePane{ID: tt.id})
 			if show(got.Tab().Layout) != tt.wantTree {
 				t.Errorf("tree = %s, want %s", show(got.Tab().Layout), tt.wantTree)
 			}
+
 			if got.Tab().Focus != tt.wantFocus {
 				t.Errorf("Focus = %q, want %q", got.Tab().Focus, tt.wantFocus)
 			}
+
 			if _, ok := got.Panes[tt.id]; ok {
 				t.Error("pane metadata not removed")
 			}
+
 			if got.Tab().Zoomed {
 				t.Error("zoom not cleared")
 			}
@@ -211,6 +234,7 @@ func TestDispatchKeepsStateOnError(t *testing.T) {
 			t.Errorf("Dispatch(%T) want error", a)
 		}
 	}
+
 	got := st.State()
 	if show(got.Tab().Layout) != "v(p1,p2)" || got.Tab().Focus != "p1" || len(got.Panes) != 2 || got.NextID != 2 {
 		t.Errorf("state changed: %s %+v", show(got.Tab().Layout), got)
@@ -224,10 +248,12 @@ func TestStateIsCopied(t *testing.T) {
 	delete(got.Panes, "p2")
 	got.Tab().Layout.Ratio = 0.9
 	got.Tab().Layout.A.Pane = "zz"
+
 	again := st.State()
 	if len(again.Panes) != 2 || again.Panes["p1"].Kind != KindShell {
 		t.Errorf("Panes leaked: %+v", again.Panes)
 	}
+
 	if again.Tab().Layout.Ratio != 0.5 || again.Tab().Layout.A.Pane != "p1" {
 		t.Errorf("Layout leaked: %s", show(again.Tab().Layout))
 	}
@@ -238,6 +264,7 @@ func TestSetThemeStillWorks(t *testing.T) {
 	if err := st.Dispatch(SetTheme{Name: "b"}); err != nil {
 		t.Fatal(err)
 	}
+
 	if st.State().Theme != "b" {
 		t.Error("theme not set")
 	}
@@ -245,6 +272,7 @@ func TestSetThemeStillWorks(t *testing.T) {
 
 func TestFocusDir(t *testing.T) {
 	tree := func() *Node { return vsplit(leaf("p1"), hsplit(leaf("p2"), leaf("p3"))) }
+
 	tests := []struct {
 		name  string
 		focus PaneID
@@ -273,6 +301,7 @@ func TestFocusDirPrefersOverlap(t *testing.T) {
 	// p1 is wide on top; below sit p2 (narrow, left) and p3 (wide, right).
 	tree := hsplit(leaf("p1"), &Node{Split: SplitVertical, Ratio: 0.2, A: leaf("p2"), B: leaf("p3")})
 	tree.Ratio = 0.5
+
 	s := stateOf(tree, "p1")
 	if got := dispatch(t, s, FocusDir{Dir: Down}); got.Tab().Focus != "p3" {
 		t.Errorf("Focus = %q, want p3 (most overlap)", got.Tab().Focus)
@@ -300,6 +329,7 @@ func TestResizeDir(t *testing.T) {
 			for _, d := range tt.dirs {
 				s = dispatch(t, s, ResizeDir{Dir: d})
 			}
+
 			if s.Tab().Layout.Ratio != tt.wantRatio {
 				t.Errorf("Ratio = %v, want %v", s.Tab().Layout.Ratio, tt.wantRatio)
 			}
@@ -309,6 +339,7 @@ func TestResizeDir(t *testing.T) {
 
 func TestResizeDirUsesNearestAncestor(t *testing.T) {
 	tree := vsplit(leaf("p1"), vsplit(leaf("p2"), leaf("p3")))
+
 	s := dispatch(t, stateOf(tree, "p3"), ResizeDir{Dir: Right})
 	if s.Tab().Layout.Ratio != 0.5 || s.Tab().Layout.B.Ratio != 0.55 {
 		t.Errorf("ratios = %v, %v", s.Tab().Layout.Ratio, s.Tab().Layout.B.Ratio)
@@ -317,13 +348,16 @@ func TestResizeDirUsesNearestAncestor(t *testing.T) {
 
 func TestToggleZoom(t *testing.T) {
 	s := stateOf(vsplit(leaf("p1"), leaf("p2")), "p1")
+
 	s = dispatch(t, s, ToggleZoom{})
 	if !s.Tab().Zoomed {
 		t.Fatal("not zoomed")
 	}
+
 	if s = dispatch(t, s, ToggleZoom{}); s.Tab().Zoomed {
 		t.Error("still zoomed")
 	}
+
 	if s = dispatch(t, stateOf(nil, ""), ToggleZoom{}); s.Tab().Zoomed {
 		t.Error("zoomed with no pane")
 	}
@@ -333,8 +367,10 @@ func TestZoomClearedBy(t *testing.T) {
 	zoomed := func(focus PaneID) State {
 		s := stateOf(vsplit(leaf("p1"), hsplit(leaf("p2"), leaf("p3"))), focus)
 		s.Tabs[0].Zoomed = true
+
 		return s
 	}
+
 	tests := []struct {
 		name   string
 		from   State
@@ -370,6 +406,7 @@ func TestSwapDir(t *testing.T) {
 		return &Node{Split: SplitVertical, Ratio: 0.7, A: leaf("p1"), B: leaf("p2")}
 	}
 	tree := func() *Node { return vsplit(leaf("p1"), hsplit(leaf("p2"), leaf("p3"))) }
+
 	tests := []struct {
 		name      string
 		layout    *Node
@@ -392,19 +429,24 @@ func TestSwapDir(t *testing.T) {
 			s := stateOf(tt.layout, tt.focus)
 			s.Tabs[0].Zoomed = tt.zoomed
 			before := maps.Clone(s.Panes)
+
 			got := dispatch(t, s, SwapDir{Dir: tt.dir})
 			if g := show(got.Tab().Layout); g != tt.want {
 				t.Errorf("layout = %s, want %s", g, tt.want)
 			}
+
 			if got.Tab().Focus != tt.focus {
 				t.Errorf("Focus = %q, want %q", got.Tab().Focus, tt.focus)
 			}
+
 			if got.Tab().Zoomed != tt.wantZoom {
 				t.Errorf("Zoomed = %v, want %v", got.Tab().Zoomed, tt.wantZoom)
 			}
+
 			if tt.wantRatio != 0 && got.Tab().Layout.Ratio != tt.wantRatio {
 				t.Errorf("root ratio = %v, want %v", got.Tab().Layout.Ratio, tt.wantRatio)
 			}
+
 			if !maps.Equal(got.Panes, before) {
 				t.Errorf("Panes = %v, want %v", got.Panes, before)
 			}

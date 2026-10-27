@@ -11,15 +11,19 @@ func TestEveryBindingResolves(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	km := defaultKeymap()
 	seen := map[string]bool{}
+
 	for _, b := range km.bindings {
 		if _, ok := reg.get(b.command); !ok {
 			t.Errorf("binding %q names unknown command %q", b.key, b.command)
 		}
+
 		if seen[b.key] {
 			t.Errorf("key %q is bound twice", b.key)
 		}
+
 		seen[b.key] = true
 		if !slices.Contains([]string{"Panes", "Layout", "Tabs", "App"}, b.group) {
 			t.Errorf("binding %q has group %q, want Panes, Layout, Tabs or App", b.key, b.group)
@@ -32,6 +36,7 @@ func TestDefaultKeymap(t *testing.T) {
 	if km.leader != "ctrl+space" {
 		t.Errorf("leader = %q, want ctrl+space", km.leader)
 	}
+
 	if km.delay.Milliseconds() != 300 {
 		t.Errorf("delay = %v, want 300ms", km.delay)
 	}
@@ -39,6 +44,7 @@ func TestDefaultKeymap(t *testing.T) {
 
 func TestKeymapLookup(t *testing.T) {
 	km := defaultKeymap()
+
 	tests := []struct {
 		key     string
 		wantCmd string
@@ -64,6 +70,7 @@ func TestKeymapLookup(t *testing.T) {
 
 func TestKeymapKeyFor(t *testing.T) {
 	km := defaultKeymap()
+
 	tests := []struct {
 		command string
 		want    string

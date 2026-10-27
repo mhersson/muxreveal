@@ -61,10 +61,16 @@ func TestCommands(t *testing.T) {
 		shArg []string
 		agent []string
 	}{
-		{"fish", "/usr/bin/fish", []string{"/usr/bin/fish", "-l"},
-			[]string{"/usr/bin/fish", "-l", "-i", "-c", `status job-control full; 'claude'; exec "$SHELL" -l`}},
-		{"fallback", "", []string{"/bin/sh", "-l"},
-			[]string{"/bin/sh", "-l", "-i", "-c", `'claude'; exec "$SHELL" -l`}},
+		{
+			"fish", "/usr/bin/fish",
+			[]string{"/usr/bin/fish", "-l"},
+			[]string{"/usr/bin/fish", "-l", "-i", "-c", `status job-control full; 'claude'; exec "$SHELL" -l`},
+		},
+		{
+			"fallback", "",
+			[]string{"/bin/sh", "-l"},
+			[]string{"/bin/sh", "-l", "-i", "-c", `'claude'; exec "$SHELL" -l`},
+		},
 	}
 
 	for _, tt := range tests {
@@ -80,16 +86,20 @@ func TestCommands(t *testing.T) {
 			}
 
 			wantShell := tt.shArg[0]
+
 			for _, c := range []Command{sh, ag} {
 				var shells []string
+
 				for _, kv := range c.Env {
 					if strings.HasPrefix(kv, "SHELL=") {
 						shells = append(shells, kv)
 					}
 				}
+
 				if !slices.Equal(shells, []string{"SHELL=" + wantShell}) {
 					t.Errorf("SHELL entries = %q, want only SHELL=%s", shells, wantShell)
 				}
+
 				if !slices.Contains(c.Env, "TERM=xterm-256color") {
 					t.Errorf("Env lacks TERM: %q", c.Env)
 				}

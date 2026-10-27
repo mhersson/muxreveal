@@ -334,6 +334,7 @@ func startSession(t *testing.T, env core.Env, cfg string, fresh bool) *session {
 
 	t.Cleanup(func() {
 		cancel()
+
 		_ = inW.Close()
 	})
 

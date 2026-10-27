@@ -31,20 +31,25 @@ func newRegistry(cmds []command) (*registry, error) {
 		if c.id == "" {
 			return nil, errors.New("ui: command with empty id")
 		}
+
 		if c.run == nil {
 			return nil, fmt.Errorf("ui: command %q has no run function", c.id)
 		}
+
 		if _, dup := r.byID[c.id]; dup {
 			return nil, fmt.Errorf("ui: duplicate command id %q", c.id)
 		}
+
 		r.byID[c.id] = c
 		r.order = append(r.order, c)
 	}
+
 	return r, nil
 }
 
 func (r *registry) get(id string) (command, bool) {
 	c, ok := r.byID[id]
+
 	return c, ok
 }
 
@@ -59,16 +64,25 @@ func defaultCommands() []command {
 		name string
 		dir  core.Dir
 	}{{"left", core.Left}, {"down", core.Down}, {"up", core.Up}, {"right", core.Right}}
+
 	cmds := []command{{
 		id:    "palette.open",
 		icon:  iconPalette,
 		title: "Open command palette",
-		run:   func(a *App) tea.Cmd { a.openCommandPalette(); return nil },
+		run: func(a *App) tea.Cmd {
+			a.openCommandPalette()
+
+			return nil
+		},
 	}, {
 		id:    "theme.pick",
 		icon:  iconTheme,
 		title: "Pick theme",
-		run:   func(a *App) tea.Cmd { a.openThemePicker(); return nil },
+		run: func(a *App) tea.Cmd {
+			a.openThemePicker()
+
+			return nil
+		},
 	}, {
 		id:    "agent.new",
 		icon:  iconAgent,
@@ -93,6 +107,7 @@ func defaultCommands() []command {
 			run:   func(a *App) tea.Cmd { return a.act(core.FocusDir{Dir: d.dir, Area: a.bodyArea()}) },
 		})
 	}
+
 	for _, d := range dirs {
 		cmds = append(cmds, command{
 			id:    "pane.resize." + d.name,
@@ -101,6 +116,7 @@ func defaultCommands() []command {
 			run:   func(a *App) tea.Cmd { return a.act(core.ResizeDir{Dir: d.dir}) },
 		})
 	}
+
 	for _, d := range dirs {
 		cmds = append(cmds, command{
 			id:    "pane.swap." + d.name,
@@ -109,6 +125,7 @@ func defaultCommands() []command {
 			run:   func(a *App) tea.Cmd { return a.act(core.SwapDir{Dir: d.dir, Area: a.bodyArea()}) },
 		})
 	}
+
 	cmds = append(cmds, command{
 		id:    "pane.zoom",
 		icon:  iconZoom,
@@ -163,7 +180,9 @@ func defaultCommands() []command {
 			run:   func(a *App) tea.Cmd { return a.act(core.SelectTab{Index: n - 1}) },
 		})
 	}
+
 	cmds = append(cmds, layoutCommands()...)
+
 	cmds = append(cmds, command{
 		id:    "app.quit",
 		icon:  iconQuit,
@@ -178,9 +197,11 @@ func defaultCommands() []command {
 			run: func(a *App) tea.Cmd {
 				// dispatch logs its own failures.
 				_ = a.dispatch(core.SetTheme{Name: th.Name})
+
 				return nil
 			},
 		})
 	}
+
 	return cmds
 }

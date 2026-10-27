@@ -62,6 +62,7 @@ func TestKeysReachFocusedPane(t *testing.T) {
 			if got := settled(t, a, "p2", fp2); got != tt.want {
 				t.Errorf("focused pane got %q, want %q", got, tt.want)
 			}
+
 			if got := settled(t, a, "p1", fp1); got != "" {
 				t.Errorf("other pane got %q, want nothing", got)
 			}
@@ -107,9 +108,11 @@ func TestLeaderTwiceSendsCtrlSpace(t *testing.T) {
 			if cmd := press(a, keyLeader, keyLeader); cmd != nil {
 				t.Error("leader twice returned a command")
 			}
+
 			if a.pending {
 				t.Error("leader still pending")
 			}
+
 			if got := settled(t, a, "p2", fp2); got != tt.want {
 				t.Errorf("pane got %q, want %q", got, tt.want)
 			}
@@ -125,6 +128,7 @@ func TestLeaderStillRuns(t *testing.T) {
 	if a.overlay == nil || a.overlay.kind != overlayThemes {
 		t.Fatal("ctrl+space t did not open the theme picker")
 	}
+
 	a.closeOverlay()
 
 	press(a, keyLeader, keyEsc)
@@ -146,6 +150,7 @@ func TestOverlayFirst(t *testing.T) {
 	if view := ansi.Strip(a.View().Content); !strings.Contains(view, "\u276f aquit") {
 		t.Errorf("query lacks the typed and pasted text:\n%s", view)
 	}
+
 	for id, fp := range map[core.PaneID]*fakeProc{"p1": fp1, "p2": fp2} {
 		if got := settled(t, a, id, fp); got != "" {
 			t.Errorf("%s got %q, want nothing", id, got)
@@ -157,12 +162,14 @@ func TestPasteToPane(t *testing.T) {
 	a, _, fp2 := twoPanes(t)
 
 	a.Update(tea.PasteMsg{Content: "one"})
+
 	if got := settled(t, a, "p2", fp2); got != "one" {
 		t.Fatalf("plain paste = %q, want %q", got, "one")
 	}
 
 	feedAndWait(t, a.panes["p2"], fp2, "\x1b[?2004h")
 	a.Update(tea.PasteMsg{Content: "two"})
+
 	if got := settled(t, a, "p2", fp2); got != "one\x1b[200~two\x1b[201~" {
 		t.Errorf("bracketed paste = %q", got)
 	}
@@ -175,6 +182,7 @@ func TestFocusReports(t *testing.T) {
 
 	a.Update(tea.BlurMsg{})
 	a.Update(tea.FocusMsg{})
+
 	if got := settled(t, a, "p2", fp2); got != "\x1b[O\x1b[I" {
 		t.Errorf("outer focus reports = %q", got)
 	}
@@ -182,17 +190,21 @@ func TestFocusReports(t *testing.T) {
 	if err := a.dispatch(core.FocusPane{ID: "p1"}); err != nil {
 		t.Fatal(err)
 	}
+
 	if got := settled(t, a, "p2", fp2); got != "\x1b[O\x1b[I\x1b[O" {
 		t.Errorf("old pane got %q, want focus-out", got)
 	}
+
 	if got := settled(t, a, "p1", fp1); got != "\x1b[I" {
 		t.Errorf("new pane got %q, want focus-in", got)
 	}
 
 	a.Update(tea.BlurMsg{})
+
 	if err := a.dispatch(core.FocusPane{ID: "p2"}); err != nil {
 		t.Fatal(err)
 	}
+
 	if got := settled(t, a, "p2", fp2); got != "\x1b[O\x1b[I\x1b[O" {
 		t.Errorf("blurred terminal still got a report: %q", got)
 	}
@@ -205,9 +217,11 @@ func TestViewRequestsFocusReports(t *testing.T) {
 	if !v.ReportFocus {
 		t.Error("ReportFocus = false")
 	}
+
 	if !v.KeyboardEnhancements.ReportAlternateKeys {
 		t.Error("ReportAlternateKeys = false")
 	}
+
 	if v.KeyboardEnhancements.ReportEventTypes {
 		t.Error("key releases requested")
 	}
@@ -217,19 +231,23 @@ func TestPasteEndsPendingLeader(t *testing.T) {
 	a, _, fp2 := twoPanes(t)
 	a.keymap.delay = 0
 	pressRun(a, keyLeader)
+
 	if !a.pending || !a.popup {
 		t.Fatalf("pending = %v, popup = %v, want both set", a.pending, a.popup)
 	}
 
 	a.Update(tea.PasteMsg{Content: "one"})
+
 	if a.pending || a.popup {
 		t.Errorf("pending = %v, popup = %v after paste", a.pending, a.popup)
 	}
+
 	if got := settled(t, a, "p2", fp2); got != "one" {
 		t.Errorf("paste = %q, want %q", got, "one")
 	}
 
 	press(a, keyRune('x'))
+
 	if len(a.panes) != 2 {
 		t.Errorf("x after the paste closed a pane; %d left", len(a.panes))
 	}
@@ -268,16 +286,19 @@ func TestPanesAnswerThemeColours(t *testing.T) {
 
 	// The picker's live preview already reports the highlighted theme.
 	pressRun(a, keyLeader, keyRune('t'), keyDown)
+
 	if got := answers(); !hasColours(got, "rgb:4c4c/4f4f/6969", "rgb:efef/f1f1/f5f5") {
 		t.Errorf("latte preview answers = %q", got)
 	}
 
 	pressRun(a, keyEsc)
+
 	if got := answers(); !hasColours(got, "rgb:cdcd/d6d6/f4f4", "rgb:1e1e/1e1e/2e2e") {
 		t.Errorf("answers after cancelling the preview = %q", got)
 	}
 
 	pressRun(a, keyLeader, keyRune('t'), keyDown, keyEnter)
+
 	if got := answers(); !hasColours(got, "rgb:4c4c/4f4f/6969", "rgb:efef/f1f1/f5f5") {
 		t.Errorf("latte answers = %q", got)
 	}

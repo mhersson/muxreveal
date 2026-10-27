@@ -79,9 +79,11 @@ func Encode(st core.State) ([]byte, error) {
 	if len(tabs) == 0 {
 		tabs = []core.Tab{{ID: "t1"}}
 	}
+
 	if st.Active < 0 || st.Active >= len(tabs) {
 		return nil, fmt.Errorf("active tab %d is out of range for %d tabs", st.Active, len(tabs))
 	}
+
 	f := fileJSON{
 		Version: json.RawMessage(strconv.Itoa(Version)),
 		Active:  st.Active,
@@ -89,6 +91,7 @@ func Encode(st core.State) ([]byte, error) {
 	}
 	for _, t := range tabs {
 		ids := t.Panes
+
 		jt := tabJSON{
 			ID: string(t.ID), Name: t.Name, Focused: string(t.Focus), Zoomed: t.Zoomed,
 			PaneIDs: make([]string, 0, len(ids)),
@@ -96,24 +99,30 @@ func Encode(st core.State) ([]byte, error) {
 		if err := encodeMode(&jt, t); err != nil {
 			return nil, fmt.Errorf("tab %s: %w", t.ID, err)
 		}
+
 		for _, id := range ids {
 			p, ok := st.Panes[id]
 			if !ok {
 				return nil, fmt.Errorf("tab %s: pane %s has no metadata", t.ID, id)
 			}
+
 			jp, err := encodePane(p)
 			if err != nil {
 				return nil, fmt.Errorf("pane %s: %w", id, err)
 			}
+
 			jt.PaneIDs = append(jt.PaneIDs, string(id))
 			f.Panes[string(id)] = jp
 		}
+
 		f.Tabs = append(f.Tabs, jt)
 	}
+
 	data, err := json.MarshalIndent(f, "", "  ")
 	if err != nil {
 		return nil, fmt.Errorf("encoding state: %w", err)
 	}
+
 	return append(data, '\n'), nil
 }
 
@@ -124,44 +133,54 @@ func encodeMode(jt *tabJSON, t core.Tab) error {
 	if mode == "" && t.Layout != nil {
 		mode = core.ModeBSP
 	}
+
 	if mode != "" {
 		if err := setRaw(&jt.Mode, string(mode)); err != nil {
 			return err
 		}
 	}
+
 	switch mode {
 	case core.ModeBSP:
 		layout, err := encodeLayout(t.Layout)
 		jt.Layout = layout
+
 		return err
 	case core.ModeMaster:
 		if t.Master == 0 {
 			return nil
 		}
+
 		if !finite(t.Master) {
 			return errors.New("master ratio is not a finite number")
 		}
+
 		return setRaw(&jt.MasterRatio, normRatio(t.Master))
 	case core.ModeScrolling:
 		cols, err := encodeColumns(t.Columns)
 		if err != nil {
 			return err
 		}
+
 		if len(cols) > 0 {
 			if err := setRaw(&jt.Columns, cols); err != nil {
 				return err
 			}
 		}
+
 		if t.First != 0 {
 			return setRaw(&jt.First, t.First)
 		}
+
 		return nil
 	case "":
 		if t.Empty() {
 			jt.Layout = json.RawMessage("null")
+
 			return nil
 		}
 	}
+
 	return fmt.Errorf("unknown layout mode %q", mode)
 }
 
@@ -170,7 +189,9 @@ func setRaw(dst *json.RawMessage, v any) error {
 	if err != nil {
 		return fmt.Errorf("encoding layout: %w", err)
 	}
+
 	*dst = raw
+
 	return nil
 }
 
@@ -183,11 +204,13 @@ func encodePane(p core.Pane) (paneJSON, error) {
 			// Decode requires a harness; a file it would reject must never be written.
 			return paneJSON{Kind: string(core.KindShell), Cwd: p.Cwd}, nil
 		}
+
 		return paneJSON{
 			Kind: string(p.Kind), Cwd: p.Cwd, Harness: p.Harness,
 			SessionID: string(p.Session), Transcript: p.Transcript,
 		}, nil
 	}
+
 	return paneJSON{}, fmt.Errorf("unknown kind %q", p.Kind)
 }
 
@@ -199,10 +222,12 @@ func Load(path string, lc core.LayoutConfig) (core.State, Report, error) {
 		return core.State{}, Report{}, fmt.Errorf("opening state file: %w", err)
 	}
 	defer func() { _ = f.Close() }()
+
 	data, err := io.ReadAll(io.LimitReader(f, maxFileSize+1))
 	if err != nil {
 		return core.State{}, Report{}, fmt.Errorf("reading state file: %w", err)
 	}
+
 	return Decode(data, lc)
 }
 
@@ -217,14 +242,18 @@ func Decode(data []byte, lc core.LayoutConfig) (core.State, Report, error) {
 	if len(data) > maxFileSize {
 		return invalid("file is larger than %d bytes", maxFileSize)
 	}
+
 	var f fileJSON
 	if err := json.Unmarshal(data, &f); err != nil {
 		return invalid("%v", err)
 	}
+
 	if len(f.Panes) > core.MaxPanes {
 		return invalid("%d panes, at most %d", len(f.Panes), core.MaxPanes)
 	}
+
 	var rep Report
+
 	current := isCurrentVersion(f.Version)
 	if !current {
 		rep.Version = versionText(f.Version)
@@ -236,10 +265,12 @@ func Decode(data []byte, lc core.LayoutConfig) (core.State, Report, error) {
 		if err != nil {
 			return invalid("pane id %q: %v", key, err)
 		}
+
 		p, err := decodePane(jp)
 		if err != nil {
 			return invalid("pane %s: %v", key, err)
 		}
+
 		st.Panes[core.PaneID(key)] = p
 		st.NextID = max(st.NextID, n)
 	}
@@ -247,21 +278,26 @@ func Decode(data []byte, lc core.LayoutConfig) (core.State, Report, error) {
 	if len(f.Tabs) == 0 {
 		return invalid("no tabs")
 	}
+
 	if f.Active < 0 || f.Active >= len(f.Tabs) {
 		return invalid("active tab %d is out of range for %d tabs", f.Active, len(f.Tabs))
 	}
+
 	st.Active = f.Active
 
 	owner := map[core.PaneID]string{}
 	tabIDs := map[string]bool{}
+
 	for _, jt := range f.Tabs {
 		n, err := parseNumbered(jt.ID, "t")
 		if err != nil {
 			return invalid("tab id %q: %v", jt.ID, err)
 		}
+
 		if tabIDs[jt.ID] {
 			return invalid("tab %s appears twice", jt.ID)
 		}
+
 		tabIDs[jt.ID] = true
 		st.NextTabID = max(st.NextTabID, n)
 
@@ -271,17 +307,21 @@ func Decode(data []byte, lc core.LayoutConfig) (core.State, Report, error) {
 			if _, ok := st.Panes[id]; !ok {
 				return invalid("tab %s names unknown pane %q", jt.ID, s)
 			}
+
 			if o, dup := owner[id]; dup {
 				return invalid("pane %s is in tab %s and tab %s", s, o, jt.ID)
 			}
+
 			owner[id] = jt.ID
 			ids = append(ids, id)
 		}
+
 		if len(ids) == 0 && len(f.Tabs) > 1 {
 			return invalid("tab %s has no panes", jt.ID)
 		}
 
 		tab := core.Tab{ID: core.TabID(jt.ID), Name: cleanName(jt.Name), Panes: ids}
+
 		if current {
 			var ok bool
 			if tab, ok = decodeTab(jt, tab, lc); !ok {
@@ -290,21 +330,25 @@ func Decode(data []byte, lc core.LayoutConfig) (core.State, Report, error) {
 		} else {
 			tab = core.DefaultLayout(tab, lc)
 		}
+
 		focus := core.PaneID(jt.Focused)
 		if len(tab.Panes) == 0 {
 			focus = ""
 		} else if owner[focus] != jt.ID {
 			focus = tab.Panes[0]
 		}
+
 		tab.Focus, tab.Zoomed = focus, jt.Zoomed && focus != ""
 		tab.KeepVisible()
 		st.Tabs = append(st.Tabs, tab)
 	}
+
 	for id := range st.Panes {
 		if _, ok := owner[id]; !ok {
 			return invalid("pane %s is in no tab", id)
 		}
 	}
+
 	return st, rep, nil
 }
 
@@ -314,6 +358,7 @@ func tabMode(raw json.RawMessage) core.LayoutMode {
 	if json.Unmarshal(raw, &m) != nil {
 		return ""
 	}
+
 	return core.LayoutMode(m)
 }
 
@@ -324,20 +369,25 @@ func tabMode(raw json.RawMessage) core.LayoutMode {
 func decodeTab(jt tabJSON, base core.Tab, lc core.LayoutConfig) (tab core.Tab, ok bool) {
 	ids := base.Panes
 	mode := tabMode(jt.Mode)
+
 	if len(ids) == 0 {
 		tab = core.DefaultLayout(base, lc)
 		if mode == core.ModeBSP || mode == core.ModeMaster || mode == core.ModeScrolling {
 			tab.Mode = mode
 		}
+
 		return tab, true
 	}
+
 	tab = base
+
 	switch mode {
 	case core.ModeBSP:
 		root, err := decodeLayout(jt.Layout, ids)
 		if err != nil {
 			return core.DefaultLayout(base, lc), false
 		}
+
 		tab.Mode, tab.Layout, tab.Panes = core.ModeBSP, root, leafOrder(root)
 	case core.ModeMaster:
 		tab.Mode = core.ModeMaster
@@ -349,6 +399,7 @@ func decodeTab(jt tabJSON, base core.Tab, lc core.LayoutConfig) (tab core.Tab, o
 			if !good {
 				return core.DefaultLayout(base, lc), false
 			}
+
 			tab.Master = normRatio(r)
 		}
 	case core.ModeScrolling:
@@ -356,6 +407,7 @@ func decodeTab(jt tabJSON, base core.Tab, lc core.LayoutConfig) (tab core.Tab, o
 		if err != nil {
 			return core.DefaultLayout(base, lc), false
 		}
+
 		tab.Mode, tab.Columns = core.ModeScrolling, cols
 		if f, good := finiteNumber(jt.First); good && f == math.Trunc(f) && f >= 0 && f < float64(len(cols)) {
 			tab.First = int(f)
@@ -363,6 +415,7 @@ func decodeTab(jt tabJSON, base core.Tab, lc core.LayoutConfig) (tab core.Tab, o
 	default:
 		return core.DefaultLayout(base, lc), false
 	}
+
 	return tab, true
 }
 
@@ -371,12 +424,14 @@ func decodePane(jp paneJSON) (core.Pane, error) {
 	if filepath.IsAbs(jp.Cwd) {
 		p.Cwd = jp.Cwd
 	}
+
 	switch p.Kind {
 	case core.KindShell:
 	case core.KindAgent:
 		if jp.Harness != harnessClaude {
 			return core.Pane{}, fmt.Errorf("unknown harness %q", jp.Harness)
 		}
+
 		p.Harness = jp.Harness
 		if uuidRE.MatchString(jp.SessionID) {
 			p.Session = core.SessionID(jp.SessionID)
@@ -385,6 +440,7 @@ func decodePane(jp paneJSON) (core.Pane, error) {
 	default:
 		return core.Pane{}, fmt.Errorf("unknown kind %q", jp.Kind)
 	}
+
 	return p, nil
 }
 
@@ -395,25 +451,30 @@ func parseNumbered(s, prefix string) (int, error) {
 	if !ok || digits == "" || digits[0] == '0' || len(digits) > 9 {
 		return 0, fmt.Errorf("want %s followed by a positive number", prefix)
 	}
+
 	for _, r := range digits {
 		if r < '0' || r > '9' {
 			return 0, fmt.Errorf("want %s followed by a positive number", prefix)
 		}
 	}
+
 	n, err := strconv.Atoi(digits)
 	if err != nil || n > maxNumber {
 		return 0, errors.New("number is too large")
 	}
+
 	return n, nil
 }
 
 func isCurrentVersion(raw json.RawMessage) bool {
 	var v float64
+
 	return json.Unmarshal(raw, &v) == nil && v == Version
 }
 
 func isNull(raw json.RawMessage) bool {
 	t := bytes.TrimSpace(raw)
+
 	return len(t) == 0 || bytes.Equal(t, []byte("null"))
 }
 
@@ -423,6 +484,7 @@ func versionText(raw json.RawMessage) string {
 	if isNull(raw) {
 		return "unknown"
 	}
+
 	return cleanText(string(raw), maxVersionLen)
 }
 
@@ -434,10 +496,12 @@ func cleanText(s string, limit int) string {
 		if unicode.IsControl(r) {
 			return -1
 		}
+
 		return r
 	}, strings.ToValidUTF8(s, ""))
 	if r := []rune(s); len(r) > limit {
 		return string(r[:limit])
 	}
+
 	return s
 }

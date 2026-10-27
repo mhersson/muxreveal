@@ -48,10 +48,12 @@ func charClass(content string) int {
 	if content == "" || content == " " {
 		return classBlank
 	}
+
 	r, _ := utf8.DecodeRuneInString(content)
 	if unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_' || strings.ContainsRune("-./~:@", r) {
 		return classWord
 	}
+
 	return classOther
 }
 
@@ -59,6 +61,7 @@ func charClass(content string) int {
 func clampPoint(g grid, p point) point {
 	p.row = min(max(p.row, 0), max(g.Rows()-1, 0))
 	p.col = min(max(p.col, 0), max(g.Cols()-1, 0))
+
 	return p
 }
 
@@ -68,6 +71,7 @@ func (s selection) ordered() (start, end point) {
 	if a.row > h.row || (a.row == h.row && a.col > h.col) {
 		a, h = h, a
 	}
+
 	return a, h
 }
 
@@ -81,10 +85,12 @@ func (s selection) rowSpan(row, cols int) (from, to int, ok bool) {
 	if cols <= 0 {
 		return 0, 0, false
 	}
+
 	first, last := s.rowBounds()
 	if row < first || row > last {
 		return 0, 0, false
 	}
+
 	switch s.mode {
 	case selBlock:
 		from = min(s.anchor.col, s.head.col)
@@ -93,19 +99,24 @@ func (s selection) rowSpan(row, cols int) (from, to int, ok bool) {
 		from, to = 0, cols-1
 	default:
 		start, end := s.ordered()
+
 		from, to = 0, cols-1
 		if row == start.row {
 			from = start.col
 		}
+
 		if row == end.row {
 			to = end.col
 		}
 	}
+
 	from = max(from, 0)
+
 	to = min(to, cols-1)
 	if from > to {
 		return 0, 0, false
 	}
+
 	return from, to, true
 }
 
@@ -116,9 +127,11 @@ func cellClass(g grid, row, col int) int {
 	if c == nil {
 		return classBlank
 	}
+
 	if isContinuation(g, row, col) {
 		return cellClass(g, row, col-1)
 	}
+
 	return charClass(c.Content)
 }
 
@@ -128,17 +141,21 @@ func isContinuation(g grid, row, col int) bool {
 	if c == nil || c.Width != 0 || col == 0 {
 		return false
 	}
+
 	prev := g.Cell(row, col-1)
+
 	return prev != nil && prev.Width >= 2
 }
 
 // wordAt selects the word under p, joining rows that soft-wrap into each other.
 func wordAt(g grid, p point) selection {
 	p = clampPoint(g, p)
+
 	sel := selection{mode: selStream, anchor: p, head: p}
 	if g.Rows() == 0 || g.Cols() == 0 || cellClass(g, p.row, p.col) != classWord {
 		return sel
 	}
+
 	start := p
 	for {
 		prev := start
@@ -150,11 +167,14 @@ func wordAt(g grid, p point) selection {
 		default:
 			prev = start
 		}
+
 		if prev == start || cellClass(g, prev.row, prev.col) != classWord {
 			break
 		}
+
 		start = prev
 	}
+
 	end := p
 	for {
 		next := end
@@ -164,25 +184,32 @@ func wordAt(g grid, p point) selection {
 		case end.row+1 < g.Rows() && g.Wrapped(end.row):
 			next = point{end.row + 1, 0}
 		}
+
 		if next == end || cellClass(g, next.row, next.col) != classWord {
 			break
 		}
+
 		end = next
 	}
+
 	sel.anchor, sel.head = start, end
+
 	return sel
 }
 
 // lineAt selects the logical line containing p, across soft wraps.
 func lineAt(g grid, p point) selection {
 	p = clampPoint(g, p)
+
 	first, last := p.row, p.row
 	for first > 0 && g.Wrapped(first-1) {
 		first--
 	}
+
 	for last+1 < g.Rows() && g.Wrapped(last) {
 		last++
 	}
+
 	return selection{
 		mode:   selLine,
 		anchor: point{first, 0},
@@ -197,25 +224,33 @@ func extract(g grid, s selection) string {
 	if rows == 0 || cols == 0 {
 		return ""
 	}
+
 	first, last := s.rowBounds()
 	first = max(first, 0)
 	last = min(last, rows-1)
+
 	var b strings.Builder
+
 	for row := first; row <= last; row++ {
 		from, to, ok := s.rowSpan(row, cols)
+
 		var text string
 		if ok {
 			text = rowText(g, row, from, to)
 		}
+
 		joined := s.mode != selBlock && row < last && g.Wrapped(row)
 		if !joined {
 			text = strings.TrimRight(text, " ")
 		}
+
 		b.WriteString(text)
+
 		if row < last && !joined {
 			b.WriteByte('\n')
 		}
 	}
+
 	return b.String()
 }
 
@@ -225,7 +260,9 @@ func rowText(g grid, row, from, to int) string {
 	if ts, ok := g.(textScanner); ok && row < ts.historyRows() {
 		return historyRowText(ts, row, from, to)
 	}
+
 	var b strings.Builder
+
 	for col := from; col <= to; col++ {
 		c := g.Cell(row, col)
 		switch {
@@ -239,15 +276,19 @@ func rowText(g grid, row, from, to int) string {
 			b.WriteString(c.Content)
 		}
 	}
+
 	return b.String()
 }
 
 // historyRowText is rowText for a history row read as text cells.
 func historyRowText(ts textScanner, row, from, to int) string {
 	var b strings.Builder
+
 	read := false
+
 	ts.scanText(row, row+1, func(_ int, cells []term.TextCell) bool {
 		read = true
+
 		for col := from; col <= to; col++ {
 			switch {
 			case col >= len(cells):
@@ -262,10 +303,13 @@ func historyRowText(ts textScanner, row, from, to int) string {
 				b.Write(cells[col].Content)
 			}
 		}
+
 		return false
 	})
+
 	if !read {
 		return strings.Repeat(" ", max(to-from+1, 0))
 	}
+
 	return b.String()
 }

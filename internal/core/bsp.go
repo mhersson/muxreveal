@@ -12,10 +12,12 @@ import (
 // paneWindow maps a pane id "p<N>" to its tiling window id N.
 func paneWindow(id PaneID) (int, error) {
 	s, ok := strings.CutPrefix(string(id), "p")
+
 	n, err := strconv.Atoi(s)
 	if !ok || err != nil || n < 0 || s != strconv.Itoa(n) {
 		return 0, fmt.Errorf("core: pane id %q is not p<N>", id)
 	}
+
 	return n, nil
 }
 
@@ -25,6 +27,7 @@ func splitType(s Split) tiling.SplitType {
 	if s == SplitHorizontal {
 		return tiling.SplitHorizontal
 	}
+
 	return tiling.SplitVertical
 }
 
@@ -35,57 +38,74 @@ func toTiling(n *Node) (*tiling.BSPTree, error) {
 	if n == nil {
 		return tree, nil
 	}
+
 	var build func(*Node) (*tiling.TileNode, error)
+
 	build = func(n *Node) (*tiling.TileNode, error) {
 		if n.leaf() {
 			w, err := paneWindow(n.Pane)
 			if err != nil {
 				return nil, err
 			}
+
 			if tree.HasWindow(w) {
 				return nil, fmt.Errorf("core: pane %q appears twice in the layout", n.Pane)
 			}
+
 			node := tree.NewLeafNode(w)
 			tree.WindowToNode[w] = node
+
 			return node, nil
 		}
+
 		if n.A == nil || n.B == nil {
 			return nil, fmt.Errorf("core: layout split without two children")
 		}
+
 		a, err := build(n.A)
 		if err != nil {
 			return nil, err
 		}
+
 		b, err := build(n.B)
 		if err != nil {
 			return nil, err
 		}
+
 		return tree.NewInternalNode(splitType(n.Split), n.Ratio, a, b), nil
 	}
+
 	root, err := build(n)
 	if err != nil {
 		return nil, err
 	}
+
 	tree.Root = root
+
 	return tree, nil
 }
 
 // fromTiling is the Node tree of a tiling tree; nil for an empty tree.
 func fromTiling(tree *tiling.BSPTree) *Node {
 	var conv func(*tiling.TileNode) *Node
+
 	conv = func(n *tiling.TileNode) *Node {
 		if n == nil {
 			return nil
 		}
+
 		if n.IsLeaf() {
 			return &Node{Pane: windowPane(n.WindowID)}
 		}
+
 		split := SplitVertical
 		if n.SplitType == tiling.SplitHorizontal {
 			split = SplitHorizontal
 		}
+
 		return &Node{Split: split, Ratio: n.SplitRatio, A: conv(n.Left), B: conv(n.Right)}
 	}
+
 	return conv(tree.Root)
 }
 
@@ -97,6 +117,7 @@ func leafOrder(n *Node) []PaneID {
 	case n.leaf():
 		return []PaneID{n.Pane}
 	}
+
 	return append(leafOrder(n.A), leafOrder(n.B)...)
 }
 
@@ -116,21 +137,27 @@ func (t *Tab) place(id PaneID, split Split, area Rect, lc LayoutConfig) error {
 	if slices.Contains(t.Panes, id) {
 		return fmt.Errorf("core: pane %q is already in the layout", id)
 	}
+
 	if t.Empty() {
 		mode := t.Mode
 		if mode == "" {
 			mode = lc.Mode()
 		}
+
 		t.start(id, mode, lc)
+
 		return nil
 	}
+
 	switch t.Mode {
 	case ModeMaster:
 		t.placeMaster(id)
+
 		return nil
 	case ModeScrolling:
 		return t.placeScrolling(id, split, lc)
 	}
+
 	return t.placeBSP(id, split, area, lc)
 }
 
@@ -143,6 +170,7 @@ func (t *Tab) remove(id PaneID) (PaneID, error) {
 	case ModeScrolling:
 		return t.removeScrolling(id)
 	}
+
 	return t.removeBSP(id)
 }
 
@@ -151,31 +179,40 @@ func (t *Tab) placeBSP(id PaneID, split Split, area Rect, lc LayoutConfig) error
 	if err != nil {
 		return err
 	}
+
 	tree, err := toTiling(t.Layout)
 	if err != nil {
 		return err
 	}
+
 	focus := 0
 	if tree.Root != nil {
 		if focus, err = paneWindow(t.Focus); err != nil || !tree.HasWindow(focus) {
 			return fmt.Errorf("core: focused pane %q is not in the layout", t.Focus)
 		}
 	}
+
 	tree.AutoScheme = lc.Scheme()
+
 	dir := tiling.SplitNone
 	if split != "" {
 		dir = splitType(split)
 	}
+
 	if pre, ok := preselectionOf(t.Preselect); ok {
 		tree.InsertWindowWithPreselection(win, focus, pre, tileArea(area), gap)
 	} else {
 		tree.InsertWindow(win, focus, dir, 0.5, tileArea(area), gap)
 	}
+
 	t.Preselect = NoDir
+
 	if !tree.HasWindow(win) {
 		return fmt.Errorf("core: pane %q is already in the layout", id)
 	}
+
 	t.setTree(fromTiling(tree))
+
 	return nil
 }
 
@@ -190,6 +227,7 @@ func preselectionOf(d Dir) (tiling.PreselectionDir, bool) {
 	case Right:
 		return tiling.PreselectionRight, true
 	}
+
 	return tiling.PreselectionNone, false
 }
 
@@ -200,16 +238,22 @@ func equalizeNode(n *Node) (cols, rows int) {
 	if n == nil {
 		return 0, 0
 	}
+
 	if n.leaf() {
 		return 1, 1
 	}
+
 	ac, ar := equalizeNode(n.A)
+
 	bc, br := equalizeNode(n.B)
 	if n.Split == SplitVertical {
 		n.Ratio = equalShare(ac, bc)
+
 		return ac + bc, max(ar, br)
 	}
+
 	n.Ratio = equalShare(ar, br)
+
 	return max(ac, bc), ar + br
 }
 
@@ -222,26 +266,33 @@ func (t *Tab) removeBSP(id PaneID) (PaneID, error) {
 	if err != nil {
 		return "", err
 	}
+
 	tree, err := toTiling(t.Layout)
 	if err != nil {
 		return "", err
 	}
+
 	node := tree.FindNode(win)
 	if node == nil {
 		return "", fmt.Errorf("core: pane %q is not in the layout", id)
 	}
+
 	next := t.Focus
 	if id == t.Focus {
 		next = ""
+
 		if sib := node.Sibling(); sib != nil {
 			for !sib.IsLeaf() {
 				sib = sib.Left
 			}
+
 			next = windowPane(sib.WindowID)
 		}
 	}
+
 	tree.RemoveWindow(win)
 	t.setTree(fromTiling(tree))
+
 	return next, nil
 }
 
@@ -253,23 +304,29 @@ func (t *Tab) swap(a, b PaneID) error {
 	case ModeScrolling:
 		return t.swapScrolling(a, b)
 	}
+
 	wa, err := paneWindow(a)
 	if err != nil {
 		return err
 	}
+
 	wb, err := paneWindow(b)
 	if err != nil {
 		return err
 	}
+
 	tree, err := toTiling(t.Layout)
 	if err != nil {
 		return err
 	}
+
 	if !tree.HasWindow(wa) || !tree.HasWindow(wb) {
 		return fmt.Errorf("core: swap between %q and %q: pane not in the layout", a, b)
 	}
+
 	tree.SwapWindows(wa, wb)
 	t.setTree(fromTiling(tree))
+
 	return nil
 }
 
@@ -285,6 +342,7 @@ func sideOf(d Dir) (tiling.Side, bool) {
 	case Right:
 		return tiling.SideRight, true
 	}
+
 	return 0, false
 }
 
@@ -298,14 +356,18 @@ func neighbour(t Tab, d Dir, area Rect, lc LayoutConfig) (PaneID, bool) {
 	if t.Mode == ModeScrolling {
 		return scrollNeighbour(t, d)
 	}
+
 	side, ok := sideOf(d)
 	if !ok {
 		return "", false
 	}
+
 	if area == (Rect{}) {
 		area = virtualBody()
 	}
+
 	rects := Arrange(t, area, lc).Rects
+
 	cur, ok := rects[t.Focus]
 	if !ok {
 		// A body too small to draw the focused pane: move as on the virtual rect.
@@ -314,17 +376,23 @@ func neighbour(t Tab, d Dir, area Rect, lc LayoutConfig) (PaneID, bool) {
 			return "", false
 		}
 	}
-	var ids []PaneID
-	var cands []tiling.Rect
+
+	var (
+		ids   []PaneID
+		cands []tiling.Rect
+	)
+
 	for _, id := range t.Panes {
 		if r, ok := rects[id]; ok && id != t.Focus {
 			ids = append(ids, id)
 			cands = append(cands, tiling.Rect(r))
 		}
 	}
+
 	i := tiling.Neighbour(tiling.Rect(cur), cands, side, false)
 	if i < 0 {
 		return "", false
 	}
+
 	return ids[i], true
 }

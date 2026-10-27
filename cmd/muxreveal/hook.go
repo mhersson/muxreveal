@@ -53,6 +53,7 @@ func runHook(ctx context.Context, id string, stdin io.Reader, getenv func(string
 		data, err := io.ReadAll(io.LimitReader(stdin, maxHookPayload))
 		// Drain the rest so the agent's write never fails with EPIPE.
 		_, _ = io.Copy(io.Discard, stdin)
+
 		read <- result{data, err}
 	}()
 

@@ -38,6 +38,7 @@ func TestRunServesHooks(t *testing.T) {
 	}
 
 	in, inW := io.Pipe()
+
 	t.Cleanup(func() { _ = inW.Close() })
 
 	ctx, cancel := context.WithCancel(t.Context())

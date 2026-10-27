@@ -40,6 +40,7 @@ func TestRootRejectsBadConfig(t *testing.T) {
 			// returns at once instead of taking over the test's terminal.
 			ctx, cancel := context.WithCancel(t.Context())
 			cancel()
+
 			err := cmd.ExecuteContext(ctx)
 
 			if err == nil || !strings.Contains(err.Error(), path) {
@@ -76,13 +77,16 @@ func TestRootRejectsBadLayoutConfig(t *testing.T) {
 			cmd.SetArgs([]string{"--config", path})
 			cmd.SetOut(io.Discard)
 			cmd.SetErr(io.Discard)
+
 			ctx, cancel := context.WithCancel(t.Context())
 			cancel()
+
 			err := cmd.ExecuteContext(ctx)
 
 			if err == nil || !strings.Contains(err.Error(), path) || !strings.Contains(err.Error(), "layout.") {
 				t.Fatalf("Execute() error = %v, want one naming %s and the layout key", err, path)
 			}
+
 			if entries, _ := os.ReadDir(stateHome); len(entries) != 0 {
 				t.Errorf("state dir has %d entries, want none", len(entries))
 			}
@@ -105,13 +109,16 @@ func TestRootRejectsUnknownTheme(t *testing.T) {
 	cmd.SetArgs([]string{"--config", path})
 	cmd.SetOut(io.Discard)
 	cmd.SetErr(io.Discard)
+
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
+
 	err := cmd.ExecuteContext(ctx)
 
 	if err == nil || !strings.Contains(err.Error(), path) || !strings.Contains(err.Error(), "catppuccin-mocha") {
 		t.Fatalf("Execute() error = %v, want one naming %s and the known themes", err, path)
 	}
+
 	if entries, _ := os.ReadDir(stateHome); len(entries) != 0 {
 		t.Errorf("state dir has %d entries, want none", len(entries))
 	}

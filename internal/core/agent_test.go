@@ -7,6 +7,7 @@ func agentState(panes map[PaneID]Pane, layout *Node, focus PaneID) State {
 	for id, p := range panes {
 		s.Panes[id] = p
 	}
+
 	return s
 }
 
@@ -25,6 +26,7 @@ func TestAgentStateString(t *testing.T) {
 			t.Errorf("AgentState(%d).String() = %q, want %q", tt.s, got, tt.want)
 		}
 	}
+
 	if AgentUnknown != 0 {
 		t.Error("AgentUnknown must be the zero value")
 	}
@@ -32,6 +34,7 @@ func TestAgentStateString(t *testing.T) {
 
 func TestSetPaneKind(t *testing.T) {
 	full := Pane{Kind: KindAgent, Cwd: "/w", Harness: "claude-code", Session: "s1", Transcript: "/t", State: AgentWorking}
+
 	tests := []struct {
 		name string
 		from Pane
@@ -59,6 +62,7 @@ func TestAgentActionErrors(t *testing.T) {
 			"p2": {Kind: KindAgent, Harness: "claude-code"},
 		}, vsplit(leaf("p1"), leaf("p2")), "p1")
 	}
+
 	tests := []struct {
 		name string
 		act  Action
@@ -79,6 +83,7 @@ func TestAgentActionErrors(t *testing.T) {
 			if err := st.Dispatch(tt.act); err == nil {
 				t.Fatal("want error")
 			}
+
 			want := base()
 			for id, p := range want.Panes {
 				if st.State().Panes[id] != p {
@@ -92,14 +97,17 @@ func TestAgentActionErrors(t *testing.T) {
 func TestSetAgentSessionAndState(t *testing.T) {
 	s := agentState(map[PaneID]Pane{"p1": {Kind: KindAgent, Harness: "claude-code"}}, leaf("p1"), "p1")
 	s = dispatch(t, s, SetAgentSession{ID: "p1", Session: "s1", Transcript: "/t.jsonl"})
+
 	s = dispatch(t, s, SetAgentState{ID: "p1", State: AgentBlocked})
 	if p := s.Panes["p1"]; p.Session != "s1" || p.Transcript != "/t.jsonl" || p.State != AgentBlocked {
 		t.Fatalf("pane = %+v", p)
 	}
+
 	s = dispatch(t, s, SetAgentState{ID: "p1", State: AgentUnknown})
 	if s.Panes["p1"].State != AgentUnknown {
 		t.Error("AgentUnknown did not clear the state")
 	}
+
 	s = dispatch(t, s, SetAgentSession{ID: "p1"})
 	if p := s.Panes["p1"]; p.Session != "" || p.Transcript != "" {
 		t.Errorf("empty session did not clear: %+v", p)
@@ -108,6 +116,7 @@ func TestSetAgentSessionAndState(t *testing.T) {
 
 func TestTabAgentState(t *testing.T) {
 	ag := func(st AgentState) Pane { return Pane{Kind: KindAgent, Harness: "claude-code", State: st} }
+
 	tests := []struct {
 		name   string
 		panes  map[PaneID]Pane
@@ -129,10 +138,12 @@ func TestTabAgentState(t *testing.T) {
 			}
 		})
 	}
+
 	s := agentState(map[PaneID]Pane{"p1": ag(AgentBlocked)}, leaf("p1"), "p1")
 	if got := s.TabAgentState(5); got != AgentUnknown {
 		t.Errorf("out of range = %v", got)
 	}
+
 	if got := s.TabAgentState(-1); got != AgentUnknown {
 		t.Errorf("negative = %v", got)
 	}
@@ -150,10 +161,12 @@ func TestAgentPanes(t *testing.T) {
 	setLayout(&t2, hsplit(leaf("p5"), leaf("p4")))
 	s.Tabs = append(s.Tabs, t2)
 	got := s.AgentPanes()
+
 	want := []PaneID{"p3", "p2", "p4"}
 	if len(got) != len(want) {
 		t.Fatalf("AgentPanes() = %v, want %v", got, want)
 	}
+
 	for i := range want {
 		if got[i] != want[i] {
 			t.Fatalf("AgentPanes() = %v, want %v", got, want)

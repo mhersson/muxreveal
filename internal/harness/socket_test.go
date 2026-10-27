@@ -49,7 +49,9 @@ func startServer(t *testing.T, buf int, log *slog.Logger) *served {
 
 	t.Cleanup(func() {
 		cancel()
+
 		_ = srv.Close()
+
 		if err := <-s.done; err != nil {
 			t.Errorf("Serve() error = %v", err)
 		}
@@ -222,6 +224,7 @@ func TestFullChannelDropsAfterOneSecond(t *testing.T) {
 	defer cancel()
 
 	start := time.Now()
+
 	if err := Send(ctx, s.path, Event{Pane: "p", Name: "x"}); err == nil {
 		t.Fatal("Send() error = nil, want one for a dropped event")
 	}
@@ -319,6 +322,7 @@ func TestSendSilentServerHonoursDeadline(t *testing.T) {
 			}
 
 			mu.Lock()
+
 			accepted = append(accepted, c)
 			mu.Unlock()
 		}
@@ -339,6 +343,7 @@ func TestSendSilentServerHonoursDeadline(t *testing.T) {
 	defer cancel()
 
 	start := time.Now()
+
 	if err := Send(ctx, path, Event{Pane: "p"}); err == nil {
 		t.Fatal("Send() error = nil, want one")
 	}
@@ -383,7 +388,9 @@ func startHeldServer(t *testing.T, hold time.Duration) *served {
 
 	t.Cleanup(func() {
 		cancel()
+
 		_ = srv.Close()
+
 		if err := <-s.done; err != nil {
 			t.Errorf("Serve() error = %v", err)
 		}
@@ -401,6 +408,7 @@ func sendAsync(path string, ev Event) <-chan sendResult {
 		defer cancel()
 
 		start := time.Now()
+
 		err := Send(ctx, path, ev)
 		res <- sendResult{err: err, took: time.Since(start)}
 	}()
@@ -480,6 +488,7 @@ func TestCloseDuringHoldDoesNotWait(t *testing.T) {
 	_ = recv(t, s.out)
 
 	start := time.Now()
+
 	if err := s.srv.Close(); err != nil {
 		t.Fatal(err)
 	}

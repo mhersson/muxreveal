@@ -77,6 +77,7 @@ func defaultKeymap() keymap {
 			binding{key: "> " + strconv.Itoa(n), command: "pane.move.tab." + strconv.Itoa(n), group: "Tabs"},
 			binding{key: ". " + strconv.Itoa(n), command: "pane.send.tab." + strconv.Itoa(n), group: "Tabs"})
 	}
+
 	return km
 }
 
@@ -101,6 +102,7 @@ func (k keymap) lookup(key string) (string, bool) {
 			return b.command, true
 		}
 	}
+
 	return "", false
 }
 
@@ -111,6 +113,7 @@ func (k keymap) keyOf(command string) (string, bool) {
 			return b.key, true
 		}
 	}
+
 	return "", false
 }
 
@@ -120,6 +123,7 @@ func (k keymap) keyFor(command string) (string, bool) {
 	if !ok {
 		return "", false
 	}
+
 	return k.leader + " " + key, true
 }
 
@@ -130,5 +134,6 @@ func (k keymap) groupOf(command string) string {
 			return b.group
 		}
 	}
+
 	return ""
 }

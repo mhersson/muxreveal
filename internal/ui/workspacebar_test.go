@@ -63,6 +63,7 @@ func lineVT(t *testing.T, line string, w int) term.VT {
 	t.Helper()
 
 	vt := term.NewVT(w, 1, io.Discard)
+
 	t.Cleanup(func() { _ = vt.Close() })
 
 	if _, err := vt.Write([]byte(line)); err != nil {
@@ -85,6 +86,7 @@ func assertColours(t *testing.T, vt term.VT, x, y int, content string, fg, bg th
 	c := vt.CellAt(x, y)
 	if c == nil || c.Style.Fg == nil || c.Style.Bg == nil {
 		t.Errorf("cell (%d, %d) lacks a colour: %+v", x, y, c)
+
 		return
 	}
 
@@ -118,23 +120,28 @@ func TestWorkspaceBar(t *testing.T) {
 		tray  string // the tray without styling; the bar ends with it
 	}{
 		{
-			"one tab", []tabSpec{{core.KindShell, "/w/proj", ""}}, 0, true,
+			"one tab",
+			[]tabSpec{{core.KindShell, "/w/proj", ""}},
+			0, true,
 			" 1 " + shellIcon + " proj " + edgeSolid, layoutTray,
 		},
 		{
 			"three tabs, active in the middle",
-			[]tabSpec{{core.KindShell, "/w/a", "api"}, {core.KindAgent, "/w/web", ""}, {core.KindShell, "", ""}}, 1, true,
+			[]tabSpec{{core.KindShell, "/w/a", "api"}, {core.KindAgent, "/w/web", ""}, {core.KindShell, "", ""}},
+			1, true,
 			" 1 " + shellIcon + " api " + edgeSolid + " 2 " + agent + " web " + edgeSolid + " 3 " + shellIcon + " shell " + edgeSolid,
 			layoutTray + edgeThin + " " + agent + " ",
 		},
 		{
 			"inactive neighbours get a thin edge",
-			[]tabSpec{{core.KindShell, "/w/a", "one"}, {core.KindShell, "/w/b", "two"}, {core.KindShell, "/w/c", "three"}}, 2, true,
+			[]tabSpec{{core.KindShell, "/w/a", "one"}, {core.KindShell, "/w/b", "two"}, {core.KindShell, "/w/c", "three"}},
+			2, true,
 			" 1 " + shellIcon + " one " + edgeThin + " 2 " + shellIcon + " two " + edgeSolid + " 3 " + shellIcon + " three " + edgeSolid, layoutTray,
 		},
 		{
 			"icons off",
-			[]tabSpec{{core.KindShell, "/w/a", "one"}, {core.KindAgent, "/w/b", "two"}}, 0, false,
+			[]tabSpec{{core.KindShell, "/w/a", "one"}, {core.KindAgent, "/w/b", "two"}},
+			0, false,
 			" 1 one   2 two ",
 			" layout bsp │ agents 1 ",
 		},
@@ -189,6 +196,7 @@ func TestWorkspaceBarColours(t *testing.T) {
 	assertColours(t, vt, 21, 0, "3", ui.Muted, ui.Surface, true)
 	assertColours(t, vt, 23, 0, iconAgent, ui.Dim, ui.Surface, false)
 	assertColours(t, vt, 31, 0, edgeSolid, ui.Surface, ui.Bar, false)
+
 	if c := vt.CellAt(50, 0); c == nil || c.Style.Bg == nil || hexOf(c.Style.Bg) != string(ui.Bar) {
 		t.Errorf("padding cell = %+v, want background %s", c, ui.Bar)
 	}
@@ -333,6 +341,7 @@ func TestWorkspaceBarTraySpacing(t *testing.T) {
 func TestTrayWidth(t *testing.T) {
 	mk := func(ids ...string) []trayModule {
 		var out []trayModule
+
 		for _, m := range testModules() {
 			for _, id := range ids {
 				if m.id == id {
@@ -382,6 +391,7 @@ func attachTabPanes(t *testing.T, a *App) map[core.PaneID]*fakeProc {
 		c := contentRect(a.tabRects(i)[id])
 		fp := newFakeProc()
 		p := newPane(id, fp, max(c.W, 1), max(c.H, 1), realClock{})
+
 		t.Cleanup(func() { _ = p.close() })
 
 		a.panes[id] = p

@@ -140,10 +140,12 @@ func TestDragThatLeavesItsPaneStaysClamped(t *testing.T) {
 	}{
 		{"into the neighbour", func(a *App) (int, int) {
 			c := r(a, "p2")
+
 			return c.X + 3, r(a, "p1").Y + 1
 		}, "hello world\nsecond line", false},
 		{"onto the header", func(a *App) (int, int) {
 			c := r(a, "p2")
+
 			return c.X + 1, c.Y - 1
 		}, "hello world", false},
 		{"onto the bottom border on the last row", func(a *App) (int, int) {
@@ -151,10 +153,12 @@ func TestDragThatLeavesItsPaneStaysClamped(t *testing.T) {
 		}, "hello world\nsecond line\nthird", true},
 		{"onto its right border", func(a *App) (int, int) {
 			c := r(a, "p1")
+
 			return c.X + c.W, c.Y
 		}, "hello world", false},
 		{"onto its bottom border", func(a *App) (int, int) {
 			c := r(a, "p1")
+
 			return c.X + 2, c.Y + c.H
 		}, "hello world\nsecond line\nthird", true},
 		{"onto the tab bar", func(a *App) (int, int) {
@@ -218,6 +222,7 @@ func settle(t *testing.T, a *App, fp *fakeProc, c core.Rect) string {
 	wheelAt(a, c.X, c.Y, tea.MouseWheelUp)
 
 	want := "\x1b[<64;1;1M"
+
 	eventually(t, "probe wheel", func() bool { return strings.HasSuffix(fp.sent(), want) })
 
 	return strings.TrimSuffix(fp.sent(), want)
@@ -236,6 +241,7 @@ func TestClickInTrackingPaneIsForwardedOnRelease(t *testing.T) {
 	mup(a, c.X+4, c.Y+2, tea.MouseLeft)
 
 	want := "\x1b[<0;5;3M\x1b[<0;5;3m"
+
 	eventually(t, "click", func() bool { return strings.Contains(procs["p1"].sent(), want) })
 
 	if a.sel != nil {

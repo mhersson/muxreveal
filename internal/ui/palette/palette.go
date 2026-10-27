@@ -63,17 +63,21 @@ func New(title string, items []Item, t theme.Theme) Model {
 	// A static cursor keeps View independent of blink timing.
 	in.SetStyles(inputStyles(t))
 	in.Focus()
+
 	m := Model{title: title, items: items, input: in, theme: t, enter: "run"}
 	for _, it := range items {
 		m.icons = m.icons || it.Icon != ""
 	}
+
 	m.refilter()
+
 	return m
 }
 
 // WithEnterLabel returns m with the footer's enter hint labelled label.
 func (m Model) WithEnterLabel(label string) Model {
 	m.enter = label
+
 	return m
 }
 
@@ -86,6 +90,7 @@ func inputStyles(t theme.Theme) textinput.Styles {
 		Placeholder: onPanel.Foreground(ui.Subtle),
 		Suggestion:  onPanel.Foreground(ui.Subtle),
 	}
+
 	return textinput.Styles{
 		Focused: state,
 		Blurred: state,
@@ -107,6 +112,7 @@ func (m Model) Selected() (Item, bool) {
 	if m.sel < 0 || m.sel >= len(m.matches) {
 		return Item{}, false
 	}
+
 	return m.items[m.matches[m.sel].item], true
 }
 
@@ -116,6 +122,7 @@ func (m *Model) Select(id string) {
 		if m.items[mt.item].ID == id {
 			m.sel = i
 			m.scrollToSel()
+
 			return
 		}
 	}
@@ -126,6 +133,7 @@ func (m Model) visibleIDs() []string {
 	for _, mt := range m.matches {
 		ids = append(ids, m.items[mt.item].ID)
 	}
+
 	return ids
 }
 
@@ -133,6 +141,7 @@ func (m Model) selectedID() string {
 	if it, ok := m.Selected(); ok {
 		return it.ID
 	}
+
 	return ""
 }
 
@@ -149,9 +158,11 @@ func (m *Model) refilter() {
 			for _, ix := range r.MatchedIndexes {
 				set[ix] = true
 			}
+
 			m.matches = append(m.matches, match{item: r.Index, matched: set})
 		}
 	}
+
 	m.sel, m.top = -1, 0
 	if len(m.matches) > 0 {
 		m.sel = 0
@@ -162,9 +173,11 @@ func (m *Model) scrollToSel() {
 	if m.sel < 0 {
 		return
 	}
+
 	if m.sel < m.top {
 		m.top = m.sel
 	}
+
 	if m.sel >= m.top+MaxRows {
 		m.top = m.sel - MaxRows + 1
 	}
@@ -175,6 +188,7 @@ func (m *Model) move(delta int) {
 	if n == 0 {
 		return
 	}
+
 	m.sel = ((m.sel+delta)%n + n) % n
 	m.scrollToSel()
 }
@@ -183,6 +197,7 @@ func highlight(id string) tea.Cmd {
 	if id == "" {
 		return nil
 	}
+
 	return func() tea.Msg { return HighlightMsg{ID: id} }
 }
 
@@ -190,31 +205,40 @@ func highlight(id string) tea.Cmd {
 // HighlightMsg, batched with the input's own commands.
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	prev := m.selectedID()
+
 	key, isKey := msg.(tea.KeyPressMsg)
 	if isKey {
 		switch key.String() {
 		case "down", "ctrl+n", "tab":
 			m.move(1)
+
 			return m, m.changed(prev)
 		case "up", "ctrl+p", "shift+tab":
 			m.move(-1)
+
 			return m, m.changed(prev)
 		case "enter":
 			if id := m.selectedID(); id != "" {
 				return m, func() tea.Msg { return ChosenMsg{ID: id} }
 			}
+
 			return m, nil
 		case "esc":
 			return m, func() tea.Msg { return ClosedMsg{} }
 		}
 	}
+
 	oldQuery := m.input.Value()
+
 	var inCmd tea.Cmd
+
 	m.input, inCmd = m.input.Update(msg)
 	if m.input.Value() == oldQuery {
 		return m, inCmd
 	}
+
 	m.refilter()
+
 	return m, tea.Batch(inCmd, m.changed(prev))
 }
 
@@ -223,6 +247,7 @@ func (m Model) changed(prev string) tea.Cmd {
 	if id := m.selectedID(); id != prev {
 		return highlight(id)
 	}
+
 	return nil
 }
 
@@ -232,6 +257,7 @@ func (m Model) View(width int) string {
 	if width < 2 {
 		return ""
 	}
+
 	ui := m.theme.UI
 	inner := width - 2
 	panel := lipgloss.NewStyle().Background(ui.Panel).Foreground(ui.Fg)
@@ -241,6 +267,7 @@ func (m Model) View(width int) string {
 	fit := func(content string, fill lipgloss.Style) string {
 		content = ansi.Truncate(content, inner, "")
 		pad := fill.Render(strings.Repeat(" ", max(0, inner-lipgloss.Width(content))))
+
 		return border.Render("│") + content + pad + border.Render("│")
 	}
 
@@ -260,6 +287,7 @@ func (m Model) View(width int) string {
 	if len(m.matches) == 0 {
 		lines = append(lines, fit(panel.Render(" ")+panel.Foreground(ui.Subtle).Render("No matches"), panel))
 	}
+
 	end := min(len(m.matches), m.top+MaxRows)
 	for i := m.top; i < end; i++ {
 		lines = append(lines, m.row(i, inner))
@@ -269,6 +297,7 @@ func (m Model) View(width int) string {
 
 	// The count ends one dash before the corner; it is left out when it does not fit.
 	count := " " + strconv.Itoa(max(m.sel+1, 0)) + " of " + strconv.Itoa(len(m.matches)) + " "
+
 	cw := lipgloss.Width(count)
 	if inner >= cw+1 {
 		lines = append(lines, border.Render("╰"+strings.Repeat("─", inner-cw-1))+
@@ -276,9 +305,11 @@ func (m Model) View(width int) string {
 	} else {
 		lines = append(lines, border.Render("╰"+strings.Repeat("─", inner)+"╯"))
 	}
+
 	for i, l := range lines {
 		lines[i] = ansi.Truncate(l, width, "")
 	}
+
 	return strings.Join(lines, "\n")
 }
 
@@ -286,15 +317,19 @@ func (m Model) View(width int) string {
 // pairs three cells apart, after one cell of margin.
 func (m Model) footer(panel lipgloss.Style) string {
 	ui := m.theme.UI
+
 	var sb strings.Builder
 	sb.WriteString(panel.Render(" "))
+
 	for i, h := range [][2]string{{"up/down", "move"}, {"enter", m.enter}, {"esc", "close"}} {
 		if i > 0 {
 			sb.WriteString(panel.Render("   "))
 		}
+
 		sb.WriteString(panel.Foreground(ui.Key).Bold(true).Render(h[0]))
 		sb.WriteString(panel.Foreground(ui.Muted).Render(" " + h[1]))
 	}
+
 	return sb.String()
 }
 
@@ -305,12 +340,14 @@ func (m Model) row(i, inner int) string {
 	base := lipgloss.NewStyle().Background(ui.Panel).Foreground(ui.Fg)
 	selected := i == m.sel
 	icon := base.Foreground(ui.Muted)
+
 	title := base
 	if selected {
 		base = base.Background(ui.Selection)
 		icon = base.Foreground(ui.Accent)
 		title = base.Bold(true)
 	}
+
 	hit := base.Foreground(ui.Match).Bold(true)
 	border := lipgloss.NewStyle().Background(ui.Panel).Foreground(ui.BorderFocus)
 
@@ -324,6 +361,7 @@ func (m Model) row(i, inner int) string {
 		if it.Icon != "" {
 			lead = icon.Render(it.Icon)
 		}
+
 		lead += base.Render(" ")
 		avail = max(0, avail-2)
 	}
@@ -332,43 +370,56 @@ func (m Model) row(i, inner int) string {
 	if hint != "" && lipgloss.Width(it.Title)+1+lipgloss.Width(hint) > avail {
 		hint = ""
 	}
+
 	titleAvail := avail
 	if hint != "" {
 		titleAvail = avail - lipgloss.Width(hint) - 1
 	}
 
 	var sb, run strings.Builder
+
 	used, runHit := 0, false
 	flush := func() {
 		if run.Len() == 0 {
 			return
 		}
+
 		if runHit {
 			sb.WriteString(hit.Render(run.String()))
 		} else {
 			sb.WriteString(title.Render(run.String()))
 		}
+
 		run.Reset()
 	}
+
 	for bi, r := range it.Title {
 		w := lipgloss.Width(string(r))
 		if used+w > titleAvail {
 			break
 		}
+
 		used += w
+
 		if mt.matched[bi] != runHit {
 			flush()
+
 			runHit = mt.matched[bi]
 		}
+
 		run.WriteRune(r)
 	}
+
 	flush()
+
 	content := base.Render(" ") + lead + sb.String()
 	if hint != "" {
 		content += base.Render(strings.Repeat(" ", avail-used-lipgloss.Width(hint))) +
 			base.Foreground(ui.Key).Bold(true).Render(hint)
 	}
+
 	content = ansi.Truncate(content, inner, "")
 	pad := base.Render(strings.Repeat(" ", max(0, inner-lipgloss.Width(content))))
+
 	return border.Render("│") + content + pad + border.Render("│")
 }

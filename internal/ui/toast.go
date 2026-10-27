@@ -37,6 +37,7 @@ func toastLayout(width, height int, notice string, icons bool) (text string, x, 
 // toastCovers reports whether the toast box for notice covers cell (cx, cy).
 func toastCovers(width, height int, notice string, icons bool, cx, cy int) bool {
 	_, x, y, w, ok := toastLayout(width, height, notice, icons)
+
 	return ok && cx >= x && cx < x+w && cy >= y && cy < y+toastRows
 }
 

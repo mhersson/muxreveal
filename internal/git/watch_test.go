@@ -616,6 +616,7 @@ func TestWatchCloseStopsEverything(t *testing.T) {
 	writeFile(t, dir, "tracked.txt", "two\n")
 
 	start := time.Now()
+
 	if err := w.Close(); err != nil {
 		t.Fatalf("close: %v", err)
 	}
@@ -762,6 +763,7 @@ func TestWatchOverflowRewalksUnwatchedDirectories(t *testing.T) {
 
 	// No loop goroutine runs, so the Create events below are never handled.
 	w := &Watcher{repo: r, fs: fsw, watched: map[string]struct{}{}}
+
 	t.Cleanup(func() { _ = fsw.Close() })
 
 	if err := w.start(context.Background()); err != nil {

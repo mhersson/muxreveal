@@ -41,6 +41,7 @@ func All() []Theme {
 // Names returns the theme names in the order of All.
 func Names() []string {
 	all := All()
+
 	names := make([]string, len(all))
 	for i, t := range all {
 		names[i] = t.Name

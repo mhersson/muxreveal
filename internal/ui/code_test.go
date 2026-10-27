@@ -15,9 +15,11 @@ func TestHighlight(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+
 		if len(lines) != 1 {
 			t.Fatalf("got %d lines, want 1", len(lines))
 		}
+
 		if got := ansi.Strip(lines[0]); got != "func f() {}" {
 			t.Errorf("text = %q", got)
 		}
@@ -32,6 +34,7 @@ func TestHighlight(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+
 		if !strings.Contains(lines[0], "38;2;203;166;247") {
 			t.Errorf("no Mauve SGR in %q", lines[0])
 		}
@@ -42,6 +45,7 @@ func TestHighlight(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+
 		if got := ansi.Strip(strings.Join(lines, "\n")); got != "func f() {}" {
 			t.Errorf("text = %q", got)
 		}
@@ -49,6 +53,7 @@ func TestHighlight(t *testing.T) {
 		if !strings.Contains(lines[0], "38;2;205;214;244") {
 			t.Errorf("no Fg SGR in %q", lines[0])
 		}
+
 		if strings.Contains(lines[0], "38;2;203;166;247") {
 			t.Errorf("fallback was highlighted: %q", lines[0])
 		}
@@ -59,10 +64,12 @@ func TestHighlight(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+
 		joined := strings.Join(lines, "\n")
 		if strings.Contains(joined, "\t") {
 			t.Errorf("tab survived: %q", joined)
 		}
+
 		if got := ansi.Strip(lines[1]); !strings.HasPrefix(got, "    return") {
 			t.Errorf("line 1 = %q", got)
 		}

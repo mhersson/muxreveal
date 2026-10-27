@@ -48,6 +48,7 @@ func newStyles(t theme.Theme) styles {
 	ui := t.UI
 	onBg := lipgloss.NewStyle().Background(ui.Bg).Foreground(ui.Fg)
 	onPanel := lipgloss.NewStyle().Background(ui.Panel).Foreground(ui.Fg)
+
 	return styles{
 		body:        onBg,
 		card:        lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(ui.Border).BorderBackground(ui.Bg),
@@ -108,11 +109,14 @@ func (s styles) borderRun(own uint8, glyphs string) string {
 	if r, ok := s.runs.m[k]; ok {
 		return r
 	}
+
 	if s.runs.m == nil || len(s.runs.m) >= runCacheMax {
 		s.runs.m = make(map[runKey]string)
 	}
+
 	r := s.borderStyle(own).Render(glyphs)
 	s.runs.m[k] = r
+
 	return r
 }
 
@@ -123,6 +127,7 @@ func (s styles) borderStyle(own uint8) lipgloss.Style {
 	case ownShell:
 		return s.borderShell
 	}
+
 	return s.border
 }
 
@@ -155,5 +160,6 @@ func (s styles) kind(k core.PaneKind) lipgloss.Style {
 	if k == core.KindAgent {
 		return s.kindAgent
 	}
+
 	return s.kindShell
 }
