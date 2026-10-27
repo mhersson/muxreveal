@@ -4,7 +4,7 @@ Update this file at the end of every session: tick what's done, set the next ste
 
 ## Current milestones
 
-M1e Tiling, tab moves and chrome and M2a Worktrees and diff engine run in parallel, each on its own branch and PR; M2b Review pane follows once both have merged.
+M1e Tiling, tab moves and chrome is complete and waits for review; M2a Worktrees and diff engine is done (PR #11). The agents rail comes next, then M2b Review pane.
 
 ## M1 Terminal core
 
@@ -381,7 +381,7 @@ Gate: a saved file shows in the diff within 300 ms, and turn mode isolates the l
 
 M2 ships as two plans, one PR each.
 
-### M2a Worktrees and diff engine
+### M2a Worktrees and diff engine (done, PR #11)
 
 Headless, in `internal/git`: worktrees, turn snapshots taken before the prompt hook is answered, the diff engine with branch and turn sources, and the directory watcher. Covers WT-1, WT-2, DF-1, DF-2, DF-3.
 
@@ -436,7 +436,7 @@ Gate: a saved file shows in the open review pane within 300 ms; turn mode shows 
 
 ## Next
 
-M2a Worktrees and diff engine is complete on `feat/diff-engine` and waits for review. M1e Tiling, tab moves and chrome is in progress; the agents rail follows it, then M2b Review pane.
+M1e Tiling, tab moves and chrome is complete on `feat/tiling-tab-moves` and waits for review; the reboot part of its gate is the operator's check. The agents rail comes next, then M2b Review pane.
 
 ## Done
 
