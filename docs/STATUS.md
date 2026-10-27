@@ -4,7 +4,7 @@ Update this file at the end of every session: tick what's done, set the next ste
 
 ## Current milestones
 
-M1e Tiling, tab moves and chrome is complete and waits for review; M2a Worktrees and diff engine is done (PR #11). The agents rail comes next, then M2b Review pane.
+M1e Tiling, tab moves and chrome is merged (PR #12) and M2a Worktrees and diff engine is merged (PR #11); the reboot part of the M1e gate is still the operator's check. The build, CI and lint tooling plan runs now, then the agents rail, then M2b Review pane.
 
 ## M1 Terminal core
 
@@ -436,7 +436,7 @@ Gate: a saved file shows in the open review pane within 300 ms; turn mode shows 
 
 ## Next
 
-M1e Tiling, tab moves and chrome is complete on `feat/tiling-tab-moves` and waits for review; the reboot part of its gate is the operator's check. The agents rail comes next, then M2b Review pane.
+M1e Tiling, tab moves and chrome is merged (PR #12); the reboot part of its gate is still the operator's check. The build, CI and lint tooling plan runs now: a Makefile, GitHub Actions CI with Dependabot, and a stricter golangci-lint config. The agents rail comes next, then M2b Review pane.
 
 ## Done
 
@@ -478,6 +478,9 @@ M1e Tiling, tab moves and chrome is complete on `feat/tiling-tab-moves` and wait
 | 2026-10-27 | The `Bar` role is Base, not Crust | The operator's pick from the chrome comparison |
 | 2026-10-27 | Overlay boxes (which-key, sequence popup, palette, theme picker, confirm) have rounded corners `╭ ╮ ╰ ╯`, not square ones | The operator's pick from the chrome comparison |
 | 2026-10-27 | The palette and the theme picker end in a joined divider and a hint row (`up/down move`, `enter run`, `esc close`), two rows taller | The operator's pick from the chrome comparison |
+| 2026-10-27 | A Makefile and GitHub Actions CI with Dependabot: the Linux job runs the local `make check` gates; a macOS job builds, vets and tests natively | One command locally and the same gates on every pull request; Dependabot keeps modules and actions current |
+| 2026-10-27 | The golangci-lint config is adapted from contextmatrix's and stricter; ported tuios code stays out of the style-only linters and formatters | The ports stay close to upstream; correctness linters still run on them |
+| 2026-10-27 | v1 ends with a docs and demo milestone | A new user needs a README and user docs that show MuxReveal working |
 
 ## Later
 
