@@ -11,16 +11,16 @@
 │ Working ────────│  Open command palette                          ctrl+space : │                 │
 │╭────────────────│ 󰏘 Pick theme                                    ctrl+space t │                 │
 ││⠋ web           │ 󱙺 New agent pane                                ctrl+space n │                 │
-││   feat/login  │ 󰯋 Split: shell below                            ctrl+space s │                 │
-││  Edit src/login│ 󰯌 Split: shell right                            ctrl+space v │                 │
-││  +120 -14  5 fi│ 󰓾 Focus left                                    ctrl+space h │                 │
-│╰────────────────│ 󰓾 Focus down                                    ctrl+space j │                 │
-│ ⠋ muxreveal     │ 󰓾 Focus up                                      ctrl+space k │                 │
-│    feat/agents-│ 󰓾 Focus right                                   ctrl+space l │                 │
-│   Bash go test .│ 󰘖 Resize left                                   ctrl+space H │                 │
+││   feat/login  │ 󱙺 Agents rail                                   ctrl+space a │                 │
+││  Edit src/login│ 󰯋 Split: shell below                            ctrl+space s │                 │
+││  +120 -14  5 fi│ 󰯌 Split: shell right                            ctrl+space v │                 │
+│╰────────────────│ 󰓾 Focus left                                    ctrl+space h │                 │
+│ ⠋ muxreveal     │ 󰓾 Focus down                                    ctrl+space j │                 │
+│    feat/agents-│ 󰓾 Focus up                                      ctrl+space k │                 │
+│   Bash go test .│ 󰓾 Focus right                                   ctrl+space l │                 │
 │   +340 -12  9 fi├──────────────────────────────────────────────────────────────┤                 │
 │                 │ up/down move   enter run   esc close                         │                 │
-│ Idle ───────────╰──────────────────────────────────────────────────── 1 of 71 ─╯                 │
+│ Idle ───────────╰──────────────────────────────────────────────────── 1 of 72 ─╯                 │
 │                                          ││                          ││                          │
 │ 󰗡 docs                                1d ││                          ││                          │
 │    main                                 ││                          ││                          │

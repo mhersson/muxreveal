@@ -65,6 +65,7 @@ func TestDefaultCommands(t *testing.T) {
 		{"palette.open", "Open command palette", iconPalette},
 		{"theme.pick", "Pick theme", iconTheme},
 		{"agent.new", "New agent pane", iconAgent},
+		{"rail.toggle", "Agents rail", iconAgent},
 		{"pane.split.down", "Split: shell below", iconSplitDown},
 		{"pane.split.right", "Split: shell right", iconPanes},
 	}

@@ -382,6 +382,10 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, a.onRailStats(msg)
 	case railDueMsg:
 		return a, a.onRailDue(msg)
+	case railPulseMsg:
+		a.onRailPulse()
+	case railFlashMsg:
+		a.onRailFlash(msg)
 	case palette.ChosenMsg:
 		return a, a.chosen(msg.ID)
 	case palette.ClosedMsg:
@@ -469,14 +473,16 @@ func (a *App) runLeader(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 			return nil, true
 		}
 
-		return c.run(a), true
+		return a.runLeaderCommand(id, c), true
 	}
 
 	switch bindingKey(msg) {
 	case "esc":
 		return nil, true
 	case a.keymap.leader:
-		a.keyToFocused(msg)
+		if !a.rail.focused {
+			a.keyToFocused(msg)
+		}
 
 		return nil, true
 	}

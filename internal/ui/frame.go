@@ -386,8 +386,8 @@ func (a *App) cursorBase(g geometry) *tea.Cursor {
 	}
 
 	st := a.store.State()
-	if cur := a.railCursor(st); cur != nil {
-		return cur
+	if a.rail.focused && a.railShows(st.Rail) {
+		return a.railCursor(st)
 	}
 
 	p := a.panes[st.Tab().Focus]

@@ -147,6 +147,16 @@ func (a *App) anyWorking() bool {
 	return false
 }
 
+func (a *App) anyBlocked() bool {
+	for _, m := range a.store.State().Panes {
+		if m.Kind == core.KindAgent && m.State == core.AgentBlocked {
+			return true
+		}
+	}
+
+	return false
+}
+
 // dialogKey reports whether key answers a permission or question dialog.
 func dialogKey(key string) bool {
 	switch key {

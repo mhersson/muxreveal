@@ -459,12 +459,14 @@ func TestRailForgetsClosedPanes(t *testing.T) {
 func TestRailUIStateSurvivesUpdates(t *testing.T) {
 	r := newRailApp(t, false)
 	r.addAgent(t, false, t.TempDir())
+	openIn(t, r.App, core.SetRail{Open: true})
 	r.rail.focused, r.rail.top = true, 3
 	r.railOpened()
 	r.settle()
 
-	if !r.rail.focused || r.rail.top != 3 {
-		t.Errorf("focused %v top %d changed by the model", r.rail.focused, r.rail.top)
+	// One card fits the list, so the stored top is clamped to the start.
+	if !r.rail.focused || r.rail.top != 0 {
+		t.Errorf("focused %v top %d, want the keyboard kept and top clamped to 0", r.rail.focused, r.rail.top)
 	}
 }
 

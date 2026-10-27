@@ -142,7 +142,7 @@ func (a *App) chosen(id string) tea.Cmd {
 			return nil
 		}
 
-		return c.run(a)
+		return a.runLeaderCommand(id, c)
 	case overlayThemes:
 		// dispatch logs its own failures.
 		_ = a.dispatch(core.SetTheme{Name: id})

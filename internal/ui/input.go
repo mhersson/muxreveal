@@ -8,7 +8,8 @@ import (
 )
 
 // handleKey routes a key press: an open confirm first, then an open prompt, then
-// copy mode, then the open overlay, then the leader state machine, then the focused pane.
+// copy mode, then the open overlay, then the leader state machine, then the rail while it
+// has the keyboard, then the focused pane.
 func (a *App) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 	if a.confirm != nil {
 		return a.handleConfirmKey(msg)
@@ -29,6 +30,10 @@ func (a *App) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 	a.notice = ""
 	if cmd, ok := a.runLeader(msg); ok {
 		return cmd
+	}
+
+	if a.rail.focused {
+		return a.handleRailKey(msg)
 	}
 
 	a.keyToFocused(msg)
@@ -56,6 +61,13 @@ func (a *App) handlePaste(msg tea.PasteMsg) tea.Cmd {
 	}
 
 	a.endLeader()
+
+	if a.rail.focused {
+		a.railPaste(msg.Content)
+
+		return nil
+	}
+
 	a.sendToFocused(func(p *pane) {
 		a.clearSelectionOf(p.id)
 		p.sendPaste(msg.Content)

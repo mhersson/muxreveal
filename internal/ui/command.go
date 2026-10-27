@@ -89,6 +89,11 @@ func defaultCommands() []command {
 		title: "New agent pane",
 		run:   func(a *App) tea.Cmd { return a.openPane(core.KindAgent, core.SplitVertical) },
 	}, {
+		id:    "rail.toggle",
+		icon:  iconAgent,
+		title: "Agents rail",
+		run:   (*App).railToggle,
+	}, {
 		id:    "pane.split.down",
 		icon:  iconSplitDown,
 		title: "Split: shell below",

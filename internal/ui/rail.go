@@ -8,8 +8,17 @@ import (
 	"time"
 	"unicode"
 
+	tea "charm.land/bubbletea/v2"
+
 	"github.com/mhersson/muxreveal/internal/core"
 	"github.com/mhersson/muxreveal/internal/git"
+)
+
+const (
+	// railPulseEvery is the blocked bar's blink half-period.
+	railPulseEvery = 500 * time.Millisecond
+	// railFlashFor is how long a jump flashes the pane's frame.
+	railFlashFor = 600 * time.Millisecond
 )
 
 // idleAction is the third card line of an idle agent.
@@ -90,6 +99,8 @@ type railState struct {
 
 	flashPane  core.PaneID // the pane whose frame shows the jump flash
 	flashUntil time.Time   // the flash ends when the clock reaches this
+	flashSeq   int         // a flash tick of an earlier jump does not clear a later flash
+	pulsing    bool        // a railPulseMsg is outstanding
 
 	panes  map[core.PaneID]*railPane
 	ctx    context.Context //nolint:containedctx // the rail's lifetime, set while the rail is open; probes derive from it
@@ -237,8 +248,9 @@ func (a *App) railShown(st core.State) []railCard {
 
 // railNormalize keeps the selection on a shown card: it follows its agent, else
 // takes the card now at its old index, else the last.
-func (a *App) railNormalize(st core.State) {
-	shown := a.railShown(st)
+func (a *App) railNormalize(st core.State) { a.railNormalizeIn(a.railShown(st)) }
+
+func (a *App) railNormalizeIn(shown []railCard) {
 	if len(shown) == 0 {
 		a.rail.sel, a.rail.selIdx = "", 0
 
@@ -316,6 +328,11 @@ func (a *App) changeAgentState(id core.PaneID, s core.AgentState) error {
 // pane, forgets closed panes, keeps the selection valid and starts the probes
 // that panes new to the rail or with a new cwd need.
 func (a *App) railAfterUpdate() {
+	// A rail the width rule hides cannot hold the keyboard.
+	if a.rail.focused && !a.railVisible() {
+		a.rail.focused = false
+	}
+
 	if len(a.rail.panes) == 0 && !a.railIsOpen() {
 		return
 	}
@@ -336,11 +353,63 @@ func (a *App) railAfterUpdate() {
 		return
 	}
 
-	a.railNormalize(st)
+	a.railFit(st)
+
+	if cmd := a.railPulseCmd(); cmd != nil {
+		a.later = append(a.later, cmd)
+	}
 
 	for _, id := range st.AgentPanes() {
 		if cmd := a.railSync(id, st.Panes[id].Cwd); cmd != nil {
 			a.later = append(a.later, cmd)
 		}
 	}
+}
+
+// railFit keeps the selection on a shown card and stores the list's first row
+// clamped to keep that card whole, so the drawing never has to.
+func (a *App) railFit(st core.State) {
+	v, ok := a.railViewOf(st)
+	if !ok {
+		a.railNormalize(st)
+
+		return
+	}
+
+	a.railNormalizeIn(v.shown)
+
+	sel := -1
+	if len(v.shown) > 0 {
+		sel = a.rail.selIdx
+	}
+
+	a.rail.top = railClampTop(v.rows, v.geom.list.H, a.rail.top, sel)
+}
+
+// railToggle is leader a: it opens the rail, or gives it the keyboard, or closes it.
+func (a *App) railToggle() tea.Cmd {
+	var cmds []tea.Cmd
+
+	switch {
+	case !a.store.State().Rail:
+		// dispatch logs its own failures.
+		_ = a.dispatch(core.SetRail{Open: true})
+		cmds = append(cmds, a.railOpened())
+		a.rail.focused = a.railVisible()
+	case !a.railVisible() || a.rail.focused:
+		a.railClose()
+	default:
+		a.rail.focused = true
+	}
+
+	cmds = append(cmds, a.relayout())
+
+	return tea.Batch(cmds...)
+}
+
+// railClose closes the rail and forgets its search; the keyboard returns to the focused pane.
+func (a *App) railClose() {
+	_ = a.dispatch(core.SetRail{Open: false})
+	a.railClosed()
+	a.rail.focused, a.rail.searching, a.rail.query = false, false, ""
 }
