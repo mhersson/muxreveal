@@ -8,7 +8,8 @@ import (
 	"github.com/mhersson/muxreveal/internal/core"
 )
 
-// handleRailKey takes a key while the rail has the keyboard; keys it does not use are dropped.
+// handleRailKey takes a key while the rail has the keyboard; keys it does not
+// use are dropped.
 func (a *App) handleRailKey(msg tea.KeyPressMsg) tea.Cmd {
 	var cmd tea.Cmd
 

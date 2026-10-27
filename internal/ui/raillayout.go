@@ -97,9 +97,10 @@ func railLayout(groups []railGroup) []railRow {
 
 // railClampTop is the first row shown in h rows: top moved the least that shows
 // the selected card with its blank rows and, when it fits, its group's header
-// (the blank rows win over the header), then snapped to a group header or a card's blank row so the
-// list never starts mid-card. When the card and its blank rows do not fit, the
-// card's first line wins. card is the selected card's index, -1 for none.
+// (the blank rows win over the header), then snapped to a group header or a
+// card's blank row so the list never starts mid-card. When the card and its
+// blank rows do not fit, the card's first line wins. card is the selected
+// card's index, -1 for none.
 func railClampTop(rows []railRow, h, top, card int) int {
 	maxTop := max(len(rows)-h, 0)
 	top = min(max(top, 0), maxTop)

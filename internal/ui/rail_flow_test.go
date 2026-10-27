@@ -990,7 +990,7 @@ func TestRailManyAgentsStayWhole(t *testing.T) {
 	r.step(struct{}{})
 	whole("first tab closed")
 
-	if _, ok := r.railSelected(); !ok {
+	if r.rail.sel == "" {
 		t.Error("no selection after the closes")
 	}
 }

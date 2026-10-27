@@ -150,10 +150,7 @@ func (a *App) frameAt(g geometry) string {
 	}
 
 	if bodyH := a.height - 2; bodyH > 0 {
-		var rail []string
-
-		railW := 0
-		rail, railW = a.railFrame(st, lk)
+		rail, railW := a.railFrame(st, lk)
 
 		if st.Tab().Empty() {
 			lines = append(lines, a.welcomeBody(bodyH, lk, rail, railW)...)

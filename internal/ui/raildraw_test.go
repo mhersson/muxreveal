@@ -549,11 +549,10 @@ func TestRailHighlightOnCutText(t *testing.T) {
 		t.Errorf("highlight past the cut = %q, cut = %v, want none and a cut", hit, cut)
 	}
 
-	// A match that straddles the cut keeps only the shown part.
-	const word = "web"
-
-	if hit, _ := marked("日本語日本語web", 17); !strings.HasPrefix(word, hit) {
-		t.Errorf("highlight across the cut = %q", hit)
+	// A match that straddles the cut keeps only the shown part; the cut's
+	// ellipsis takes the colour of the run it ends.
+	if hit, cut := marked("日本語日本語web", 16); strings.TrimSuffix(hit, "…") != "w" || !cut {
+		t.Errorf("highlight across the cut = %q, cut = %v, want only the shown w and a cut", hit, cut)
 	}
 }
 

@@ -277,7 +277,7 @@ func TestRailSearchFiltersCards(t *testing.T) {
 		t.Error("a search that matches nothing lists cards")
 	}
 
-	if _, ok := r.railSelected(); ok {
+	if r.rail.sel != "" {
 		t.Error("a selection with nothing shown")
 	}
 }
@@ -300,7 +300,7 @@ func TestRailSelectionFollowsItsAgent(t *testing.T) {
 	r.setState(t, a3, core.AgentBlocked)
 	r.settle()
 
-	if sel, _ := r.railSelected(); sel != a2 || r.rail.selIdx != 2 {
+	if sel := r.rail.sel; sel != a2 || r.rail.selIdx != 2 {
 		t.Fatalf("selection = %s at %d, want %s at 2", sel, r.rail.selIdx, a2)
 	}
 
@@ -308,7 +308,7 @@ func TestRailSelectionFollowsItsAgent(t *testing.T) {
 	openIn(t, r.App, core.ClosePane{ID: a2})
 	r.settle()
 
-	if sel, _ := r.railSelected(); sel != a1 {
+	if sel := r.rail.sel; sel != a1 {
 		t.Errorf("after the agent went: %s, want %s", sel, a1)
 	}
 
@@ -316,19 +316,19 @@ func TestRailSelectionFollowsItsAgent(t *testing.T) {
 	r.railSelect(a3)
 	r.railSetSearch(true, "no such text")
 
-	if _, ok := r.railSelected(); ok {
+	if r.rail.sel != "" {
 		t.Error("selection kept with an empty list")
 	}
 
 	r.railSetSearch(true, "")
 
-	if _, ok := r.railSelected(); !ok {
+	if r.rail.sel == "" {
 		t.Error("no selection once cards are shown again")
 	}
 
 	r.railMove(10)
 
-	if sel, _ := r.railSelected(); sel != a1 {
+	if sel := r.rail.sel; sel != a1 {
 		t.Errorf("moved past the end: %s, want the last card %s", sel, a1)
 	}
 }
@@ -483,13 +483,13 @@ func TestRailSelectionUnderAFilterThatHidesIt(t *testing.T) {
 	r.railSelect(a2)
 	r.railSetSearch(true, "alpha")
 
-	if sel, _ := r.railSelected(); sel != a3 {
+	if sel := r.rail.sel; sel != a3 {
 		t.Errorf("selection = %s, want %s (the card now at its old index)", sel, a3)
 	}
 
 	r.railSetSearch(true, "alphab")
 
-	if sel, _ := r.railSelected(); sel != a3 {
+	if sel := r.rail.sel; sel != a3 {
 		t.Errorf("selection = %s, want %s", sel, a3)
 	}
 
@@ -497,7 +497,7 @@ func TestRailSelectionUnderAFilterThatHidesIt(t *testing.T) {
 	r.railSelect(a1)
 	r.railSetSearch(true, "beta")
 
-	if sel, _ := r.railSelected(); sel != a2 {
+	if sel := r.rail.sel; sel != a2 {
 		t.Errorf("selection = %s, want %s (the only card)", sel, a2)
 	}
 }

@@ -268,11 +268,6 @@ func (a *App) railNormalizeIn(shown []railCard) {
 	a.rail.sel, a.rail.selIdx = shown[i].pane, i
 }
 
-// railSelected is the selected agent, if any card is shown.
-func (a *App) railSelected() (core.PaneID, bool) {
-	return a.rail.sel, a.rail.sel != ""
-}
-
 // railMove moves the selection by delta cards, stopping at the ends.
 func (a *App) railMove(delta int) {
 	st := a.store.State()
