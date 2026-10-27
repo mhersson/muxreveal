@@ -540,6 +540,31 @@ Test counts from `go test -count=1 -v`, counting `--- PASS` lines (top-level tes
 
 The PR list (agent branches), the PR view with its diff in the review pane, the CI view, the compose overlay with `$EDITOR`, the approve and merge confirms, the push command, the tray's PR and CI module, the PR and CI line on the rail's cards, and the core events and state behind them. Planned after M2b.
 
+## M4 Markdown and polish
+
+Goal: rendered markdown with images, PR conversation, compose preview, reviewed hunks, notifications, other PR tabs, CI log tail, remapping, worktree cleanup. Covers MD-1, MD-2, GH-1 (others), GH-3, GH-4 (logs), GA-4, DF-7, AG-6, UX-3, WT-3.
+
+Gate: rendered markdown with images, the polish items and the requirements above work in Ghostty and Kitty on macOS and Linux.
+
+M4 ships as two plans, one PR each.
+
+### M4a Markdown layout
+
+Headless, in a new `internal/md` package, and it runs beside M2b. Markdown (PR bodies, agents' plan files, repo docs) becomes width-wrapped lines of styled runs with link targets, image references and foldable `<details>` blocks, so M3b and M4b can draw it without knowing markdown. Covers the layout part of MD-1.
+
+- [ ] Parsing: the size bound, `<details>` folds and alerts
+- [ ] Inline runs, links and wrapping
+- [ ] Headings, lists, quotes, alerts, images, folds and footnotes
+- [ ] Code blocks
+- [ ] Tables
+- [ ] The corpus, the fuzz target and the timing tests
+
+Gate: every corpus document lays out at widths 20, 40, 80, 100 and 130 with no line wider than the width; no run holds a control character; only http, https and mailto are linked; `go test -run '^$' -fuzz=FuzzLayout -fuzztime=5m ./internal/md` finds nothing; Layout of the pathological inputs takes under 200 ms and of a 4 MiB document under 1 s, with parse times recorded. The timing tests skip under `-race` and `-short`, so they run under `make test` and in the gate run, not in `make check`.
+
+### M4b Everything else in M4
+
+Rendered markdown on screen (including images and the `Code` theme role), the PR conversation, compose preview, reviewed hunks, notifications, other PR tabs, CI log tail, remapping and worktree cleanup. Planned after M3b.
+
 ## Next
 
 M1e Tiling, tab moves and chrome is merged (PR #12); the reboot part of its gate is still the operator's check. The build, CI and lint tooling work (Makefile, GitHub Actions CI with Dependabot, stricter golangci-lint config) is complete; the macOS test step in CI is non-blocking until the macOS test failures listed in Later are fixed. M3a GitHub and push backend is merged (PR #15). M1f Agents rail is merged (PR #16); M2b Review pane is next, then M3b.
@@ -598,6 +623,9 @@ M1e Tiling, tab moves and chrome is merged (PR #12); the reboot part of its gate
 | 2026-10-27 | While the agents rail has the keyboard, the focused pane is drawn as an unfocused one (`Border` frame, `Muted` title) | Only one thing should look focused; the rail's `Accent` border says where the keys go |
 | 2026-10-27 | The rail's list scrolls by whole cards, keeping the selected card whole | A half-cut card hides its state and action; the counts in the border say what is out of sight |
 | 2026-10-27 | The rail keeps its last lines in a cache keyed by the store version, size, query, selection and animation phase | The rail is redrawn on every frame while a badge animates; a frame in which nothing changed in the rail reuses its lines |
+| 2026-10-27 | Markdown is parsed by goldmark v2 (v2.1.9) with GFM and footnotes, and laid out by our own code in `internal/md`, not by a port of tuios's `internal/markdown` | v2 is faster on most hostile inputs and linear on repeated backticks, where v1 is not; the tuios port reads only the subset agents write (HTML, reference links and footnotes stay raw text, there are no images, and input is capped at 32 KiB), and PR templates need the rest |
+| 2026-10-27 | Only `http`, `https` and `mailto` links are linked; relative links resolve against a URL base or, against a local base, to a path M4b follows inside MuxReveal | Markdown from PRs and agents is untrusted; OSC 8 must not carry arbitrary schemes |
+| 2026-10-27 | M4 ships as M4a, the headless markdown layout beside M2b, and M4b, the rest of M4 | New-package work runs beside the UI milestone; UI work stays serial |
 
 ## Later
 
@@ -660,3 +688,4 @@ Ideas and requests that came up outside the current milestone go here.
 - A poller keeps a host's client after its token is revoked or expires, so every poll for that host fails with 401 until a restart; rebuild the client after a 401.
 - A persistent failure of the focused PR's checks (for example a fine-grained token without checks access) fails every poll while that PR is focused; report the checks error beside a fresh PR list.
 - A change of `Watch.Visible` alone neither polls nor recomputes the cadence, so a pending PR scrolled into view can wait up to the slow interval.
+- goldmark's link scan is quadratic on repeated `[a](` and its cost is superlinear on deep nesting: take it upstream, or cap the source per document in M4b (GitHub limits PR bodies to 64 KB).
