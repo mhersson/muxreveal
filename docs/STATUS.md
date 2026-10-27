@@ -4,7 +4,7 @@ Update this file at the end of every session: tick what's done, set the next ste
 
 ## Current milestones
 
-M1e Tiling, tab moves and chrome is merged (PR #12), M2a Worktrees and diff engine is merged (PR #11) and M3a GitHub and push backend is merged (PR #15); the reboot part of the M1e gate is still the operator's check. The build, CI and lint tooling work (Makefile, GitHub Actions CI with Dependabot, stricter golangci-lint config) is complete. M1f Agents rail is complete and waits for review on its PR. M2b Review pane is next, then M3b.
+M1e Tiling, tab moves and chrome is merged (PR #12), M2a Worktrees and diff engine is merged (PR #11) and M3a GitHub and push backend is merged (PR #15); the reboot part of the M1e gate is still the operator's check. The build, CI and lint tooling work (Makefile, GitHub Actions CI with Dependabot, stricter golangci-lint config) is complete. M1f Agents rail is merged (PR #16). M2b Review pane is next, then M3b.
 
 ## M1 Terminal core
 
@@ -542,7 +542,7 @@ The PR list (agent branches), the PR view with its diff in the review pane, the 
 
 ## Next
 
-M1e Tiling, tab moves and chrome is merged (PR #12); the reboot part of its gate is still the operator's check. The build, CI and lint tooling work (Makefile, GitHub Actions CI with Dependabot, stricter golangci-lint config) is complete; the macOS test step in CI is non-blocking until the macOS test failures listed in Later are fixed. M3a GitHub and push backend is merged (PR #15). The agents rail is complete and waits for review on its PR; M2b Review pane is next, then M3b.
+M1e Tiling, tab moves and chrome is merged (PR #12); the reboot part of its gate is still the operator's check. The build, CI and lint tooling work (Makefile, GitHub Actions CI with Dependabot, stricter golangci-lint config) is complete; the macOS test step in CI is non-blocking until the macOS test failures listed in Later are fixed. M3a GitHub and push backend is merged (PR #15). M1f Agents rail is merged (PR #16); M2b Review pane is next, then M3b.
 
 ## Done
 
@@ -641,7 +641,6 @@ Ideas and requests that came up outside the current milestone go here.
 - A button release outside the window leaves the press held until the next click, which blocks hover focus meanwhile.
 - With `focus_follows_mouse` on, every pointer move builds a frame (unmeasured).
 - `TestBenchKitOnSynth` times out waiting for pane read loops under `CGO_ENABLED=1 go test -race -count=2 ./internal/ui/` (also on main before agents and persistence); it passes at `-count=1` and on its own (skipped in the nightly race run until fixed).
-- `TestAppCloseNoLeaks` flakes in CI's race run ("process group N survived Close", once in two Linux runs with no code change). `Close` waits only for each pane's leader; any other member of its process group is killed, but only init can reap it, and the test checks `kill(-pgid, 0)` at the instant `Close` returns. A local probe saw a group still occupied right after `Close` in 200 of 200 rounds when the shell forks, and in 0 of 200 when it execs; not confirmed on Ubuntu's dash, which normally execs a lone `-c` command. Likely fix: the test polls with a deadline.
 - In a reftable repository the watcher does not watch `.git/reftable/`, so a fetch or another ref change sets no git flag in its batch.
 - A weekly CI job that runs the hook and resume checks against the latest claude (DESIGN Risks); it needs a Claude login in CI.
 - Fix the tests that fail on macOS; until then the macOS test step in CI is non-blocking (`continue-on-error`), and removing that line is part of this item:
