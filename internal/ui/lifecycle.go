@@ -687,6 +687,8 @@ func (a *App) renameTab() tea.Cmd {
 // its terminal's foreground group, asynchronously after Close returns.
 // It is safe to call twice, and only after the program stopped running Update.
 func (a *App) Close(ctx context.Context) error {
+	a.watches.holds.closeAll()
+
 	for id, p := range a.panes {
 		delete(a.panes, id)
 		a.closeAsync(p)

@@ -616,7 +616,6 @@ M1e Tiling, tab moves and chrome is merged (PR #12); the reboot part of its gate
 
 Ideas and requests that came up outside the current milestone go here.
 
-- The agents rail's branch and stats go stale when an agent switches branch or commits between hooks, because probes run only on hooks and when the rail opens; the review drawer's watchers fix this.
 - Snapshots that fall back to `read-tree HEAD` (a split or unreadable index) lose skip-worktree bits, so a sparse checkout's snapshot shows the sparse files as deleted.
 - A tracked file inside a directory git ignores (force-added) gets no watch, so its edits show only after a full recompute.
 - Last-tab jump.

@@ -55,6 +55,9 @@ type Options struct {
 	// IndexCache is the directory where git keeps a refreshed index copy per
 	// worktree; empty disables the cache.
 	IndexCache string
+	// Watches shares one git watcher per worktree among the agent panes in it;
+	// nil means no watches.
+	Watches *git.WatchSet
 	// Save is called with the state after every successful dispatch; nil saves nothing.
 	Save func(core.State)
 }
@@ -99,6 +102,7 @@ type App struct {
 	clock     clock // the sync hold's and the tray's time source
 	tray      trayState
 	rail      railState
+	watches   watchState
 	storeVer  uint64        // counts the dispatches the store accepted
 	engine    *git.Engine   // nil when the rail's diff stats are off
 	probeSem  chan struct{} // its capacity bounds the rail's probes running at once
@@ -176,7 +180,8 @@ func New(opts Options) (*App, error) {
 		events: opts.Events, notice: opts.Notice, save: opts.Save,
 		log: opts.Logger, store: opts.Store, reg: reg, keymap: km,
 		panes: map[core.PaneID]*pane{}, outerFocused: true,
-		getenv: getenv, cwd: cwd, recordDir: opts.RecordDir, icons: opts.Icons, clock: realClock{}, start: termStart,
+		watches: watchState{set: opts.Watches, panes: map[core.PaneID]*paneWatch{}, failed: map[string]bool{}},
+		getenv:  getenv, cwd: cwd, recordDir: opts.RecordDir, icons: opts.Icons, clock: realClock{}, start: termStart,
 		load:         newSysLoad(),
 		probeSem:     make(chan struct{}, railProbeMax),
 		focusFollows: opts.FocusFollowsMouse, copyOnSelect: opts.CopyOnSelect,
@@ -285,7 +290,7 @@ func (a *App) Init() tea.Cmd {
 		rail = a.railOpened()
 	}
 
-	return tea.Batch(a.initTray(), a.waitEvent(), rail)
+	return tea.Batch(a.initTray(), a.waitEvent(), a.waitWatch(), rail)
 }
 
 // Update implements tea.Model.
@@ -296,6 +301,10 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	check()
 	a.syncPaneColors()
 	a.railAfterUpdate()
+
+	if c := a.watchSync(); c != nil {
+		a.later = append(a.later, c)
+	}
 
 	if len(a.later) > 0 {
 		cmd = tea.Batch(append(a.later, cmd)...)
@@ -405,6 +414,12 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, a.onKindDue(msg)
 	case hookMsg:
 		return a, tea.Batch(a.onHook(msg.ev), a.waitEvent())
+	case watchMsg:
+		return a, tea.Batch(a.onWatch(msg), a.waitWatch())
+	case paneRepoMsg:
+		return a, a.onPaneRepo(msg)
+	case watchAcquiredMsg:
+		a.onWatchAcquired(msg)
 	case agentTickMsg:
 		return a, a.onAgentTick()
 	case clockMsg:
