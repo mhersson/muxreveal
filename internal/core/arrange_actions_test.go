@@ -203,6 +203,20 @@ func TestEqualizeBSP(t *testing.T) {
 			t.Fatalf("widths %v heights %v", ws, hs)
 		}
 	})
+	t.Run("nested non-chain", func(t *testing.T) {
+		s := stateOf(vsplit(leaf("p1"), hsplit(vsplit(leaf("p2"), leaf("p3")), vsplit(leaf("p4"), leaf("p5")))), "p1")
+		st := NewStore(s)
+		must(t, st, Equalize{})
+		s = st.State()
+		a := Arrange(s.Tabs[0], Rect{0, 0, 120, 40}, s.Layout)
+		var ws []int
+		for _, id := range s.Tabs[0].Panes {
+			ws = append(ws, a.Rects[id].W)
+		}
+		if len(ws) != 5 || spread(ws) > 1 {
+			t.Fatalf("widths = %v", ws)
+		}
+	})
 	t.Run("ratios", func(t *testing.T) {
 		st := storeOf(t, ModeBSP, 3)
 		must(t, st, Equalize{})
