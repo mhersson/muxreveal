@@ -252,3 +252,22 @@ func railAge(active, now time.Time) string {
 
 	return strconv.Itoa(int(d/(24*time.Hour))) + "d"
 }
+
+// railHidden counts the cards not wholly inside the h rows shown from top: a
+// card is shown only when all four of its lines are.
+func railHidden(rows []railRow, h, top int) (above, below int) {
+	for i, r := range rows {
+		if r.kind != railRowCard || r.line != 0 {
+			continue
+		}
+
+		switch {
+		case i < top:
+			above++
+		case i+railCardLines-1 >= top+h:
+			below++
+		}
+	}
+
+	return above, below
+}

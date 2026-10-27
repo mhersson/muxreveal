@@ -147,6 +147,8 @@ func railCases() []railCase {
 		{"width-84", fixture(84, 30, nil)},
 		{"width-70", fixture(70, 30, nil)},
 		{"width-64", fixture(64, 30, nil)},
+		{"overflow-70", fixture(70, 30, func(a *App) { a.rail.sel = "p5" })},
+		{"fits-no-counts", fixture(100, 50, nil)},
 		{"width-63", fixture(63, 30, nil)},
 		{"body-20-rows", fixture(100, 22, func(a *App) { a.rail.sel = "p5" })},
 		{"body-9-rows", fixture(100, 11, func(a *App) { a.rail.sel = "p3" })},
@@ -585,5 +587,31 @@ func TestSpinFrame(t *testing.T) {
 		if got, want := spinFrame(n), string(frames[n%len(frames)]); got != want {
 			t.Errorf("spinFrame(%d) = %q, want %q", n, got, want)
 		}
+	}
+}
+
+func TestRailBottomCounts(t *testing.T) {
+	ui := mustTheme(t, "catppuccin-mocha").UI
+
+	tests := []struct {
+		name         string
+		w            int
+		above, below int
+		want         string
+	}{
+		{"none", 12, 0, 0, "╰──────────╯"},
+		{"both", 20, 3, 12, "╰─ ↑ 3 ───── 12 ↓ ─╯"},
+		{"above only", 12, 3, 0, "╰─ ↑ 3 ────╯"},
+		{"below only", 12, 0, 3, "╰──── 3 ↓ ─╯"},
+		{"the right count is left out when both do not fit", 10, 3, 3, "╰─ ↑ 3 ──╯"},
+		{"neither fits", 6, 3, 3, "╰────╯"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := ansi.Strip(railBottom(ui, tt.w, ui.Border, tt.above, tt.below))
+			if got != tt.want || ansi.StringWidth(got) != tt.w {
+				t.Errorf("railBottom = %q (%d wide), want %q", got, ansi.StringWidth(got), tt.want)
+			}
+		})
 	}
 }

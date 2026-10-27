@@ -158,3 +158,29 @@ func TestRailCardAt(t *testing.T) {
 		t.Error("cardAt found a card under the list")
 	}
 }
+
+func TestRailHidden(t *testing.T) {
+	// One group of four cards: the header is row 0, card k fills rows 5k+2 to 5k+5.
+	rows := railLayout([]railGroup{{cards: make([]railCard, 4)}})
+
+	tests := []struct {
+		name         string
+		h, top       int
+		above, below int
+	}{
+		{"top of the list", 10, 0, 0, 3},
+		{"middle", 10, 7, 1, 1},
+		{"bottom of the list", 10, 12, 2, 0},
+		{"card cut at the top edge", 10, 3, 1, 2},
+		{"card cut at the bottom edge", 8, 2, 0, 3},
+		{"everything fits", 30, 0, 0, 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			above, below := railHidden(rows, tt.h, tt.top)
+			if above != tt.above || below != tt.below {
+				t.Errorf("railHidden(h=%d, top=%d) = %d, %d; want %d, %d", tt.h, tt.top, above, below, tt.above, tt.below)
+			}
+		})
+	}
+}

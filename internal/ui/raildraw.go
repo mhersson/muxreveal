@@ -181,7 +181,8 @@ func (a *App) railLines(st core.State, lk look, v railView) []string {
 	}
 
 	if box.H >= 2 {
-		lines = append(lines, paint(edgeFg, ui.Bg, false).Render("╰"+strings.Repeat("─", max(box.W-2, 0))+"╯"))
+		above, below := railHidden(v.rows, v.geom.list.H, v.top)
+		lines = append(lines, railBottom(ui, box.W, edgeFg, above, below))
 	}
 
 	return lines[:min(len(lines), box.H)]
@@ -532,4 +533,71 @@ func (a *App) railCursor(st core.State) *tea.Cursor {
 	text := ansi.Truncate(printable(a.rail.query), max(cw-3, 0), "")
 
 	return tea.NewCursor(box.X+2+2+ansi.StringWidth(text), g.searchY)
+}
+
+// railBottom is the bottom border with the counts of cards hidden above (left)
+// and below (right); a count that does not fit between the corners is left out.
+func railBottom(ui theme.UI, w int, edgeFg theme.Hex, above, below int) string {
+	border := paint(edgeFg, ui.Bg, false)
+	count := paint(ui.Accent, ui.Bg, true)
+	room := max(w-2, 0)
+
+	var left, right string
+
+	if above > 0 {
+		left = " \u2191 " + strconv.Itoa(above) + " "
+	}
+
+	if below > 0 {
+		right = " " + strconv.Itoa(below) + " \u2193 "
+	}
+
+	// Each count has a dash on its outer side.
+	if left != "" && 1+ansi.StringWidth(left) > room {
+		left = ""
+	}
+
+	if right != "" && (1+ansi.StringWidth(right))+boolInt(left != "")*(1+ansi.StringWidth(left)) > room {
+		right = ""
+	}
+
+	lw, rw := 0, 0
+	if left != "" {
+		lw = 1 + ansi.StringWidth(left)
+	}
+
+	if right != "" {
+		rw = 1 + ansi.StringWidth(right)
+	}
+
+	dashes := strings.Repeat("─", room-lw-rw)
+
+	if left == "" && right == "" {
+		return border.Render("╰" + dashes + "╯")
+	}
+
+	var sb strings.Builder
+
+	if left != "" {
+		sb.WriteString(border.Render("╰─") + count.Render(left))
+		sb.WriteString(border.Render(dashes))
+	} else {
+		sb.WriteString(border.Render("╰" + dashes))
+	}
+
+	if right != "" {
+		sb.WriteString(count.Render(right) + border.Render("─╯"))
+	} else {
+		sb.WriteString(border.Render("╯"))
+	}
+
+	return sb.String()
+}
+
+func boolInt(b bool) int {
+	if b {
+		return 1
+	}
+
+	return 0
 }
