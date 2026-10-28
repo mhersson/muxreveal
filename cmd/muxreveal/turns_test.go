@@ -648,8 +648,8 @@ func isolateGit(t *testing.T) {
 	t.Setenv("GIT_AUTHOR_EMAIL", "test@example.com")
 	t.Setenv("GIT_COMMITTER_NAME", "Test")
 	t.Setenv("GIT_COMMITTER_EMAIL", "test@example.com")
-	t.Setenv("HOME", t.TempDir())
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	t.Setenv("HOME", shortDir(t))
+	t.Setenv("XDG_STATE_HOME", shortDir(t))
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
 }
@@ -769,7 +769,7 @@ func TestHookAnswersAfterTheSnapshotExists(t *testing.T) {
 	repo := seededRepo(t)
 	base := runtime.NumGoroutine()
 
-	h, err := setupHooks(discardLogger(), t.TempDir(), "", testWatches(t))
+	h, err := setupHooks(discardLogger(), shortDir(t), "", testWatches(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -800,7 +800,7 @@ func TestHookBudgetSlowSnapshot(t *testing.T) {
 
 	base := runtime.NumGoroutine()
 
-	h, err := setupHooks(discardLogger(), t.TempDir(), "", testWatches(t))
+	h, err := setupHooks(discardLogger(), shortDir(t), "", testWatches(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -840,7 +840,7 @@ func TestHookBudgetServerClosingMidSnapshot(t *testing.T) {
 
 	base := runtime.NumGoroutine()
 
-	h, err := setupHooks(discardLogger(), t.TempDir(), "", testWatches(t))
+	h, err := setupHooks(discardLogger(), shortDir(t), "", testWatches(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -898,7 +898,7 @@ func TestHookBudgetHeldIndexLockDoesNotBlockTheSnapshot(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	h, err := setupHooks(discardLogger(), t.TempDir(), "", testWatches(t))
+	h, err := setupHooks(discardLogger(), shortDir(t), "", testWatches(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -924,7 +924,7 @@ func TestHookBudgetUnsnapshottableTurnsAnswerAtOnce(t *testing.T) {
 	notRepo := t.TempDir()
 	base := runtime.NumGoroutine()
 
-	h, err := setupHooks(discardLogger(), t.TempDir(), "", testWatches(t))
+	h, err := setupHooks(discardLogger(), shortDir(t), "", testWatches(t))
 	if err != nil {
 		t.Fatal(err)
 	}

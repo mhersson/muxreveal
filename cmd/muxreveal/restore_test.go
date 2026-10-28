@@ -296,10 +296,10 @@ func (b *lockedBuffer) contains(s string) bool {
 func testEnv(t *testing.T) (env core.Env, cfg string) {
 	t.Helper()
 
-	t.Setenv("HOME", t.TempDir())
+	t.Setenv("HOME", shortDir(t))
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	t.Setenv("XDG_STATE_HOME", shortDir(t))
 	t.Setenv("SHELL", "/bin/sh")
 
 	// run launches in the cwd; inside a repository leader n opens the worktree picker.
