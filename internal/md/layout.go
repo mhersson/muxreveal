@@ -6,6 +6,7 @@ import (
 
 	"github.com/charmbracelet/x/ansi"
 	"github.com/yuin/goldmark/v2/ast"
+	east "github.com/yuin/goldmark/v2/extension/ast"
 )
 
 const (
@@ -191,7 +192,7 @@ func (l *layouter) blocks(out *frag, parent ast.Node, width int, c blockCtx, com
 	}
 }
 
-// block appends one block. Tables lay out nothing yet.
+// block appends one block.
 func (l *layouter) block(out *frag, n ast.Node, width int, c blockCtx) {
 	text := c.text
 	if c.done {
@@ -219,6 +220,8 @@ func (l *layouter) block(out *frag, n ast.Node, width int, c blockCtx) {
 		l.htmlBlock(out, n, width, text)
 	case *ast.CodeBlock:
 		l.codeBlock(out, n, width)
+	case *east.Table:
+		l.table(out, n, width, text)
 	case *ast.ThematicBreak:
 		out.lines = append(out.lines, l.rule(RoleRule, width))
 	}

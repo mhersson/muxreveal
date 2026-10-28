@@ -1,0 +1,5 @@
+‹TableFrame:╭───┬────╮›
+‹TableFrame:│ ›‹TableHeader,b:a›‹TableFrame: │ ›‹TableHeader,b:bb›‹TableFrame: │›
+‹TableFrame:├───┼────┤›
+‹TableFrame:│ ›1‹TableFrame: │ ›2 ‹TableFrame: │›
+‹TableFrame:╰───┴────╯›
