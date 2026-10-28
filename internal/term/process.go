@@ -101,8 +101,8 @@ func (p *Process) Done() <-chan struct{} { return p.done }
 
 // Close sends SIGHUP to the leader's process group and to the terminal's
 // foreground group (a job-control shell runs its commands in their own group),
-// escalates to SIGKILL after a second, waits for the child and closes the
-// master. It is idempotent.
+// waits for the child and closes the master. After a second it escalates to
+// SIGKILL and closes the master before waiting. It is idempotent.
 func (p *Process) Close() error {
 	p.closeOnce.Do(func() {
 		// Read before any signal: once the leader dies the terminal loses its foreground group.
@@ -115,13 +115,20 @@ func (p *Process) Close() error {
 		case <-time.After(killAfter):
 			signalGroups(groups, syscall.SIGKILL)
 
+			// macOS can hold a killed session leader in exit while its master is
+			// open and unread. A Read in flight defers the real close, but its
+			// reads keep the master drained, so the leader exits anyway.
+			if err := p.pty.Close(); err != nil {
+				p.closeErr = fmt.Errorf("close pty: %w", err)
+			}
+
 			<-p.done
 		}
 
 		// A descendant that ignored SIGHUP may outlive a leader that exited on it.
 		signalGroups(groups, syscall.SIGKILL)
 
-		if err := p.pty.Close(); err != nil && !errors.Is(err, os.ErrClosed) {
+		if err := p.pty.Close(); err != nil && !errors.Is(err, os.ErrClosed) && p.closeErr == nil {
 			p.closeErr = fmt.Errorf("close pty: %w", err)
 		}
 	})
