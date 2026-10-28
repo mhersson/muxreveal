@@ -1,0 +1,71 @@
+‹Image:󰥶 Gleam logo  ›‹ImageHost:githu…›
+‹Text,b:Gleam› - a tiny, fast
+static site builder
+
+‹Link,u:Website› | ‹Link,u:Docs›
+
+‹Image,u:󰥶 Build  ›‹ImageHost,u:img.shield…›
+‹Image,u:󰥶 Release  ›‹ImageHost,u:img.shie…›
+‹Image,u:󰥶 License: MIT  ›‹ImageHost,u:img…›
+
+‹Heading1,b:Gleam›
+‹Rule:────────────────────›
+
+Gleam turns a folder
+of Markdown into a
+site. It has ‹Text,b:no›
+‹Text,b:runtime›, reads a
+single ‹Link,u:config file›,
+and builds a
+thousand pages in
+under a second. See
+the ‹Link,u:changelog› and
+the ‹Link,u:contributing›
+‹Link,u:guide›.
+
+‹Image:󰥶 A screenshot of t…›
+
+‹Heading2,b:Install›
+
+‹CodeFrame:╭─ ›‹CodeLang:sh›‹CodeFrame: ─────────────╮›
+‹CodeFrame:│ ›‹LineNumber:1 ›‹CodeText:go install ex…›‹CodeFrame: │›
+‹CodeFrame:╰──────────────────╯›
+
+Or download a binary
+from the ‹Link,u:releases›
+‹Link,u:page›. Contact
+‹Link,u:mailto:hello@example›
+‹Link,u:.com› or
+‹Link,u:https://example.com/›
+‹Link,u:gleam› for help.
+
+‹Heading2,b:Usage›
+
+  ‹Bullet:1. ›Create
+     ‹Code: gleam.toml ›
+  ‹Bullet:2. ›Put pages in
+     ‹Code: content/ ›
+  ‹Bullet:3. ›Run ‹Code: gleam›
+     ‹Code:build ›
+
+‹TableFrame:╭────────┬────────┬…›
+‹TableFrame:│ ›‹TableHeader,b:Flag  ›‹TableFrame: │ ›‹TableHeader,b:Defaul›‹TableFrame: │…›
+‹TableFrame:│ ›‹TableHeader,b:      ›‹TableFrame: │ ›‹TableHeader,b:t     ›‹TableFrame: │…›
+‹TableFrame:├────────┼────────┼…›
+‹TableFrame:│ ›‹Code: --out›‹TableFrame: │ ›‹Code: dist ›‹TableFrame: │…›
+‹TableFrame:│ ›‹Code: ›     ‹TableFrame: │ ›      ‹TableFrame: │…›
+‹TableFrame:│ ›      ‹TableFrame: │ ›      ‹TableFrame: │…›
+‹TableFrame:│ ›      ‹TableFrame: │ ›      ‹TableFrame: │…›
+‹TableFrame:│ ›      ‹TableFrame: │ ›      ‹TableFrame: │…›
+‹TableFrame:│ ›      ‹TableFrame: │ ›      ‹TableFrame: │…›
+‹TableFrame:│ ›‹Code: --dra›‹TableFrame: │ ›off   ‹TableFrame: │…›
+‹TableFrame:│ ›‹Code:fts ›  ‹TableFrame: │ ›      ‹TableFrame: │…›
+‹TableFrame:│ ›      ‹TableFrame: │ ›      ‹TableFrame: │…›
+‹TableFrame:│ ›      ‹TableFrame: │ ›      ‹TableFrame: │…›
+‹TableFrame:│ ›      ‹TableFrame: │ ›      ‹TableFrame: │…›
+‹TableFrame:│ ›      ‹TableFrame: │ ›      ‹TableFrame: │…›
+‹TableFrame:╰────────┴────────┴…›
+
+‹Heading2,b:License›
+
+MIT, see ‹Link,u:LICENSE›.

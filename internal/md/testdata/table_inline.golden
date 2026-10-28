@@ -1,0 +1,5 @@
+‹TableFrame:╭───────┬────────┬────────╮›
+‹TableFrame:│ ›‹TableHeader,b,i:em›‹TableHeader,b: st›‹TableFrame: │ ›‹Code,b: code ›‹TableFrame: │ ›‹Link,b,u:docs›‹TableHeader,b: ›‹TableHeader,b,s:x›‹TableFrame: │›
+‹TableFrame:├───────┼────────┼────────┤›
+‹TableFrame:│ ›‹Text,i:em› ‹Text,b:st›‹TableFrame: │ ›‹Code: code ›‹TableFrame: │ ›‹Link,u:docs› ‹Text,s:x›‹TableFrame: │›
+‹TableFrame:╰───────┴────────┴────────╯›

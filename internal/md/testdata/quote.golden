@@ -1,0 +1,10 @@
+‹QuoteBar:▎ ›‹QuoteText:a ›‹Link,u:l›‹QuoteText: ›‹Code: c ›
+‹QuoteBar:▎ ›
+‹QuoteBar:▎ ›‹QuoteText:b›
+
+‹QuoteBar:▎ ▎ ›‹QuoteText:nested back›
+‹QuoteBar:▎ ›‹QuoteText:outer›
+‹QuoteBar:▎ ›
+‹QuoteBar:▎ ▎ ›‹QuoteText:inner text›
+‹QuoteBar:▎ ▎ ›‹QuoteText:that wraps›
+‹QuoteBar:▎ ▎ ›‹QuoteText:here›

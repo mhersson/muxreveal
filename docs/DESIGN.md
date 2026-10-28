@@ -191,7 +191,7 @@ One Go module, `github.com/mhersson/muxreveal`.
 | `internal/harness` | `Harness` interface; Claude Code adapter (launch args, hook settings, resume, a session's custom name from its transcript) |
 | `internal/git` | Worktrees, turn snapshots, watcher and watch set, diff engine, highlighting; `linediff` and `invisible` (ported from tuios) |
 | `internal/github` | Auth via `gh`, GraphQL and REST client, poller, PR actions |
-| `internal/md` | Markdown to styled cells plus image references |
+| `internal/md` | Markdown to width-wrapped lines of styled runs, with link targets, image references and folds; no UI imports |
 | `internal/store` | `state.json` and SQLite persistence |
 
 ```go
@@ -236,7 +236,7 @@ Go 1.27 (`tuios.dev/vt` needs 1.26 or later). The reason for Rust was a proven V
 | Diff | `git diff --histogram` parsed with `bluekeyes/go-gitdiff`; intra-line spans from the ported tuios `diffview` (`Changed`), computed when rendering | Same hunks as git; tuios's span rule |
 | Diff rendering | Ported tuios `diffview` with its lexers (M2b) | Highlighting, gutter, tints and side-by-side pairing built for the same job |
 | Syntax | Chroma v2 | Ships Catppuccin styles; wide language coverage |
-| Markdown | `yuin/goldmark` (GFM) + our own renderer | Full control of layout and image placement; Glamour has no images |
+| Markdown | goldmark v2 with GFM and footnotes, plus our own layout in `internal/md` | Full control of layout and image placement; Glamour has no images |
 | Images | Own Kitty graphics encoder; `image/*` + `golang.org/x/image` for decode and scaling | The protocol is small; port TUIOS's passthrough (MIT) if it's cleaner |
 | File watching | `fsnotify` with our own directory walk | Maintained; the walk skips `.git` internals, `.worktrees` and ignored directories; `rjeczalik/notify` is unmaintained since 2023 and uses FSEvents on macOS only with cgo |
 | GitHub | `cli/go-gh/v2` for hosts, tokens and the REST and GraphQL clients (GraphQL queries as tagged Go structs); ETags through our own transport under its clients | Same login and host routing as `gh`; no schema file or codegen; conditional requests do not count against the rate limit |
@@ -286,7 +286,7 @@ Go 1.27 (`tuios.dev/vt` needs 1.26 or later). The reason for Rust was a proven V
 - Shell panes run `$SHELL -l`. `leader n` opens an agent pane to the right of the focused pane, in its cwd, running `$SHELL -l -i -c '"$@"; exec "$SHELL" -l' sh claude --settings <file>`, with the command, the settings path and any session id passed as arguments after the script and never quoted into it, since no quoting is safe in every shell (fish takes them as `$argv`, and a restore adds `--resume <id>`), so leaving Claude leaves a shell in the pane. `$SHELL` falls back to `/bin/sh`. Shell panes and agent panes both get `MUXREVEAL_PANE` and `MUXREVEAL_SOCK` in their environment.
 - `leader x` closes the focused pane at once; for an agent pane it first asks in a confirm overlay (`y` or `enter` confirms, `n` or `esc` cancels). `leader q` quits and asks first when any agent pane is open. `leader X` closes the active tab with all its panes, asking first when it holds an agent pane. A pane whose process exits closes without asking, and so does an open confirm about it or about its tab once the tab is gone. The confirm owns every key while it is open.
 - The cwd a pane shows and its splits inherit is the last OSC 7 path the pane reported, else on Linux the `/proc` cwd of the terminal's foreground process group, else the cwd the pane started in. It is looked up off the UI loop, at most every 500 ms per pane.
-- A pane's kind follows its terminal's foreground process. The same probe reads the name of the foreground process group leader (`/proc/<pgrp>/comm` on Linux, the `kinfo_proc` `p_comm` on macOS). The harness's program (`claude`) makes the pane an agent; anything else makes it a shell. Becoming a shell clears the pane's harness, session, transcript and state. Hooks never change the kind, and hook events for a pane that is not an agent are ignored.
+- A pane's kind follows its terminal's foreground process. The same probe reads the name of the foreground process group leader (`/proc/<pgrp>/comm` on Linux; on macOS the base name of its `argv[0]` from `kern.procargs2`, without a login shell's leading `-`, else the `kinfo_proc` `p_comm`, since `p_comm` names a symlink's target and Claude's native install runs as a file named after its version). The harness's program (`claude`) makes the pane an agent; anything else makes it a shell. Becoming a shell clears the pane's harness, session, transcript and state. Hooks never change the kind, and hook events for a pane that is not an agent are ignored.
 - Claude is the foreground leader only when it runs under a shell with job control, which `$SHELL -l -i -c` gives in sh, bash and zsh and an interactive shell pane gives everywhere; for fish the agent command turns it on with `status job-control full`.
 - A pane that MuxReveal launched as an agent (`leader n` or a restore) stays an agent until Claude has been seen in the foreground and has left it, or has not appeared within 10 s of the launch (one extra probe fires at 10 s), so a slow shell start-up or a missing `claude` never demotes the pane early. A pane launched with `--resume` that has had no `SessionStart` yet is also exempt from the kind rule until that probe (see Persisted state, Resume).
 - A hand-typed `claude` makes the pane an agent by this rule but has no hooks, so it shows no badge and has no session id; restored, it gets a fresh `claude` and a notice.
@@ -591,7 +591,7 @@ An agent pane whose Claude has sent no hook has no state and shows no badge. The
 - A plain `--resume` fires `SessionStart` with `source: "resume"` and the same session id.
 - A refused resume prints `No conversation found with session ID: <id>`, exits 1 within about a second, fires `SessionEnd` (reason `other`) and no `SessionStart`.
 - The longest gap in Claude's PTY output while it worked was 0.24 s, so 3 s is a wide margin for the quiet rule.
-- Claude's comm is `claude`; see Panes and layout for when it is the foreground leader.
+- Claude's process name is `claude`: its comm on Linux, its `argv[0]` on macOS (the native install's `p_comm` is its version, such as `2.1.312`); see Panes and layout for when it is the foreground leader.
 
 ### Turn snapshots
 
@@ -766,8 +766,69 @@ func (e *Engine) FileText(ctx context.Context, worktree string, f FileDiff) (old
 ### Images and markdown
 
 - MuxReveal owns the whole screen, so it knows where every image cell sits. Images are sent once per id over the Kitty graphics protocol, then placed and deleted as panes scroll or re-layout.
-- Support is detected with a Kitty graphics query at startup. If it's missing, images render as `[image: alt]`.
+- Support is detected with a Kitty graphics query at startup. If it's missing, an image is drawn as the layout's image line (the image icon, or `image: ` with icons off, then the alt text and the host).
 - Remote images, including GitHub user-attachments, are fetched with the host token and cached under the cache dir.
+
+#### Markdown layout
+
+`internal/md` turns markdown (PR bodies, agents' plan files, repo docs) into width-wrapped lines of styled runs, so the screens that show markdown never know markdown. It is pure: bytes in, values out, no IO and no UI imports.
+
+- **API.** `Parse(src, ParseOptions{Base})` reads the source once with goldmark v2 (GFM and footnotes) and never fails. `(*Doc).Layout(LayoutOptions{Width, Open, Icons, Highlight})` returns `Lines` of `Runs` plus the `Links`, `Images` and `Folds` found. `Doc.Cut` reports that the input was cut. `Layout.Plain` gives each line's text for search and copy.
+- **Runs carry roles, not colours.** A run has a semantic `Role`, the attributes bold, italic, underline and strike, the highlighter's class for code, a `Link` index (-1 for none) and a `Path`. The UI maps roles to theme colours by the table below. Adjacent runs with equal fields merge.
+- **Widths.** Lines wrap at the width given, at most 100 cells. Widths are cells, wide characters count 2, and no line is ever wider than the width used. One blank line separates blocks; none sits inside a list or between a list item's paragraphs.
+- **Text safety.** Prose goes through `invisible.Strip`; C0 and C1 controls and DEL are dropped (a tab becomes a space) and invalid UTF-8 becomes U+FFFD. In code, inline and blocks, every `invisible.Rune` character and every control except tab becomes `⟨U+XXXX⟩` (upper-case hex, at least four digits) in `RoleHidden`, as the review drawer draws them. No run's text holds a control character.
+- **Bounds.** Input past `MaxBytes` (4 MiB) is cut at the last line break before it. Lists, quotes, alerts and open folds nested deeper than 16 are laid out at depth 16: past it they add no bars or indentation, and their content is still laid out. List items keep their marker, number or task mark on their first line, which is narrower by it; the item's other lines use the whole width, except that a fold head, code box, table or rule that starts the item is laid out whole in the room the marker leaves. A marker that a non-empty first line has no room for is dropped, never the text, and an item with no text keeps its marker, cut to the width if need be. An alert keeps its title line. Past 32 levels the walk stops recursing and lays the rest out flat at the cap by the same rules, so no input within `MaxBytes` overflows the stack in our code. A table with more than 64 columns (the header row's cells count) is laid out as paragraphs of its source lines; rows stop once a table holds 4,096 cells, followed by a `RoleFoldHint` line `N more rows`. Parse is goldmark's: linear on `[` repeated 100,000 times, `>` repeated 10,000 times, 100,000 list items and 4 MiB of one paragraph, quadratic on repeated `[a](` and superlinear on deep nesting, and it recurses once per nesting level at about 60 bytes of stack each, so callers parse off the update loop. Layout is ours and linear in the input.
+- **Inline.** Emphasis, strong and `~~` strike set attributes. Inline code gets one space on each side. Inline HTML drops its tags and keeps their text: `<kbd>` is `RoleKey`, `<br>` breaks the line, `<b>`/`<strong>` are bold and `<i>`/`<em>` italic. HTML comments are dropped wherever they are. An HTML block other than a `<details>` part or a comment (such as `<p align="center">`) lays out as a paragraph by the same rules, alignment ignored.
+- **Links.** Only `http`, `https` and `mailto` targets get a `Link`, which the UI emits as OSC 8. Any other scheme keeps the underlined text with no `Link`. Autolinks and GFM bare URLs count as links.
+- **Base.** `ParseOptions.Base` is a URL base (an absolute http or https URL) or a local base (an absolute path); anything else counts as no base and leaves relative targets unresolved. Against a URL base a relative link resolves to a URL and is linked if the result is http or https. Against a local base it resolves to `Run.Path`, a cleaned absolute path with no `Link`, and M4b decides what to open; a local Path is not confined to the base. A `#fragment` link resolves against a URL base and is linked; against a local base it gets neither a link nor a path. `//host/x` takes a URL base's scheme and otherwise gets neither. Image sources resolve the same way.
+- **Lists.** Bullets are `•`, `◦`, `▪` by depth (deeper levels repeat `▪`); ordered lists use right-aligned numbers plus `.`; continuation lines and the item's other blocks hang under the item's text. A list outside any other list is indented 2 cells. Task items show `✓` (done, text dimmed) or `○` (open); both are plain Unicode and stay with icons off.
+- **Code blocks.** A rounded box across the full width with the fence's first word (at most 20 cells) in the top border (`╭─ go ───╮`; no label without one), right-aligned line numbers as wide as the last number, and the code below. Lines are cut with `…`, never wrapped, and tabs expand to 4-cell stops. The `Highlighter` gets each code line as written, before tab expansion and hidden-character tags, and its spans index those bytes. With no highlighter the code is plain. The package never imports a highlighter, which keeps it free of UI imports.
+- **Quotes and alerts.** A quote draws `▎` on every line. A quote whose first line is `[!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]` or `[!CAUTION]` is a GitHub alert: a bold title line (icon and title) in the alert's role. The icons are nf-md-information_outline U+F02FD (note), nf-md-lightbulb_outline U+F0336 (tip), nf-md-message_alert_outline U+F0A04 (important), nf-md-alert_outline U+F002A (warning) and nf-md-alert_octagon_outline U+F0CE6 (caution); there is no icon with icons off. The body follows, with the bar in the same role.
+- **Images.** `![alt](src)`, `<img>` and badges inside links are one line: the image icon (U+F0976, or `image: ` with icons off) and the alt text, then two spaces and the source's host (a local source shows its file name). The line is also an `Image` reference carrying the resolved source and, inside a link, the link, so M4b can place the picture there. An image inside a paragraph takes a line of its own and the text continues on the next line; one hard break (`<br>` or a line break) straight after an image is dropped, since the image already ended its line, and whitespace between consecutive images (badge rows) is dropped.
+- **Folds.** Folds come from `<details>` and `<summary>` tags read in HTML blocks and in paragraphs: `<details>` opens a fold, `</details>` closes the innermost open fold of the same container (a stray one is dropped, and one inside a nested container closes nothing outside it), and `<summary>` names the innermost fold. A paragraph splits at those tags: the text before stays a paragraph, the text after an opener is the fold's body, and the text after a closer follows the fold. A `</details>` nested in emphasis or link text closes the innermost open fold after its paragraph (after its part of a paragraph split at other tags), or is dropped when none is open; a nested `<details>` or `<summary>` is not read. A fold starts folded unless its `<details>` has the `open` attribute (any case, with or without a value); `LayoutOptions.Open`, keyed by `Fold.ID`, overrides that default when it holds the key. Folded shows `▸ `, the summary and `   enter opens`; open shows `▾ ` and the summary, then the body indented 2. The summary is the first `<summary>` in the opener's block or paragraph, or in the HTML block right after it, with tags dropped and entities decoded, else `Details`. A one-line `<details>...</details>` is a fold whose body is its text after `</summary>`.
+- **Tables.** A rounded grid with a header rule and per-column GFM alignment. Columns start at their widest cell; when the table is wider than the width the widest column shrinks first, down to 6 cells, and cells wrap inside their columns keeping their inline styles. A table still too wide at 6-cell columns is cut at the right edge with `…`.
+- **Footnotes.** A reference is `[n]`, numbered as goldmark numbers it. At the end of the document come a 16-cell `─` rule, then `n. text` for each footnote referenced from the body or from a footnote listed, in number order. A label with several definitions shows the first.
+- **Headings.** Bold; `#` is followed by a full-width rule. Thematic breaks are a full-width rule.
+
+Roles and their theme colours, which M4b maps. `Code` is a theme role M4b adds: Peach for `RoleCode`'s text and Surface for its ground (Peach is a palette colour only today). The other roles named exist in `internal/ui/theme`.
+
+| Role | Theme role | Attributes | Used for |
+| --- | --- | --- | --- |
+| `RoleText` | `Fg` | | body text |
+| `RoleHeading1` | `Accent` | bold | `#` headings |
+| `RoleHeading2` | `Accent` | bold | `##` headings |
+| `RoleHeading3` | `Fg` | bold | `###` to `######` headings |
+| `RoleRule` | `Border` | | the rule under `#`, thematic breaks |
+| `RoleCode` | `Code` (new) | | inline code, on the `Code` ground |
+| `RoleLink` | `Info` | underline | link text, and unlinked targets |
+| `RoleKey` | `Key` | bold | `<kbd>` text |
+| `RoleBullet` | `Accent` | | bullets and ordered numbers |
+| `RoleTaskDone` | `Success` | bold | `✓` |
+| `RoleTaskDoneText` | `Dim` | | done items' text |
+| `RoleTaskOpen` | `Muted` | | `○` |
+| `RoleCodeFrame` | `Border` | | code box |
+| `RoleCodeLang` | `Subtle` | | language label |
+| `RoleLineNumber` | `Muted` | | code line numbers |
+| `RoleCodeText` | `Fg` | highlighter class | code text |
+| `RoleHidden` | `Error` | bold | `⟨U+XXXX⟩` tags in code |
+| `RoleQuoteBar` | `Border` | | `▎` of a quote |
+| `RoleQuoteText` | `Dim` | | quoted text |
+| `RoleAlertNote` | `Info` | bold title | note alerts: bar and title |
+| `RoleAlertTip` | `Success` | bold title | tip alerts |
+| `RoleAlertImportant` | `Accent` | bold title | important alerts |
+| `RoleAlertWarning` | `Warning` | bold title | warning alerts |
+| `RoleAlertCaution` | `Error` | bold title | caution alerts |
+| `RoleSummaryMark` | `Accent` | bold | `▸` and `▾` |
+| `RoleSummary` | `Fg` | bold | fold summary |
+| `RoleFoldHint` | `Subtle` | | `enter opens`, `N more rows` |
+| `RoleImage` | `Muted` | | image icon and alt text |
+| `RoleImageHost` | `Subtle` | | image host or file name |
+| `RoleTableFrame` | `Border` | | table grid |
+| `RoleTableHeader` | `Fg` | bold | header cells |
+| `RoleFootnoteRef` | `Info` | | `[n]` references |
+| `RoleFootnoteRule` | `Border` | | rule above footnotes |
+| `RoleFootnoteNumber` | `Info` | | footnote numbers |
+| `RoleFootnoteText` | `Dim` | | footnote text |
 
 ### Config
 
@@ -1015,7 +1076,9 @@ v1 ships in six milestones, preceded by a VT spike. Each ends on a gate you can 
     - Gate: a saved file shows in the open drawer within 300 ms, and turn mode isolates the last turn's changes.
 4. **M3 GitHub loop.** Agent PRs, PR diff, CI status, push, PR compose, approve and merge on github.com and GHE. Covers GH-1 (agents), GH-2, GH-4 (status), GH-5 to GH-7, GA-1 to GA-3, GA-5.
     - Gate: agent change → push → PR → green CI → approve → merge, without opening a browser.
-5. **M4 Markdown and polish.** Rendered markdown with images, PR conversation, compose preview, reviewed hunks, notifications, other PR tabs, CI log tail, remapping, worktree cleanup. Covers MD-1, MD-2, GH-1 (others), GH-3, GH-4 (logs), GA-4, DF-7, AG-6, UX-3, WT-3.
+5. **M4 Markdown and polish.** Rendered markdown with images, PR conversation, compose preview, reviewed hunks, notifications, other PR tabs, CI log tail, remapping, worktree cleanup. Covers MD-1, MD-2, GH-1 (others), GH-3, GH-4 (logs), GA-4, DF-7, AG-6, UX-3, WT-3. M4 ships as two plans:
+    - **M4a Markdown layout:** headless, in `internal/md`; MD-1's layout.
+    - **M4b:** the rest of M4, including MD-2.
     - Gate: rendered markdown with images, the polish items and the requirements above work in Ghostty and Kitty on macOS and Linux.
 6. **M5 Docs and demo.** A README (what MuxReveal is, install, first run, the main keys and workflows) and user docs (keys, config, layouts, review, PRs), with screenshots and a short demo video or recording.
     - Gate: the v1 release on macOS and Linux, tested in Ghostty and Kitty, with the README, user docs, screenshots and demo video done: someone new can install and run MuxReveal from the README alone, and the README shows it working.

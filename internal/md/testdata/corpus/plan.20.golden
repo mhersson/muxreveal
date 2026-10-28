@@ -1,0 +1,217 @@
+‹Heading1,b:Plan: a link checker›
+‹Heading1,b:for the site builder›
+‹Rule:────────────────────›
+
+‹QuoteBar:▎ ›‹QuoteText:For agentic›
+‹QuoteBar:▎ ›‹QuoteText:workers: work›
+‹QuoteBar:▎ ›‹QuoteText:through the steps›
+‹QuoteBar:▎ ›‹QuoteText:in order and tick›
+‹QuoteBar:▎ ›‹QuoteText:each box when its›
+‹QuoteBar:▎ ›‹QuoteText:tests pass.›
+
+‹Text,b:Goal:› ‹Code: gleam check ›
+reads a built site
+and reports every
+broken internal
+link, with the page
+and line it came
+from.
+
+‹Text,b:Architecture:›
+
+  ‹Bullet:• ›A walker lists
+    the pages under
+    the output
+    folder
+  ‹Bullet:• ›A parser pulls
+    every ‹Code: href › and
+    ‹Code: src › out of
+    each page
+    ‹Bullet:◦ ›absolute URLs
+      are skipped
+    ‹Bullet:◦ ›fragments are
+      checked
+      against the
+      page's own
+      anchors
+      ‹Bullet:▪ ›an anchor is
+        any ‹Code: id ›
+        attribute
+      ‹Bullet:▪ ›a heading
+        gets one
+        from its
+        text
+  ‹Bullet:• ›A reporter
+    prints one line
+    per broken link
+    and sets the
+    exit code
+
+‹Text,b:Tech stack:› Go 1.27,
+‹Code: golang.org/x/net/ht›
+‹Code:ml ›, the standard
+library otherwise.
+
+‹Heading2,b:File structure›
+
+‹TableFrame:╭────────┬─────────╮›
+‹TableFrame:│ ›‹TableHeader,b:File  ›‹TableFrame: │ ›‹TableHeader,b:Job    ›‹TableFrame: │›
+‹TableFrame:├────────┼─────────┤›
+‹TableFrame:│ ›‹Code: inter›‹TableFrame: │ ›list   ‹TableFrame: │›
+‹TableFrame:│ ›‹Code:nal/ch›‹TableFrame: │ ›pages, ‹TableFrame: │›
+‹TableFrame:│ ›‹Code:eck/wa›‹TableFrame: │ ›never  ‹TableFrame: │›
+‹TableFrame:│ ›‹Code:lk.go ›‹TableFrame: │ ›follow ‹TableFrame: │›
+‹TableFrame:│ ›      ‹TableFrame: │ ›symlink‹TableFrame: │›
+‹TableFrame:│ ›      ‹TableFrame: │ ›s      ‹TableFrame: │›
+‹TableFrame:│ ›‹Code: inter›‹TableFrame: │ ›extract‹TableFrame: │›
+‹TableFrame:│ ›‹Code:nal/ch›‹TableFrame: │ ›links  ‹TableFrame: │›
+‹TableFrame:│ ›‹Code:eck/li›‹TableFrame: │ ›and    ‹TableFrame: │›
+‹TableFrame:│ ›‹Code:nks.go›‹TableFrame: │ ›anchors‹TableFrame: │›
+‹TableFrame:│ ›‹Code: ›     ‹TableFrame: │ ›from a ‹TableFrame: │›
+‹TableFrame:│ ›      ‹TableFrame: │ ›page   ‹TableFrame: │›
+‹TableFrame:│ ›‹Code: inter›‹TableFrame: │ ›format ‹TableFrame: │›
+‹TableFrame:│ ›‹Code:nal/ch›‹TableFrame: │ ›and    ‹TableFrame: │›
+‹TableFrame:│ ›‹Code:eck/re›‹TableFrame: │ ›count  ‹TableFrame: │›
+‹TableFrame:│ ›‹Code:port.g›‹TableFrame: │ ›the    ‹TableFrame: │›
+‹TableFrame:│ ›‹Code:o ›    ‹TableFrame: │ ›finding‹TableFrame: │›
+‹TableFrame:│ ›      ‹TableFrame: │ ›s      ‹TableFrame: │›
+‹TableFrame:╰────────┴─────────╯›
+
+‹Heading2,b:Step 1: walk the›
+‹Heading2,b:output folder›
+
+  ‹TaskOpen:○ ›Write the
+    failing test in
+    ‹Code: internal/check/›
+    ‹Code:walk_test.go ›
+    ‹Bullet:1. ›Build a
+       folder with
+       three pages
+       and a symlink
+       in
+       ‹Code: t.TempDir() ›
+    ‹Bullet:2. ›Assert the
+       walker
+       returns the
+       three pages,
+       sorted
+    ‹Bullet:3. ›Run it and
+       watch it
+       fail:
+       ‹CodeFrame:╭─ ›‹CodeLang:sh›‹CodeFrame: ──────╮›
+       ‹CodeFrame:│ ›‹LineNumber:1 ›‹CodeText:go tes…›‹CodeFrame: │›
+       ‹CodeFrame:╰───────────╯›
+       Expected:
+       ‹Code: undefined:›
+       ‹Code:Walk ›
+  ‹TaskOpen:○ ›Implement ‹Code: Walk ›
+    in ‹Code: walk.go ›
+    ‹CodeFrame:╭─ ›‹CodeLang:go›‹CodeFrame: ─────────╮›
+    ‹CodeFrame:│ ›‹LineNumber: 1 ›‹CodeText:// Walk …›‹CodeFrame: │›
+    ‹CodeFrame:│ ›‹LineNumber: 2 ›‹CodeText:func Wal…›‹CodeFrame: │›
+    ‹CodeFrame:│ ›‹LineNumber: 3 ›‹CodeText:    var …›‹CodeFrame: │›
+    ‹CodeFrame:│ ›‹LineNumber: 4 ›‹CodeText:         ›‹CodeFrame: │›
+    ‹CodeFrame:│ ›‹LineNumber: 5 ›‹CodeText:    err …›‹CodeFrame: │›
+    ‹CodeFrame:│ ›‹LineNumber: 6 ›‹CodeText:        …›‹CodeFrame: │›
+    ‹CodeFrame:│ ›‹LineNumber: 7 ›‹CodeText:        …›‹CodeFrame: │›
+    ‹CodeFrame:│ ›‹LineNumber: 8 ›‹CodeText:        }›‹CodeFrame: │›
+    ‹CodeFrame:│ ›‹LineNumber: 9 ›‹CodeText:         ›‹CodeFrame: │›
+    ‹CodeFrame:│ ›‹LineNumber:10 ›‹CodeText:        …›‹CodeFrame: │›
+    ‹CodeFrame:│ ›‹LineNumber:11 ›‹CodeText:        …›‹CodeFrame: │›
+    ‹CodeFrame:│ ›‹LineNumber:12 ›‹CodeText:        }›‹CodeFrame: │›
+    ‹CodeFrame:│ ›‹LineNumber:13 ›‹CodeText:         ›‹CodeFrame: │›
+    ‹CodeFrame:│ ›‹LineNumber:14 ›‹CodeText:        …›‹CodeFrame: │›
+    ‹CodeFrame:│ ›‹LineNumber:15 ›‹CodeText:        …›‹CodeFrame: │›
+    ‹CodeFrame:│ ›‹LineNumber:16 ›‹CodeText:        }›‹CodeFrame: │›
+    ‹CodeFrame:│ ›‹LineNumber:17 ›‹CodeText:         ›‹CodeFrame: │›
+    ‹CodeFrame:│ ›‹LineNumber:18 ›‹CodeText:        …›‹CodeFrame: │›
+    ‹CodeFrame:│ ›‹LineNumber:19 ›‹CodeText:    })   ›‹CodeFrame: │›
+    ‹CodeFrame:│ ›‹LineNumber:20 ›‹CodeText:         ›‹CodeFrame: │›
+    ‹CodeFrame:│ ›‹LineNumber:21 ›‹CodeText:    retu…›‹CodeFrame: │›
+    ‹CodeFrame:│ ›‹LineNumber:22 ›‹CodeText:}        ›‹CodeFrame: │›
+    ‹CodeFrame:╰──────────────╯›
+  ‹TaskDone,b:✓ ›‹TaskDoneText:Commit:›
+    ‹Code: feat(check):›
+    ‹Code:walk the output›
+    ‹Code:folder ›
+
+‹Heading2,b:Step 2: extract›
+‹Heading2,b:links›
+
+  ‹TaskOpen:○ ›Test the
+    extractor on a
+    page with every
+    link shape
+    ‹Bullet:◦ ›plain ‹Code: <a›
+      ‹Code:href> › and
+      ‹Code: <img src> ›
+    ‹Bullet:◦ ›a link with a
+      fragment only
+    ‹Bullet:◦ ›a link with a
+      query string
+      and a fragment
+      ‹Bullet:▪ ›the query is
+        ignored when
+        the file is
+        looked up
+      ‹Bullet:▪ ›the fragment
+        is checked
+        against the
+        target page
+        ‹Bullet:▪ ›a missing
+          anchor is
+          a finding,
+          a missing
+          file is
+          another
+  ‹TaskOpen:○ ›Implement it,
+    then run ‹Code: make›
+    ‹Code:check ›
+  ‹TaskOpen:○ ›Commit
+
+‹Heading2,b:Step 3: report›
+
+‹TableFrame:╭────────┬────────┬…›
+‹TableFrame:│ ›‹TableHeader,b:Findin›‹TableFrame: │ ›‹TableHeader,b:  Exit›‹TableFrame: │…›
+‹TableFrame:│ ›‹TableHeader,b:g     ›‹TableFrame: │ ›‹TableHeader,b:  code›‹TableFrame: │…›
+‹TableFrame:├────────┼────────┼…›
+‹TableFrame:│ ›none  ‹TableFrame: │ ›     0‹TableFrame: │…›
+‹TableFrame:│ ›      ‹TableFrame: │ ›      ‹TableFrame: │…›
+‹TableFrame:│ ›      ‹TableFrame: │ ›      ‹TableFrame: │…›
+‹TableFrame:│ ›broken‹TableFrame: │ ›     1‹TableFrame: │…›
+‹TableFrame:│ ›link  ‹TableFrame: │ ›      ‹TableFrame: │…›
+‹TableFrame:│ ›      ‹TableFrame: │ ›      ‹TableFrame: │…›
+‹TableFrame:│ ›      ‹TableFrame: │ ›      ‹TableFrame: │…›
+‹TableFrame:│ ›      ‹TableFrame: │ ›      ‹TableFrame: │…›
+‹TableFrame:│ ›      ‹TableFrame: │ ›      ‹TableFrame: │…›
+‹TableFrame:│ ›unread‹TableFrame: │ ›     2‹TableFrame: │…›
+‹TableFrame:│ ›able  ‹TableFrame: │ ›      ‹TableFrame: │…›
+‹TableFrame:│ ›dir   ‹TableFrame: │ ›      ‹TableFrame: │…›
+‹TableFrame:│ ›      ‹TableFrame: │ ›      ‹TableFrame: │…›
+‹TableFrame:│ ›      ‹TableFrame: │ ›      ‹TableFrame: │…›
+‹TableFrame:╰────────┴────────┴…›
+
+  ‹TaskOpen:○ ›Write the
+    reporter and its
+    golden test
+  ‹TaskOpen:○ ›Wire ‹Code: gleam›
+    ‹Code:check › into the
+    CLI
+
+‹QuoteBar:▎ ›‹QuoteText:Keep the reporter›
+‹QuoteBar:▎ ›‹QuoteText:free of colour:›
+‹QuoteBar:▎ ›‹QuoteText:the CI log is›
+‹QuoteBar:▎ ›‹QuoteText:plain text.›
+
+‹Heading2,b:Notes›
+
+  ‹Bullet:1. ›Do not follow
+     redirects, a
+     redirect page
+     is a finding
+     too
+  ‹Bullet:2. ›Cap the walk at
+     100,000 pages
+  ‹Bullet:3. ›Never write
+     into the output
+     folder

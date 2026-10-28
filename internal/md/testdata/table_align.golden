@@ -1,0 +1,6 @@
+‹TableFrame:╭──────┬─────┬───────┬──────╮›
+‹TableFrame:│ ›‹TableHeader,b:left›‹TableFrame: │ ›‹TableHeader,b:ctr›‹TableFrame: │ ›‹TableHeader,b:right›‹TableFrame: │ ›‹TableHeader,b:none›‹TableFrame: │›
+‹TableFrame:├──────┼─────┼───────┼──────┤›
+‹TableFrame:│ ›a   ‹TableFrame: │ › b ‹TableFrame: │ ›    c‹TableFrame: │ ›d   ‹TableFrame: │›
+‹TableFrame:│ ›    ‹TableFrame: │ ›ab ‹TableFrame: │ ›     ‹TableFrame: │ ›    ‹TableFrame: │›
+‹TableFrame:╰──────┴─────┴───────┴──────╯›

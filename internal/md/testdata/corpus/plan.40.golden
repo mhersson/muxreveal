@@ -1,0 +1,131 @@
+‹Heading1,b:Plan: a link checker for the site›
+‹Heading1,b:builder›
+‹Rule:────────────────────────────────────────›
+
+‹QuoteBar:▎ ›‹QuoteText:For agentic workers: work through the›
+‹QuoteBar:▎ ›‹QuoteText:steps in order and tick each box when›
+‹QuoteBar:▎ ›‹QuoteText:its tests pass.›
+
+‹Text,b:Goal:› ‹Code: gleam check › reads a built site
+and reports every broken internal link,
+with the page and line it came from.
+
+‹Text,b:Architecture:›
+
+  ‹Bullet:• ›A walker lists the pages under the
+    output folder
+  ‹Bullet:• ›A parser pulls every ‹Code: href › and
+    ‹Code: src › out of each page
+    ‹Bullet:◦ ›absolute URLs are skipped
+    ‹Bullet:◦ ›fragments are checked against the
+      page's own anchors
+      ‹Bullet:▪ ›an anchor is any ‹Code: id › attribute
+      ‹Bullet:▪ ›a heading gets one from its text
+  ‹Bullet:• ›A reporter prints one line per
+    broken link and sets the exit code
+
+‹Text,b:Tech stack:› Go 1.27,
+‹Code: golang.org/x/net/html ›, the standard
+library otherwise.
+
+‹Heading2,b:File structure›
+
+‹TableFrame:╭──────────────────┬───────────────────╮›
+‹TableFrame:│ ›‹TableHeader,b:File            ›‹TableFrame: │ ›‹TableHeader,b:Job              ›‹TableFrame: │›
+‹TableFrame:├──────────────────┼───────────────────┤›
+‹TableFrame:│ ›‹Code: internal/check/›‹TableFrame: │ ›list pages, never‹TableFrame: │›
+‹TableFrame:│ ›‹Code:walk.go ›        ‹TableFrame: │ ›follow symlinks  ‹TableFrame: │›
+‹TableFrame:│ ›‹Code: internal/check/›‹TableFrame: │ ›extract links and‹TableFrame: │›
+‹TableFrame:│ ›‹Code:links.go ›       ‹TableFrame: │ ›anchors from a   ‹TableFrame: │›
+‹TableFrame:│ ›                ‹TableFrame: │ ›page             ‹TableFrame: │›
+‹TableFrame:│ ›‹Code: internal/check/›‹TableFrame: │ ›format and count ‹TableFrame: │›
+‹TableFrame:│ ›‹Code:report.go ›      ‹TableFrame: │ ›the findings     ‹TableFrame: │›
+‹TableFrame:╰──────────────────┴───────────────────╯›
+
+‹Heading2,b:Step 1: walk the output folder›
+
+  ‹TaskOpen:○ ›Write the failing test in
+    ‹Code: internal/check/walk_test.go ›
+    ‹Bullet:1. ›Build a folder with three pages
+       and a symlink in ‹Code: t.TempDir() ›
+    ‹Bullet:2. ›Assert the walker returns the
+       three pages, sorted
+    ‹Bullet:3. ›Run it and watch it fail:
+       ‹CodeFrame:╭─ ›‹CodeLang:sh›‹CodeFrame: ──────────────────────────╮›
+       ‹CodeFrame:│ ›‹LineNumber:1 ›‹CodeText:go test ./internal/check -…›‹CodeFrame: │›
+       ‹CodeFrame:╰───────────────────────────────╯›
+       Expected: ‹Code: undefined: Walk ›
+  ‹TaskOpen:○ ›Implement ‹Code: Walk › in ‹Code: walk.go ›
+    ‹CodeFrame:╭─ ›‹CodeLang:go›‹CodeFrame: ─────────────────────────────╮›
+    ‹CodeFrame:│ ›‹LineNumber: 1 ›‹CodeText:// Walk lists the .html file…›‹CodeFrame: │›
+    ‹CodeFrame:│ ›‹LineNumber: 2 ›‹CodeText:func Walk(ctx context.Contex…›‹CodeFrame: │›
+    ‹CodeFrame:│ ›‹LineNumber: 3 ›‹CodeText:    var pages []string       ›‹CodeFrame: │›
+    ‹CodeFrame:│ ›‹LineNumber: 4 ›‹CodeText:                             ›‹CodeFrame: │›
+    ‹CodeFrame:│ ›‹LineNumber: 5 ›‹CodeText:    err := filepath.WalkDir(…›‹CodeFrame: │›
+    ‹CodeFrame:│ ›‹LineNumber: 6 ›‹CodeText:        if err != nil {      ›‹CodeFrame: │›
+    ‹CodeFrame:│ ›‹LineNumber: 7 ›‹CodeText:            return fmt.Error…›‹CodeFrame: │›
+    ‹CodeFrame:│ ›‹LineNumber: 8 ›‹CodeText:        }                    ›‹CodeFrame: │›
+    ‹CodeFrame:│ ›‹LineNumber: 9 ›‹CodeText:                             ›‹CodeFrame: │›
+    ‹CodeFrame:│ ›‹LineNumber:10 ›‹CodeText:        if d.Type()&fs.ModeS…›‹CodeFrame: │›
+    ‹CodeFrame:│ ›‹LineNumber:11 ›‹CodeText:            return nil       ›‹CodeFrame: │›
+    ‹CodeFrame:│ ›‹LineNumber:12 ›‹CodeText:        }                    ›‹CodeFrame: │›
+    ‹CodeFrame:│ ›‹LineNumber:13 ›‹CodeText:                             ›‹CodeFrame: │›
+    ‹CodeFrame:│ ›‹LineNumber:14 ›‹CodeText:        if strings.HasSuffix…›‹CodeFrame: │›
+    ‹CodeFrame:│ ›‹LineNumber:15 ›‹CodeText:            pages = append(p…›‹CodeFrame: │›
+    ‹CodeFrame:│ ›‹LineNumber:16 ›‹CodeText:        }                    ›‹CodeFrame: │›
+    ‹CodeFrame:│ ›‹LineNumber:17 ›‹CodeText:                             ›‹CodeFrame: │›
+    ‹CodeFrame:│ ›‹LineNumber:18 ›‹CodeText:        return ctx.Err()     ›‹CodeFrame: │›
+    ‹CodeFrame:│ ›‹LineNumber:19 ›‹CodeText:    })                       ›‹CodeFrame: │›
+    ‹CodeFrame:│ ›‹LineNumber:20 ›‹CodeText:                             ›‹CodeFrame: │›
+    ‹CodeFrame:│ ›‹LineNumber:21 ›‹CodeText:    return pages, err        ›‹CodeFrame: │›
+    ‹CodeFrame:│ ›‹LineNumber:22 ›‹CodeText:}                            ›‹CodeFrame: │›
+    ‹CodeFrame:╰──────────────────────────────────╯›
+  ‹TaskDone,b:✓ ›‹TaskDoneText:Commit: ›‹Code: feat(check): walk the›
+    ‹Code:output folder ›
+
+‹Heading2,b:Step 2: extract links›
+
+  ‹TaskOpen:○ ›Test the extractor on a page with
+    every link shape
+    ‹Bullet:◦ ›plain ‹Code: <a href> › and ‹Code: <img src> ›
+    ‹Bullet:◦ ›a link with a fragment only
+    ‹Bullet:◦ ›a link with a query string and a
+      fragment
+      ‹Bullet:▪ ›the query is ignored when the
+        file is looked up
+      ‹Bullet:▪ ›the fragment is checked against
+        the target page
+        ‹Bullet:▪ ›a missing anchor is a finding,
+          a missing file is another
+  ‹TaskOpen:○ ›Implement it, then run ‹Code: make check ›
+  ‹TaskOpen:○ ›Commit
+
+‹Heading2,b:Step 3: report›
+
+‹TableFrame:╭────────────┬───────────┬─────────────╮›
+‹TableFrame:│ ›‹TableHeader,b:Finding   ›‹TableFrame: │ ›‹TableHeader,b:Exit code›‹TableFrame: │ ›‹TableHeader,b:Example    ›‹TableFrame: │›
+‹TableFrame:├────────────┼───────────┼─────────────┤›
+‹TableFrame:│ ›none      ‹TableFrame: │ ›        0‹TableFrame: │ ›‹Code: ok: 214›   ‹TableFrame: │›
+‹TableFrame:│ ›          ‹TableFrame: │ ›         ‹TableFrame: │ ›‹Code:pages ›     ‹TableFrame: │›
+‹TableFrame:│ ›broken    ‹TableFrame: │ ›        1‹TableFrame: │ ›‹Code: a.html:12› ‹TableFrame: │›
+‹TableFrame:│ ›link      ‹TableFrame: │ ›         ‹TableFrame: │ ›‹Code:->›         ‹TableFrame: │›
+‹TableFrame:│ ›          ‹TableFrame: │ ›         ‹TableFrame: │ ›‹Code:missing.htm›‹TableFrame: │›
+‹TableFrame:│ ›          ‹TableFrame: │ ›         ‹TableFrame: │ ›‹Code:l ›         ‹TableFrame: │›
+‹TableFrame:│ ›unreadable‹TableFrame: │ ›        2‹TableFrame: │ ›‹Code: error:›    ‹TableFrame: │›
+‹TableFrame:│ ›dir       ‹TableFrame: │ ›         ‹TableFrame: │ ›‹Code:open dist:› ‹TableFrame: │›
+‹TableFrame:│ ›          ‹TableFrame: │ ›         ‹TableFrame: │ ›‹Code:denied ›    ‹TableFrame: │›
+‹TableFrame:╰────────────┴───────────┴─────────────╯›
+
+  ‹TaskOpen:○ ›Write the reporter and its golden
+    test
+  ‹TaskOpen:○ ›Wire ‹Code: gleam check › into the CLI
+
+‹QuoteBar:▎ ›‹QuoteText:Keep the reporter free of colour: the›
+‹QuoteBar:▎ ›‹QuoteText:CI log is plain text.›
+
+‹Heading2,b:Notes›
+
+  ‹Bullet:1. ›Do not follow redirects, a redirect
+     page is a finding too
+  ‹Bullet:2. ›Cap the walk at 100,000 pages
+  ‹Bullet:3. ›Never write into the output folder

@@ -6,7 +6,9 @@ import (
 	"errors"
 	"io"
 	"runtime"
+	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -208,6 +210,68 @@ func TestCloseKillsGroup(t *testing.T) {
 		}
 
 		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+// macOS can hold a killed session leader in exit while its master is open and
+// unread, so Close must close the master before it waits for the leader.
+func TestCloseReturnsForManyKilledGroups(t *testing.T) {
+	const n = 24
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	t.Cleanup(cancel)
+
+	procs := make([]*Process, n)
+	pids := make([]int, 0, 2*n)
+
+	for i := range procs {
+		cmd := Command{Argv: []string{"/bin/sh", "-c", `trap "" HUP; sleep 30 & echo $!; wait`}, Dir: t.TempDir(), Env: PaneEnv(nil)}
+
+		// Not startSh: its cleanup Close would block on a Close that hangs here.
+		p, err := Start(ctx, cmd, 80, 24)
+		if err != nil {
+			t.Fatalf("Start: %v", err)
+		}
+
+		procs[i] = p
+
+		child, err := strconv.Atoi(strings.TrimSpace(readUntil(t, p, "\n")))
+		if err != nil {
+			t.Fatalf("child pid: %v", err)
+		}
+
+		pids = append(pids, p.Pid(), child)
+	}
+
+	var wg sync.WaitGroup
+
+	for _, p := range procs {
+		wg.Go(func() { _ = p.Close() })
+	}
+
+	done := make(chan struct{})
+
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("Close still blocked after 10 s")
+	}
+
+	deadline := time.Now().Add(testDeadline)
+
+	for _, pid := range pids {
+		for syscall.Kill(pid, 0) == nil {
+			if time.Now().After(deadline) {
+				t.Fatalf("pid %d still alive", pid)
+			}
+
+			time.Sleep(20 * time.Millisecond)
+		}
 	}
 }
 

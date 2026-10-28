@@ -1,0 +1,22 @@
+intro
+
+‹SummaryMark,b:▸ ›‹Summary,b:Why so›‹FoldHint:   enter opens›
+
+after
+intro
+
+‹SummaryMark,b:▾ ›‹Summary,b:Why so›
+  body one
+
+  ‹SummaryMark,b:▸ ›‹Summary,b:Inner›‹FoldHint:   enter opens›
+
+after
+intro
+
+‹SummaryMark,b:▾ ›‹Summary,b:Why so›
+  body one
+
+  ‹SummaryMark,b:▾ ›‹Summary,b:Inner›
+    deep
+
+after

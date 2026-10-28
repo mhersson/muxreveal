@@ -1,0 +1,10 @@
+‹SummaryMark,b:▸ ›‹Summary,b:a long summary that wraps›
+  ‹Summary,b:over lines›‹FoldHint:   enter opens›
+‹SummaryMark,b:▸ ›‹Summary,b:a long summary›
+  ‹Summary,b:that wraps over›
+  ‹Summary,b:lines›
+  ‹FoldHint:enter opens›
+‹SummaryMark,b:▾ ›‹Summary,b:a long summary›
+  ‹Summary,b:that wraps over›
+  ‹Summary,b:lines›
+  x
