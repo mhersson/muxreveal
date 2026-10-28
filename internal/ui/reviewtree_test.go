@@ -105,7 +105,7 @@ func TestTreeWidthBounds(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			items := treeItems(tt.files)
-			if got := treeWidth(items, tt.files, tt.inner); got != tt.want {
+			if got := treeWidth(items, tt.files, nil, tt.inner); got != tt.want {
 				t.Errorf("treeWidth = %d, want %d", got, tt.want)
 			}
 		})
@@ -115,9 +115,20 @@ func TestTreeWidthBounds(t *testing.T) {
 		files := paths(strings.Repeat("y", 26) + ".go")
 		files[0].Added, files[0].Removed = 12, 3
 		items := treeItems(files)
-		// "M " + name (29) + two spaces + "+12 -3" (6)
-		if got, want := treeWidth(items, files, 200), 2+29+2+6; got != want {
+		// margins + "M " + name (29) + two spaces + "+12 -3" (6)
+		if got, want := treeWidth(items, files, nil, 200), treePad+2+29+2+6; got != want {
 			t.Errorf("treeWidth = %d, want %d", got, want)
 		}
 	})
+}
+
+func TestTreeWidthHiddenFlag(t *testing.T) {
+	files := paths(strings.Repeat("y", 26) + ".go")
+	files[0].Added, files[0].Removed = 12, 3
+	items := treeItems(files)
+
+	plain := treeWidth(items, files, []bool{false}, 200)
+	if got := treeWidth(items, files, []bool{true}, 200); got != plain+2 {
+		t.Errorf("treeWidth with the flag = %d, want %d", got, plain+2)
+	}
 }

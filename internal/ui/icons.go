@@ -43,6 +43,14 @@ const (
 	iconRotate          = "\U000F0467" // nf-md-rotate_right
 	iconEqualize        = "\U000F01FC" // nf-md-equal
 	iconPromote         = "\U000F01A5" // nf-md-crown
+
+	iconReview     = "\uF4D2"     // nf-oct-file_diff
+	iconBranchMode = "\U000F062C" // nf-md-source_branch
+	iconTurn       = "\U000F02DA" // nf-md-history
+	iconSplit      = "\U000F08DF" // nf-md-format_columns
+	iconFull       = "\U000F09EE" // nf-md-file_document_outline
+	iconGhost      = "\U000F165D" // nf-md-ghost_outline
+	iconFolder     = "\U000F0256" // nf-md-folder_outline
 )
 
 // Powerline edges and dividers.

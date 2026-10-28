@@ -102,6 +102,7 @@ type App struct {
 	clock     clock // the sync hold's and the tray's time source
 	tray      trayState
 	rail      railState
+	drawer    drawerState
 	watches   watchState
 	storeVer  uint64        // counts the dispatches the store accepted
 	engine    *git.Engine   // nil when the rail's diff stats are off
@@ -306,6 +307,10 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.later = append(a.later, c)
 	}
 
+	if c := a.drawerAfterUpdate(); c != nil {
+		a.later = append(a.later, c)
+	}
+
 	if len(a.later) > 0 {
 		cmd = tea.Batch(append(a.later, cmd)...)
 		a.later = nil
@@ -436,6 +441,7 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.onRailPulse()
 	case railFlashMsg:
 		a.onRailFlash(msg)
+	case drawerPaintMsg:
 	case palette.ChosenMsg:
 		return a, a.chosen(msg.ID)
 	case palette.ClosedMsg:
@@ -548,7 +554,12 @@ func (a *App) View() tea.View {
 	lk := a.current()
 	g := a.geometry()
 
-	content := overlayToast(a.frameAt(g), a.width, a.height, a.notice, a.icons, lk.styles)
+	content := a.frameAt(g)
+	if r, ok := a.drawerRect(a.store.State()); ok {
+		content = overlayAt(content, a.width, a.height, r.X, r.Y, a.drawerLines(a.store.State(), r))
+	}
+
+	content = overlayToast(content, a.width, a.height, a.notice, a.icons, lk.styles)
 	if a.sequenceOpen() {
 		content = overlayCorner(content, a.width, a.height, sequencePopup(a.keymap.leader, a.prefix, a.icons, lk.styles))
 	}

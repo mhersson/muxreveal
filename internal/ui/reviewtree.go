@@ -84,14 +84,21 @@ func appendTree(out []treeItem, n *treeNode, depth int) []treeItem {
 	return out
 }
 
+// treePad is the blank cells a tree row keeps at each end: the left one holds
+// the selection mark, the right one parts the counts from the rule.
+const treePad = 2
+
 // treeWidth is the width of the widest row, at least 20 columns and, when the
-// inner width allows, at most 35 % of it.
-func treeWidth(items []treeItem, files []git.FileDiff, inner int) int {
+// inner width allows, at most 35 % of it. A row is a margin, the indent, the
+// status and a space, the name (and a slash for a folder), two spaces, the
+// hidden flag's two cells and the counts, then a margin. hidden says per file
+// whether it has the flag; the caller caches it per result.
+func treeWidth(items []treeItem, files []git.FileDiff, hidden []bool, inner int) int {
 	widest := 0
 
 	for _, it := range items {
 		name, _ := cleanText(it.name)
-		w := it.depth*2 + 2 + ansi.StringWidth(name)
+		w := treePad + it.depth*2 + 2 + ansi.StringWidth(name)
 
 		if it.dir {
 			w++
@@ -99,7 +106,7 @@ func treeWidth(items []treeItem, files []git.FileDiff, inner int) int {
 			f := files[it.file]
 			w += 2 + len(fileCounts(f))
 
-			if fileHidden(f) {
+			if it.file < len(hidden) && hidden[it.file] {
 				w += 2
 			}
 		}
