@@ -89,6 +89,8 @@ func (a MovePane) move(s *State) error {
 			return err
 		}
 
+		t.dropReview(a.ID)
+
 		if t.Focus == a.ID {
 			t.Zoomed = false
 		}

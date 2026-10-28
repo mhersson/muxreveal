@@ -194,6 +194,7 @@ func (a ClosePane) apply(s *State) error {
 	}
 
 	delete(s.Panes, a.ID)
+	t.dropReview(a.ID)
 
 	t.Zoomed = false
 	t.setFocus(next)
