@@ -400,19 +400,18 @@ func scanTags(s string) []htmlTag {
 			continue
 		}
 
-		kind, nameEnd, ok := tagAt(s, i)
+		kind, ok := tagAt(s, i)
 		if !ok {
 			i++
 
 			continue
 		}
 
-		gt := strings.IndexByte(s[nameEnd:], '>')
-		if gt < 0 {
+		end := tagEnd(s, i)
+		if s[end-1] != '>' {
 			break
 		}
 
-		end := nameEnd + gt + 1
 		tags = append(tags, htmlTag{kind: kind, start: i, end: end})
 		i = end
 	}
@@ -420,8 +419,8 @@ func scanTags(s string) []htmlTag {
 	return tags
 }
 
-// tagAt reports a details or summary tag opening at s[i] and where its name ends.
-func tagAt(s string, i int) (kind tagKind, nameEnd int, ok bool) {
+// tagAt reports a details or summary tag opening at s[i].
+func tagAt(s string, i int) (kind tagKind, ok bool) {
 	p := i + 1
 
 	closing := p < len(s) && s[p] == '/'
@@ -440,10 +439,10 @@ func tagAt(s string, i int) (kind tagKind, nameEnd int, ok bool) {
 			case ' ', '\t', '\n', '\r', '\f', '>':
 			case '/':
 				if closing {
-					return 0, 0, false
+					return 0, false
 				}
 			default:
-				return 0, 0, false
+				return 0, false
 			}
 		}
 
@@ -458,26 +457,27 @@ func tagAt(s string, i int) (kind tagKind, nameEnd int, ok bool) {
 			kind = tagSummaryOpen
 		}
 
-		return kind, end, true
+		return kind, true
 	}
 
-	return 0, 0, false
+	return 0, false
 }
 
-// groupDetails folds the HTML blocks of n that carry <details> tags into
-// foldNodes. A fold still open at the end of n's children ends there.
+// groupDetails folds the HTML blocks and paragraphs of n that carry <details>
+// tags into foldNodes. A fold still open at the end of n's children ends there.
 func (d *Doc) groupDetails(n ast.Node) {
-	hasHTML := false
+	found := false
 
-	for c := n.FirstChild(); c != nil; c = c.NextSibling() {
-		if _, ok := c.(*ast.HTMLBlock); ok {
-			hasHTML = true
-
-			break
+	for c := n.FirstChild(); c != nil && !found; c = c.NextSibling() {
+		switch c := c.(type) {
+		case *ast.HTMLBlock:
+			found = true
+		case *ast.Paragraph:
+			found = d.hasFoldTag(c)
 		}
 	}
 
-	if !hasHTML {
+	if !found {
 		return
 	}
 
@@ -513,6 +513,12 @@ func (g *folder) target() ast.Node {
 }
 
 func (g *folder) add(c ast.Node) {
+	if p, ok := c.(*ast.Paragraph); ok && g.d.hasFoldTag(p) {
+		g.addParagraph(p)
+
+		return
+	}
+
 	h, ok := c.(*ast.HTMLBlock)
 	if !ok || (h.HTMLBlockKind != ast.HTMLBlockKind6 && h.HTMLBlockKind != ast.HTMLBlockKind7) {
 		g.pending = nil
@@ -601,6 +607,148 @@ func (g *folder) add(c ast.Node) {
 	}
 }
 
+// rawTag reads the <details> or <summary> tag an inline node holds.
+func (d *Doc) rawTag(n ast.Node) (tagKind, string, bool) {
+	r, ok := n.(*ast.RawHTML)
+	if !ok {
+		return 0, "", false
+	}
+
+	raw := r.Value.Value(d.src)
+	if raw == "" || raw[0] != '<' {
+		return 0, "", false
+	}
+
+	kind, ok := tagAt(raw, 0)
+
+	return kind, raw, ok
+}
+
+// hasFoldTag reports whether p holds a <details> or <summary> tag.
+func (d *Doc) hasFoldTag(p *ast.Paragraph) bool {
+	for c := p.FirstChild(); c != nil; c = c.NextSibling() {
+		if _, _, ok := d.rawTag(c); ok {
+			return true
+		}
+	}
+
+	return false
+}
+
+// addParagraph splits p at its <details> and <summary> tags by the rules of an
+// HTML block: the inline content before a tag stays a paragraph, the content
+// after an opener is the new fold's body, and the content after a closer
+// follows the fold.
+func (g *folder) addParagraph(p *ast.Paragraph) {
+	cand := g.pending
+	g.pending = nil
+	opened := false
+
+	var kids []ast.Node
+	for c := p.FirstChild(); c != nil; c = c.NextSibling() {
+		kids = append(kids, c)
+	}
+
+	var cur *ast.Paragraph
+
+	flush := func() {
+		if cur != nil {
+			g.target().AppendChild(cur)
+			cur = nil
+		}
+	}
+
+	keep := func(n ast.Node) {
+		if cur == nil {
+			cur = ast.NewParagraph()
+		}
+
+		cur.AppendChild(n)
+	}
+
+	for i := 0; i < len(kids); i++ {
+		kind, raw, ok := g.d.rawTag(kids[i])
+
+		switch {
+		case !ok || kind == tagSummaryClose:
+			keep(kids[i])
+		case kind == tagDetailsOpen:
+			flush()
+
+			f := newFold()
+			f.Open = hasOpenAttr(raw)
+			g.target().AppendChild(f)
+			g.stack = append(g.stack, f)
+			cand, opened = f, true
+		case kind == tagDetailsClose:
+			flush()
+
+			if len(g.stack) > 0 {
+				g.stack = g.stack[:len(g.stack)-1]
+			}
+		case cand == nil || cand.named || len(g.stack) == 0 || g.stack[len(g.stack)-1] != cand:
+			keep(kids[i])
+		default:
+			flush()
+
+			end := len(kids)
+
+			for j := i + 1; j < len(kids); j++ {
+				if k, _, ok := g.d.rawTag(kids[j]); ok && k == tagSummaryClose {
+					end = j
+
+					break
+				}
+			}
+
+			cand.Summary, cand.named = g.d.inlineSummary(kids[i+1:end]), true
+			i = end
+		}
+	}
+
+	flush()
+
+	if opened && cand != nil && !cand.named && len(g.stack) > 0 && g.stack[len(g.stack)-1] == cand {
+		g.pending = cand
+	}
+}
+
+// inlineSummary is the summary text of the inline nodes between <summary> tags:
+// the text of each, a space for a line break or a <br>, <p> or <div> tag, and
+// whitespace collapsed. Goldmark has already decoded the entities.
+func (d *Doc) inlineSummary(nodes []ast.Node) string {
+	var b strings.Builder
+
+	for _, n := range nodes {
+		walkTree(n, func(c ast.Node) bool {
+			switch c := c.(type) {
+			case *ast.Text:
+				b.WriteString(c.Value.Value(d.src))
+
+				if c.SoftLineBreak() || c.HardLineBreak() {
+					b.WriteByte(' ')
+				}
+			case *ast.CodeSpan:
+				b.WriteString(c.Value.Value(d.src))
+
+				return false
+			case *ast.RawHTML:
+				if raw := c.Value.Value(d.src); len(raw) > 2 && breaksLine(strings.Trim(raw, "<>")) {
+					b.WriteByte(' ')
+				}
+			}
+
+			return true
+		})
+	}
+
+	if text := strings.Join(strings.Fields(b.String()), " "); text != "" {
+		return text
+	}
+
+	return "Details"
+}
+
 // summaryText drops tags, decodes entities and collapses whitespace.
 func summaryText(s string) string {
 	var b strings.Builder
@@ -636,55 +784,9 @@ func summaryText(s string) string {
 
 // hasOpenAttr reports whether a <details ...> tag carries the open attribute.
 func hasOpenAttr(tag string) bool {
-	tag = strings.TrimSuffix(strings.TrimSuffix(tag, ">"), "/")
+	_, ok := tagAttr(tag, "open")
 
-	i := strings.IndexAny(tag, " \t\r\n\f")
-	if i < 0 {
-		return false
-	}
-
-	s := tag[i:]
-	for {
-		s = strings.TrimLeft(s, " \t\r\n\f/")
-		if s == "" {
-			return false
-		}
-
-		n := strings.IndexAny(s, " \t\r\n\f/=")
-		if n < 0 {
-			n = len(s)
-		}
-
-		name := s[:n]
-		s = s[n:]
-
-		rest := strings.TrimLeft(s, " \t\r\n\f")
-		if strings.HasPrefix(rest, "=") {
-			rest = strings.TrimLeft(rest[1:], " \t\r\n\f")
-			switch {
-			case rest != "" && (rest[0] == '"' || rest[0] == '\''):
-				end := strings.IndexByte(rest[1:], rest[0])
-				if end < 0 {
-					rest = ""
-				} else {
-					rest = rest[end+2:]
-				}
-			default:
-				end := strings.IndexAny(rest, " \t\r\n\f")
-				if end < 0 {
-					end = len(rest)
-				}
-
-				rest = rest[end:]
-			}
-
-			s = rest
-		}
-
-		if strings.EqualFold(name, "open") {
-			return true
-		}
-	}
+	return ok
 }
 
 // breaksLine reports whether the tag (without its angle brackets) separates

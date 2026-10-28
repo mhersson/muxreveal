@@ -285,6 +285,25 @@ func TestDetailsFold(t *testing.T) {
 	wantFolds(t, closed, Fold{ID: 0, Line: 0, Open: false})
 }
 
+func TestDetailsTagsInParagraphs(t *testing.T) {
+	// The closer glued to the image ends the fold, so the rest of the document
+	// shows below it instead of hiding inside it.
+	glued := "<details>\n<summary>Screenshot</summary>\n\n![shot](https://e.com/s.png)</details>\n\n## After\n\nMore text.\n"
+
+	folded := layoutOf(glued, 40, "")
+	wantLines(t, folded, "▸ Screenshot   enter opens", "", "After", "", "More text.")
+	wantFolds(t, folded, Fold{ID: 0, Line: 0, Open: false})
+
+	open := layoutWith(glued, LayoutOptions{Width: 40, Open: map[int]bool{0: true}}, "")
+	wantLines(t, open, "▾ Screenshot", "  image: shot  e.com", "", "After", "", "More text.")
+
+	inline := layoutWith("before <details open><summary>s</summary>body</details> after\n", LayoutOptions{Width: 40}, "")
+	wantLines(t, inline, "before", "", "▾ s", "  body", "", "after")
+
+	attr := layoutOf("<details title=\"a>b\" open>\n<summary>S</summary>\n\nbody\n\n</details>\n", 40, "")
+	wantLines(t, attr, "▾ S", "  body")
+}
+
 func TestDetailsSummaryWraps(t *testing.T) {
 	src := "<details>\n<summary>a long summary that wraps over lines</summary>\n\nx\n\n</details>\n"
 
