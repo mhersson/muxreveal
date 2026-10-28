@@ -483,7 +483,7 @@ The review drawer: an overlay that slides over the right half of the body and sh
 - [ ] Watches per agent pane, and the rail's re-probes
 - [ ] Drawer state in core and the state file
 - [x] The rows of the diff column and the file tree
-- [ ] Drawing the drawer: frame, tags, tree, diff, unified and side-by-side rendering with highlighting and invisible characters, full-file view with ghost lines
+- [x] Drawing the drawer: frame, tags, tree, diff, unified and side-by-side rendering with highlighting and invisible characters, full-file view with ghost lines
 - [x] Loading, turns and live updates that keep the cursor on its hunk, and the `[diff]` config
 - [x] Drawer keys, commands, focus, mouse and the slide
 - [x] Worktree picker and new worktree, and the `[worktrees]` config
