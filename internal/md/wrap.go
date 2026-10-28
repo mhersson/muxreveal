@@ -23,8 +23,13 @@ type cell struct {
 
 // cellsOf splits segs into cells. Adjacent segs in one style share a styles entry.
 func cellsOf(segs []seg) ([]cell, []style) {
+	n := 0
+	for _, sg := range segs {
+		n += len(sg.text) + 1
+	}
+
 	var (
-		cells  []cell
+		cells  = make([]cell, 0, n) // one cell per byte at most, so appends never regrow
 		styles []style
 	)
 
