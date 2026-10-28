@@ -97,8 +97,7 @@ func (a *App) onReviewOpen(msg reviewOpenMsg) tea.Cmd {
 	}
 
 	if msg.focus {
-		a.railRelease()
-		a.drawer.focused, a.drawer.tree = true, false
+		a.drawerTake()
 	}
 
 	// The check found the pane's repository: hand it to the watch bookkeeping

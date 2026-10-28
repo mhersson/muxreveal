@@ -145,3 +145,45 @@ func TestAgentCommandQuoting(t *testing.T) {
 		t.Errorf("script = %q, want %q", got, want)
 	}
 }
+
+func TestEditorCommand(t *testing.T) {
+	sh := func(string) string { return "/bin/sh" }
+	fish := func(string) string { return "/usr/bin/fish" }
+
+	tests := []struct {
+		name   string
+		env    func(string) string
+		editor string
+		args   []string
+		want   string
+	}{
+		{"a plain editor", sh, "vi", []string{"+7", "a.go"}, `vi '+7' 'a.go'; exec "$SHELL" -l`},
+		{"an editor with arguments is read by the shell", sh, "code -w", []string{"+7", "a.go"}, `code -w '+7' 'a.go'; exec "$SHELL" -l`},
+		{"a quote and a space stay one argument", sh, "vi", []string{"+7", "it's a file.go"}, `vi '+7' 'it'\''s a file.go'; exec "$SHELL" -l`},
+		{"shell syntax in an argument is not run", sh, "vi", []string{"$(x)", "a;b"}, `vi '$(x)' 'a;b'; exec "$SHELL" -l`},
+		{"fish gets job control first", fish, "vi", []string{"a.go"}, `status job-control full; vi 'a.go'; exec "$SHELL" -l`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := EditorCommand(tt.env, "/work", tt.editor, tt.args, []string{"MUXREVEAL_PANE=p2"})
+
+			wantSh := tt.env("SHELL")
+			if len(c.Argv) != 5 || c.Argv[0] != wantSh || c.Argv[1] != "-l" || c.Argv[2] != "-i" || c.Argv[3] != "-c" {
+				t.Fatalf("Argv = %q, want %s -l -i -c <script>", c.Argv, wantSh)
+			}
+
+			if got := c.Argv[4]; got != tt.want {
+				t.Errorf("script = %q, want %q", got, tt.want)
+			}
+
+			if c.Dir != "/work" {
+				t.Errorf("Dir = %q, want /work", c.Dir)
+			}
+
+			if !slices.Contains(c.Env, "SHELL="+wantSh) || !slices.Contains(c.Env, "MUXREVEAL_PANE=p2") {
+				t.Errorf("Env lacks SHELL or the extra entry: %q", c.Env)
+			}
+		})
+	}
+}

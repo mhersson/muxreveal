@@ -37,7 +37,7 @@ func (a *App) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		return a.handleRailKey(msg)
 	}
 
-	if a.drawerHasKeys(a.store.State()) {
+	if a.drawerHasKeys() {
 		return a.handleDrawerKey(msg)
 	}
 
@@ -74,7 +74,7 @@ func (a *App) handlePaste(msg tea.PasteMsg) tea.Cmd {
 		return nil
 	}
 
-	if a.drawerHasKeys(a.store.State()) {
+	if a.drawerHasKeys() {
 		a.drawerPaste(msg.Content)
 
 		return nil

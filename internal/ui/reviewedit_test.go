@@ -1,0 +1,267 @@
+package ui
+
+import (
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"slices"
+	"strings"
+	"testing"
+
+	"github.com/mhersson/muxreveal/internal/core"
+	"github.com/mhersson/muxreveal/internal/git"
+)
+
+func TestReviewEditor(t *testing.T) {
+	tests := []struct {
+		name, visual, editor, want string
+	}{
+		{"visual wins", "code", "nano", "code"},
+		{"editor", "", "nano", "nano"},
+		{"neither", "", "", "vi"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := reviewEditor(func(k string) string {
+				return map[string]string{"VISUAL": tt.visual, "EDITOR": tt.editor}[k]
+			})
+			if got != tt.want {
+				t.Errorf("editor = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+// editRig is a drawer with a changed file whose path holds a quote and a space,
+// one whose path starts with a dash, a deleted file and an editor that writes the
+// arguments it got to a file.
+type editRig struct {
+	*drawerRig
+	st       *starts
+	v        *reviewView
+	dir      string
+	name     string
+	editor   string
+	argsFile string
+}
+
+func newEditRig(t *testing.T, editorArgs string) *editRig {
+	t.Helper()
+
+	dir := newRepoDir(t)
+	name := "dir/it's a file.txt"
+
+	write(t, filepath.Join(dir, name), numberedLines("line", 20))
+	write(t, filepath.Join(dir, "gone.txt"), "x\n")
+	write(t, filepath.Join(dir, "-dash.txt"), "one\n")
+	commitEverything(t, dir, "init")
+	write(t, filepath.Join(dir, name), editedLines(20, 7))
+	write(t, filepath.Join(dir, "-dash.txt"), "two\n")
+
+	if err := os.Remove(filepath.Join(dir, "gone.txt")); err != nil {
+		t.Fatal(err)
+	}
+
+	argsFile, editor := filepath.Join(t.TempDir(), "args"), filepath.Join(t.TempDir(), "ed.sh")
+	write(t, editor, "#!/bin/sh\nfor a in \"$@\"; do printf '%s\\n' \"$a\"; done > \"$ARGS_FILE\"\n")
+
+	if err := os.Chmod(editor, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	r := newKeysRig(t, dir, func(o *Options) {
+		o.Getenv = func(k string) string {
+			return map[string]string{"SHELL": "/bin/testsh", "EDITOR": editor + editorArgs}[k]
+		}
+	})
+	st := &starts{}
+	r.start = st.start
+
+	return &editRig{drawerRig: r, st: st, v: r.opened(t), dir: dir, name: name, editor: editor, argsFile: argsFile}
+}
+
+// cursorOn puts the cursor on the first row want accepts.
+func (e *editRig) cursorOn(t *testing.T, want func(git.FileDiff, reviewRow) bool) {
+	t.Helper()
+
+	for i, row := range e.v.rows {
+		if want(e.v.res.Files[row.file], row) {
+			e.v.cursor = i
+
+			return
+		}
+	}
+
+	t.Fatal("no such row")
+}
+
+func TestEditOpensAnEditorPane(t *testing.T) {
+	tests := []struct {
+		name       string
+		editorArgs string // appended to $EDITOR
+		wantWords  string // the editor as the script holds it, before its path
+		wantArgs   []string
+	}{
+		{"a plain editor", "", "", nil},
+		{"an editor with arguments runs as git runs it", " -w", " -w", []string{"-w"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			e := newEditRig(t, tt.editorArgs)
+
+			e.cursorOn(t, func(f git.FileDiff, row reviewRow) bool {
+				return f.Path == e.name && row.kind == rowLine && f.Hunks[row.hunk].Lines[row.line].Kind == git.Add
+			})
+
+			row := e.v.rows[e.v.cursor]
+			line := e.v.res.Files[row.file].Hunks[row.hunk].Lines[row.line].New
+
+			e.keys(keyRune('e'))
+
+			if e.st.count() != 1 {
+				t.Fatalf("e started %d processes, want 1", e.st.count())
+			}
+
+			c := e.st.cmds[0]
+			script := fmt.Sprintf(`%s%s '+%d' 'dir/it'\''s a file.txt'; exec "$SHELL" -l`, e.editor, tt.wantWords, line)
+
+			if !slices.Equal(c.Argv, []string{"/bin/testsh", "-l", "-i", "-c", script}) || c.Dir != e.dir {
+				t.Errorf("command = %q in %q, want the login shell running %s in %s", c.Argv, c.Dir, script, e.dir)
+			}
+
+			got := e.store.State()
+			if got.Tab().Review != nil || e.drawer.focused {
+				t.Errorf("drawer open = %v, has the keyboard = %v, want it closed", got.Tab().Review != nil, e.drawer.focused)
+			}
+
+			if m := got.Panes[got.Tab().Focus]; m.Kind != core.KindShell || m.Cwd != e.dir || got.Tab().Focus == "p1" {
+				t.Errorf("focused pane = %+v, want the new shell in %s", m, e.dir)
+			}
+
+			// The shell reads the script back as the arguments the editor needs.
+			truePath, err := exec.LookPath("true")
+			if err != nil {
+				t.Skip("no true(1)")
+			}
+
+			cmd := exec.Command("/bin/sh", "-c", script)
+
+			cmd.Dir, cmd.Env = e.dir, append(os.Environ(), "ARGS_FILE="+e.argsFile, "SHELL="+truePath)
+
+			if out, err := cmd.CombinedOutput(); err != nil {
+				t.Fatalf("running the command: %v\n%s", err, out)
+			}
+
+			args, err := os.ReadFile(e.argsFile)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			want := strings.Join(append(slices.Clone(tt.wantArgs), fmt.Sprintf("+%d", line), e.name), "\n") + "\n"
+			if string(args) != want {
+				t.Errorf("the editor got %q, want %q", args, want)
+			}
+		})
+	}
+
+	t.Run("a deleted file", func(t *testing.T) {
+		e := newEditRig(t, "")
+		e.cursorOn(t, func(f git.FileDiff, row reviewRow) bool { return f.Path == "gone.txt" && row.kind == rowFile })
+		e.keys(keyRune('e'))
+
+		if e.notice != "the file is deleted" || e.st.count() != 0 {
+			t.Errorf("notice = %q, panes started = %d, want the notice and none", e.notice, e.st.count())
+		}
+	})
+
+	t.Run("a path that starts with a dash", func(t *testing.T) {
+		e := newEditRig(t, "")
+		e.cursorOn(t, func(f git.FileDiff, row reviewRow) bool { return f.Path == "-dash.txt" && row.kind == rowFile })
+		e.keys(keyRune('e'))
+
+		if e.st.count() != 1 || !strings.Contains(e.st.cmds[0].Argv[4], `'./-dash.txt'`) {
+			t.Errorf("commands = %q, want the path given as ./-dash.txt", e.st.cmds)
+		}
+	})
+}
+
+// editLine is the line the editor opens at, for every kind of row the cursor can be on.
+func TestEditLine(t *testing.T) {
+	file := git.FileDiff{Path: "f.go", Status: git.Modified, Hunks: []git.Hunk{{
+		OldStart: 10, OldLines: 5, NewStart: 20, NewLines: 5,
+		Lines: []git.Line{
+			{Kind: git.Context, Old: 10, New: 20, Text: "c1"},
+			{Kind: git.Del, Old: 11, Text: "d1"},
+			{Kind: git.Add, New: 21, Text: "a1"},
+			{Kind: git.Add, New: 22, Text: "a2"},
+			{Kind: git.Context, Old: 12, New: 23, Text: "c2"},
+			{Kind: git.Del, Old: 13, Text: "d2"},
+			{Kind: git.Context, Old: 14, New: 24, Text: "c3"},
+		},
+	}}}
+	res := git.Result{Files: []git.FileDiff{file}}
+	whole := fullText{old: []string{"keep", "gone1", "gone2", "tail"}, new: []string{"keep", "new", "tail"}}
+
+	unified := buildRows(res, rowOpts{})
+	split := buildRows(res, rowOpts{split: true})
+	shown := buildRows(res, rowOpts{full: map[string]fullText{"f.go": whole}})
+	folded := buildRows(res, rowOpts{full: map[string]fullText{"f.go": whole}, ghostsStartFolded: true})
+	info := buildRows(git.Result{Files: []git.FileDiff{{Path: "b.bin", Binary: true}}}, rowOpts{})
+
+	// nth is the n-th row of a kind, counting from 0, that has the given text ("" for any).
+	nth := func(rows []reviewRow, kind reviewRowKind, text string, n int) reviewRow {
+		t.Helper()
+
+		for _, r := range rows {
+			if r.kind != kind || (text != "" && r.text != text) {
+				continue
+			}
+
+			if n == 0 {
+				return r
+			}
+
+			n--
+		}
+
+		t.Fatalf("no row of kind %d with text %q", kind, text)
+
+		return reviewRow{}
+	}
+
+	tests := []struct {
+		name string
+		file git.FileDiff
+		row  reviewRow
+		want int
+	}{
+		{"file header", file, nth(unified, rowFile, "", 0), 1},
+		{"hunk header: the hunk's new start", file, nth(unified, rowHunk, "", 0), 20},
+		{"context line: its new number", file, unified[2], 20},
+		{"removed line: its old number", file, unified[3], 11},
+		{"added line: its new number", file, unified[4], 21},
+		{"second added line", file, unified[5], 22},
+		{"side by side, a replaced pair: the new side", file, nth(split, rowPair, "", 1), 21},
+		{"side by side, a removal alone: its old number", file, nth(split, rowPair, "", 4), 13},
+		{"side by side, an addition alone: its new number", file, nth(split, rowPair, "", 2), 22},
+		{"side by side, a context pair: its new number", file, nth(split, rowPair, "", 3), 23},
+		{"full file, a kept line: its place in the new text", file, nth(shown, rowFull, "keep", 0), 1},
+		{"full file, an added line", file, nth(shown, rowFull, "new", 0), 2},
+		{"full file, the last kept line", file, nth(shown, rowFull, "tail", 0), 3},
+		{"full file, a ghost line: its old number", file, nth(shown, rowGhost, "gone1", 0), 2},
+		{"full file, the next ghost line", file, nth(shown, rowGhost, "gone2", 0), 3},
+		{"full file, a folded block: its first old number", file, nth(folded, rowFold, "", 0), 2},
+		{"an info row: the top of the file", git.FileDiff{Path: "b.bin"}, nth(info, rowInfo, "", 0), 1},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := editLine(tt.file, tt.row); got != tt.want {
+				t.Errorf("editLine() = %d, want %d", got, tt.want)
+			}
+		})
+	}
+}

@@ -19,11 +19,16 @@ type drawerSlideMsg struct{}
 type slideOpenMsg struct{ reviewOpenMsg }
 
 // drawerHasKeys reports whether the drawer is open and has the keyboard,
-// whether or not it has slid into view.
-func (a *App) drawerHasKeys(st core.State) bool {
-	_, ok := a.drawerFull(st)
+// whether or not it has slid into view. It reads the state only when the drawer
+// has been given the keyboard, which keeps it off the path of a keystroke.
+func (a *App) drawerHasKeys() bool {
+	if !a.drawer.focused {
+		return false
+	}
 
-	return ok && a.drawer.focused
+	_, ok := a.drawerFull(a.store.State())
+
+	return ok
 }
 
 // drawerTake gives the drawer the keyboard, with the diff holding it; the rail
@@ -54,7 +59,7 @@ func (a *App) reviewToggle() tea.Cmd {
 	switch {
 	case tab.Review == nil:
 		return a.openSliding(tab.Focus)
-	case a.drawerHasKeys(st):
+	case a.drawerHasKeys():
 		return a.closeDrawer(true)
 	}
 
@@ -194,69 +199,11 @@ func (a *App) focusDir(d core.Dir) tea.Cmd {
 }
 
 // visibleNeighbour is the pane a focus move reaches among those the drawer does
-// not cover. Scrolling layouts step by column, which core decides, so there it
-// repeats the step until it lands on a pane that shows.
+// not cover.
 func (a *App) visibleNeighbour(st core.State, d core.Dir, box core.Rect) (core.PaneID, bool) {
-	tab, area := st.Tab(), a.bodyArea()
-
-	if tab.Mode == core.ModeScrolling {
-		sim := core.NewStore(st)
-
-		for range core.MaxPanes {
-			before := sim.State().Tab().Focus
-			if err := sim.Dispatch(core.FocusDir{Dir: d, Area: area}); err != nil || sim.State().Tab().Focus == before {
-				return "", false
-			}
-
-			now := sim.State()
-			if r, ok := core.Arrange(now.Tab(), area, now.Layout).Rects[now.Tab().Focus]; !ok || !covered(r, box) {
-				return now.Tab().Focus, true
-			}
-		}
-
-		return "", false
-	}
-
-	side, ok := sideOf(d)
-	rects := core.Arrange(tab, area, st.Layout).Rects
-	cur, drawn := rects[tab.Focus]
-
-	if !ok || !drawn {
-		return "", false
-	}
-
-	var (
-		ids   []core.PaneID
-		cands []tiling.Rect
-	)
-
-	for _, id := range tab.Panes {
-		if r, ok := rects[id]; ok && id != tab.Focus && !covered(r, box) {
-			ids = append(ids, id)
-			cands = append(cands, tiling.Rect(r))
-		}
-	}
-
-	if i := tiling.Neighbour(tiling.Rect(cur), cands, side, false); i >= 0 {
-		return ids[i], true
-	}
-
-	return "", false
-}
-
-func sideOf(d core.Dir) (tiling.Side, bool) {
-	switch d {
-	case core.Left:
-		return tiling.SideLeft, true
-	case core.Down:
-		return tiling.SideDown, true
-	case core.Up:
-		return tiling.SideUp, true
-	case core.Right:
-		return tiling.SideRight, true
-	}
-
-	return 0, false
+	return core.NeighbourSkipping(st.Tab(), d, a.bodyAreaIn(st.Rail), st.Layout, func(_ core.PaneID, r core.Rect) bool {
+		return covered(r, box)
+	})
 }
 
 // drawerLeave gives the keyboard to the shown pane nearest the drawer's left

@@ -62,6 +62,9 @@ func shiftEnd(p point, delta int, mode selMode, clampRow func(int) int) point {
 // enterCopyMode implements copy.mode: vim-style navigation of the focused
 // pane's text, starting at the bottom of its current view.
 func (a *App) enterCopyMode() tea.Cmd {
+	// A pane the drawer covers cannot show copy mode, so the drawer closes first.
+	a.uncoverFocus()
+
 	p := a.panes[a.store.State().Tab().Focus]
 	if p == nil {
 		return nil
@@ -253,6 +256,10 @@ func (a *App) copyCursor(g geometry) *tea.Cursor {
 		cur.Shape = tea.CursorBlock
 		cur.Blink = false
 	})
+
+	if cur != nil && a.inDrawer(cur.X, cur.Y) {
+		return nil
+	}
 
 	return cur
 }

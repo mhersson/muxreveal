@@ -358,13 +358,14 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // alone. The drawer is then settled (see settleDrawer).
 func (a *App) keyboardCheck(msg tea.Msg) func() {
 	user := isUserInput(msg)
+	railWas, drawerWas, ver := a.rail.focused, a.drawer.focused, a.storeVer
 
+	// The state before the update is copied only when something can depend on it:
+	// the rail or a drawer has the keyboard, or a drawer is open.
 	var prev core.State
-	if user {
+	if user && (railWas || drawerWas || len(a.drawer.views) > 0) {
 		prev = a.store.State()
 	}
-
-	railWas, drawerWas, ver := a.rail.focused, a.drawer.focused, a.storeVer
 
 	return func() {
 		acted := user && a.storeVer != ver
@@ -594,7 +595,7 @@ func (a *App) runLeader(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 	case "esc":
 		return nil, true
 	case a.keymap.leader:
-		if !a.rail.focused && !a.drawerHasKeys(a.store.State()) {
+		if !a.rail.focused && !a.drawerHasKeys() {
 			a.keyToFocused(msg)
 		}
 

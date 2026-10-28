@@ -520,7 +520,7 @@ func (a *App) reviewEdit() tea.Cmd {
 		path = "./" + path
 	}
 
-	run := []string{reviewEditor(a.getenv), "+" + strconv.Itoa(editLine(f, r)), path}
+	run := &paneRun{program: reviewEditor(a.getenv), args: []string{"+" + strconv.Itoa(editLine(f, r)), path}}
 
 	cmd, opened := a.openPaneAt(core.KindShell, core.SplitVertical, tab.Review.Pane, v.root, run)
 	if opened {

@@ -2,8 +2,6 @@ package ui
 
 import (
 	"fmt"
-	"os"
-	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -303,130 +301,6 @@ func TestSearchFindsAndMisses(t *testing.T) {
 
 	if v.search == nil || *v.search != "pasted" {
 		t.Errorf("search after a paste = %v, want pasted", v.search)
-	}
-}
-
-func TestReviewEditor(t *testing.T) {
-	tests := []struct {
-		name, visual, editor, want string
-	}{
-		{"visual wins", "code", "nano", "code"},
-		{"editor", "", "nano", "nano"},
-		{"neither", "", "", "vi"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := reviewEditor(func(k string) string {
-				return map[string]string{"VISUAL": tt.visual, "EDITOR": tt.editor}[k]
-			})
-			if got != tt.want {
-				t.Errorf("editor = %q, want %q", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestEditOpensAnEditorPane(t *testing.T) {
-	dir := newRepoDir(t)
-	name := "dir/it's a file.txt"
-
-	write(t, filepath.Join(dir, name), numberedLines("line", 20))
-	write(t, filepath.Join(dir, "gone.txt"), "x\n")
-	commitEverything(t, dir, "init")
-	write(t, filepath.Join(dir, name), editedLines(20, 7))
-
-	if err := os.Remove(filepath.Join(dir, "gone.txt")); err != nil {
-		t.Fatal(err)
-	}
-
-	argsFile, editor := filepath.Join(t.TempDir(), "args"), filepath.Join(t.TempDir(), "ed.sh")
-	write(t, editor, "#!/bin/sh\nfor a in \"$@\"; do printf '%s\\n' \"$a\"; done > \"$ARGS_FILE\"\n")
-
-	if err := os.Chmod(editor, 0o755); err != nil {
-		t.Fatal(err)
-	}
-
-	r := newKeysRig(t, dir, func(o *Options) {
-		o.Getenv = func(k string) string {
-			return map[string]string{"SHELL": "/bin/testsh", "EDITOR": editor}[k]
-		}
-	})
-	st := &starts{}
-	r.start = st.start
-	v := r.opened(t)
-
-	cursorOn := func(want func(git.FileDiff, reviewRow) bool) {
-		t.Helper()
-
-		for i, row := range v.rows {
-			if want(v.res.Files[row.file], row) {
-				v.cursor = i
-
-				return
-			}
-		}
-
-		t.Fatal("no such row")
-	}
-
-	// A deleted file cannot be opened.
-	cursorOn(func(f git.FileDiff, row reviewRow) bool { return f.Path == "gone.txt" && row.kind == rowFile })
-	r.keys(keyRune('e'))
-
-	if r.notice != "the file is deleted" || st.count() != 0 {
-		t.Fatalf("e on a deleted file: notice = %q, panes started = %d, want the notice and none", r.notice, st.count())
-	}
-
-	cursorOn(func(f git.FileDiff, row reviewRow) bool {
-		return f.Path == name && row.kind == rowLine && f.Hunks[row.hunk].Lines[row.line].Kind == git.Add
-	})
-
-	line := v.res.Files[v.rows[v.cursor].file].Hunks[v.rows[v.cursor].hunk].Lines[v.rows[v.cursor].line].New
-
-	r.keys(keyRune('e'))
-
-	if st.count() != 1 {
-		t.Fatalf("e started %d processes, want 1", st.count())
-	}
-
-	c := st.cmds[0]
-	script := fmt.Sprintf(`'%s' '+%d' 'dir/it'\''s a file.txt'; exec "$SHELL" -l`, editor, line)
-
-	if !slices.Equal(c.Argv, []string{"/bin/testsh", "-l", "-i", "-c", script}) || c.Dir != dir {
-		t.Errorf("command = %q in %q, want the login shell running %s in %s", c.Argv, c.Dir, script, dir)
-	}
-
-	got := r.store.State()
-	if got.Tab().Review != nil || r.drawer.focused {
-		t.Errorf("drawer open = %v, has the keyboard = %v, want it closed", got.Tab().Review != nil, r.drawer.focused)
-	}
-
-	if m := got.Panes[got.Tab().Focus]; m.Kind != core.KindShell || m.Cwd != dir || got.Tab().Focus == "p1" {
-		t.Errorf("focused pane = %+v, want the new shell in %s", m, dir)
-	}
-
-	// The shell reads the quoting back as the two arguments the editor needs.
-	truePath, err := exec.LookPath("true")
-	if err != nil {
-		t.Skip("no true(1)")
-	}
-
-	cmd := exec.Command("/bin/sh", "-c", script)
-
-	cmd.Dir, cmd.Env = dir, append(os.Environ(), "ARGS_FILE="+argsFile, "SHELL="+truePath)
-
-	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("running the command: %v\n%s", err, out)
-	}
-
-	args, err := os.ReadFile(argsFile)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if want := fmt.Sprintf("+%d\n%s\n", line, name); string(args) != want {
-		t.Errorf("the editor got %q, want %q", args, want)
 	}
 }
 

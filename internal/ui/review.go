@@ -283,17 +283,6 @@ func (a *App) drawerRect(st core.State) (core.Rect, bool) {
 	return full, true
 }
 
-// drawerKeys reports whether the drawer is on screen and has the keyboard.
-func (a *App) drawerKeys(st core.State) bool {
-	if !a.drawer.focused {
-		return false
-	}
-
-	_, ok := a.drawerRect(st)
-
-	return ok
-}
-
 // blobIDs names the two sides of a file in the object database; a full-file
 // text is current while res still names the same pair for the file.
 type blobIDs struct{ old, new string }

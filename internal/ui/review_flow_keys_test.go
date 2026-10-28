@@ -382,50 +382,6 @@ func TestRailAndDrawerShareTheKeyboard(t *testing.T) {
 	}
 }
 
-func TestOverlaysWhileTheDrawerHasTheKeyboard(t *testing.T) {
-	dir := keysRepo(t)
-	r := newKeysRig(t, dir)
-	// An agent pane asks before it closes.
-	r.run(r.openPane(core.KindAgent, core.SplitVertical))
-
-	v := r.opened(t)
-
-	cases := []struct {
-		name        string
-		open, close []tea.KeyPressMsg
-		closed      func() bool
-	}{
-		{"copy mode", []tea.KeyPressMsg{keyLeader, keyRune('[')}, []tea.KeyPressMsg{keyEsc}, func() bool { return r.copy == nil }},
-		{"confirm", []tea.KeyPressMsg{keyLeader, keyRune('x')}, []tea.KeyPressMsg{keyRune('n')}, func() bool { return r.confirm == nil }},
-		{"palette", []tea.KeyPressMsg{keyLeader, keyRune(':')}, []tea.KeyPressMsg{keyEsc}, func() bool { return r.overlay == nil }},
-	}
-
-	for _, c := range cases {
-		r.keys(c.open...)
-
-		at := v.cursor
-
-		r.keys(keyRune('j'))
-
-		if v.cursor != at {
-			t.Fatalf("with %s open the drawer took j", c.name)
-		}
-
-		r.keys(c.close...)
-		r.until(t, c.name+" to close", c.closed)
-
-		if !r.drawer.focused {
-			t.Fatalf("closing %s left the drawer without the keyboard", c.name)
-		}
-
-		r.keys(keyRune('j'))
-
-		if v.cursor != at+1 {
-			t.Errorf("after %s the drawer's cursor went %d -> %d, want it to move down", c.name, at, v.cursor)
-		}
-	}
-}
-
 func TestSlideLastsAbout120ms(t *testing.T) {
 	r := newKeysRig(t, keysRepo(t))
 	r.leader('d')
@@ -571,12 +527,18 @@ func TestSecondLeaderDEndsTheSlide(t *testing.T) {
 		t.Fatalf("second leader d: drawer %+v, closing = %v, want the full drawer sliding out", rect, r.drawer.closing)
 	}
 
-	// A third press ends the slide out at once; the drawer is gone before it opens again.
-	r.step(keyLeader)
-	r.step(keyRune('d'))
+	// A third press ends the slide out, which closes the drawer, and the same press
+	// opens a new one, sliding in with the keyboard.
+	r.leader('d')
+	r.until(t, "the drawer to open again", func() bool { return r.store.State().Tab().Review != nil })
 
-	if r.store.State().Tab().Review != nil || r.drawer.closing {
-		t.Errorf("third leader d: drawer open = %v, closing = %v, want the close to end at once", r.store.State().Tab().Review != nil, r.drawer.closing)
+	if r.drawer.closing || r.drawer.slideFrom.IsZero() || !r.drawer.focused {
+		t.Errorf("third leader d: closing = %v, slide running = %v, drawer has the keyboard = %v, want a new drawer sliding in with the keyboard",
+			r.drawer.closing, !r.drawer.slideFrom.IsZero(), r.drawer.focused)
+	}
+
+	if rect, ok := r.drawerRect(r.store.State()); ok && rect.W != 0 {
+		t.Errorf("the new drawer is %d wide at the start of its slide, want out of sight", rect.W)
 	}
 }
 
@@ -732,6 +694,37 @@ func TestClickOnARowMovesTheCursor(t *testing.T) {
 
 	if got := r.sentSoFar(t, "p1"); got != "" {
 		t.Errorf("a click in the drawer sent the pane %q, want nothing", got)
+	}
+}
+
+// In a narrow drawer the tree shows only while it has the keyboard; a click on
+// one of its files jumps to that file's header and hides it again.
+func TestClickOnATreeFileInANarrowDrawer(t *testing.T) {
+	r := newKeysRig(t, keysRepo(t))
+	sized(t, r.App, 100, 30)
+
+	v := r.opened(t)
+	box := mustRect(t, r)
+
+	r.keys(tea.KeyPressMsg{Code: tea.KeyTab})
+
+	lay := r.drawerLayoutOf(box, v)
+	if lay.treeW == 0 || !r.drawer.tree {
+		t.Fatalf("setup: tree width %d, tree has the keyboard = %v, want the tree shown", lay.treeW, r.drawer.tree)
+	}
+
+	z := slices.IndexFunc(v.derived().tree, func(it treeItem) bool { return !it.dir && v.res.Files[it.file].Path == "z.txt" })
+	x, y := r.drawerCell(t, 2, 1+3+z)
+
+	click(r.App, x, y)
+
+	if fileAtCursor(v) != "z.txt" || v.rows[v.cursor].kind != rowFile {
+		t.Errorf("a click on z.txt in the tree: cursor on %s (kind %d), want z.txt's header", fileAtCursor(v), v.rows[v.cursor].kind)
+	}
+
+	if r.drawer.tree || !r.drawer.focused || r.drawerLayoutOf(box, v).treeW != 0 {
+		t.Errorf("after the click: tree has the keyboard = %v, drawer has it = %v, tree shown = %v, want the diff to have it and the tree hidden",
+			r.drawer.tree, r.drawer.focused, r.drawerLayoutOf(box, v).treeW != 0)
 	}
 }
 

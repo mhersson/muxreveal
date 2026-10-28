@@ -4,19 +4,27 @@ package ui
 const wheelRows = 3
 
 // inDrawer reports whether the cell lies on the part of the drawer on screen.
+// Every open drawer has a view once an update has run, so with none there is no
+// drawer and no state to read.
 func (a *App) inDrawer(x, y int) bool {
+	if len(a.drawer.views) == 0 {
+		return false
+	}
+
 	r, ok := a.drawerRect(a.store.State())
 
 	return ok && x >= r.X && x < r.X+r.W && y >= r.Y && y < r.Y+r.H
 }
 
 // drawerClick gives the drawer the keyboard; on a diff row it moves the cursor
-// there and on a tree file it jumps to it.
+// there and on a tree file it jumps to it. The click lands on what was drawn, so
+// the layout is read before the diff takes the keyboard from the tree, which a
+// narrow drawer hides it for.
 func (a *App) drawerClick(x, y int) {
 	st := a.store.State()
 	treeWas := a.drawer.focused && a.drawer.tree
 
-	a.drawerTake()
+	defer a.drawerTake()
 
 	r, shown := a.drawerRect(st)
 	box, _ := a.drawerFull(st)

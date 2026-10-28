@@ -35,16 +35,26 @@ func ShellCommand(env func(string) string, dir string, extraEnv []string) Comman
 // when the agent exits. Every argument is single-quoted, so nothing in argv is
 // interpreted by the shell. argv must not be empty.
 func AgentCommand(env func(string) string, dir string, argv, extraEnv []string) Command {
+	return runThenShell(env, dir, strings.Join(quoteAll(argv), " "), extraEnv)
+}
+
+// EditorCommand runs editor with args in an interactive login shell, then stays
+// in a shell when the editor exits. The shell reads editor as git reads
+// $EDITOR, so a value such as `code -w` runs code with -w; every argument is
+// single-quoted, so nothing in args is interpreted. editor comes from the
+// operator's own environment and must not be empty.
+func EditorCommand(env func(string) string, dir, editor string, args, extraEnv []string) Command {
+	return runThenShell(env, dir, strings.Join(append([]string{editor}, quoteAll(args)...), " "), extraEnv)
+}
+
+// runThenShell runs the shell command line in an interactive login shell, then
+// replaces that shell with a login shell.
+func runThenShell(env func(string) string, dir, line string, extraEnv []string) Command {
 	sh := shellPath(env)
 
-	quoted := make([]string, len(argv))
-	for i, a := range argv {
-		quoted[i] = quote(a)
-	}
-
-	script := strings.Join(quoted, " ") + `; exec "$SHELL" -l`
+	script := line + `; exec "$SHELL" -l`
 	if filepath.Base(sh) == "fish" {
-		// fish -c runs commands without job control, so the agent would not
+		// fish -c runs commands without job control, so the program would not
 		// lead the terminal's foreground group.
 		script = "status job-control full; " + script
 	}
@@ -54,6 +64,15 @@ func AgentCommand(env func(string) string, dir string, argv, extraEnv []string) 
 		Dir:  dir,
 		Env:  shellEnv(sh, extraEnv),
 	}
+}
+
+func quoteAll(args []string) []string {
+	out := make([]string, len(args))
+	for i, a := range args {
+		out[i] = quote(a)
+	}
+
+	return out
 }
 
 // quote is POSIX single-quoting; fish reads it alike for arguments without backslashes.

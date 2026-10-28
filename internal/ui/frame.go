@@ -193,7 +193,7 @@ func (a *App) frameBody(g geometry, st core.State, lk look, rail []string, railW
 	now := a.clock.Now()
 	// The focused pane draws as unfocused while the rail or the drawer has the
 	// keyboard, so one element shows it.
-	railKeys := (a.rail.focused && a.railShows(st.Rail)) || a.drawerKeys(st)
+	railKeys := (a.rail.focused && a.railShows(st.Rail)) || a.drawerHasKeys()
 
 	for id, r := range g.rects {
 		own := ownNone
@@ -388,7 +388,7 @@ func (a *App) cursorBase(g geometry) *tea.Cursor {
 		return a.railCursor(st)
 	}
 
-	if a.drawerKeys(st) {
+	if a.drawerHasKeys() {
 		return nil
 	}
 
