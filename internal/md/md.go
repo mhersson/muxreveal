@@ -553,6 +553,13 @@ func (g *folder) target() ast.Node {
 	return g.root
 }
 
+// closeFold ends the innermost open fold; with none open the closer is a stray.
+func (g *folder) closeFold() {
+	if len(g.stack) > 0 {
+		g.stack = g.stack[:len(g.stack)-1]
+	}
+}
+
 func (g *folder) add(c ast.Node) {
 	if p, ok := c.(*ast.Paragraph); ok && g.d.hasFoldTag(p) {
 		g.addParagraph(p)
@@ -665,7 +672,8 @@ func (d *Doc) rawTag(n ast.Node) (tagKind, string, bool) {
 	return kind, raw, ok
 }
 
-// hasFoldTag reports whether p holds a <details> or <summary> tag.
+// hasFoldTag reports whether p holds a <details> or <summary> tag among its
+// inline children, or a </details> anywhere inside it.
 func (d *Doc) hasFoldTag(p *ast.Paragraph) bool {
 	for c := p.FirstChild(); c != nil; c = c.NextSibling() {
 		if _, _, ok := d.rawTag(c); ok {
@@ -673,13 +681,29 @@ func (d *Doc) hasFoldTag(p *ast.Paragraph) bool {
 		}
 	}
 
-	return false
+	return d.closersIn(p) > 0
+}
+
+// closersIn counts the </details> tags among the inline descendants of n.
+func (d *Doc) closersIn(n ast.Node) int {
+	count := 0
+
+	walkTree(n, func(c ast.Node) bool {
+		if kind, _, ok := d.rawTag(c); ok && kind == tagDetailsClose {
+			count++
+		}
+
+		return true
+	})
+
+	return count
 }
 
 // addParagraph splits p at its <details> and <summary> tags by the rules of an
 // HTML block: the inline content before a tag stays a paragraph, the content
 // after an opener is the new fold's body, and the content after a closer
-// follows the fold.
+// follows the fold. A </details> nested in emphasis or link text closes the
+// innermost open fold after the part of the paragraph that holds it.
 func (g *folder) addParagraph(p *ast.Paragraph) {
 	cand := g.pending
 	g.pending = nil
@@ -693,10 +717,17 @@ func (g *folder) addParagraph(p *ast.Paragraph) {
 	var cur *ast.Paragraph
 
 	flush := func() {
-		if cur != nil {
-			g.target().AppendChild(cur)
-			cur = nil
+		if cur == nil {
+			return
 		}
+
+		g.target().AppendChild(cur)
+
+		for range g.d.closersIn(cur) {
+			g.closeFold()
+		}
+
+		cur = nil
 	}
 
 	keep := func(n ast.Node) {
@@ -723,10 +754,7 @@ func (g *folder) addParagraph(p *ast.Paragraph) {
 			cand, opened = f, true
 		case kind == tagDetailsClose:
 			flush()
-
-			if len(g.stack) > 0 {
-				g.stack = g.stack[:len(g.stack)-1]
-			}
+			g.closeFold()
 		case cand == nil || cand.named || len(g.stack) == 0 || g.stack[len(g.stack)-1] != cand:
 			keep(kids[i])
 		default:

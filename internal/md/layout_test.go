@@ -304,6 +304,36 @@ func TestDetailsTagsInParagraphs(t *testing.T) {
 	wantLines(t, attr, "▾ S", "  body")
 }
 
+func TestDetailsCloserNestedInParagraph(t *testing.T) {
+	for _, tt := range []struct{ name, para, text string }{
+		{"strong", "**log</details>**", "log"},
+		{"emphasis", "*log</details>*", "log"},
+		{"link text", "[log</details>](https://e.com)", "log"},
+		{"strong around a link", "**a [b](https://e.com)</details>**", "a b"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			src := "<details>\n<summary>S</summary>\n\n" + tt.para + "\n\n## After\n\nMore text.\n"
+
+			// The closer ends the fold after its paragraph, so the rest of the
+			// document shows below the fold, not inside it.
+			folded := layoutOf(src, 40, "")
+			wantLines(t, folded, "▸ S   enter opens", "", "After", "", "More text.")
+
+			open := layoutWith(src, LayoutOptions{Width: 40, Open: map[int]bool{0: true}}, "")
+			wantLines(t, open, "▾ S", "  "+strings.Join(strings.Fields(tt.text), " "), "", "After", "", "More text.")
+
+			for _, line := range open.Plain() {
+				if strings.Contains(line, "details") || strings.Contains(line, "<") {
+					t.Errorf("the tag shows as text: %q", line)
+				}
+			}
+		})
+	}
+
+	// With no fold open the nested closer is a stray and drops out.
+	wantLines(t, layoutOf("plain **text</details>** more\n\nafter\n", 40, ""), "plain text more", "", "after")
+}
+
 func TestDetailsSummaryWraps(t *testing.T) {
 	src := "<details>\n<summary>a long summary that wraps over lines</summary>\n\nx\n\n</details>\n"
 
