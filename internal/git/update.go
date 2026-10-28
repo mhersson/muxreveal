@@ -71,7 +71,7 @@ func gitDirsExist(r Repo) bool {
 // the result equals a fresh Diff. Anything that could change which files pair
 // up, the old side, or which files fall inside the caps runs a full Diff. The
 // Repo opened for a worktree is reused until its git dirs move or an update
-// fails.
+// fails; an update whose context ended keeps it.
 func (e *Engine) Update(ctx context.Context, prev Result, src Source, b Batch) (Result, error) {
 	if !e.canUpdate(prev, src, b) {
 		return e.Diff(ctx, src)
@@ -91,7 +91,10 @@ func (e *Engine) Update(ctx context.Context, prev Result, src Source, b Batch) (
 	res, err := e.update(ctx, r, prev, src, b)
 	if err != nil {
 		// The repo may be what failed (moved, replaced); open it again next time.
-		e.repos.forget(dir)
+		// A context that ended proves nothing about it.
+		if ctx.Err() == nil {
+			e.repos.forget(dir)
+		}
 
 		return Result{}, err
 	}

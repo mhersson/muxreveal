@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 )
 
 // updateRepo commits a.txt, b.txt, c.txt and dir/d.txt on main, then branches.
@@ -547,23 +548,66 @@ func TestUpdateOfAGoneWorktreeIsAnError(t *testing.T) {
 	}
 }
 
+// A linked worktree removed without a prune leaves its admin dir, so the cached
+// git dirs still exist and the error comes from running git in the gone
+// directory; the entry is dropped all the same.
+func TestUpdateOfAGoneLinkedWorktreeIsAnError(t *testing.T) {
+	dir := updateRepo(t)
+	wt := filepath.Join(t.TempDir(), "wt")
+	gitOut(t, dir, "worktree", "add", "-q", "-b", "other", wt, "main")
+
+	src := BranchSource{Worktree: wt, Base: "main"}
+	e := testEngine(t)
+	prev := diffOK(t, e, src)
+
+	writeFile(t, wt, "b.txt", numbered("b.txt", 30)+"first\n")
+
+	res := updateOK(t, e, prev, src, Batch{Paths: []string{"b.txt"}})
+
+	cached, ok := e.repos.get(wt)
+	if !ok {
+		t.Fatal("setup: the update did not cache its repo")
+	}
+
+	must(t, os.RemoveAll(wt))
+
+	if !gitDirsExist(cached) {
+		t.Fatalf("setup: the admin dir %s went with the worktree", cached.GitDir)
+	}
+
+	if _, err := e.Update(context.Background(), res, src, Batch{Paths: []string{"b.txt"}}); err == nil {
+		t.Error("Update of a removed linked worktree succeeded")
+	}
+
+	if _, ok := e.repos.get(wt); ok {
+		t.Error("the removed worktree's repo is still cached")
+	}
+}
+
+// A failed update drops its repo, which may be what failed. The fake git fails
+// the next listing call once, when the test creates "$LOG.fail".
 func TestUpdateOpensAgainAfterAFailedUpdate(t *testing.T) {
 	dir := updateRepo(t)
 	src := BranchSource{Worktree: dir, Base: "main"}
 	e := testEngine(t)
 	prev := diffOK(t, e, src)
 
-	logPath := fakeGit(t, "")
+	logPath := fakeGit(t, `case "$*" in *--raw*)
+	if [ -e "$LOG.fail" ]; then rm "$LOG.fail"; echo "fatal: injected" >&2; exit 1; fi;;
+esac`)
 
 	writeFile(t, dir, "b.txt", numbered("b.txt", 30)+"first\n")
 
 	res := updateOK(t, e, prev, src, Batch{Paths: []string{"b.txt"}})
 
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
+	must(t, os.WriteFile(logPath+".fail", nil, 0o644))
 
-	if _, err := e.Update(ctx, res, src, Batch{Paths: []string{"b.txt"}}); err == nil {
-		t.Fatal("Update with a cancelled context succeeded")
+	if _, err := e.Update(context.Background(), res, src, Batch{Paths: []string{"b.txt"}}); err == nil {
+		t.Fatal("Update with a failing git succeeded")
+	}
+
+	if _, ok := e.repos.get(dir); ok {
+		t.Error("the failed update kept its repo")
 	}
 
 	res = updateOK(t, e, res, src, Batch{Paths: []string{"b.txt"}})
@@ -572,6 +616,55 @@ func TestUpdateOpensAgainAfterAFailedUpdate(t *testing.T) {
 	}
 
 	sameAsFull(t, res, src)
+}
+
+// An update whose context ended says nothing about the repo: the drawer
+// cancels its load whenever a newer one starts, and the next update reuses it.
+func TestUpdateKeepsItsRepoWhenItsContextEnds(t *testing.T) {
+	ends := map[string]func() (context.Context, context.CancelFunc){
+		"cancelled": func() (context.Context, context.CancelFunc) {
+			ctx, cancel := context.WithCancel(context.Background())
+			cancel()
+
+			return ctx, cancel
+		},
+		"past its deadline": func() (context.Context, context.CancelFunc) {
+			return context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
+		},
+	}
+
+	for name, end := range ends {
+		t.Run(name, func(t *testing.T) {
+			dir := updateRepo(t)
+			src := BranchSource{Worktree: dir, Base: "main"}
+			e := testEngine(t)
+			prev := diffOK(t, e, src)
+
+			logPath := fakeGit(t, "")
+
+			writeFile(t, dir, "b.txt", numbered("b.txt", 30)+"first\n")
+
+			res := updateOK(t, e, prev, src, Batch{Paths: []string{"b.txt"}})
+
+			ctx, cancel := end()
+			defer cancel()
+
+			if _, err := e.Update(ctx, res, src, Batch{Paths: []string{"b.txt"}}); err == nil {
+				t.Fatal("Update with an ended context succeeded")
+			}
+
+			if _, ok := e.repos.get(dir); !ok {
+				t.Error("the update whose context ended dropped its repo")
+			}
+
+			res = updateOK(t, e, res, src, Batch{Paths: []string{"b.txt"}})
+			if n := openCalls(t, logPath); n != 1 {
+				t.Errorf("opens = %d, want 1: the repo is reused after the context ended", n)
+			}
+
+			sameAsFull(t, res, src)
+		})
+	}
 }
 
 func TestUpdateRunsFromSeveralGoroutines(t *testing.T) {
