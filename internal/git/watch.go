@@ -230,6 +230,12 @@ func (w *Watcher) loop(ctx context.Context) {
 	}
 
 	onError := func(err error) {
+		// fsnotify's kqueue backend can report the lstat of a file that vanished
+		// between its own checks; the events already cover it.
+		if errors.Is(err, fs.ErrNotExist) {
+			return
+		}
+
 		if !errors.Is(err, fsnotify.ErrEventOverflow) {
 			w.report(err)
 
