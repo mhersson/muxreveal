@@ -725,7 +725,7 @@ Roles and their theme colours, which M4b maps. `Code` is a theme role M4b adds: 
 | `RoleLink` | `Info` | underline | link text, and unlinked targets |
 | `RoleKey` | `Key` | bold | `<kbd>` text |
 | `RoleBullet` | `Accent` | | bullets and ordered numbers |
-| `RoleTaskDone` | `Success` | | `✓` |
+| `RoleTaskDone` | `Success` | bold | `✓` |
 | `RoleTaskDoneText` | `Dim` | | done items' text |
 | `RoleTaskOpen` | `Muted` | | `○` |
 | `RoleCodeFrame` | `Border` | | code box |
