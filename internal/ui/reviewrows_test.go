@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"maps"
 	"slices"
 	"testing"
 
@@ -444,4 +445,63 @@ func TestFreshRows(t *testing.T) {
 			t.Errorf("fresh pairs = %d, want 3", n)
 		}
 	})
+}
+
+func fullFixture() (git.Result, map[string]fullText) {
+	res := git.Result{Files: []git.FileDiff{{Path: "a.go", Status: git.Modified}}}
+
+	return res, map[string]fullText{"a.go": {
+		old: []string{"a", "b", "c"},
+		new: []string{"a", "c", "Added"},
+	}}
+}
+
+func TestRestoreAnchorFullFile(t *testing.T) {
+	res, full := fullFixture()
+	rows := buildRows(res, rowOpts{full: full})
+	// 0 file, 1 a, 2 ghost b, 3 c, 4 Added
+
+	tests := []struct {
+		name string
+		at   int
+		next func(map[string]fullText) map[string]fullText
+		want int
+	}{
+		{"a line inserted above keeps the row", 3, func(f map[string]fullText) map[string]fullText {
+			f["a.go"] = fullText{old: f["a.go"].old, new: append([]string{"top"}, f["a.go"].new...)}
+
+			return f
+		}, 4},
+		{"a ghost line keeps its row", 2, func(f map[string]fullText) map[string]fullText { return f }, 2},
+		{"an added line keeps its row", 4, func(f map[string]fullText) map[string]fullText { return f }, 4},
+		{"the line gone falls back to the file header", 4, func(f map[string]fullText) map[string]fullText {
+			f["a.go"] = fullText{old: f["a.go"].old, new: []string{"a", "c"}}
+
+			return f
+		}, 0},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			a := anchorAt(res, rows, tt.at)
+			nrows := buildRows(res, rowOpts{full: tt.next(maps.Clone(full))})
+
+			if got := restoreAnchor(res, nrows, a); got != tt.want {
+				t.Errorf("restoreAnchor = %d, want %d", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestSearchRowsFullFile(t *testing.T) {
+	res, full := fullFixture()
+	rows := buildRows(res, rowOpts{full: full})
+
+	if got, ok := searchRows(res, rows, 0, "ADDED"); !ok || got != 4 {
+		t.Errorf("full row search = %d, %v; want 4", got, ok)
+	}
+
+	if got, ok := searchRows(res, rows, 3, "b"); !ok || got != 2 {
+		t.Errorf("ghost row search = %d, %v; want 2", got, ok)
+	}
 }

@@ -31,8 +31,9 @@ const (
 //   - rowPair: line is the left (old) side's index, else the right side's;
 //     other is the right side's index, -1 when it has no line.
 //   - rowFull: line indexes the new text; other indexes the old text for a kept
-//     line and is -1 for an added one.
-//   - rowGhost: line indexes the old text; block is the ghost block.
+//     line and is -1 for an added one. text is the line.
+//   - rowGhost: line indexes the old text; block is the ghost block. text is
+//     the line.
 //   - rowFold: line is the block's first old line, other the number of lines.
 type reviewRow struct {
 	kind                    reviewRowKind
@@ -174,7 +175,7 @@ func appendFull(rows []reviewRow, file int, path string, ft fullText, o rowOpts)
 
 	kept := func(oi, ni int) reviewRow {
 		r := newRow(rowFull, file)
-		r.line, r.other = ni, oi
+		r.line, r.other, r.text = ni, oi, nw[ni]
 
 		return r
 	}
@@ -215,7 +216,7 @@ func appendFull(rows []reviewRow, file int, path string, ft fullText, o rowOpts)
 			} else {
 				for k := range n {
 					r := newRow(rowGhost, file)
-					r.line, r.block = oi+k, block
+					r.line, r.block, r.text = oi+k, block, old[oi+k]
 					rows = append(rows, r)
 				}
 			}
@@ -272,6 +273,13 @@ func anchorAt(res git.Result, rows []reviewRow, i int) rowAnchor {
 	a.path = res.Files[r.file].Path
 
 	switch r.kind {
+	case rowFull:
+		a.kind, a.text = git.Context, r.text
+		if r.other < 0 {
+			a.kind = git.Add
+		}
+	case rowGhost:
+		a.kind, a.text = git.Del, r.text
 	case rowHunk, rowLine, rowPair:
 		h := res.Files[r.file].Hunks[r.hunk]
 		a.hunkNewStart, a.hunkNewLines = h.NewStart, h.NewLines
@@ -297,6 +305,7 @@ func restoreAnchor(res git.Result, rows []reviewRow, a rowAnchor) int {
 	header := -1
 	hunkRow := -1
 	line, lineDist := -1, 0
+	whole := -1
 
 	for i, r := range rows {
 		f := res.Files[r.file]
@@ -310,6 +319,11 @@ func restoreAnchor(res git.Result, rows []reviewRow, a rowAnchor) int {
 		case rowHunk:
 			if hunkRow < 0 && overlaps(f.Hunks[r.hunk], a) {
 				hunkRow = i
+			}
+		case rowFull, rowGhost:
+			if r.kind == a.row && r.text == a.text && (r.kind == rowGhost || (r.other < 0) == (a.kind == git.Add)) &&
+				(whole < 0 || abs(i-a.index) < abs(whole-a.index)) {
+				whole = i
 			}
 		case rowLine, rowPair:
 			h := f.Hunks[r.hunk]
@@ -335,6 +349,8 @@ func restoreAnchor(res git.Result, rows []reviewRow, a rowAnchor) int {
 	switch {
 	case a.row == rowFile && header >= 0:
 		return header
+	case (a.row == rowFull || a.row == rowGhost) && whole >= 0:
+		return whole
 	case (a.row == rowLine || a.row == rowPair) && line >= 0:
 		return line
 	case (a.row == rowLine || a.row == rowPair || a.row == rowHunk) && hunkRow >= 0:
@@ -362,8 +378,7 @@ func sameLine(h git.Hunk, r reviewRow, a rowAnchor) bool {
 
 // searchRows returns the first row after from whose text holds q, ignoring
 // case, wrapping around and ending on from itself. A file row's text is its
-// path, a hunk row's its header and section. Rows of the full file view hold
-// no text in the result, so they never match.
+// path, a hunk row's its header and section.
 func searchRows(res git.Result, rows []reviewRow, from int, q string) (int, bool) {
 	if q == "" || len(rows) == 0 {
 		return 0, false
@@ -393,7 +408,7 @@ func rowTexts(res git.Result, r reviewRow) []string {
 	switch r.kind {
 	case rowFile:
 		return []string{f.Path, f.OldPath}
-	case rowInfo:
+	case rowInfo, rowFull, rowGhost:
 		return []string{r.text}
 	case rowHunk:
 		h := f.Hunks[r.hunk]
