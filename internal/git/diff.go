@@ -127,6 +127,7 @@ type Engine struct {
 	tempDir    string
 	indexCache string
 	cache      *hunkCache
+	repos      repoCache // the repos Update opened, by worktree path
 }
 
 // EngineOptions configure NewEngine.

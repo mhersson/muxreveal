@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -425,4 +426,182 @@ func TestUpdateNewFileBesideChangesRunsAFullListing(t *testing.T) {
 	if full != 1 || restricted != 1 {
 		t.Errorf("listings: restricted=%d full=%d, want the touched listing and then a full one", restricted, full)
 	}
+}
+
+// openCalls counts the rev-parse calls Open makes.
+func openCalls(t *testing.T, logPath string) int {
+	t.Helper()
+
+	data, err := os.ReadFile(logPath)
+	if err != nil {
+		return 0
+	}
+
+	return strings.Count(string(data), "--show-toplevel")
+}
+
+func TestUpdateReusesTheRepoItOpened(t *testing.T) {
+	dir := updateRepo(t)
+	src := BranchSource{Worktree: dir, Base: "main"}
+	e := testEngine(t)
+	prev := diffOK(t, e, src)
+
+	logPath := fakeGit(t, "")
+
+	writeFile(t, dir, "b.txt", numbered("b.txt", 30)+"first\n")
+
+	res := updateOK(t, e, prev, src, Batch{Paths: []string{"b.txt"}})
+	if n := openCalls(t, logPath); n != 1 {
+		t.Fatalf("the first update opened the repo %d times, want 1", n)
+	}
+
+	writeFile(t, dir, "c.txt", numbered("c.txt", 30)+"second\n")
+
+	res = updateOK(t, e, res, src, Batch{Paths: []string{"c.txt"}})
+	if n := openCalls(t, logPath); n != 1 {
+		t.Errorf("the second update opened the repo again: %d opens in all, want 1", n)
+	}
+
+	sameAsFull(t, res, src)
+}
+
+func TestUpdateKeepsOneRepoPerWorktree(t *testing.T) {
+	dirA, dirB := updateRepo(t), updateRepo(t)
+	srcA, srcB := BranchSource{Worktree: dirA, Base: "main"}, BranchSource{Worktree: dirB, Base: "main"}
+	e := testEngine(t)
+	prevA, prevB := diffOK(t, e, srcA), diffOK(t, e, srcB)
+
+	logPath := fakeGit(t, "")
+
+	// Each repo has its own edit, so a repo taken for the other's would show.
+	writeFile(t, dirA, "b.txt", numbered("b.txt", 30)+"in a\n")
+	writeFile(t, dirB, "c.txt", numbered("c.txt", 30)+"in b\n")
+
+	resA := updateOK(t, e, prevA, srcA, Batch{Paths: []string{"b.txt"}})
+	resB := updateOK(t, e, prevB, srcB, Batch{Paths: []string{"c.txt"}})
+
+	writeFile(t, dirA, "dir/d.txt", numbered("dir/d.txt", 30)+"again in a\n")
+
+	resA = updateOK(t, e, resA, srcA, Batch{Paths: []string{"dir/d.txt"}})
+	if n := openCalls(t, logPath); n != 2 {
+		t.Errorf("opens = %d, want 2: one per worktree", n)
+	}
+
+	sameAsFull(t, resA, srcA)
+	sameAsFull(t, resB, srcB)
+}
+
+func TestUpdateReopensAWorktreeWhoseGitDirMoved(t *testing.T) {
+	dir := updateRepo(t)
+	wt := filepath.Join(t.TempDir(), "wt")
+	gitOut(t, dir, "worktree", "add", "-q", "-b", "other", wt, "main")
+
+	src := BranchSource{Worktree: wt, Base: "main"}
+	e := testEngine(t)
+	prev := diffOK(t, e, src)
+
+	logPath := fakeGit(t, "")
+
+	writeFile(t, wt, "b.txt", numbered("b.txt", 30)+"first\n")
+
+	res := updateOK(t, e, prev, src, Batch{Paths: []string{"b.txt"}})
+	if n := openCalls(t, logPath); n != 1 {
+		t.Fatalf("opens = %d, want 1", n)
+	}
+
+	// Rename the worktree's admin dir and point its .git file at the new name.
+	common := gitOut(t, dir, "rev-parse", "--path-format=absolute", "--git-common-dir")
+	oldAdmin := filepath.Join(common, "worktrees", "wt")
+	newAdmin := filepath.Join(common, "worktrees", "moved")
+	must(t, os.Rename(oldAdmin, newAdmin))
+	writeFile(t, wt, ".git", "gitdir: "+newAdmin+"\n")
+
+	writeFile(t, wt, "c.txt", numbered("c.txt", 30)+"second\n")
+
+	res = updateOK(t, e, res, src, Batch{Paths: []string{"c.txt"}})
+	if n := openCalls(t, logPath); n != 2 {
+		t.Errorf("opens = %d, want 2: the moved git dir needs the repo opened again", n)
+	}
+
+	if r, ok := e.repos.get(wt); !ok || filepath.Base(r.GitDir) != "moved" {
+		t.Errorf("cached repo = %+v, %v, want the moved git dir", r, ok)
+	}
+
+	sameAsFull(t, res, src)
+}
+
+func TestUpdateOfAGoneWorktreeIsAnError(t *testing.T) {
+	dir := updateRepo(t)
+	src := BranchSource{Worktree: dir, Base: "main"}
+	e := testEngine(t)
+	prev := diffOK(t, e, src)
+
+	writeFile(t, dir, "b.txt", numbered("b.txt", 30)+"first\n")
+
+	res := updateOK(t, e, prev, src, Batch{Paths: []string{"b.txt"}})
+
+	must(t, os.RemoveAll(dir))
+
+	if _, err := e.Update(context.Background(), res, src, Batch{Paths: []string{"b.txt"}}); err == nil {
+		t.Error("Update of a deleted worktree succeeded")
+	}
+}
+
+func TestUpdateOpensAgainAfterAFailedUpdate(t *testing.T) {
+	dir := updateRepo(t)
+	src := BranchSource{Worktree: dir, Base: "main"}
+	e := testEngine(t)
+	prev := diffOK(t, e, src)
+
+	logPath := fakeGit(t, "")
+
+	writeFile(t, dir, "b.txt", numbered("b.txt", 30)+"first\n")
+
+	res := updateOK(t, e, prev, src, Batch{Paths: []string{"b.txt"}})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	if _, err := e.Update(ctx, res, src, Batch{Paths: []string{"b.txt"}}); err == nil {
+		t.Fatal("Update with a cancelled context succeeded")
+	}
+
+	res = updateOK(t, e, res, src, Batch{Paths: []string{"b.txt"}})
+	if n := openCalls(t, logPath); n != 2 {
+		t.Errorf("opens = %d, want 2: a failed update does not keep its repo", n)
+	}
+
+	sameAsFull(t, res, src)
+}
+
+func TestUpdateRunsFromSeveralGoroutines(t *testing.T) {
+	var srcs []BranchSource
+
+	prevs := map[string]Result{}
+	e := testEngine(t)
+
+	for range 2 {
+		src := BranchSource{Worktree: updateRepo(t), Base: "main"}
+		srcs = append(srcs, src)
+		prevs[src.Worktree] = diffOK(t, e, src)
+	}
+
+	var wg sync.WaitGroup
+
+	for i := range 8 {
+		src := srcs[i%len(srcs)]
+
+		wg.Go(func() {
+			for range 3 {
+				if _, err := e.Update(context.Background(), prevs[src.Worktree], src, Batch{Paths: []string{"b.txt"}}); err != nil {
+					t.Errorf("Update: %v", err)
+
+					return
+				}
+			}
+		})
+	}
+
+	wg.Wait()
+	assertEmptyDir(t, e.tempDir)
 }
