@@ -642,8 +642,11 @@ func (a *App) View() tea.View {
 	g := a.geometry()
 
 	content := a.frameAt(g)
-	if r, ok := a.drawerRect(a.store.State()); ok {
-		content = overlayAt(content, a.width, a.height, r.X, r.Y, a.drawerLines(a.store.State(), r))
+	st := a.store.State()
+
+	if r, ok := a.drawerRect(st); ok {
+		lines, fits := a.drawerDrawn(st, r)
+		content = overlayDrawer(content, a.width, a.height, r, lines, fits)
 	}
 
 	content = overlayToast(content, a.width, a.height, a.notice, a.icons, lk.styles)

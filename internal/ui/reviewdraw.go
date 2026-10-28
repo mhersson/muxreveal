@@ -225,22 +225,31 @@ func (d *drawCtx) freshInView() string {
 // left part. The lines are drawn again only when a drawKey field changed; they
 // are shared with the cache, so callers must not change them.
 func (a *App) drawerLines(st core.State, r core.Rect) []string {
+	lines, _ := a.drawerDrawn(st, r)
+
+	return lines
+}
+
+// drawerDrawn is drawerLines, and whether every line is exactly r.W cells and
+// ends with no style or link open, as splicing the lines into a frame needs.
+func (a *App) drawerDrawn(st core.State, r core.Rect) (lines []string, fits bool) {
 	d, name, ok := a.drawCtxFor(st)
 	if !ok || r.W <= 0 || r.H <= 0 {
-		return nil
+		return nil, false
 	}
 
 	key := d.key(r, name)
 	if d.c.drawnOK && d.c.drawnKey == key {
-		return d.c.drawn
+		return d.c.drawn, d.c.drawnFit
 	}
 
 	a.drawer.renders++
 
-	lines := d.lines(r)
-	d.c.drawn, d.c.drawnKey, d.c.drawnOK = lines, key, true
+	lines = d.lines(r)
+	fits = !slices.ContainsFunc(lines, func(l string) bool { return ansi.StringWidth(l) != r.W || !endsClean(l) })
+	d.c.drawn, d.c.drawnFit, d.c.drawnKey, d.c.drawnOK = lines, fits, key, true
 
-	return lines
+	return lines, fits
 }
 
 // drawCtxFor is what drawing the active tab's drawer needs, and the name of the

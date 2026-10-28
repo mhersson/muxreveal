@@ -102,6 +102,7 @@ type reviewCache struct {
 	// The drawn lines and what they were drawn from. spansRev counts the chunks
 	// spans gained, as the drawing shows them.
 	drawn    []string
+	drawnFit bool // the drawn lines can be spliced into a frame, see drawerDrawn
 	drawnKey drawKey
 	drawnOK  bool
 	spansRev int
