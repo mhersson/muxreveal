@@ -1030,11 +1030,14 @@ func TestWatchNestedBranchSetsGit(t *testing.T) {
 }
 
 func TestWatchOverflowBumpsSeq(t *testing.T) {
-	w := startWatch(t, baseRepo(t), fastWatch)
+	injectErrs := make(chan error, 1)
+	opts := fastWatch
+	opts.injectErrs = injectErrs
+	w := startWatch(t, baseRepo(t), opts)
 	before := w.Seq()
 
 	// The lost events never reach handle, so the overflow itself must count.
-	w.fs.Errors <- fsnotify.ErrEventOverflow
+	injectErrs <- fsnotify.ErrEventOverflow
 
 	b := collect(t, w, func(b Batch) bool { return b.Overflow })
 	if !b.Overflow {
