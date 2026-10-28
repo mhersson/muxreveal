@@ -625,7 +625,6 @@ Ideas and requests that came up outside the current milestone go here.
 - A go-to picker over agents, tabs and panes.
 - Sessions above tabs (PR-5).
 - Keep each layout mode's arrangement (BSP ratios, master ratio, column widths) per tab across mode switches.
-- A layout switch (`leader space`, `layout.set.*`) rebuilds the tab without its `Review`, so it closes the tab's review drawer; `Tab.setMode` in `internal/core` should keep it.
 - tuios `composer` for the PR compose body (M3).
 - tuios `markdown` and `tuios.dev/sketch` for Mermaid (M4).
 - `tuios.dev/swatch` for TH-3.

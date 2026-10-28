@@ -131,3 +131,39 @@ func TestStateCloneCopiesReview(t *testing.T) {
 		t.Error("State.clone shares Review")
 	}
 }
+
+// A layout switch rebuilds the tab but keeps its drawer.
+func TestLayoutSwitchKeepsTheReviewDrawer(t *testing.T) {
+	want := &Review{Pane: "p2", Mode: ReviewBranch}
+
+	for _, from := range []LayoutMode{ModeBSP, ModeMaster, ModeScrolling} {
+		for _, to := range []LayoutMode{ModeBSP, ModeMaster, ModeScrolling} {
+			t.Run(string(from)+" to "+string(to), func(t *testing.T) {
+				s := buildTabs(t, []LayoutMode{from, ModeBSP}, []int{2, 2})
+				s = dispatch(t, s, OpenReview{Pane: "p2", Mode: ReviewBranch})
+				s = dispatch(t, s, SetLayoutMode{Mode: to})
+
+				if got := s.Tabs[0].Review; !reflect.DeepEqual(got, want) {
+					t.Errorf("after the switch Review = %+v, want %+v", got, want)
+				}
+
+				if s.Tabs[1].Review != nil {
+					t.Errorf("the other tab got a drawer: %+v", s.Tabs[1].Review)
+				}
+			})
+		}
+	}
+
+	t.Run("cycle", func(t *testing.T) {
+		s := reviewState(t)
+		s = dispatch(t, s, OpenReview{Pane: "p2", Mode: ReviewBranch})
+
+		for range 3 {
+			s = dispatch(t, s, CycleLayoutMode{})
+
+			if got := s.Tabs[0].Review; !reflect.DeepEqual(got, want) {
+				t.Fatalf("after cycling to %q Review = %+v, want %+v", s.Tabs[0].Mode, got, want)
+			}
+		}
+	})
+}
