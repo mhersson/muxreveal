@@ -1082,8 +1082,8 @@ func TestWatchIgnoresVanishedPaths(t *testing.T) {
 			opts.injectErrs = injectErrs
 			w := startWatch(t, dir, opts)
 
-			// The shape fsnotify's kqueue backend sends for a lock file that is gone
-			// by its second lstat.
+			// A PathError shaped like the one fsnotify's kqueue backend sends; the
+			// errno varies by case.
 			injectErrs <- &fs.PathError{
 				Op:   "lstat",
 				Path: filepath.Join(dir, ".git", "refs", "heads", "x.lock"),
