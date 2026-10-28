@@ -197,3 +197,123 @@ func TestTabSwitchToACoveredFocusGivesTheDrawerTheKeyboard(t *testing.T) {
 			st.Active, st.Tab().Review != nil, r.drawer.focused, r.drawer.closing, r.focus())
 	}
 }
+
+// A drawer restored into a hidden tab has no view until its tab shows. A pane
+// moved into that tab and followed still closes the drawer when it lands under it.
+func TestPaneMovedIntoARestoredDrawersTab(t *testing.T) {
+	dir := keysRepo(t)
+	r := newKeysRig(t, dir)
+
+	openIn(t, r.App, core.OpenReview{Pane: "p1", Mode: core.ReviewBranch})
+	r.settle()
+
+	first := r.store.State().Tab().ID
+
+	r.leader('c')
+	r.openShell(t, dir, core.SplitVertical)
+
+	// A restore leaves a hidden tab's drawer with no view.
+	delete(r.drawer.views, first)
+	r.settle()
+
+	if len(r.drawer.views) != 0 {
+		t.Fatalf("setup: %d views, want none", len(r.drawer.views))
+	}
+
+	moved := r.focus()
+
+	r.keys(keyLeader, keyRune('>'), keyRune('1'))
+
+	st := r.store.State()
+	if st.Active != 0 || st.Tab().Focus != moved || st.Tab().Review != nil || r.drawer.focused {
+		t.Errorf("tab %d, focus %s, drawer open = %v, has the keyboard = %v, want the moved pane focused and the drawer closed",
+			st.Active, st.Tab().Focus, st.Tab().Review != nil, r.drawer.focused)
+	}
+}
+
+// closeLandsCovered is a rig with a four pane master-stack tab and a drawer open
+// on p1, the focus on a shown pane x whose close moves the focus to a pane y that
+// the drawer then covers, and the keyboard with the panes. The pair is found from
+// the layout, not assumed.
+func closeLandsCovered(t *testing.T) (r *drawerRig, x, y core.PaneID) {
+	t.Helper()
+
+	dir := keysRepo(t)
+	r = newKeysRig(t, dir)
+
+	openIn(t, r.App, core.SetLayoutMode{Mode: core.ModeMaster, Area: r.bodyArea()})
+
+	for range 3 {
+		r.openShell(t, dir, core.SplitVertical)
+	}
+
+	openIn(t, r.App, core.FocusPane{ID: "p1"})
+	r.opened(t)
+
+	st := r.store.State()
+	box, _ := r.drawerFull(st)
+	shown := r.layoutRects()
+
+	for _, id := range st.Tab().Panes {
+		if rect, ok := shown[id]; id == "p1" || !ok || covered(rect, box) {
+			continue
+		}
+
+		sim := core.NewStore(st)
+		if sim.Dispatch(core.FocusPane{ID: id}) != nil || sim.Dispatch(core.ClosePane{ID: id}) != nil {
+			continue
+		}
+
+		after := sim.State()
+		if rect, ok := core.Arrange(after.Tab(), r.bodyArea(), after.Layout).Rects[after.Tab().Focus]; ok && covered(rect, box) {
+			x, y = id, after.Tab().Focus
+
+			break
+		}
+	}
+
+	if x == "" {
+		t.Fatal("setup: no shown pane's close moves the focus under the drawer")
+	}
+
+	openIn(t, r.App, core.FocusPane{ID: x})
+	r.drawerRelease()
+	r.settle()
+
+	if st := r.store.State(); st.Tab().Review == nil || r.drawer.focused || r.focus() != x {
+		t.Fatalf("setup: drawer open = %v, has the keyboard = %v, focus = %s, want the drawer open, the panes holding the keyboard and focus on %s",
+			st.Tab().Review != nil, r.drawer.focused, r.focus(), x)
+	}
+
+	return r, x, y
+}
+
+// When the focused pane closes and the next focus is under the drawer, the way it
+// closes decides: a process that exits hands the drawer the keyboard, and a close
+// the operator asks for is their action on a covered pane, so the drawer closes.
+func TestFocusedPaneClosesOntoACoveredPane(t *testing.T) {
+	t.Run("the process exits", func(t *testing.T) {
+		r, x, y := closeLandsCovered(t)
+
+		r.run(r.closePane(x))
+		r.settle()
+
+		st := r.store.State()
+		if st.Tab().Review == nil || !r.drawer.focused || r.focus() != y {
+			t.Errorf("drawer open = %v, has the keyboard = %v, focus = %s, want the drawer open with the keyboard and focus on %s",
+				st.Tab().Review != nil, r.drawer.focused, r.focus(), y)
+		}
+	})
+
+	t.Run("the operator closes it", func(t *testing.T) {
+		r, _, y := closeLandsCovered(t)
+
+		r.leader('x')
+
+		st := r.store.State()
+		if st.Tab().Review != nil || r.drawer.focused || r.drawer.closing || r.focus() != y {
+			t.Errorf("drawer open = %v, has the keyboard = %v, closing = %v, focus = %s, want the drawer closed at once and focus on %s",
+				st.Tab().Review != nil, r.drawer.focused, r.drawer.closing, r.focus(), y)
+		}
+	})
+}

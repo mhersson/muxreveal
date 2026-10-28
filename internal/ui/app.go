@@ -123,6 +123,7 @@ type App struct {
 	spin                       int         // badge spinner frame
 	agentTicking               bool        // an agentTickMsg is outstanding
 	slideTicking               bool        // a drawerSlideMsg is outstanding
+	drawersOpen                bool        // some tab's state holds a review drawer; only dispatch changes it
 	settled                    settleKey   // what settleDrawer last found nothing to change in
 	load                       loadSampler // nil on platforms without a load reading
 	start                      func(ctx context.Context, c term.Command, cols, rows int) (proc, error)
@@ -195,6 +196,7 @@ func New(opts Options) (*App, error) {
 	}
 
 	a.drawer.cfg = opts.Diff
+	a.drawersOpen = anyReview(opts.Store.State())
 
 	if opts.GitTempDir != "" {
 		a.engine = git.NewEngine(git.EngineOptions{
@@ -261,6 +263,8 @@ func (a *App) dispatch(act core.Action) error {
 	a.storeVer++
 
 	st := a.store.State()
+	a.drawersOpen = anyReview(st)
+
 	if a.save != nil && !a.restoring {
 		a.save(st)
 	}
@@ -284,6 +288,11 @@ func (a *App) dispatch(act core.Action) error {
 	}
 
 	return nil
+}
+
+// anyReview reports whether some tab of st has a review drawer open.
+func anyReview(st core.State) bool {
+	return slices.ContainsFunc(st.Tabs, func(t core.Tab) bool { return t.Review != nil })
 }
 
 // mayChangeTab reports whether act can change the active tab or its drawer.
@@ -361,9 +370,9 @@ func (a *App) keyboardCheck(msg tea.Msg) func() {
 	railWas, drawerWas, ver := a.rail.focused, a.drawer.focused, a.storeVer
 
 	// The state before the update is copied only when something can depend on it:
-	// the rail or a drawer has the keyboard, or a drawer is open.
+	// the rail or a drawer has the keyboard, or a drawer is open in some tab.
 	var prev core.State
-	if user && (railWas || drawerWas || len(a.drawer.views) > 0) {
+	if user && (railWas || drawerWas || a.drawersOpen) {
 		prev = a.store.State()
 	}
 

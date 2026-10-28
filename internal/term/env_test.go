@@ -187,3 +187,76 @@ func TestEditorCommand(t *testing.T) {
 		})
 	}
 }
+
+// TestAgentCommandPinned pins, byte for byte, the Command AgentCommand returns.
+// It runs nothing, so unlike the tests that start a shell it holds on every platform.
+func TestAgentCommandPinned(t *testing.T) {
+	t.Setenv("SHELL", "/inherited/shell")
+	t.Setenv("MUXREVEAL_PANE", "p9")
+	t.Setenv("MUXREVEAL_SOCK", "/inherited.sock")
+	t.Setenv("TERM", "dumb")
+	t.Setenv("COLORTERM", "16color")
+
+	const (
+		tail   = `; exec "$SHELL" -l`
+		quoted = `'claude' '--settings' '/tmp/a b/it'\''s.json' '$(x)'`
+	)
+
+	argv := []string{"claude", "--settings", "/tmp/a b/it's.json", "$(x)"}
+	fishScript := `status job-control full; ` + quoted + tail
+
+	tests := []struct {
+		name  string
+		shell string // what $SHELL says; "" for unset
+		argv  []string
+		sh    string // the shell that runs
+		want  string
+	}{
+		{"sh", "/bin/sh", argv, "/bin/sh", quoted + tail},
+		{"bash", "/bin/bash", argv, "/bin/bash", quoted + tail},
+		{"zsh", "/bin/zsh", argv, "/bin/zsh", quoted + tail},
+		{"fish gets job control first", "/usr/bin/fish", argv, "/usr/bin/fish", fishScript},
+		{"fish at another path", "/opt/homebrew/bin/fish", argv, "/opt/homebrew/bin/fish", fishScript},
+		{"an unset SHELL runs sh", "", argv, "/bin/sh", quoted + tail},
+		{"one word", "/bin/zsh", []string{"claude"}, "/bin/zsh", `'claude'` + tail},
+	}
+
+	extra := []string{"MUXREVEAL_PANE=p2", "MUXREVEAL_SOCK=/run/1.sock"}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			env := func(k string) string {
+				if k == "SHELL" {
+					return tt.shell
+				}
+
+				return ""
+			}
+
+			c := AgentCommand(env, "/work", tt.argv, extra)
+
+			if want := []string{tt.sh, "-l", "-i", "-c", tt.want}; !slices.Equal(c.Argv, want) {
+				t.Errorf("Argv = %q, want %q", c.Argv, want)
+			}
+
+			if c.Dir != "/work" {
+				t.Errorf("Dir = %q, want /work", c.Dir)
+			}
+
+			// The inherited identity, shell and terminal values are dropped; the pane's
+			// terminal values, the shell that runs and the extra entries end the list, in this order.
+			wantTail := []string{"TERM=xterm-256color", "COLORTERM=truecolor", "SHELL=" + tt.sh, "MUXREVEAL_PANE=p2", "MUXREVEAL_SOCK=/run/1.sock"}
+			if len(c.Env) < len(wantTail) || !slices.Equal(c.Env[len(c.Env)-len(wantTail):], wantTail) {
+				t.Fatalf("Env ends with %q, want %q", c.Env[max(len(c.Env)-len(wantTail), 0):], wantTail)
+			}
+
+			for _, kv := range c.Env[:len(c.Env)-len(wantTail)] {
+				for _, key := range []string{"SHELL=", "MUXREVEAL_PANE=", "MUXREVEAL_SOCK=", "TERM=", "COLORTERM="} {
+					if strings.HasPrefix(kv, key) {
+						t.Errorf("Env keeps the inherited %q", kv)
+					}
+				}
+			}
+		})
+	}
+}

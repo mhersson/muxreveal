@@ -4,10 +4,9 @@ package ui
 const wheelRows = 3
 
 // inDrawer reports whether the cell lies on the part of the drawer on screen.
-// Every open drawer has a view once an update has run, so with none there is no
-// drawer and no state to read.
+// With no drawer open in any tab there is none and no state to read.
 func (a *App) inDrawer(x, y int) bool {
-	if len(a.drawer.views) == 0 {
+	if !a.drawersOpen {
 		return false
 	}
 

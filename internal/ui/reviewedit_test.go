@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/mhersson/muxreveal/internal/core"
 	"github.com/mhersson/muxreveal/internal/git"
@@ -263,5 +264,73 @@ func TestEditLine(t *testing.T) {
 				t.Errorf("editLine() = %d, want %d", got, tt.want)
 			}
 		})
+	}
+}
+
+// The editor pane is placed beside the drawer's pane without focusing that pane
+// first, so it, which the operator never moved the focus to, hears nothing.
+func TestEditSendsNoFocusReportsToTheDrawersPane(t *testing.T) {
+	r := newKeysRig(t, keysRepo(t))
+	r.run(r.openPane(core.KindShell, core.SplitVertical))
+
+	procs := map[core.PaneID]*fakeProc{}
+
+	for _, id := range []core.PaneID{"p1", "p2"} {
+		p := r.panes[id]
+		fp, ok := p.proc.(*fakeProc)
+
+		if !ok {
+			t.Fatalf("%s runs %T, want the fake process", id, p.proc)
+		}
+
+		procs[id] = fp
+
+		if _, err := fp.feed.Write([]byte("\x1b[?1004h")); err != nil {
+			t.Fatal(err)
+		}
+
+		eventually(t, "focus reporting in "+string(id), func() bool {
+			p.mu.Lock()
+			defer p.mu.Unlock()
+
+			return p.vt.FocusReporting()
+		})
+	}
+
+	// The drawer reviews p1 and has the keyboard while the focus is on p2, which it covers.
+	openIn(t, r.App, core.FocusPane{ID: "p1"})
+	r.opened(t)
+	openIn(t, r.App, core.FocusPane{ID: "p2"})
+
+	reports := func(id core.PaneID) (in, out int) {
+		sent := procs[id].sent()
+
+		return strings.Count(sent, "\x1b[I"), strings.Count(sent, "\x1b[O")
+	}
+
+	// Each focus move so far told the pane it left and the pane it reached.
+	eventually(t, "the focus reports of the setup", func() bool {
+		in1, out1 := reports("p1")
+		in2, out2 := reports("p2")
+
+		return in1 == 1 && out1 == 1 && in2 == 1 && out2 == 1
+	})
+
+	r.keys(keyRune('e'))
+
+	if r.store.State().Tab().Review != nil {
+		t.Fatal("e left the drawer open")
+	}
+
+	// p2 had the focus and loses it to the editor pane; p1 was only the anchor.
+	eventually(t, "p2 to be told it lost the focus", func() bool {
+		_, out := reports("p2")
+
+		return out == 2
+	})
+	time.Sleep(50 * time.Millisecond)
+
+	if in, out := reports("p1"); in != 1 || out != 1 {
+		t.Errorf("p1 was sent %d focus-in and %d focus-out reports, want the 1 and 1 from before e", in, out)
 	}
 }
