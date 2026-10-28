@@ -8,17 +8,14 @@ Terminal emulation comes from `tuios.dev/vt`; everything above it is ours.
 
 - `docs/DESIGN.md`: requirements (IDs like AG-3, DF-2), architecture, packages,
   key designs, keymap, milestones. Read it before any change.
-- `docs/STATUS.md`: the current milestone, what's done, what's next, decisions
-  made along the way. Read it at the start of every session and update it before
-  you finish.
 
 If the code and DESIGN.md disagree, stop and ask. Don't silently change the
 design; propose an edit to DESIGN.md instead.
 
 ## Workflow
 
-- Work only on the current milestones in STATUS.md. Anything else goes in its
-  "Later" list.
+- Work only on the task you were given; raise anything outside it with the
+  maintainer instead of building it.
 - Start each task in plan mode: list the requirement IDs it covers, the packages
   and files you'll touch, and how you'll test it. Wait for approval.
 - One branch and one PR per milestone plan; every task in it is its own reviewed

@@ -26,7 +26,7 @@ Terminal emulation comes from `tuios.dev/vt`, the emulator TUIOS publishes as a 
 
 ## Functional requirements
 
-IDs are referenced by milestones, plans and STATUS; commits and PRs do not carry them. Priority: **P0** blocks v1, **P1** ships in v1 if possible, **P2** is v1.x.
+IDs are referenced by milestones and plans; commits and PRs do not carry them. Priority: **P0** blocks v1, **P1** ships in v1 if possible, **P2** is v1.x.
 
 ### Agents and panes
 

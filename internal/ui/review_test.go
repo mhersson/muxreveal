@@ -919,8 +919,8 @@ func hunkHolds(v *reviewView, path, text string) bool {
 }
 
 // saveToPaneCeiling bounds the median save-to-pane time the test asserts, as
-// saveToDiffCeiling does for the engine. The 300 ms gate is measured on a quiet
-// machine and recorded in STATUS.
+// saveToDiffCeiling does for the engine. The 300 ms gate is read from the
+// logged median on a quiet machine.
 const saveToPaneCeiling = time.Second
 
 // A file saved in a 2,000-file repository reaches the open drawer. The test
