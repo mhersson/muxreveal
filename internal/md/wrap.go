@@ -26,8 +26,8 @@ type cell struct {
 }
 
 // nextCluster returns the leading grapheme cluster of s and its width in cells.
-// It is the one width measure of the package: wrapping, code blocks and table
-// cells all count cells through it. s must not be empty.
+// It is the one width measure of the package: wrapping, cutting, code blocks and
+// table cells all count cells through it. s must not be empty.
 func nextCluster(s string) (string, int) {
 	if s[0] < 0x80 && (len(s) == 1 || s[1] < 0x80) {
 		return s[:1], 1
@@ -39,6 +39,24 @@ func nextCluster(s string) (string, int) {
 	}
 
 	return g, w
+}
+
+// cutCells returns the longest prefix of s at most n cells wide, cut between
+// clusters.
+func cutCells(s string, n int) string {
+	w := 0
+
+	for i := 0; i < len(s); {
+		g, cw := nextCluster(s[i:])
+		if w+cw > n {
+			return s[:i]
+		}
+
+		w += cw
+		i += len(g)
+	}
+
+	return s
 }
 
 // textWidth is the width of s in cells, the sum of its clusters' widths.

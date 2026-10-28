@@ -51,7 +51,7 @@ keyboard back.
   ‹Bullet:• ›‹Code: leader n › picks
     a worktree for a
     new agent
-    ‹Bullet:◦ ›‹Image:󰥶 The drawer ›‹Image:…›
+    ‹Bullet:◦ ›‹Image:󰥶 The drawer …›
     ‹Bullet:◦ ›‹SummaryMark,b:▸ ›‹Summary,b:Keys in the›
         ‹Summary,b:list›
         ‹FoldHint:enter opens›
@@ -95,37 +95,37 @@ keyboard back.
 ‹CodeFrame:│ ›‹LineNumber:6 ›‹CodeText:}             ›‹CodeFrame: │›
 ‹CodeFrame:╰──────────────────╯›
 
-‹TableFrame:╭────────┬────────┬›‹TableFrame:…›
-‹TableFrame:│ ›‹TableHeader,b:Gate  ›‹TableFrame: │ ›‹TableHeader,b: Limit›‹TableFrame: │›‹TableFrame:…›
-‹TableFrame:│ ›‹TableHeader,b:      ›‹TableFrame: │ ›‹TableHeader,b:      ›‹TableFrame: │›‹TableFrame:…›
-‹TableFrame:├────────┼────────┼›‹TableFrame:…›
-‹TableFrame:│ ›Save  ‹TableFrame: │ ›300 ms‹TableFrame: │›‹TableFrame:…›
-‹TableFrame:│ ›to    ‹TableFrame: │ ›      ‹TableFrame: │›‹TableFrame:…›
-‹TableFrame:│ ›drawer‹TableFrame: │ ›      ‹TableFrame: │›‹TableFrame:…›
-‹TableFrame:│ ›(media‹TableFrame: │ ›      ‹TableFrame: │›‹TableFrame:…›
-‹TableFrame:│ ›n)    ‹TableFrame: │ ›      ‹TableFrame: │›‹TableFrame:…›
-‹TableFrame:│ ›Six-pa‹TableFrame: │ ›  8 ms‹TableFrame: │›‹TableFrame:…›
-‹TableFrame:│ ›ne    ‹TableFrame: │ ›      ‹TableFrame: │›‹TableFrame:…›
-‹TableFrame:│ ›bench ‹TableFrame: │ ›      ‹TableFrame: │›‹TableFrame:…›
-‹TableFrame:│ ›p99   ‹TableFrame: │ ›      ‹TableFrame: │›‹TableFrame:…›
-‹TableFrame:│ ›with  ‹TableFrame: │ ›      ‹TableFrame: │›‹TableFrame:…›
-‹TableFrame:│ ›the   ‹TableFrame: │ ›      ‹TableFrame: │›‹TableFrame:…›
-‹TableFrame:│ ›drawer‹TableFrame: │ ›      ‹TableFrame: │›‹TableFrame:…›
-‹TableFrame:│ ›open  ‹TableFrame: │ ›      ‹TableFrame: │›‹TableFrame:…›
-‹TableFrame:│ ›over a‹TableFrame: │ ›      ‹TableFrame: │›‹TableFrame:…›
-‹TableFrame:│ ›busy  ‹TableFrame: │ ›      ‹TableFrame: │›‹TableFrame:…›
-‹TableFrame:│ ›agent ‹TableFrame: │ ›      ‹TableFrame: │›‹TableFrame:…›
-‹TableFrame:│ ›Scroll‹TableFrame: │ ›  8 ms‹TableFrame: │›‹TableFrame:…›
-‹TableFrame:│ ›a     ‹TableFrame: │ ›      ‹TableFrame: │›‹TableFrame:…›
-‹TableFrame:│ ›10,000‹TableFrame: │ ›      ‹TableFrame: │›‹TableFrame:…›
-‹TableFrame:│ ›-line ‹TableFrame: │ ›      ‹TableFrame: │›‹TableFrame:…›
-‹TableFrame:│ ›diff, ‹TableFrame: │ ›      ‹TableFrame: │›‹TableFrame:…›
-‹TableFrame:│ ›p99   ‹TableFrame: │ ›      ‹TableFrame: │›‹TableFrame:…›
-‹TableFrame:│ ›Idle  ‹TableFrame: │ ›   1 %‹TableFrame: │›‹TableFrame:…›
-‹TableFrame:│ ›CPU,  ‹TableFrame: │ ›      ‹TableFrame: │›‹TableFrame:…›
-‹TableFrame:│ ›drawer‹TableFrame: │ ›      ‹TableFrame: │›‹TableFrame:…›
-‹TableFrame:│ ›open  ‹TableFrame: │ ›      ‹TableFrame: │›‹TableFrame:…›
-‹TableFrame:╰────────┴────────┴›‹TableFrame:…›
+‹TableFrame:╭────────┬────────┬…›
+‹TableFrame:│ ›‹TableHeader,b:Gate  ›‹TableFrame: │ ›‹TableHeader,b: Limit›‹TableFrame: │…›
+‹TableFrame:│ ›‹TableHeader,b:      ›‹TableFrame: │ ›‹TableHeader,b:      ›‹TableFrame: │…›
+‹TableFrame:├────────┼────────┼…›
+‹TableFrame:│ ›Save  ‹TableFrame: │ ›300 ms‹TableFrame: │…›
+‹TableFrame:│ ›to    ‹TableFrame: │ ›      ‹TableFrame: │…›
+‹TableFrame:│ ›drawer‹TableFrame: │ ›      ‹TableFrame: │…›
+‹TableFrame:│ ›(media‹TableFrame: │ ›      ‹TableFrame: │…›
+‹TableFrame:│ ›n)    ‹TableFrame: │ ›      ‹TableFrame: │…›
+‹TableFrame:│ ›Six-pa‹TableFrame: │ ›  8 ms‹TableFrame: │…›
+‹TableFrame:│ ›ne    ‹TableFrame: │ ›      ‹TableFrame: │…›
+‹TableFrame:│ ›bench ‹TableFrame: │ ›      ‹TableFrame: │…›
+‹TableFrame:│ ›p99   ‹TableFrame: │ ›      ‹TableFrame: │…›
+‹TableFrame:│ ›with  ‹TableFrame: │ ›      ‹TableFrame: │…›
+‹TableFrame:│ ›the   ‹TableFrame: │ ›      ‹TableFrame: │…›
+‹TableFrame:│ ›drawer‹TableFrame: │ ›      ‹TableFrame: │…›
+‹TableFrame:│ ›open  ‹TableFrame: │ ›      ‹TableFrame: │…›
+‹TableFrame:│ ›over a‹TableFrame: │ ›      ‹TableFrame: │…›
+‹TableFrame:│ ›busy  ‹TableFrame: │ ›      ‹TableFrame: │…›
+‹TableFrame:│ ›agent ‹TableFrame: │ ›      ‹TableFrame: │…›
+‹TableFrame:│ ›Scroll‹TableFrame: │ ›  8 ms‹TableFrame: │…›
+‹TableFrame:│ ›a     ‹TableFrame: │ ›      ‹TableFrame: │…›
+‹TableFrame:│ ›10,000‹TableFrame: │ ›      ‹TableFrame: │…›
+‹TableFrame:│ ›-line ‹TableFrame: │ ›      ‹TableFrame: │…›
+‹TableFrame:│ ›diff, ‹TableFrame: │ ›      ‹TableFrame: │…›
+‹TableFrame:│ ›p99   ‹TableFrame: │ ›      ‹TableFrame: │…›
+‹TableFrame:│ ›Idle  ‹TableFrame: │ ›   1 %‹TableFrame: │…›
+‹TableFrame:│ ›CPU,  ‹TableFrame: │ ›      ‹TableFrame: │…›
+‹TableFrame:│ ›drawer‹TableFrame: │ ›      ‹TableFrame: │…›
+‹TableFrame:│ ›open  ‹TableFrame: │ ›      ‹TableFrame: │…›
+‹TableFrame:╰────────┴────────┴…›
 
 ‹AlertWarning:▎ ›‹AlertWarning,b:󰀪 Warning›
 ‹AlertWarning:▎ ›Drawer keys never
@@ -142,7 +142,7 @@ keyboard back.
 ‹QuoteBar:▎ ›
 ‹QuoteBar:▎ ›  ‹Bullet:• ›‹QuoteText:the first rule›
 ‹QuoteBar:▎ ›    ‹QuoteText:of review›
-‹QuoteBar:▎ ›  ‹Bullet:• ›‹Image:󰥶 A quoted sc›‹Image:…›
+‹QuoteBar:▎ ›  ‹Bullet:• ›‹Image:󰥶 A quoted sc…›
 ‹QuoteBar:▎ ›
 ‹QuoteBar:▎ ›‹SummaryMark,b:▾ ›‹Summary,b:Quoted notes›
 ‹QuoteBar:▎ ›  ‹QuoteText:Open by default,›
@@ -165,7 +165,7 @@ keyboard back.
 ‹AlertCaution:▎ ›unsaved edits do
 ‹AlertCaution:▎ ›not show.
 
-‹Image:󰥶 The drawer over t›‹Image:…›
+‹Image:󰥶 The drawer over t…›
 
 ‹SummaryMark,b:▸ ›‹Summary,b:Bench output›
   ‹FoldHint:enter opens›

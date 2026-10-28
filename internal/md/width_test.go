@@ -158,3 +158,109 @@ func TestLongSplitClusterFits(t *testing.T) {
 		assertSafe(t, layoutOf(src, w, ""), w)
 	}
 }
+
+func TestFitCutsByCluster(t *testing.T) {
+	for name, sample := range widthSamples {
+		t.Run(name, func(t *testing.T) {
+			for _, text := range []string{sample + " tail", "ab" + sample + sample + "cd", sample} {
+				line := Line{{Text: text, Link: -1}}
+
+				for w := 1; w <= textWidth(text)+1; w++ {
+					if got := lineWidth(fit(line, w)); got > w {
+						t.Errorf("fit(%q, %d) is %d cells wide", text, w, got)
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestCodeLabelCutByCluster(t *testing.T) {
+	for name, sample := range widthSamples {
+		t.Run(name, func(t *testing.T) {
+			src := "```" + strings.Repeat(sample+"x", 30) + "\ncode\n```\n"
+
+			for _, w := range []int{8, 14, 20, 30, 40} {
+				l := codeLayout(src, w, nil)
+				assertSafe(t, l, w)
+				assertBordersAligned(t, l, l.Plain())
+			}
+		})
+	}
+}
+
+func TestCutCells(t *testing.T) {
+	tests := []struct {
+		name string
+		s    string
+		n    int
+		want string
+	}{
+		{"fits", "abc", 3, "abc"},
+		{"ascii", "abcdef", 4, "abcd"},
+		{"zero cells", "abc", 0, ""},
+		{"wide character at the cut", "a\u4E2Db", 2, "a"},
+		{"wide character fits", "a\u4E2Db", 3, "a\u4E2D"},
+		{"keycap at the cut", "a1\uFE0F\u20E3b", 2, "a"},
+		{"keycap fits", "a1\uFE0F\u20E3b", 3, "a1\uFE0F\u20E3"},
+		{"keycap alone in one cell", "1\uFE0F\u20E3x", 1, ""},
+		{"flag at the cut", "a\U0001F1F3\U0001F1F4", 2, "a"},
+		{"combining mark stays with its base", "e\u0301e\u0301", 1, "e\u0301"},
+		{"zero-width join stays in its cluster", "\U0001F469\u200D\U0001F4BBx", 1, ""},
+		{"empty", "", 5, ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := cutCells(tt.s, tt.n); got != tt.want {
+				t.Errorf("cutCells(%q, %d) = %q, want %q", tt.s, tt.n, got, tt.want)
+			}
+		})
+	}
+
+	// For every sample and every n the cut fits and is the longest prefix that does.
+	for name, sample := range widthSamples {
+		s := "ab" + sample + "cd" + sample
+		for n := 0; n <= textWidth(s)+1; n++ {
+			cut := cutCells(s, n)
+			if got := textWidth(cut); got > n {
+				t.Errorf("%s: cutCells(%q, %d) is %d cells wide", name, s, n, got)
+			}
+
+			if rest := s[len(cut):]; rest != "" {
+				if _, w := nextCluster(rest); textWidth(cut)+w <= n {
+					t.Errorf("%s: cutCells(%q, %d) = %q stops before a cluster that fits", name, s, n, cut)
+				}
+			}
+		}
+	}
+}
+
+func TestFitMergesTheEllipsis(t *testing.T) {
+	st := Run{Role: RoleTableFrame, Link: -1}
+
+	tests := []struct {
+		name string
+		line Line
+		w    int
+		want string
+	}{
+		{"cut inside a run", Line{{Text: "abcdef", Role: st.Role, Link: -1}}, 4, "[abc…]"},
+		{"cut between runs of one style", Line{{Text: "ab", Role: st.Role, Link: -1}, {Text: "cdef", Role: RoleText, Link: -1}}, 3, "[ab][…]"},
+		{"cut run of another style", Line{{Text: "abc", Role: st.Role, Link: -1}, {Text: "defg", Role: RoleText, Link: -1}}, 6, "[abc][de…]"},
+		{"nothing of the run fits", Line{{Text: "ab", Role: st.Role, Link: -1}, {Text: "\u4E2D", Role: st.Role, Link: -1}}, 3, "[ab…]"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var b strings.Builder
+			for _, r := range fit(tt.line, tt.w) {
+				b.WriteString("[" + r.Text + "]")
+			}
+
+			if b.String() != tt.want {
+				t.Errorf("fit = %s, want %s", b.String(), tt.want)
+			}
+		})
+	}
+}

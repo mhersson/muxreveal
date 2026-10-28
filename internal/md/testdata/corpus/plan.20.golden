@@ -171,25 +171,25 @@ library otherwise.
 
 ‹Heading2,b:Step 3: report›
 
-‹TableFrame:╭────────┬────────┬›‹TableFrame:…›
-‹TableFrame:│ ›‹TableHeader,b:Findin›‹TableFrame: │ ›‹TableHeader,b:  Exit›‹TableFrame: │›‹TableFrame:…›
-‹TableFrame:│ ›‹TableHeader,b:g     ›‹TableFrame: │ ›‹TableHeader,b:  code›‹TableFrame: │›‹TableFrame:…›
-‹TableFrame:├────────┼────────┼›‹TableFrame:…›
-‹TableFrame:│ ›none  ‹TableFrame: │ ›     0‹TableFrame: │›‹TableFrame:…›
-‹TableFrame:│ ›      ‹TableFrame: │ ›      ‹TableFrame: │›‹TableFrame:…›
-‹TableFrame:│ ›      ‹TableFrame: │ ›      ‹TableFrame: │›‹TableFrame:…›
-‹TableFrame:│ ›broken‹TableFrame: │ ›     1‹TableFrame: │›‹TableFrame:…›
-‹TableFrame:│ ›link  ‹TableFrame: │ ›      ‹TableFrame: │›‹TableFrame:…›
-‹TableFrame:│ ›      ‹TableFrame: │ ›      ‹TableFrame: │›‹TableFrame:…›
-‹TableFrame:│ ›      ‹TableFrame: │ ›      ‹TableFrame: │›‹TableFrame:…›
-‹TableFrame:│ ›      ‹TableFrame: │ ›      ‹TableFrame: │›‹TableFrame:…›
-‹TableFrame:│ ›      ‹TableFrame: │ ›      ‹TableFrame: │›‹TableFrame:…›
-‹TableFrame:│ ›unread‹TableFrame: │ ›     2‹TableFrame: │›‹TableFrame:…›
-‹TableFrame:│ ›able  ‹TableFrame: │ ›      ‹TableFrame: │›‹TableFrame:…›
-‹TableFrame:│ ›dir   ‹TableFrame: │ ›      ‹TableFrame: │›‹TableFrame:…›
-‹TableFrame:│ ›      ‹TableFrame: │ ›      ‹TableFrame: │›‹TableFrame:…›
-‹TableFrame:│ ›      ‹TableFrame: │ ›      ‹TableFrame: │›‹TableFrame:…›
-‹TableFrame:╰────────┴────────┴›‹TableFrame:…›
+‹TableFrame:╭────────┬────────┬…›
+‹TableFrame:│ ›‹TableHeader,b:Findin›‹TableFrame: │ ›‹TableHeader,b:  Exit›‹TableFrame: │…›
+‹TableFrame:│ ›‹TableHeader,b:g     ›‹TableFrame: │ ›‹TableHeader,b:  code›‹TableFrame: │…›
+‹TableFrame:├────────┼────────┼…›
+‹TableFrame:│ ›none  ‹TableFrame: │ ›     0‹TableFrame: │…›
+‹TableFrame:│ ›      ‹TableFrame: │ ›      ‹TableFrame: │…›
+‹TableFrame:│ ›      ‹TableFrame: │ ›      ‹TableFrame: │…›
+‹TableFrame:│ ›broken‹TableFrame: │ ›     1‹TableFrame: │…›
+‹TableFrame:│ ›link  ‹TableFrame: │ ›      ‹TableFrame: │…›
+‹TableFrame:│ ›      ‹TableFrame: │ ›      ‹TableFrame: │…›
+‹TableFrame:│ ›      ‹TableFrame: │ ›      ‹TableFrame: │…›
+‹TableFrame:│ ›      ‹TableFrame: │ ›      ‹TableFrame: │…›
+‹TableFrame:│ ›      ‹TableFrame: │ ›      ‹TableFrame: │…›
+‹TableFrame:│ ›unread‹TableFrame: │ ›     2‹TableFrame: │…›
+‹TableFrame:│ ›able  ‹TableFrame: │ ›      ‹TableFrame: │…›
+‹TableFrame:│ ›dir   ‹TableFrame: │ ›      ‹TableFrame: │…›
+‹TableFrame:│ ›      ‹TableFrame: │ ›      ‹TableFrame: │…›
+‹TableFrame:│ ›      ‹TableFrame: │ ›      ‹TableFrame: │…›
+‹TableFrame:╰────────┴────────┴…›
 
   ‹TaskOpen:○ ›Write the
     reporter and its

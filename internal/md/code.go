@@ -6,7 +6,6 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/charmbracelet/x/ansi"
 	"github.com/yuin/goldmark/v2/ast"
 
 	"github.com/mhersson/muxreveal/internal/git/invisible"
@@ -45,7 +44,7 @@ func (l *layouter) codeBlock(out *frag, n *ast.CodeBlock, width int) {
 	if maxL := min(maxLangCell, fw-6); label == "" || maxL < 1 {
 		label = ""
 	} else if textWidth(label) > maxL {
-		label = ansi.Truncate(label, maxL-1, "") + "…"
+		label = cutCells(label, maxL-1) + "…"
 	}
 
 	var top Line

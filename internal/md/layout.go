@@ -4,7 +4,6 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/charmbracelet/x/ansi"
 	"github.com/yuin/goldmark/v2/ast"
 	east "github.com/yuin/goldmark/v2/extension/ast"
 )
@@ -401,16 +400,15 @@ func fit(line Line, width int) Line {
 		}
 
 		if left > 0 {
-			if cut := ansi.Truncate(r.Text, left, ""); cut != "" {
+			if cut := cutCells(r.Text, left); cut != "" {
 				r.Text = cut
 				out = append(out, r)
 			}
 		}
 
 		r.Text = "…"
-		out = append(out, r)
 
-		return out
+		return appendRun(out, r)
 	}
 
 	return out

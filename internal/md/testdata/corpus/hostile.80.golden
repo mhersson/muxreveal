@@ -176,15 +176,15 @@ WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW
 ‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ›
 ‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ›‹QuoteText:quote 29›
 
-‹TableFrame:╭────────┬────────┬────────┬────────┬────────┬────────┬────────┬────────┬──────›‹TableFrame:…›
-‹TableFrame:│ ›‹TableHeader,b:h0    ›‹TableFrame: │ ›‹TableHeader,b:h1    ›‹TableFrame: │ ›‹TableHeader,b:h2    ›‹TableFrame: │ ›‹TableHeader,b:h3    ›‹TableFrame: │ ›‹TableHeader,b:h4    ›‹TableFrame: │ ›‹TableHeader,b:h5    ›‹TableFrame: │ ›‹TableHeader,b:h6    ›‹TableFrame: │ ›‹TableHeader,b:h7    ›‹TableFrame: │ ›‹TableHeader,b:h8   ›‹TableHeader,b:…›
-‹TableFrame:├────────┼────────┼────────┼────────┼────────┼────────┼────────┼────────┼──────›‹TableFrame:…›
+‹TableFrame:╭────────┬────────┬────────┬────────┬────────┬────────┬────────┬────────┬──────…›
+‹TableFrame:│ ›‹TableHeader,b:h0    ›‹TableFrame: │ ›‹TableHeader,b:h1    ›‹TableFrame: │ ›‹TableHeader,b:h2    ›‹TableFrame: │ ›‹TableHeader,b:h3    ›‹TableFrame: │ ›‹TableHeader,b:h4    ›‹TableFrame: │ ›‹TableHeader,b:h5    ›‹TableFrame: │ ›‹TableHeader,b:h6    ›‹TableFrame: │ ›‹TableHeader,b:h7    ›‹TableFrame: │ ›‹TableHeader,b:h8   …›
+‹TableFrame:├────────┼────────┼────────┼────────┼────────┼────────┼────────┼────────┼──────…›
 ‹TableFrame:│ ›cell  ‹TableFrame: │ ›cell  ‹TableFrame: │ ›cell  ‹TableFrame: │ ›cell  ‹TableFrame: │ ›cell  ‹TableFrame: │ ›cell  ‹TableFrame: │ ›cell  ‹TableFrame: │ ›cell  ‹TableFrame: │ ›cell …
 ‹TableFrame:│ ›number‹TableFrame: │ ›number‹TableFrame: │ ›number‹TableFrame: │ ›number‹TableFrame: │ ›number‹TableFrame: │ ›number‹TableFrame: │ ›number‹TableFrame: │ ›number‹TableFrame: │ ›numbe…
 ‹TableFrame:│ ›0     ‹TableFrame: │ ›1     ‹TableFrame: │ ›2     ‹TableFrame: │ ›3     ‹TableFrame: │ ›4     ‹TableFrame: │ ›5     ‹TableFrame: │ ›6     ‹TableFrame: │ ›7     ‹TableFrame: │ ›8    …
 ‹TableFrame:│ ›‹Code: c0 ›  ‹TableFrame: │ ›‹Code: c1 ›  ‹TableFrame: │ ›‹Code: c2 ›  ‹TableFrame: │ ›‹Code: c3 ›  ‹TableFrame: │ ›‹Code: c4 ›  ‹TableFrame: │ ›‹Code: c5 ›  ‹TableFrame: │ ›‹Code: c6 ›  ‹TableFrame: │ ›‹Code: c7 ›  ‹TableFrame: │ ›‹Code: c8 › …
 ‹TableFrame:│ ›[1m   ‹TableFrame: │ ›[1m   ‹TableFrame: │ ›[1m   ‹TableFrame: │ ›[1m   ‹TableFrame: │ ›[1m   ‹TableFrame: │ ›[1m   ‹TableFrame: │ ›[1m   ‹TableFrame: │ ›[1m   ‹TableFrame: │ ›[1m  …
-‹TableFrame:╰────────┴────────┴────────┴────────┴────────┴────────┴────────┴────────┴──────›‹TableFrame:…›
+‹TableFrame:╰────────┴────────┴────────┴────────┴────────┴────────┴────────┴────────┴──────…›
 
 | h0 | h1 | h2 | h3 | h4 | h5 | h6 | h7 | h8 | h9 | h10 | h11 | h12 | h13 | h14
 | h15 | h16 | h17 | h18 | h19 | h20 | h21 | h22 | h23 | h24 | h25 | h26 | h27 |

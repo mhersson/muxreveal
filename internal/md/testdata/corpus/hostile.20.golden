@@ -29,9 +29,9 @@ and ‹Text,b:bold›
 ‹Link,u:il.example/�› and
 ‹Link,u:safe›
 
-‹Image:󰥶 alt [31;1m]8;;htt›‹Image:…›
+‹Image:󰥶 alt [31;1m]8;;htt…›
 and
-‹Image:󰥶 html [31;1m]8;;ht›‹Image:…›
+‹Image:󰥶 html [31;1m]8;;ht…›
 
 ‹TableFrame:╭────────┬─────────╮›
 ‹TableFrame:│ ›‹TableHeader,b:head  ›‹TableFrame: │ ›‹TableHeader,b:other  ›‹TableFrame: │›
@@ -135,7 +135,7 @@ and
                   l
                   8
 
-                  ‹SummaryMark,b:▾›‹SummaryMark,b:…›
+                  ‹SummaryMark,b:▾…›
                    …
                    …
                    …
@@ -191,7 +191,7 @@ WWWWWWWWWW
                   ve
                   l
                   7
-                  ‹Bullet:▪›‹Bullet:…›
+                  ‹Bullet:▪…›
                    …
                    …
                    …
@@ -367,182 +367,182 @@ WWWWWWWWWW
 ‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ›‹QuoteText:e›
 ‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ›‹QuoteText:8›
 ‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
 ‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
-‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎›‹QuoteBar:…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
+‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎…›
 
-‹TableFrame:╭────────┬────────┬›‹TableFrame:…›
-‹TableFrame:│ ›‹TableHeader,b:h0    ›‹TableFrame: │ ›‹TableHeader,b:h1    ›‹TableFrame: │›‹TableFrame:…›
-‹TableFrame:├────────┼────────┼›‹TableFrame:…›
-‹TableFrame:│ ›cell  ‹TableFrame: │ ›cell  ‹TableFrame: │›‹TableFrame:…›
-‹TableFrame:│ ›number‹TableFrame: │ ›number‹TableFrame: │›‹TableFrame:…›
-‹TableFrame:│ ›0     ‹TableFrame: │ ›1     ‹TableFrame: │›‹TableFrame:…›
-‹TableFrame:│ ›‹Code: c0 ›  ‹TableFrame: │ ›‹Code: c1 ›  ‹TableFrame: │›‹TableFrame:…›
-‹TableFrame:│ ›[1m   ‹TableFrame: │ ›[1m   ‹TableFrame: │›‹TableFrame:…›
-‹TableFrame:╰────────┴────────┴›‹TableFrame:…›
+‹TableFrame:╭────────┬────────┬…›
+‹TableFrame:│ ›‹TableHeader,b:h0    ›‹TableFrame: │ ›‹TableHeader,b:h1    ›‹TableFrame: │…›
+‹TableFrame:├────────┼────────┼…›
+‹TableFrame:│ ›cell  ‹TableFrame: │ ›cell  ‹TableFrame: │…›
+‹TableFrame:│ ›number‹TableFrame: │ ›number‹TableFrame: │…›
+‹TableFrame:│ ›0     ‹TableFrame: │ ›1     ‹TableFrame: │…›
+‹TableFrame:│ ›‹Code: c0 ›  ‹TableFrame: │ ›‹Code: c1 ›  ‹TableFrame: │…›
+‹TableFrame:│ ›[1m   ‹TableFrame: │ ›[1m   ‹TableFrame: │…›
+‹TableFrame:╰────────┴────────┴…›
 
 | h0 | h1 | h2 | h3
 | h4 | h5 | h6 | h7

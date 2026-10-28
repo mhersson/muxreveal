@@ -125,7 +125,7 @@ WWWWWWWWWWWWWWWWWWWWWWWWWWWWWW
                                   ve
                                   l
                                   17
-                                  ‹Bullet:▪›‹Bullet:…›
+                                  ‹Bullet:▪…›
                                   e
                                   v
                                   e
@@ -270,15 +270,15 @@ WWWWWWWWWWWWWWWWWWWWWWWWWWWWWW
 ‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ›
 ‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ›‹QuoteText:quote 29›
 
-‹TableFrame:╭────────┬────────┬────────┬────────┬──›‹TableFrame:…›
-‹TableFrame:│ ›‹TableHeader,b:h0    ›‹TableFrame: │ ›‹TableHeader,b:h1    ›‹TableFrame: │ ›‹TableHeader,b:h2    ›‹TableFrame: │ ›‹TableHeader,b:h3    ›‹TableFrame: │ ›‹TableHeader,b:h›‹TableHeader,b:…›
-‹TableFrame:├────────┼────────┼────────┼────────┼──›‹TableFrame:…›
+‹TableFrame:╭────────┬────────┬────────┬────────┬──…›
+‹TableFrame:│ ›‹TableHeader,b:h0    ›‹TableFrame: │ ›‹TableHeader,b:h1    ›‹TableFrame: │ ›‹TableHeader,b:h2    ›‹TableFrame: │ ›‹TableHeader,b:h3    ›‹TableFrame: │ ›‹TableHeader,b:h…›
+‹TableFrame:├────────┼────────┼────────┼────────┼──…›
 ‹TableFrame:│ ›cell  ‹TableFrame: │ ›cell  ‹TableFrame: │ ›cell  ‹TableFrame: │ ›cell  ‹TableFrame: │ ›c…
 ‹TableFrame:│ ›number‹TableFrame: │ ›number‹TableFrame: │ ›number‹TableFrame: │ ›number‹TableFrame: │ ›n…
 ‹TableFrame:│ ›0     ‹TableFrame: │ ›1     ‹TableFrame: │ ›2     ‹TableFrame: │ ›3     ‹TableFrame: │ ›4…
-‹TableFrame:│ ›‹Code: c0 ›  ‹TableFrame: │ ›‹Code: c1 ›  ‹TableFrame: │ ›‹Code: c2 ›  ‹TableFrame: │ ›‹Code: c3 ›  ‹TableFrame: │ ›‹Code: ›‹Code:…›
+‹TableFrame:│ ›‹Code: c0 ›  ‹TableFrame: │ ›‹Code: c1 ›  ‹TableFrame: │ ›‹Code: c2 ›  ‹TableFrame: │ ›‹Code: c3 ›  ‹TableFrame: │ ›‹Code: …›
 ‹TableFrame:│ ›[1m   ‹TableFrame: │ ›[1m   ‹TableFrame: │ ›[1m   ‹TableFrame: │ ›[1m   ‹TableFrame: │ ›[…
-‹TableFrame:╰────────┴────────┴────────┴────────┴──›‹TableFrame:…›
+‹TableFrame:╰────────┴────────┴────────┴────────┴──…›
 
 | h0 | h1 | h2 | h3 | h4 | h5 | h6 | h7
 | h8 | h9 | h10 | h11 | h12 | h13 | h14

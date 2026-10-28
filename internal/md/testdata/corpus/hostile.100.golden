@@ -173,15 +173,15 @@ WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW
 ‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ›
 ‹QuoteBar:▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ▎ ›‹QuoteText:quote 29›
 
-‹TableFrame:╭────────┬────────┬────────┬────────┬────────┬────────┬────────┬────────┬────────┬────────┬────────›‹TableFrame:…›
-‹TableFrame:│ ›‹TableHeader,b:h0    ›‹TableFrame: │ ›‹TableHeader,b:h1    ›‹TableFrame: │ ›‹TableHeader,b:h2    ›‹TableFrame: │ ›‹TableHeader,b:h3    ›‹TableFrame: │ ›‹TableHeader,b:h4    ›‹TableFrame: │ ›‹TableHeader,b:h5    ›‹TableFrame: │ ›‹TableHeader,b:h6    ›‹TableFrame: │ ›‹TableHeader,b:h7    ›‹TableFrame: │ ›‹TableHeader,b:h8    ›‹TableFrame: │ ›‹TableHeader,b:h9    ›‹TableFrame: │ ›‹TableHeader,b:h10   ›‹TableFrame: ›‹TableFrame:…›
-‹TableFrame:├────────┼────────┼────────┼────────┼────────┼────────┼────────┼────────┼────────┼────────┼────────›‹TableFrame:…›
-‹TableFrame:│ ›cell  ‹TableFrame: │ ›cell  ‹TableFrame: │ ›cell  ‹TableFrame: │ ›cell  ‹TableFrame: │ ›cell  ‹TableFrame: │ ›cell  ‹TableFrame: │ ›cell  ‹TableFrame: │ ›cell  ‹TableFrame: │ ›cell  ‹TableFrame: │ ›cell  ‹TableFrame: │ ›cell  ‹TableFrame: ›‹TableFrame:…›
-‹TableFrame:│ ›number‹TableFrame: │ ›number‹TableFrame: │ ›number‹TableFrame: │ ›number‹TableFrame: │ ›number‹TableFrame: │ ›number‹TableFrame: │ ›number‹TableFrame: │ ›number‹TableFrame: │ ›number‹TableFrame: │ ›number‹TableFrame: │ ›number‹TableFrame: ›‹TableFrame:…›
-‹TableFrame:│ ›0     ‹TableFrame: │ ›1     ‹TableFrame: │ ›2     ‹TableFrame: │ ›3     ‹TableFrame: │ ›4     ‹TableFrame: │ ›5     ‹TableFrame: │ ›6     ‹TableFrame: │ ›7     ‹TableFrame: │ ›8     ‹TableFrame: │ ›9     ‹TableFrame: │ ›10    ‹TableFrame: ›‹TableFrame:…›
-‹TableFrame:│ ›‹Code: c0 ›  ‹TableFrame: │ ›‹Code: c1 ›  ‹TableFrame: │ ›‹Code: c2 ›  ‹TableFrame: │ ›‹Code: c3 ›  ‹TableFrame: │ ›‹Code: c4 ›  ‹TableFrame: │ ›‹Code: c5 ›  ‹TableFrame: │ ›‹Code: c6 ›  ‹TableFrame: │ ›‹Code: c7 ›  ‹TableFrame: │ ›‹Code: c8 ›  ‹TableFrame: │ ›‹Code: c9 ›  ‹TableFrame: │ ›‹Code: c10 › ‹TableFrame: ›‹TableFrame:…›
-‹TableFrame:│ ›[1m   ‹TableFrame: │ ›[1m   ‹TableFrame: │ ›[1m   ‹TableFrame: │ ›[1m   ‹TableFrame: │ ›[1m   ‹TableFrame: │ ›[1m   ‹TableFrame: │ ›[1m   ‹TableFrame: │ ›[1m   ‹TableFrame: │ ›[1m   ‹TableFrame: │ ›[1m   ‹TableFrame: │ ›[1m   ‹TableFrame: ›‹TableFrame:…›
-‹TableFrame:╰────────┴────────┴────────┴────────┴────────┴────────┴────────┴────────┴────────┴────────┴────────›‹TableFrame:…›
+‹TableFrame:╭────────┬────────┬────────┬────────┬────────┬────────┬────────┬────────┬────────┬────────┬────────…›
+‹TableFrame:│ ›‹TableHeader,b:h0    ›‹TableFrame: │ ›‹TableHeader,b:h1    ›‹TableFrame: │ ›‹TableHeader,b:h2    ›‹TableFrame: │ ›‹TableHeader,b:h3    ›‹TableFrame: │ ›‹TableHeader,b:h4    ›‹TableFrame: │ ›‹TableHeader,b:h5    ›‹TableFrame: │ ›‹TableHeader,b:h6    ›‹TableFrame: │ ›‹TableHeader,b:h7    ›‹TableFrame: │ ›‹TableHeader,b:h8    ›‹TableFrame: │ ›‹TableHeader,b:h9    ›‹TableFrame: │ ›‹TableHeader,b:h10   ›‹TableFrame: …›
+‹TableFrame:├────────┼────────┼────────┼────────┼────────┼────────┼────────┼────────┼────────┼────────┼────────…›
+‹TableFrame:│ ›cell  ‹TableFrame: │ ›cell  ‹TableFrame: │ ›cell  ‹TableFrame: │ ›cell  ‹TableFrame: │ ›cell  ‹TableFrame: │ ›cell  ‹TableFrame: │ ›cell  ‹TableFrame: │ ›cell  ‹TableFrame: │ ›cell  ‹TableFrame: │ ›cell  ‹TableFrame: │ ›cell  ‹TableFrame: …›
+‹TableFrame:│ ›number‹TableFrame: │ ›number‹TableFrame: │ ›number‹TableFrame: │ ›number‹TableFrame: │ ›number‹TableFrame: │ ›number‹TableFrame: │ ›number‹TableFrame: │ ›number‹TableFrame: │ ›number‹TableFrame: │ ›number‹TableFrame: │ ›number‹TableFrame: …›
+‹TableFrame:│ ›0     ‹TableFrame: │ ›1     ‹TableFrame: │ ›2     ‹TableFrame: │ ›3     ‹TableFrame: │ ›4     ‹TableFrame: │ ›5     ‹TableFrame: │ ›6     ‹TableFrame: │ ›7     ‹TableFrame: │ ›8     ‹TableFrame: │ ›9     ‹TableFrame: │ ›10    ‹TableFrame: …›
+‹TableFrame:│ ›‹Code: c0 ›  ‹TableFrame: │ ›‹Code: c1 ›  ‹TableFrame: │ ›‹Code: c2 ›  ‹TableFrame: │ ›‹Code: c3 ›  ‹TableFrame: │ ›‹Code: c4 ›  ‹TableFrame: │ ›‹Code: c5 ›  ‹TableFrame: │ ›‹Code: c6 ›  ‹TableFrame: │ ›‹Code: c7 ›  ‹TableFrame: │ ›‹Code: c8 ›  ‹TableFrame: │ ›‹Code: c9 ›  ‹TableFrame: │ ›‹Code: c10 › ‹TableFrame: …›
+‹TableFrame:│ ›[1m   ‹TableFrame: │ ›[1m   ‹TableFrame: │ ›[1m   ‹TableFrame: │ ›[1m   ‹TableFrame: │ ›[1m   ‹TableFrame: │ ›[1m   ‹TableFrame: │ ›[1m   ‹TableFrame: │ ›[1m   ‹TableFrame: │ ›[1m   ‹TableFrame: │ ›[1m   ‹TableFrame: │ ›[1m   ‹TableFrame: …›
+‹TableFrame:╰────────┴────────┴────────┴────────┴────────┴────────┴────────┴────────┴────────┴────────┴────────…›
 
 | h0 | h1 | h2 | h3 | h4 | h5 | h6 | h7 | h8 | h9 | h10 | h11 | h12 | h13 | h14 | h15 | h16 | h17 |
 h18 | h19 | h20 | h21 | h22 | h23 | h24 | h25 | h26 | h27 | h28 | h29 | h30 | h31 | h32 | h33 | h34

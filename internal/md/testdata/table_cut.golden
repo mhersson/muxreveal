@@ -1,6 +1,6 @@
-‹TableFrame:╭────────┬────────┬────────┬────────┬──›‹TableFrame:…›
-‹TableFrame:│ ›‹TableHeader,b:column›‹TableFrame: │ ›‹TableHeader,b:column›‹TableFrame: │ ›‹TableHeader,b:column›‹TableFrame: │ ›‹TableHeader,b:column›‹TableFrame: │ ›‹TableHeader,b:c›‹TableHeader,b:…›
-‹TableFrame:│ ›‹TableHeader,b:00    ›‹TableFrame: │ ›‹TableHeader,b:01    ›‹TableFrame: │ ›‹TableHeader,b:02    ›‹TableFrame: │ ›‹TableHeader,b:03    ›‹TableFrame: │ ›‹TableHeader,b:0›‹TableHeader,b:…›
-‹TableFrame:├────────┼────────┼────────┼────────┼──›‹TableFrame:…›
+‹TableFrame:╭────────┬────────┬────────┬────────┬──…›
+‹TableFrame:│ ›‹TableHeader,b:column›‹TableFrame: │ ›‹TableHeader,b:column›‹TableFrame: │ ›‹TableHeader,b:column›‹TableFrame: │ ›‹TableHeader,b:column›‹TableFrame: │ ›‹TableHeader,b:c…›
+‹TableFrame:│ ›‹TableHeader,b:00    ›‹TableFrame: │ ›‹TableHeader,b:01    ›‹TableFrame: │ ›‹TableHeader,b:02    ›‹TableFrame: │ ›‹TableHeader,b:03    ›‹TableFrame: │ ›‹TableHeader,b:0…›
+‹TableFrame:├────────┼────────┼────────┼────────┼──…›
 ‹TableFrame:│ ›cell00‹TableFrame: │ ›cell01‹TableFrame: │ ›cell02‹TableFrame: │ ›cell03‹TableFrame: │ ›c…
-‹TableFrame:╰────────┴────────┴────────┴────────┴──›‹TableFrame:…›
+‹TableFrame:╰────────┴────────┴────────┴────────┴──…›

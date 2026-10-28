@@ -1,13 +1,13 @@
-‹Image:󰥶 Gleam logo  ›‹ImageHost:githu›‹ImageHost:…›
+‹Image:󰥶 Gleam logo  ›‹ImageHost:githu…›
 
 ‹Text,b:Gleam› - a tiny, fast
 static site builder
 
 ‹Link,u:Website› | ‹Link,u:Docs›
 
-‹Image,u:󰥶 Build  ›‹ImageHost,u:img.shield›‹ImageHost,u:…›
-‹Image,u:󰥶 Release  ›‹ImageHost,u:img.shie›‹ImageHost,u:…›
-‹Image,u:󰥶 License: MIT  ›‹ImageHost,u:img›‹ImageHost,u:…›
+‹Image,u:󰥶 Build  ›‹ImageHost,u:img.shield…›
+‹Image,u:󰥶 Release  ›‹ImageHost,u:img.shie…›
+‹Image,u:󰥶 License: MIT  ›‹ImageHost,u:img…›
 
 ‹Heading1,b:Gleam›
 ‹Rule:────────────────────›
@@ -24,7 +24,7 @@ the ‹Link,u:changelog› and
 the ‹Link,u:contributing›
 ‹Link,u:guide›.
 
-‹Image:󰥶 A screenshot of t›‹Image:…›
+‹Image:󰥶 A screenshot of t…›
 
 ‹Heading2,b:Install›
 
@@ -49,23 +49,23 @@ from the ‹Link,u:releases›
   ‹Bullet:3. ›Run ‹Code: gleam›
      ‹Code:build ›
 
-‹TableFrame:╭────────┬────────┬›‹TableFrame:…›
-‹TableFrame:│ ›‹TableHeader,b:Flag  ›‹TableFrame: │ ›‹TableHeader,b:Defaul›‹TableFrame: │›‹TableFrame:…›
-‹TableFrame:│ ›‹TableHeader,b:      ›‹TableFrame: │ ›‹TableHeader,b:t     ›‹TableFrame: │›‹TableFrame:…›
-‹TableFrame:├────────┼────────┼›‹TableFrame:…›
-‹TableFrame:│ ›‹Code: --out›‹TableFrame: │ ›‹Code: dist ›‹TableFrame: │›‹TableFrame:…›
-‹TableFrame:│ ›‹Code: ›     ‹TableFrame: │ ›      ‹TableFrame: │›‹TableFrame:…›
-‹TableFrame:│ ›      ‹TableFrame: │ ›      ‹TableFrame: │›‹TableFrame:…›
-‹TableFrame:│ ›      ‹TableFrame: │ ›      ‹TableFrame: │›‹TableFrame:…›
-‹TableFrame:│ ›      ‹TableFrame: │ ›      ‹TableFrame: │›‹TableFrame:…›
-‹TableFrame:│ ›      ‹TableFrame: │ ›      ‹TableFrame: │›‹TableFrame:…›
-‹TableFrame:│ ›‹Code: --dra›‹TableFrame: │ ›off   ‹TableFrame: │›‹TableFrame:…›
-‹TableFrame:│ ›‹Code:fts ›  ‹TableFrame: │ ›      ‹TableFrame: │›‹TableFrame:…›
-‹TableFrame:│ ›      ‹TableFrame: │ ›      ‹TableFrame: │›‹TableFrame:…›
-‹TableFrame:│ ›      ‹TableFrame: │ ›      ‹TableFrame: │›‹TableFrame:…›
-‹TableFrame:│ ›      ‹TableFrame: │ ›      ‹TableFrame: │›‹TableFrame:…›
-‹TableFrame:│ ›      ‹TableFrame: │ ›      ‹TableFrame: │›‹TableFrame:…›
-‹TableFrame:╰────────┴────────┴›‹TableFrame:…›
+‹TableFrame:╭────────┬────────┬…›
+‹TableFrame:│ ›‹TableHeader,b:Flag  ›‹TableFrame: │ ›‹TableHeader,b:Defaul›‹TableFrame: │…›
+‹TableFrame:│ ›‹TableHeader,b:      ›‹TableFrame: │ ›‹TableHeader,b:t     ›‹TableFrame: │…›
+‹TableFrame:├────────┼────────┼…›
+‹TableFrame:│ ›‹Code: --out›‹TableFrame: │ ›‹Code: dist ›‹TableFrame: │…›
+‹TableFrame:│ ›‹Code: ›     ‹TableFrame: │ ›      ‹TableFrame: │…›
+‹TableFrame:│ ›      ‹TableFrame: │ ›      ‹TableFrame: │…›
+‹TableFrame:│ ›      ‹TableFrame: │ ›      ‹TableFrame: │…›
+‹TableFrame:│ ›      ‹TableFrame: │ ›      ‹TableFrame: │…›
+‹TableFrame:│ ›      ‹TableFrame: │ ›      ‹TableFrame: │…›
+‹TableFrame:│ ›‹Code: --dra›‹TableFrame: │ ›off   ‹TableFrame: │…›
+‹TableFrame:│ ›‹Code:fts ›  ‹TableFrame: │ ›      ‹TableFrame: │…›
+‹TableFrame:│ ›      ‹TableFrame: │ ›      ‹TableFrame: │…›
+‹TableFrame:│ ›      ‹TableFrame: │ ›      ‹TableFrame: │…›
+‹TableFrame:│ ›      ‹TableFrame: │ ›      ‹TableFrame: │…›
+‹TableFrame:│ ›      ‹TableFrame: │ ›      ‹TableFrame: │…›
+‹TableFrame:╰────────┴────────┴…›
 
 ‹Heading2,b:License›
 
