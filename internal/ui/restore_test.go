@@ -496,6 +496,51 @@ func TestResumeRestartsAgentWhoseClaudeNeverAppeared(t *testing.T) {
 	}
 }
 
+// Claude Code files its sessions under the directory it was launched in, so an
+// agent resumes there even when its last hook named another directory.
+func TestResumeStartsInTheLaunchDirNotTheAgentCwd(t *testing.T) {
+	const worktree = "/srv/api/.worktrees/feat"
+
+	t.Run("a restored agent", func(t *testing.T) {
+		st := restoreState()
+		p := st.Panes["p1"]
+		p.AgentCwd = worktree
+		st.Panes["p1"] = p
+
+		r := restoreApp(t, st)
+		r.size(100, 30)
+
+		if c := r.st.cmds[0]; c.Dir != "/srv/api" || !hasArgs(argvOf(c), "--resume", restoreSession) {
+			t.Errorf("p1 start = dir %q argv %q, want a resume in /srv/api", c.Dir, argvOf(c))
+		}
+	})
+
+	t.Run("a fresh restart", func(t *testing.T) {
+		r := resumeApp(t)
+
+		hook(r.a, harness.Event{Pane: "p1", Name: "PostToolUse", Cwd: worktree})
+
+		if m := r.a.store.State().Panes["p1"]; m.AgentCwd != worktree || m.Cwd != "/srv/api" {
+			t.Fatalf("pane = Cwd %q AgentCwd %q, want the hook's directory beside the launch directory", m.Cwd, m.AgentCwd)
+		}
+
+		r.st.proc(0).setFg("zsh")
+		probeAt(t, r, "p1", agentGrace)
+
+		if r.st.count() != 4 {
+			t.Fatalf("starts = %d, want a fresh claude", r.st.count())
+		}
+
+		if c := r.st.cmds[3]; c.Dir != "/srv/api" {
+			t.Errorf("restart dir = %q, want /srv/api", c.Dir)
+		}
+
+		if r.a.notice != freshNotice {
+			t.Errorf("notice = %q, want %q", r.a.notice, freshNotice)
+		}
+	})
+}
+
 func TestResumeRestartSchedulesItsOwnProbe(t *testing.T) {
 	r := resumeApp(t)
 

@@ -173,8 +173,8 @@ func (rp *railPane) slot(k railProbeKind) *probeSlot {
 func (a *App) railFire(st core.State, id core.PaneID, k railProbeKind) tea.Cmd {
 	m := st.Panes[id]
 
-	// The git probes run in the cwd; the name probe reads the transcript.
-	target := m.Cwd
+	// The git probes run in the agent's directory; the name probe reads the transcript.
+	target := m.WorkDir()
 	if k == probeName {
 		target = m.Transcript
 	}
@@ -190,8 +190,8 @@ func (a *App) railFire(st core.State, id core.PaneID, k railProbeKind) tea.Cmd {
 
 		// Outside a repository there is nothing to count. Only a head result for
 		// this cwd says so; the cwd is recorded so that railSync does not ask again.
-		if known := a.rail.panes[id]; known != nil && known.probe.known && !known.probe.repo && known.probe.headCwd == m.Cwd {
-			known.stats.target = m.Cwd
+		if known := a.rail.panes[id]; known != nil && known.probe.known && !known.probe.repo && known.probe.headCwd == m.WorkDir() {
+			known.stats.target = m.WorkDir()
 
 			return nil
 		}
@@ -232,7 +232,7 @@ func (a *App) railFire(st core.State, id core.PaneID, k railProbeKind) tea.Cmd {
 
 	s.pending, s.busy, s.last, s.target = false, true, a.clock.Now(), target
 
-	ctx, cwd, gen := a.rail.ctx, m.Cwd, a.rail.gen
+	ctx, cwd, gen := a.rail.ctx, m.WorkDir(), a.rail.gen
 
 	sem := a.probeSem
 
@@ -338,7 +338,7 @@ func (a *App) railFresh(id core.PaneID, cwd string, gen int, k railProbeKind) (*
 
 	m := a.store.State().Panes[id]
 
-	return rp, m.Kind == core.KindAgent && m.Cwd == cwd
+	return rp, m.Kind == core.KindAgent && m.WorkDir() == cwd
 }
 
 // onRailName keeps a name read for the pane's current transcript. A completed

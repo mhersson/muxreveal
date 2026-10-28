@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"path/filepath"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -51,6 +52,12 @@ func (a *App) onHook(ev harness.Event) tea.Cmd {
 		a.log.Debug("hook event ignored", "pane", ev.Pane, "event", ev.Name)
 
 		return nil
+	}
+
+	// A relative cwd would resolve against MuxReveal's directory, so it counts as none.
+	if filepath.IsAbs(ev.Cwd) && ev.Cwd != m.AgentCwd {
+		// dispatch logs its own failures.
+		_ = a.dispatch(core.SetAgentCwd{ID: ev.Pane, Cwd: ev.Cwd})
 	}
 
 	a.railEntry(ev.Pane).hookAt = a.clock.Now()

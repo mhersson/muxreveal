@@ -194,7 +194,7 @@ func (a *App) watchSync() tea.Cmd {
 	var cmds []tea.Cmd
 
 	for _, id := range ids {
-		cwd := st.Panes[id].Cwd
+		cwd := st.Panes[id].WorkDir()
 		if cwd == "" {
 			continue
 		}

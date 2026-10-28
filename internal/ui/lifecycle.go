@@ -76,10 +76,11 @@ func (a *App) openPaneIn(kind core.PaneKind, split core.Split, cwd string) tea.C
 	return cmd
 }
 
-// focusedCwd is the cwd of st's focused pane, or the launch dir without one.
+// focusedCwd is the directory st's focused pane works in, or the launch dir
+// without one.
 func (a *App) focusedCwd(st core.State) string {
-	if m, ok := st.Panes[st.Tab().Focus]; ok && m.Cwd != "" {
-		return m.Cwd
+	if m, ok := st.Panes[st.Tab().Focus]; ok && m.WorkDir() != "" {
+		return m.WorkDir()
 	}
 
 	return a.cwd
