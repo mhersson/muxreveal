@@ -172,22 +172,59 @@ func (d *Doc) numberFolds() {
 	})
 }
 
-// indexNotes finds the footnote references and definitions of the tree.
+// indexNotes finds the footnotes to list: the references in the body, then
+// those inside each definition they lead to, until no new label appears. The
+// first definition of a label wins.
 func (d *Doc) indexNotes() {
 	d.notes = noteIndex{labels: map[int]string{}, defs: map[string]*east.FootnoteDefinition{}}
+
+	var work []string
+
+	ref := func(n *east.FootnoteReference) {
+		label := n.Label.Value(d.src)
+		d.notes.labels[n.Index] = label
+		work = append(work, label)
+	}
 
 	walkTree(d.root, func(n ast.Node) bool {
 		switch n := n.(type) {
 		case *east.FootnoteDefinition:
-			d.notes.defs[n.Label.Value(d.src)] = n
+			if label := n.Label.Value(d.src); d.notes.defs[label] == nil {
+				d.notes.defs[label] = n
+			}
 
 			return false
 		case *east.FootnoteReference:
-			d.notes.labels[n.Index] = n.Label.Value(d.src)
+			ref(n)
 		}
 
 		return true
 	})
+
+	read := map[string]bool{}
+
+	for len(work) > 0 {
+		label := work[len(work)-1]
+		work = work[:len(work)-1]
+
+		def := d.notes.defs[label]
+		if def == nil || read[label] {
+			continue
+		}
+
+		read[label] = true
+
+		walkTree(def, func(n ast.Node) bool {
+			switch n := n.(type) {
+			case *east.FootnoteDefinition:
+				return n == def
+			case *east.FootnoteReference:
+				ref(n)
+			}
+
+			return true
+		})
+	}
 }
 
 // alertKind is the type of a GitHub alert.

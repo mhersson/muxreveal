@@ -328,6 +328,59 @@ func wantFolds(t *testing.T, l Layout, want ...Fold) {
 	}
 }
 
+func TestFootnotesReachedThroughNotes(t *testing.T) {
+	rule := strings.Repeat("─", 16)
+
+	tests := []struct {
+		name string
+		src  string
+		want []string
+	}{
+		{
+			name: "a note referenced only from another note",
+			src:  "one[^1] two[^2]\n\n[^1]: see [^3]\n\n[^2]: second\n\n[^3]: third\n",
+			want: []string{"one[1] two[2]", "", rule, " 1. see [3]", " 2. second", " 3. third"},
+		},
+		{
+			name: "a chain of notes",
+			src:  "x[^a]\n\n[^a]: first [^b]\n\n[^b]: middle [^c]\n\n[^c]: last\n",
+			want: []string{"x[1]", "", rule, " 1. first [2]", " 2. middle [3]", " 3. last"},
+		},
+		{
+			// goldmark numbers a note by its first reference in the source.
+			name: "a chain of notes defined in reverse",
+			src:  "x[^a]\n\n[^c]: last\n\n[^b]: middle [^c]\n\n[^a]: first [^b]\n",
+			want: []string{"x[1]", "", rule, " 1. first [3]", " 2. last", " 3. middle [2]"},
+		},
+		{
+			name: "notes that refer to each other end",
+			src:  "x[^1]\n\n[^1]: one [^2]\n\n[^2]: two [^1]\n",
+			want: []string{"x[1]", "", rule, " 1. one [2]", " 2. two [1]"},
+		},
+		{
+			name: "a note that refers to itself",
+			src:  "x[^1]\n\n[^1]: me [^1]\n",
+			want: []string{"x[1]", "", rule, " 1. me [1]"},
+		},
+		{
+			name: "the first definition of a label wins",
+			src:  "x[^1]\n\n[^1]: first\n\n[^1]: second\n",
+			want: []string{"x[1]", "", rule, " 1. first"},
+		},
+		{
+			name: "a note that nothing shown refers to stays out",
+			src:  "x[^1]\n\n[^1]: one\n\n[^2]: two [^3]\n\n[^3]: three\n",
+			want: []string{"x[1]", "", rule, " 1. one"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			wantLines(t, layoutOf(tt.src, 24, ""), tt.want...)
+		})
+	}
+}
+
 func TestThematicBreak(t *testing.T) {
 	l := layoutOf("a\n\n---\n\nb\n\n***\n", 10, "")
 	rule := strings.Repeat("─", 10)
