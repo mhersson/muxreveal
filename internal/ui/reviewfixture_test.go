@@ -167,8 +167,16 @@ func appGoFull() fullText {
 	return fullText{old: old, new: nw}
 }
 
+// longPlain is a 1 MiB line of one printable character; longTags is a 1 MiB
+// line of "a" and an escape byte, which cleans into about half a million tags.
+func longPlain() string { return strings.Repeat("x", 1<<20) }
+
+func longTags() string { return strings.Repeat("a\x1b", 1<<19) }
+
 // hostileResult holds every kind of text that must never reach the terminal
-// raw, in lines and in paths.
+// raw, in lines and in paths, and, in a hunk of their own, two pairs of 1 MiB
+// lines. The highlighter draws a whole chunk plain once a line of it is past its
+// limit, so those lines must not share a hunk with the rest.
 func hostileResult() git.Result {
 	body := fileSpec("cmd/hostile.go", git.Modified, hunkSpec(1, 1, "func main()",
 		" package main",
@@ -184,6 +192,13 @@ func hostileResult() git.Result {
 		"-\ttab\tseparated\tcolumns",
 		"+\ttab\tseparated\tcolumns!",
 		" tail",
+	), hunkSpec(30, 34, "func tail()",
+		" }",
+		"-"+longPlain(),
+		"-"+longTags(),
+		"+"+longPlain()+"!",
+		"+"+longTags()+"\r",
+		" }",
 	))
 	pathy := fileSpec("dir/evil\nname\x1b[31m.go", git.Added, hunkSpec(0, 1, "", "+one"))
 	zero := fileSpec("zero\u200bwidth/\u202erevers.go", git.Modified, hunkSpec(1, 1, "", "-a", "+b"))
@@ -195,8 +210,8 @@ func hostileResult() git.Result {
 
 func hostileFull() fullText {
 	return fullText{
-		old: []string{"a\x1b[2J", "gone\u202e", "same"},
-		new: []string{"a\x1b[2J", "new\u200b", "same", "tab\there\x07"},
+		old: []string{"a\x1b[2J", "gone\u202e", "same", longTags()},
+		new: []string{"a\x1b[2J", "new\u200b", "same", "tab\there\x07", longPlain()},
 	}
 }
 

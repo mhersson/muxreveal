@@ -106,7 +106,7 @@ func changedIn(ls []git.Line, li int, text string) diffview.Range {
 		return diffview.Range{}
 	}
 
-	other, _ := cleanLine(ls[p].Text)
+	other, _ := shownLine(ls[p].Text)
 	if ls[li].Kind == git.Del {
 		r, _ := diffview.Changed(text, other)
 
@@ -239,7 +239,7 @@ func (d *drawCtx) fullRow(r reviewRow, cursor, fresh bool) string {
 		kind = diffview.Add
 	}
 
-	text, _ := cleanLine(r.text)
+	text, _ := shownLine(r.text)
 	ref := spanRef{spanKey{r.file, -1, sideNew, r.line / hlChunk}, r.line % hlChunk}
 
 	return d.lineCells(d.thFor(fresh), kind, cursor, []int{r.line + 1}, text, d.spansAt(ref, true), diffview.Range{}, d.lay.unifiedCode(1))
@@ -267,7 +267,7 @@ func (d *drawCtx) ghostRow(r reviewRow, cursor, fresh bool) string {
 	}
 
 	gutter = d.cursorGround(gutter, cursor)
-	text, _ := cleanLine(r.text)
+	text, _ := shownLine(r.text)
 
 	num := strconv.Itoa(r.line + 1)
 	num = strings.Repeat(" ", max(lay.gw-1-len(num), 0)) + num + " "

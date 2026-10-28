@@ -40,10 +40,40 @@ type drawerLayout struct {
 	gw             int  // width of one line number column
 }
 
+// layoutKey is what the layout depends on besides the result's generation.
+type layoutKey struct {
+	box        core.Rect
+	tree       bool // the tree is asked to show
+	split      bool
+	modeW      int // the mode row's width
+	fullDigits int // digits of the longest file shown whole
+}
+
+// fullDigits is the digits of the highest line number among the files shown whole.
+func fullDigits(v *reviewView) int {
+	n := 0
+
+	for _, ft := range v.full {
+		n = max(n, numDigits(max(len(ft.old), len(ft.new))))
+	}
+
+	return n
+}
+
 // drawerLayoutOf divides the box for the view. Side by side is used only when
-// the view wants it and 24 code columns fit on each side.
+// the view wants it and 24 code columns fit on each side. The layout is kept
+// until one of its inputs changes, as it is asked for on every update.
 func (a *App) drawerLayoutOf(box core.Rect, v *reviewView) drawerLayout {
 	c := v.derived()
+	mw := modeWidth(v, a.icons)
+	key := layoutKey{box: box, tree: v.treeOpen || a.drawer.tree, split: v.split, modeW: mw, fullDigits: fullDigits(v)}
+
+	if c.layOK && c.layKey == key {
+		return c.lay
+	}
+
+	a.drawer.layouts++
+
 	l := drawerLayout{box: box, innerW: max(box.W-2, 0), innerH: max(box.H-2, 0)}
 	l.hints = l.innerH >= hintsMinInner
 	l.bodyH = l.innerH
@@ -54,23 +84,20 @@ func (a *App) drawerLayoutOf(box core.Rect, v *reviewView) drawerLayout {
 
 	l.diffW = l.innerW
 
-	if l.innerW >= treeMinInner || v.treeOpen || a.drawer.tree {
-		tw := treeWidth(c.tree, v.res.Files, c.hidden, l.innerW)
+	if l.innerW >= treeMinInner || key.tree {
+		tw := c.treeWidthAt(v.res.Files, l.innerW)
 		// The mode row is a row of the tree too, up to the same share of the width.
-		tw = max(tw, min(modeWidth(v, a.icons), l.innerW*treeMaxShare/100))
+		tw = max(tw, min(mw, l.innerW*treeMaxShare/100))
 
 		if l.innerW-tw-1 >= 1 {
 			l.treeW, l.diffW = tw, l.innerW-tw-1
 		}
 	}
 
-	digits := c.digits
-	for _, ft := range v.full {
-		digits = max(digits, numDigits(max(len(ft.old), len(ft.new))))
-	}
-
-	l.gw = max(digits, minNumW) + 1
+	l.gw = max(c.digits, key.fullDigits, minNumW) + 1
 	l.split = v.split && l.splitCode() >= splitMinCode
+
+	c.lay, c.layKey, c.layOK = l, key, true
 
 	return l
 }

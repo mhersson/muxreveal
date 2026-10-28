@@ -8,9 +8,15 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/mhersson/muxreveal/internal/git/invisible"
+	"github.com/mhersson/muxreveal/internal/ui/diffview"
 )
 
 const tabStop = 4
+
+// lineBudget is how many runes of one line are cleaned, drawn and tokenised.
+// The rest is dropped before any per-rune work, so a frame costs the same for a
+// 1 MiB line as for a short one. It is wider than any column the drawer has.
+const lineBudget = 1024
 
 // cleanText makes diff text safe to draw: tabs expand to the next multiple of
 // 4 columns, and hidden characters and C0 or C1 controls become <U+XXXX> tags.
@@ -80,20 +86,53 @@ func runeWidth(r rune) int {
 
 // cleanLine is cleanText for a line of a file: one CR right before the line
 // end is part of the line ending, so it is dropped and does not count as
-// hidden. A CR anywhere else is tagged.
+// hidden. A CR anywhere else is tagged. It covers the whole line, so a file is
+// flagged for what lies past the part drawn too.
 func cleanLine(s string) (text string, hidden bool) {
 	return cleanText(strings.TrimSuffix(s, "\r"))
+}
+
+// shownLine is the text drawn for a line of a file: the line without its
+// ending, cut to lineBudget runes and then cleaned. A cut line ends in the
+// ellipsis, so its row says it holds less than the line even when the part kept
+// is narrower than the column. The ending is judged before the cut, so a CRLF
+// ending never becomes a CR in the middle.
+func shownLine(s string) (text string, cut bool) {
+	s, cut = cutRunes(strings.TrimSuffix(s, "\r"), lineBudget)
+	text, _ = cleanText(s)
+
+	if cut {
+		text += diffview.Ellipsis()
+	}
+
+	return text, cut
+}
+
+// cutRunes is the first n runes of s, an invalid byte counting as one as in
+// cleanText, and whether any of s was left out. It looks at n runes at most.
+func cutRunes(s string, n int) (string, bool) {
+	if len(s) <= n {
+		return s, false
+	}
+
+	i := 0
+	for ; n > 0 && i < len(s); n-- {
+		_, size := utf8.DecodeRuneInString(s[i:])
+		i += size
+	}
+
+	return s[:i], i < len(s)
 }
 
 const endingTag = "⟨U+000D⟩"
 
 // lineShown is the text drawn for a line. When the line it is paired with
 // differs only in its ending and this one has the CR, the CR shows as a tag so
-// the change is visible.
+// the change is visible; a cut line shows none, as its ending lies past the cut.
 func lineShown(raw, other string, paired bool) string {
-	text, _ := cleanLine(raw)
+	text, cut := shownLine(raw)
 
-	if paired && strings.HasSuffix(raw, "\r") && other == strings.TrimSuffix(raw, "\r") {
+	if !cut && paired && strings.HasSuffix(raw, "\r") && other == strings.TrimSuffix(raw, "\r") {
 		text += endingTag
 	}
 

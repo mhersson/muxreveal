@@ -74,6 +74,14 @@ func (a *App) highlightRows(v *reviewView, lay drawerLayout) (more bool) {
 
 	c := v.derived()
 	top := v.viewTop(lay.bodyH)
+	key := scanKey{rev: v.rowsRev, top: top, bodyH: lay.bodyH}
+
+	if c.scanned && c.scan == key {
+		return false
+	}
+
+	a.drawer.scans++
+
 	budget := highlightCap
 
 	for i := max(top-lay.bodyH, 0); i < min(top+2*lay.bodyH, len(v.rows)); i++ {
@@ -95,8 +103,14 @@ func (a *App) highlightRows(v *reviewView, lay drawerLayout) (more bool) {
 		}
 	}
 
+	c.scan, c.scanned = key, !more
+
 	return more
 }
+
+// scanKey is what the rows searched for chunks to tokenise depend on besides
+// the result's generation: the rows and the part of them in view.
+type scanKey struct{ rev, top, bodyH int }
 
 // spanRef locates one line's spans: the chunk, and the line's place in it.
 type spanRef struct {
@@ -177,7 +191,7 @@ func (v *reviewView) chunkLines(k spanKey) (path string, lines []string) {
 	if k.hunk < 0 {
 		text := v.full[f.Path].new
 		for _, s := range text[min(start, len(text)):min(end, len(text))] {
-			c, _ := cleanLine(s)
+			c, _ := shownLine(s)
 			lines = append(lines, c)
 		}
 
@@ -196,7 +210,7 @@ func (v *reviewView) chunkLines(k spanKey) (path string, lines []string) {
 		}
 
 		if n >= start {
-			c, _ := cleanLine(l.Text)
+			c, _ := shownLine(l.Text)
 			lines = append(lines, c)
 		}
 

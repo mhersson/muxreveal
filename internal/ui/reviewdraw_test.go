@@ -288,6 +288,11 @@ func TestDrawerRectSlides(t *testing.T) {
 	}
 }
 
+// stepBudget is the most one resize of a drawer may take, update and both
+// frames: the hostile result holds 1 MiB lines, and what is drawn of a line
+// must not depend on its length.
+const stepBudget = 500 * time.Millisecond
+
 func TestDrawerRowsAreExactWidth(t *testing.T) {
 	type variant struct {
 		name string
@@ -316,47 +321,75 @@ func TestDrawerRowsAreExactWidth(t *testing.T) {
 				step = 11
 			}
 
+			var widths []int
 			for w := 40; w <= 120; w += step {
-				name := fmt.Sprintf("icons=%v/%s/width=%d", icons, vr.name, w)
-				t.Run(name, func(t *testing.T) {
-					s := reviewScene{theme: "catppuccin-mocha", icons: icons, w: w, h: 30, res: hostileResult(), turn: 2, turns: 3, focused: true}
-					s.tune = func(t *testing.T, a *App, v *reviewView) {
-						vr.tune(a, v)
-						v.cursor = min(4, len(v.rows)-1)
-					}
-					a := s.build(t)
+				widths = append(widths, w)
+			}
 
-					st := a.store.State()
+			t.Run(fmt.Sprintf("icons=%v/%s", icons, vr.name), func(t *testing.T) {
+				// The view is built once and drawn at every width, so the budget
+				// measures the resizes and the frames, not the setup.
+				s := reviewScene{theme: "catppuccin-mocha", icons: icons, w: widths[0], h: 30, res: hostileResult(), turn: 2, turns: 3, focused: true}
+				s.tune = func(t *testing.T, a *App, v *reviewView) {
+					vr.tune(a, v)
+					v.cursor = min(4, len(v.rows)-1)
+				}
+				a := s.build(t)
 
-					r, ok := a.drawerRect(st)
-					if !ok {
-						t.Fatal("no drawer")
-					}
+				var slowest time.Duration
 
-					lines := a.drawerLines(st, r)
-					if len(lines) != r.H {
-						t.Fatalf("%d lines, want %d", len(lines), r.H)
-					}
+				for _, w := range widths {
+					var took time.Duration
 
-					for i, l := range lines {
-						if got := ansi.StringWidth(l); got != r.W {
-							t.Errorf("row %d is %d cells, want %d: %q", i, got, r.W, ansi.Strip(l))
+					t.Run(fmt.Sprintf("width=%d", w), func(t *testing.T) {
+						start := time.Now()
+
+						sized(t, a, w, 30)
+						settleDrawer(t, a)
+
+						st := a.store.State()
+
+						r, ok := a.drawerRect(st)
+						if !ok {
+							t.Fatal("no drawer")
 						}
 
-						for _, c := range ansi.Strip(l) {
-							if c < 0x20 || (c >= 0x7f && c <= 0x9f) || invisible.Rune(c) {
-								t.Errorf("row %d carries %U: %q", i, c, ansi.Strip(l))
+						lines := a.drawerLines(st, r)
+						frame := a.View().Content
+						took = time.Since(start)
+
+						if len(lines) != r.H {
+							t.Fatalf("%d lines, want %d", len(lines), r.H)
+						}
+
+						for i, l := range lines {
+							if got := ansi.StringWidth(l); got != r.W {
+								t.Errorf("row %d is %d cells, want %d: %q", i, got, r.W, ansi.Strip(l))
+							}
+
+							for _, c := range ansi.Strip(l) {
+								if c < 0x20 || (c >= 0x7f && c <= 0x9f) || invisible.Rune(c) {
+									t.Errorf("row %d carries %U: %q", i, c, ansi.Strip(l))
+								}
 							}
 						}
-					}
 
-					for i, l := range strings.Split(a.View().Content, "\n") {
-						if got := ansi.StringWidth(l); got != w {
-							t.Errorf("frame row %d is %d cells, want %d", i, got, w)
+						for i, l := range strings.Split(frame, "\n") {
+							if got := ansi.StringWidth(l); got != w {
+								t.Errorf("frame row %d is %d cells, want %d", i, got, w)
+							}
 						}
+					})
+
+					slowest = max(slowest, took)
+
+					if took > stepBudget {
+						t.Fatalf("a resize to width %d took %v, want at most %v", w, took, stepBudget)
 					}
-				})
-			}
+				}
+
+				t.Logf("slowest resize: %v", slowest)
+			})
 		}
 	}
 }

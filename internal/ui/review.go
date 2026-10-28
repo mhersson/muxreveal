@@ -27,7 +27,7 @@ const (
 type reviewView struct {
 	src  git.Source
 	root string
-	//nolint:unused // the loader sets it with root
+	//nolint:unused // the agent session whose turns the drawer steps through
 	session     string
 	res         git.Result
 	gen         int // bumps whenever res is replaced; the caches follow it
@@ -51,12 +51,14 @@ type reviewView struct {
 	noSnapshot      bool   // the turn shown has no snapshot
 
 	rowsSplit bool // rows hold side by side pairs
+	rowsRev   int  // bumps whenever rows are replaced; rebuild is the only place that does
 	treeSel   int  // the file selected while the tree has the keyboard
 
 	cache reviewCache
 }
 
-// reviewCache holds what is derived from a result once per generation.
+// reviewCache holds what is derived from a result once per generation. The
+// fields below the spans follow their own keys as well.
 type reviewCache struct {
 	ok     bool
 	gen    int
@@ -65,6 +67,16 @@ type reviewCache struct {
 	hidden []bool // per file: its paths or text carry a hidden character
 	digits int    // digits of the highest line number in the hunks
 	spans  map[spanKey][][]diffview.Span
+
+	// The tree column's width at one inner width, the layout for one set of
+	// inputs, and the rows last searched for chunks to tokenise.
+	treeW, treeInner int
+	treeOK           bool
+	lay              drawerLayout
+	layKey           layoutKey
+	layOK            bool
+	scan             scanKey
+	scanned          bool
 }
 
 // drawerState is the drawer's UI state outside the views.
@@ -78,6 +90,8 @@ type drawerState struct {
 	dvName        string
 	dvFlash       *diffview.Theme // the same on the flash ground
 	tokenised     int             // lines tokenised by the last highlighting pass
+	layouts       int             // layouts computed rather than reused; tests read it
+	scans         int             // searches of the visible rows for chunks to tokenise; tests read it
 }
 
 // reviewViewOf returns the tab's view, creating it.
@@ -121,6 +135,16 @@ func (v *reviewView) derived() *reviewCache {
 	return c
 }
 
+// treeWidthAt is the tree column's width at an inner width. It walks every
+// tree item, so it is computed once per width and generation.
+func (c *reviewCache) treeWidthAt(files []git.FileDiff, inner int) int {
+	if !c.treeOK || c.treeInner != inner {
+		c.treeW, c.treeInner, c.treeOK = treeWidth(c.tree, files, c.hidden, inner), inner, true
+	}
+
+	return c.treeW
+}
+
 func numDigits(n int) int {
 	d := 1
 	for ; n >= 10; n /= 10 {
@@ -136,6 +160,7 @@ func (v *reviewView) rebuild(split bool) {
 	anchor := anchorAt(v.res, v.rows, v.cursor)
 
 	v.rowsSplit = split
+	v.rowsRev++
 	v.rows = buildRows(v.res, rowOpts{split: split, full: v.full, folded: v.folded})
 	v.cursor = restoreAnchor(v.res, v.rows, anchor)
 }
