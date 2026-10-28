@@ -393,6 +393,41 @@ func TestThematicBreak(t *testing.T) {
 	goldenText(t, "break", l.debug())
 }
 
+func TestBreakAfterImage(t *testing.T) {
+	const a, b = "https://e.com/a.png", "https://e.com/b.png"
+
+	tests := []struct {
+		name string
+		src  string
+		want []string
+	}{
+		{"br", "![Logo](" + a + ")<br>tagline\n", []string{"image: Logo  e.com", "tagline"}},
+		{"backslash break", "![Logo](" + a + ")\\\ntagline\n", []string{"image: Logo  e.com", "tagline"}},
+		{"two-space break", "![Logo](" + a + ")  \ntagline\n", []string{"image: Logo  e.com", "tagline"}},
+		{"spaces around the br", "![Logo](" + a + ") <br> tagline\n", []string{"image: Logo  e.com", "tagline"}},
+		{"a second break still makes a blank line", "![Logo](" + a + ")<br><br>tagline\n", []string{"image: Logo  e.com", "", "tagline"}},
+		{"text before the image", "see ![a](" + a + ")<br>after\n", []string{"see", "image: a  e.com", "after"}},
+		{"two images", "![a](" + a + ")<br>![b](" + b + ")\n", []string{"image: a  e.com", "image: b  e.com"}},
+		{
+			"html block",
+			"<p align=\"center\">\n  <img src=\"" + a + "\" alt=\"L\">\n  <br>\n  <b>G</b> tagline\n</p>\n",
+			[]string{"image: L  e.com", "G tagline"},
+		},
+		{"a break before the image is kept", "x<br>![a](" + a + ")\n", []string{"x", "image: a  e.com"}},
+		{
+			"a paragraph tag after the image still separates",
+			"<p><img src=\"" + a + "\" alt=\"L\"></p>\n<p>after</p>\n",
+			[]string{"image: L  e.com", "", "after"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			wantLines(t, layoutOf(tt.src, 40, ""), tt.want...)
+		})
+	}
+}
+
 func TestFootnotesSection(t *testing.T) {
 	src := "Text[^b] and[^a].\n\n[^a]: First note.\n[^b]: Second note that wraps\n[^c]: unused\n"
 	l := layoutOf(src, 24, "")

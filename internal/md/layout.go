@@ -281,13 +281,29 @@ func (l *layouter) flow(out *frag, segs []seg, width int) {
 		}
 
 		out.lines = append(out.lines, wrap(segs[start:i], width)...)
-		start = i + 1
+		start = afterImageBreak(segs, i+1)
 
 		out.images = append(out.images, Image{Line: len(out.lines), Alt: sg.img.alt, Src: sg.img.src, Link: sg.st.link})
 		out.lines = append(out.lines, fit(l.imageLine(sg), width))
 	}
 
 	out.lines = append(out.lines, wrap(segs[start:], width)...)
+}
+
+// afterImageBreak returns where the text after an image starts: past the first
+// hard break that follows it (and the spaces before the break), since the image
+// already ended its line. A second break still makes a blank line.
+func afterImageBreak(segs []seg, from int) int {
+	j := from
+	for j < len(segs) && segs[j].img == nil && !segs[j].brk && strings.TrimSpace(segs[j].text) == "" {
+		j++
+	}
+
+	if j < len(segs) && segs[j].brk && !segs[j].soft {
+		return j + 1
+	}
+
+	return from
 }
 
 func (l *layouter) heading(out *frag, h *ast.Heading, width int) {
