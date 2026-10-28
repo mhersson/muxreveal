@@ -27,11 +27,12 @@ type railKey struct {
 }
 
 // railAgentKey is what an agent's card takes from outside the core state: the
-// unseen mark, the probe results and the age as displayed (its unit and count,
-// so an age that renders the same does not rebuild).
+// unseen mark, the probe results, the session name and the age as displayed
+// (its unit and count, so an age that renders the same does not rebuild).
 type railAgentKey struct {
 	unseen  bool
 	probe   railProbe
+	name    railName
 	ageN    int
 	ageUnit byte
 }
@@ -101,7 +102,7 @@ func (a *App) railAgentKeys(dst []railAgentKey, ids []core.PaneID, now time.Time
 		var active time.Time
 
 		if rp := a.rail.panes[id]; rp != nil {
-			k.unseen, k.probe, active = rp.unseen, rp.probe, rp.hookAt
+			k.unseen, k.probe, k.name, active = rp.unseen, rp.probe, rp.name, rp.hookAt
 		}
 
 		if p := a.panes[id]; p != nil && p.lastOut.After(active) {

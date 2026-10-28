@@ -502,6 +502,8 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, a.onRailHead(msg)
 	case railStatsMsg:
 		return a, a.onRailStats(msg)
+	case railNameMsg:
+		return a, a.onRailName(msg)
 	case railDueMsg:
 		return a, a.onRailDue(msg)
 	case railPulseMsg:

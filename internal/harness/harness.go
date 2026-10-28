@@ -2,6 +2,7 @@
 package harness
 
 import (
+	"context"
 	"time"
 
 	"github.com/mhersson/muxreveal/internal/core"
@@ -21,6 +22,9 @@ type Harness interface {
 	Settings(exe string) ([]byte, error)
 	// ParseEvent reads one hook payload as received on stdin.
 	ParseEvent(payload []byte) (Event, error)
+	// CustomName reads the name the user gave the session from its transcript
+	// file; empty when it has none. The name is untrusted text. It does file IO.
+	CustomName(ctx context.Context, transcript string) (string, error)
 }
 
 // Event is one hook payload reduced to what the app needs.

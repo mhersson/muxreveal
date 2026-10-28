@@ -110,23 +110,7 @@ func printable(s string) string {
 }
 
 // clip makes s an action: printable runes only, at most maxActionRunes.
-func clip(s string) string {
-	s = printable(s)
-	if len(s) <= maxActionRunes {
-		return s
-	}
-
-	i := 0
-	for pos := range s {
-		if i == maxActionRunes {
-			return s[:pos]
-		}
-
-		i++
-	}
-
-	return s
-}
+func clip(s string) string { return capRunes(printable(s), maxActionRunes) }
 
 // jsonString returns raw as a string, or "" when it is not a JSON string.
 func jsonString(raw json.RawMessage) string {

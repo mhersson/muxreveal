@@ -466,7 +466,8 @@ func (a *App) railCardLine(ui theme.UI, c railCard, hits []railHit, n, cw int) [
 	}
 }
 
-// railTitleLine is a card's first line: state glyph, project, age and the unseen dot.
+// railTitleLine is a card's first line: state glyph, the session's name or else
+// the project, age and the unseen dot.
 func (a *App) railTitleLine(ui theme.UI, c railCard, hits []railHit, cw int) []railRun {
 	glyph := railRun{text: " ", fg: ui.Fg}
 	spin := spinFrame(a.spin)
@@ -508,7 +509,12 @@ func (a *App) railTitleLine(ui theme.UI, c railCard, hits []railHit, cw int) []r
 		room = cw - rw - 1
 	}
 
-	left := cutRuns(append([]railRun{glyph, {text: " ", fg: ui.Fg}}, hiRuns(c.project, hitsOf(hits, railFieldProject), ui.Fg, ui.Match, true)...), room)
+	who, field := c.project, railFieldProject
+	if c.name != "" {
+		who, field = c.name, railFieldName
+	}
+
+	left := cutRuns(append([]railRun{glyph, {text: " ", fg: ui.Fg}}, hiRuns(who, hitsOf(hits, field), ui.Fg, ui.Match, true)...), room)
 	pad := cw - runsWidth(left) - runsWidth(right)
 
 	if len(right) == 0 || pad < 1 {

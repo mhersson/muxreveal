@@ -205,7 +205,7 @@ Inputs: recordings `~/.cache/muxreveal-spike/recordings/pane-2.rec` (run a), `~/
 
 ### M1f Agents rail
 
-A framed rail on the left lists every agent in every tab as a card (state, project, branch, current action, diff stats), stays open until closed, takes the keyboard on `leader a`, searches with `/` and jumps to any agent with `enter`; the tray's agents module goes away. Covers AG-13.
+A framed rail on the left lists every agent in every tab as a card (state, session name or project, branch, current action, diff stats), stays open until closed, takes the keyboard on `leader a`, searches with `/` and jumps to any agent with `enter`; the tray's agents module goes away. Covers AG-13.
 
 - [x] Hooks carry the agent's current action into the pane state
 - [x] The rail's open state is saved, and panes lay out beside it
@@ -487,6 +487,7 @@ The review drawer: an overlay that slides over the right half of the body and sh
 - [x] Loading, turns and live updates that keep the cursor on its hunk, and the `[diff]` config
 - [x] Drawer keys, commands, focus, mouse and the slide
 - [x] Worktree picker and new worktree, and the `[worktrees]` config
+- [x] The rail's cards name each agent by its session's custom name, else the project
 - [ ] Bench, idle CPU and the gate
 
 Gate:
@@ -611,6 +612,7 @@ M1e Tiling, tab moves and chrome is merged (PR #12); the reboot part of its gate
 | 2026-10-27 | Review is an overlay drawer over the right half of the body, one per tab in `core.Tab.Review`, not a layout pane of kind `review` (this replaces the review-pane decision) | The panes keep their rects and PTY sizes, so opening it never resizes an agent's terminal, and `core.Arrange` stays untouched |
 | 2026-10-27 | One `git.WatchSet` watcher per worktree serves every agent pane in it; its change counter lets the turn gate skip unchanged snapshots, and its batches update the drawer and re-probe the rail | Watching is per worktree, not per pane, so six agents in one repo cost one watcher |
 | 2026-10-27 | `leader n` opens a worktree picker in a git repository, with a page to create a worktree | Starting an agent in a worktree is the common case, and the picker needs no separate command |
+| 2026-10-28 | Card line 1 shows the agent session's custom name (set with `--name` or `/rename`, read from its transcript by a rail probe), else the project; the pane's frame title stays its OSC title | Three agents in one repo all read the same project; a `<project> · <title>` line would leave no room on a 44-column rail for the model and context meter planned for line 1 |
 | 2026-10-28 | The which-key popup folds `s` and `v` into one row, `s v  Split below/right` | The `d  Review drawer` row made the Panes group one row too tall for a 24-row terminal; the popup fits whole there again |
 
 ## Later

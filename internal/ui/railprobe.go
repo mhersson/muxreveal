@@ -16,6 +16,7 @@ import (
 const (
 	railProbeTimeout = 2 * time.Second
 	headEvery        = 5 * time.Second
+	nameEvery        = 5 * time.Second
 	statsEvery       = 10 * time.Second
 	shortOIDLen      = 7
 	// railProbeMax bounds the rail's probes running at once.
@@ -27,6 +28,7 @@ type railProbeKind int
 const (
 	probeHead railProbeKind = iota
 	probeStats
+	probeName
 )
 
 // probeSlot rate-limits one probe of one pane.
@@ -35,7 +37,7 @@ type probeSlot struct {
 	busy    bool      // a probe is in flight
 	pending bool      // a trigger arrived that has not run yet
 	timer   bool      // a delayed probe is scheduled
-	cwd     string    // the cwd the latest probe was started for
+	target  string    // what the latest probe was started for: the cwd, or the transcript for the name probe
 	force   bool      // the next run ignores the interval
 }
 
@@ -55,6 +57,15 @@ type railStatsMsg struct {
 	gen   int
 	stats git.Stats
 	err   error
+}
+
+// railNameMsg is a name probe's answer; it carries the transcript it read.
+type railNameMsg struct {
+	pane       core.PaneID
+	transcript string
+	gen        int
+	name       string
+	err        error
 }
 
 // railDueMsg ends the wait before a delayed probe.
@@ -80,7 +91,7 @@ func (a *App) railOpened() tea.Cmd {
 	var cmds []tea.Cmd
 
 	for _, id := range st.AgentPanes() {
-		cmds = append(cmds, a.railFire(st, id, probeHead), a.railFire(st, id, probeStats))
+		cmds = append(cmds, a.railFire(st, id, probeHead), a.railFire(st, id, probeStats), a.railFire(st, id, probeName))
 	}
 
 	return tea.Batch(cmds...)
@@ -96,14 +107,17 @@ func (a *App) railClosed() {
 	a.rail.ctx, a.rail.cancel = nil, nil
 
 	for _, rp := range a.rail.panes {
-		rp.head = probeSlot{last: rp.head.last, cwd: rp.head.cwd}
-		rp.stats = probeSlot{last: rp.stats.last, cwd: rp.stats.cwd}
+		rp.head = probeSlot{last: rp.head.last, target: rp.head.target}
+		rp.stats = probeSlot{last: rp.stats.last, target: rp.stats.target}
+		rp.nameSlot = probeSlot{last: rp.nameSlot.last, target: rp.nameSlot.target}
 	}
 }
 
-// railSync probes an agent whose cwd differs from the one its probes last ran for.
+// railSync probes an agent whose cwd differs from the one its git probes last
+// ran for, and one whose transcript differs from the one its name was last read
+// from.
 func (a *App) railSync(st core.State, id core.PaneID, cwd string) tea.Cmd {
-	if cwd == "" || !a.railIsOpen() {
+	if !a.railIsOpen() {
 		return nil
 	}
 
@@ -111,12 +125,16 @@ func (a *App) railSync(st core.State, id core.PaneID, cwd string) tea.Cmd {
 
 	var cmds []tea.Cmd
 
-	if rp.head.cwd != cwd {
+	if cwd != "" && rp.head.target != cwd {
 		cmds = append(cmds, a.railFire(st, id, probeHead))
 	}
 
-	if rp.stats.cwd != cwd && a.engine != nil {
+	if cwd != "" && rp.stats.target != cwd && a.engine != nil {
 		cmds = append(cmds, a.railFire(st, id, probeStats))
+	}
+
+	if tr := st.Panes[id].Transcript; tr != "" && rp.nameSlot.target != tr {
+		cmds = append(cmds, a.railFire(st, id, probeName))
 	}
 
 	return tea.Batch(cmds...)
@@ -129,7 +147,7 @@ func (a *App) railHook(id core.PaneID, start, idle bool) tea.Cmd {
 	st := a.store.State()
 
 	if start || idle {
-		cmds = append(cmds, a.railFire(st, id, probeHead))
+		cmds = append(cmds, a.railFire(st, id, probeHead), a.railFire(st, id, probeName))
 	}
 
 	if idle {
@@ -140,8 +158,11 @@ func (a *App) railHook(id core.PaneID, start, idle bool) tea.Cmd {
 }
 
 func (rp *railPane) slot(k railProbeKind) *probeSlot {
-	if k == probeStats {
+	switch k {
+	case probeStats:
 		return &rp.stats
+	case probeName:
+		return &rp.nameSlot
 	}
 
 	return &rp.head
@@ -151,7 +172,14 @@ func (rp *railPane) slot(k railProbeKind) *probeSlot {
 // not passed or one is running.
 func (a *App) railFire(st core.State, id core.PaneID, k railProbeKind) tea.Cmd {
 	m := st.Panes[id]
-	if !a.railIsOpen() || m.Kind != core.KindAgent || m.Cwd == "" {
+
+	// The git probes run in the cwd; the name probe reads the transcript.
+	target := m.Cwd
+	if k == probeName {
+		target = m.Transcript
+	}
+
+	if !a.railIsOpen() || m.Kind != core.KindAgent || target == "" {
 		return nil
 	}
 
@@ -163,7 +191,7 @@ func (a *App) railFire(st core.State, id core.PaneID, k railProbeKind) tea.Cmd {
 		// Outside a repository there is nothing to count. Only a head result for
 		// this cwd says so; the cwd is recorded so that railSync does not ask again.
 		if known := a.rail.panes[id]; known != nil && known.probe.known && !known.probe.repo && known.probe.headCwd == m.Cwd {
-			known.stats.cwd = m.Cwd
+			known.stats.target = m.Cwd
 
 			return nil
 		}
@@ -179,8 +207,12 @@ func (a *App) railFire(st core.State, id core.PaneID, k railProbeKind) tea.Cmd {
 	}
 
 	every := headEvery
-	if k == probeStats {
+
+	switch k {
+	case probeStats:
 		every = statsEvery
+	case probeName:
+		every = nameEvery
 	}
 
 	force := s.force
@@ -198,11 +230,27 @@ func (a *App) railFire(st core.State, id core.PaneID, k railProbeKind) tea.Cmd {
 		return a.tick(every-since, func(time.Time) tea.Msg { return railDueMsg{pane: id, kind: k, gen: gen} })
 	}
 
-	s.pending, s.busy, s.last, s.cwd = false, true, a.clock.Now(), m.Cwd
+	s.pending, s.busy, s.last, s.target = false, true, a.clock.Now(), target
 
 	ctx, cwd, gen := a.rail.ctx, m.Cwd, a.rail.gen
 
 	sem := a.probeSem
+
+	if k == probeName {
+		h := a.harnessOf(m)
+
+		return func() tea.Msg {
+			ctx, done, err := admit(ctx, sem)
+			if err != nil {
+				return railNameMsg{pane: id, transcript: target, gen: gen, err: err}
+			}
+			defer done()
+
+			name, err := h.CustomName(ctx, target)
+
+			return railNameMsg{pane: id, transcript: target, gen: gen, name: name, err: err}
+		}
+	}
 
 	if k == probeStats {
 		eng := a.engine
@@ -268,18 +316,60 @@ func (a *App) onRailDue(msg railDueMsg) tea.Cmd {
 	return a.railFire(a.store.State(), msg.pane, msg.kind)
 }
 
-// railFresh reports whether an answer still applies, and frees the slot.
-func (a *App) railFresh(id core.PaneID, cwd string, gen int, k railProbeKind) (*railPane, bool) {
+// railLive returns the pane's memory for an answer of this open of the rail,
+// and frees the slot; nil when the pane is gone or the rail was closed since.
+func (a *App) railLive(id core.PaneID, gen int, k railProbeKind) *railPane {
 	rp, ok := a.rail.panes[id]
 	if !ok || gen != a.rail.gen || !a.railIsOpen() {
-		return nil, false
+		return nil
 	}
 
 	rp.slot(k).busy = false
 
+	return rp
+}
+
+// railFresh reports whether an answer still applies, and frees the slot.
+func (a *App) railFresh(id core.PaneID, cwd string, gen int, k railProbeKind) (*railPane, bool) {
+	rp := a.railLive(id, gen, k)
+	if rp == nil {
+		return nil, false
+	}
+
 	m := a.store.State().Panes[id]
 
 	return rp, m.Kind == core.KindAgent && m.Cwd == cwd
+}
+
+// onRailName keeps a name read for the pane's current transcript. A failed read
+// keeps the name last read from it; a name read from another transcript is not
+// kept.
+func (a *App) onRailName(msg railNameMsg) tea.Cmd {
+	rp := a.railLive(msg.pane, msg.gen, probeName)
+	if rp == nil {
+		return nil
+	}
+
+	st := a.store.State()
+
+	if m := st.Panes[msg.pane]; m.Kind == core.KindAgent && m.Transcript == msg.transcript {
+		switch {
+		case msg.err != nil:
+			a.log.Debug("name probe", "pane", msg.pane, "err", msg.err)
+
+			if rp.name.transcript != msg.transcript {
+				rp.name = railName{}
+			}
+		default:
+			rp.name = railName{text: msg.name, transcript: msg.transcript}
+		}
+	}
+
+	if rp.nameSlot.pending {
+		return a.railFire(st, msg.pane, probeName)
+	}
+
+	return nil
 }
 
 func (a *App) onRailHead(msg railHeadMsg) tea.Cmd {

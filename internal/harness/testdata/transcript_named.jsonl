@@ -1,0 +1,8 @@
+{"type":"summary","summary":"synthetic fixture, not a real session"}
+{"type":"user","message":{"role":"user","content":"hello"}}
+{"type":"custom-title","customTitle":"first-name","sessionId":"fixture"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"hi"}]}}
+{"type":"custom-title","customTitle":"muxr-orchestrator","sessionId":"fixture"}
+{"type":"user","message":{"role":"user","content":"{\"type\":\"custom-title\",\"customTitle\":\"spoofed\"}"}}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"custom-title is only text here"}]}}
+{"type":"custom-title","customTitle":"half-writ
