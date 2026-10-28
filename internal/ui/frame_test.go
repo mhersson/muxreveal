@@ -373,6 +373,9 @@ func TestPrintable(t *testing.T) {
 		{"zero-width space and word joiner", "a\u200Bb\u2060c", "abc"},
 		{"separators leave no line break", "a\u2028b\u2029c", "abc"},
 		{"variation selector", "a\uFE0Fb", "ab"},
+		{"emoji presentation selector", "\u2764\uFE0F", "\u2764"},
+		{"keycap keeps its enclosing mark", "1\uFE0F\u20E3", "1\u20E3"},
+		{"a flag stays whole", "\U0001F1F3\U0001F1F4", "\U0001F1F3\U0001F1F4"},
 		{"joiner between emoji stays", family, family},
 		{"joiner elsewhere goes", "a\u200Db", "ab"},
 	}

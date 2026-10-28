@@ -342,8 +342,7 @@ func (a *App) railFresh(id core.PaneID, cwd string, gen int, k railProbeKind) (*
 }
 
 // onRailName keeps a name read for the pane's current transcript. A failed read
-// keeps the name last read from it; a name read from another transcript is not
-// kept.
+// means no name, as a missing file does.
 func (a *App) onRailName(msg railNameMsg) tea.Cmd {
 	rp := a.railLive(msg.pane, msg.gen, probeName)
 	if rp == nil {
@@ -353,14 +352,11 @@ func (a *App) onRailName(msg railNameMsg) tea.Cmd {
 	st := a.store.State()
 
 	if m := st.Panes[msg.pane]; m.Kind == core.KindAgent && m.Transcript == msg.transcript {
-		switch {
-		case msg.err != nil:
+		if msg.err != nil {
 			a.log.Debug("name probe", "pane", msg.pane, "err", msg.err)
 
-			if rp.name.transcript != msg.transcript {
-				rp.name = railName{}
-			}
-		default:
+			rp.name = railName{}
+		} else {
 			rp.name = railName{text: msg.name, transcript: msg.transcript}
 		}
 	}

@@ -9,6 +9,7 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"strings"
 	"syscall"
 )
 
@@ -21,7 +22,7 @@ const (
 )
 
 // customTitleMark prefilters lines, so only those that may be a name entry are parsed.
-var customTitleMark = []byte(`"custom-title"`)
+const customTitleMark = `"custom-title"`
 
 // CustomName returns the name set with `--name` or `/rename`: the customTitle
 // of the last custom-title entry in the last 256 KiB of the transcript. A
@@ -47,7 +48,7 @@ func (Claude) CustomName(ctx context.Context, transcript string) (string, error)
 		line := data[start:end]
 		end = start - 1
 
-		if !bytes.Contains(line, customTitleMark) {
+		if !bytes.Contains(line, []byte(customTitleMark)) {
 			continue
 		}
 
@@ -119,7 +120,8 @@ func readTail(path string, n int64) ([]byte, error) {
 	return nil, nil
 }
 
-// capRunes cuts s to at most n runes.
+// capRunes cuts s to at most n runes. A cut copies, so the result does not keep
+// the whole of a long s alive.
 func capRunes(s string, n int) string {
 	if len(s) <= n {
 		return s
@@ -129,7 +131,7 @@ func capRunes(s string, n int) string {
 
 	for pos := range s {
 		if i == n {
-			return s[:pos]
+			return strings.Clone(s[:pos])
 		}
 
 		i++

@@ -743,36 +743,88 @@ func TestRailCardFallsBackToTheProject(t *testing.T) {
 }
 
 func TestRailCardCutsTheName(t *testing.T) {
-	name := strings.Repeat("0123456789", 6)
-	a := drawApp(t, "catppuccin-mocha", true, 100, 44, []railAgent{
-		{project: "proj", state: core.AgentWorking, action: "x", age: 8 * time.Second, unseen: true, name: name},
-	})
+	const (
+		wide   = "\u6f22" // two cells
+		family = "\U0001F468\u200D\U0001F469\u200D\U0001F467"
+	)
 
-	rows := linesWith(railTextLines(a), "0123")
-	if len(rows) != 1 {
-		t.Fatalf("name lines = %d, want 1", len(rows))
+	tests := []struct {
+		name string
+		text string
+		keep string // the name before the cut mark
+		unit string // what the last cell group of keep must be whole, if set
+	}{
+		{"ascii", strings.Repeat("0123456789", 6), "01234567890123456789012345678901", ""},
+		{"wide characters on the boundary", strings.Repeat(wide, 60), strings.Repeat(wide, 16), wide},
+		{"wide characters, odd aligned", "a" + strings.Repeat(wide, 59), "a" + strings.Repeat(wide, 15), wide},
+		{"joined emoji on the boundary", strings.Repeat(family, 20), strings.Repeat(family, 16), family},
+		{"joined emoji, odd aligned", "x" + strings.Repeat(family, 20), "x" + strings.Repeat(family, 15), family},
 	}
 
-	row := rows[0]
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			a := drawApp(t, "catppuccin-mocha", true, 100, 44, []railAgent{
+				{project: "proj", state: core.AgentWorking, action: "x", age: 8 * time.Second, unseen: true, name: tt.text},
+			})
 
-	// 40 content columns: the glyph and a space, the name, the time and the dot.
-	// The time and the dot stay whole; the name gives way with a cut mark.
-	want := name[:32] + "…"
-	if !strings.Contains(row, " "+want+" ") || !strings.Contains(row, " 8s ●") {
-		t.Errorf("row = %q, want the name cut to %q before 8s and the dot", row, want)
-	}
+			rows := linesWith(railTextLines(a), " 8s ●")
+			if len(rows) != 1 {
+				t.Fatalf("card lines = %d, want 1", len(rows))
+			}
 
-	if w := ansi.StringWidth(row); w != 44 {
-		t.Errorf("row is %d cells wide, want 44", w)
+			row := rows[0]
+
+			// 40 content columns: the glyph and a space, the name, the time and the dot.
+			// The time and the dot stay whole; the name gives way with a cut mark.
+			before, _, ok := strings.Cut(row, "…")
+			if !ok || !strings.Contains(row, " 8s ●") {
+				t.Fatalf("row = %q, want a cut mark before 8s and the dot", row)
+			}
+
+			// The row starts with the edge, a space, the glyph and a space.
+			keep := string([]rune(before)[4:])
+			if keep != tt.keep {
+				t.Errorf("name before the cut = %q, want %q", keep, tt.keep)
+			}
+
+			if !strings.HasSuffix(keep, tt.unit) {
+				t.Errorf("the cut split %q", tt.unit)
+			}
+
+			if w := ansi.StringWidth(row); w != 44 {
+				t.Errorf("row is %d cells wide, want 44", w)
+			}
+		})
 	}
 
 	// The same rule cuts a project.
+	name := strings.Repeat("0123456789", 6)
+
 	b := drawApp(t, "catppuccin-mocha", true, 100, 30, []railAgent{
 		{project: name, state: core.AgentWorking, action: "x", age: 8 * time.Second, unseen: true},
 	})
 
-	if rows := linesWith(railTextLines(b), "0123"); len(rows) != 1 || !strings.Contains(rows[0], " "+want+" ") {
-		t.Errorf("project rows = %q, want the project cut to %q", rows, want)
+	if rows := linesWith(railTextLines(b), "0123"); len(rows) != 1 || !strings.Contains(rows[0], " "+name[:32]+"… ") {
+		t.Errorf("project rows = %q, want the project cut to %q", rows, name[:32]+"…")
+	}
+}
+
+// The pane's frame keeps its own title, the guest's OSC title, however its
+// card is named.
+func TestRailNameLeavesThePaneTitleAlone(t *testing.T) {
+	a, _ := framedApp(t, 100, 12, paneSpec{kind: core.KindAgent, cwd: "/w/proj", split: core.SplitVertical, text: "\x1b]2;vim main.go\x07"})
+	openIn(t, a, core.SetRail{Open: true}, core.SetAgentSession{ID: "p1", Session: "s-p1", Transcript: "/w/proj/p1.jsonl"})
+	a.railEntry("p1").name = railName{text: "muxr-orchestrator", transcript: "/w/proj/p1.jsonl"}
+
+	lines := strings.Split(ansi.Strip(a.View().Content), "\n")
+
+	// Row 2 is the top border of both the rail and the pane's frame.
+	if !strings.Contains(lines[2], "vim main.go") || strings.Contains(lines[2], "muxr-orchestrator") {
+		t.Errorf("top border = %q, want the pane's OSC title and not the name", lines[2])
+	}
+
+	if rows := linesWith(lines, "muxr-orchestrator"); len(rows) != 1 || strings.Contains(rows[0], "vim main.go") {
+		t.Errorf("the name is on %q, want the rail's card alone", rows)
 	}
 }
 
