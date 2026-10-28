@@ -146,6 +146,76 @@ func TestUpdateShapesEqualFullDiff(t *testing.T) {
 	}
 }
 
+// A file the old side holds reads as a modification on the incremental path
+// too, though the working tree does not track it: only a file the old side
+// lacks is Untracked. Each case checks the update listed only the touched
+// path, because a full listing would give the right answer for another reason
+// (a retained added file next to a touched change makes Update recompute whole).
+func TestUpdateJudgesAFileTheOldSideHoldsByTheComparison(t *testing.T) {
+	tests := []struct {
+		name string
+		// prepare returns the worktree, the source and the path of a file that
+		// the old side holds and the working tree does not track.
+		prepare func(t *testing.T) (dir string, src Source, path string)
+		// first and second are its contents before the first result and after it.
+		first, second string
+	}{
+		{
+			name: "a turn that snapshotted an untracked file",
+			prepare: func(t *testing.T) (string, Source, string) {
+				dir := seedRepo(t)
+				writeFile(t, dir, "x.go", numbered("x", 40))
+				snap(t, dir, sessA, SnapshotOptions{})
+
+				return dir, TurnSource{Worktree: dir, Session: sessA}, "x.go"
+			},
+			first:  strings.Replace(numbered("x", 40), "x 35\n", "x 35\nx 35a\nx 35b\n", 1),
+			second: strings.Replace(numbered("x", 40), "x 35\n", "x 35\nx 35a\nx 35b\nx 35c\n", 1),
+		},
+		{
+			name: "a branch whose base holds a file removed from the index",
+			prepare: func(t *testing.T) (string, Source, string) {
+				dir := updateRepo(t)
+				gitOut(t, dir, "rm", "-q", "--cached", "b.txt")
+
+				return dir, BranchSource{Worktree: dir, Base: "main"}, "b.txt"
+			},
+			first:  numbered("b.txt", 30) + "first\n",
+			second: numbered("b.txt", 30) + "first\nsecond\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir, src, path := tt.prepare(t)
+			writeFile(t, dir, path, tt.first)
+
+			e := testEngine(t)
+			prev := diffOK(t, e, src)
+
+			// The starting point: a live result that holds the file as a modification.
+			if f := fileByPath(t, prev, path); !prev.Live || f.Status != Modified || f.Untracked {
+				t.Fatalf("setup: live = %v, %s = %+v, want a modification of the old side's file", prev.Live, path, f)
+			}
+
+			writeFile(t, dir, path, tt.second)
+
+			logPath := fakeGit(t, "")
+			upd := updateOK(t, e, prev, src, Batch{Paths: []string{path}})
+
+			if restricted, full := listingCalls(t, logPath); restricted == 0 || full != 0 {
+				t.Fatalf("listings: restricted=%d full=%d, want the incremental path (touched paths only)", restricted, full)
+			}
+
+			if f := fileByPath(t, upd, path); f.Status != Modified || f.Untracked || f.Added == 0 {
+				t.Errorf("%s after update = %+v, want a modification that is not untracked", path, f)
+			}
+
+			sameAsFull(t, upd, src)
+		})
+	}
+}
+
 func TestUpdateFallsBackToFullDiff(t *testing.T) {
 	many := make([]string, 201)
 	for i := range many {
