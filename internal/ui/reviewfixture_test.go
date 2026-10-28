@@ -173,11 +173,24 @@ func longPlain() string { return strings.Repeat("x", 1<<20) }
 
 func longTags() string { return strings.Repeat("a\x1b", 1<<19) }
 
+// longLines are the over-long lines of the hostile fixtures: one plain, one of
+// tags. kilobyteLines is the same shape small enough to draw in full, the
+// baseline a 1 MiB line must not cost much more than.
+type longLines struct{ plain, tags string }
+
+func megabyteLines() longLines { return longLines{longPlain(), longTags()} }
+
+func kilobyteLines() longLines {
+	return longLines{strings.Repeat("x", 1<<10), strings.Repeat("a\x1b", 1<<9)}
+}
+
 // hostileResult holds every kind of text that must never reach the terminal
 // raw, in lines and in paths, and, in a hunk of their own, two pairs of 1 MiB
 // lines. The highlighter draws a whole chunk plain once a line of it is past its
 // limit, so those lines must not share a hunk with the rest.
-func hostileResult() git.Result {
+func hostileResult() git.Result { return hostileResultOf(megabyteLines()) }
+
+func hostileResultOf(long longLines) git.Result {
 	body := fileSpec("cmd/hostile.go", git.Modified, hunkSpec(1, 1, "func main()",
 		" package main",
 		" ",
@@ -194,10 +207,10 @@ func hostileResult() git.Result {
 		" tail",
 	), hunkSpec(30, 34, "func tail()",
 		" }",
-		"-"+longPlain(),
-		"-"+longTags(),
-		"+"+longPlain()+"!",
-		"+"+longTags()+"\r",
+		"-"+long.plain,
+		"-"+long.tags,
+		"+"+long.plain+"!",
+		"+"+long.tags+"\r",
 		" }",
 	))
 	pathy := fileSpec("dir/evil\nname\x1b[31m.go", git.Added, hunkSpec(0, 1, "", "+one"))
@@ -208,10 +221,10 @@ func hostileResult() git.Result {
 	return git.Result{Turn: 2, Through: 2, Files: []git.FileDiff{body, pathy, zero}}
 }
 
-func hostileFull() fullText {
+func hostileFullOf(long longLines) fullText {
 	return fullText{
-		old: []string{"a\x1b[2J", "gone\u202e", "same", longTags()},
-		new: []string{"a\x1b[2J", "new\u200b", "same", "tab\there\x07", longPlain()},
+		old: []string{"a\x1b[2J", "gone\u202e", "same", long.tags},
+		new: []string{"a\x1b[2J", "new\u200b", "same", "tab\there\x07", long.plain},
 	}
 }
 

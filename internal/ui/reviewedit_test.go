@@ -8,7 +8,6 @@ import (
 	"slices"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/mhersson/muxreveal/internal/core"
 	"github.com/mhersson/muxreveal/internal/git"
@@ -373,7 +372,16 @@ func TestEditSendsNoFocusReportsToTheDrawersPane(t *testing.T) {
 
 		return out == 2
 	})
-	time.Sleep(50 * time.Millisecond)
+
+	// Reports reach a pane through one ordered pipe, so a marker sent after e
+	// returned arrives after every report e caused for p1.
+	p1 := r.panes["p1"]
+
+	p1.mu.Lock()
+	p1.vt.SendBytes([]byte("marker"))
+	p1.mu.Unlock()
+
+	eventually(t, "the marker to reach p1", func() bool { return strings.Contains(procs["p1"].sent(), "marker") })
 
 	if in, out := reports("p1"); in != 1 || out != 1 {
 		t.Errorf("p1 was sent %d focus-in and %d focus-out reports, want the 1 and 1 from before e", in, out)

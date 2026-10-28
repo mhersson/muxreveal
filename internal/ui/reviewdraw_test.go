@@ -288,30 +288,31 @@ func TestDrawerRectSlides(t *testing.T) {
 	}
 }
 
-// stepBudget is the most one resize of a drawer may take, update and both
-// frames: the hostile result holds 1 MiB lines, and what is drawn of a line
-// must not depend on its length.
-const stepBudget = 500 * time.Millisecond
+// stepRatio is how many times what a resize costs with 1 KiB lines a resize may
+// cost with 1 MiB lines: what is drawn of a line must not depend on its length,
+// which would show as a ratio in the hundreds. Both are timed in the same run,
+// one after the other, so machine load moves them together.
+const stepRatio = 10
 
 func TestDrawerRowsAreExactWidth(t *testing.T) {
 	type variant struct {
 		name string
-		tune func(a *App, v *reviewView)
+		tune func(a *App, v *reviewView, long longLines)
 	}
 
 	variants := []variant{
-		{"unified", func(a *App, v *reviewView) {}},
-		{"split", func(a *App, v *reviewView) { v.split = true }},
-		{"full file", func(a *App, v *reviewView) {
+		{"unified", func(a *App, v *reviewView, long longLines) {}},
+		{"split", func(a *App, v *reviewView, long longLines) { v.split = true }},
+		{"full file", func(a *App, v *reviewView, long longLines) {
 			v.full = map[string]fullText{}
 			for _, f := range v.res.Files {
-				v.full[f.Path] = hostileFull()
+				v.full[f.Path] = hostileFullOf(long)
 			}
 
 			v.rebuild(v.split)
 		}},
-		{"tree open", func(a *App, v *reviewView) { v.treeOpen = true; a.drawer.tree = true }},
-		{"search", func(a *App, v *reviewView) { v.search = ptr("e\x1bv") }},
+		{"tree open", func(a *App, v *reviewView, long longLines) { v.treeOpen = true; a.drawer.tree = true }},
+		{"search", func(a *App, v *reviewView, long longLines) { v.search = ptr("e\x1bv") }},
 	}
 
 	for _, icons := range []bool{true, false} {
@@ -327,36 +328,50 @@ func TestDrawerRowsAreExactWidth(t *testing.T) {
 			}
 
 			t.Run(fmt.Sprintf("icons=%v/%s", icons, vr.name), func(t *testing.T) {
-				// The view is built once and drawn at every width, so the budget
-				// measures the resizes and the frames, not the setup.
-				s := reviewScene{theme: "catppuccin-mocha", icons: icons, w: widths[0], h: 30, res: hostileResult(), turn: 2, turns: 3, focused: true}
-				s.tune = func(t *testing.T, a *App, v *reviewView) {
-					vr.tune(a, v)
-					v.cursor = min(4, len(v.rows)-1)
-				}
-				a := s.build(t)
+				// The views are built once and drawn at every width, so the
+				// timings measure the resizes and the frames, not the setup.
+				build := func(long longLines) *App {
+					s := reviewScene{theme: "catppuccin-mocha", icons: icons, w: widths[0], h: 30, res: hostileResultOf(long), turn: 2, turns: 3, focused: true}
+					s.tune = func(t *testing.T, a *App, v *reviewView) {
+						vr.tune(a, v, long)
+						v.cursor = min(4, len(v.rows)-1)
+					}
 
-				var slowest time.Duration
+					return s.build(t)
+				}
+
+				a, baseline := build(megabyteLines()), build(kilobyteLines())
+
+				// resize is one step of the drawer: the update and both frames.
+				resize := func(t *testing.T, a *App, w int) (r core.Rect, lines []string, frame string, took time.Duration) {
+					t.Helper()
+
+					start := time.Now()
+
+					sized(t, a, w, 30)
+					settleDrawer(t, a)
+
+					st := a.store.State()
+
+					r, ok := a.drawerRect(st)
+					if !ok {
+						t.Fatal("no drawer")
+					}
+
+					lines = a.drawerLines(st, r)
+					frame = a.View().Content
+
+					return r, lines, frame, time.Since(start)
+				}
+
+				var slow, base time.Duration
 
 				for _, w := range widths {
-					var took time.Duration
-
 					t.Run(fmt.Sprintf("width=%d", w), func(t *testing.T) {
-						start := time.Now()
+						_, _, _, baseTook := resize(t, baseline, w)
+						r, lines, frame, took := resize(t, a, w)
 
-						sized(t, a, w, 30)
-						settleDrawer(t, a)
-
-						st := a.store.State()
-
-						r, ok := a.drawerRect(st)
-						if !ok {
-							t.Fatal("no drawer")
-						}
-
-						lines := a.drawerLines(st, r)
-						frame := a.View().Content
-						took = time.Since(start)
+						base, slow = base+baseTook, slow+took
 
 						if len(lines) != r.H {
 							t.Fatalf("%d lines, want %d", len(lines), r.H)
@@ -380,15 +395,13 @@ func TestDrawerRowsAreExactWidth(t *testing.T) {
 							}
 						}
 					})
-
-					slowest = max(slowest, took)
-
-					if took > stepBudget {
-						t.Fatalf("a resize to width %d took %v, want at most %v", w, took, stepBudget)
-					}
 				}
 
-				t.Logf("slowest resize: %v", slowest)
+				t.Logf("resizes: %v with 1 MiB lines, %v with 1 KiB lines", slow, base)
+
+				if slow > stepRatio*base {
+					t.Errorf("the resizes took %v with 1 MiB lines and %v with 1 KiB lines, want at most %dx", slow, base, stepRatio)
+				}
 			})
 		}
 	}
