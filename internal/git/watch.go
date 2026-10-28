@@ -42,6 +42,9 @@ type WatchOptions struct {
 	Debounce time.Duration // quiet time before a batch goes out; 150 ms when zero
 	MaxDelay time.Duration // longest an unsent change waits while events keep coming; 1 s when zero
 	SeqBase  uint64        // Seq's starting value, so a restarted watcher never repeats one
+
+	// injectErrs lets tests raise watcher errors: fsnotify's goroutine owns its Errors channel.
+	injectErrs <-chan error
 }
 
 // Watcher reports debounced changes of one worktree. Directories git ignores,
@@ -226,6 +229,22 @@ func (w *Watcher) loop(ctx context.Context) {
 		}
 	}
 
+	onError := func(err error) {
+		if !errors.Is(err, fsnotify.ErrEventOverflow) {
+			w.report(err)
+
+			return
+		}
+
+		p.overflow = true
+
+		// Lost events never reach handle, so the overflow counts itself.
+		w.seq.Add(1)
+		w.degraded.Store(true)
+
+		arm()
+	}
+
 	for {
 		var (
 			out   Batch
@@ -252,19 +271,9 @@ func (w *Watcher) loop(ctx context.Context) {
 				return
 			}
 
-			if errors.Is(err, fsnotify.ErrEventOverflow) {
-				p.overflow = true
-
-				// Lost events never reach handle, so the overflow counts itself.
-				w.seq.Add(1)
-				w.degraded.Store(true)
-
-				arm()
-
-				continue
-			}
-
-			w.report(err)
+			onError(err)
+		case err := <-w.opts.injectErrs:
+			onError(err)
 		case <-debounce.C:
 			flush()
 		case <-maxDelay.C:

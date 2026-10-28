@@ -16,7 +16,13 @@ import (
 func newWatchSet(t *testing.T) *WatchSet {
 	t.Helper()
 
-	s := NewWatchSet(context.Background(), fastWatch)
+	return newWatchSetWith(t, fastWatch)
+}
+
+func newWatchSetWith(t *testing.T, opts WatchOptions) *WatchSet {
+	t.Helper()
+
+	s := NewWatchSet(context.Background(), opts)
 
 	t.Cleanup(func() { _ = s.Close() })
 
@@ -342,7 +348,10 @@ func TestWatchSetSeqIsOffAfterAWatcherError(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			dir := newRepo(t)
-			s := newWatchSet(t)
+			injectErrs := make(chan error, 1)
+			opts := fastWatch
+			opts.injectErrs = injectErrs
+			s := newWatchSetWith(t, opts)
 			r := openRepo(t, dir)
 
 			rel, err := s.Acquire(context.Background(), r)
@@ -354,11 +363,7 @@ func TestWatchSetSeqIsOffAfterAWatcherError(t *testing.T) {
 				t.Fatal("healthy watcher not reported")
 			}
 
-			s.mu.Lock()
-			w := s.entries[r.Root].w
-			s.mu.Unlock()
-
-			w.fs.Errors <- injected
+			injectErrs <- injected
 
 			deadline := time.Now().Add(watchWait)
 			for time.Now().Before(deadline) {
