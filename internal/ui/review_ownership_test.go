@@ -317,3 +317,44 @@ func TestFocusedPaneClosesOntoACoveredPane(t *testing.T) {
 		}
 	})
 }
+
+// hiddenDrawerState is a saved state with a drawer open in the first tab while
+// the second tab, two shells, is the active one.
+func hiddenDrawerState() core.State {
+	return core.State{
+		Theme: "catppuccin-mocha", Active: 1, NextID: 3, NextTabID: 2,
+		Tabs: []core.Tab{
+			{
+				ID: "t1", Focus: "p1", Mode: core.ModeBSP, Panes: []core.PaneID{"p1"}, Layout: &core.Node{Pane: "p1"},
+				Review: &core.Review{Pane: "p1", Mode: core.ReviewBranch},
+			},
+			{ID: "t2", Focus: "p3", Mode: core.ModeBSP, Panes: []core.PaneID{"p2", "p3"}, Layout: vsplit("p2", "p3")},
+		},
+		Panes: map[core.PaneID]core.Pane{
+			"p1": {Kind: core.KindShell, Cwd: "/srv/api"},
+			"p2": {Kind: core.KindShell, Cwd: "/srv/web"},
+			"p3": {Kind: core.KindShell, Cwd: "/srv/web"},
+		},
+	}
+}
+
+// Restored through New, a drawer in a hidden tab is known to the app only from
+// the state it was given, with no view and no dispatch before the first key. A
+// pane moved into that tab and followed still closes the drawer when it lands
+// under it.
+func TestPaneMovedIntoARestoredHiddenDrawersTab(t *testing.T) {
+	r := restoreApp(t, hiddenDrawerState())
+	r.size(200, 50)
+
+	if len(r.a.drawer.views) != 0 || r.a.store.State().Tabs[0].Review == nil {
+		t.Fatalf("setup: %d views, first tab's drawer = %+v, want a drawer in the state and no view", len(r.a.drawer.views), r.a.store.State().Tabs[0].Review)
+	}
+
+	press(r.a, keyLeader, keyRune('>'), keyRune('1'))
+
+	st := r.a.store.State()
+	if st.Active != 0 || st.Tab().Focus != "p3" || st.Tab().Review != nil || r.a.drawer.focused || r.a.drawer.closing {
+		t.Errorf("tab %d, focus %s, drawer open = %v, has the keyboard = %v, closing = %v, want the moved pane focused and the drawer closed at once",
+			st.Active, st.Tab().Focus, st.Tab().Review != nil, r.a.drawer.focused, r.a.drawer.closing)
+	}
+}
