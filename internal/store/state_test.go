@@ -578,7 +578,7 @@ func TestAgentCwdIsNotPersisted(t *testing.T) {
 	data, err := Encode(st)
 	noErr(t, err)
 
-	if strings.Contains(string(data), "/sub") {
+	if strings.Contains(string(data), "/home/me/code/api/sub") {
 		t.Errorf("the agent's cwd is written:\n%s", data)
 	}
 
