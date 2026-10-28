@@ -870,6 +870,7 @@ func newRealApp(t *testing.T, scripts ...string) *realApp {
 
 	// A copy must never reach the operator's real clipboard tools.
 	a.clip.run = (&fakeRun{}).run
+	a.tick = cancellableTick(a.ctx)
 
 	r := &realApp{App: a}
 
@@ -957,6 +958,66 @@ func eventually2(t *testing.T, limit time.Duration, what string, cond func() boo
 		}
 
 		time.Sleep(5 * time.Millisecond)
+	}
+}
+
+// cancellableTick is tea.Tick that also returns when ctx ends. Bubble Tea
+// cannot cancel a tick, so one a pump runs would hold its goroutine for the
+// whole delay after the app closed.
+func cancellableTick(ctx context.Context) func(time.Duration, func(time.Time) tea.Msg) tea.Cmd {
+	return func(d time.Duration, fn func(time.Time) tea.Msg) tea.Cmd {
+		t := time.NewTimer(d)
+
+		return func() tea.Msg {
+			defer t.Stop()
+
+			select {
+			case ts := <-t.C:
+				return fn(ts)
+			case <-ctx.Done():
+				return nil
+			}
+		}
+	}
+}
+
+func TestCancellableTick(t *testing.T) {
+	type tickMsg struct{}
+
+	tests := []struct {
+		name   string
+		delay  time.Duration
+		cancel bool
+		want   tea.Msg
+	}{
+		{"fires after the delay", time.Millisecond, false, tickMsg{}},
+		{"gives up when the context ends", time.Hour, true, nil},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			t.Cleanup(cancel)
+
+			cmd := cancellableTick(ctx)(tt.delay, func(time.Time) tea.Msg { return tickMsg{} })
+
+			if tt.cancel {
+				cancel()
+			}
+
+			got := make(chan tea.Msg, 1)
+
+			go func() { got <- cmd() }()
+
+			select {
+			case m := <-got:
+				if m != tt.want {
+					t.Errorf("tick returned %v, want %v", m, tt.want)
+				}
+			case <-time.After(5 * time.Second):
+				t.Fatal("the tick did not return")
+			}
+		})
 	}
 }
 
