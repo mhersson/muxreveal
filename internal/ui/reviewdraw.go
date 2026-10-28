@@ -973,7 +973,7 @@ func changedIn(ls []git.Line, li int, text string) diffview.Range {
 		return diffview.Range{}
 	}
 
-	other, _ := cleanText(ls[p].Text)
+	other, _ := cleanLine(ls[p].Text)
 	if ls[li].Kind == git.Del {
 		r, _ := diffview.Changed(text, other)
 
@@ -989,7 +989,14 @@ func changedIn(ls []git.Line, li int, text string) diffview.Range {
 func (d *drawCtx) unifiedRow(r reviewRow, f git.FileDiff, cursor, fresh bool) string {
 	h := f.Hunks[r.hunk]
 	l := h.Lines[r.line]
-	text, _ := cleanText(l.Text)
+	p := partner(h.Lines, r.line)
+
+	other := ""
+	if p >= 0 {
+		other = h.Lines[p].Text
+	}
+
+	text := lineShown(l.Text, other, p >= 0)
 	ref, ok := lineRef(r.file, r.hunk, h, r.line)
 
 	return d.lineCells(d.thFor(fresh), diffKind(l.Kind), cursor, []int{l.Old, l.New}, text, d.spansAt(ref, ok), changedIn(h.Lines, r.line, text), d.lay.unifiedCode(2))
@@ -1030,12 +1037,14 @@ func (d *drawCtx) pairRow(r reviewRow, f git.FileDiff, cursor, fresh bool) strin
 
 	var lt, rt string
 
+	paired := left >= 0 && right >= 0 && left != right
+
 	if left >= 0 {
-		lt, _ = cleanText(h.Lines[left].Text)
+		lt = d.sideText(h, left, right, paired)
 	}
 
 	if right >= 0 {
-		rt, _ = cleanText(h.Lines[right].Text)
+		rt = d.sideText(h, right, left, paired)
 	}
 
 	var lr, rr diffview.Range
@@ -1080,6 +1089,16 @@ func (d *drawCtx) pairRow(r reviewRow, f git.FileDiff, cursor, fresh bool) strin
 	return b.String()
 }
 
+// sideText is the text of line li of a side by side pair.
+func (d *drawCtx) sideText(h git.Hunk, li, other int, paired bool) string {
+	o := ""
+	if paired {
+		o = h.Lines[other].Text
+	}
+
+	return lineShown(h.Lines[li].Text, o, paired)
+}
+
 // fullRow is a line of the file shown whole, with one number column.
 func (d *drawCtx) fullRow(r reviewRow, cursor, fresh bool) string {
 	kind := diffview.Context
@@ -1087,7 +1106,7 @@ func (d *drawCtx) fullRow(r reviewRow, cursor, fresh bool) string {
 		kind = diffview.Add
 	}
 
-	text, _ := cleanText(r.text)
+	text, _ := cleanLine(r.text)
 	ref := spanRef{spanKey{r.file, -1, sideNew, r.line / hlChunk}, r.line % hlChunk}
 
 	return d.lineCells(d.thFor(fresh), kind, cursor, []int{r.line + 1}, text, d.spansAt(ref, true), diffview.Range{}, d.lay.unifiedCode(1))
@@ -1115,7 +1134,7 @@ func (d *drawCtx) ghostRow(r reviewRow, cursor, fresh bool) string {
 	}
 
 	gutter = d.cursorGround(gutter, cursor)
-	text, _ := cleanText(r.text)
+	text, _ := cleanLine(r.text)
 
 	num := strconv.Itoa(r.line + 1)
 	num = strings.Repeat(" ", max(lay.gw-1-len(num), 0)) + num + " "

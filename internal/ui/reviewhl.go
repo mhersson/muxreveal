@@ -177,7 +177,7 @@ func (v *reviewView) chunkLines(k spanKey) (path string, lines []string) {
 	if k.hunk < 0 {
 		text := v.full[f.Path].new
 		for _, s := range text[min(start, len(text)):min(end, len(text))] {
-			c, _ := cleanText(s)
+			c, _ := cleanLine(s)
 			lines = append(lines, c)
 		}
 
@@ -196,7 +196,7 @@ func (v *reviewView) chunkLines(k spanKey) (path string, lines []string) {
 		}
 
 		if n >= start {
-			c, _ := cleanText(l.Text)
+			c, _ := cleanLine(l.Text)
 			lines = append(lines, c)
 		}
 

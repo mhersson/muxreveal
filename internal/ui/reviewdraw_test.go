@@ -623,3 +623,46 @@ func TestDrawerTreeLayout(t *testing.T) {
 		}
 	}
 }
+
+func crResult(specs ...string) git.Result {
+	f := fileSpec("eol.txt", git.Modified, hunkSpec(1, 1, "", specs...))
+
+	return git.Result{Turn: 4, Through: 4, Files: []git.FileDiff{f}}
+}
+
+func TestLineEndingCR(t *testing.T) {
+	const tag = "\u27e8U+000D\u27e9"
+
+	tests := []struct {
+		name    string
+		specs   []string
+		split   bool
+		tags    int
+		flagged bool
+	}{
+		{"crlf content change shows nothing", []string{"-old\r", "+new\r", " same\r"}, false, 0, false},
+		{"crlf content change in split", []string{"-old\r", "+new\r"}, true, 0, false},
+		{"lf to crlf is tagged", []string{"-same", "+same\r"}, false, 1, false},
+		{"crlf to lf is tagged", []string{"-same\r", "+same"}, false, 1, false},
+		{"lf to crlf in split", []string{"-same", "+same\r"}, true, 1, false},
+		{"mid-line cr is tagged and flags", []string{"+a\rb"}, false, 1, true},
+		{"cr and an edit is not an ending change", []string{"-a\r", "+b"}, false, 0, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			res := crResult(tt.specs...)
+			s := reviewScene{theme: "catppuccin-mocha", w: 200, h: 52, res: res, turn: 4, turns: 4, focused: true}
+			s.tune = func(t *testing.T, a *App, v *reviewView) { v.split = tt.split }
+
+			text := ansi.Strip(s.build(t).View().Content)
+			if got := strings.Count(text, tag); got != tt.tags {
+				t.Errorf("%d CR tags drawn, want %d:\n%s", got, tt.tags, text)
+			}
+
+			if got := fileHidden(res.Files[0]); got != tt.flagged {
+				t.Errorf("fileHidden = %v, want %v", got, tt.flagged)
+			}
+		})
+	}
+}

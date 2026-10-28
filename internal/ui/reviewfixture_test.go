@@ -177,6 +177,7 @@ func hostileResult() git.Result {
 		"+// bidi \u202eevil\u202c",
 		"+x := 1\x1b[31m red\x1b[0m",
 		"+crlf line\r",
+		"+mid\rline",
 		"+c1 \u0085 and \u009b",
 		"-lone \x9b byte and \xff\xfe",
 		"-\x00nul\x07bell\x7f",

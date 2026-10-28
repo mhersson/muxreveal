@@ -71,3 +71,48 @@ func TestCleanTextLongLine(t *testing.T) {
 		t.Errorf("a 1 MiB hostile line: len %d, hidden %v", len(got), hidden)
 	}
 }
+
+func TestCleanLine(t *testing.T) {
+	tests := []struct {
+		name, in, want string
+		hidden         bool
+	}{
+		{"lf line", "text", "text", false},
+		{"crlf line", "text\r", "text", false},
+		{"only the last cr", "text\r\r", "text⟨U+000D⟩", true},
+		{"mid-line cr", "a\rb", "a⟨U+000D⟩b", true},
+		{"cr then other control", "a\x1b\r", "a⟨U+001B⟩", true},
+		{"lone cr line", "\r", "", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, hidden := cleanLine(tt.in)
+			if got != tt.want || hidden != tt.hidden {
+				t.Errorf("cleanLine(%q) = %q, %v; want %q, %v", tt.in, got, hidden, tt.want, tt.hidden)
+			}
+		})
+	}
+}
+
+func TestLineShown(t *testing.T) {
+	tests := []struct {
+		name, raw, other string
+		paired           bool
+		want             string
+	}{
+		{"unpaired crlf", "x\r", "", false, "x"},
+		{"both crlf", "x\r", "x\r", true, "x"},
+		{"only this has the cr", "x\r", "x", true, "x⟨U+000D⟩"},
+		{"only the other has the cr", "x", "x\r", true, "x"},
+		{"content differs", "x\r", "y", true, "x"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := lineShown(tt.raw, tt.other, tt.paired); got != tt.want {
+				t.Errorf("lineShown(%q, %q, %v) = %q, want %q", tt.raw, tt.other, tt.paired, got, tt.want)
+			}
+		})
+	}
+}

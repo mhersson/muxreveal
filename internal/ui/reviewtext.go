@@ -77,3 +77,25 @@ func runeWidth(r rune) int {
 
 	return ansi.StringWidth(string(r))
 }
+
+// cleanLine is cleanText for a line of a file: one CR right before the line
+// end is part of the line ending, so it is dropped and does not count as
+// hidden. A CR anywhere else is tagged.
+func cleanLine(s string) (text string, hidden bool) {
+	return cleanText(strings.TrimSuffix(s, "\r"))
+}
+
+const endingTag = "⟨U+000D⟩"
+
+// lineShown is the text drawn for a line. When the line it is paired with
+// differs only in its ending and this one has the CR, the CR shows as a tag so
+// the change is visible.
+func lineShown(raw, other string, paired bool) string {
+	text, _ := cleanLine(raw)
+
+	if paired && strings.HasSuffix(raw, "\r") && other == strings.TrimSuffix(raw, "\r") {
+		text += endingTag
+	}
+
+	return text
+}

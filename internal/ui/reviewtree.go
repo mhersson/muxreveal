@@ -137,7 +137,7 @@ func fileHidden(f git.FileDiff) bool {
 
 	for _, h := range f.Hunks {
 		for _, l := range h.Lines {
-			if _, hid := cleanText(l.Text); hid {
+			if _, hid := cleanLine(l.Text); hid {
 				return true
 			}
 		}
