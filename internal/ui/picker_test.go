@@ -20,6 +20,7 @@ import (
 
 	"github.com/mhersson/muxreveal/internal/core"
 	"github.com/mhersson/muxreveal/internal/git"
+	"github.com/mhersson/muxreveal/internal/ui/palette"
 )
 
 // pickerApp is an app over fake processes whose first shell starts in cwd,
@@ -1253,6 +1254,109 @@ func TestPickerSizes(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+// hostileTrees are worktrees whose paths and branches carry what a repository
+// can: a hyperlink and a sixel string, a bidi override, line breaks.
+func hostileTrees() []git.Worktree {
+	return []git.Worktree{
+		{Path: "/home/me/code/api", Head: "1111111aaaa", Branch: "main", Main: true},
+		{Path: "/o/x\x1b]8;;https://evil.example\x1b\\y\x1bPq#0;2;0;0;0\x1b\\z", Head: "2222222bbbb", Branch: "e\u202evil"},
+		{Path: "/home/me/code/api/.worktrees/a\nb\rc", Head: "3333333cccc", Branch: "split\u2028line"},
+	}
+}
+
+// Text git supplies reaches the terminal only as plain characters, and every
+// line of the frame keeps its width.
+func TestPickerCleansGitText(t *testing.T) {
+	hostile := errors.New("fatal: \x1b]8;;https://evil.example\x1b\\bad\x1bPq#0\x1b\\ \u202etxt\nsecond line")
+
+	scenes := map[string]func(t *testing.T, a *App){
+		"list": func(*testing.T, *App) {},
+		"filtered": func(t *testing.T, a *App) {
+			// The bidi override is not part of the branch the query matches.
+			typeText(a, "evil")
+
+			if !strings.Contains(viewText(a), "evil") {
+				t.Errorf("no row matches evil:\n%s", viewText(a))
+			}
+		},
+		"error on the page": func(t *testing.T, a *App) {
+			openSampleForm(t, a)
+			a.Update(pickerCreatedMsg{seq: a.picker.open.seq, err: hostile})
+
+			if !strings.Contains(viewText(a), "bad") {
+				t.Errorf("the page does not show the error:\n%s", viewText(a))
+			}
+		},
+	}
+
+	for name, scene := range scenes {
+		t.Run(name, func(t *testing.T) {
+			a, _ := pickerApp(t, "/work")
+			injectPicker(t, a, sampleRepo, hostileTrees())
+			scene(t, a)
+
+			// The picker's own lines, before the frame's splice can clip them.
+			_, _, w, _ := a.pickerBox()
+			p, pt := a.picker.open, palette.NewBox(a.current().theme, w)
+
+			own := a.pickerListLines(p, pt)
+			if p.page == pageNewWorktree {
+				own = a.pickerFormLines(p, pt)
+			}
+
+			for i, l := range own {
+				if strings.ContainsAny(l, "\n\r") || ansi.StringWidth(l) != w {
+					t.Errorf("picker line %d = %q (width %d), want one line of width %d", i, l, ansi.StringWidth(l), w)
+				}
+			}
+
+			content := a.View().Content
+
+			for _, bad := range []string{"\x1b]8;;https", "\x1bP", "\u202e", "\u2028", "\r"} {
+				if strings.Contains(content, bad) || strings.Contains(strings.Join(own, "\n"), bad) {
+					t.Errorf("the picker holds %q", bad)
+				}
+			}
+
+			lines := strings.Split(content, "\n")
+			if len(lines) != 30 {
+				t.Fatalf("view has %d lines, want 30", len(lines))
+			}
+
+			for i, l := range lines {
+				if got := lipgloss.Width(l); got != 100 {
+					t.Errorf("line %d width = %d, want 100", i, got)
+				}
+			}
+		})
+	}
+}
+
+// The shortened path and the reason for a failure are safe to draw wherever
+// they are used.
+func TestPickerTextHelpersCleanTheirOutput(t *testing.T) {
+	const evil = "\x1b]8;;https://evil.example\x1b\\"
+
+	tests := []struct {
+		name string
+		got  string
+		want string
+	}{
+		{"a path outside everything", shortPath("/o/x"+evil+"y", "/main", "/home/me"), "/o/x]8;;https://evil.example\\y"},
+		{"a path inside the main checkout", shortPath("/main/a\nb", "/main", "/home/me"), "ab"},
+		{"a path under home", shortPath("/home/me/a\rb", "/main", "/home/me"), "~/ab"},
+		{"a reason", gitReason(errors.New("git: " + evil + "bad\u202e")), "git: ]8;;https://evil.example\\bad"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.got != tt.want {
+				t.Errorf("got %q, want %q", tt.got, tt.want)
+			}
+		})
 	}
 }
 

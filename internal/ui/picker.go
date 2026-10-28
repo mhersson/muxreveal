@@ -189,7 +189,9 @@ func (a *App) onPickerOpen(msg pickerOpenMsg) tea.Cmd {
 }
 
 // pickerTrees prepares the rows for list, skipping a bare repository's entry,
-// and finds the main checkout their paths are shortened against.
+// and finds the main checkout their paths are shortened against. Branches and
+// paths are repository content, so the rows keep them without control or
+// invisible characters; the fuzzy matches index the cleaned text.
 func pickerTrees(list []git.Worktree, home string) (trees []pickerTree, main string) {
 	for _, w := range list {
 		if w.Main && !w.Bare {
@@ -199,7 +201,7 @@ func pickerTrees(list []git.Worktree, home string) (trees []pickerTree, main str
 
 	for _, w := range list {
 		if !w.Bare {
-			trees = append(trees, pickerTree{wt: w, label: worktreeLabel(w), short: shortPath(w.Path, main, home)})
+			trees = append(trees, pickerTree{wt: w, label: printable(worktreeLabel(w)), short: shortPath(w.Path, main, home)})
 		}
 	}
 
@@ -218,17 +220,17 @@ func worktreeLabel(w git.Worktree) string {
 }
 
 // shortPath is path relative to the main checkout when it lies inside it, else
-// with ~ for the home directory.
+// with ~ for the home directory, without control or invisible characters.
 func shortPath(path, main, home string) string {
 	if rel, ok := within(main, path); ok {
-		return rel
+		return printable(rel)
 	}
 
 	if rel, ok := within(home, path); ok {
-		return "~/" + rel
+		return "~/" + printable(rel)
 	}
 
-	return path
+	return printable(path)
 }
 
 // within is path relative to dir when it lies strictly inside it.
@@ -529,17 +531,17 @@ func worktreeReason(err error) string {
 }
 
 // gitReason is why git failed, on one line: what git printed after its exit
-// status, else the whole message.
+// status, else the whole message, without control or invisible characters.
 func gitReason(err error) string {
 	msg, _, _ := strings.Cut(err.Error(), "\n")
 
 	if i := strings.Index(msg, "exit status "); i >= 0 {
 		if _, reason, ok := strings.Cut(msg[i:], ": "); ok {
-			return reason
+			msg = reason
 		}
 	}
 
-	return msg
+	return printable(msg)
 }
 
 // agentCounts counts the agent panes by the repository root they work in. It
