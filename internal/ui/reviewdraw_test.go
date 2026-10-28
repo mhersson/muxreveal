@@ -646,6 +646,53 @@ func TestDrawerGhostsAndFolds(t *testing.T) {
 	}
 }
 
+func TestDrawerGhostLinesCarryNoNumber(t *testing.T) {
+	s := reviewScene{theme: "catppuccin-mocha", icons: true, w: 200, h: 52, res: turn4Result(), turn: 4, turns: 4, focused: true}
+	s.tune = func(t *testing.T, a *App, v *reviewView) {
+		v.full = map[string]fullText{appGoPath: appGoFull()}
+		v.rebuild(false)
+	}
+
+	lines := strings.Split(ansi.Strip(s.build(t).View().Content), "\n")
+
+	// before is the screen row that holds code, up to where the code starts.
+	before := func(code string) string {
+		t.Helper()
+
+		var found []string
+
+		for _, l := range lines {
+			if i := strings.Index(l, code); i >= 0 {
+				found = append(found, l[:i])
+			}
+		}
+
+		if len(found) != 1 {
+			t.Fatalf("%d screen rows hold %q, want 1:\n%s", len(found), code, strings.Join(lines, "\n"))
+		}
+
+		return found[0]
+	}
+
+	isNumber := func(s string) bool { return s != "" && strings.Trim(s, "0123456789") == "" }
+
+	// The removed line "notice  string" is old line 6; the kept line "rail    rail" is new line 8.
+	ghost, kept := before("notice  string"), before("rail    rail")
+
+	fields := strings.Fields(ghost)
+	if n := len(fields); n < 2 || fields[n-1] != "-" || isNumber(fields[n-2]) {
+		t.Errorf("a ghost row reads %q before its code, want no number before the sign", fields[max(len(fields)-2, 0):])
+	}
+
+	if gw, kw := ansi.StringWidth(ghost), ansi.StringWidth(kept); gw != kw {
+		t.Errorf("a ghost row's code starts at column %d, a kept row's at %d, want them aligned", gw, kw)
+	}
+
+	if fields := strings.Fields(kept); len(fields) == 0 || fields[len(fields)-1] != "8" {
+		t.Errorf("the line after the removed one reads %q before its code, want its new number 8", fields[max(len(fields)-1, 0):])
+	}
+}
+
 func TestDrawerTreeLayout(t *testing.T) {
 	s := reviewScene{theme: "catppuccin-mocha", icons: false, w: 200, h: 52, res: turn4Result(), turn: 4, turns: 4, focused: true}
 	text := ansi.Strip(s.build(t).View().Content)

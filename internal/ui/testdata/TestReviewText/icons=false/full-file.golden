@@ -23,7 +23,7 @@
 │                                                                                                   │                                │   3   // App is the Bubble Tea model.                           │
 │                                                                                                   │                                │   4   type App struct {                                         │
 │                                                                                                   │                                │   5       store   *core.Store                                   │
-│                                                                                                   │                                │▎  6 -     notice  string                                        │
+│                                                                                                   │                                │▎    -     notice  string                                        │
 │                                                                                                   │                                │   6 +     toast   toast                                         │
 │                                                                                                   │                                │   7 +     reviews map[core.PaneID]*review                       │
 │                                                                                                   │                                │   8       rail    rail                                          │

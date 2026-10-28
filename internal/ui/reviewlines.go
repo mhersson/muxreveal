@@ -256,7 +256,8 @@ func (d *drawCtx) ghostGround(cursor, fresh bool) theme.Hex {
 }
 
 // ghostRow is a removed line in the full view: muted text on a faint Error
-// ground, with no syntax colours.
+// ground, with no syntax colours and no line number, as the number column
+// counts the new file only.
 func (d *drawCtx) ghostRow(r reviewRow, cursor, fresh bool) string {
 	ui, lay := d.ui, d.lay
 	g := d.ghostGround(cursor, fresh)
@@ -269,13 +270,10 @@ func (d *drawCtx) ghostRow(r reviewRow, cursor, fresh bool) string {
 	gutter = d.cursorGround(gutter, cursor)
 	text, _ := shownLine(r.text)
 
-	num := strconv.Itoa(r.line + 1)
-	num = strings.Repeat(" ", max(lay.gw-1-len(num), 0)) + num + " "
-
 	var b strings.Builder
 
 	b.WriteString(railPainter{bg: gutter}.line([]railRun{d.markRun(cursor)}, markW))
-	b.WriteString(railPainter{bg: gutter}.line([]railRun{{text: num, fg: ui.Muted}}, lay.gw))
+	b.WriteString(railPainter{bg: gutter}.line(nil, lay.gw))
 	b.WriteString(railPainter{bg: g}.line([]railRun{{text: "- ", fg: ui.Error, bold: true}}, diffview.SignWidth))
 	b.WriteString(railPainter{bg: g}.line(d.matchRuns(text, ui.Muted, false), lay.unifiedCode(1)))
 
