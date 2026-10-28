@@ -569,6 +569,27 @@ func decodeDefault(data []byte) (core.State, Report, error) {
 	return Decode(data, core.LayoutConfig{})
 }
 
+func TestAgentCwdIsNotPersisted(t *testing.T) {
+	st := fixedState()
+	p := st.Panes["p1"]
+	p.AgentCwd = "/home/me/code/api/sub"
+	st.Panes["p1"] = p
+
+	data, err := Encode(st)
+	noErr(t, err)
+
+	if strings.Contains(string(data), "/sub") {
+		t.Errorf("the agent's cwd is written:\n%s", data)
+	}
+
+	got, rep, err := decodeDefault(data)
+	noErr(t, err)
+	eq(t, rep, Report{})
+	eq(t, got.Panes["p1"].AgentCwd, "")
+	eq(t, got.Panes["p1"].Cwd, "/home/me/code/api")
+	eq(t, got, roundTripped())
+}
+
 func TestRailPersistence(t *testing.T) {
 	open := fixedState()
 	open.Rail = true
