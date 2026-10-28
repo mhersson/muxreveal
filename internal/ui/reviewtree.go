@@ -1,0 +1,140 @@
+package ui
+
+import (
+	"maps"
+	"slices"
+	"strconv"
+	"strings"
+
+	"github.com/charmbracelet/x/ansi"
+
+	"github.com/mhersson/muxreveal/internal/git"
+)
+
+const (
+	treeMinWidth = 20
+	treeMaxShare = 35 // percent of the inner width
+)
+
+// treeItem is one row of the file tree. A folder's name is its whole joined
+// path without the trailing slash; names are raw, so drawing cleans them.
+type treeItem struct {
+	dir   bool
+	name  string
+	depth int
+	file  int // index into the result's files; -1 for a folder
+}
+
+type treeNode struct {
+	name  string
+	dirs  map[string]*treeNode
+	files map[string]int
+}
+
+// treeItems lists the files as a tree: folders before files, both by name,
+// with single-folder chains joined into one item.
+func treeItems(files []git.FileDiff) []treeItem {
+	root := &treeNode{dirs: map[string]*treeNode{}, files: map[string]int{}}
+
+	for i, f := range files {
+		parts := slices.DeleteFunc(strings.Split(f.Path, "/"), func(p string) bool { return p == "" })
+		if len(parts) == 0 {
+			continue
+		}
+
+		n := root
+
+		for _, p := range parts[:len(parts)-1] {
+			c := n.dirs[p]
+			if c == nil {
+				c = &treeNode{name: p, dirs: map[string]*treeNode{}, files: map[string]int{}}
+				n.dirs[p] = c
+			}
+
+			n = c
+		}
+
+		n.files[parts[len(parts)-1]] = i
+	}
+
+	return appendTree(nil, root, 0)
+}
+
+func appendTree(out []treeItem, n *treeNode, depth int) []treeItem {
+	for _, name := range slices.Sorted(maps.Keys(n.dirs)) {
+		c := n.dirs[name]
+		joined := c.name
+
+		for len(c.files) == 0 && len(c.dirs) == 1 {
+			for _, only := range c.dirs {
+				c = only
+			}
+
+			joined += "/" + c.name
+		}
+
+		out = append(out, treeItem{dir: true, name: joined, depth: depth, file: -1})
+		out = appendTree(out, c, depth+1)
+	}
+
+	for _, name := range slices.Sorted(maps.Keys(n.files)) {
+		out = append(out, treeItem{name: name, depth: depth, file: n.files[name]})
+	}
+
+	return out
+}
+
+// treeWidth is the width of the widest row, at least 20 columns and, when the
+// inner width allows, at most 35 % of it.
+func treeWidth(items []treeItem, files []git.FileDiff, inner int) int {
+	widest := 0
+
+	for _, it := range items {
+		name, _ := cleanText(it.name)
+		w := it.depth*2 + 2 + ansi.StringWidth(name)
+
+		if it.dir {
+			w++
+		} else {
+			f := files[it.file]
+			w += 2 + len(fileCounts(f))
+
+			if fileHidden(f) {
+				w += 2
+			}
+		}
+
+		widest = max(widest, w)
+	}
+
+	return max(treeMinWidth, min(widest, inner*treeMaxShare/100))
+}
+
+// fileCounts is "+A -R", or "bin" for a binary file.
+func fileCounts(f git.FileDiff) string {
+	if f.Binary {
+		return "bin"
+	}
+
+	return "+" + strconv.Itoa(f.Added) + " -" + strconv.Itoa(f.Removed)
+}
+
+// fileHidden reports whether the file's paths or diff text hold a character
+// cleanText tags.
+func fileHidden(f git.FileDiff) bool {
+	for _, s := range []string{f.Path, f.OldPath} {
+		if _, h := cleanText(s); h {
+			return true
+		}
+	}
+
+	for _, h := range f.Hunks {
+		for _, l := range h.Lines {
+			if _, hid := cleanText(l.Text); hid {
+				return true
+			}
+		}
+	}
+
+	return false
+}

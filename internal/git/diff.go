@@ -5,7 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+
+	"github.com/mhersson/muxreveal/internal/git/linediff"
 )
+
+// maxFileText bounds one side of Engine.FileText.
+const maxFileText = 8 << 20
 
 var (
 	// ErrNoSnapshot means the requested turn has no snapshot.
@@ -14,6 +19,8 @@ var (
 	ErrNoTurns = errors.New("git: session has no turns")
 	// ErrNotFetched means the pull request refs are not in the repository.
 	ErrNotFetched = errors.New("git: pull request refs not fetched")
+	// ErrTooLarge means a file is too large to read whole.
+	ErrTooLarge = errors.New("git: file too large")
 )
 
 // Source selects what Engine.Diff compares.
@@ -362,4 +369,40 @@ func markUntracked(files []FileDiff, untracked []string) {
 	for i := range files {
 		files[i].Untracked = set[files[i].Path]
 	}
+}
+
+// FileText returns the lines of both sides of f, read from the object database.
+// An empty id gives an empty side. A side over 8 MiB gives ErrTooLarge.
+func (e *Engine) FileText(ctx context.Context, worktree string, f FileDiff) (old, nw []string, err error) {
+	if old, err = blobLines(ctx, worktree, f.OldOID); err != nil {
+		return nil, nil, fmt.Errorf("read old side of %s: %w", f.Path, err)
+	}
+
+	if nw, err = blobLines(ctx, worktree, f.NewOID); err != nil {
+		return nil, nil, fmt.Errorf("read new side of %s: %w", f.Path, err)
+	}
+
+	return old, nw, nil
+}
+
+func blobLines(ctx context.Context, worktree, oid string) ([]string, error) {
+	if oid == "" {
+		return nil, nil
+	}
+
+	out, err := run(ctx, call{
+		dir:   worktree,
+		args:  []string{"cat-file", "blob", oid},
+		read:  true,
+		limit: maxFileText,
+	})
+	if errors.Is(err, errLimit) {
+		return nil, ErrTooLarge
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	return linediff.Split(string(out)), nil
 }
