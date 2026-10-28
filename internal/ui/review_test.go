@@ -512,7 +512,8 @@ func TestSessionChangeRetargets(t *testing.T) {
 		t.Errorf("shows %v of %d turns, want x.txt of 1", got, v.turns)
 	}
 
-	// In branch mode a new session only changes what t would show.
+	// In branch mode a new session only changes what t would show: the diff
+	// stays, and the turn count is probed for the new session.
 	r.run(r.setReviewMode(core.ReviewBranch))
 	r.idle(t)
 
@@ -520,9 +521,10 @@ func TestSessionChangeRetargets(t *testing.T) {
 
 	openIn(t, r.App, core.SetAgentSession{ID: id, Session: testSession})
 	r.settle()
+	r.until(t, "the count for the new session", r.viewHolds(func(v *reviewView) bool { return v.turnsFor == string(testSession) && !v.loading }))
 
-	if v := r.view(); v.loading || v.gen != gen || v.session != string(testSession) {
-		t.Errorf("branch mode: loading=%v gen %d -> %d session %q, want no load and the new session", v.loading, gen, v.gen, v.session)
+	if v := r.view(); v.gen != gen || v.session != string(testSession) || v.turns != 3 {
+		t.Errorf("branch mode: gen %d -> %d session %q turns %d, want the diff kept, the new session and its 3 turns", gen, v.gen, v.session, v.turns)
 	}
 
 	r.run(r.setReviewMode(core.ReviewTurn))

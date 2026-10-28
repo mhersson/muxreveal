@@ -59,6 +59,7 @@ type reviewLoadedMsg struct {
 	live     bool       // the answer to a watcher batch, not to a new source
 	infoOnly bool       // only info is new: a past turn learning its turn count
 	src      git.Source // the source shown when it is not the one asked for
+	session  string     // the session info.turns counts the turns of
 	info     reviewInfo
 }
 
@@ -69,11 +70,28 @@ type reviewFullMsg struct {
 	gen  int
 	path string
 	ids  blobIDs
+	read int // the serial of the read that made this answer
 	text fullText
 }
 
 // reviewFlashMsg ends the flash of rows a live update added.
 type reviewFlashMsg struct{ tab core.TabID }
+
+// nextRead hands out the serial of a full-file read.
+func (d *drawerState) nextRead() int {
+	d.reads++
+
+	return d.reads
+}
+
+// adoptTurns takes the turn count a load probed, unless it probed for a session
+// the pane has since left: the count then stays the other session's, which
+// turnsFor says, and a probe for the current session is due.
+func (v *reviewView) adoptTurns(session string, turns int) {
+	if session == v.session {
+		v.turns, v.turnsFor = turns, session
+	}
+}
 
 // nextEpoch hands out an epoch no view has used, so an answer from a view that
 // was replaced never matches its successor.
@@ -184,12 +202,18 @@ func (a *App) reviewSync() tea.Cmd {
 
 	// A turn drawer that showed the branch because its session had no turns
 	// shows the session's latest turn as soon as there is one.
-	if _, isTurn := v.src.(git.TurnSource); rv.Mode == core.ReviewTurn && !isTurn && v.loaded && v.session != "" && v.turns > 0 {
+	if _, isTurn := v.src.(git.TurnSource); rv.Mode == core.ReviewTurn && !isTurn && v.loaded && v.session != "" &&
+		v.turnsFor == v.session && v.turns > 0 {
 		need = true
 	}
 
 	if need {
 		return a.reviewRetarget(tab.ID, v, 0)
+	}
+
+	if v.loaded && v.session != "" && v.turnsFor != v.session {
+		// The count is the previous session's.
+		return a.reviewCount(tab.ID, v)
 	}
 
 	return a.reviewFlush(true, tab.ID, v)
@@ -267,10 +291,14 @@ func (a *App) reviewStart(tab core.TabID, v *reviewView, b *git.Batch, infoOnly 
 	ctx, cancel := context.WithTimeout(a.ctx, reviewLoadTimeout)
 	v.cancel, v.loading = cancel, true
 
+	keep := reviewInfo{project: v.project, branch: v.branch, base: v.base}
+	if v.turnsFor == v.session {
+		keep.turns = v.turns
+	}
+
 	job := reviewJob{
 		tab: tab, epoch: v.epoch, src: v.src, root: v.root, session: v.session, batch: b, infoOnly: infoOnly, prev: v.res,
-		keep: reviewInfo{project: v.project, branch: v.branch, base: v.base, turns: v.turns},
-		eng:  a.engine, log: a.log,
+		keep: keep, eng: a.engine, log: a.log,
 	}
 
 	return func() tea.Msg {
@@ -281,7 +309,7 @@ func (a *App) reviewStart(tab core.TabID, v *reviewView, b *git.Batch, infoOnly 
 }
 
 func (j reviewJob) run(ctx context.Context) reviewLoadedMsg {
-	msg := reviewLoadedMsg{tab: j.tab, gen: j.epoch, live: j.batch != nil, infoOnly: j.infoOnly, info: j.keep}
+	msg := reviewLoadedMsg{tab: j.tab, gen: j.epoch, live: j.batch != nil, infoOnly: j.infoOnly, session: j.session, info: j.keep}
 
 	if j.eng == nil {
 		msg.err = errDiffsOff
@@ -380,6 +408,8 @@ func (j reviewJob) describe(ctx context.Context, info *reviewInfo) {
 	}
 
 	if j.session == "" {
+		info.turns = 0
+
 		return
 	}
 
@@ -408,14 +438,43 @@ func (a *App) onReviewLoaded(msg reviewLoadedMsg) tea.Cmd {
 
 	if msg.infoOnly {
 		in := msg.info
-		v.project, v.branch, v.base, v.turns = in.project, in.branch, in.base, in.turns
+		v.project, v.branch, v.base = in.project, in.branch, in.base
+		v.adoptTurns(msg.session, in.turns)
 
-		return a.reviewFlush(active, msg.tab, v)
+		return tea.Batch(a.reviewResume(active, v), a.reviewFlush(active, msg.tab, v))
 	}
 
 	flash := a.reviewApply(v, msg)
 
-	return tea.Batch(flash, a.reviewFullSync(msg.tab, v), a.reviewFlush(active, msg.tab, v))
+	return tea.Batch(flash, a.reviewFullSync(msg.tab, v), a.reviewResume(active, v), a.reviewFlush(active, msg.tab, v))
+}
+
+// reviewCount refreshes the turn count, which is the previous session's, with
+// a load that skips the diff. A load already running answers first, and the
+// next sync asks again if its count is still not the session's.
+func (a *App) reviewCount(tab core.TabID, v *reviewView) tea.Cmd {
+	if v.loading || v.root == "" {
+		return nil
+	}
+
+	return a.reviewStart(tab, v, nil, true)
+}
+
+// reviewResume runs the turn key that waited for the count, now that the count
+// is the session's. A key pressed in a tab that is no longer shown is dropped.
+func (a *App) reviewResume(active bool, v *reviewView) tea.Cmd {
+	if v.after == nil || v.turnsFor != v.session {
+		return nil
+	}
+
+	resume := v.after
+	v.after = nil
+
+	if !active {
+		return nil
+	}
+
+	return resume()
 }
 
 // reviewApply replaces the view's result. A new source starts at the top with
@@ -426,7 +485,8 @@ func (a *App) reviewApply(v *reviewView, msg reviewLoadedMsg) tea.Cmd {
 	live := msg.live && msg.src == nil && v.loaded && v.err == nil && msg.err == nil
 	prev := v.res
 
-	v.project, v.branch, v.base, v.turns, v.noSnapshot = in.project, in.branch, in.base, in.turns, in.noSnapshot
+	v.project, v.branch, v.base, v.noSnapshot = in.project, in.branch, in.base, in.noSnapshot
+	v.adoptTurns(msg.session, in.turns)
 	v.hiddenIn, v.err, v.loaded = in.hidden, msg.err, true
 
 	if msg.src != nil {

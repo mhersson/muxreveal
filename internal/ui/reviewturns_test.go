@@ -213,3 +213,83 @@ func TestHookEventMarksAHiddenDrawerStale(t *testing.T) {
 		t.Errorf("the first hunk starts at line %d, want 1 (the saved file)", got)
 	}
 }
+
+// A new session makes the turn count the ended session's: the turn keys wait
+// for the new session's count instead of trusting it. With no turns they say
+// so, and core stays in branch mode.
+func TestTurnKeysDoNotTrustTheEndedSessionsCount(t *testing.T) {
+	r := newDrawerRig(t)
+	dir := threeTurnRepo(t)
+	root := rootOf(t, dir)
+	id := r.agent(t, dir, testSession)
+
+	r.open(t, id)
+	r.watching(t, id, root)
+	r.run(r.setReviewMode(core.ReviewBranch))
+
+	if v := r.idle(t); v.turns != 3 {
+		t.Fatalf("setup: %d turns, want the ended session's 3", v.turns)
+	}
+
+	// The /clear order, with the key pressed before anything refreshed the count.
+	r.run(r.step(hookMsg{ev: harness.Event{Pane: id, Name: "SessionEnd", End: true}}))
+	r.run(r.step(hookMsg{ev: harness.Event{Pane: id, Name: "SessionStart", Session: otherSession, Start: true}}))
+
+	r.notice = ""
+	r.run(r.setReviewMode(core.ReviewTurn))
+	r.until(t, "the notice", func() bool { return r.notice != "" })
+
+	if want := "no turns yet"; r.notice != want {
+		t.Errorf("notice = %q, want %q", r.notice, want)
+	}
+
+	if r.coreMode() != core.ReviewBranch {
+		t.Errorf("core mode = %q, want branch kept", r.coreMode())
+	}
+}
+
+// The same wait ends in the switch when the new session has turns.
+func TestTurnKeysSwitchToANewSessionThatHasTurns(t *testing.T) {
+	r := newDrawerRig(t)
+	dir := threeTurnRepo(t)
+	root := rootOf(t, dir)
+	snapshotTurn(t, dir, otherSession)
+	id := r.agent(t, dir, testSession)
+
+	r.open(t, id)
+	r.watching(t, id, root)
+	r.run(r.setReviewMode(core.ReviewBranch))
+	r.idle(t)
+
+	r.run(r.step(hookMsg{ev: harness.Event{Pane: id, Name: "SessionEnd", End: true}}))
+	r.run(r.step(hookMsg{ev: harness.Event{Pane: id, Name: "SessionStart", Session: otherSession, Start: true}}))
+
+	r.notice = ""
+	r.run(r.setReviewMode(core.ReviewTurn))
+	r.until(t, "the new session's turn", r.viewHolds(func(v *reviewView) bool {
+		ts, ok := v.src.(git.TurnSource)
+
+		return ok && ts.Session == string(otherSession) && v.loaded && !v.loading
+	}))
+
+	if r.notice != "" || r.coreMode() != core.ReviewTurn || r.view().turns != 1 {
+		t.Errorf("notice %q core mode %q turns %d, want no notice, turn mode and 1 turn", r.notice, r.coreMode(), r.view().turns)
+	}
+}
+
+// An answer whose probe ran for another session does not set the count.
+func TestAnswerForAnotherSessionDoesNotSetTheCount(t *testing.T) {
+	r := newDrawerRig(t)
+	id := r.agent(t, threeTurnRepo(t), testSession)
+
+	v := r.open(t, id)
+	tab := r.store.State().Tab().ID
+
+	r.run(r.step(hookMsg{ev: harness.Event{Pane: id, Name: "SessionEnd", End: true}}))
+	r.run(r.step(hookMsg{ev: harness.Event{Pane: id, Name: "SessionStart", Session: otherSession, Start: true}}))
+	r.step(reviewLoadedMsg{tab: tab, gen: v.epoch, session: string(testSession), info: reviewInfo{turns: 7}})
+
+	if v.turns == 7 {
+		t.Error("the count of the ended session was adopted for the new one")
+	}
+}

@@ -140,8 +140,11 @@ func (a *App) setReviewMode(mode core.ReviewMode) tea.Cmd {
 	}
 
 	session := paneSession(a.store.State(), tab.Review.Pane)
-	if mode == core.ReviewTurn && a.noTurnsNotice(v, session) {
-		return nil
+
+	if mode == core.ReviewTurn {
+		if ok, wait := a.turnsGate(tab.ID, v, session, func() tea.Cmd { return a.setReviewMode(mode) }); !ok {
+			return wait
+		}
 	}
 
 	if err := a.dispatch(core.SetReviewMode{Mode: mode}); err != nil {
@@ -153,19 +156,25 @@ func (a *App) setReviewMode(mode core.ReviewMode) tea.Cmd {
 	return a.reviewRetarget(tab.ID, v, 0)
 }
 
-// noTurnsNotice shows why a pane cannot show turns, and reports whether it
-// has none: no agent session, or a session whose first turn has not begun.
-func (a *App) noTurnsNotice(v *reviewView, session string) bool {
+// turnsGate decides whether a turn key can go on. A pane with no turns gets
+// the notice that says why. While the count is another session's, which a new
+// session leaves behind, the key waits: the answer of the probe for the new
+// session runs retry again.
+func (a *App) turnsGate(tab core.TabID, v *reviewView, session string, retry func() tea.Cmd) (bool, tea.Cmd) {
 	switch {
 	case session == "":
 		a.notice = noticeNoTurns
+	case v.loaded && v.turnsFor != session:
+		v.after = retry
+
+		return false, a.reviewCount(tab, v)
 	case v.loaded && v.turns == 0:
 		a.notice = noticeNoTurnsYet
 	default:
-		return false
+		return true, nil
 	}
 
-	return true
+	return false, nil
 }
 
 // stepReviewTurn shows the previous (delta -1) or next (1) turn. In branch
@@ -176,8 +185,8 @@ func (a *App) stepReviewTurn(delta int) tea.Cmd {
 		return nil
 	}
 
-	if a.noTurnsNotice(v, paneSession(a.store.State(), tab.Review.Pane)) {
-		return nil
+	if ok, wait := a.turnsGate(tab.ID, v, paneSession(a.store.State(), tab.Review.Pane), func() tea.Cmd { return a.stepReviewTurn(delta) }); !ok {
+		return wait
 	}
 
 	ts, isTurn := v.src.(git.TurnSource)
@@ -279,16 +288,17 @@ func (a *App) reviewFullSync(tab core.TabID, v *reviewView) tea.Cmd {
 			continue
 		}
 
-		if ask, ok := v.fullAsk[path]; ok && ask == ids {
+		if ask, ok := v.fullAsk[path]; ok && ask.ids == ids {
 			continue
 		}
 
 		if v.fullAsk == nil {
-			v.fullAsk = map[string]blobIDs{}
+			v.fullAsk = map[string]fullRead{}
 		}
 
-		v.fullAsk[path] = ids
-		cmds = append(cmds, a.reviewFullCmd(tab, v, f, ids))
+		read := a.drawer.nextRead()
+		v.fullAsk[path] = fullRead{ids: ids, read: read}
+		cmds = append(cmds, a.reviewFullCmd(tab, v, f, ids, read))
 	}
 
 	return tea.Batch(cmds...)
@@ -296,7 +306,7 @@ func (a *App) reviewFullSync(tab core.TabID, v *reviewView) tea.Cmd {
 
 // reviewFullCmd reads both sides of f. The view ends the read when it is
 // replaced, closed or turned away from the file.
-func (a *App) reviewFullCmd(tab core.TabID, v *reviewView, f git.FileDiff, ids blobIDs) tea.Cmd {
+func (a *App) reviewFullCmd(tab core.TabID, v *reviewView, f git.FileDiff, ids blobIDs, read int) tea.Cmd {
 	eng, root, epoch := a.engine, v.root, v.epoch
 
 	ctx, cancel := context.WithTimeout(a.ctx, reviewLoadTimeout)
@@ -316,7 +326,7 @@ func (a *App) reviewFullCmd(tab core.TabID, v *reviewView, f git.FileDiff, ids b
 
 		old, nw, err := eng.FileText(ctx, root, f)
 
-		return reviewFullMsg{tab: tab, gen: epoch, path: f.Path, ids: ids, text: fullText{old: old, new: nw, err: err}}
+		return reviewFullMsg{tab: tab, gen: epoch, path: f.Path, ids: ids, read: read, text: fullText{old: old, new: nw, err: err}}
 	}
 }
 
@@ -329,10 +339,12 @@ func (a *App) onReviewFull(msg reviewFullMsg) tea.Cmd {
 		return nil
 	}
 
-	if ask, ok := v.fullAsk[msg.path]; ok && ask == msg.ids {
-		delete(v.fullAsk, msg.path)
-		delete(v.fullStop, msg.path)
+	if ask, ok := v.fullAsk[msg.path]; !ok || ask.read != msg.read {
+		return nil
 	}
+
+	delete(v.fullAsk, msg.path)
+	delete(v.fullStop, msg.path)
 
 	if !v.fullOn[msg.path] {
 		return nil

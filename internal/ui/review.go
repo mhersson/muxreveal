@@ -5,6 +5,8 @@ import (
 	"math"
 	"time"
 
+	tea "charm.land/bubbletea/v2"
+
 	"github.com/mhersson/muxreveal/internal/core"
 	"github.com/mhersson/muxreveal/internal/git"
 	"github.com/mhersson/muxreveal/internal/ui/diffview"
@@ -30,10 +32,12 @@ type reviewView struct {
 	mode     core.ReviewMode // the mode the view follows, as core holds it
 	src      git.Source
 	root     string
-	session  string // the reviewed agent's session; "" for none
-	loaded   bool   // an answer, a result or an error, has been applied
-	loading  bool   // a load is in flight
-	epoch    int    // names the source in force; every answer carries the one it was asked for
+	session  string         // the reviewed agent's session; "" for none
+	turnsFor string         // the session turns counts; another one until a probe for session answers
+	after    func() tea.Cmd // the turn key waiting for the count
+	loaded   bool           // an answer, a result or an error, has been applied
+	loading  bool           // a load is in flight
+	epoch    int            // names the source in force; every answer carries the one it was asked for
 	cancel   context.CancelFunc
 	queued   *git.Batch // changes seen since the last load started
 	hiddenIn []bool     // per file of res: handed over with it, so derived scans no text
@@ -42,7 +46,7 @@ type reviewView struct {
 	// that full holds, and the blobs being read.
 	fullOn   map[string]bool
 	fullHave map[string]blobIDs
-	fullAsk  map[string]blobIDs
+	fullAsk  map[string]fullRead
 	fullStop map[string]context.CancelFunc // ends the read of a file's text
 
 	res         git.Result
@@ -63,7 +67,7 @@ type reviewView struct {
 	// git.Result does not carry.
 	project, branch string
 	base            string // the base the branch is compared with, resolved
-	turns           int    // how many turns the session has
+	turns           int    // how many turns turnsFor has
 	noSnapshot      bool   // the turn shown has no snapshot
 
 	rowsSplit bool // rows hold side by side pairs
@@ -107,6 +111,7 @@ type drawerState struct {
 	dvFlash       *diffview.Theme // the same on the flash ground
 	cfg           core.DiffConfig // [diff]: the layout and mode a new drawer starts in
 	epochs        int             // the last epoch handed out; unique across views
+	reads         int             // the last full-file read serial handed out
 	tokenised     int             // lines tokenised by the last highlighting pass
 	layouts       int             // layouts computed rather than reused; tests read it
 	scans         int             // searches of the visible rows for chunks to tokenise; tests read it
@@ -292,3 +297,11 @@ func (a *App) drawerKeys(st core.State) bool {
 // blobIDs names the two sides of a file in the object database; a full-file
 // text is current while res still names the same pair for the file.
 type blobIDs struct{ old, new string }
+
+// fullRead is the read of one file's two sides that is under way. Only the
+// answer that carries its serial is applied, so a read that was cancelled and
+// replaced by another of the same blobs cannot stand in for it.
+type fullRead struct {
+	ids  blobIDs
+	read int
+}

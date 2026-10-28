@@ -223,3 +223,36 @@ func TestClosePaneAndMoveReleaseTheDrawersWatch(t *testing.T) {
 		}
 	})
 }
+
+// A read that was cancelled is not applied when a newer read of the same blobs
+// has taken its place, and its answer does not end the newer read.
+func TestCancelledFullReadDoesNotShadowTheNewOne(t *testing.T) {
+	r := newDrawerRig(t)
+	id := r.shell(t, editedRepo(t))
+
+	v := r.open(t, id)
+	v.cursor = rowWith(t, v, "f.txt")
+
+	first := r.toggleReviewFull()
+
+	r.toggleReviewFull()
+
+	second := r.toggleReviewFull()
+
+	// The cancelled read answers first.
+	for _, m := range flatten(first) {
+		r.step(m)
+	}
+
+	if len(v.full) != 0 || v.fullStop["f.txt"] == nil {
+		t.Fatalf("the cancelled read was applied or ended the new one: %d texts, stop %v", len(v.full), v.fullStop["f.txt"] != nil)
+	}
+
+	for _, m := range flatten(second) {
+		r.step(m)
+	}
+
+	if ft, ok := v.full["f.txt"]; !ok || ft.err != nil || len(ft.new) != 60 {
+		t.Errorf("the new read was not applied: %+v", ft)
+	}
+}
