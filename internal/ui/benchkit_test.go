@@ -2,10 +2,15 @@ package ui
 
 import (
 	"context"
+	"fmt"
+	"path"
+	"reflect"
 	"runtime"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/mhersson/muxreveal/internal/core"
 	"github.com/mhersson/muxreveal/internal/term/rec"
@@ -277,6 +282,146 @@ func TestParseBenchRail(t *testing.T) {
 		if err != nil || got != tt.want {
 			t.Errorf("parseBenchRail(%q) = %v, %v; want %v", tt.in, got, err, tt.want)
 		}
+	}
+}
+
+func TestParseBenchReview(t *testing.T) {
+	tests := []struct {
+		in      string
+		want    bool
+		wantErr string
+	}{
+		{in: "", want: false},
+		{in: "0", want: false},
+		{in: "1", want: true},
+		{in: "true", wantErr: "MUXREVEAL_BENCH_REVIEW"},
+		{in: "on", wantErr: "0 or 1"},
+	}
+
+	for _, tt := range tests {
+		got, err := parseBenchReview(tt.in)
+		if tt.wantErr != "" {
+			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+				t.Errorf("parseBenchReview(%q) error = %v, want one naming %q", tt.in, err, tt.wantErr)
+			}
+
+			continue
+		}
+
+		if err != nil || got != tt.want {
+			t.Errorf("parseBenchReview(%q) = %v, %v; want %v", tt.in, got, err, tt.want)
+		}
+	}
+}
+
+func TestBenchAppOpensTheDrawer(t *testing.T) {
+	build := func(t *testing.T, review, rail bool) (*App, []core.PaneID) {
+		t.Helper()
+
+		app, ids, err := newBenchApp(benchConfig{Panes: 6, Width: 240, Height: 64, Agents: true, Rail: rail, Review: review}, &fakeClock{t: time.Unix(1_000_000, 0)})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		t.Cleanup(func() { _ = app.Close(context.Background()) })
+
+		return app, ids
+	}
+
+	if app, _ := build(t, false, false); app.store.State().Tab().Review != nil {
+		t.Error("a drawer is open without the knob")
+	}
+
+	for _, rail := range []bool{false, true} {
+		t.Run(fmt.Sprintf("rail=%v", rail), func(t *testing.T) {
+			app, ids := build(t, true, rail)
+			st := app.store.State()
+
+			rv := st.Tab().Review
+			if rv == nil || rv.Pane != ids[0] || rv.Mode != core.ReviewBranch {
+				t.Fatalf("drawer = %+v, want one open on pane %s in branch mode", rv, ids[0])
+			}
+
+			box, ok := app.drawerFull(st)
+			if body := app.bodyAreaIn(st.Rail); !ok || box.W != body.W-body.W/2 || box.X+box.W != body.X+body.W {
+				t.Errorf("drawer box = %+v (shown %v), want the right half of the body %+v", box, ok, body)
+			}
+
+			if app.railVisible() != rail {
+				t.Errorf("rail visible = %v, want %v", app.railVisible(), rail)
+			}
+
+			v := app.drawer.views[st.Tab().ID]
+			if v == nil || !v.loaded || v.loading || v.err != nil || len(v.res.Files) != benchReviewFiles {
+				t.Fatalf("view = %+v, want a loaded result of %d files", v, benchReviewFiles)
+			}
+
+			if !app.drawerHasKeys() {
+				t.Error("the drawer does not have the keyboard")
+			}
+
+			first := path.Base(v.res.Files[0].Path)
+			if frame := ansi.Strip(app.View().Content); !strings.Contains(frame, first) {
+				t.Errorf("the drawn frame does not show %q", first)
+			}
+		})
+	}
+}
+
+func TestBenchReviewResultsDifferByOneHunk(t *testing.T) {
+	for rev := range 6 {
+		prev, next := benchReviewResult(rev), benchReviewResult(rev+1)
+
+		if len(next.Files) != benchReviewFiles {
+			t.Fatalf("result %d has %d files, want %d", rev+1, len(next.Files), benchReviewFiles)
+		}
+
+		var changed []string
+
+		for i, f := range next.Files {
+			for j, h := range f.Hunks {
+				if !reflect.DeepEqual(h, prev.Files[i].Hunks[j]) {
+					changed = append(changed, fmt.Sprintf("file %d hunk %d", i, j))
+				}
+			}
+		}
+
+		if want := fmt.Sprintf("file 0 hunk %d", rev%benchReviewHunks); len(changed) != 1 || changed[0] != want {
+			t.Errorf("result %d changed %v from the one before, want only %s", rev+1, changed, want)
+		}
+	}
+}
+
+// A run with the drawer draws a frame for every answer the fake engine gives,
+// one each half second of virtual time, while the panes stay silent.
+func TestBenchKitServesReviewAnswers(t *testing.T) {
+	quiet := recs(40, 16,
+		rec.Record{At: ms(100), Data: []byte("x")},
+		rec.Record{At: 4 * time.Second, Data: []byte("y")},
+	)
+	run := func(review bool) benchResult {
+		res, err := runBench(benchConfig{
+			Panes: 1, Recordings: [][]rec.Record{quiet}, Width: 240, Height: 64, Length: 3100 * time.Millisecond, FPS: 60, Review: review,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		return res
+	}
+
+	off, on := run(false), run(true)
+
+	if off.Reviews != 0 || off.Frames.Count != 1 {
+		t.Errorf("without the drawer: %d answers and %d frames, want 0 and 1", off.Reviews, off.Frames.Count)
+	}
+
+	if on.Reviews != 6 {
+		t.Errorf("answers = %d, want 6 (at 0.5 s to 3 s)", on.Reviews)
+	}
+
+	if on.Frames.Count < 1+on.Reviews {
+		t.Errorf("frames = %d, want one for the write and one per answer, at least %d", on.Frames.Count, 1+on.Reviews)
 	}
 }
 

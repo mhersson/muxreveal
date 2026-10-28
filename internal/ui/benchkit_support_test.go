@@ -17,6 +17,7 @@ import (
 	uv "github.com/charmbracelet/ultraviolet"
 
 	"github.com/mhersson/muxreveal/internal/core"
+	"github.com/mhersson/muxreveal/internal/git"
 	"github.com/mhersson/muxreveal/internal/term"
 	"github.com/mhersson/muxreveal/internal/term/rec"
 )
@@ -130,8 +131,10 @@ type benchConfig struct {
 	// Mode is the bench tab's layout mode; "" is bsp.
 	Mode core.LayoutMode
 	// Rail opens the agents rail before the run.
-	Rail  bool
-	Trace func(at time.Duration, drew bool) // tests only; nil in production
+	Rail bool
+	// Review opens the review drawer on the first pane over a 40-file result; a new result arrives every benchReviewEvery.
+	Review bool
+	Trace  func(at time.Duration, drew bool) // tests only; nil in production
 }
 
 // benchScrollingColumnWidth is the column width (percent) that keeps all six
@@ -153,7 +156,13 @@ func parseBenchMode(s string) (core.LayoutMode, error) {
 }
 
 // parseBenchRail maps MUXREVEAL_BENCH_RAIL to whether the rail is open; "" is closed.
-func parseBenchRail(s string) (bool, error) {
+func parseBenchRail(s string) (bool, error) { return parseBenchSwitch("MUXREVEAL_BENCH_RAIL", s) }
+
+// parseBenchReview maps MUXREVEAL_BENCH_REVIEW to whether the drawer is open; "" is closed.
+func parseBenchReview(s string) (bool, error) { return parseBenchSwitch("MUXREVEAL_BENCH_REVIEW", s) }
+
+// parseBenchSwitch reads an on/off knob: "" and "0" are off, "1" is on.
+func parseBenchSwitch(name, s string) (bool, error) {
 	switch s {
 	case "", "0":
 		return false, nil
@@ -161,7 +170,7 @@ func parseBenchRail(s string) (bool, error) {
 		return true, nil
 	}
 
-	return false, fmt.Errorf("MUXREVEAL_BENCH_RAIL %q is not 0 or 1", s)
+	return false, fmt.Errorf("%s %q is not 0 or 1", name, s)
 }
 
 type benchResult struct {
@@ -173,6 +182,7 @@ type benchResult struct {
 	BytesFed              int64
 	Steps                 int
 	Updates               int // pane Update calls in timed steps
+	Reviews               int // results the fake engine served in timed steps
 	GCs                   uint32
 	GCPause               time.Duration
 }
@@ -354,7 +364,117 @@ func newBenchApp(cfg benchConfig, clk clock) (*App, []core.PaneID, error) {
 		app.rail.focused = false
 	}
 
+	if cfg.Review {
+		if err := openBenchDrawer(app, ids[0]); err != nil {
+			_ = app.Close(context.Background())
+
+			return nil, nil, err
+		}
+	}
+
 	return app, ids, nil
+}
+
+const (
+	// benchReviewFiles is the size of the result the fake engine serves.
+	benchReviewFiles = 40
+	// benchReviewHunks is how many hunks each of its files has.
+	benchReviewHunks = 2
+	// benchReviewEvery is the virtual time between two results.
+	benchReviewEvery = 500 * time.Millisecond
+	// benchReviewRoot is the worktree the reviewed pane resolves to.
+	benchReviewRoot = "/bench/repo"
+)
+
+// benchReviewHunk is one hunk of a file of the fake engine's result; seq is the
+// number the hunk's last stamp carries, 0 before it has one.
+func benchReviewHunk(file, hunk, seq int) git.Hunk {
+	start := 10 + hunk*40
+
+	return hunkSpec(start, start, fmt.Sprintf("func (s *Server) handle%d_%d(w http.ResponseWriter, r *http.Request)", file, hunk),
+		" \tctx := r.Context()",
+		" \tlog := s.log.With(\"handler\", \"handle\")",
+		"-\tid := r.URL.Query().Get(\"id\")",
+		"+\tid := mux.Vars(r)[\"id\"]",
+		" \tif id == \"\" {",
+		" \t\thttp.Error(w, \"missing id\", http.StatusBadRequest)",
+		" \t\treturn",
+		" \t}",
+		"-\titem, err := s.store.Get(id)",
+		"+\titem, err := s.store.Get(ctx, id)",
+		fmt.Sprintf("+\tstamp := %d", seq),
+		" \tif err != nil {",
+		" \t\tlog.Error(\"get\", \"id\", id, \"err\", err)",
+		" \t\treturn",
+		" \t}",
+	)
+}
+
+// benchReviewResult is the fake engine's result number rev: 40 files of two
+// hunks. Each result after the first changes one hunk of the first file, the
+// one at the top of the drawer, so every result shows.
+func benchReviewResult(rev int) git.Result {
+	files := make([]git.FileDiff, benchReviewFiles)
+
+	for i := range files {
+		hunks := make([]git.Hunk, benchReviewHunks)
+
+		for j := range hunks {
+			seq := 0
+			if i == 0 && rev-1 >= j {
+				seq = rev - (rev-1-j)%benchReviewHunks
+			}
+
+			hunks[j] = benchReviewHunk(i, j, seq)
+		}
+
+		files[i] = fileSpec(fmt.Sprintf("internal/pkg%02d/file%02d.go", i/4, i), git.Modified, hunks...)
+	}
+
+	return git.Result{Old: "base", New: fmt.Sprintf("tree%d", rev), Live: true, Files: files}
+}
+
+// benchReviewMsg is the answer the engine's goroutine would send for the active
+// tab's load of res; live is an answer to a watcher batch, not to a new source.
+func benchReviewMsg(app *App, res git.Result, live bool) reviewLoadedMsg {
+	tab := app.store.State().Tab().ID
+
+	return reviewLoadedMsg{
+		tab: tab, gen: app.drawer.views[tab].epoch, res: res, live: live,
+		info: reviewInfo{project: "bench", branch: "feat/bench", base: "main", hidden: hiddenFlags(res.Files)},
+	}
+}
+
+// openBenchDrawer opens the drawer on pane in branch mode, with the keyboard,
+// and answers its first load with the fake engine's first result. The app has
+// no engine: an answer is the one message a load ends in, so the sync that
+// starts the load and the apply of its answer run as in the app. The load's
+// command is not run, so its context is ended here.
+func openBenchDrawer(app *App, pane core.PaneID) error {
+	if err := app.dispatch(core.OpenReview{Pane: pane, Mode: core.ReviewBranch}); err != nil {
+		return fmt.Errorf("open the drawer: %w", err)
+	}
+
+	app.watches.panes[pane] = &paneWatch{cwd: app.store.State().Panes[pane].Cwd, want: benchReviewRoot}
+	_ = app.reviewSync()
+	app.drawerTake()
+
+	tab := app.store.State().Tab().ID
+	if v := app.drawer.views[tab]; v == nil || !v.loading {
+		return errors.New("the drawer did not start a load")
+	}
+
+	app.drawer.views[tab].cancel()
+	app.Update(benchReviewMsg(app, benchReviewResult(0), false))
+
+	switch v := app.drawer.views[tab]; {
+	case v.err != nil:
+		return fmt.Errorf("apply the first result: %w", v.err)
+	case !v.loaded:
+		return errors.New("the drawer did not apply the first result")
+	}
+
+	return nil
 }
 
 // selectWholePane selects the pane's whole history and more, so every content
@@ -407,6 +527,8 @@ func runBench(cfg benchConfig) (benchResult, error) {
 
 	feeds := make([]*replayFeed, cfg.Panes)
 	res := benchResult{Panes: cfg.Panes, Width: cfg.Width, Height: cfg.Height}
+	tab := app.store.State().Tab().ID
+	rev := 0
 
 	for i, id := range ids {
 		pn := app.panes[id]
@@ -464,6 +586,15 @@ func runBench(cfg benchConfig) (benchResult, error) {
 		now := t0.Add(at)
 		clk.Set(now)
 
+		// The engine builds its answer off the update loop, so it is built before timing.
+		var answer *reviewLoadedMsg
+
+		if cfg.Review && at/benchReviewEvery > (at-fi)/benchReviewEvery {
+			rev++
+			msg := benchReviewMsg(app, benchReviewResult(rev), true)
+			answer = &msg
+		}
+
 		t := time.Now()
 
 		for i, f := range feeds {
@@ -498,6 +629,22 @@ func runBench(cfg benchConfig) (benchResult, error) {
 			app.spin++
 
 			updates++
+		}
+
+		if answer != nil {
+			app.Update(*answer)
+
+			res.Reviews++
+			updates++
+		}
+
+		// The flash of rows an answer added ends on a tick in the app; a later answer moves its end.
+		if cfg.Review {
+			if v := app.drawer.views[tab]; v != nil && !v.flashUntil.IsZero() && !now.Before(v.flashUntil) {
+				app.Update(reviewFlashMsg{tab: tab})
+
+				updates++
+			}
 		}
 
 		res.Updates += updates
