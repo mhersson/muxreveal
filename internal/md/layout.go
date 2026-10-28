@@ -357,7 +357,7 @@ func concat(a, b Line) Line {
 func lineWidth(line Line) int {
 	w := 0
 	for _, r := range line {
-		w += ansi.StringWidth(r.Text)
+		w += textWidth(r.Text)
 	}
 
 	return w
@@ -373,7 +373,7 @@ func fit(line Line, width int) Line {
 	left := width - 1
 
 	for _, r := range line {
-		w := ansi.StringWidth(r.Text)
+		w := textWidth(r.Text)
 		if w <= left {
 			out = append(out, r)
 			left -= w

@@ -2,9 +2,13 @@ package md
 
 import (
 	"strings"
+	"unicode/utf8"
 
 	"github.com/charmbracelet/x/ansi"
 )
+
+// maxJoin caps the bytes of one cell that spans segs, so each seg boundary costs bounded work.
+const maxJoin = 64
 
 const (
 	cellWord      uint8 = iota // part of a word
@@ -21,6 +25,90 @@ type cell struct {
 	k  uint8
 }
 
+// nextCluster returns the leading grapheme cluster of s and its width in cells.
+// It is the one width measure of the package: wrapping, code blocks and table
+// cells all count cells through it. s must not be empty.
+func nextCluster(s string) (string, int) {
+	if s[0] < 0x80 && (len(s) == 1 || s[1] < 0x80) {
+		return s[:1], 1
+	}
+
+	g, w := ansi.FirstGraphemeCluster(s, ansi.GraphemeWidth)
+	if g == "" {
+		return s[:1], 0
+	}
+
+	return g, w
+}
+
+// textWidth is the width of s in cells, the sum of its clusters' widths.
+func textWidth(s string) int {
+	w := 0
+
+	for s != "" {
+		g, cw := nextCluster(s)
+		w += cw
+		s = s[len(g):]
+	}
+
+	return w
+}
+
+// joinNext extends the cluster g that ends text seg k with the text segs that
+// follow, when a style change fell inside one cluster. The cluster stays one
+// cell in the style of its first byte. It returns the cluster, its width and
+// where the walk resumes: whole segs before skipTo are consumed, and seg skipTo
+// from byte skipBytes on.
+func joinNext(segs []seg, k int, g string, w int) (string, int, int, int) {
+	skipTo, skipBytes := 0, 0
+
+	for j := k + 1; j < len(segs); j++ {
+		nx := segs[j]
+		if nx.img != nil || nx.brk {
+			break
+		}
+
+		if nx.text == "" {
+			skipTo = j + 1
+
+			continue
+		}
+
+		if nx.text[0] < 0x80 {
+			break
+		}
+
+		room := maxJoin - len(g)
+		if room <= 0 {
+			break
+		}
+
+		n := min(len(nx.text), room)
+		for n < len(nx.text) && !utf8.RuneStart(nx.text[n]) {
+			n--
+		}
+
+		ng, nw := nextCluster(g + nx.text[:n])
+
+		used := len(ng) - len(g)
+		if used <= 0 {
+			break
+		}
+
+		g, w = ng, nw
+
+		if used < len(nx.text) {
+			skipTo, skipBytes = j, used
+
+			break
+		}
+
+		skipTo = j + 1
+	}
+
+	return g, w, skipTo, skipBytes
+}
+
 // cellsOf splits segs into cells. Adjacent segs in one style share a styles entry.
 func cellsOf(segs []seg) ([]cell, []style) {
 	n := 0
@@ -33,7 +121,18 @@ func cellsOf(segs []seg) ([]cell, []style) {
 		styles []style
 	)
 
-	for _, sg := range segs {
+	skipTo, skipBytes := 0, 0
+
+	for k, sg := range segs {
+		if k < skipTo {
+			continue
+		}
+
+		text := sg.text
+		if k == skipTo {
+			text, skipBytes = text[skipBytes:], 0
+		}
+
 		if sg.img != nil {
 			continue
 		}
@@ -50,23 +149,15 @@ func cellsOf(segs []seg) ([]cell, []style) {
 
 		si := uint32(len(styles) - 1) //nolint:gosec // one entry per seg, and a Doc is at most 4 MiB
 
-		for s := sg.text; s != ""; {
-			var (
-				g string
-				w int
-			)
+		for s := text; s != ""; {
+			g, w := nextCluster(s)
+			s = s[len(g):]
 
-			if s[0] < 0x80 && (len(s) == 1 || s[1] < 0x80) {
-				g, w = s[:1], 1
-			} else {
-				g, w = ansi.FirstGraphemeCluster(s, ansi.GraphemeWidth)
-				if g == "" {
-					g, w = s[:1], 0
-				}
+			if s == "" {
+				g, w, skipTo, skipBytes = joinNext(segs, k, g, w)
 			}
 
-			s = s[len(g):]
-			c := cell{g: g, w: uint8(min(w, 255)), si: si}
+			c := cell{g: g, w: uint8(min(w, 255)), si: si} //nolint:gosec // non-negative and clamped to 255
 
 			if g == " " {
 				switch sg.sp {

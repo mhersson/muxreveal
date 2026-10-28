@@ -44,7 +44,7 @@ func (l *layouter) codeBlock(out *frag, n *ast.CodeBlock, width int) {
 	label := cleanProse(lang)
 	if maxL := min(maxLangCell, fw-6); label == "" || maxL < 1 {
 		label = ""
-	} else if ansi.StringWidth(label) > maxL {
+	} else if textWidth(label) > maxL {
 		label = ansi.Truncate(label, maxL-1, "") + "…"
 	}
 
@@ -53,7 +53,7 @@ func (l *layouter) codeBlock(out *frag, n *ast.CodeBlock, width int) {
 	if label == "" {
 		top = Line{frame.run("╭" + strings.Repeat("─", fw-2) + "╮")}
 	} else {
-		fill := strings.Repeat("─", fw-5-ansi.StringWidth(label))
+		fill := strings.Repeat("─", fw-5-textWidth(label))
 		top = Line{frame.run("╭─ "), styled(RoleCodeLang).run(label), frame.run(" " + fill + "╮")}
 	}
 
@@ -114,7 +114,7 @@ func spanClasses(line string, spans []Span) []uint8 {
 	return classes
 }
 
-// codeCell is one rune of code laid out: its run and the cells it takes.
+// codeCell is one unit of code laid out: its run and the cells it takes.
 type codeCell struct {
 	run   Run
 	cells int
@@ -122,49 +122,92 @@ type codeCell struct {
 
 // codeCells lays line out in exactly room cells: tabs expanded, hidden
 // characters tagged, padded with spaces, or cut to room-1 cells and a …. It
-// stops reading the line once room is full.
+// walks grapheme clusters and stops reading the line once room is full.
 func codeCells(line string, spans []Span, room int) Line {
 	classes := spanClasses(line, spans)
 	cells := make([]codeCell, 0, min(len(line), room+1))
 	col, cut := 0, false
 
-	for i := 0; i < len(line); {
-		r, size := utf8.DecodeRuneInString(line[i:])
+	// emit adds one unit starting at byte offset at; it reports false when the
+	// unit does not fit.
+	emit := func(at int, text string, cw int, hidden bool) bool {
+		if col+cw > room {
+			return false
+		}
 
 		st := styled(RoleCodeText)
-		if classes != nil {
-			st.class = classes[i]
-		}
-
-		i += size
-
-		var text string
-
-		var cw int
-
-		switch {
-		case r == utf8.RuneError && size == 1:
-			text, cw = "�", 1
-		case r == '\t':
-			cw = tabStop - col%tabStop
-			text = strings.Repeat(" ", cw)
-		case unicode.IsControl(r) || invisible.Rune(r):
-			text = hiddenTag(r)
-			cw = ansi.StringWidth(text)
-			st.role, st.bold, st.class = RoleHidden, true, 0
-		default:
-			text = string(r)
-			cw = ansi.StringWidth(text)
-		}
-
-		if col+cw > room {
-			cut = true
-
-			break
+		if hidden {
+			st.role, st.bold = RoleHidden, true
+		} else if classes != nil {
+			st.class = classes[at]
 		}
 
 		cells = append(cells, codeCell{run: st.run(text), cells: cw})
 		col += cw
+
+		return true
+	}
+
+	for i := 0; i < len(line) && !cut; {
+		g, gw := nextCluster(line[i:])
+		at := i
+		i += len(g)
+
+		if len(g) == 1 && g[0] >= 0x20 && g[0] < 0x7f {
+			cut = !emit(at, g, gw, false)
+
+			continue
+		}
+
+		// Split the cluster around each tagged, expanded or invalid character
+		// and measure the plain pieces on their own; a cluster with none is one unit.
+		start := 0
+
+		for p := 0; p < len(g) && !cut; {
+			r, size := utf8.DecodeRuneInString(g[p:])
+
+			var (
+				text   string
+				hidden bool
+				tab    = r == '\t'
+			)
+
+			switch {
+			case r == utf8.RuneError && size == 1:
+				text = "�"
+			case tab:
+			case unicode.IsControl(r) || invisible.Rune(r):
+				text, hidden = hiddenTag(r), true
+			default:
+				p += size
+
+				continue
+			}
+
+			if p > start {
+				cut = !emit(at+start, g[start:p], textWidth(g[start:p]), false)
+			}
+
+			if tab {
+				text = strings.Repeat(" ", tabStop-col%tabStop)
+			}
+
+			if !cut {
+				cut = !emit(at+p, text, textWidth(text), hidden)
+			}
+
+			p += size
+			start = p
+		}
+
+		if !cut && start < len(g) {
+			w := gw
+			if start > 0 {
+				w = textWidth(g[start:])
+			}
+
+			cut = !emit(at+start, g[start:], w, false)
+		}
 	}
 
 	if cut {
