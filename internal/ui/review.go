@@ -97,6 +97,13 @@ type reviewCache struct {
 	layOK            bool
 	scan             scanKey
 	scanned          bool
+
+	// The drawn lines and what they were drawn from. spansRev counts the chunks
+	// spans gained, as the drawing shows them.
+	drawn    []string
+	drawnKey drawKey
+	drawnOK  bool
+	spansRev int
 }
 
 // drawerState is the drawer's UI state outside the views.
@@ -115,6 +122,7 @@ type drawerState struct {
 	tokenised     int             // lines tokenised by the last highlighting pass
 	layouts       int             // layouts computed rather than reused; tests read it
 	scans         int             // searches of the visible rows for chunks to tokenise; tests read it
+	renders       int             // drawers drawn rather than reused; tests read it
 }
 
 // reviewViewOf returns the tab's view, creating it.

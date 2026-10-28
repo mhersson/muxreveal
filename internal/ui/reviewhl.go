@@ -100,6 +100,7 @@ func (a *App) highlightRows(v *reviewView, lay drawerLayout) (more bool) {
 			budget -= len(lines)
 			a.drawer.tokenised += len(lines)
 			c.spans[ref.key] = a.drawer.hl.Highlight(path, lines)
+			c.spansRev++
 		}
 	}
 

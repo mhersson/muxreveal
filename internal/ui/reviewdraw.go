@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"encoding/binary"
 	"fmt"
 	"image/color"
 	"slices"
@@ -157,13 +158,97 @@ func (a *App) diffThemes(lk look) (*diffview.Theme, *diffview.Theme) {
 	return a.drawer.dv, a.drawer.dvFlash
 }
 
+// drawKey is every input the drawing reads, so drawerLines can keep its lines
+// while the key stays the same. An input the drawing gains needs a field here.
+type drawKey struct {
+	w, h              int // the cells shown, which a slide narrows
+	lay               drawerLayout
+	theme             string
+	ui                theme.UI
+	icons, keys, tree bool
+
+	rowsRev, spansRev    int
+	rowsSplit            bool
+	top, cursor, treeSel int
+	query                string
+	searching            bool
+	fresh                string // the rows in view that flash, while a flash is on
+	src                  git.Source
+	project, branch      string
+	base                 string
+	turns                int
+	resTurn, resThrough  int
+	noSnapshot           bool
+	err                  string
+	hasErr               bool
+}
+
+// key is the drawKey of d drawn into r, for the theme called name.
+func (d *drawCtx) key(r core.Rect, name string) drawKey {
+	v := d.v
+	k := drawKey{
+		w: r.W, h: r.H, lay: d.lay, theme: name, ui: d.ui,
+		icons: d.icons, keys: d.keys, tree: d.tree,
+		rowsRev: v.rowsRev, spansRev: d.c.spansRev, rowsSplit: v.rowsSplit,
+		top: d.top, cursor: v.cursor, treeSel: v.treeSel,
+		query: d.query, searching: v.search != nil,
+		src: v.src, project: v.project, branch: v.branch, base: v.base,
+		turns: v.turns, resTurn: v.res.Turn, resThrough: v.res.Through, noSnapshot: v.noSnapshot,
+	}
+
+	if v.err != nil {
+		k.err, k.hasErr = v.err.Error(), true
+	}
+
+	if len(v.fresh) > 0 && d.now.Before(v.flashUntil) {
+		k.fresh = d.freshInView()
+	}
+
+	return k
+}
+
+// freshInView names the rows in view that flash; a string keeps the key comparable.
+func (d *drawCtx) freshInView() string {
+	var rows []byte
+
+	for i := d.top; i < min(d.top+d.lay.bodyH, len(d.v.rows)); i++ {
+		if d.v.fresh[i] {
+			rows = binary.AppendVarint(rows, int64(i))
+		}
+	}
+
+	return string(rows)
+}
+
 // drawerLines draws the drawer for r, the rect drawerRect returned: r.H lines
 // of r.W cells. While it slides, r is narrower than the drawer and shows its
-// left part.
+// left part. The lines are drawn again only when a drawKey field changed; they
+// are shared with the cache, so callers must not change them.
 func (a *App) drawerLines(st core.State, r core.Rect) []string {
-	box, ok := a.drawerFull(st)
+	d, name, ok := a.drawCtxFor(st)
 	if !ok || r.W <= 0 || r.H <= 0 {
 		return nil
+	}
+
+	key := d.key(r, name)
+	if d.c.drawnOK && d.c.drawnKey == key {
+		return d.c.drawn
+	}
+
+	a.drawer.renders++
+
+	lines := d.lines(r)
+	d.c.drawn, d.c.drawnKey, d.c.drawnOK = lines, key, true
+
+	return lines
+}
+
+// drawCtxFor is what drawing the active tab's drawer needs, and the name of the
+// theme it draws in; ok is false with no drawer to draw.
+func (a *App) drawCtxFor(st core.State) (d *drawCtx, name string, ok bool) {
+	box, ok := a.drawerFull(st)
+	if !ok {
+		return nil, "", false
 	}
 
 	lk := a.current()
@@ -173,7 +258,7 @@ func (a *App) drawerLines(st core.State, r core.Rect) []string {
 		v = &reviewView{}
 	}
 
-	d := &drawCtx{ui: lk.theme.UI, icons: a.icons, v: v, c: v.derived(), now: a.clock.Now(), keys: a.drawer.focused, tree: a.drawer.focused && a.drawer.tree}
+	d = &drawCtx{ui: lk.theme.UI, icons: a.icons, v: v, c: v.derived(), now: a.clock.Now(), keys: a.drawer.focused, tree: a.drawer.focused && a.drawer.tree}
 	d.lay = a.drawerLayoutOf(box, v)
 	d.dv, d.flash = a.diffThemes(lk)
 	d.top = v.viewTop(d.lay.bodyH)
@@ -185,6 +270,11 @@ func (a *App) drawerLines(st core.State, r core.Rect) []string {
 		d.query = v.last
 	}
 
+	return d, lk.theme.Name, true
+}
+
+// lines draws the box into r, r.H lines of r.W cells.
+func (d *drawCtx) lines(r core.Rect) []string {
 	lines := d.render()
 	for i, l := range lines {
 		lines[i] = ansi.Truncate(l, r.W, "")
