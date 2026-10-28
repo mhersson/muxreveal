@@ -58,6 +58,9 @@ type Options struct {
 	// Watches shares one git watcher per worktree among the agent panes in it;
 	// nil means no watches.
 	Watches *git.WatchSet
+	// Diff is the [diff] config: the review drawer's starting layout and mode and
+	// the diff engine's limits. The zero value means the defaults.
+	Diff core.DiffConfig
 	// Save is called with the state after every successful dispatch; nil saves nothing.
 	Save func(core.State)
 }
@@ -105,7 +108,7 @@ type App struct {
 	drawer    drawerState
 	watches   watchState
 	storeVer  uint64        // counts the dispatches the store accepted
-	engine    *git.Engine   // nil when the rail's diff stats are off
+	engine    *git.Engine   // nil when the rail's diff stats and the review drawer's diffs are off
 	probeSem  chan struct{} // its capacity bounds the rail's probes running at once
 	clip      *clipboard
 	sel       *paneSelection // the one selection; survives tab switches
@@ -189,8 +192,13 @@ func New(opts Options) (*App, error) {
 		clip: newClipboard(clipboardConfig{OSC52: !opts.NoOSC52, Native: !opts.NoNativeClipboard}, getenv, runtime.GOOS, opts.Logger),
 	}
 
+	a.drawer.cfg = opts.Diff
+
 	if opts.GitTempDir != "" {
-		a.engine = git.NewEngine(git.EngineOptions{TempDir: opts.GitTempDir, IndexCache: opts.IndexCache})
+		a.engine = git.NewEngine(git.EngineOptions{
+			TempDir: opts.GitTempDir, IndexCache: opts.IndexCache,
+			Limits: git.Limits{Files: opts.Diff.MaxFiles, Bytes: opts.Diff.MaxBytes, Lines: opts.Diff.MaxLines},
+		})
 	}
 
 	if err := a.sync(); err != nil {
@@ -304,6 +312,10 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	a.railAfterUpdate()
 
 	if c := a.watchSync(); c != nil {
+		a.later = append(a.later, c)
+	}
+
+	if c := a.reviewSync(); c != nil {
 		a.later = append(a.later, c)
 	}
 
@@ -442,6 +454,14 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case railFlashMsg:
 		a.onRailFlash(msg)
 	case drawerPaintMsg:
+	case reviewOpenMsg:
+		return a, a.onReviewOpen(msg)
+	case reviewLoadedMsg:
+		return a, a.onReviewLoaded(msg)
+	case reviewFullMsg:
+		return a, a.onReviewFull(msg)
+	case reviewFlashMsg:
+		a.onReviewFlash(msg)
 	case palette.ChosenMsg:
 		return a, a.chosen(msg.ID)
 	case palette.ClosedMsg:

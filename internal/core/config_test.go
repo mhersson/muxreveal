@@ -81,6 +81,17 @@ func TestLoadConfig(t *testing.T) {
 			}(),
 		},
 		{name: "unknown layout key", content: "[layout]\nmaster = 3\n", wantErr: true, errHas: []string{"unknown key layout.master"}},
+		{
+			name: "diff section", content: "[diff]\nlayout = \"split\"\nmode = \"branch\"\nmax_files = 10\n",
+			want: func() Config {
+				c := DefaultConfig()
+				c.Diff.Layout, c.Diff.Mode, c.Diff.MaxFiles = "split", "branch", 10
+
+				return c
+			}(),
+		},
+		{name: "unknown diff key", content: "[diff]\nsplit = true\n", wantErr: true, errHas: []string{"unknown key diff.split"}},
+		{name: "diff wrong type", content: "[diff]\nmax_lines = \"many\"\n", wantErr: true, errHas: []string{"max_lines"}},
 		{name: "layout wrong type", content: "[layout]\nmaster_ratio = \"half\"\n", wantErr: true, errHas: []string{"master_ratio"}},
 		{name: "invalid toml", content: "theme = \"x", wantErr: true, errHas: []string{"line 1"}},
 		{name: "unknown key", content: "them = \"x\"\n", wantErr: true, errHas: []string{"unknown key them"}},
@@ -111,6 +122,11 @@ func TestLoadConfig(t *testing.T) {
 			// A want that leaves Layout empty means the layout defaults.
 			if tt.want.Layout == (LayoutConfig{}) {
 				tt.want.Layout = DefaultConfig().Layout
+			}
+
+			// Likewise for Diff.
+			if tt.want.Diff == (DiffConfig{}) {
+				tt.want.Diff = DefaultConfig().Diff
 			}
 
 			if !tt.wantErr {
@@ -244,5 +260,61 @@ func TestLoadConfigLayoutOutOfRangeFailsValidate(t *testing.T) {
 
 	if err := cfg.Layout.Validate(); err == nil || !strings.Contains(err.Error(), "layout.master_count") {
 		t.Errorf("Validate() = %v, want an error naming layout.master_count", err)
+	}
+}
+
+func TestDiffDefaults(t *testing.T) {
+	got := DefaultConfig().Diff
+
+	want := DiffConfig{Layout: "unified", Mode: "turn", MaxFiles: 400, MaxBytes: 2097152, MaxLines: 5000}
+	if got != want {
+		t.Errorf("default diff = %+v, want %+v", got, want)
+	}
+
+	if err := got.Validate(); err != nil {
+		t.Errorf("default diff: Validate() = %v", err)
+	}
+}
+
+func TestDiffConfigValidate(t *testing.T) {
+	with := func(f func(*DiffConfig)) DiffConfig {
+		c := DefaultConfig().Diff
+		f(&c)
+
+		return c
+	}
+
+	good := []struct {
+		name string
+		c    DiffConfig
+	}{
+		{"split", with(func(c *DiffConfig) { c.Layout = "split" })},
+		{"branch", with(func(c *DiffConfig) { c.Mode = "branch" })},
+		{"smallest limits", with(func(c *DiffConfig) { c.MaxFiles, c.MaxBytes, c.MaxLines = 1, 1, 1 })},
+	}
+	for _, tt := range good {
+		if err := tt.c.Validate(); err != nil {
+			t.Errorf("%s: Validate() = %v", tt.name, err)
+		}
+	}
+
+	bad := []struct {
+		name string
+		c    DiffConfig
+		want string
+	}{
+		{"layout", with(func(c *DiffConfig) { c.Layout = "tiled" }), `diff.layout: "tiled" is not unified or split`},
+		{"empty layout", with(func(c *DiffConfig) { c.Layout = "" }), "diff.layout"},
+		{"mode", with(func(c *DiffConfig) { c.Mode = "last" }), `diff.mode: "last" is not turn or branch`},
+		{"files zero", with(func(c *DiffConfig) { c.MaxFiles = 0 }), "diff.max_files: 0 is not a positive number"},
+		{"files negative", with(func(c *DiffConfig) { c.MaxFiles = -5 }), "diff.max_files: -5"},
+		{"bytes zero", with(func(c *DiffConfig) { c.MaxBytes = 0 }), "diff.max_bytes"},
+		{"lines negative", with(func(c *DiffConfig) { c.MaxLines = -1 }), "diff.max_lines"},
+	}
+	for _, tt := range bad {
+		err := tt.c.Validate()
+		if err == nil || !strings.Contains(err.Error(), tt.want) {
+			t.Errorf("%s: Validate() = %v, want it to contain %q", tt.name, err, tt.want)
+		}
 	}
 }

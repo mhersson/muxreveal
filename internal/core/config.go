@@ -24,6 +24,7 @@ type Config struct {
 	Mouse     Mouse        `toml:"mouse"`
 	Clipboard Clipboard    `toml:"clipboard"`
 	Layout    LayoutConfig `toml:"layout"`
+	Diff      DiffConfig   `toml:"diff"`
 }
 
 // LayoutConfig is the [layout] section. Validate rejects an out-of-range value
@@ -129,6 +130,46 @@ func (c LayoutConfig) columnWidth() float64 {
 	return float64(min(max(orDefault(c.ColumnWidth, 50), minColumnWidth), maxColumnWidth)) / 100
 }
 
+// DiffConfig is the [diff] section. Validate rejects an unknown name or a
+// non-positive limit from a file; the accessors read a zero field as its
+// default so a hand-built DiffConfig behaves as the defaults.
+type DiffConfig struct {
+	Layout   string `toml:"layout"`    // unified | split: the layout a drawer starts in
+	Mode     string `toml:"mode"`      // turn | branch: what a new drawer opens in
+	MaxFiles int    `toml:"max_files"` // the engine's limits
+	MaxBytes int    `toml:"max_bytes"`
+	MaxLines int    `toml:"max_lines"`
+}
+
+// Validate names the first key that is unknown or not positive.
+func (c DiffConfig) Validate() error {
+	if c.Layout != "unified" && c.Layout != "split" {
+		return fmt.Errorf("diff.layout: %q is not unified or split", c.Layout)
+	}
+
+	if c.Mode != string(ReviewTurn) && c.Mode != string(ReviewBranch) {
+		return fmt.Errorf("diff.mode: %q is not turn or branch", c.Mode)
+	}
+
+	for _, l := range []struct {
+		key string
+		n   int
+	}{{"diff.max_files", c.MaxFiles}, {"diff.max_bytes", c.MaxBytes}, {"diff.max_lines", c.MaxLines}} {
+		if l.n <= 0 {
+			return fmt.Errorf("%s: %d is not a positive number", l.key, l.n)
+		}
+	}
+
+	return nil
+}
+
+// Split reports whether a new drawer starts side by side.
+func (c DiffConfig) Split() bool { return c.Layout == "split" }
+
+// BranchFirst reports whether a new drawer opens in branch mode even when the
+// pane has turns.
+func (c DiffConfig) BranchFirst() bool { return c.Mode == string(ReviewBranch) }
+
 // Mouse is the [mouse] section; both switches are off by default.
 type Mouse struct {
 	FocusFollowsMouse bool `toml:"focus_follows_mouse"`
@@ -156,10 +197,14 @@ func (c Config) IconsOn() bool {
 
 // DefaultConfig returns the config used for keys the file does not set.
 func DefaultConfig() Config {
-	return Config{Theme: DefaultTheme, Layout: LayoutConfig{
-		DefaultMode: string(ModeBSP), AutoScheme: "spiral", MasterRatio: 50, MasterPosition: tiling.MasterPositionLeft,
-		MasterCount: 1, MasterGrid: new(true), ColumnWidth: 50,
-	}}
+	return Config{
+		Theme: DefaultTheme,
+		Layout: LayoutConfig{
+			DefaultMode: string(ModeBSP), AutoScheme: "spiral", MasterRatio: 50, MasterPosition: tiling.MasterPositionLeft,
+			MasterCount: 1, MasterGrid: new(true), ColumnWidth: 50,
+		},
+		Diff: DiffConfig{Layout: "unified", Mode: string(ReviewTurn), MaxFiles: 400, MaxBytes: 2 << 20, MaxLines: 5000},
+	}
 }
 
 // LoadConfig reads the config file at path over the defaults. A missing file

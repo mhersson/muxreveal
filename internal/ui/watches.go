@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
-	"strings"
+	"slices"
 	"sync"
 	"time"
 
@@ -45,6 +45,7 @@ type paneWatch struct {
 	root    string // the root release holds a reference on
 	release func()
 	failed  bool // the latest resolution failed; a hook retries it
+	notRepo bool // the latest resolution found no repository
 }
 
 type watchState struct {
@@ -155,26 +156,38 @@ func (w *paneWatch) clear(a *App) {
 	w.release, w.root, w.want = nil, "", ""
 }
 
-// watchSync reconciles the held watches with the agent panes: it starts
-// resolving a pane whose cwd changed and releases those of panes that closed
-// or stopped being agents.
+// watchSync reconciles the held watches with the panes that need one, the
+// agents (while there is a set to hold watches in) and the panes a drawer
+// reviews: it starts resolving a pane whose cwd changed and releases those of
+// panes that closed, stopped being agents or are no longer reviewed.
 func (a *App) watchSync() tea.Cmd {
-	if a.watches.set == nil {
-		return nil
-	}
-
 	st := a.store.State()
+	reviewed := reviewedPanes(st)
+	agents := a.watches.set != nil
 
 	for id, w := range a.watches.panes {
-		if m, ok := st.Panes[id]; !ok || m.Kind != core.KindAgent {
-			w.clear(a)
-			delete(a.watches.panes, id)
+		if m, ok := st.Panes[id]; ok && (reviewed[id] || agents && m.Kind == core.KindAgent) {
+			continue
+		}
+
+		w.clear(a)
+		delete(a.watches.panes, id)
+	}
+
+	var ids []core.PaneID
+	if agents {
+		ids = st.AgentPanes()
+	}
+
+	for id := range reviewed {
+		if !slices.Contains(ids, id) {
+			ids = append(ids, id)
 		}
 	}
 
 	var cmds []tea.Cmd
 
-	for _, id := range st.AgentPanes() {
+	for _, id := range ids {
 		cwd := st.Panes[id].Cwd
 		if cwd == "" {
 			continue
@@ -222,25 +235,25 @@ func (a *App) onPaneRepo(msg paneRepoMsg) tea.Cmd {
 	case errors.Is(msg.err, git.ErrNotRepo), msg.err != nil && msg.gone:
 		w.clear(a)
 
-		w.failed = false
+		w.failed, w.notRepo = false, true
 
 		return nil
 	case msg.err != nil:
 		a.log.Warn("resolve watch repo", "pane", msg.id, "err", msg.err)
 		w.clear(a)
 
-		w.failed = true
+		w.failed, w.notRepo = true, false
 
 		a.noticeOnce("project "+filepath.Base(msg.cwd), filepath.Base(msg.cwd), msg.err)
 
 		return nil
 	}
 
-	w.failed = false
+	w.failed, w.notRepo = false, false
 	delete(a.watches.failed, "project "+filepath.Base(msg.cwd))
 
 	w.want = msg.repo.Root
-	if w.root == msg.repo.Root {
+	if w.root == msg.repo.Root || a.watches.set == nil {
 		return nil
 	}
 
@@ -282,14 +295,7 @@ func (a *App) onWatchAcquired(msg watchAcquiredMsg) {
 func (a *App) noticeWatchFailed(r git.Repo, err error) {
 	a.log.Warn("watch failed", "root", r.Root, "err", err)
 
-	project := filepath.Base(r.Root)
-	if root, merr := r.MainRoot(); merr == nil {
-		project = filepath.Base(root)
-	} else if errors.Is(merr, git.ErrBare) {
-		project = strings.TrimSuffix(filepath.Base(r.CommonDir), ".git")
-	}
-
-	a.noticeOnce("root "+r.Root, project, err)
+	a.noticeOnce("root "+r.Root, repoProject(r), err)
 }
 
 // noticeOnce shows the failure notice unless key was shown before.
@@ -303,13 +309,23 @@ func (a *App) noticeOnce(key, project string, err error) {
 }
 
 // watchRetry makes the next sync resolve a pane whose last resolution failed.
+// With no watch held for the pane, its drawer cannot hear file changes, so the
+// hook event recomputes it.
 func (a *App) watchRetry(id core.PaneID) {
-	if w := a.watches.panes[id]; w != nil && w.failed {
+	w := a.watches.panes[id]
+	if w != nil && w.failed {
 		w.cwd = ""
+	}
+
+	if w == nil || w.root == "" {
+		if c := a.reviewHook(id); c != nil {
+			a.later = append(a.later, c)
+		}
 	}
 }
 
-// onWatch re-probes the rail for every agent in the batch's root.
+// onWatch re-probes the rail for every agent in the batch's root and hands the
+// batch to the drawers that review it.
 func (a *App) onWatch(msg watchMsg) tea.Cmd {
 	if msg.Err != nil {
 		a.log.Debug("watch error", "root", msg.Root, "err", msg.Err)
@@ -345,6 +361,8 @@ func (a *App) onWatch(msg watchMsg) tea.Cmd {
 			cmds = append(cmds, a.railFire(st, id, probeStats))
 		}
 	}
+
+	cmds = append(cmds, a.reviewBatch(msg.Root, b))
 
 	return tea.Batch(cmds...)
 }

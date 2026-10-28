@@ -1,0 +1,1379 @@
+package ui
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
+	"slices"
+	"strings"
+	"testing"
+	"time"
+
+	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
+
+	"github.com/mhersson/muxreveal/internal/core"
+	"github.com/mhersson/muxreveal/internal/git"
+	"github.com/mhersson/muxreveal/internal/harness"
+)
+
+const (
+	testSession  core.SessionID = "11111111-2222-4333-8444-555555555555"
+	otherSession core.SessionID = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+)
+
+// isolateGitEnv points git at an empty global config with a fixed identity.
+func isolateGitEnv(t *testing.T) {
+	t.Helper()
+
+	cfg := filepath.Join(t.TempDir(), "gitconfig")
+	if err := os.WriteFile(cfg, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
+	t.Setenv("GIT_CONFIG_GLOBAL", cfg)
+	t.Setenv("GIT_AUTHOR_NAME", "Test")
+	t.Setenv("GIT_AUTHOR_EMAIL", "test@example.com")
+	t.Setenv("GIT_COMMITTER_NAME", "Test")
+	t.Setenv("GIT_COMMITTER_EMAIL", "test@example.com")
+}
+
+func gitRun(t *testing.T, dir string, args ...string) {
+	t.Helper()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "git", args...)
+	cmd.Dir = dir
+
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git %v: %v\n%s", args, err, out)
+	}
+}
+
+// newRepoDir is an empty repository on main in a temp dir without symlinks.
+func newRepoDir(t *testing.T) string {
+	t.Helper()
+
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not installed")
+	}
+
+	isolateGitEnv(t)
+
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	gitRun(t, dir, "init", "-q", "-b", "main")
+
+	return dir
+}
+
+func putFile(t *testing.T, dir, rel, content string) {
+	t.Helper()
+
+	path := filepath.Join(dir, rel)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func commitEverything(t *testing.T, dir, msg string) {
+	t.Helper()
+	gitRun(t, dir, "add", "-A")
+	gitRun(t, dir, "commit", "-q", "-m", msg)
+}
+
+func numberedLines(prefix string, n int) string {
+	var b strings.Builder
+	for i := 1; i <= n; i++ {
+		fmt.Fprintf(&b, "%s %d\n", prefix, i)
+	}
+
+	return b.String()
+}
+
+func snapshotTurn(t *testing.T, dir string, session core.SessionID) {
+	t.Helper()
+
+	if _, err := git.Snapshot(context.Background(), dir, string(session), git.SnapshotOptions{TempDir: t.TempDir()}); err != nil {
+		t.Fatalf("Snapshot: %v", err)
+	}
+}
+
+func missingTurn(t *testing.T, dir string, session core.SessionID) {
+	t.Helper()
+
+	if _, err := git.MarkMissing(context.Background(), dir, string(session)); err != nil {
+		t.Fatalf("MarkMissing: %v", err)
+	}
+}
+
+// threeTurnRepo has three turns of testSession: turn 1 edits a.txt, turn 2
+// edits b.txt, deletes d.txt and adds an untracked file, and turn 3 edits
+// dir/c.txt and commits.
+func threeTurnRepo(t *testing.T) string {
+	t.Helper()
+
+	dir := newRepoDir(t)
+	putFile(t, dir, "a.txt", "a\n")
+	putFile(t, dir, "b.txt", "b\n")
+	putFile(t, dir, "dir/c.txt", "c\n")
+	commitEverything(t, dir, "init")
+	putFile(t, dir, "d.txt", "d\n")
+	putFile(t, dir, "e.txt", "e\n")
+	commitEverything(t, dir, "more")
+
+	snapshotTurn(t, dir, testSession)
+	putFile(t, dir, "a.txt", "turn one\n")
+
+	snapshotTurn(t, dir, testSession)
+	putFile(t, dir, "b.txt", "turn two\n")
+
+	if err := os.Remove(filepath.Join(dir, "d.txt")); err != nil {
+		t.Fatal(err)
+	}
+
+	putFile(t, dir, "new.txt", "untracked\n")
+
+	snapshotTurn(t, dir, testSession)
+	putFile(t, dir, "dir/c.txt", "turn three\n")
+	commitEverything(t, dir, "agent commit")
+
+	return dir
+}
+
+// editedRepo has f.txt of 60 lines committed on main with lines 5 and 50
+// edited in the working tree: two hunks.
+func editedRepo(t *testing.T) string {
+	t.Helper()
+
+	dir := newRepoDir(t)
+	putFile(t, dir, "f.txt", numberedLines("line", 60))
+	commitEverything(t, dir, "init")
+	putFile(t, dir, "f.txt", editedF(0))
+
+	return dir
+}
+
+// editedF is f.txt with lines 5 and 50 edited, under n inserted lines.
+func editedF(n int) string {
+	var b strings.Builder
+
+	for i := range n {
+		fmt.Fprintf(&b, "inserted %d\n", i+1)
+	}
+
+	for i := 1; i <= 60; i++ {
+		switch i {
+		case 5:
+			b.WriteString("five edited\n")
+		case 50:
+			b.WriteString("fifty edited\n")
+		default:
+			fmt.Fprintf(&b, "line %d\n", i)
+		}
+	}
+
+	return b.String()
+}
+
+// heldTicks records the ticks the app schedules and keeps their messages
+// until a test fires them.
+type heldTicks struct {
+	delays []time.Duration
+	msgs   []tea.Msg
+}
+
+func (h *heldTicks) tick(d time.Duration, fn func(time.Time) tea.Msg) tea.Cmd {
+	h.delays = append(h.delays, d)
+	h.msgs = append(h.msgs, fn(t0))
+
+	return nil
+}
+
+func (h *heldTicks) fire() []tea.Msg {
+	out := h.msgs
+	h.msgs = nil
+
+	return out
+}
+
+func (h *heldTicks) scheduled(d time.Duration) bool { return slices.Contains(h.delays, d) }
+
+// drawerRig is an app with a diff engine and a real watch set. A pump stands
+// in for the Bubble Tea runtime, so loads run off the test's goroutine.
+type drawerRig struct {
+	*App
+	ticks *heldTicks
+	clk   *fakeClock
+	pm    *pump
+	set   *git.WatchSet
+	wait  time.Duration // how long until gives up
+}
+
+func newDrawerRig(t *testing.T, opts ...func(*Options)) *drawerRig {
+	t.Helper()
+
+	return newDrawerRigWatching(t, git.WatchOptions{Debounce: 20 * time.Millisecond}, opts...)
+}
+
+func newDrawerRigWatching(t *testing.T, wo git.WatchOptions, opts ...func(*Options)) *drawerRig {
+	t.Helper()
+	isolateGitEnv(t)
+
+	set := git.NewWatchSet(context.Background(), wo)
+
+	t.Cleanup(func() { _ = set.Close() })
+
+	// The app's wiring: a run directory for temporary indexes and a cache of
+	// refreshed index copies.
+	tmp, cache := t.TempDir(), t.TempDir()
+	set0 := func(o *Options) { o.GitTempDir, o.IndexCache, o.Watches = tmp, cache, set }
+
+	a, _, clk := kindApp(t, append([]func(*Options){set0}, opts...)...)
+	r := &drawerRig{App: a, ticks: &heldTicks{}, clk: clk, pm: newPump(t), set: set, wait: watchWait}
+	a.tick = r.ticks.tick
+
+	// A wide window shows the file tree and its mode row.
+	sized(t, a, 200, 50)
+	r.pm.run(a.waitWatch())
+
+	return r
+}
+
+func (r *drawerRig) step(msg tea.Msg) tea.Cmd {
+	_, cmd := r.Update(msg)
+
+	return cmd
+}
+
+func (r *drawerRig) run(cmd tea.Cmd) { r.pm.run(cmd) }
+
+// settle runs the after-update work for a change made outside Update.
+func (r *drawerRig) settle() { r.run(r.step(struct{}{})) }
+
+// until feeds queued messages to Update until cond holds.
+func (r *drawerRig) until(t *testing.T, what string, cond func() bool) {
+	t.Helper()
+
+	deadline := time.Now().Add(r.wait)
+
+	for !cond() {
+		select {
+		case m := <-r.pm.msgs:
+			r.run(r.step(m))
+		case <-time.After(10 * time.Millisecond):
+			r.settle()
+		}
+
+		if time.Now().After(deadline) {
+			t.Fatalf("timed out waiting for %s", what)
+		}
+	}
+}
+
+func (r *drawerRig) view() *reviewView { return r.drawer.views[r.store.State().Tab().ID] }
+
+// viewHolds is a condition on the active tab's view, false while it has none.
+func (r *drawerRig) viewHolds(cond func(v *reviewView) bool) func() bool {
+	return func() bool {
+		v := r.view()
+
+		return v != nil && cond(v)
+	}
+}
+
+// idle waits until the drawer has a result and no load is in flight.
+func (r *drawerRig) idle(t *testing.T) *reviewView {
+	t.Helper()
+
+	r.until(t, "the drawer to load", func() bool {
+		v := r.view()
+
+		return v != nil && v.loaded && !v.loading
+	})
+
+	return r.view()
+}
+
+func (r *drawerRig) shell(t *testing.T, cwd string) core.PaneID {
+	t.Helper()
+
+	id := r.store.State().NewPaneID()
+	openIn(t, r.App, core.OpenPane{Kind: core.KindShell, Cwd: cwd, Split: core.SplitVertical, Area: r.bodyArea()})
+
+	return id
+}
+
+func (r *drawerRig) agent(t *testing.T, cwd string, session core.SessionID) core.PaneID {
+	t.Helper()
+
+	id := r.store.State().NewPaneID()
+	openIn(t, r.App, core.OpenPane{Kind: core.KindAgent, Cwd: cwd, Split: core.SplitVertical, Harness: "claude-code", Area: r.bodyArea()})
+
+	if session != "" {
+		openIn(t, r.App, core.SetAgentSession{ID: id, Session: session})
+	}
+
+	return id
+}
+
+// open opens the drawer on a pane and waits for its first diff.
+func (r *drawerRig) open(t *testing.T, id core.PaneID) *reviewView {
+	t.Helper()
+
+	r.run(r.openReview(id, true))
+	r.until(t, "the drawer to open", func() bool { return r.store.State().Tab().Review != nil })
+
+	return r.idle(t)
+}
+
+// held reports whether the pane's watch reference is taken.
+func (r *drawerRig) held(id core.PaneID) string {
+	if pw := r.watches.panes[id]; pw != nil {
+		return pw.root
+	}
+
+	return ""
+}
+
+func (r *drawerRig) watched(root string) bool {
+	_, ok := r.set.Seq(root)
+
+	return ok
+}
+
+// watching waits until the pane's worktree is watched.
+func (r *drawerRig) watching(t *testing.T, id core.PaneID, root string) {
+	t.Helper()
+	r.until(t, "the worktree to be watched", func() bool { return r.held(id) == root && r.watched(root) })
+}
+
+// batch hands the app a watcher batch as the set would.
+func (r *drawerRig) batch(root string, b git.Batch) tea.Cmd {
+	return r.onWatch(watchMsg{RootBatch: git.RootBatch{Root: root, Batch: b}})
+}
+
+func rootOf(t *testing.T, dir string) string {
+	t.Helper()
+
+	repo, err := git.Open(context.Background(), dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return repo.Root
+}
+
+// paths are the sorted paths of the diff the view holds.
+func viewPaths(v *reviewView) []string {
+	out := make([]string, 0, len(v.res.Files))
+	for _, f := range v.res.Files {
+		out = append(out, f.Path)
+	}
+
+	slices.Sort(out)
+
+	return out
+}
+
+// drawn is the drawer as text.
+func (r *drawerRig) drawn(t *testing.T) string {
+	t.Helper()
+
+	st := r.store.State()
+
+	rect, ok := r.drawerRect(st)
+	if !ok {
+		t.Fatal("no drawer on screen")
+	}
+
+	return ansi.Strip(strings.Join(r.drawerLines(st, rect), "\n"))
+}
+
+// lineAt is the text of the diff line under row i, "" for other rows.
+func diffLineAt(v *reviewView, i int) string {
+	r := v.rows[i]
+	if r.kind != rowLine && r.kind != rowPair {
+		return ""
+	}
+
+	return v.res.Files[r.file].Hunks[r.hunk].Lines[r.line].Text
+}
+
+func TestDrawerOpensInTurnMode(t *testing.T) {
+	r := newDrawerRig(t)
+	dir := threeTurnRepo(t)
+	id := r.agent(t, dir, testSession)
+
+	v := r.open(t, id)
+	root := rootOf(t, dir)
+
+	if rv := r.store.State().Tab().Review; rv == nil || rv.Pane != id || rv.Mode != core.ReviewTurn {
+		t.Fatalf("Tab.Review = %+v, want turn mode on %s", rv, id)
+	}
+
+	if want := (git.TurnSource{Worktree: root, Session: string(testSession)}); v.src != want {
+		t.Errorf("source = %+v, want %+v", v.src, want)
+	}
+
+	if got := viewPaths(v); !slices.Equal(got, []string{"dir/c.txt"}) || !v.res.Live || v.turns != 3 {
+		t.Errorf("turn mode shows %v live=%v of %d turns, want the last turn's dir/c.txt of 3", got, v.res.Live, v.turns)
+	}
+
+	if v.project != filepath.Base(dir) || v.branch != "main" {
+		t.Errorf("title = %q on %q, want %q on main", v.project, v.branch, filepath.Base(dir))
+	}
+
+	if !r.drawer.focused {
+		t.Error("the opened drawer does not have the keyboard")
+	}
+}
+
+func TestDrawerOpensInBranchForAShell(t *testing.T) {
+	r := newDrawerRig(t)
+	dir := newRepoDir(t)
+	putFile(t, dir, "a.txt", "one\n")
+	commitEverything(t, dir, "init")
+	putFile(t, dir, "a.txt", "one\ntwo\n")
+
+	id := r.shell(t, dir)
+	v := r.open(t, id)
+
+	if rv := r.store.State().Tab().Review; rv == nil || rv.Mode != core.ReviewBranch {
+		t.Fatalf("Tab.Review = %+v, want branch mode", rv)
+	}
+
+	if want := (git.BranchSource{Worktree: rootOf(t, dir)}); v.src != want {
+		t.Errorf("source = %+v, want %+v", v.src, want)
+	}
+
+	if got := viewPaths(v); !slices.Equal(got, []string{"a.txt"}) || v.base != "main" {
+		t.Errorf("branch mode shows %v against %q, want a.txt against main", got, v.base)
+	}
+
+	r.run(r.setReviewMode(core.ReviewTurn))
+
+	if want := "no turns: this pane has no agent session"; r.notice != want {
+		t.Errorf("notice = %q, want %q", r.notice, want)
+	}
+
+	if rv := r.store.State().Tab().Review; rv.Mode != core.ReviewBranch {
+		t.Errorf("mode = %q after t on a shell, want branch", rv.Mode)
+	}
+}
+
+func TestDrawerOpenModeFollowsTurnsAndConfig(t *testing.T) {
+	tests := []struct {
+		name    string
+		session core.SessionID
+		cfg     core.DiffConfig
+		want    core.ReviewMode
+	}{
+		{"an agent with turns", testSession, core.DiffConfig{}, core.ReviewTurn},
+		{"an agent without a session", "", core.DiffConfig{}, core.ReviewBranch},
+		{"a session without turns", otherSession, core.DiffConfig{}, core.ReviewBranch},
+		{"the config asks for branch", testSession, core.DiffConfig{Mode: "branch"}, core.ReviewBranch},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := newDrawerRig(t, func(o *Options) { o.Diff = tt.cfg })
+			id := r.agent(t, threeTurnRepo(t), tt.session)
+
+			r.open(t, id)
+
+			if got := r.store.State().Tab().Review.Mode; got != tt.want {
+				t.Errorf("opened in %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestDrawerNeedsARepository(t *testing.T) {
+	r := newDrawerRig(t)
+	id := r.shell(t, t.TempDir())
+
+	r.run(r.openReview(id, true))
+	r.until(t, "the notice", func() bool { return r.notice != "" })
+
+	if want := "not a git repository"; r.notice != want {
+		t.Errorf("notice = %q, want %q", r.notice, want)
+	}
+
+	if r.store.State().Tab().Review != nil {
+		t.Error("a drawer opened outside a repository")
+	}
+}
+
+// The check at opening is newer than an earlier finding that the cwd is in no
+// repository: a repository made since is found.
+func TestOpenFindsARepositoryMadeAfterTheCwdWasFound(t *testing.T) {
+	r := newDrawerRig(t)
+
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	id := r.agent(t, dir, "")
+	r.settle()
+	r.until(t, "the cwd to be found outside a repository", func() bool { return r.watches.panes[id] != nil && r.watches.panes[id].notRepo })
+
+	gitRun(t, dir, "init", "-q", "-b", "main")
+	putFile(t, dir, "a.txt", "one\n")
+	commitEverything(t, dir, "init")
+	putFile(t, dir, "a.txt", "one\ntwo\n")
+
+	v := r.open(t, id)
+
+	if got := viewPaths(v); !slices.Equal(got, []string{"a.txt"}) || v.err != nil {
+		t.Errorf("shows %v with err %v, want a.txt", got, v.err)
+	}
+}
+
+func TestDrawerWithoutAnEngineShowsTheError(t *testing.T) {
+	r := newDrawerRig(t, func(o *Options) { o.GitTempDir = "" })
+	dir := editedRepo(t)
+
+	v := r.open(t, r.shell(t, dir))
+
+	if v.err == nil || len(v.res.Files) != 0 {
+		t.Fatalf("err = %v with %d files, want the error and no files", v.err, len(v.res.Files))
+	}
+
+	if got := r.drawn(t); !strings.Contains(got, "diffs are off") {
+		t.Errorf("the drawer does not say why it is empty:\n%s", got)
+	}
+}
+
+func TestTurnStepping(t *testing.T) {
+	r := newDrawerRig(t)
+	dir := threeTurnRepo(t)
+	missingTurn(t, dir, testSession)
+
+	id := r.agent(t, dir, testSession)
+	v := r.open(t, id)
+
+	// The latest turn took no snapshot: it reads as such, with its two info rows.
+	if !v.noSnapshot || v.turns != 4 || v.err != nil || len(v.res.Files) != 0 {
+		t.Fatalf("latest: noSnapshot=%v turns=%d err=%v files=%d, want a turn 4 of 4 without a snapshot",
+			v.noSnapshot, v.turns, v.err, len(v.res.Files))
+	}
+
+	got := r.drawn(t)
+	for _, want := range []string{"turn 4 of 4, no snapshot", "turn 4 has no snapshot", ", and . step through the turns; b shows the branch"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("the drawer lacks %q:\n%s", want, got)
+		}
+	}
+
+	step := func(delta, turn int, through int, files ...string) {
+		t.Helper()
+
+		r.run(r.stepReviewTurn(delta))
+		v := r.idle(t)
+
+		if v.res.Turn != turn || v.res.Through != through || !slices.Equal(viewPaths(v), files) {
+			t.Errorf("after stepping %d: turn %d through %d files %v, want turn %d through %d files %v",
+				delta, v.res.Turn, v.res.Through, viewPaths(v), turn, through, files)
+		}
+	}
+
+	step(-1, 3, 4, "dir/c.txt")
+	step(-1, 2, 2, "b.txt", "d.txt", "new.txt")
+	step(-1, 1, 1, "a.txt")
+
+	r.notice = ""
+	r.run(r.stepReviewTurn(-1))
+
+	if want := "turn 1 is the first turn"; r.notice != want {
+		t.Errorf("notice = %q, want %q", r.notice, want)
+	}
+
+	if v := r.view(); v.res.Turn != 1 || v.loading {
+		t.Errorf("the first turn's end reloaded: turn %d loading=%v", v.res.Turn, v.loading)
+	}
+
+	step(1, 2, 2, "b.txt", "d.txt", "new.txt")
+	step(1, 3, 4, "dir/c.txt")
+
+	// The latest turn is the source's turn 0 again, here without a snapshot.
+	r.run(r.stepReviewTurn(1))
+
+	if v := r.idle(t); !v.noSnapshot || v.src.(git.TurnSource).Turn != 0 {
+		t.Errorf("stepping to the latest turn: noSnapshot=%v source %+v", v.noSnapshot, v.src)
+	}
+
+	r.notice = ""
+	r.run(r.stepReviewTurn(1))
+
+	if want := "turn 4 is the latest turn"; r.notice != want {
+		t.Errorf("notice = %q, want %q", r.notice, want)
+	}
+}
+
+func TestStepInBranchModeEntersTurnMode(t *testing.T) {
+	r := newDrawerRig(t, func(o *Options) { o.Diff = core.DiffConfig{Mode: "branch"} })
+	id := r.agent(t, threeTurnRepo(t), testSession)
+
+	r.open(t, id)
+
+	if r.store.State().Tab().Review.Mode != core.ReviewBranch {
+		t.Fatal("setup: the drawer did not open in branch mode")
+	}
+
+	for _, delta := range []int{-1, 1} {
+		r.run(r.setReviewMode(core.ReviewBranch))
+		r.idle(t)
+		r.run(r.stepReviewTurn(delta))
+
+		v := r.idle(t)
+
+		if r.store.State().Tab().Review.Mode != core.ReviewTurn || v.res.Turn != 3 || !slices.Equal(viewPaths(v), []string{"dir/c.txt"}) {
+			t.Errorf("stepping %d from branch mode: mode %q turn %d files %v, want turn mode on the latest turn",
+				delta, r.store.State().Tab().Review.Mode, v.res.Turn, viewPaths(v))
+		}
+	}
+}
+
+func TestTurnModeReturnsToTheLatestTurn(t *testing.T) {
+	r := newDrawerRig(t)
+	id := r.agent(t, threeTurnRepo(t), testSession)
+
+	r.open(t, id)
+	r.run(r.stepReviewTurn(-1))
+
+	if v := r.idle(t); v.res.Turn != 2 {
+		t.Fatalf("setup: turn %d, want 2", v.res.Turn)
+	}
+
+	r.run(r.setReviewMode(core.ReviewTurn))
+
+	if v := r.idle(t); v.res.Turn != 3 || !v.res.Live {
+		t.Errorf("t shows turn %d live=%v, want the live latest turn 3", v.res.Turn, v.res.Live)
+	}
+}
+
+func TestStaleLoadIsDropped(t *testing.T) {
+	r := newDrawerRig(t)
+	id := r.agent(t, threeTurnRepo(t), testSession)
+
+	v := r.open(t, id)
+	tab := r.store.State().Tab().ID
+	before, gen := v.res, v.gen
+
+	// A load whose source was replaced before it answered changes nothing.
+	first := r.setReviewMode(core.ReviewBranch)
+	second := r.setReviewMode(core.ReviewTurn)
+	late := flatten(first)
+
+	for _, m := range late {
+		r.step(m)
+	}
+
+	if v.gen != gen || v.err != nil || len(v.res.Files) != len(before.Files) {
+		t.Fatalf("a superseded load was applied: gen %d -> %d, err %v", gen, v.gen, v.err)
+	}
+
+	if _, ok := v.src.(git.TurnSource); !ok {
+		t.Errorf("source = %T after the superseded load, want the turn source", v.src)
+	}
+
+	for _, m := range flatten(second) {
+		r.step(m)
+	}
+
+	if v.gen == gen {
+		t.Error("the load for the current source was not applied")
+	}
+
+	// Answers that name an older generation are dropped, whatever they hold.
+	gen = v.gen
+	bogus := git.Result{Files: []git.FileDiff{{Path: "bogus.txt", Status: git.Added}}}
+
+	r.step(reviewLoadedMsg{tab: tab, gen: v.epoch - 1, res: bogus})
+	r.step(reviewFullMsg{tab: tab, gen: v.epoch - 1, path: "dir/c.txt", text: fullText{new: []string{"bogus"}}})
+
+	if v.gen != gen || viewPaths(v)[0] == "bogus.txt" || len(v.full) != 0 {
+		t.Errorf("a stale answer was applied: gen %d -> %d, files %v, full %d", gen, v.gen, viewPaths(v), len(v.full))
+	}
+
+	// An answer for a tab that has no drawer is dropped too.
+	r.step(reviewLoadedMsg{tab: "t99", gen: v.epoch, res: bogus})
+
+	if r.drawer.views["t99"] != nil {
+		t.Error("an answer for an unknown tab created a view")
+	}
+}
+
+func TestLiveUpdateKeepsTheHunk(t *testing.T) {
+	r := newDrawerRig(t)
+	dir := editedRepo(t)
+	root := rootOf(t, dir)
+	id := r.shell(t, dir)
+
+	v := r.open(t, id)
+	r.watching(t, id, root)
+
+	if len(v.res.Files) != 1 || len(v.res.Files[0].Hunks) != 2 {
+		t.Fatalf("setup: %d files, want f.txt with two hunks", len(v.res.Files))
+	}
+
+	v.cursor = rowWith(t, v, "fifty edited")
+	gen := v.gen
+
+	lastStart := func() int {
+		if len(v.res.Files) == 0 || len(v.res.Files[0].Hunks) == 0 {
+			return -1
+		}
+
+		hs := v.res.Files[0].Hunks
+
+		return hs[len(hs)-1].NewStart
+	}
+
+	// Three lines above the cursor shift it down; the saved file reaches the drawer by itself.
+	putFile(t, dir, "f.txt", editedF(3))
+	r.until(t, "the saved file to reach the drawer", func() bool { return v.gen > gen && lastStart() == 50 })
+
+	if got := diffLineAt(v, v.cursor); got != "fifty edited" {
+		t.Errorf("the cursor is on %q after the update, want the line it was on", got)
+	}
+
+	row := v.rows[v.cursor]
+
+	if h := v.res.Files[row.file].Hunks[row.hunk]; h.NewStart != 50 {
+		t.Errorf("the cursor is in the hunk at line %d, want the one at line 50", h.NewStart)
+	}
+}
+
+func TestLiveUpdateFlashes(t *testing.T) {
+	r := newDrawerRig(t)
+	dir := editedRepo(t)
+	root := rootOf(t, dir)
+	id := r.shell(t, dir)
+
+	v := r.open(t, id)
+	r.watching(t, id, root)
+
+	if len(v.fresh) != 0 {
+		t.Fatalf("the first load flashes %d rows", len(v.fresh))
+	}
+
+	putFile(t, dir, "f.txt", editedF(0)+"a brand new last line\n")
+	r.run(r.batch(root, git.Batch{Paths: []string{"f.txt"}}))
+	r.until(t, "the flash", func() bool { return len(v.fresh) > 0 })
+
+	// The new line flashes, and so do the context lines the new hunk shows for
+	// the first time; lines that were on screen before do not.
+	flashing := map[string]bool{}
+	for i := range v.fresh {
+		flashing[diffLineAt(v, i)] = true
+	}
+
+	if !flashing["a brand new last line"] || flashing["five edited"] || flashing["fifty edited"] || flashing["line 4"] {
+		t.Errorf("flashing lines %v, want the new line and not the ones shown before", flashing)
+	}
+
+	const flash = 600 * time.Millisecond
+
+	if want := r.clk.Now().Add(flash); !v.flashUntil.Equal(want) || !r.ticks.scheduled(flash) {
+		t.Errorf("flash until %v with ticks %v, want %v and a %v tick", v.flashUntil, r.ticks.delays, want, flash)
+	}
+
+	during := strings.Join(r.drawerLines(r.store.State(), mustRect(t, r)), "\n")
+
+	// A tick that fires early, while a later flash runs, leaves the flash alone.
+	for _, m := range r.ticks.fire() {
+		r.step(m)
+	}
+
+	if len(v.fresh) == 0 {
+		t.Error("a tick before the flash ended cleared it")
+	}
+
+	r.clk.Advance(flash)
+	r.step(reviewFlashMsg{tab: r.store.State().Tab().ID})
+
+	if len(v.fresh) != 0 {
+		t.Errorf("%d rows still flash after the tick", len(v.fresh))
+	}
+
+	if after := strings.Join(r.drawerLines(r.store.State(), mustRect(t, r)), "\n"); after == during {
+		t.Error("the drawer looks the same after the flash ended")
+	}
+}
+
+func mustRect(t *testing.T, r *drawerRig) core.Rect {
+	t.Helper()
+
+	rect, ok := r.drawerRect(r.store.State())
+	if !ok {
+		t.Fatal("no drawer on screen")
+	}
+
+	return rect
+}
+
+func TestHiddenTabDrawerRecomputesWhenShown(t *testing.T) {
+	r := newDrawerRig(t)
+	dir := editedRepo(t)
+	root := rootOf(t, dir)
+	id := r.shell(t, dir)
+
+	v := r.open(t, id)
+	r.watching(t, id, root)
+
+	first := r.store.State().Tab().ID
+
+	openIn(t, r.App, core.NewTab{Kind: core.KindShell, Cwd: t.TempDir()})
+	r.settle()
+
+	gen := v.gen
+
+	putFile(t, dir, "f.txt", editedF(2))
+
+	if cmd := r.batch(root, git.Batch{Paths: []string{"f.txt"}}); cmd != nil {
+		t.Error("a batch for a hidden tab's drawer started work")
+	}
+
+	if v.loading || v.queued == nil || v.gen != gen {
+		t.Fatalf("hidden drawer: loading=%v queued=%v gen %d -> %d, want it marked stale and left alone", v.loading, v.queued, gen, v.gen)
+	}
+
+	openIn(t, r.App, core.SelectTab{Index: 0})
+
+	if got := r.store.State().Tab().ID; got != first {
+		t.Fatalf("active tab = %s, want %s", got, first)
+	}
+
+	r.settle()
+	r.until(t, "the drawer to recompute", func() bool { return v.gen > gen && !v.loading })
+
+	if v.queued != nil || v.res.Files[0].Hunks[0].NewStart != 1 {
+		t.Errorf("after showing: queued=%v first hunk at %d, want the new diff", v.queued, v.res.Files[0].Hunks[0].NewStart)
+	}
+}
+
+func TestSessionChangeRetargets(t *testing.T) {
+	r := newDrawerRig(t)
+	dir := threeTurnRepo(t)
+	snapshotTurn(t, dir, otherSession)
+	putFile(t, dir, "x.txt", "after the other session began\n")
+
+	id := r.agent(t, dir, testSession)
+	v := r.open(t, id)
+
+	// The working tree holds x.txt, which the other session's turn has not seen yet.
+	if v.session != string(testSession) || !slices.Equal(viewPaths(v), []string{"dir/c.txt", "x.txt"}) {
+		t.Fatalf("setup: session %q files %v", v.session, viewPaths(v))
+	}
+
+	openIn(t, r.App, core.SetAgentSession{ID: id, Session: otherSession})
+	r.settle()
+	r.until(t, "the other session's turn", r.viewHolds(func(v *reviewView) bool {
+		return v.session == string(otherSession) && v.loaded && !v.loading
+	}))
+
+	v = r.view()
+	if ts, ok := v.src.(git.TurnSource); !ok || ts.Session != string(otherSession) || ts.Turn != 0 {
+		t.Errorf("source = %+v, want the other session's latest turn", v.src)
+	}
+
+	if got := viewPaths(v); !slices.Equal(got, []string{"x.txt"}) || v.turns != 1 {
+		t.Errorf("shows %v of %d turns, want x.txt of 1", got, v.turns)
+	}
+
+	// In branch mode a new session only changes what t would show.
+	r.run(r.setReviewMode(core.ReviewBranch))
+	r.idle(t)
+
+	gen := r.view().gen
+
+	openIn(t, r.App, core.SetAgentSession{ID: id, Session: testSession})
+	r.settle()
+
+	if v := r.view(); v.loading || v.gen != gen || v.session != string(testSession) {
+		t.Errorf("branch mode: loading=%v gen %d -> %d session %q, want no load and the new session", v.loading, gen, v.gen, v.session)
+	}
+
+	r.run(r.setReviewMode(core.ReviewTurn))
+
+	if v := r.idle(t); !slices.Equal(viewPaths(v), []string{"dir/c.txt", "x.txt"}) {
+		t.Errorf("t shows %v, want the new session's latest turn", viewPaths(v))
+	}
+
+	// A session that ends takes the turns with it: the drawer shows the branch.
+	openIn(t, r.App, core.SetAgentSession{ID: id})
+	r.settle()
+	r.until(t, "the branch", r.viewHolds(func(v *reviewView) bool {
+		_, ok := v.src.(git.BranchSource)
+
+		return ok && !v.loading
+	}))
+
+	if got := r.store.State().Tab().Review.Mode; got != core.ReviewBranch {
+		t.Errorf("mode = %q after the session ended, want branch", got)
+	}
+}
+
+// Batches reach only the drawers that review their root, and a past turn,
+// which does not change with the files, ignores them.
+func TestBatchesRouteToTheirRootAndSkipPastTurns(t *testing.T) {
+	r := newDrawerRig(t)
+	dir := threeTurnRepo(t)
+	root := rootOf(t, dir)
+	id := r.agent(t, dir, testSession)
+
+	v := r.open(t, id)
+
+	if cmd := r.batch(filepath.Join(root, "elsewhere"), git.Batch{Overflow: true}); cmd != nil || v.queued != nil || v.loading {
+		t.Fatalf("a batch for another root reached the drawer: queued=%v loading=%v", v.queued, v.loading)
+	}
+
+	r.run(r.stepReviewTurn(-1))
+	r.idle(t)
+
+	if v.res.Live {
+		t.Fatal("setup: a past turn is live")
+	}
+
+	if cmd := r.batch(root, git.Batch{Paths: []string{"a.txt"}}); cmd != nil || v.loading || v.queued != nil {
+		t.Errorf("a batch recomputed a past turn: loading=%v queued=%v", v.loading, v.queued)
+	}
+}
+
+// A drawer opened without the keyboard leaves it where it is.
+func TestOpenWithoutTheKeyboard(t *testing.T) {
+	r := newDrawerRig(t)
+	id := r.shell(t, editedRepo(t))
+
+	r.run(r.openReview(id, false))
+	r.until(t, "the drawer to open", func() bool { return r.store.State().Tab().Review != nil })
+
+	if r.drawer.focused {
+		t.Error("the drawer took the keyboard")
+	}
+}
+
+// With no watch held a hook event stands in for the file changes.
+func TestHookEventRecomputesAnUnwatchedDrawer(t *testing.T) {
+	r := newDrawerRig(t, func(o *Options) { o.Watches = nil })
+	dir := editedRepo(t)
+	id := r.agent(t, dir, "")
+
+	v := r.open(t, id)
+	gen := v.gen
+
+	if got := r.held(id); got != "" {
+		t.Fatalf("setup: the pane holds a watch on %q", got)
+	}
+
+	putFile(t, dir, "f.txt", editedF(2))
+	r.run(r.step(hookMsg{ev: harness.Event{Pane: id, Name: "Stop", State: core.AgentIdle}}))
+	r.until(t, "the drawer to recompute", func() bool { return v.gen > gen && !v.loading })
+
+	if got := v.res.Files[0].Hunks[0].NewStart; got != 1 {
+		t.Errorf("the first hunk starts at line %d, want 1 (the saved file)", got)
+	}
+}
+
+func TestBranchSwitchRecomputes(t *testing.T) {
+	r := newDrawerRig(t)
+	dir := newRepoDir(t)
+	putFile(t, dir, "base.txt", "base\n")
+	commitEverything(t, dir, "init")
+	gitRun(t, dir, "checkout", "-q", "-b", "feature")
+	putFile(t, dir, "feat.txt", "feature\n")
+	commitEverything(t, dir, "feature work")
+
+	root := rootOf(t, dir)
+	id := r.shell(t, dir)
+	v := r.open(t, id)
+
+	if !slices.Equal(viewPaths(v), []string{"feat.txt"}) || v.branch != "feature" {
+		t.Fatalf("setup: %v on %q, want feat.txt on feature", viewPaths(v), v.branch)
+	}
+
+	switchTo := func(branch string, want ...string) {
+		t.Helper()
+
+		gitRun(t, dir, "checkout", "-q", branch)
+
+		gen := r.view().gen
+		r.run(r.batch(root, git.Batch{Git: true}))
+		r.until(t, "the new branch's diff", func() bool { return r.view().gen > gen && !r.view().loading })
+
+		if v := r.view(); !slices.Equal(viewPaths(v), want) || v.branch != branch {
+			t.Errorf("on %s: %v titled %q, want %v", branch, viewPaths(v), v.branch, want)
+		}
+	}
+
+	switchTo("main")
+	switchTo("feature", "feat.txt")
+}
+
+func TestPaneCwdChangeRetargetsTheDrawer(t *testing.T) {
+	r := newDrawerRig(t)
+	a, b := editedRepo(t), newRepoDir(t)
+	putFile(t, b, "base.txt", "base\n")
+	commitEverything(t, b, "init")
+	putFile(t, b, "only-in-b.txt", "b\n")
+
+	rootA, rootB := rootOf(t, a), rootOf(t, b)
+	id := r.shell(t, a)
+
+	r.open(t, id)
+	r.watching(t, id, rootA)
+
+	openIn(t, r.App, core.SetPaneCwd{ID: id, Cwd: b})
+	r.settle()
+	r.until(t, "the drawer to show b", r.viewHolds(func(v *reviewView) bool { return v.root == rootB && v.loaded && !v.loading }))
+
+	v := r.view()
+	if v.project != filepath.Base(b) || !slices.Equal(viewPaths(v), []string{"only-in-b.txt"}) {
+		t.Errorf("shows %v of %q, want only-in-b.txt of %q", viewPaths(v), v.project, filepath.Base(b))
+	}
+
+	r.until(t, "the watch to move", func() bool { return r.held(id) == rootB && !r.watched(rootA) })
+
+	// Outside any repository the drawer says so and keeps nothing.
+	openIn(t, r.App, core.SetPaneCwd{ID: id, Cwd: t.TempDir()})
+	r.settle()
+	r.until(t, "the drawer to notice", r.viewHolds(func(v *reviewView) bool { return v.root == "" && v.err != nil }))
+
+	if v := r.view(); len(v.res.Files) != 0 || !strings.Contains(v.err.Error(), "not a git repository") {
+		t.Errorf("outside a repository: %d files, err %v", len(v.res.Files), v.err)
+	}
+}
+
+func TestWorktreeDeletedShowsTheError(t *testing.T) {
+	r := newDrawerRig(t)
+	dir := editedRepo(t)
+	root := rootOf(t, dir)
+
+	v := r.open(t, r.shell(t, dir))
+
+	if len(v.res.Files) == 0 {
+		t.Fatal("setup: nothing to show")
+	}
+
+	if err := os.RemoveAll(dir); err != nil {
+		t.Fatal(err)
+	}
+
+	r.run(r.batch(root, git.Batch{Overflow: true}))
+	r.until(t, "the error", func() bool { return v.err != nil && !v.loading })
+
+	if len(v.res.Files) != 0 || len(v.rows) != 0 {
+		t.Errorf("a deleted worktree still shows %d files and %d rows", len(v.res.Files), len(v.rows))
+	}
+
+	if got := r.drawn(t); !strings.Contains(got, "open ") {
+		t.Errorf("the drawer does not show the error %q:\n%s", v.err, got)
+	}
+}
+
+func TestFullFileLoadsOnF(t *testing.T) {
+	r := newDrawerRig(t)
+	dir := editedRepo(t)
+	putFile(t, dir, "blob.bin", "a\x00b\x00")
+	root := rootOf(t, dir)
+	id := r.shell(t, dir)
+
+	v := r.open(t, id)
+	r.watching(t, id, root)
+
+	v.cursor = rowWith(t, v, "f.txt")
+	gen := v.gen
+
+	r.run(r.toggleReviewFull())
+	r.until(t, "the full text", func() bool { return len(v.full) == 1 })
+
+	ft := v.full["f.txt"]
+	if len(ft.new) != 60 || len(ft.old) != 60 || ft.err != nil || v.gen <= gen {
+		t.Fatalf("full text: %d new, %d old lines, err %v, gen %d -> %d, want 60 and 60 and a new generation", len(ft.new), len(ft.old), ft.err, gen, v.gen)
+	}
+
+	if n := countRows(v, rowFull); n < 60 {
+		t.Errorf("%d full rows, want the 60 lines of the new file", n)
+	}
+
+	// A save while the file is shown whole reloads its text.
+	gen = v.gen
+
+	putFile(t, dir, "f.txt", editedF(2))
+	r.until(t, "the full text to follow", func() bool { return v.gen > gen && len(v.full["f.txt"].new) == 62 })
+
+	// f toggles it off again, and the other file has no full view.
+	v.cursor = rowWith(t, v, "f.txt")
+
+	r.run(r.toggleReviewFull())
+
+	if len(v.full) != 0 || countRows(v, rowFull) != 0 {
+		t.Errorf("f did not turn the full view off: %d texts, %d rows", len(v.full), countRows(v, rowFull))
+	}
+
+	v.cursor = rowWith(t, v, "blob.bin")
+	r.notice = ""
+
+	r.run(r.toggleReviewFull())
+
+	if want := "a binary file has no full view"; r.notice != want {
+		t.Errorf("notice = %q, want %q", r.notice, want)
+	}
+}
+
+func countRows(v *reviewView, kind reviewRowKind) int {
+	n := 0
+
+	for _, row := range v.rows {
+		if row.kind == kind {
+			n++
+		}
+	}
+
+	return n
+}
+
+func TestRestoredDrawerLoadsWhenItsTabShows(t *testing.T) {
+	r := newDrawerRig(t)
+	dir := editedRepo(t)
+	id := r.shell(t, dir)
+
+	// A restored state has the drawer open and no view.
+	openIn(t, r.App, core.OpenReview{Pane: id, Mode: core.ReviewBranch})
+	r.settle()
+	r.idle(t)
+
+	if r.drawer.focused {
+		t.Error("a restored drawer took the keyboard")
+	}
+
+	first := r.store.State().Tab().ID
+	openIn(t, r.App, core.NewTab{Kind: core.KindShell, Cwd: t.TempDir()})
+
+	delete(r.drawer.views, first)
+	r.settle()
+
+	if len(r.drawer.views) != 0 {
+		t.Fatalf("a hidden tab's drawer was loaded: %d views", len(r.drawer.views))
+	}
+
+	openIn(t, r.App, core.SelectTab{Index: 0})
+	r.settle()
+
+	if v := r.idle(t); !slices.Equal(viewPaths(v), []string{"f.txt"}) {
+		t.Errorf("the restored drawer shows %v, want f.txt", viewPaths(v))
+	}
+}
+
+// A restored drawer whose pane is no longer in a repository says so.
+func TestRestoredDrawerOutsideARepositoryShowsTheError(t *testing.T) {
+	r := newDrawerRig(t)
+	id := r.shell(t, t.TempDir())
+
+	openIn(t, r.App, core.OpenReview{Pane: id, Mode: core.ReviewBranch})
+	r.settle()
+	r.until(t, "the error", r.viewHolds(func(v *reviewView) bool { return v.err != nil }))
+
+	if v := r.view(); !errors.Is(v.err, errNotRepo) || !v.loaded || len(v.rows) != 0 {
+		t.Errorf("err = %v loaded = %v rows = %d, want the not-a-repository error and no rows", v.err, v.loaded, len(v.rows))
+	}
+
+	if got := r.drawn(t); !strings.Contains(got, "not a git repository") {
+		t.Errorf("the drawer does not say why it is empty:\n%s", got)
+	}
+}
+
+func TestDrawerHoldsAWatchForAShell(t *testing.T) {
+	r := newDrawerRig(t)
+	dir := editedRepo(t)
+	root := rootOf(t, dir)
+	id := r.shell(t, dir)
+
+	r.open(t, id)
+	r.watching(t, id, root)
+
+	openIn(t, r.App, core.CloseReview{})
+	r.settle()
+	r.until(t, "the watch to be released", func() bool { return !r.watched(root) })
+
+	if len(r.drawer.views) != 0 || r.watches.panes[id] != nil {
+		t.Errorf("closing the drawer left %d views and a watch entry %v", len(r.drawer.views), r.watches.panes[id])
+	}
+}
+
+func TestEngineLimitsAndLayoutFollowTheConfig(t *testing.T) {
+	dir := newRepoDir(t)
+	putFile(t, dir, "a.txt", "a\n")
+	putFile(t, dir, "b.txt", "b\n")
+	commitEverything(t, dir, "init")
+	putFile(t, dir, "a.txt", "a2\n")
+	putFile(t, dir, "b.txt", "b2\n")
+
+	t.Run("defaults", func(t *testing.T) {
+		r := newDrawerRig(t)
+		v := r.open(t, r.shell(t, dir))
+
+		if v.res.Truncated || v.split {
+			t.Errorf("truncated=%v split=%v with the defaults, want neither", v.res.Truncated, v.split)
+		}
+	})
+
+	t.Run("configured", func(t *testing.T) {
+		r := newDrawerRig(t, func(o *Options) {
+			o.Diff = core.DiffConfig{Layout: "split", MaxFiles: 1}
+		})
+		v := r.open(t, r.shell(t, dir))
+
+		if !v.res.Truncated || !v.split {
+			t.Errorf("truncated=%v split=%v with max_files 1 and layout split, want both", v.res.Truncated, v.split)
+		}
+	})
+}
+
+func TestAppCloseNoLeaksWithADrawer(t *testing.T) {
+	base := runtime.NumGoroutine()
+	r := newDrawerRig(t)
+	dir := editedRepo(t)
+	root := rootOf(t, dir)
+	id := r.shell(t, dir)
+
+	r.open(t, id)
+	r.watching(t, id, root)
+
+	// A load is in flight when the app closes.
+	putFile(t, dir, "f.txt", editedF(1))
+	r.run(r.batch(root, git.Batch{Paths: []string{"f.txt"}}))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := r.Close(ctx); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+
+	if err := r.set.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	eventually2(t, 2*time.Second, "goroutines to return to baseline", func() bool { return runtime.NumGoroutine() <= base })
+}
+
+// quiet feeds messages until nothing arrives for d and no load is pending.
+func (r *drawerRig) quiet(t *testing.T, d time.Duration) {
+	t.Helper()
+
+	deadline := time.Now().Add(r.wait)
+
+	for {
+		select {
+		case m := <-r.pm.msgs:
+			r.run(r.step(m))
+		case <-time.After(d):
+			if v := r.view(); !v.loading && v.queued == nil {
+				return
+			}
+		}
+
+		if time.Now().After(deadline) {
+			t.Fatal("the drawer never went quiet")
+		}
+	}
+}
+
+func hunkHolds(v *reviewView, path, text string) bool {
+	for _, f := range v.res.Files {
+		if f.Path != path {
+			continue
+		}
+
+		for _, h := range f.Hunks {
+			for _, l := range h.Lines {
+				if l.Kind == git.Add && l.Text == text {
+					return true
+				}
+			}
+		}
+	}
+
+	return false
+}
+
+// A file saved in a big repository reaches the open drawer within 300 ms at
+// the median. The watcher has its default debounce, as in the app.
+func TestReviewSaveToPane(t *testing.T) {
+	const (
+		files   = 2000
+		saves   = 20
+		ceiling = 300 * time.Millisecond
+	)
+
+	r := newDrawerRigWatching(t, git.WatchOptions{})
+	r.wait = 60 * time.Second
+
+	dir := newRepoDir(t)
+	for i := range files {
+		putFile(t, dir, fmt.Sprintf("d%02d/f%04d.txt", i%50, i), numberedLines("line", 20))
+	}
+
+	commitEverything(t, dir, "base")
+	gitRun(t, dir, "checkout", "-q", "-b", "feature")
+
+	// Files written in the same second as the index are racily clean: git must
+	// hash them again until the index is written once the second has passed.
+	time.Sleep(1500 * time.Millisecond)
+	gitRun(t, dir, "status", "--porcelain")
+
+	root := rootOf(t, dir)
+	id := r.shell(t, dir)
+
+	v := r.open(t, id)
+	r.watching(t, id, root)
+	r.quiet(t, 400*time.Millisecond)
+
+	if len(v.res.Files) != 0 {
+		t.Fatalf("setup: %d changed files", len(v.res.Files))
+	}
+
+	took := make([]time.Duration, 0, saves)
+
+	for i := range saves {
+		n := (i*97 + 13) % files
+		rel := fmt.Sprintf("d%02d/f%04d.txt", n%50, n)
+		text := fmt.Sprintf("saved %d", i)
+
+		r.quiet(t, 250*time.Millisecond)
+
+		start := time.Now()
+
+		putFile(t, dir, rel, text+"\n")
+		r.until(t, "save "+rel+" to reach the drawer", func() bool { return hunkHolds(v, rel, text) })
+
+		took = append(took, time.Since(start))
+	}
+
+	slices.Sort(took)
+
+	median, p95 := took[len(took)/2], took[len(took)*95/100]
+	t.Logf("save to pane over %d saves: median %v, p95 %v, max %v", saves, median, p95, took[len(took)-1])
+
+	if median > ceiling {
+		t.Errorf("median save to pane is %v, want at most %v (p95 %v)", median, ceiling, p95)
+	}
+}

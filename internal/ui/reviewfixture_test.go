@@ -307,7 +307,11 @@ func (s reviewScene) build(t *testing.T) *App {
 	}
 	attachPanes(t, a, texts)
 
+	// The drawer's pane is resolved to its root, as the watch bookkeeping leaves it.
+	a.watches.panes["p1"] = &paneWatch{cwd: "/w/p1", want: "/w/p1"}
+
 	v := a.reviewViewOf(a.store.State().Tab().ID)
+	v.pane, v.mode, v.loaded = "p1", mode, true
 	v.root, v.project, v.branch = "/w/p1", "muxreveal", "feat/review-pane"
 	v.res, v.gen, v.turns, v.noSnapshot = s.res, 1, s.turns, s.noSnap
 
