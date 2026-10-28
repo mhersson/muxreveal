@@ -41,7 +41,7 @@ type reviewView struct {
 	cancel   context.CancelFunc
 	queued   *git.Batch                     // changes seen since the last load started
 	hiddenIn []bool                         // per file of res: handed over with it, so derived scans no text
-	carry    map[chunkSum][][]diffview.Span // the last live result's spans by chunk text, for this one to take
+	carry    map[chunkSum][][]diffview.Span // the last generation's spans by chunk text, for the next to take
 
 	// The files the operator wants shown whole, the blobs res names for them
 	// that full holds, and the blobs being read.
@@ -126,6 +126,7 @@ type drawerState struct {
 	layouts       int             // layouts computed rather than reused; tests read it
 	scans         int             // searches of the visible rows for chunks to tokenise; tests read it
 	renders       int             // drawers drawn rather than reused; tests read it
+	fallbacks     int             // frames whose drawer the compositor drew because the splice declined; tests and benches read it
 }
 
 // reviewViewOf returns the tab's view, creating it.
@@ -171,8 +172,9 @@ func (v *reviewView) derived() *reviewCache {
 	return c
 }
 
-// keepSpans hands the spans tokenised so far to the next result, which takes
-// those of the chunks it reads the same.
+// keepSpans hands the spans tokenised so far to the next generation of the
+// result (a live update or a full-file toggle), which takes those of the chunks
+// it reads the same.
 func (v *reviewView) keepSpans() {
 	if len(v.cache.bySum) > 0 {
 		v.carry = v.cache.bySum

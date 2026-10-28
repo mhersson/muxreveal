@@ -138,6 +138,10 @@ func TestBenchReviewScroll(t *testing.T) {
 	t.Logf("per-component p50/p99 (they do not sum to the frame's): update+view %s/%s, present %s/%s",
 		fmtMS(r.P50), fmtMS(r.P99), fmtMS(p.P50), fmtMS(p.P99))
 
+	if app.drawer.fallbacks != 0 {
+		t.Errorf("the compositor drew the drawer in %d frames, so the run did not measure the splice", app.drawer.fallbacks)
+	}
+
 	if s.P99 > scrollGateP99 {
 		t.Errorf("p99 = %v, gate is %v", s.P99, scrollGateP99)
 	}

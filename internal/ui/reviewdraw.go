@@ -223,15 +223,17 @@ func (d *drawCtx) freshInView() string {
 // drawerLines draws the drawer for r, the rect drawerRect returned: r.H lines
 // of r.W cells. While it slides, r is narrower than the drawer and shows its
 // left part. The lines are drawn again only when a drawKey field changed; they
-// are shared with the cache, so callers must not change them.
+// are shared with the cache, so callers must not change them. View uses
+// drawerDrawn; this is the seam the drawing tests call.
 func (a *App) drawerLines(st core.State, r core.Rect) []string {
 	lines, _ := a.drawerDrawn(st, r)
 
 	return lines
 }
 
-// drawerDrawn is drawerLines, and whether every line is exactly r.W cells and
-// ends with no style or link open, as splicing the lines into a frame needs.
+// drawerDrawn is drawerLines, and whether every line is exactly r.W cells, ends
+// with no style or link open and carries nothing across cells, as splicing the
+// lines into a frame needs.
 func (a *App) drawerDrawn(st core.State, r core.Rect) (lines []string, fits bool) {
 	d, name, ok := a.drawCtxFor(st)
 	if !ok || r.W <= 0 || r.H <= 0 {
@@ -246,7 +248,7 @@ func (a *App) drawerDrawn(st core.State, r core.Rect) (lines []string, fits bool
 	a.drawer.renders++
 
 	lines = d.lines(r)
-	fits = !slices.ContainsFunc(lines, func(l string) bool { return ansi.StringWidth(l) != r.W || !endsClean(l) })
+	fits = !slices.ContainsFunc(lines, func(l string) bool { return ansi.StringWidth(l) != r.W || !endsClean(l) || carriesAcrossCells(l) })
 	d.c.drawn, d.c.drawnFit, d.c.drawnKey, d.c.drawnOK = lines, fits, key, true
 
 	return lines, fits

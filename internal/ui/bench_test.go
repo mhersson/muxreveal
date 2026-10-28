@@ -199,6 +199,10 @@ func TestBench(t *testing.T) {
 				t.Fatal(err)
 			}
 
+			if res.Fallbacks != 0 {
+				t.Errorf("%d panes: the compositor drew the drawer in %d frames, so the run did not measure the splice", n, res.Fallbacks)
+			}
+
 			runs = append(runs, res)
 		}
 

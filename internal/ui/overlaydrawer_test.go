@@ -48,6 +48,12 @@ const (
 	linkOn  = "\x1b]8;;https://example.com/a\x1b\\"
 	linkOff = "\x1b]8;;\x1b\\"
 	reset   = "\x1b[m"
+
+	// The string sequences uv rides on the next cell.
+	apc = "\x1b_Gi=1,a=T;AAAA\x1b\\"
+	dcs = "\x1bPq#0;2;0;0;0~-\x1b\\"
+	sos = "\x1bXnote\x1b\\"
+	pm  = "\x1b^note\x1b\\"
 )
 
 func repeatA(n int) string { return strings.Repeat("a", n) }
@@ -144,10 +150,26 @@ func TestOverlayDrawerMatchesTheCompositorAtTheEdge(t *testing.T) {
 		{"a combining mark after the edge", func(y int) string {
 			return repeatA(spliceAt-1) + "e\u0301" + repeatA(spliceWidth-spliceAt)
 		}, true},
-		{"image sequences before and after the edge", func(y int) string {
-			return "\x1b_Gi=1,a=T;AAAA\x1b\\" + repeatA(spliceAt-2) + "\x1b_Gi=2,a=T;BBBB\x1b\\" + repeatA(spliceWidth-spliceAt+2)
-		}, true},
 		{"a control character in the row", func(y int) string { return repeatA(20) + "\x07" + repeatA(spliceWidth-20) }, true},
+
+		// A string sequence rides on the next cell, so one at the edge would
+		// reach the drawer's first cell, and a carriage return moves the column.
+		{"image sequences before and after the edge", func(y int) string {
+			return apc + repeatA(spliceAt-2) + "\x1b_Gi=2,a=T;BBBB\x1b\\" + repeatA(spliceWidth-spliceAt+2)
+		}, false},
+		{"an APC just before the edge", func(y int) string { return repeatA(spliceAt) + apc + repeatA(spliceWidth-spliceAt) }, false},
+		{"a DCS just before the edge", func(y int) string { return repeatA(spliceAt) + dcs + repeatA(spliceWidth-spliceAt) }, false},
+		{"an SOS just before the edge", func(y int) string { return repeatA(spliceAt) + sos + repeatA(spliceWidth-spliceAt) }, false},
+		{"a PM just before the edge", func(y int) string { return repeatA(spliceAt) + pm + repeatA(spliceWidth-spliceAt) }, false},
+		{"an APC well before the edge", func(y int) string { return repeatA(5) + apc + repeatA(spliceWidth-5) }, false},
+		{"an APC at the end of a short row", short(repeatA(10) + apc), false},
+		{"a DCS at the end of a short row", short(repeatA(10) + dcs), false},
+		{"an APC at the end of a full row", func(y int) string { return repeatA(spliceWidth) + apc }, false},
+		{"an APC before the wide character that straddles", func(y int) string {
+			return repeatA(spliceAt-1) + apc + "中" + repeatA(spliceWidth-spliceAt-1)
+		}, false},
+		{"a carriage return before the edge", func(y int) string { return repeatA(14) + "\r" + repeatA(spliceWidth-14) }, false},
+		{"a carriage return after the edge", func(y int) string { return repeatA(30) + "\r" + repeatA(10) }, false},
 
 		// A row that leaves a style or link open carries it into the next row.
 		{"style never reset", func(y int) string { return sgrOpen + repeatA(spliceWidth) }, false},
@@ -180,7 +202,7 @@ func TestOverlayDrawerMatchesTheCompositorAtTheEdge(t *testing.T) {
 				}
 
 				want := overlayAt(base, spliceWidth, spliceHeight, r.X, r.Y, lines)
-				got := overlayDrawer(base, spliceWidth, spliceHeight, r, lines, true)
+				got, _ := overlayDrawer(base, spliceWidth, spliceHeight, r, lines, true)
 
 				requireSameCells(t, got, want, spliceWidth, spliceHeight)
 
@@ -203,7 +225,7 @@ func TestOverlayDrawerMatchesTheCompositorAtTheLeftEdge(t *testing.T) {
 	lines := slices.Repeat([]string{strings.Repeat("-", spliceWidth)}, r.H)
 
 	want := overlayAt(base, spliceWidth, spliceHeight, r.X, r.Y, lines)
-	got := overlayDrawer(base, spliceWidth, spliceHeight, r, lines, true)
+	got, _ := overlayDrawer(base, spliceWidth, spliceHeight, r, lines, true)
 
 	requireSameCells(t, got, want, spliceWidth, spliceHeight)
 
@@ -240,8 +262,8 @@ func TestOverlayDrawerFallsBackToTheCompositor(t *testing.T) {
 			}
 
 			want := overlayAt(tt.base, spliceWidth, spliceHeight, tt.r.X, tt.r.Y, tt.lines)
-			if got := overlayDrawer(tt.base, spliceWidth, spliceHeight, tt.r, tt.lines, tt.fits); got != want {
-				t.Error("the compositor's result was not used")
+			if got, spliced := overlayDrawer(tt.base, spliceWidth, spliceHeight, tt.r, tt.lines, tt.fits); got != want || spliced {
+				t.Errorf("spliced = %v, or the compositor's result was not used", spliced)
 			}
 		})
 	}
@@ -299,6 +321,66 @@ func TestEndsClean(t *testing.T) {
 	}
 }
 
+// carriesAcrossCells finds what uv carries from one cell to another.
+func TestCarriesAcrossCells(t *testing.T) {
+	tests := []struct {
+		s    string
+		want bool
+	}{
+		{"", false},
+		{"plain", false},
+		{sgrOpen + "x" + reset + linkOn + "y" + linkOff, false},
+		{"\x1b[2K", false},
+		{"x" + apc, true},
+		{dcs + "x", true},
+		{"x" + sos, true},
+		{pm, true},
+		{"abc\rdef", true},
+	}
+
+	for _, tt := range tests {
+		if got := carriesAcrossCells(tt.s); got != tt.want {
+			t.Errorf("carriesAcrossCells(%q) = %v, want %v", tt.s, got, tt.want)
+		}
+	}
+}
+
+// drawDrawer counts the frames the compositor draws in the splice's place, and
+// draws what the compositor draws.
+func TestDrawDrawerCountsFallbacks(t *testing.T) {
+	a := cacheScene().build(t)
+	r := drawerRectOf(t, a, 0)
+	base := a.frameAt(a.geometry())
+	lines, fits := a.drawerDrawn(a.store.State(), r)
+
+	if !fits {
+		t.Fatal("the drawer's lines do not fit the splice")
+	}
+
+	a.drawDrawer(base, r, lines, fits)
+
+	if a.drawer.fallbacks != 0 {
+		t.Fatalf("%d fallbacks for a frame the splice covers, want 0", a.drawer.fallbacks)
+	}
+
+	rows := strings.Split(base, "\n")
+	rows[r.Y+3] += apc
+	held := strings.Join(rows, "\n")
+
+	got := a.drawDrawer(held, r, lines, fits)
+	requireSameCells(t, got, overlayAt(held, a.width, a.height, r.X, r.Y, lines), a.width, a.height)
+
+	if a.drawer.fallbacks != 1 {
+		t.Errorf("%d fallbacks after a row the splice declines, want 1", a.drawer.fallbacks)
+	}
+
+	a.drawDrawer(base, r, lines, false)
+
+	if a.drawer.fallbacks != 2 {
+		t.Errorf("%d fallbacks after lines that do not fit, want 2", a.drawer.fallbacks)
+	}
+}
+
 // Every drawer scene, drawn whole and part way through a slide, must leave
 // the cells the compositor leaves.
 func TestOverlayDrawerMatchesTheCompositorOnTheDrawerScenes(t *testing.T) {
@@ -316,7 +398,7 @@ func TestOverlayDrawerMatchesTheCompositorOnTheDrawerScenes(t *testing.T) {
 						lines, fits := a.drawerDrawn(st, r)
 
 						want := overlayAt(base, a.width, a.height, r.X, r.Y, lines)
-						got := overlayDrawer(base, a.width, a.height, r, lines, fits)
+						got, _ := overlayDrawer(base, a.width, a.height, r, lines, fits)
 
 						requireSameCells(t, got, want, a.width, a.height)
 
@@ -326,6 +408,10 @@ func TestOverlayDrawerMatchesTheCompositorOnTheDrawerScenes(t *testing.T) {
 
 						if slide == 0 {
 							requireSameCells(t, a.View().Content, want, a.width, a.height)
+
+							if a.drawer.fallbacks != 0 {
+								t.Errorf("View drew the drawer with the compositor %d times", a.drawer.fallbacks)
+							}
 						}
 					})
 				}

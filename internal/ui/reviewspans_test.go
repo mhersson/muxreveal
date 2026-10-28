@@ -142,3 +142,64 @@ func TestScrollTokenisesEachChunkOnce(t *testing.T) {
 		t.Errorf("a step inside the view tokenised %d lines and searched %d times", got, a.drawer.scans-scans)
 	}
 }
+
+// Showing a file whole, and back as hunks, tokenises only the chunks whose text
+// is new: the other files' chunks keep the spans they had.
+func TestFullFileToggleKeepsSpansOfUnchangedChunks(t *testing.T) {
+	a := cacheScene().build(t)
+	tab := a.store.State().Tab().ID
+	v := a.reviewViewOf(tab)
+
+	f := v.res.Files[v.rows[rowWith(t, v, "a review pane needs an agent pane")].file]
+	if f.Path != appGoPath {
+		t.Fatalf("the row belongs to %s, want %s", f.Path, appGoPath)
+	}
+
+	// counted settles the update work and checks it tokenised exactly the chunks
+	// that were not held before, and that some chunk was held.
+	counted := func(t *testing.T, step string, had map[string]int) {
+		t.Helper()
+
+		got := settleCounting(t, a)
+		want, held := 0, 0
+
+		for text, n := range spanTexts(v) {
+			held += n
+
+			if _, same := had[text]; !same {
+				want += n
+			}
+		}
+
+		if want == 0 || want >= held {
+			t.Fatalf("%s: %d of %d lines in view are new, want some but not all", step, want, held)
+		}
+
+		if got != want {
+			t.Errorf("%s tokenised %d lines, want the %d of the chunks with new text", step, got, want)
+		}
+	}
+
+	had := spanTexts(v)
+
+	v.fullOn = map[string]bool{f.Path: true}
+	v.fullAsk = map[string]fullRead{f.Path: {ids: blobIDs{f.OldOID, f.NewOID}, read: 1}}
+	a.onReviewFull(reviewFullMsg{tab: tab, gen: v.epoch, path: f.Path, ids: blobIDs{f.OldOID, f.NewOID}, read: 1, text: appGoFull()})
+
+	if _, whole := v.full[f.Path]; !whole {
+		t.Fatal("the file is not shown whole")
+	}
+
+	counted(t, "showing the file whole", had)
+
+	had = spanTexts(v)
+	v.cursor = rowWith(t, v, "notice  string")
+
+	a.toggleReviewFull()
+
+	if _, whole := v.full[f.Path]; whole {
+		t.Fatal("the file is still shown whole")
+	}
+
+	counted(t, "showing the file as hunks again", had)
+}

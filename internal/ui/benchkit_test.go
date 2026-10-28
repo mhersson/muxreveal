@@ -364,6 +364,10 @@ func TestBenchAppOpensTheDrawer(t *testing.T) {
 			if frame := ansi.Strip(app.View().Content); !strings.Contains(frame, first) {
 				t.Errorf("the drawn frame does not show %q", first)
 			}
+
+			if app.drawer.fallbacks != 0 {
+				t.Errorf("the compositor drew the drawer in %d frames, want the splice", app.drawer.fallbacks)
+			}
 		})
 	}
 }
@@ -422,6 +426,10 @@ func TestBenchKitServesReviewAnswers(t *testing.T) {
 
 	if on.Frames.Count < 1+on.Reviews {
 		t.Errorf("frames = %d, want one for the write and one per answer, at least %d", on.Frames.Count, 1+on.Reviews)
+	}
+
+	if on.Fallbacks != 0 {
+		t.Errorf("the compositor drew the drawer in %d frames, want the splice", on.Fallbacks)
 	}
 }
 

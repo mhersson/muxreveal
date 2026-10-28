@@ -212,20 +212,34 @@ const drawerReset = "\x1b[m\x1b]8;;\x1b\\"
 // overlayDrawer draws the drawer's lines over base. The drawer always reaches
 // the right edge and spans the body's height, so each line replaces the end of
 // one base row and the compositor's parse of the whole screen is not needed.
-// Anything that shape does not cover goes through the compositor.
-func overlayDrawer(base string, width, height int, r core.Rect, lines []string, fits bool) string {
+// Anything that shape does not cover goes through the compositor; spliced says
+// which drew it.
+func overlayDrawer(base string, width, height int, r core.Rect, lines []string, fits bool) (out string, spliced bool) {
 	if out, ok := spliceDrawer(base, width, height, r, lines, fits); ok {
-		return out
+		return out, true
 	}
 
-	return overlayAt(base, width, height, r.X, r.Y, lines)
+	return overlayAt(base, width, height, r.X, r.Y, lines), false
+}
+
+// drawDrawer draws the drawer over the frame and counts the frames the
+// compositor drew instead of the splice, each about 3 ms dearer.
+func (a *App) drawDrawer(base string, r core.Rect, lines []string, fits bool) string {
+	out, spliced := overlayDrawer(base, a.width, a.height, r, lines, fits)
+	if !spliced {
+		a.drawer.fallbacks++
+	}
+
+	return out
 }
 
 // spliceDrawer replaces the end of each covered base row with the drawer's line.
 // It reports false, drawing nothing, unless the cells it leaves are the
 // compositor's: the lines must fit (see drawerDrawn), the drawer must reach the
-// right edge inside the screen, and each covered row must end with nothing
-// open, since an open style carries into the next row and a cut row does not.
+// right edge inside the screen, and each covered row must end with nothing open
+// and hold nothing uv carries from one cell to another (see carriesAcrossCells).
+// It has no counterpart to overlayAt's bounds guard, which leaves a base wider
+// than the screen undrawn: that differs only for a frame that is already broken.
 func spliceDrawer(base string, width, height int, r core.Rect, lines []string, fits bool) (string, bool) {
 	if !fits || len(lines) == 0 || width < 2 || height < 2 || r.X < 0 || r.X+r.W != width || r.Y < 0 || r.Y+len(lines) > height {
 		return "", false
@@ -238,7 +252,7 @@ func spliceDrawer(base string, width, height int, r core.Rect, lines []string, f
 
 	for i, l := range lines {
 		row := rows[r.Y+i]
-		if !endsClean(row) {
+		if !endsClean(row) || carriesAcrossCells(row) {
 			return "", false
 		}
 
@@ -246,6 +260,14 @@ func spliceDrawer(base string, width, height int, r core.Rect, lines []string, f
 	}
 
 	return strings.Join(rows, "\n"), true
+}
+
+// carriesAcrossCells reports whether s holds something uv carries from one cell
+// to another, which a cut row would change: an APC, DCS, SOS or PM string rides
+// on the next cell drawn, and a carriage return moves the column back.
+func carriesAcrossCells(s string) bool {
+	return strings.Contains(s, "\r") || strings.Contains(s, "\x1b_") || strings.Contains(s, "\x1bP") ||
+		strings.Contains(s, "\x1bX") || strings.Contains(s, "\x1b^")
 }
 
 // endsClean reports whether nothing is left open at the end of s, judged by its

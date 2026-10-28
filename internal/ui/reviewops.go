@@ -257,6 +257,7 @@ func (a *App) toggleReviewFull() tea.Cmd {
 
 		if _, shown := v.full[f.Path]; shown {
 			delete(v.full, f.Path)
+			v.keepSpans()
 			v.gen++
 			v.rebuild(v.rowsSplit)
 		}
@@ -371,6 +372,7 @@ func (a *App) onReviewFull(msg reviewFullMsg) tea.Cmd {
 	}
 
 	v.full[msg.path], v.fullHave[msg.path] = msg.text, msg.ids
+	v.keepSpans()
 	v.gen++
 	v.rebuild(v.rowsSplit)
 
