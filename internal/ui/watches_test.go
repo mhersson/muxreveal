@@ -68,17 +68,6 @@ func (w *watchApp) until(t *testing.T, what string, seen func(tea.Msg), cond fun
 	}
 }
 
-func (w *watchApp) rootOf(t *testing.T, dir string) string {
-	t.Helper()
-
-	r, err := git.Open(context.Background(), dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	return r.Root
-}
-
 func (w *watchApp) watched(root string) bool {
 	_, ok := w.set.Seq(root)
 
@@ -96,7 +85,7 @@ func (w *watchApp) held(id core.PaneID) string {
 func TestAgentPaneAcquiresItsWorktree(t *testing.T) {
 	w := newWatchApp(t, false)
 	dir := w.repo(t, "proj")
-	root := w.rootOf(t, dir)
+	root := rootOf(t, dir)
 	id := w.addAgent(t, false, dir)
 
 	w.pm.run(w.settle())
@@ -110,7 +99,7 @@ func TestAgentPaneAcquiresItsWorktree(t *testing.T) {
 func TestThreeAgentsShareOneWatch(t *testing.T) {
 	w := newWatchApp(t, false)
 	dir := w.repo(t, "proj")
-	root := w.rootOf(t, dir)
+	root := rootOf(t, dir)
 
 	ids := []core.PaneID{w.addAgent(t, false, dir), w.addAgent(t, false, dir), w.addAgent(t, false, dir)}
 
@@ -142,7 +131,7 @@ func TestThreeAgentsShareOneWatch(t *testing.T) {
 func TestShellDoesNotAcquire(t *testing.T) {
 	w := newWatchApp(t, false)
 	dir := w.repo(t, "proj")
-	root := w.rootOf(t, dir)
+	root := rootOf(t, dir)
 
 	openIn(t, w.App, core.OpenPane{Kind: core.KindShell, Cwd: dir, Split: core.SplitVertical, Area: w.bodyArea()})
 
@@ -158,7 +147,7 @@ func TestShellDoesNotAcquire(t *testing.T) {
 func TestCwdToAnotherRepoMovesTheWatch(t *testing.T) {
 	w := newWatchApp(t, false)
 	a, b := w.repo(t, "a"), w.repo(t, "b")
-	rootA, rootB := w.rootOf(t, a), w.rootOf(t, b)
+	rootA, rootB := rootOf(t, a), rootOf(t, b)
 	id := w.addAgent(t, false, a)
 
 	w.pm.run(w.settle())
@@ -188,9 +177,9 @@ func TestStaleResolutionIsDropped(t *testing.T) {
 	w.until(t, "b to be held", nil, func() bool { return w.held(id) != "" })
 
 	// An answer for a cwd the pane left must not start a watch.
-	w.step(paneRepoMsg{id: id, cwd: a, repo: git.Repo{Root: w.rootOf(t, a)}})
+	w.step(paneRepoMsg{id: id, cwd: a, repo: git.Repo{Root: rootOf(t, a)}})
 
-	if w.watched(w.rootOf(t, a)) {
+	if w.watched(rootOf(t, a)) {
 		t.Error("a stale resolution started a watch")
 	}
 }
@@ -198,7 +187,7 @@ func TestStaleResolutionIsDropped(t *testing.T) {
 func TestStaleAcquisitionIsReleased(t *testing.T) {
 	w := newWatchApp(t, false)
 	dir := w.repo(t, "proj")
-	root := w.rootOf(t, dir)
+	root := rootOf(t, dir)
 
 	repo, err := git.Open(context.Background(), dir)
 	if err != nil {
@@ -257,13 +246,13 @@ func TestRailSeesABranchSwitch(t *testing.T) {
 	w := newWatchApp(t, true)
 	dir := w.repo(t, "proj")
 	// A branch with one more file, so switching to it changes the totals.
-	w.gitIn(t, dir, "switch", "-q", "-c", "other")
+	gitIn(t, w.real, dir, "switch", "-q", "-c", "other")
 	write(t, dir+"/b.txt", "b\n")
-	w.gitIn(t, dir, "add", "b.txt")
-	w.gitIn(t, dir, "commit", "-q", "-m", "b")
-	w.gitIn(t, dir, "switch", "-q", "main")
+	gitIn(t, w.real, dir, "add", "b.txt")
+	gitIn(t, w.real, dir, "commit", "-q", "-m", "b")
+	gitIn(t, w.real, dir, "switch", "-q", "main")
 
-	root := w.rootOf(t, dir)
+	root := rootOf(t, dir)
 	id := w.addAgent(t, false, dir)
 
 	w.pm.run(w.settle())
@@ -280,7 +269,7 @@ func TestRailSeesABranchSwitch(t *testing.T) {
 	files := c.stats.Files
 
 	// No clock jump: the switch lands inside both intervals.
-	w.gitIn(t, dir, "switch", "-q", "other")
+	gitIn(t, w.real, dir, "switch", "-q", "other")
 
 	start := time.Now()
 
@@ -298,7 +287,7 @@ func TestRailSeesABranchSwitch(t *testing.T) {
 func TestIndexOnlyChangeCostsNoStatsProbe(t *testing.T) {
 	w := newWatchApp(t, true)
 	dir := w.repo(t, "proj")
-	root := w.rootOf(t, dir)
+	root := rootOf(t, dir)
 	id := w.addAgent(t, false, dir)
 
 	w.pm.run(w.settle())
@@ -324,7 +313,7 @@ func TestIndexOnlyChangeCostsNoStatsProbe(t *testing.T) {
 	// Staging rewrites the index and moves no head. The clock stands just
 	// inside the stats interval, so only a forced probe could run.
 	w.clk.Advance(statsEvery - time.Second)
-	w.gitIn(t, dir, "add", "a.txt")
+	gitIn(t, w.real, dir, "add", "a.txt")
 	w.until(t, "the head probe the index change caused", seen, func() bool { return heads >= 1 })
 
 	deadline := time.Now().Add(400 * time.Millisecond)
@@ -347,7 +336,7 @@ func TestIndexOnlyChangeCostsNoStatsProbe(t *testing.T) {
 func TestFailedResolveNotifiesOnceAndRetriesOnAHook(t *testing.T) {
 	w := newWatchApp(t, false)
 	dir := w.repo(t, "proj")
-	root := w.rootOf(t, dir)
+	root := rootOf(t, dir)
 
 	w.watches.open = func(context.Context, string) (git.Repo, error) { return git.Repo{}, errors.New("too slow") }
 
@@ -403,7 +392,7 @@ func TestFailedResolveNotifiesOnceAndRetriesOnAHook(t *testing.T) {
 func TestRailStatsFollowAFileWrite(t *testing.T) {
 	w := newWatchApp(t, true)
 	dir := w.repo(t, "proj")
-	root := w.rootOf(t, dir)
+	root := rootOf(t, dir)
 	id := w.addAgent(t, false, dir)
 
 	w.pm.run(w.settle())
@@ -476,7 +465,7 @@ func TestWatchBatchErrorShowsNothing(t *testing.T) {
 func TestIdleAppDoesNoProbes(t *testing.T) {
 	w := newWatchApp(t, true)
 	dir := w.repo(t, "proj")
-	root := w.rootOf(t, dir)
+	root := rootOf(t, dir)
 	id := w.addAgent(t, false, dir)
 
 	w.pm.run(w.settle())

@@ -40,20 +40,6 @@ func isolateGitEnv(t *testing.T) {
 	t.Setenv("GIT_COMMITTER_EMAIL", "test@example.com")
 }
 
-func gitRun(t *testing.T, dir string, args ...string) {
-	t.Helper()
-
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	cmd := exec.CommandContext(ctx, "git", args...)
-	cmd.Dir = dir
-
-	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("git %v: %v\n%s", args, err, out)
-	}
-}
-
 // newRepoDir is an empty repository on main in a temp dir without symlinks.
 func newRepoDir(t *testing.T) string {
 	t.Helper()
@@ -69,28 +55,15 @@ func newRepoDir(t *testing.T) string {
 		t.Fatal(err)
 	}
 
-	gitRun(t, dir, "init", "-q", "-b", "main")
+	gitIn(t, "git", dir, "init", "-q", "-b", "main")
 
 	return dir
 }
 
-func putFile(t *testing.T, dir, rel, content string) {
-	t.Helper()
-
-	path := filepath.Join(dir, rel)
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		t.Fatal(err)
-	}
-
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-		t.Fatal(err)
-	}
-}
-
 func commitEverything(t *testing.T, dir, msg string) {
 	t.Helper()
-	gitRun(t, dir, "add", "-A")
-	gitRun(t, dir, "commit", "-q", "-m", msg)
+	gitIn(t, "git", dir, "add", "-A")
+	gitIn(t, "git", dir, "commit", "-q", "-m", msg)
 }
 
 func numberedLines(prefix string, n int) string {
@@ -125,28 +98,28 @@ func threeTurnRepo(t *testing.T) string {
 	t.Helper()
 
 	dir := newRepoDir(t)
-	putFile(t, dir, "a.txt", "a\n")
-	putFile(t, dir, "b.txt", "b\n")
-	putFile(t, dir, "dir/c.txt", "c\n")
+	write(t, filepath.Join(dir, "a.txt"), "a\n")
+	write(t, filepath.Join(dir, "b.txt"), "b\n")
+	write(t, filepath.Join(dir, "dir/c.txt"), "c\n")
 	commitEverything(t, dir, "init")
-	putFile(t, dir, "d.txt", "d\n")
-	putFile(t, dir, "e.txt", "e\n")
+	write(t, filepath.Join(dir, "d.txt"), "d\n")
+	write(t, filepath.Join(dir, "e.txt"), "e\n")
 	commitEverything(t, dir, "more")
 
 	snapshotTurn(t, dir, testSession)
-	putFile(t, dir, "a.txt", "turn one\n")
+	write(t, filepath.Join(dir, "a.txt"), "turn one\n")
 
 	snapshotTurn(t, dir, testSession)
-	putFile(t, dir, "b.txt", "turn two\n")
+	write(t, filepath.Join(dir, "b.txt"), "turn two\n")
 
 	if err := os.Remove(filepath.Join(dir, "d.txt")); err != nil {
 		t.Fatal(err)
 	}
 
-	putFile(t, dir, "new.txt", "untracked\n")
+	write(t, filepath.Join(dir, "new.txt"), "untracked\n")
 
 	snapshotTurn(t, dir, testSession)
-	putFile(t, dir, "dir/c.txt", "turn three\n")
+	write(t, filepath.Join(dir, "dir/c.txt"), "turn three\n")
 	commitEverything(t, dir, "agent commit")
 
 	return dir
@@ -158,9 +131,9 @@ func editedRepo(t *testing.T) string {
 	t.Helper()
 
 	dir := newRepoDir(t)
-	putFile(t, dir, "f.txt", numberedLines("line", 60))
+	write(t, filepath.Join(dir, "f.txt"), numberedLines("line", 60))
 	commitEverything(t, dir, "init")
-	putFile(t, dir, "f.txt", editedF(0))
+	write(t, filepath.Join(dir, "f.txt"), editedF(0))
 
 	return dir
 }
@@ -401,7 +374,7 @@ func (r *drawerRig) drawn(t *testing.T) string {
 	return ansi.Strip(strings.Join(r.drawerLines(st, rect), "\n"))
 }
 
-// lineAt is the text of the diff line under row i, "" for other rows.
+// diffLineAt is the text of the diff line under row i, "" for other rows.
 func diffLineAt(v *reviewView, i int) string {
 	r := v.rows[i]
 	if r.kind != rowLine && r.kind != rowPair {

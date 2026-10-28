@@ -43,6 +43,7 @@ type reviewView struct {
 	fullOn   map[string]bool
 	fullHave map[string]blobIDs
 	fullAsk  map[string]blobIDs
+	fullStop map[string]context.CancelFunc // ends the read of a file's text
 
 	res         git.Result
 	gen         int // bumps whenever res is replaced; the caches follow it
@@ -187,6 +188,24 @@ func (v *reviewView) rebuildFor(res git.Result, split bool) {
 	v.rowsRev++
 	v.rows = buildRows(res, rowOpts{split: split, full: v.full, folded: v.folded})
 	v.cursor = restoreAnchor(res, v.rows, anchor)
+}
+
+// stop ends the work running for the view: its load and its full-file reads.
+func (v *reviewView) stop() {
+	if v.cancel != nil {
+		v.cancel()
+	}
+
+	v.stopReads()
+}
+
+// stopReads ends the full-file reads running for the view.
+func (v *reviewView) stopReads() {
+	for _, cancel := range v.fullStop {
+		cancel()
+	}
+
+	v.fullStop = nil
 }
 
 // hiddenFlags says per file whether its paths or diff text hold a hidden character.

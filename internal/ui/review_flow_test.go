@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -56,7 +57,7 @@ func TestReviewDrawerFlow(t *testing.T) {
 	tm.Send(openDrawerMsg{pane: "p1"})
 	waitForText(t, tm, "fifty")
 
-	putFile(t, dir, "f.txt", editedF(0)+"LIVEUPDATE\n")
+	write(t, filepath.Join(dir, "f.txt"), editedF(0)+"LIVEUPDATE\n")
 	waitForText(t, tm, "LIVEUPDATE")
 
 	if err := tm.Quit(); err != nil {

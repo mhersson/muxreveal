@@ -55,7 +55,7 @@ func (a *App) onHook(ev harness.Event) tea.Cmd {
 
 	a.railEntry(ev.Pane).hookAt = a.clock.Now()
 	a.watchRetry(ev.Pane)
-	probes := a.railHook(ev.Pane, ev.Start, ev.State == core.AgentIdle)
+	probes := tea.Batch(a.railHook(ev.Pane, ev.Start, ev.State == core.AgentIdle), a.reviewHook(ev.Pane, ev.TurnStart))
 
 	if ev.State == core.AgentIdle {
 		a.markUnseen(ev.Pane)

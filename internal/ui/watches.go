@@ -309,18 +309,9 @@ func (a *App) noticeOnce(key, project string, err error) {
 }
 
 // watchRetry makes the next sync resolve a pane whose last resolution failed.
-// With no watch held for the pane, its drawer cannot hear file changes, so the
-// hook event recomputes it.
 func (a *App) watchRetry(id core.PaneID) {
-	w := a.watches.panes[id]
-	if w != nil && w.failed {
+	if w := a.watches.panes[id]; w != nil && w.failed {
 		w.cwd = ""
-	}
-
-	if w == nil || w.root == "" {
-		if c := a.reviewHook(id); c != nil {
-			a.later = append(a.later, c)
-		}
 	}
 }
 

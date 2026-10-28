@@ -52,12 +52,14 @@ type reviewOpenMsg struct {
 
 // reviewLoadedMsg answers one load. gen is the view's epoch when it was asked.
 type reviewLoadedMsg struct {
-	tab  core.TabID
-	gen  int
-	res  git.Result
-	err  error
-	live bool // the answer to a watcher batch, not to a new source
-	info reviewInfo
+	tab      core.TabID
+	gen      int
+	res      git.Result
+	err      error
+	live     bool       // the answer to a watcher batch, not to a new source
+	infoOnly bool       // only info is new: a past turn learning its turn count
+	src      git.Source // the source shown when it is not the one asked for
+	info     reviewInfo
 }
 
 // reviewFullMsg answers the read of one file's two sides. gen is the view's
@@ -133,10 +135,7 @@ func (a *App) reviewSync() tea.Cmd {
 			continue
 		}
 
-		if v.cancel != nil {
-			v.cancel()
-		}
-
+		v.stop()
 		delete(a.drawer.views, id)
 	}
 
@@ -183,6 +182,12 @@ func (a *App) reviewSync() tea.Cmd {
 		v.mode, need = rv.Mode, true
 	}
 
+	// A turn drawer that showed the branch because its session had no turns
+	// shows the session's latest turn as soon as there is one.
+	if _, isTurn := v.src.(git.TurnSource); rv.Mode == core.ReviewTurn && !isTurn && v.loaded && v.session != "" && v.turns > 0 {
+		need = true
+	}
+
 	if need {
 		return a.reviewRetarget(tab.ID, v, 0)
 	}
@@ -202,8 +207,8 @@ func tabByID(st core.State, id core.TabID) (core.Tab, bool) {
 // reviewReset replaces the tab's view by an empty one for pane, ending the
 // work of the old one.
 func (a *App) reviewReset(tab core.TabID, pane core.PaneID) *reviewView {
-	if old := a.drawer.views[tab]; old != nil && old.cancel != nil {
-		old.cancel()
+	if old := a.drawer.views[tab]; old != nil {
+		old.stop()
 	}
 
 	delete(a.drawer.views, tab)
@@ -215,20 +220,14 @@ func (a *App) reviewReset(tab core.TabID, pane core.PaneID) *reviewView {
 }
 
 // reviewRetarget points the view at its mode's source, turn being the turn to
-// show (0 is the latest), and loads it. A pane without a session has no turns,
-// so a turn view of one shows the branch.
+// show (0 is the latest), and loads it. A turn view of a pane with no session
+// shows the branch; core keeps the mode.
 func (a *App) reviewRetarget(tab core.TabID, v *reviewView, turn int) tea.Cmd {
 	if v.root == "" {
 		return nil
 	}
 
-	if v.mode == core.ReviewTurn && v.session == "" {
-		v.mode = core.ReviewBranch
-
-		_ = a.dispatch(core.SetReviewMode{Mode: core.ReviewBranch})
-	}
-
-	if v.mode == core.ReviewTurn {
+	if v.mode == core.ReviewTurn && v.session != "" {
 		v.src = git.TurnSource{Worktree: v.root, Session: v.session, Turn: turn}
 	} else {
 		v.src = git.BranchSource{Worktree: v.root}
@@ -236,28 +235,31 @@ func (a *App) reviewRetarget(tab core.TabID, v *reviewView, turn int) tea.Cmd {
 
 	v.epoch = a.drawer.nextEpoch()
 	v.queued = nil
+	v.stopReads()
 
-	return a.reviewStart(tab, v, nil)
+	return a.reviewStart(tab, v, nil, false)
 }
 
 // reviewJob is what one load needs, copied off the view so the command reads
 // no view state.
 type reviewJob struct {
-	tab     core.TabID
-	epoch   int
-	src     git.Source
-	root    string
-	session string
-	batch   *git.Batch // nil: a full diff of src
-	prev    git.Result // the result batch updates
-	keep    reviewInfo // what a load that skips a probe keeps
-	eng     *git.Engine
-	log     *slog.Logger
+	tab      core.TabID
+	epoch    int
+	src      git.Source
+	root     string
+	session  string
+	batch    *git.Batch // nil: a full diff of src
+	infoOnly bool       // skip the diff: refresh only what describe finds
+	prev     git.Result // the result batch updates
+	keep     reviewInfo // what a load that skips a probe keeps
+	eng      *git.Engine
+	log      *slog.Logger
 }
 
 // reviewStart loads the view's source off the update loop, ending a load still
-// running for it. It always answers, with an error when diffs are off.
-func (a *App) reviewStart(tab core.TabID, v *reviewView, b *git.Batch) tea.Cmd {
+// running for it. It always answers, with an error when diffs are off. With
+// infoOnly it only refreshes what the drawing shows besides the diff.
+func (a *App) reviewStart(tab core.TabID, v *reviewView, b *git.Batch, infoOnly bool) tea.Cmd {
 	if v.cancel != nil {
 		v.cancel()
 	}
@@ -266,7 +268,7 @@ func (a *App) reviewStart(tab core.TabID, v *reviewView, b *git.Batch) tea.Cmd {
 	v.cancel, v.loading = cancel, true
 
 	job := reviewJob{
-		tab: tab, epoch: v.epoch, src: v.src, root: v.root, session: v.session, batch: b, prev: v.res,
+		tab: tab, epoch: v.epoch, src: v.src, root: v.root, session: v.session, batch: b, infoOnly: infoOnly, prev: v.res,
 		keep: reviewInfo{project: v.project, branch: v.branch, base: v.base, turns: v.turns},
 		eng:  a.engine, log: a.log,
 	}
@@ -279,10 +281,16 @@ func (a *App) reviewStart(tab core.TabID, v *reviewView, b *git.Batch) tea.Cmd {
 }
 
 func (j reviewJob) run(ctx context.Context) reviewLoadedMsg {
-	msg := reviewLoadedMsg{tab: j.tab, gen: j.epoch, live: j.batch != nil, info: j.keep}
+	msg := reviewLoadedMsg{tab: j.tab, gen: j.epoch, live: j.batch != nil, infoOnly: j.infoOnly, info: j.keep}
 
 	if j.eng == nil {
 		msg.err = errDiffsOff
+
+		return msg
+	}
+
+	if j.infoOnly {
+		j.describe(ctx, &msg.info)
 
 		return msg
 	}
@@ -297,18 +305,18 @@ func (j reviewJob) run(ctx context.Context) reviewLoadedMsg {
 		j.describe(ctx, &msg.info)
 	}()
 
-	var (
-		res git.Result
-		err error
-	)
-
-	if j.batch != nil {
-		res, err = j.eng.Update(ctx, j.prev, j.src, *j.batch)
-	} else {
-		res, err = j.eng.Diff(ctx, j.src)
+	res, err := j.diff(ctx, j.src)
+	if errors.Is(err, git.ErrNoTurns) {
+		// A session with no turns yet shows the branch until its first turn.
+		msg.src = git.BranchSource{Worktree: j.root}
+		res, err = j.eng.Diff(ctx, msg.src)
 	}
 
 	<-described
+
+	if msg.src != nil {
+		msg.info.turns = 0
+	}
 
 	switch {
 	case errors.Is(err, git.ErrNoSnapshot):
@@ -321,6 +329,15 @@ func (j reviewJob) run(ctx context.Context) reviewLoadedMsg {
 	}
 
 	return msg
+}
+
+// diff computes src, updating the previous result when a batch asks for it.
+func (j reviewJob) diff(ctx context.Context, src git.Source) (git.Result, error) {
+	if j.batch != nil {
+		return j.eng.Update(ctx, j.prev, src, *j.batch)
+	}
+
+	return j.eng.Diff(ctx, src)
 }
 
 // describe fills what the drawing shows besides the diff. The head and the base
@@ -348,23 +365,33 @@ func (j reviewJob) describe(ctx context.Context, info *reviewInfo) {
 			}
 		}
 
+		base := ""
 		if s, ok := j.src.(git.BranchSource); ok {
-			info.base = s.Base
-			if info.base == "" {
-				if info.base, err = git.DefaultBranch(ctx, r); err != nil {
-					j.log.Debug("review: default branch", "root", j.root, "err", err)
-				}
+			base = s.Base
+		}
+
+		if base == "" {
+			if base, err = git.DefaultBranch(ctx, r); err != nil {
+				j.log.Debug("review: default branch", "root", j.root, "err", err)
 			}
 		}
+
+		info.base = base
 	}
 
 	if j.session == "" {
 		return
 	}
 
-	info.turns = 0
+	turns, err := git.Turns(ctx, r, j.session)
+	if err != nil {
+		j.log.Debug("review: turns", "root", j.root, "err", err)
 
-	if turns, err := git.Turns(ctx, r, j.session); err == nil && len(turns) > 0 {
+		return
+	}
+
+	info.turns = 0
+	if len(turns) > 0 {
 		info.turns = turns[len(turns)-1].N
 	}
 }
@@ -377,9 +404,16 @@ func (a *App) onReviewLoaded(msg reviewLoadedMsg) tea.Cmd {
 	}
 
 	v.loading, v.cancel = false, nil
+	active := a.store.State().Tab().ID == msg.tab
+
+	if msg.infoOnly {
+		in := msg.info
+		v.project, v.branch, v.base, v.turns = in.project, in.branch, in.base, in.turns
+
+		return a.reviewFlush(active, msg.tab, v)
+	}
 
 	flash := a.reviewApply(v, msg)
-	active := a.store.State().Tab().ID == msg.tab
 
 	return tea.Batch(flash, a.reviewFullSync(msg.tab, v), a.reviewFlush(active, msg.tab, v))
 }
@@ -389,11 +423,15 @@ func (a *App) onReviewLoaded(msg reviewLoadedMsg) tea.Cmd {
 // the rows it added.
 func (a *App) reviewApply(v *reviewView, msg reviewLoadedMsg) tea.Cmd {
 	in := msg.info
-	live := msg.live && v.loaded && v.err == nil && msg.err == nil
+	live := msg.live && msg.src == nil && v.loaded && v.err == nil && msg.err == nil
 	prev := v.res
 
 	v.project, v.branch, v.base, v.turns, v.noSnapshot = in.project, in.branch, in.base, in.turns, in.noSnapshot
 	v.hiddenIn, v.err, v.loaded = in.hidden, msg.err, true
+
+	if msg.src != nil {
+		v.src = msg.src
+	}
 
 	if live {
 		v.forgetGone(msg.res)
@@ -410,8 +448,19 @@ func (a *App) reviewApply(v *reviewView, msg reviewLoadedMsg) tea.Cmd {
 		return nil
 	}
 
-	v.fresh = freshRows(prev, msg.res, v.rows)
-	if len(v.fresh) == 0 {
+	v.treeSel = followFile(prev, msg.res, v.treeSel)
+
+	fresh := freshRows(prev, msg.res, v.rows)
+
+	switch {
+	case len(fresh) > 0:
+		v.fresh = fresh
+	case sameResult(prev, msg.res):
+		// A reload that changed nothing leaves a running flash alone.
+		return nil
+	default:
+		v.fresh = nil
+
 		return nil
 	}
 
@@ -419,6 +468,26 @@ func (a *App) reviewApply(v *reviewView, msg reviewLoadedMsg) tea.Cmd {
 	tab := msg.tab
 
 	return a.tick(reviewFlashFor, func(time.Time) tea.Msg { return reviewFlashMsg{tab: tab} })
+}
+
+// sameResult reports whether two results are the same diff: trees are named by
+// their content.
+func sameResult(a, b git.Result) bool {
+	return a.Old == b.Old && a.New == b.New && a.Turn == b.Turn && a.Through == b.Through &&
+		a.Live == b.Live && len(a.Files) == len(b.Files)
+}
+
+// followFile returns the index in next of the file at index i of prev, else the
+// nearest index.
+func followFile(prev, next git.Result, i int) int {
+	if i >= 0 && i < len(prev.Files) {
+		path := prev.Files[i].Path
+		if j := slices.IndexFunc(next.Files, func(f git.FileDiff) bool { return f.Path == path }); j >= 0 {
+			return j
+		}
+	}
+
+	return min(max(i, 0), max(len(next.Files)-1, 0))
 }
 
 // forgetGone drops the full-file state of files res no longer holds, or holds
@@ -429,10 +498,15 @@ func (v *reviewView) forgetGone(res git.Result) {
 			continue
 		}
 
+		if stop := v.fullStop[path]; stop != nil {
+			stop()
+		}
+
 		delete(v.fullOn, path)
 		delete(v.full, path)
 		delete(v.fullHave, path)
 		delete(v.fullAsk, path)
+		delete(v.fullStop, path)
 	}
 }
 
@@ -492,24 +566,35 @@ func (a *App) reviewBatch(root string, b git.Batch) tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
-// reviewHook recomputes the active tab's drawer when a hook event arrives for
-// its pane and no watch is held: the event stands in for the file changes.
-func (a *App) reviewHook(pane core.PaneID) tea.Cmd {
-	tab := a.store.State().Tab()
-
-	v := a.drawer.views[tab.ID]
-	if tab.Review == nil || tab.Review.Pane != pane || v == nil || v.root == "" {
+// reviewHook recomputes the drawers that review the pane when a hook event
+// arrives that the watcher cannot report: a turn's start, whose snapshot ref
+// never wakes it, or any event while no watch is held, which then stands in for
+// the file changes. A hidden tab's drawer is marked stale, as a batch would.
+func (a *App) reviewHook(pane core.PaneID, turnStart bool) tea.Cmd {
+	if w := a.watches.panes[pane]; !turnStart && w != nil && w.root != "" {
 		return nil
 	}
 
-	v.queued = mergeBatch(v.queued, git.Batch{Overflow: true})
+	active := a.store.State().Tab().ID
 
-	return a.reviewFlush(true, tab.ID, v)
+	var cmds []tea.Cmd
+
+	for id, v := range a.drawer.views {
+		if v.pane != pane || v.root == "" {
+			continue
+		}
+
+		v.queued = mergeBatch(v.queued, git.Batch{Overflow: true})
+		cmds = append(cmds, a.reviewFlush(id == active, id, v))
+	}
+
+	return tea.Batch(cmds...)
 }
 
 // reviewFlush starts the load the changes in v.queued call for. A load already
 // running keeps them for its answer; a hidden tab keeps them until it shows. A
-// past turn does not change with the files.
+// past turn does not change with the files: only a git change, an overflow or a
+// hook, which a new turn may have caused, refreshes its turn count.
 func (a *App) reviewFlush(active bool, tab core.TabID, v *reviewView) tea.Cmd {
 	if !active || v.queued == nil || v.loading || !v.loaded {
 		return nil
@@ -519,8 +604,12 @@ func (a *App) reviewFlush(active bool, tab core.TabID, v *reviewView) tea.Cmd {
 	v.queued = nil
 
 	if v.err == nil && !v.res.Live && !v.noSnapshot {
+		if b.Git || b.Overflow {
+			return a.reviewStart(tab, v, &b, true)
+		}
+
 		return nil
 	}
 
-	return a.reviewStart(tab, v, &b)
+	return a.reviewStart(tab, v, &b, false)
 }
