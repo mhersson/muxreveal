@@ -405,20 +405,24 @@ func TestMovementKeys(t *testing.T) {
 		t.Fatalf("k at the top: cursor = %d, want 0", v.cursor)
 	}
 
-	hunks := []int{0, 0, 1} // the file of each hunk the next ] reaches
+	// Each hunk's first changed line is its first removed line.
+	hunks := []struct {
+		file int
+		text string
+	}{{0, "line 3"}, {0, "line 30"}, {1, "line 3"}}
 
-	for i, file := range hunks {
+	for i, want := range hunks {
 		r.keys(keyRune(']'))
 
-		if !at(file, rowHunk) {
-			t.Fatalf("] #%d: cursor on file %d kind %d, want a hunk of file %d", i+1, v.rows[v.cursor].file, kindAt(), file)
+		if l, ok := cursorLine(v); !ok || v.rows[v.cursor].file != want.file || l.Kind != git.Del || l.Text != want.text {
+			t.Fatalf("] #%d: cursor on file %d row kind %d, want file %d's removed line %q", i+1, v.rows[v.cursor].file, kindAt(), want.file, want.text)
 		}
 	}
 
 	r.keys(keyRune('['))
 
-	if !at(0, rowHunk) || v.rows[v.cursor].hunk != 1 {
-		t.Errorf("[: cursor on file %d hunk %d, want file 0 hunk 1", v.rows[v.cursor].file, v.rows[v.cursor].hunk)
+	if l, ok := cursorLine(v); !ok || v.rows[v.cursor].file != 0 || l.Text != "line 30" {
+		t.Errorf("[: cursor on file %d row kind %d, want file 0's removed line %q", v.rows[v.cursor].file, kindAt(), "line 30")
 	}
 
 	r.keys(keyRune('}'))
@@ -472,6 +476,109 @@ func TestMovementKeys(t *testing.T) {
 	if v.top != top || v.cursor != bodyH+2 {
 		t.Errorf("k: view starts at %d, cursor %d, want %d and %d", v.top, v.cursor, top, bodyH+2)
 	}
+}
+
+// cursorLine is the diff line under the cursor on a hunk row: the row's line,
+// or the old side of a side by side pair.
+func cursorLine(v *reviewView) (git.Line, bool) {
+	r := v.rows[v.cursor]
+	if r.kind != rowLine && r.kind != rowPair {
+		return git.Line{}, false
+	}
+
+	return v.res.Files[r.file].Hunks[r.hunk].Lines[r.line], true
+}
+
+// changeRow reports whether a full-file row is an added or removed line.
+func changeRow(r reviewRow) bool {
+	return (r.kind == rowFull && r.other < 0) || r.kind == rowGhost || r.kind == rowFold
+}
+
+func TestHunkKeysLandOnTheFirstChange(t *testing.T) {
+	// editedRepo's hunks open with three context lines; line 5 and line 50 are
+	// each hunk's first removed line.
+	for _, split := range []bool{false, true} {
+		t.Run(map[bool]string{false: "unified", true: "split"}[split], func(t *testing.T) {
+			r := newKeysRig(t, editedRepo(t))
+			v := r.opened(t)
+
+			if split {
+				r.keys(keyRune('u'))
+				r.settle()
+			}
+
+			at := func(step, text string) {
+				t.Helper()
+
+				if l, ok := cursorLine(v); !ok || l.Kind != git.Del || l.Text != text {
+					t.Fatalf("%s: cursor row %d is %+v (hunk row %v), want the removed line %q", step, v.cursor, v.rows[v.cursor], ok, text)
+				}
+			}
+
+			r.keys(keyRune(']'))
+			at("]", "line 5")
+
+			r.keys(keyRune(']'))
+			at("] again", "line 50")
+
+			r.keys(keyRune(']'))
+			at("] at the last hunk", "line 50")
+
+			// From inside the hunk, [ goes back to its first change; again, to the hunk before.
+			r.keys(keyRune('j'), keyRune('j'), keyRune('j'), keyRune('['))
+			at("[ from inside a hunk", "line 50")
+
+			r.keys(keyRune('['))
+			at("[", "line 5")
+
+			r.keys(keyRune('['))
+			at("[ at the first hunk", "line 5")
+		})
+	}
+
+	t.Run("full file", func(t *testing.T) {
+		r := newKeysRig(t, editedRepo(t))
+		v := r.opened(t)
+
+		r.keys(keyRune('f'))
+		r.until(t, "the full file", func() bool { return len(v.full) == 1 })
+		r.keys(keyRune('g'))
+
+		first := func(step string) int {
+			t.Helper()
+
+			i := v.cursor
+			if !changeRow(v.rows[i]) || changeRow(v.rows[i-1]) {
+				t.Fatalf("%s: row %d is not the first row of a change block (row %+v after %+v)", step, i, v.rows[i], v.rows[i-1])
+			}
+
+			return i
+		}
+
+		r.keys(keyRune(']'))
+
+		a := first("]")
+
+		r.keys(keyRune(']'))
+
+		b := first("] again")
+
+		if b <= a {
+			t.Fatalf("] again: cursor row %d, want a later block than row %d", b, a)
+		}
+
+		r.keys(keyRune('j'), keyRune('['))
+
+		if v.cursor != b {
+			t.Errorf("[ from inside a block: cursor row %d, want the block's first row %d", v.cursor, b)
+		}
+
+		r.keys(keyRune('['))
+
+		if v.cursor != a {
+			t.Errorf("[: cursor row %d, want the first block's first row %d", v.cursor, a)
+		}
+	})
 }
 
 func TestViewKeys(t *testing.T) {

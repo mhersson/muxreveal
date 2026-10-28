@@ -309,8 +309,8 @@ func (a *App) reviewJump(starts func(*reviewView) []int, dir int) tea.Cmd {
 	return nil
 }
 
-// blockStarts are the rows where a hunk begins or, in the full-file view, a
-// block of changes does.
+// blockStarts are the rows where a hunk's first changed line is or, in the
+// full-file view, a block of changes begins.
 func (v *reviewView) blockStarts() []int {
 	var out []int
 
@@ -318,7 +318,11 @@ func (v *reviewView) blockStarts() []int {
 
 	for i, r := range v.rows {
 		change := (r.kind == rowFull && r.other < 0) || r.kind == rowGhost || r.kind == rowFold
-		if r.kind == rowHunk || (change && !inBlock) {
+
+		switch {
+		case r.kind == rowHunk:
+			out = append(out, v.firstChange(i))
+		case change && !inBlock:
 			out = append(out, i)
 		}
 
@@ -326,6 +330,24 @@ func (v *reviewView) blockStarts() []int {
 	}
 
 	return out
+}
+
+// firstChange is the row of the first added or removed line of the hunk whose
+// header is row hdr; a hunk with none stands for its header.
+func (v *reviewView) firstChange(hdr int) int {
+	for i := hdr + 1; i < len(v.rows); i++ {
+		r := v.rows[i]
+		if r.kind != rowLine && r.kind != rowPair {
+			break
+		}
+
+		lines := v.res.Files[r.file].Hunks[r.hunk].Lines
+		if lines[r.line].Kind != git.Context || (r.other >= 0 && lines[r.other].Kind != git.Context) {
+			return i
+		}
+	}
+
+	return hdr
 }
 
 // fileStarts are the rows of the files' headers.
