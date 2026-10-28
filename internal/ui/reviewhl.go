@@ -1,6 +1,10 @@
 package ui
 
 import (
+	"crypto/sha256"
+	"encoding/binary"
+	"io"
+
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/mhersson/muxreveal/internal/git"
@@ -26,6 +30,35 @@ type spanKey struct {
 	file, hunk int
 	side       uint8
 	chunk      int
+}
+
+// chunkSum names a chunk by its file's path and its text. Spans are a function
+// of the two, so a chunk that reads the same in the next result keeps them.
+type chunkSum [sha256.Size]byte
+
+// sumOf is the chunkSum of a path and the lines of its chunk; each part is
+// length-prefixed so no two chunks hash the same bytes.
+func sumOf(path string, lines []string) chunkSum {
+	h := sha256.New()
+
+	var n [binary.MaxVarintLen64]byte
+
+	put := func(s string) {
+		_, _ = h.Write(n[:binary.PutUvarint(n[:], uint64(len(s)))])
+		_, _ = io.WriteString(h, s)
+	}
+
+	put(path)
+
+	for _, l := range lines {
+		put(l)
+	}
+
+	var sum chunkSum
+
+	h.Sum(sum[:0])
+
+	return sum
 }
 
 // drawerPaintMsg asks for another pass of highlighting.
@@ -91,15 +124,26 @@ func (a *App) highlightRows(v *reviewView, lay drawerLayout) (more bool) {
 			}
 
 			path, lines := v.chunkLines(ref.key)
-			if len(lines) > budget {
-				more = true
+			sum := sumOf(path, lines)
 
-				continue
+			spans, known := v.carry[sum]
+			if !known {
+				spans, known = c.bySum[sum]
 			}
 
-			budget -= len(lines)
-			a.drawer.tokenised += len(lines)
-			c.spans[ref.key] = a.drawer.hl.Highlight(path, lines)
+			if !known {
+				if len(lines) > budget {
+					more = true
+
+					continue
+				}
+
+				budget -= len(lines)
+				a.drawer.tokenised += len(lines)
+				spans = a.drawer.hl.Highlight(path, lines)
+			}
+
+			c.spans[ref.key], c.bySum[sum] = spans, spans
 			c.spansRev++
 		}
 	}

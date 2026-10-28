@@ -3,6 +3,7 @@ package ui
 import (
 	"errors"
 	"math/rand/v2"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -303,6 +304,14 @@ func TestDrawerLinesStayTrueToAColdDraw(t *testing.T) {
 
 		if again := strings.Join(a.drawerLines(st, r), "\n"); again != got {
 			t.Fatalf("step %d (%s): the next frame differs from the one before it", step, op.name)
+		}
+
+		// Spans a live result kept must be what tokenising the chunk again gives.
+		for k, held := range v.derived().spans {
+			path, lines := v.chunkLines(k)
+			if !reflect.DeepEqual(held, a.drawer.hl.Highlight(path, lines)) {
+				t.Fatalf("step %d (%s): the spans held for %+v are not what tokenising it gives", step, op.name, k)
+			}
 		}
 	}
 }

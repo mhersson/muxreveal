@@ -495,8 +495,10 @@ func (a *App) reviewApply(v *reviewView, msg reviewLoadedMsg) tea.Cmd {
 
 	if live {
 		v.forgetGone(msg.res)
+		v.keepSpans()
 	} else {
 		v.full, v.fullOn, v.fullHave, v.fullAsk, v.folded = nil, nil, nil, nil, nil
+		v.carry = nil
 	}
 
 	v.gen++

@@ -39,8 +39,9 @@ type reviewView struct {
 	loading  bool           // a load is in flight
 	epoch    int            // names the source in force; every answer carries the one it was asked for
 	cancel   context.CancelFunc
-	queued   *git.Batch // changes seen since the last load started
-	hiddenIn []bool     // per file of res: handed over with it, so derived scans no text
+	queued   *git.Batch                     // changes seen since the last load started
+	hiddenIn []bool                         // per file of res: handed over with it, so derived scans no text
+	carry    map[chunkSum][][]diffview.Span // the last live result's spans by chunk text, for this one to take
 
 	// The files the operator wants shown whole, the blobs res names for them
 	// that full holds, and the blobs being read.
@@ -104,6 +105,7 @@ type reviewCache struct {
 	drawnKey drawKey
 	drawnOK  bool
 	spansRev int
+	bySum    map[chunkSum][][]diffview.Span // spans by the text of their chunk
 }
 
 // drawerState is the drawer's UI state outside the views.
@@ -147,7 +149,7 @@ func (v *reviewView) derived() *reviewCache {
 		return c
 	}
 
-	*c = reviewCache{ok: true, gen: v.gen, files: len(v.res.Files), spans: map[spanKey][][]diffview.Span{}}
+	*c = reviewCache{ok: true, gen: v.gen, files: len(v.res.Files), spans: map[spanKey][][]diffview.Span{}, bySum: map[chunkSum][][]diffview.Span{}}
 	c.tree = treeItems(v.res.Files)
 
 	c.hidden = v.hiddenIn
@@ -166,6 +168,14 @@ func (v *reviewView) derived() *reviewCache {
 	c.digits = numDigits(hi)
 
 	return c
+}
+
+// keepSpans hands the spans tokenised so far to the next result, which takes
+// those of the chunks it reads the same.
+func (v *reviewView) keepSpans() {
+	if len(v.cache.bySum) > 0 {
+		v.carry = v.cache.bySum
+	}
 }
 
 // treeWidthAt is the tree column's width at an inner width. It walks every
