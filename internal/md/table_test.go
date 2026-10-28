@@ -2,6 +2,7 @@ package md
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -294,6 +295,77 @@ func TestTableBounds(t *testing.T) {
 	l = layoutOf(bigTable(10, 408), 100, "")
 	if got := l.Plain()[len(l.Lines)-1]; !strings.HasPrefix(got, "╰") {
 		t.Errorf("a table at the bound has a count line: %q", got)
+	}
+}
+
+// TestWideTableRowsStop checks that a table too wide for a grid stops at the
+// same cell bound as a grid: 62 body rows of 65 cells after the header.
+func TestWideTableRowsStop(t *testing.T) {
+	const cols = 65
+
+	cells := func(first string) string {
+		parts := []string{first}
+		for i := 1; i < cols; i++ {
+			parts = append(parts, fmt.Sprintf("c%d", i))
+		}
+
+		return "| " + strings.Join(parts, " | ") + " |\n"
+	}
+
+	build := func(rows int) string {
+		var b strings.Builder
+
+		b.WriteString(cells("h0") + "|" + strings.Repeat("-|", cols) + "\n")
+
+		for i := range rows {
+			b.WriteString(cells(fmt.Sprintf("r%d", i)))
+		}
+
+		return b.String()
+	}
+
+	l := layoutOf(build(200), 100, "")
+	plain := l.Plain()
+	shown := 0
+
+	for _, p := range plain {
+		if strings.HasPrefix(p, "| r") {
+			shown++
+		}
+
+		if strings.HasPrefix(p, "╭") {
+			t.Fatalf("a table of %d columns made a grid", cols)
+		}
+	}
+
+	if shown != 62 {
+		t.Errorf("body rows shown = %d, want 62", shown)
+	}
+
+	if slices.ContainsFunc(plain, func(p string) bool { return strings.HasPrefix(p, "| r62 |") }) {
+		t.Error("row 62 is past the bound")
+	}
+
+	if got, want := plain[len(plain)-1], "138 more rows"; got != want {
+		t.Errorf("last line = %q, want %q", got, want)
+	}
+
+	if r := l.Lines[len(l.Lines)-1][0]; r.Role != RoleFoldHint {
+		t.Errorf("count run = %+v", r)
+	}
+
+	assertSafe(t, l, 100)
+
+	// At the bound, and under it, no count line follows.
+	for _, rows := range []int{62, 10} {
+		last := layoutOf(build(rows), 100, "").Plain()
+		if got := last[len(last)-1]; strings.HasSuffix(got, "more rows") || strings.HasSuffix(got, "more row") {
+			t.Errorf("%d rows: count line %q", rows, got)
+		}
+	}
+
+	if got := layoutOf(build(63), 100, "").Plain(); got[len(got)-1] != "1 more row" {
+		t.Errorf("one row over: last line = %q", got[len(got)-1])
 	}
 }
 

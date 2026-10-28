@@ -53,7 +53,7 @@ func (l *layouter) tableRows(t *east.Table, text Role) (aligns []east.Alignment,
 	}
 
 	rows = append(rows, l.cellRow(header, n, RoleTableHeader, true))
-	budget := max(maxTableCells/n-1, 0)
+	budget := rowBudget(n)
 
 	for ch := t.FirstChild(); ch != nil; ch = ch.NextSibling() {
 		body, ok := ch.(*east.TableBody)
@@ -73,6 +73,20 @@ func (l *layouter) tableRows(t *east.Table, text Role) (aligns []east.Alignment,
 	}
 
 	return aligns, rows, left
+}
+
+// rowBudget is how many body rows fit in maxTableCells next to the header of a
+// table with n columns.
+func rowBudget(n int) int { return max(maxTableCells/n-1, 0) }
+
+// moreRows appends the count of the rows a table left out.
+func moreRows(out *frag, left, width int) {
+	noun := " more rows"
+	if left == 1 {
+		noun = " more row"
+	}
+
+	out.lines = append(out.lines, fit(Line{styled(RoleFoldHint).run(strconv.Itoa(left) + noun)}, width))
 }
 
 // cellRow lays out the cells of row, padded with empty cells to n.
@@ -142,7 +156,7 @@ func (l *layouter) table(out *frag, t *east.Table, width int, text Role) {
 	}
 
 	if n > maxTableCols {
-		l.tableAsText(out, t, width, text)
+		l.tableAsText(out, t, width, text, n)
 
 		return
 	}
@@ -181,12 +195,7 @@ func (l *layouter) table(out *frag, t *east.Table, width int, text Role) {
 	emit(tableRule("╰", "┴", "╯", widths))
 
 	if left > 0 {
-		noun := " more rows"
-		if left == 1 {
-			noun = " more row"
-		}
-
-		out.lines = append(out.lines, fit(Line{styled(RoleFoldHint).run(strconv.Itoa(left) + noun)}, width))
+		moreRows(out, left, width)
 	}
 }
 
@@ -344,11 +353,12 @@ func tableRowLines(row []tableCell, widths []int, aligns []east.Alignment, heade
 	return lines
 }
 
-// tableAsText lays a table with too many columns out as paragraphs: each source
-// row from its start to the end of its line, wrapped, with no markdown read.
-func (l *layouter) tableAsText(out *frag, t *east.Table, width int, text Role) {
-	row := func(n ast.Node) {
-		pos := n.Pos()
+// tableAsText lays a table with too many columns (n, the header's cells) out as
+// paragraphs: each source row from its start to the end of its line, wrapped,
+// with no markdown read. Rows stop at the same cell bound as a grid.
+func (l *layouter) tableAsText(out *frag, t *east.Table, width int, text Role, n int) {
+	row := func(node ast.Node) {
+		pos := node.Pos()
 		src := l.d.src
 
 		if pos < 0 || pos > len(src) {
@@ -363,14 +373,28 @@ func (l *layouter) tableAsText(out *frag, t *east.Table, width int, text Role) {
 		out.lines = append(out.lines, wrap([]seg{{text: cleanProse(string(line)), st: styled(text)}}, width)...)
 	}
 
+	budget, left := rowBudget(n), 0
+
 	for ch := t.FirstChild(); ch != nil; ch = ch.NextSibling() {
 		switch ch.(type) {
 		case *east.TableHeader:
 			row(ch)
 		case *east.TableBody:
 			for r := ch.FirstChild(); r != nil; r = r.NextSibling() {
+				if budget == 0 {
+					left++
+
+					continue
+				}
+
+				budget--
+
 				row(r)
 			}
 		}
+	}
+
+	if left > 0 {
+		moreRows(out, left, width)
 	}
 }
