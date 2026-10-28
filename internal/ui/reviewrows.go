@@ -259,6 +259,7 @@ type rowAnchor struct {
 	text                       string
 	row                        reviewRowKind
 	index                      int
+	block                      int // a fold row's ghost block
 }
 
 // anchorAt describes row i. Rows that hold no hunk keep only the file.
@@ -273,6 +274,8 @@ func anchorAt(res git.Result, rows []reviewRow, i int) rowAnchor {
 	a.path = res.Files[r.file].Path
 
 	switch r.kind {
+	case rowFold:
+		a.block = r.block
 	case rowFull:
 		a.kind, a.text = git.Context, r.text
 		if r.other < 0 {
@@ -306,6 +309,7 @@ func restoreAnchor(res git.Result, rows []reviewRow, a rowAnchor) int {
 	hunkRow := -1
 	line, lineDist := -1, 0
 	whole := -1
+	fold := -1
 
 	for i, r := range rows {
 		f := res.Files[r.file]
@@ -319,6 +323,10 @@ func restoreAnchor(res git.Result, rows []reviewRow, a rowAnchor) int {
 		case rowHunk:
 			if hunkRow < 0 && overlaps(f.Hunks[r.hunk], a) {
 				hunkRow = i
+			}
+		case rowFold:
+			if a.row == rowFold && r.block == a.block && (fold < 0 || abs(i-a.index) < abs(fold-a.index)) {
+				fold = i
 			}
 		case rowFull, rowGhost:
 			if r.kind == a.row && r.text == a.text && (r.kind == rowGhost || (r.other < 0) == (a.kind == git.Add)) &&
@@ -340,7 +348,7 @@ func restoreAnchor(res git.Result, rows []reviewRow, a rowAnchor) int {
 				d = 0
 			}
 
-			if line < 0 || d < lineDist {
+			if line < 0 || d < lineDist || (d == lineDist && abs(i-a.index) < abs(line-a.index)) {
 				line, lineDist = i, d
 			}
 		}
@@ -349,6 +357,8 @@ func restoreAnchor(res git.Result, rows []reviewRow, a rowAnchor) int {
 	switch {
 	case a.row == rowFile && header >= 0:
 		return header
+	case a.row == rowFold && fold >= 0:
+		return fold
 	case (a.row == rowFull || a.row == rowGhost) && whole >= 0:
 		return whole
 	case (a.row == rowLine || a.row == rowPair) && line >= 0:

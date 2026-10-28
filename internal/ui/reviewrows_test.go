@@ -116,7 +116,6 @@ func TestBuildRowsSplit(t *testing.T) {
 
 	rows := buildRows(res, rowOpts{split: true})
 	// Left index first, falling back to the right index; other is the right.
-	// The left index first, else the right one; other is the right index.
 	wantPairs := [][2]int{{0, 0}, {1, 3}, {2, 4}, {5, -1}}
 
 	if len(rows) != 2+len(wantPairs) {
@@ -503,5 +502,64 @@ func TestSearchRowsFullFile(t *testing.T) {
 
 	if got, ok := searchRows(res, rows, 3, "b"); !ok || got != 2 {
 		t.Errorf("ghost row search = %d, %v; want 2", got, ok)
+	}
+}
+
+func TestRestoreAnchorRepeatedLine(t *testing.T) {
+	mk := func() git.Result {
+		return git.Result{Files: []git.FileDiff{{Path: "a.go", Status: git.Modified, Hunks: []git.Hunk{
+			hunkOf(1, 1, ln(git.Add, 0, 1, "}"), ln(git.Add, 0, 2, "x"), ln(git.Add, 0, 3, "}"), ln(git.Add, 0, 4, "}")),
+		}}}}
+	}
+	res := mk()
+	rows := buildRows(res, rowOpts{})
+	// 0 file, 1 hunk, 2 "}", 3 x, 4 "}", 5 "}"
+	for _, at := range []int{2, 4, 5} {
+		a := anchorAt(res, rows, at)
+		if got := restoreAnchor(res, rows, a); got != at {
+			t.Errorf("cursor on row %d restored to %d", at, got)
+		}
+	}
+}
+
+func TestRestoreAnchorFold(t *testing.T) {
+	res := git.Result{Files: []git.FileDiff{{Path: "a.go", Status: git.Modified}}}
+	full := map[string]fullText{"a.go": {
+		old: []string{"a", "b", "c", "d", "e"},
+		new: []string{"a", "c", "e"},
+	}}
+	folded := map[string]bool{foldKey("a.go", 0): true, foldKey("a.go", 1): true}
+	rows := buildRows(res, rowOpts{full: full, folded: folded})
+	// 0 file, 1 a, 2 fold(b), 3 c, 4 fold(d), 5 e
+	a := anchorAt(res, rows, 4)
+	if a.row != rowFold {
+		t.Fatalf("anchor row = %d", a.row)
+	}
+
+	moved := map[string]fullText{"a.go": {old: full["a.go"].old, new: []string{"top", "a", "c", "e"}}}
+	nrows := buildRows(res, rowOpts{full: moved, folded: folded})
+
+	if got := restoreAnchor(res, nrows, a); got != 5 {
+		t.Errorf("restoreAnchor = %d, want 5", got)
+	}
+}
+
+func TestHunkHeader(t *testing.T) {
+	tests := []struct {
+		name string
+		h    git.Hunk
+		want string
+	}{
+		{"both ranges", git.Hunk{OldStart: 43, OldLines: 9, NewStart: 43, NewLines: 9}, "@@ -43,9 +43,9 @@"},
+		{"single lines omit the count", git.Hunk{OldStart: 1, OldLines: 1, NewStart: 7, NewLines: 1}, "@@ -1 +7 @@"},
+		{"empty ranges", git.Hunk{OldStart: 0, OldLines: 0, NewStart: 1, NewLines: 3}, "@@ -0,0 +1,3 @@"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := hunkHeader(tt.h); got != tt.want {
+				t.Errorf("hunkHeader = %q, want %q", got, tt.want)
+			}
+		})
 	}
 }

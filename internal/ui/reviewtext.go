@@ -47,7 +47,7 @@ func cleanText(s string) (text string, hidden bool) {
 			tag := fmt.Sprintf("⟨U+%04X⟩", r)
 			b.WriteString(tag)
 
-			col += len(tag) - 2*(len("⟨")-1)
+			col += utf8.RuneCountInString(tag)
 			hidden = true
 		default:
 			b.WriteRune(r)
