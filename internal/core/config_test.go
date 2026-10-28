@@ -91,6 +91,17 @@ func TestLoadConfig(t *testing.T) {
 			}(),
 		},
 		{name: "unknown diff key", content: "[diff]\nsplit = true\n", wantErr: true, errHas: []string{"unknown key diff.split"}},
+		{
+			name: "worktrees section", content: "[worktrees]\nroot = \"sibling\"\n",
+			want: func() Config {
+				c := DefaultConfig()
+				c.Worktrees.Root = "sibling"
+
+				return c
+			}(),
+		},
+		{name: "unknown worktrees key", content: "[worktrees]\nroots = \"inside\"\n", wantErr: true, errHas: []string{"unknown key worktrees.roots"}},
+		{name: "worktrees wrong type", content: "[worktrees]\nroot = 3\n", wantErr: true, errHas: []string{"worktrees.root"}},
 		{name: "diff wrong type", content: "[diff]\nmax_lines = \"many\"\n", wantErr: true, errHas: []string{"max_lines"}},
 		{name: "layout wrong type", content: "[layout]\nmaster_ratio = \"half\"\n", wantErr: true, errHas: []string{"master_ratio"}},
 		{name: "invalid toml", content: "theme = \"x", wantErr: true, errHas: []string{"line 1"}},
@@ -127,6 +138,11 @@ func TestLoadConfig(t *testing.T) {
 			// Likewise for Diff.
 			if tt.want.Diff == (DiffConfig{}) {
 				tt.want.Diff = DefaultConfig().Diff
+			}
+
+			// And for Worktrees.
+			if tt.want.Worktrees == (WorktreesConfig{}) {
+				tt.want.Worktrees = DefaultConfig().Worktrees
 			}
 
 			if !tt.wantErr {
@@ -316,5 +332,51 @@ func TestDiffConfigValidate(t *testing.T) {
 		if err == nil || !strings.Contains(err.Error(), tt.want) {
 			t.Errorf("%s: Validate() = %v, want it to contain %q", tt.name, err, tt.want)
 		}
+	}
+}
+
+func TestWorktreesConfig(t *testing.T) {
+	def := DefaultConfig().Worktrees
+	if def.Root != "inside" || def.Sibling() {
+		t.Errorf("default worktrees = %+v (sibling %v), want root inside", def, def.Sibling())
+	}
+
+	if err := def.Validate(); err != nil {
+		t.Errorf("default worktrees: Validate() = %v", err)
+	}
+
+	tests := []struct {
+		root        string
+		wantSibling bool
+		wantErr     string
+	}{
+		{root: "inside"},
+		{root: "sibling", wantSibling: true},
+		{root: "", wantErr: `worktrees.root: "" is not inside or sibling`},
+		{root: "beside", wantErr: `worktrees.root: "beside" is not inside or sibling`},
+		{root: "Inside", wantErr: "worktrees.root"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.root, func(t *testing.T) {
+			c := WorktreesConfig{Root: tt.root}
+
+			err := c.Validate()
+			if tt.wantErr == "" && err != nil {
+				t.Fatalf("Validate() = %v", err)
+			}
+
+			if tt.wantErr != "" && (err == nil || !strings.Contains(err.Error(), tt.wantErr)) {
+				t.Fatalf("Validate() = %v, want it to contain %q", err, tt.wantErr)
+			}
+
+			if got := c.Sibling(); got != tt.wantSibling {
+				t.Errorf("Sibling() = %v, want %v", got, tt.wantSibling)
+			}
+		})
+	}
+
+	// A hand-built config reads as the default.
+	if (WorktreesConfig{}).Sibling() {
+		t.Error("the zero WorktreesConfig is sibling, want inside")
 	}
 }

@@ -136,6 +136,44 @@ func TestRootRejectsBadDiffConfig(t *testing.T) {
 	}
 }
 
+func TestRootRejectsBadWorktreesConfig(t *testing.T) {
+	for _, content := range []string{
+		"[worktrees]\nroot = \"beside\"\n",
+		"[worktrees]\nroot = \"\"\n",
+	} {
+		t.Run(strings.TrimSpace(content), func(t *testing.T) {
+			t.Setenv("HOME", t.TempDir())
+			t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+			t.Setenv("XDG_CACHE_HOME", t.TempDir())
+			stateHome := t.TempDir()
+			t.Setenv("XDG_STATE_HOME", stateHome)
+
+			path := filepath.Join(t.TempDir(), "config.toml")
+			if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+				t.Fatal(err)
+			}
+
+			cmd := newRootCmd()
+			cmd.SetArgs([]string{"--config", path})
+			cmd.SetOut(io.Discard)
+			cmd.SetErr(io.Discard)
+
+			ctx, cancel := context.WithCancel(t.Context())
+			cancel()
+
+			err := cmd.ExecuteContext(ctx)
+
+			if err == nil || !strings.Contains(err.Error(), path) || !strings.Contains(err.Error(), "worktrees.root") {
+				t.Fatalf("Execute() error = %v, want one naming %s and the worktrees key", err, path)
+			}
+
+			if entries, _ := os.ReadDir(stateHome); len(entries) != 0 {
+				t.Errorf("state dir has %d entries, want none", len(entries))
+			}
+		})
+	}
+}
+
 func TestRootRejectsUnknownTheme(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())

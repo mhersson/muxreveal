@@ -486,7 +486,7 @@ The review drawer: an overlay that slides over the right half of the body and sh
 - [ ] Drawing the drawer: frame, tags, tree, diff, unified and side-by-side rendering with highlighting and invisible characters, full-file view with ghost lines
 - [x] Loading, turns and live updates that keep the cursor on its hunk, and the `[diff]` config
 - [x] Drawer keys, commands, focus, mouse and the slide
-- [ ] Worktree picker and new worktree, and the `[worktrees]` config
+- [x] Worktree picker and new worktree, and the `[worktrees]` config
 - [ ] Bench, idle CPU and the gate
 
 Gate:

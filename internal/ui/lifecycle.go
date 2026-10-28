@@ -66,16 +66,23 @@ func contentSize(r core.Rect) (cols, rows int) {
 // openPane starts a pane of kind next to the focused one, in its cwd, and
 // focuses it. Nothing changes when the process does not start.
 func (a *App) openPane(kind core.PaneKind, split core.Split) tea.Cmd {
-	st := a.store.State()
+	return a.openPaneIn(kind, split, a.focusedCwd(a.store.State()))
+}
 
-	cwd := a.cwd
-	if m, ok := st.Panes[st.Tab().Focus]; ok && m.Cwd != "" {
-		cwd = m.Cwd
-	}
-
-	cmd, _ := a.openPaneAt(kind, split, st.Tab().Focus, cwd, nil)
+// openPaneIn is openPane in cwd.
+func (a *App) openPaneIn(kind core.PaneKind, split core.Split, cwd string) tea.Cmd {
+	cmd, _ := a.openPaneAt(kind, split, a.store.State().Tab().Focus, cwd, nil)
 
 	return cmd
+}
+
+// focusedCwd is the cwd of st's focused pane, or the launch dir without one.
+func (a *App) focusedCwd(st core.State) string {
+	if m, ok := st.Panes[st.Tab().Focus]; ok && m.Cwd != "" {
+		return m.Cwd
+	}
+
+	return a.cwd
 }
 
 // paneRun is the command line a shell pane starts in place of the plain shell.

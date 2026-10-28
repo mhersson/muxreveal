@@ -20,11 +20,12 @@ const DefaultTheme = "catppuccin-mocha"
 type Config struct {
 	Theme string `toml:"theme"`
 	// Icons is a pointer so an absent key (nil) can mean true.
-	Icons     *bool        `toml:"icons"`
-	Mouse     Mouse        `toml:"mouse"`
-	Clipboard Clipboard    `toml:"clipboard"`
-	Layout    LayoutConfig `toml:"layout"`
-	Diff      DiffConfig   `toml:"diff"`
+	Icons     *bool           `toml:"icons"`
+	Mouse     Mouse           `toml:"mouse"`
+	Clipboard Clipboard       `toml:"clipboard"`
+	Layout    LayoutConfig    `toml:"layout"`
+	Diff      DiffConfig      `toml:"diff"`
+	Worktrees WorktreesConfig `toml:"worktrees"`
 }
 
 // LayoutConfig is the [layout] section. Validate rejects an out-of-range value
@@ -170,6 +171,27 @@ func (c DiffConfig) Split() bool { return c.Layout == "split" }
 // pane has turns.
 func (c DiffConfig) BranchFirst() bool { return c.Mode == string(ReviewBranch) }
 
+// WorktreesConfig is the [worktrees] section. Validate rejects an unknown root
+// from a file; Sibling reads a zero field as the default, so a hand-built
+// WorktreesConfig behaves as the defaults.
+type WorktreesConfig struct {
+	Root string `toml:"root"` // inside | sibling: where a new worktree goes
+}
+
+// Validate names the key when the root is unknown.
+func (c WorktreesConfig) Validate() error {
+	if c.Root != "inside" && c.Root != "sibling" {
+		return fmt.Errorf("worktrees.root: %q is not inside or sibling", c.Root)
+	}
+
+	return nil
+}
+
+// Sibling reports whether a new worktree goes beside the main checkout rather
+// than inside it. internal/git owns the layouts, so the UI maps this to its
+// root style.
+func (c WorktreesConfig) Sibling() bool { return c.Root == "sibling" }
+
 // Mouse is the [mouse] section; both switches are off by default.
 type Mouse struct {
 	FocusFollowsMouse bool `toml:"focus_follows_mouse"`
@@ -203,7 +225,8 @@ func DefaultConfig() Config {
 			DefaultMode: string(ModeBSP), AutoScheme: "spiral", MasterRatio: 50, MasterPosition: tiling.MasterPositionLeft,
 			MasterCount: 1, MasterGrid: new(true), ColumnWidth: 50,
 		},
-		Diff: DiffConfig{Layout: "unified", Mode: string(ReviewTurn), MaxFiles: 400, MaxBytes: 2 << 20, MaxLines: 5000},
+		Diff:      DiffConfig{Layout: "unified", Mode: string(ReviewTurn), MaxFiles: 400, MaxBytes: 2 << 20, MaxLines: 5000},
+		Worktrees: WorktreesConfig{Root: "inside"},
 	}
 }
 

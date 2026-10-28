@@ -61,6 +61,9 @@ type Options struct {
 	// Diff is the [diff] config: the review drawer's starting layout and mode and
 	// the diff engine's limits. The zero value means the defaults.
 	Diff core.DiffConfig
+	// Worktrees is the [worktrees] config: where a new worktree goes. The zero
+	// value means inside the main checkout.
+	Worktrees core.WorktreesConfig
 	// Save is called with the state after every successful dispatch; nil saves nothing.
 	Save func(core.State)
 }
@@ -106,6 +109,7 @@ type App struct {
 	tray      trayState
 	rail      railState
 	drawer    drawerState
+	picker    pickerState
 	watches   watchState
 	storeVer  uint64        // counts the dispatches the store accepted
 	engine    *git.Engine   // nil when the rail's diff stats and the review drawer's diffs are off
@@ -196,6 +200,7 @@ func New(opts Options) (*App, error) {
 	}
 
 	a.drawer.cfg = opts.Diff
+	a.picker.cfg = opts.Worktrees
 	a.drawersOpen = anyReview(opts.Store.State())
 
 	if opts.GitTempDir != "" {
@@ -396,10 +401,11 @@ func (a *App) keyboardCheck(msg tea.Msg) func() {
 }
 
 // isUserInput reports whether msg comes from the operator: keys, pastes, mouse
-// events and a palette choice.
+// events, a palette choice and the answers that carry out a new agent request.
 func isUserInput(msg tea.Msg) bool {
 	switch msg.(type) {
-	case tea.KeyPressMsg, tea.PasteMsg, tea.MouseClickMsg, tea.MouseMotionMsg, tea.MouseReleaseMsg, tea.MouseWheelMsg, palette.ChosenMsg:
+	case tea.KeyPressMsg, tea.PasteMsg, tea.MouseClickMsg, tea.MouseMotionMsg, tea.MouseReleaseMsg, tea.MouseWheelMsg, palette.ChosenMsg,
+		pickerOpenMsg, pickerCreatedMsg:
 		return true
 	}
 
@@ -422,6 +428,12 @@ func (a *App) syncPaneColors() {
 }
 
 func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if a.picker.open != nil {
+		if cmd, ok := a.pickerUpdate(msg); ok {
+			return a, cmd
+		}
+	}
+
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		a.endSlide()
@@ -510,6 +522,12 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, a.onReviewFull(msg)
 	case reviewFlashMsg:
 		a.onReviewFlash(msg)
+	case pickerOpenMsg:
+		return a, a.onPickerOpen(msg)
+	case pickerPageMsg:
+		a.onPickerPage(msg)
+	case pickerCreatedMsg:
+		return a, a.onPickerCreated(msg)
 	case palette.ChosenMsg:
 		return a, a.chosen(msg.ID)
 	case palette.ClosedMsg:
@@ -640,6 +658,10 @@ func (a *App) View() tea.View {
 		content = overlayOver(content, a.width, a.height, a.overlay.pal)
 	}
 
+	if a.picker.open != nil {
+		content = a.overlayPicker(content, lk)
+	}
+
 	if a.confirm != nil {
 		content = overlayConfirm(content, a.width, a.height, *a.confirm, a.icons, lk.styles)
 	}
@@ -655,7 +677,12 @@ func (a *App) View() tea.View {
 	v.ReportFocus = true
 	// Modified keys arrive with their shifted character, which the legacy encoder needs.
 	v.KeyboardEnhancements.ReportAlternateKeys = true
+
 	v.Cursor = a.cursorAt(g)
+	if a.picker.open != nil {
+		v.Cursor = a.pickerCursor()
+	}
+
 	v.BackgroundColor = lk.theme.UI.Bg
 	v.ForegroundColor = lk.theme.UI.Fg
 

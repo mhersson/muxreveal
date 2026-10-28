@@ -103,6 +103,10 @@ func run(ctx context.Context, env core.Env, configPath, recordDir string, fresh 
 		return fmt.Errorf("config %s: %w", configPath, err)
 	}
 
+	if err := cfg.Worktrees.Validate(); err != nil {
+		return fmt.Errorf("config %s: %w", configPath, err)
+	}
+
 	f, err := openLog(core.StateDir(env))
 	if err != nil {
 		return err
@@ -175,6 +179,8 @@ func run(ctx context.Context, env core.Env, configPath, recordDir string, fresh 
 		Cwd:    cwd,
 		Icons:  cfg.IconsOn(),
 		Diff:   cfg.Diff,
+
+		Worktrees: cfg.Worktrees,
 
 		FocusFollowsMouse: cfg.Mouse.FocusFollowsMouse,
 		CopyOnSelect:      cfg.Mouse.CopyOnSelect,
