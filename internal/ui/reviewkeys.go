@@ -1,9 +1,9 @@
 package ui
 
 import (
+	"path/filepath"
 	"slices"
 	"strconv"
-	"strings"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -539,11 +539,9 @@ func (a *App) reviewEdit() tea.Cmd {
 		return nil
 	}
 
-	// A path that starts with a dash would be read as an option.
-	path := f.Path
-	if strings.HasPrefix(path, "-") {
-		path = "./" + path
-	}
+	// An editor reads +{command} and a leading dash as options, and the pane
+	// starts elsewhere when the root is gone; the absolute path is neither.
+	path := filepath.Join(v.root, f.Path)
 
 	run := &paneRun{program: reviewEditor(a.getenv), args: []string{"+" + strconv.Itoa(editLine(f, r)), path}}
 

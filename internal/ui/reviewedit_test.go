@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -8,9 +9,11 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/mhersson/muxreveal/internal/core"
 	"github.com/mhersson/muxreveal/internal/git"
+	"github.com/mhersson/muxreveal/internal/term"
 )
 
 func TestReviewEditor(t *testing.T) {
@@ -35,8 +38,8 @@ func TestReviewEditor(t *testing.T) {
 }
 
 // editRig is a drawer with a changed file whose path holds a quote and a space,
-// one whose path starts with a dash, a deleted file and an editor that writes the
-// arguments it got to a file.
+// files whose paths an editor would read as an option or a command, a deleted
+// file and an editor that writes the arguments it got to a file.
 type editRig struct {
 	*drawerRig
 	st       *starts
@@ -45,6 +48,12 @@ type editRig struct {
 	name     string
 	editor   string
 	argsFile string
+}
+
+// hostileEditNames are file names that start like an editor's options and
+// commands: vim runs +{command}, and reads -c, --cmd and a lone - as options.
+func hostileEditNames() []string {
+	return []string{"+call system('touch pwned')", "+/pattern", "-c", "--cmd", "-"}
 }
 
 func newEditRig(t *testing.T, editorArgs string) *editRig {
@@ -59,6 +68,11 @@ func newEditRig(t *testing.T, editorArgs string) *editRig {
 	commitEverything(t, dir, "init")
 	write(t, filepath.Join(dir, name), editedLines(20, 7))
 	write(t, filepath.Join(dir, "-dash.txt"), "two\n")
+
+	// Distinct contents, so git does not pair a new file with the deleted one as a rename.
+	for _, n := range hostileEditNames() {
+		write(t, filepath.Join(dir, n), "file named "+n+"\n")
+	}
 
 	if err := os.Remove(filepath.Join(dir, "gone.txt")); err != nil {
 		t.Fatal(err)
@@ -129,8 +143,9 @@ func TestEditOpensAnEditorPane(t *testing.T) {
 			script := fmt.Sprintf(`%s%s "$@"; exec "$SHELL" -l`, e.editor, tt.wantWords)
 			plusLine := fmt.Sprintf("+%d", line)
 
-			// The path is its own argument, never part of the script.
-			if want := []string{"/bin/testsh", "-l", "-i", "-c", script, "testsh", plusLine, e.name}; !slices.Equal(c.Argv, want) || c.Dir != e.dir {
+			// The path is its own argument, never part of the script, and absolute.
+			abs := filepath.Join(e.dir, e.name)
+			if want := []string{"/bin/testsh", "-l", "-i", "-c", script, "testsh", plusLine, abs}; !slices.Equal(c.Argv, want) || c.Dir != e.dir {
 				t.Errorf("command = %q in %q, want %q in %s", c.Argv, c.Dir, want, e.dir)
 			}
 
@@ -162,7 +177,7 @@ func TestEditOpensAnEditorPane(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			want := strings.Join(append(slices.Clone(tt.wantArgs), plusLine, e.name), "\n") + "\n"
+			want := strings.Join(append(slices.Clone(tt.wantArgs), plusLine, abs), "\n") + "\n"
 			if string(args) != want {
 				t.Errorf("the editor got %q, want %q", args, want)
 			}
@@ -179,15 +194,115 @@ func TestEditOpensAnEditorPane(t *testing.T) {
 		}
 	})
 
-	t.Run("a path that starts with a dash", func(t *testing.T) {
-		e := newEditRig(t, "")
-		e.cursorOn(t, func(f git.FileDiff, row reviewRow) bool { return f.Path == "-dash.txt" && row.kind == rowFile })
-		e.keys(keyRune('e'))
+	// An editor reads +{command} as a command and a leading dash as an option, so
+	// the path it gets is the absolute one: it starts with neither, and it does not
+	// depend on the editor pane's directory, which falls back when the root is gone.
+	t.Run("a path an editor would read as an option or a command", func(t *testing.T) {
+		for _, name := range append(hostileEditNames(), "-dash.txt") {
+			t.Run(name, func(t *testing.T) {
+				e := newEditRig(t, "")
+				e.cursorOn(t, func(f git.FileDiff, row reviewRow) bool { return f.Path == name && row.kind == rowFile })
+				e.keys(keyRune('e'))
 
-		if e.st.count() != 1 || e.st.cmds[0].Argv[len(e.st.cmds[0].Argv)-1] != "./-dash.txt" {
-			t.Errorf("commands = %q, want the path given as ./-dash.txt", e.st.cmds)
+				if e.st.count() != 1 {
+					t.Fatalf("e started %d processes, want 1", e.st.count())
+				}
+
+				want := filepath.Join(e.dir, name)
+
+				if got := e.st.cmds[0].Argv[len(e.st.cmds[0].Argv)-1]; got != want {
+					t.Errorf("the editor's path = %q, want %q", got, want)
+				}
+
+				// The recording editor, run as the shell runs it, gets the line and the path as plain arguments.
+				got := e.runPaneCommand(t, e.st.cmds[0])
+				if wantArgs := []string{"+1", want}; !slices.Equal(got, wantArgs) {
+					t.Errorf("the editor got %q, want %q", got, wantArgs)
+				}
+			})
 		}
 	})
+
+	// vim runs the +{command} it is given, as it would for a file named like one.
+	t.Run("vim runs no command from a file name", func(t *testing.T) {
+		vim, err := exec.LookPath("vim")
+		if err != nil {
+			t.Skip("vim not installed")
+		}
+
+		// vim runs system() through $SHELL, which the pane command points at true(1) for its closing exec.
+		wrapper := filepath.Join(t.TempDir(), "vim-ed.sh")
+		write(t, wrapper, "#!/bin/sh\nSHELL=/bin/sh exec '"+vim+"' -u NONE -i NONE -N -n -es \"$@\" -c 'qa!'\n")
+
+		if err := os.Chmod(wrapper, 0o755); err != nil {
+			t.Fatal(err)
+		}
+
+		// The control: given such a name as a command, this vim does run it, so the check below can fail.
+		control, home := t.TempDir(), t.TempDir()
+
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+		defer cancel()
+
+		ctl := exec.CommandContext(ctx, wrapper, "+call system('touch pwned')")
+
+		ctl.Dir, ctl.Env = control, append(os.Environ(), "HOME="+home, "VIMINIT=", "EXINIT=")
+		_ = ctl.Run() // exit status is not the point
+
+		if _, err := os.Stat(filepath.Join(control, "pwned")); err != nil {
+			t.Skip("this vim does not run a +command here")
+		}
+
+		e := newEditRig(t, "")
+		e.getenv = func(k string) string { return map[string]string{"SHELL": "/bin/testsh", "EDITOR": wrapper}[k] }
+
+		name := hostileEditNames()[0]
+
+		e.cursorOn(t, func(f git.FileDiff, row reviewRow) bool { return f.Path == name && row.kind == rowFile })
+		e.keys(keyRune('e'))
+
+		if e.st.count() != 1 {
+			t.Fatalf("e started %d processes, want 1", e.st.count())
+		}
+
+		e.runPaneCommand(t, e.st.cmds[0])
+
+		if _, err := os.Stat(filepath.Join(e.dir, "pwned")); err == nil {
+			t.Error("vim ran the command in the file name: pwned exists")
+		}
+	})
+}
+
+// runPaneCommand runs a pane command of the editor rig as the shell would, in
+// the pane's directory under a deadline, with no terminal and a SHELL that exits
+// at once, and returns the recording editor's arguments (none when the editor
+// is another program).
+func (e *editRig) runPaneCommand(t *testing.T, c term.Command) []string {
+	t.Helper()
+
+	truePath, err := exec.LookPath("true")
+	if err != nil {
+		t.Skip("no true(1)")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	_ = os.Remove(e.argsFile)
+
+	cmd := exec.CommandContext(ctx, "/bin/sh", append([]string{"-c"}, c.Argv[4:]...)...)
+	cmd.Dir, cmd.Env = c.Dir, append(os.Environ(), "ARGS_FILE="+e.argsFile, "SHELL="+truePath, "HOME="+t.TempDir(), "VIMINIT=", "EXINIT=")
+
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("running the command: %v\n%s", err, out)
+	}
+
+	raw, err := os.ReadFile(e.argsFile)
+	if err != nil {
+		return nil
+	}
+
+	return strings.Split(strings.TrimSuffix(string(raw), "\n"), "\n")
 }
 
 // editLine is the line the editor opens at, for every kind of row the cursor can be on.
