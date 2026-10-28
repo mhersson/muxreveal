@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/mhersson/muxreveal/internal/core"
+	"github.com/mhersson/muxreveal/internal/git/invisible"
 	"github.com/mhersson/muxreveal/internal/ui/theme"
 )
 
@@ -346,7 +347,9 @@ func fitWidth(s string, w int, body lipgloss.Style) string {
 	return s + spaces(body, w-got)
 }
 
-// printable drops control characters that guest or filesystem text may carry.
+// printable drops the control and invisible characters that guest or
+// filesystem text may carry. Strip goes first and turns U+2028 and U+2029 into
+// a line feed, which the filter then drops.
 func printable(t string) string {
 	return strings.Map(func(r rune) rune {
 		if r < 0x20 || r == 0x7f || (r >= 0x80 && r < 0xa0) {
@@ -354,7 +357,7 @@ func printable(t string) string {
 		}
 
 		return r
-	}, t)
+	}, invisible.Strip(t))
 }
 
 // cursorView places the cursor on screen: the prompt's, copy mode's block or

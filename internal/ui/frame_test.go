@@ -352,6 +352,40 @@ func TestTitleControlCharacters(t *testing.T) {
 	}
 }
 
+func TestTitleInvisibleCharacters(t *testing.T) {
+	// U+202E reorders what follows, U+200B is a zero-width space.
+	a, _ := framedApp(t, 40, 6, paneSpec{kind: core.KindShell, cwd: "/home/u/a", split: core.SplitVertical, text: "\x1b]2;a\u202Eb\u200Bc\x07"})
+
+	if got, want := topBorder(a), dashes("╭─ "+iconShell+" abc ", 40); got != want {
+		t.Errorf("top border = %q, want %q", got, want)
+	}
+}
+
+func TestPrintable(t *testing.T) {
+	const family = "\U0001F468\u200D\U0001F469\u200D\U0001F467"
+
+	tests := []struct {
+		name, in, want string
+	}{
+		{"plain", "main", "main"},
+		{"controls", "a\x1b\x01b\x7fc\u0085d", "abcd"},
+		{"bidi override", "a\u202Eb\u2066c", "abc"},
+		{"zero-width space and word joiner", "a\u200Bb\u2060c", "abc"},
+		{"separators leave no line break", "a\u2028b\u2029c", "abc"},
+		{"variation selector", "a\uFE0Fb", "ab"},
+		{"joiner between emoji stays", family, family},
+		{"joiner elsewhere goes", "a\u200Db", "ab"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := printable(tt.in); got != tt.want {
+				t.Errorf("printable(%q) = %q, want %q", tt.in, got, tt.want)
+			}
+		})
+	}
+}
+
 // An unfocused pane's title is Muted; the focused pane's title is bold in its
 // kind colour. The icon is in the kind colour either way.
 func TestTitleColours(t *testing.T) {
