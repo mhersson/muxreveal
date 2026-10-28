@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strconv"
 	"strings"
 	"syscall"
@@ -377,11 +376,6 @@ func TestDiffLineEndings(t *testing.T) {
 func TestDiffOddPaths(t *testing.T) {
 	names := []string{"sp ace.txt", "uni/ünï-日本.txt", "new\nline.txt", "quo\"te.txt", "tab\there.txt", "back\\slash.txt"}
 
-	invalid := "inv\xffalid.txt"
-	if runtime.GOOS != "darwin" {
-		names = append(names, invalid)
-	}
-
 	dir := branchRepo(t, func(dir string) {
 		writeFile(t, dir, "keep.txt", "k\n")
 		writeFile(t, dir, names[0], "old\n")
@@ -398,6 +392,28 @@ func TestDiffOddPaths(t *testing.T) {
 		if f := fileByPath(t, res, n); len(f.Hunks) == 0 {
 			t.Errorf("%q: no hunks", n)
 		}
+	}
+}
+
+func TestDiffInvalidUTF8Path(t *testing.T) {
+	name := "inv\xffalid.txt"
+	if !fsAcceptsName(t, name) {
+		t.Skip("the filesystem refuses names that are not valid UTF-8")
+	}
+
+	dir := branchRepo(t, func(dir string) {
+		writeFile(t, dir, "keep.txt", "k\n")
+	}, func(dir string) {
+		writeFile(t, dir, name, "content of "+strconv.Quote(name)+"\n")
+	})
+
+	f := fileByPath(t, branchDiff(t, dir), name)
+	if f.Status != Added || !f.Untracked || len(f.Hunks) != 1 || len(f.Hunks[0].Lines) != 1 {
+		t.Fatalf("%q: status %v, untracked %v, hunks %+v, want one untracked added hunk with one line", name, f.Status, f.Untracked, f.Hunks)
+	}
+
+	if l := f.Hunks[0].Lines[0]; l.Kind != Add || l.Text != "content of "+strconv.Quote(name) {
+		t.Errorf("%q: line %c %q, want %c %q", name, l.Kind, l.Text, Add, "content of "+strconv.Quote(name))
 	}
 }
 

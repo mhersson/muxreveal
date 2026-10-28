@@ -260,7 +260,13 @@ func TestSnapshotTreeContent(t *testing.T) {
 	writeFile(t, dir, "build/out.o", "x\n")
 	writeFile(t, dir, "with space/file name.txt", "x\n")
 	writeFile(t, dir, "new\nline.txt", "x\n")
-	writeFile(t, dir, "bad\xffname.txt", "x\n")
+
+	invalid := "bad\xffname.txt"
+	invalidOK := fsAcceptsName(t, invalid)
+
+	if invalidOK {
+		writeFile(t, dir, invalid, "x\n")
+	}
 
 	if err := os.Symlink("a.txt", filepath.Join(dir, "link")); err != nil {
 		t.Fatal(err)
@@ -279,10 +285,15 @@ func TestSnapshotTreeContent(t *testing.T) {
 	turn := snap(t, dir, sessA, SnapshotOptions{})
 	got := treeEntries(t, dir, turn.Tree)
 
-	for _, p := range []string{
+	wantPaths := []string{
 		"a.txt", "b.txt", "dir/c.txt", "mod.txt", "bin.dat", "crlf.txt", "untracked.txt",
-		"staged.txt", "link", "with space/file name.txt", "new\nline.txt", "bad\xffname.txt", ".gitignore",
-	} {
+		"staged.txt", "link", "with space/file name.txt", "new\nline.txt", ".gitignore",
+	}
+	if invalidOK {
+		wantPaths = append(wantPaths, invalid)
+	}
+
+	for _, p := range wantPaths {
 		if _, ok := got[p]; !ok {
 			t.Errorf("tree lacks %q; has %q", p, paths(got))
 		}
