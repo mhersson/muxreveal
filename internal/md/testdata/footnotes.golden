@@ -1,0 +1,6 @@
+Text‹FootnoteRef:[1]› and‹FootnoteRef:[2]›.
+
+‹FootnoteRule:────────────────›
+‹FootnoteNumber: 1. ›‹FootnoteText:Second note that›
+    ‹FootnoteText:wraps›
+‹FootnoteNumber: 2. ›‹FootnoteText:First note.›

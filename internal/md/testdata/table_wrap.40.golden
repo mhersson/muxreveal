@@ -1,0 +1,12 @@
+‹TableFrame:╭───────┬──────────────┬───────────────╮›
+‹TableFrame:│ ›‹TableHeader,b:Name ›‹TableFrame: │ ›‹TableHeader,b:Description ›‹TableFrame: │ ›‹TableHeader,b:         Note›‹TableFrame: │›
+‹TableFrame:├───────┼──────────────┼───────────────┤›
+‹TableFrame:│ ›alpha‹TableFrame: │ ›a ‹Text,i:longer›    ‹TableFrame: │ ›           ok‹TableFrame: │›
+‹TableFrame:│ ›     ‹TableFrame: │ ›description ‹TableFrame: │ ›             ‹TableFrame: │›
+‹TableFrame:│ ›     ‹TableFrame: │ ›with ‹Code: inline›‹TableFrame: │ ›             ‹TableFrame: │›
+‹TableFrame:│ ›     ‹TableFrame: │ ›‹Code:code › and ‹Link,u:a› ‹TableFrame: │ ›             ‹TableFrame: │›
+‹TableFrame:│ ›     ‹TableFrame: │ ›‹Link,u:link› that   ‹TableFrame: │ ›             ‹TableFrame: │›
+‹TableFrame:│ ›     ‹TableFrame: │ ›wraps       ‹TableFrame: │ ›             ‹TableFrame: │›
+‹TableFrame:│ ›beta ‹TableFrame: │ ›short       ‹TableFrame: │ ›a second note‹TableFrame: │›
+‹TableFrame:│ ›     ‹TableFrame: │ ›            ‹TableFrame: │ › that is long‹TableFrame: │›
+‹TableFrame:╰───────┴──────────────┴───────────────╯›

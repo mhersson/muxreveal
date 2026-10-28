@@ -1,0 +1,39 @@
+Plain text with
+‹Text,i:emphasis›, ‹Text,b:strong›,
+‹Text,b,i:both›, ‹Text,s:struck› and
+‹Code: inline code › that
+continues on a
+second source line.
+
+Press ‹Key,b:Ctrl›+‹Key,b:C› to
+stop; H2O and ‹Text,b:bold›
+‹Text,i:italic› tags.
+After a break, a
+‹Link,u:link› and an ‹Link,u:anchor›
+and a ‹Link,u:local› one, a
+‹Link,u:bad› one,
+‹Link,u:https://example.com/›
+‹Link,u:auto›.
+
+Hard break with two
+spaces
+and with a backslash
+then done & entities
+'ok' *escaped*.
+
+Note‹FootnoteRef:[1]› with a
+footnote.
+
+‹Heading1,b:Heading›
+‹Rule:────────────────────›
+
+Tail
+日本語のテキスト and
+😀 emoji with
+a-very-long-unbreaka
+ble-word-that-needs-
+cutting-by-cells-at-
+narrow-widths.
+
+‹FootnoteRule:────────────────›
+‹FootnoteNumber: 1. ›‹FootnoteText:The note.›

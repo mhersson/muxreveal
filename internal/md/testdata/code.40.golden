@@ -1,0 +1,17 @@
+Intro
+
+‹CodeFrame:╭─ ›‹CodeLang:go›‹CodeFrame: ─────────────────────────────────╮›
+‹CodeFrame:│ ›‹LineNumber:1 ›‹CodeText:pack#1›‹CodeText:age main                      ›‹CodeFrame: │›
+‹CodeFrame:│ ›‹LineNumber:2 ›‹CodeText:                                  ›‹CodeFrame: │›
+‹CodeFrame:│ ›‹LineNumber:3 ›‹CodeText:func#1›‹CodeText: main() {                     ›‹CodeFrame: │›
+‹CodeFrame:│ ›‹LineNumber:4 ›‹CodeText:    println("hi")   // tab        ›‹CodeFrame: │›
+‹CodeFrame:│ ›‹LineNumber:5 ›‹CodeText:}                                 ›‹CodeFrame: │›
+‹CodeFrame:╰──────────────────────────────────────╯›
+
+‹CodeFrame:╭──────────────────────────────────────╮›
+‹CodeFrame:│ ›‹LineNumber:1 ›‹CodeText:indented                          ›‹CodeFrame: │›
+‹CodeFrame:╰──────────────────────────────────────╯›
+
+‹CodeFrame:╭──────────────────────────────────────╮›
+‹CodeFrame:│ ›‹LineNumber:1 ›‹CodeText:with›‹Hidden,b:⟨U+0001⟩›‹CodeText:hidden›‹Hidden,b:⟨U+200B⟩›‹CodeText:tags an…›‹CodeFrame: │›
+‹CodeFrame:╰──────────────────────────────────────╯›

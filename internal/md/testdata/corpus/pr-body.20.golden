@@ -1,0 +1,181 @@
+‹Heading1,b:Review drawer›
+‹Rule:────────────────────›
+
+‹Code: leader d › slides a
+‹Text,b:review drawer› in
+from the right over
+half the body and
+shows the focused
+pane's diff: an
+agent's ‹Text,i:last turn›,
+or its branch
+against the base.
+See the ‹Link,u:design notes›
+for the keys; it
+replaces ‹Text,s:the old›
+‹Text,s:layout pane›. Press
+‹Key,b:esc› to hand the
+keyboard back.
+
+‹AlertNote:▎ ›‹AlertNote,b:󰋽 Note›
+‹AlertNote:▎ ›The panes under
+‹AlertNote:▎ ›the drawer keep
+‹AlertNote:▎ ›their size, so no
+‹AlertNote:▎ ›agent redraws when
+‹AlertNote:▎ ›it opens or
+‹AlertNote:▎ ›closes.
+
+‹Heading2,b:What changed›
+
+  ‹Bullet:• ›The ported tuios
+    ‹Code: diffview › draws
+    the lines, with
+    highlighting
+    from the theme
+  ‹Bullet:• ›One watcher per
+    worktree, shared
+    by every agent
+    in it
+    ‹Bullet:◦ ›the turn gate
+      skips
+      unchanged
+      snapshots
+    ‹Bullet:◦ ›the agents
+      rail re-probes
+      on a branch
+      switch
+      ‹Bullet:▪ ›which fixes
+        the stale
+        ‹Code: main › on
+        the cards
+  ‹Bullet:• ›‹Code: leader n › picks
+    a worktree for a
+    new agent
+    ‹Bullet:◦ ›‹Image:󰥶 The drawer …›
+    ‹Bullet:◦ ›‹SummaryMark,b:▸ ›‹Summary,b:Keys in the›
+        ‹Summary,b:list›
+        ‹FoldHint:enter opens›
+
+‹Heading3,b:Checklist›
+
+  ‹TaskDone,b:✓ ›‹Code: make check ›
+    ‹TaskDoneText:passes›
+  ‹TaskDone,b:✓ ›‹TaskDoneText:Goldens in Mocha›
+    ‹TaskDoneText:and Latte›
+  ‹TaskOpen:○ ›The macOS CI
+    step for the
+    watcher fix
+
+‹Heading2,b:How to test›
+
+  ‹Bullet:1. ›Open three
+     agents in
+     master-stack:
+     ‹Code: leader n ›
+     three times
+  ‹Bullet:2. ›Run a prompt in
+     the master,
+     then press
+     ‹Code: leader d ›
+  ‹Bullet:3. ›Step through
+     the turns with
+     ‹Code: , › and ‹Code: . ›
+
+‹CodeFrame:╭─ ›‹CodeLang:sh›‹CodeFrame: ─────────────╮›
+‹CodeFrame:│ ›‹LineNumber:1 ›‹CodeText:make check    ›‹CodeFrame: │›
+‹CodeFrame:│ ›‹LineNumber:2 ›‹CodeText:go test -tags…›‹CodeFrame: │›
+‹CodeFrame:╰──────────────────╯›
+
+‹CodeFrame:╭─ ›‹CodeLang:go›‹CodeFrame: ─────────────╮›
+‹CodeFrame:│ ›‹LineNumber:1 ›‹CodeText:func (a *App)…›‹CodeFrame: │›
+‹CodeFrame:│ ›‹LineNumber:2 ›‹CodeText:    if r, ok …›‹CodeFrame: │›
+‹CodeFrame:│ ›‹LineNumber:3 ›‹CodeText:        retur…›‹CodeFrame: │›
+‹CodeFrame:│ ›‹LineNumber:4 ›‹CodeText:    }         ›‹CodeFrame: │›
+‹CodeFrame:│ ›‹LineNumber:5 ›‹CodeText:    return a.…›‹CodeFrame: │›
+‹CodeFrame:│ ›‹LineNumber:6 ›‹CodeText:}             ›‹CodeFrame: │›
+‹CodeFrame:╰──────────────────╯›
+
+‹TableFrame:╭────────┬────────┬…›
+‹TableFrame:│ ›‹TableHeader,b:Gate  ›‹TableFrame: │ ›‹TableHeader,b: Limit›‹TableFrame: │…›
+‹TableFrame:│ ›‹TableHeader,b:      ›‹TableFrame: │ ›‹TableHeader,b:      ›‹TableFrame: │…›
+‹TableFrame:├────────┼────────┼…›
+‹TableFrame:│ ›Save  ‹TableFrame: │ ›300 ms‹TableFrame: │…›
+‹TableFrame:│ ›to    ‹TableFrame: │ ›      ‹TableFrame: │…›
+‹TableFrame:│ ›drawer‹TableFrame: │ ›      ‹TableFrame: │…›
+‹TableFrame:│ ›(media‹TableFrame: │ ›      ‹TableFrame: │…›
+‹TableFrame:│ ›n)    ‹TableFrame: │ ›      ‹TableFrame: │…›
+‹TableFrame:│ ›Six-pa‹TableFrame: │ ›  8 ms‹TableFrame: │…›
+‹TableFrame:│ ›ne    ‹TableFrame: │ ›      ‹TableFrame: │…›
+‹TableFrame:│ ›bench ‹TableFrame: │ ›      ‹TableFrame: │…›
+‹TableFrame:│ ›p99   ‹TableFrame: │ ›      ‹TableFrame: │…›
+‹TableFrame:│ ›with  ‹TableFrame: │ ›      ‹TableFrame: │…›
+‹TableFrame:│ ›the   ‹TableFrame: │ ›      ‹TableFrame: │…›
+‹TableFrame:│ ›drawer‹TableFrame: │ ›      ‹TableFrame: │…›
+‹TableFrame:│ ›open  ‹TableFrame: │ ›      ‹TableFrame: │…›
+‹TableFrame:│ ›over a‹TableFrame: │ ›      ‹TableFrame: │…›
+‹TableFrame:│ ›busy  ‹TableFrame: │ ›      ‹TableFrame: │…›
+‹TableFrame:│ ›agent ‹TableFrame: │ ›      ‹TableFrame: │…›
+‹TableFrame:│ ›Scroll‹TableFrame: │ ›  8 ms‹TableFrame: │…›
+‹TableFrame:│ ›a     ‹TableFrame: │ ›      ‹TableFrame: │…›
+‹TableFrame:│ ›10,000‹TableFrame: │ ›      ‹TableFrame: │…›
+‹TableFrame:│ ›-line ‹TableFrame: │ ›      ‹TableFrame: │…›
+‹TableFrame:│ ›diff, ‹TableFrame: │ ›      ‹TableFrame: │…›
+‹TableFrame:│ ›p99   ‹TableFrame: │ ›      ‹TableFrame: │…›
+‹TableFrame:│ ›Idle  ‹TableFrame: │ ›   1 %‹TableFrame: │…›
+‹TableFrame:│ ›CPU,  ‹TableFrame: │ ›      ‹TableFrame: │…›
+‹TableFrame:│ ›drawer‹TableFrame: │ ›      ‹TableFrame: │…›
+‹TableFrame:│ ›open  ‹TableFrame: │ ›      ‹TableFrame: │…›
+‹TableFrame:╰────────┴────────┴…›
+
+‹AlertWarning:▎ ›‹AlertWarning,b:󰀪 Warning›
+‹AlertWarning:▎ ›Drawer keys never
+‹AlertWarning:▎ ›reach a covered
+‹AlertWarning:▎ ›pane; ‹Code: leader h ›
+‹AlertWarning:▎ ›goes back to the
+‹AlertWarning:▎ ›master.
+
+‹QuoteBar:▎ ›‹QuoteText:Reviewing is›
+‹QuoteBar:▎ ›‹QuoteText:reading. The›
+‹QuoteBar:▎ ›‹QuoteText:drawer should›
+‹QuoteBar:▎ ›‹QuoteText:never make you›
+‹QuoteBar:▎ ›‹QuoteText:wait for it.›
+‹QuoteBar:▎ ›
+‹QuoteBar:▎ ›  ‹Bullet:• ›‹QuoteText:the first rule›
+‹QuoteBar:▎ ›    ‹QuoteText:of review›
+‹QuoteBar:▎ ›  ‹Bullet:• ›‹Image:󰥶 A quoted sc…›
+‹QuoteBar:▎ ›
+‹QuoteBar:▎ ›‹SummaryMark,b:▾ ›‹Summary,b:Quoted notes›
+‹QuoteBar:▎ ›  ‹QuoteText:Open by default,›
+‹QuoteBar:▎ ›  ‹QuoteText:inside a quote.›
+
+‹AlertTip:▎ ›‹AlertTip,b:󰌶 Tip›
+‹AlertTip:▎ ›Open the drawer
+‹AlertTip:▎ ›before the agent
+‹AlertTip:▎ ›finishes to watch
+‹AlertTip:▎ ›the diff grow.
+
+‹AlertImportant:▎ ›‹AlertImportant,b:󰨄 Important›
+‹AlertImportant:▎ ›Merging always
+‹AlertImportant:▎ ›needs the reviewed
+‹AlertImportant:▎ ›head.
+
+‹AlertCaution:▎ ›‹AlertCaution,b:󰳦 Caution›
+‹AlertCaution:▎ ›The drawer reads
+‹AlertCaution:▎ ›the worktree, so
+‹AlertCaution:▎ ›unsaved edits do
+‹AlertCaution:▎ ›not show.
+
+‹Image:󰥶 The drawer over t…›
+
+‹SummaryMark,b:▸ ›‹Summary,b:Bench output›
+  ‹FoldHint:enter opens›
+
+‹Rule:────────────────────›
+
+Closes ‹Link,u:#18›. Thanks
+to the tuios project
+for diffview‹FootnoteRef:[1]›.
+
+‹FootnoteRule:────────────────›
+‹FootnoteNumber: 1. ›‹FootnoteText:Ported at commit›
+    ‹Code: aaaa128 ›‹FootnoteText:, MIT.›

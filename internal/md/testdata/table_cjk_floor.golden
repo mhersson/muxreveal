@@ -1,0 +1,7 @@
+‹TableFrame:╭────────┬──────╮›
+‹TableFrame:│ ›‹TableHeader,b: 名前 ›‹TableFrame: │ ›‹TableHeader,b:説明›‹TableFrame: │›
+‹TableFrame:├────────┼──────┤›
+‹TableFrame:│ ›日本語‹TableFrame: │ ›世界‹TableFrame: │›
+‹TableFrame:│ ›のテキ‹TableFrame: │ ›    ‹TableFrame: │›
+‹TableFrame:│ › スト ‹TableFrame: │ ›    ‹TableFrame: │›
+‹TableFrame:╰────────┴──────╯›
