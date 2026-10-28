@@ -552,14 +552,36 @@ M4 ships as two plans, one PR each.
 
 Headless, in a new `internal/md` package, and it runs beside M2b. Markdown (PR bodies, agents' plan files, repo docs) becomes width-wrapped lines of styled runs with link targets, image references and foldable `<details>` blocks, so M3b and M4b can draw it without knowing markdown. Covers the layout part of MD-1.
 
-- [ ] Parsing: the size bound, `<details>` folds and alerts
-- [ ] Inline runs, links and wrapping
-- [ ] Headings, lists, quotes, alerts, images, folds and footnotes
-- [ ] Code blocks
-- [ ] Tables
-- [ ] The corpus, the fuzz target and the timing tests
+- [x] Parsing: the size bound, `<details>` folds and alerts
+- [x] Inline runs, links and wrapping
+- [x] Headings, lists, quotes, alerts, images, folds and footnotes
+- [x] Code blocks
+- [x] Tables
+- [x] The corpus, the fuzz target and the timing tests
 
 Gate: every corpus document lays out at widths 20, 40, 80, 100 and 130 with no line wider than the width; no run holds a control character; only http, https and mailto are linked; `go test -run '^$' -fuzz=FuzzLayout -fuzztime=5m ./internal/md` finds nothing; Layout of the pathological inputs takes under 200 ms and of a 4 MiB document under 1 s, with parse times recorded. The timing tests skip under `-race` and `-short`, so they run under `make test` and in the gate run, not in `make check`.
+
+#### M4a gate results
+
+Run at commit `011ef68` on 2026-10-28.
+
+Machine: Apple M3 Pro (Mac15,6), 11 cores, 36 GiB, macOS 27.0.1, go1.27.3, on AC power. The load before the run was 1.93 (1-minute average). The background was the aerial wallpaper, Defender, a terminal and a MuxReveal host. The timing tests ran straight after the fuzz, so their 1-minute load average (about 25) reflects the fuzz's tail.
+
+Fuzz: `go test -run '^$' -fuzz=FuzzLayout -fuzztime=5m ./internal/md` found nothing in 5m2s: 5,058,556 executions, 1,478 corpus entries. An earlier 5-minute run found a list-nesting layout bug (a fold under a list item nested past depth 16 lost its mark); it was fixed before this run, and its input is kept as a fuzz seed.
+
+Layout and parse times, best of 3 runs. Parse times are recorded, not gated.
+
+| Input | Layout | Parse | Bound |
+| --- | --- | --- | --- |
+| `[` repeated 100,000 times | 7.5 ms | 14.7 ms | 200 ms |
+| `>` repeated 10,000 times | 0.14 ms | 2.1 ms | 200 ms |
+| `>` repeated 10,000 times, then text | 0.15 ms | 2.0 ms | 200 ms |
+| `>` repeated to the 4 MiB limit, then text | 47.2 ms | 1.22 s | 200 ms |
+| 100,000 list items | 36.1 ms | 47.4 ms | 200 ms |
+| 4 MiB of one paragraph | 57.1 ms | 26.6 ms | 200 ms |
+| 3,000 nested open `<details>` | 6.6 ms | 1.5 ms | 200 ms |
+| one grapheme cluster across 32,000 styled segments | 6.8 ms | 12.9 ms | 200 ms |
+| a 4 MiB mixed document (the corpus repeated) | 155.5 ms | 70.4 ms | 1 s |
 
 ### M4b Everything else in M4
 
@@ -690,4 +712,8 @@ Ideas and requests that came up outside the current milestone go here.
 - A poller keeps a host's client after its token is revoked or expires, so every poll for that host fails with 401 until a restart; rebuild the client after a 401.
 - A persistent failure of the focused PR's checks (for example a fine-grained token without checks access) fails every poll while that PR is focused; report the checks error beside a fresh PR list.
 - A change of `Watch.Visible` alone neither polls nor recomputes the cadence, so a pending PR scrolled into view can wait up to the slow interval.
-- goldmark's link scan is quadratic on repeated `[a](` and its cost is superlinear on deep nesting: take it upstream, or cap the source per document in M4b (GitHub limits PR bodies to 64 KB).
+- Deep nesting at narrow widths: list and quote indentation is capped by depth (16 levels, 34 cells for a list and 32 for a quote), not by width, so the room left for text is the width minus up to that. At width 40 that is 6 cells; a list nested 9 levels deep at width 20, or 14 at width 30, leaves one cell per line, and a quote with more bars than the width has room for (10 at width 20) shows an ellipsis in place of its text. A fold or image line loses its mark when the indent leaves no room for it: under a list nested 4 levels deep at width 10, 9 at width 20 and 14 at width 30 (a quote one level later). From width 35 up the cap leaves room for it.
+- `<pre>` blocks collapse whitespace like paragraphs; lay them out like code.
+- A 4 MiB paragraph allocates about 100 MB of cells while it is laid out (24 bytes per input byte, short-lived); this matters if M4b lays out large repo docs on every resize.
+- goldmark's link scan is quadratic on repeated `[a](` and its cost is superlinear on deep nesting: take it upstream, or cap the source per document in M4b (GitHub limits PR bodies to 65,536 characters).
+- Pre-scan block nesting before goldmark parses, so deep nesting is capped cheaply: goldmark recurses once per nesting level and builds the whole tree, so a 4 MiB file of `>` costs about 2 GB resident memory and 1.2 s to parse. That cost is accepted for now; only local files can reach it, since GitHub caps PR bodies at 65,536 characters.
