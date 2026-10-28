@@ -2,6 +2,7 @@ package harness
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -205,12 +206,22 @@ func TestCustomNameErrors(t *testing.T) {
 		}
 	})
 
+	// The rail tells a probe that gave no answer from a failed read by these.
 	t.Run("a cancelled context", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
 
-		if name, err := (Claude{}).CustomName(ctx, writeTranscript(t, entry("x")+"\n")); err == nil || name != "" {
-			t.Errorf("CustomName() = %q, %v, want no name and an error", name, err)
+		if name, err := (Claude{}).CustomName(ctx, writeTranscript(t, entry("x")+"\n")); !errors.Is(err, context.Canceled) || name != "" {
+			t.Errorf("CustomName() = %q, %v, want no name and context.Canceled", name, err)
+		}
+	})
+
+	t.Run("an expired context", func(t *testing.T) {
+		ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
+		defer cancel()
+
+		if name, err := (Claude{}).CustomName(ctx, writeTranscript(t, entry("x")+"\n")); !errors.Is(err, context.DeadlineExceeded) || name != "" {
+			t.Errorf("CustomName() = %q, %v, want no name and context.DeadlineExceeded", name, err)
 		}
 	})
 }

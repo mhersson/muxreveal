@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -402,6 +403,57 @@ func TestRailNameProbeFailures(t *testing.T) {
 
 		if got := r.name(t, id); got != "" {
 			t.Errorf("name after the file went = %q, want none", got)
+		}
+	})
+
+	t.Run("a read that finds no entry clears the name", func(t *testing.T) {
+		r, id, transcript := setup(t)
+		write(t, transcript, `{"type":"user","message":"hi"}`+"\n"+`{"type":"assistant","message":"hello"}`+"\n")
+
+		r.deliver(hook(r.App, idleHook(id)))
+
+		if got := r.name(t, id); got != "" {
+			t.Errorf("name after a read with no entry = %q, want none", got)
+		}
+	})
+
+	// A probe with no answer says nothing about the name, so the card keeps it.
+	for _, tc := range []struct {
+		name string
+		err  error
+	}{
+		{"deadline exceeded", context.DeadlineExceeded},
+		{"deadline exceeded inside the reader's error", fmt.Errorf("harness: read transcript: %w", context.DeadlineExceeded)},
+		{"cancelled", context.Canceled},
+	} {
+		t.Run("a probe that gets no answer keeps the name: "+tc.name, func(t *testing.T) {
+			r, id, transcript := setup(t)
+
+			r.step(railNameMsg{pane: id, transcript: transcript, gen: r.rail.gen, err: tc.err})
+
+			if got := r.name(t, id); got != "kept" {
+				t.Errorf("name after the probe gave no answer = %q, want kept", got)
+			}
+
+			// The next probe that completes still replaces it.
+			rewriteTranscript(t, transcript, "renamed")
+			r.deliver(hook(r.App, idleHook(id)))
+
+			if got := r.name(t, id); got != "renamed" {
+				t.Errorf("name after the next read = %q, want renamed", got)
+			}
+		})
+	}
+
+	t.Run("a probe with no answer for another session does not show this name", func(t *testing.T) {
+		r, id, _ := setup(t)
+
+		other := transcriptNamed(t, "other")
+		r.session(t, id, other)
+		r.step(railNameMsg{pane: id, transcript: other, gen: r.rail.gen, err: context.DeadlineExceeded})
+
+		if got := r.name(t, id); got != "" {
+			t.Errorf("name = %q, want none: it belongs to the earlier session", got)
 		}
 	})
 

@@ -341,8 +341,9 @@ func (a *App) railFresh(id core.PaneID, cwd string, gen int, k railProbeKind) (*
 	return rp, m.Kind == core.KindAgent && m.Cwd == cwd
 }
 
-// onRailName keeps a name read for the pane's current transcript. A failed read
-// means no name, as a missing file does.
+// onRailName keeps a name read for the pane's current transcript. A completed
+// read replaces the name, and a failed one clears it, as a missing file does. A
+// probe that timed out or was cancelled gave no answer and leaves the name.
 func (a *App) onRailName(msg railNameMsg) tea.Cmd {
 	rp := a.railLive(msg.pane, msg.gen, probeName)
 	if rp == nil {
@@ -352,12 +353,15 @@ func (a *App) onRailName(msg railNameMsg) tea.Cmd {
 	st := a.store.State()
 
 	if m := st.Panes[msg.pane]; m.Kind == core.KindAgent && m.Transcript == msg.transcript {
-		if msg.err != nil {
+		switch {
+		case msg.err == nil:
+			rp.name = railName{text: msg.name, transcript: msg.transcript}
+		case errors.Is(msg.err, context.DeadlineExceeded), errors.Is(msg.err, context.Canceled):
+			a.log.Debug("name probe gave no answer", "pane", msg.pane, "err", msg.err)
+		default:
 			a.log.Debug("name probe", "pane", msg.pane, "err", msg.err)
 
 			rp.name = railName{}
-		} else {
-			rp.name = railName{text: msg.name, transcript: msg.transcript}
 		}
 	}
 
