@@ -22,10 +22,10 @@ import (
 func discardLogger() *slog.Logger { return slog.New(slog.NewTextHandler(io.Discard, nil)) }
 
 func TestRunServesHooks(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	t.Setenv("HOME", shortDir(t))
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
-	stateHome := t.TempDir()
+	stateHome := shortDir(t)
 	t.Setenv("XDG_STATE_HOME", stateHome)
 
 	env, err := core.DefaultEnv()
@@ -128,7 +128,7 @@ func TestStartHooksNamesAnOverlongSocketPath(t *testing.T) {
 }
 
 func TestStartHooksSweepsDeadInstances(t *testing.T) {
-	stateDir := t.TempDir()
+	stateDir := shortDir(t)
 	runDir := filepath.Join(stateDir, "run")
 
 	if err := os.MkdirAll(runDir, 0o700); err != nil {

@@ -43,38 +43,6 @@
               "New": 1,
               "NoNewline": false,
               "Old": 0,
-              "Text": "content of \"inv\\xffalid.txt\""
-            }
-          ],
-          "NewLines": 1,
-          "NewStart": 1,
-          "OldLines": 0,
-          "OldStart": 0,
-          "Section": ""
-        }
-      ],
-      "NewMode": "100644",
-      "NewOID": "df89b173cedf6fde68f5e5b29acf98250bb1ac82",
-      "OldMode": "",
-      "OldOID": "",
-      "OldPath": "",
-      "Path": "inv�alid.txt",
-      "Removed": 0,
-      "Status": "added",
-      "Truncated": false,
-      "Untracked": true
-    },
-    {
-      "Added": 1,
-      "Binary": false,
-      "Hunks": [
-        {
-          "Lines": [
-            {
-              "Kind": "+",
-              "New": 1,
-              "NoNewline": false,
-              "Old": 0,
               "Text": "content of \"new\\nline.txt\""
             }
           ],
@@ -234,7 +202,7 @@
   ],
   "Head": "",
   "Live": true,
-  "New": "5f80c56dd4fb52c8799f44f8fcd94921e9dbd42e",
+  "New": "7300dac5e57ef227d45bdf29ab561ce081590a28",
   "Old": "9714dc31092c667c5249b85f4a1c780d07b8be1d",
   "Through": 0,
   "Truncated": false,

@@ -17,11 +17,26 @@ import (
 	"github.com/mhersson/muxreveal/internal/core"
 )
 
-// socketPath returns a short socket path under t.TempDir().
+// shortDir returns a fresh directory under /tmp: macOS's temp dir is too deep
+// for a 104-byte socket path.
+func shortDir(t *testing.T) string {
+	t.Helper()
+
+	dir, err := os.MkdirTemp("/tmp", "mr")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+
+	return dir
+}
+
+// socketPath returns a short socket path.
 func socketPath(t *testing.T) string {
 	t.Helper()
 
-	return filepath.Join(t.TempDir(), "s.sock")
+	return filepath.Join(shortDir(t), "s.sock")
 }
 
 type served struct {
@@ -292,7 +307,7 @@ func TestServeEndsWithContext(t *testing.T) {
 func TestSendMissingPathFailsFast(t *testing.T) {
 	start := time.Now()
 
-	err := Send(context.Background(), filepath.Join(t.TempDir(), "none.sock"), Event{})
+	err := Send(context.Background(), filepath.Join(shortDir(t), "none.sock"), Event{})
 	if err == nil {
 		t.Fatal("Send() error = nil, want one")
 	}

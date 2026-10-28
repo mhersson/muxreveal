@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -1060,5 +1061,66 @@ func TestWatchOverflowBumpsSeq(t *testing.T) {
 
 	if got := w.Seq(); got <= before {
 		t.Fatalf("Seq = %d after an overflow, was %d", got, before)
+	}
+}
+
+func TestWatchIgnoresVanishedPaths(t *testing.T) {
+	tests := []struct {
+		name         string
+		errno        syscall.Errno
+		wantReported bool
+	}{
+		{name: "a file that vanished is dropped", errno: syscall.ENOENT},
+		{name: "any other filesystem error is reported", errno: syscall.EACCES, wantReported: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := baseRepo(t)
+			injectErrs := make(chan error, 1)
+			opts := fastWatch
+			opts.injectErrs = injectErrs
+			w := startWatch(t, dir, opts)
+
+			// A PathError shaped like the one fsnotify's kqueue backend sends; the
+			// errno varies by case.
+			injectErrs <- &fs.PathError{
+				Op:   "lstat",
+				Path: filepath.Join(dir, ".git", "refs", "heads", "x.lock"),
+				Err:  tt.errno,
+			}
+
+			if tt.wantReported {
+				select {
+				case err := <-w.Errors():
+					if !errors.Is(err, tt.errno) {
+						t.Fatalf("error = %v, want one wrapping %v", err, tt.errno)
+					}
+				case <-time.After(watchWait):
+					t.Fatal("the error never reached Errors")
+				}
+
+				if !w.Degraded() {
+					t.Fatal("Degraded = false after a reported error")
+				}
+
+				return
+			}
+
+			// The watcher handles the injected error before the real change's batch
+			// goes out, so an empty Errors afterwards is not vacuous.
+			writeFile(t, dir, "real.txt", "x")
+			waitPaths(t, w, "real.txt")
+
+			select {
+			case err := <-w.Errors():
+				t.Fatalf("a vanished path was reported: %v", err)
+			default:
+			}
+
+			if w.Degraded() {
+				t.Fatal("Degraded = true after a vanished path")
+			}
+		})
 	}
 }

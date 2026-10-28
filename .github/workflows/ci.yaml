@@ -107,9 +107,7 @@ jobs:
       - name: make scan
         run: make scan
 
-      # Non-blocking until the tests that fail on macOS are fixed.
       - name: make test
-        continue-on-error: true
         run: make test
 
   govulncheck:

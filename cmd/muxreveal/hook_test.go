@@ -22,10 +22,25 @@ func env(m map[string]string) func(string) string {
 	return func(k string) string { return m[k] }
 }
 
+// shortDir returns a fresh directory under /tmp: macOS's temp dir is too deep
+// for a 104-byte socket path.
+func shortDir(t *testing.T) string {
+	t.Helper()
+
+	dir, err := os.MkdirTemp("/tmp", "mr")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+
+	return dir
+}
+
 func shortSock(t *testing.T) string {
 	t.Helper()
 
-	return filepath.Join(t.TempDir(), "s.sock")
+	return filepath.Join(shortDir(t), "s.sock")
 }
 
 // captureStdio fails the test if f writes to the process stdout or stderr.
@@ -89,7 +104,7 @@ func TestRunHookDelivers(t *testing.T) {
 }
 
 func TestRunHookIsSilentAndQuick(t *testing.T) {
-	missing := filepath.Join(t.TempDir(), "none.sock")
+	missing := filepath.Join(shortDir(t), "none.sock")
 
 	// A listener that accepts and never answers.
 	silent := shortSock(t)
