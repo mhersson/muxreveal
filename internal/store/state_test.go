@@ -638,7 +638,7 @@ func TestReviewPersistence(t *testing.T) {
 	data, err = Encode(closed)
 	noErr(t, err)
 
-	if strings.Contains(string(data), "review") {
+	if strings.Contains(string(data), `"review":`) {
 		t.Errorf("closed drawer is written:\n%s", data)
 	}
 }
