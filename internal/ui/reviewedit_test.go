@@ -127,10 +127,12 @@ func TestEditOpensAnEditorPane(t *testing.T) {
 			}
 
 			c := e.st.cmds[0]
-			script := fmt.Sprintf(`%s%s '+%d' 'dir/it'\''s a file.txt'; exec "$SHELL" -l`, e.editor, tt.wantWords, line)
+			script := fmt.Sprintf(`%s%s "$@"; exec "$SHELL" -l`, e.editor, tt.wantWords)
+			plusLine := fmt.Sprintf("+%d", line)
 
-			if !slices.Equal(c.Argv, []string{"/bin/testsh", "-l", "-i", "-c", script}) || c.Dir != e.dir {
-				t.Errorf("command = %q in %q, want the login shell running %s in %s", c.Argv, c.Dir, script, e.dir)
+			// The path is its own argument, never part of the script.
+			if want := []string{"/bin/testsh", "-l", "-i", "-c", script, "testsh", plusLine, e.name}; !slices.Equal(c.Argv, want) || c.Dir != e.dir {
+				t.Errorf("command = %q in %q, want %q in %s", c.Argv, c.Dir, want, e.dir)
 			}
 
 			got := e.store.State()
@@ -148,7 +150,7 @@ func TestEditOpensAnEditorPane(t *testing.T) {
 				t.Skip("no true(1)")
 			}
 
-			cmd := exec.Command("/bin/sh", "-c", script)
+			cmd := exec.Command("/bin/sh", append([]string{"-c"}, c.Argv[4:]...)...)
 
 			cmd.Dir, cmd.Env = e.dir, append(os.Environ(), "ARGS_FILE="+e.argsFile, "SHELL="+truePath)
 
@@ -161,7 +163,7 @@ func TestEditOpensAnEditorPane(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			want := strings.Join(append(slices.Clone(tt.wantArgs), fmt.Sprintf("+%d", line), e.name), "\n") + "\n"
+			want := strings.Join(append(slices.Clone(tt.wantArgs), plusLine, e.name), "\n") + "\n"
 			if string(args) != want {
 				t.Errorf("the editor got %q, want %q", args, want)
 			}
@@ -183,7 +185,7 @@ func TestEditOpensAnEditorPane(t *testing.T) {
 		e.cursorOn(t, func(f git.FileDiff, row reviewRow) bool { return f.Path == "-dash.txt" && row.kind == rowFile })
 		e.keys(keyRune('e'))
 
-		if e.st.count() != 1 || !strings.Contains(e.st.cmds[0].Argv[4], `'./-dash.txt'`) {
+		if e.st.count() != 1 || e.st.cmds[0].Argv[len(e.st.cmds[0].Argv)-1] != "./-dash.txt" {
 			t.Errorf("commands = %q, want the path given as ./-dash.txt", e.st.cmds)
 		}
 	})

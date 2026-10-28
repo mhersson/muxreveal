@@ -1,9 +1,14 @@
 package term
 
 import (
+	"context"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestPaneEnv(t *testing.T) {
@@ -64,12 +69,12 @@ func TestCommands(t *testing.T) {
 		{
 			"fish", "/usr/bin/fish",
 			[]string{"/usr/bin/fish", "-l"},
-			[]string{"/usr/bin/fish", "-l", "-i", "-c", `status job-control full; 'claude'; exec "$SHELL" -l`},
+			[]string{"/usr/bin/fish", "-l", "-i", "-c", `status job-control full; $argv; exec "$SHELL" -l`, "claude"},
 		},
 		{
 			"fallback", "",
 			[]string{"/bin/sh", "-l"},
-			[]string{"/bin/sh", "-l", "-i", "-c", `'claude'; exec "$SHELL" -l`},
+			[]string{"/bin/sh", "-l", "-i", "-c", `"$@"; exec "$SHELL" -l`, "sh", "claude"},
 		},
 	}
 
@@ -136,13 +141,14 @@ func TestCommandsExtraEnv(t *testing.T) {
 	}
 }
 
-func TestAgentCommandQuoting(t *testing.T) {
+func TestAgentCommandArgumentsAreNotInTheScript(t *testing.T) {
 	env := func(string) string { return "/bin/sh" }
-	c := AgentCommand(env, "/work", []string{"claude", "--settings", "/tmp/a b/it's.json", "$(x)"}, nil)
+	argv := []string{"claude", "--settings", "/tmp/a b/it's.json", "$(x)"}
+	c := AgentCommand(env, "/work", argv, nil)
 
-	want := `'claude' '--settings' '/tmp/a b/it'\''s.json' '$(x)'; exec "$SHELL" -l`
-	if got := c.Argv[len(c.Argv)-1]; got != want {
-		t.Errorf("script = %q, want %q", got, want)
+	want := append([]string{"/bin/sh", "-l", "-i", "-c", `"$@"; exec "$SHELL" -l`, "sh"}, argv...)
+	if !slices.Equal(c.Argv, want) {
+		t.Errorf("Argv = %q, want %q", c.Argv, want)
 	}
 }
 
@@ -150,18 +156,20 @@ func TestEditorCommand(t *testing.T) {
 	sh := func(string) string { return "/bin/sh" }
 	fish := func(string) string { return "/usr/bin/fish" }
 
+	const tail = `; exec "$SHELL" -l`
+
 	tests := []struct {
 		name   string
 		env    func(string) string
 		editor string
 		args   []string
-		want   string
+		want   []string // the arguments after -l -i -c
 	}{
-		{"a plain editor", sh, "vi", []string{"+7", "a.go"}, `vi '+7' 'a.go'; exec "$SHELL" -l`},
-		{"an editor with arguments is read by the shell", sh, "code -w", []string{"+7", "a.go"}, `code -w '+7' 'a.go'; exec "$SHELL" -l`},
-		{"a quote and a space stay one argument", sh, "vi", []string{"+7", "it's a file.go"}, `vi '+7' 'it'\''s a file.go'; exec "$SHELL" -l`},
-		{"shell syntax in an argument is not run", sh, "vi", []string{"$(x)", "a;b"}, `vi '$(x)' 'a;b'; exec "$SHELL" -l`},
-		{"fish gets job control first", fish, "vi", []string{"a.go"}, `status job-control full; vi 'a.go'; exec "$SHELL" -l`},
+		{"a plain editor", sh, "vi", []string{"+7", "a.go"}, []string{`vi "$@"` + tail, "sh", "+7", "a.go"}},
+		{"an editor with arguments is read by the shell", sh, "code -w", []string{"+7", "a.go"}, []string{`code -w "$@"` + tail, "sh", "+7", "a.go"}},
+		{"a quote and a space stay one argument", sh, "vi", []string{"+7", "it's a file.go"}, []string{`vi "$@"` + tail, "sh", "+7", "it's a file.go"}},
+		{"shell syntax in an argument is not in the script", sh, "vi", []string{"$(x)", "a;b"}, []string{`vi "$@"` + tail, "sh", "$(x)", "a;b"}},
+		{"fish gets job control first and reads argv", fish, "vi", []string{"a.go"}, []string{`status job-control full; vi $argv` + tail, "a.go"}},
 	}
 
 	for _, tt := range tests {
@@ -169,12 +177,8 @@ func TestEditorCommand(t *testing.T) {
 			c := EditorCommand(tt.env, "/work", tt.editor, tt.args, []string{"MUXREVEAL_PANE=p2"})
 
 			wantSh := tt.env("SHELL")
-			if len(c.Argv) != 5 || c.Argv[0] != wantSh || c.Argv[1] != "-l" || c.Argv[2] != "-i" || c.Argv[3] != "-c" {
-				t.Fatalf("Argv = %q, want %s -l -i -c <script>", c.Argv, wantSh)
-			}
-
-			if got := c.Argv[4]; got != tt.want {
-				t.Errorf("script = %q, want %q", got, tt.want)
+			if want := append([]string{wantSh, "-l", "-i", "-c"}, tt.want...); !slices.Equal(c.Argv, want) {
+				t.Errorf("Argv = %q, want %q", c.Argv, want)
 			}
 
 			if c.Dir != "/work" {
@@ -197,28 +201,26 @@ func TestAgentCommandPinned(t *testing.T) {
 	t.Setenv("TERM", "dumb")
 	t.Setenv("COLORTERM", "16color")
 
-	const (
-		tail   = `; exec "$SHELL" -l`
-		quoted = `'claude' '--settings' '/tmp/a b/it'\''s.json' '$(x)'`
-	)
+	const tail = `; exec "$SHELL" -l`
 
 	argv := []string{"claude", "--settings", "/tmp/a b/it's.json", "$(x)"}
-	fishScript := `status job-control full; ` + quoted + tail
+	posix := `"$@"` + tail
+	fishScript := `status job-control full; $argv` + tail
 
 	tests := []struct {
 		name  string
 		shell string // what $SHELL says; "" for unset
 		argv  []string
-		sh    string // the shell that runs
-		want  string
+		sh    string   // the shell that runs
+		want  []string // the arguments after -l -i -c
 	}{
-		{"sh", "/bin/sh", argv, "/bin/sh", quoted + tail},
-		{"bash", "/bin/bash", argv, "/bin/bash", quoted + tail},
-		{"zsh", "/bin/zsh", argv, "/bin/zsh", quoted + tail},
-		{"fish gets job control first", "/usr/bin/fish", argv, "/usr/bin/fish", fishScript},
-		{"fish at another path", "/opt/homebrew/bin/fish", argv, "/opt/homebrew/bin/fish", fishScript},
-		{"an unset SHELL runs sh", "", argv, "/bin/sh", quoted + tail},
-		{"one word", "/bin/zsh", []string{"claude"}, "/bin/zsh", `'claude'` + tail},
+		{"sh", "/bin/sh", argv, "/bin/sh", append([]string{posix, "sh"}, argv...)},
+		{"bash", "/bin/bash", argv, "/bin/bash", append([]string{posix, "bash"}, argv...)},
+		{"zsh", "/bin/zsh", argv, "/bin/zsh", append([]string{posix, "zsh"}, argv...)},
+		{"fish gets job control first", "/usr/bin/fish", argv, "/usr/bin/fish", append([]string{fishScript}, argv...)},
+		{"fish at another path", "/opt/homebrew/bin/fish", argv, "/opt/homebrew/bin/fish", append([]string{fishScript}, argv...)},
+		{"an unset SHELL runs sh", "", argv, "/bin/sh", append([]string{posix, "sh"}, argv...)},
+		{"one word", "/bin/zsh", []string{"claude"}, "/bin/zsh", []string{posix, "zsh", "claude"}},
 	}
 
 	extra := []string{"MUXREVEAL_PANE=p2", "MUXREVEAL_SOCK=/run/1.sock"}
@@ -235,7 +237,7 @@ func TestAgentCommandPinned(t *testing.T) {
 
 			c := AgentCommand(env, "/work", tt.argv, extra)
 
-			if want := []string{tt.sh, "-l", "-i", "-c", tt.want}; !slices.Equal(c.Argv, want) {
+			if want := append([]string{tt.sh, "-l", "-i", "-c"}, tt.want...); !slices.Equal(c.Argv, want) {
 				t.Errorf("Argv = %q, want %q", c.Argv, want)
 			}
 
@@ -255,6 +257,117 @@ func TestAgentCommandPinned(t *testing.T) {
 					if strings.HasPrefix(kv, key) {
 						t.Errorf("Env keeps the inherited %q", kv)
 					}
+				}
+			}
+		})
+	}
+}
+
+// testShell returns a $SHELL for the named shell that reads no user or system
+// startup files, and skips the test when the shell is not installed.
+func testShell(t *testing.T, name string) string {
+	t.Helper()
+
+	path, err := exec.LookPath(name)
+	if err != nil {
+		t.Skipf("%s not installed", name)
+	}
+
+	flags := map[string]string{"fish": "--no-config", "zsh": "-f", "bash": "--noprofile --norc"}[name]
+	if flags == "" {
+		return path
+	}
+
+	wrapper := filepath.Join(t.TempDir(), name)
+	if err := os.WriteFile(wrapper, []byte("#!/bin/sh\nexec '"+path+"' "+flags+" \"$@\"\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	return wrapper
+}
+
+// runToExit runs c without a terminal and waits for it, under a deadline. The
+// command's closing `exec "$SHELL" -l` reads EOF from the null device and exits.
+func runToExit(t *testing.T, c Command) string {
+	t.Helper()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, c.Argv[0], c.Argv[1:]...)
+	cmd.Dir, cmd.Env, cmd.WaitDelay = c.Dir, c.Env, time.Second
+
+	out, _ := cmd.CombinedOutput()
+	if ctx.Err() != nil {
+		t.Fatalf("%q did not finish: %v\n%s", c.Argv, ctx.Err(), out)
+	}
+
+	return string(out)
+}
+
+// TestCommandsPassArgumentsUntouched runs the editor and agent commands under
+// each shell, with arguments the shell would act on if it parsed them. They must
+// reach the program byte for byte and nothing may run.
+func TestCommandsPassArgumentsUntouched(t *testing.T) {
+	for _, name := range []string{"sh", "bash", "zsh", "fish"} {
+		t.Run(name, func(t *testing.T) {
+			shell := testShell(t, name)
+
+			for _, kind := range []string{"editor", "agent"} {
+				for _, hostile := range []string{"escaped quote", "every metacharacter", "trailing backslash"} {
+					t.Run(kind+"/"+hostile, func(t *testing.T) {
+						out := shellTestEnv(t)
+						dir, marker := t.TempDir(), filepath.Join(t.TempDir(), "injected")
+
+						value := map[string]string{
+							"escaped quote":       `x\';touch ` + marker + `;#`,
+							"every metacharacter": "a\\'b'c$(touch pwned)`touch pwned`;touch pwned;# d\ne",
+							"trailing backslash":  "it's a\\",
+						}[hostile]
+
+						env := func(k string) string {
+							if k == "SHELL" {
+								return shell
+							}
+
+							return ""
+						}
+
+						program := filepath.Join(filepath.Dir(out), "bin", "claude")
+
+						var (
+							c    Command
+							want []string
+						)
+
+						switch kind {
+						case "editor":
+							want = []string{"+3", value}
+							c = EditorCommand(env, dir, program, want, nil)
+						default:
+							want = []string{"--settings", value, "--resume", value}
+							c = AgentCommand(env, dir, append([]string{program}, want...), nil)
+						}
+
+						shellOut := runToExit(t, c)
+
+						raw, err := os.ReadFile(filepath.Join(out, "args"))
+						if err != nil {
+							t.Fatalf("the program did not run: %v\n%s", err, shellOut)
+						}
+
+						if got := strings.Split(strings.TrimSuffix(string(raw), "\x00"), "\x00"); !slices.Equal(got, want) {
+							t.Errorf("args = %q, want %q\n%s", got, want, shellOut)
+						}
+
+						if _, err := os.Stat(marker); err == nil {
+							t.Error("an injected command ran: the marker exists")
+						}
+
+						if left, _ := os.ReadDir(dir); len(left) != 0 {
+							t.Errorf("a command in an argument ran: %d files in the working directory", len(left))
+						}
+					})
 				}
 			}
 		})

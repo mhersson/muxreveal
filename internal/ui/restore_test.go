@@ -126,8 +126,16 @@ func (r *restored) size(w, h int) tea.Cmd {
 	return cmd
 }
 
-// argvOf is the shell script an agent runs, where the claude argv is quoted.
-func argvOf(c term.Command) string { return c.Argv[len(c.Argv)-1] }
+// argvOf is the agent's own argv: what follows the script and $0 of the
+// sh-family login shell the tests run under.
+func argvOf(c term.Command) []string { return c.Argv[6:] }
+
+// hasArgs reports whether argv holds flag directly followed by value.
+func hasArgs(argv []string, flag, value string) bool {
+	i := slices.Index(argv, flag)
+
+	return i >= 0 && i+1 < len(argv) && argv[i+1] == value
+}
 
 func TestRestoreStartsEveryPane(t *testing.T) {
 	r := restoreApp(t, restoreState(), func(o *Options) {
@@ -154,11 +162,11 @@ func TestRestoreStartsEveryPane(t *testing.T) {
 		}
 	}
 
-	if got := argvOf(r.st.cmds[byPane["p1"]]); !strings.Contains(got, "'--resume' '"+restoreSession+"'") {
+	if got := argvOf(r.st.cmds[byPane["p1"]]); !hasArgs(got, "--resume", restoreSession) {
 		t.Errorf("p1 argv = %q, want --resume %s", got, restoreSession)
 	}
 
-	if got := argvOf(r.st.cmds[byPane["p3"]]); strings.Contains(got, "--resume") || !strings.Contains(got, "'--settings'") {
+	if got := argvOf(r.st.cmds[byPane["p3"]]); slices.Contains(got, "--resume") || !slices.Contains(got, "--settings") {
 		t.Errorf("p3 argv = %q, want a fresh claude with hooks", got)
 	}
 
@@ -442,7 +450,7 @@ func TestResumeRestartsAgentWhoseClaudeNeverAppeared(t *testing.T) {
 	}
 
 	c := r.st.cmds[3]
-	if got := argvOf(c); strings.Contains(got, "--resume") || !strings.HasPrefix(got, "'claude'") {
+	if got := argvOf(c); slices.Contains(got, "--resume") || got[0] != "claude" {
 		t.Errorf("restart argv = %q, want a fresh claude", got)
 	}
 

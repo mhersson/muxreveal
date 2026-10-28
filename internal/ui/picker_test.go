@@ -198,7 +198,7 @@ func TestPickerOutsideARepoOpensAtOnce(t *testing.T) {
 		t.Fatalf("starts = %d, want the agent to start", st.count())
 	}
 
-	if c := st.cmds[1]; c.Dir != dir || !strings.Contains(argvOf(c), "claude") {
+	if c := st.cmds[1]; c.Dir != dir || !slices.Contains(argvOf(c), "claude") {
 		t.Errorf("second start = %+v, want claude in %s", c, dir)
 	}
 
@@ -395,7 +395,7 @@ func TestPickerOpensAnAgentInTheWorktree(t *testing.T) {
 		t.Fatalf("starts = %d, want the agent to start", st.count())
 	}
 
-	if c := st.cmds[1]; c.Dir != wt || !strings.Contains(argvOf(c), "claude") {
+	if c := st.cmds[1]; c.Dir != wt || !slices.Contains(argvOf(c), "claude") {
 		t.Errorf("second start = %+v, want claude in %s", c, wt)
 	}
 
@@ -481,7 +481,7 @@ func TestNewWorktreeCreatesAndOpens(t *testing.T) {
 		t.Fatalf("starts = %d, want the agent to start", st.count())
 	}
 
-	if c := st.cmds[1]; c.Dir != want || !strings.Contains(argvOf(c), "claude") {
+	if c := st.cmds[1]; c.Dir != want || !slices.Contains(argvOf(c), "claude") {
 		t.Errorf("second start = %+v, want claude in %s", c, want)
 	}
 
