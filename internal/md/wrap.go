@@ -249,14 +249,27 @@ func sameStyle(a, b Run) bool {
 // wrap lays segs out in lines no wider than width cells. It breaks at spaces and
 // cuts a word wider than the width by cells; a cell wider than the width is
 // replaced by an ellipsis.
-func wrap(segs []seg, width int) []Line {
+func wrap(segs []seg, width int) []Line { return wrapLead(segs, width, 0) }
+
+// wrapLead is wrap with lead cells kept free on the first line, for a marker
+// drawn there.
+func wrapLead(segs []seg, width, lead int) []Line {
 	cells, styles := cellsOf(segs)
 	b := &lineBuilder{styles: styles}
+	first := max(width-lead, 1)
 
 	var (
 		lines []Line
 		group []cell
 	)
+
+	limit := func() int {
+		if len(lines) == 0 {
+			return first
+		}
+
+		return width
+	}
 
 	for i := 0; i < len(cells); {
 		group = group[:0]
@@ -294,7 +307,7 @@ func wrap(segs []seg, width int) []Line {
 
 		switch {
 		case b.n == 0:
-		case b.w+len(group)+ww <= width:
+		case b.w+len(group)+ww <= limit():
 			for _, c := range group {
 				b.put(c)
 			}
@@ -303,11 +316,11 @@ func wrap(segs []seg, width int) []Line {
 		}
 
 		for _, c := range word {
-			if b.n > 0 && b.w+int(c.w) > width {
+			if b.n > 0 && b.w+int(c.w) > limit() {
 				lines = append(lines, b.take())
 			}
 
-			if int(c.w) > width {
+			if int(c.w) > limit() {
 				c = cell{g: "…", w: 1, si: c.si}
 			}
 

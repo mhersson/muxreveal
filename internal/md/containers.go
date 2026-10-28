@@ -9,8 +9,9 @@ import (
 	"github.com/yuin/goldmark/v2/extension"
 )
 
-// list lays out a list. Past maxNest the marker stays on the item's first line
-// but nothing is indented.
+// list lays out a list. Past maxNest nothing is indented and the marker goes on
+// the item's first line only, which is narrower by it; the other lines use the
+// whole width.
 func (l *layouter) list(out *frag, n *ast.List, width int, c blockCtx) {
 	capped := c.depth >= maxNest
 	indent := 0
@@ -34,18 +35,44 @@ func (l *layouter) list(out *frag, n *ast.List, width int, c blockCtx) {
 
 		start := len(out.lines)
 
+		if capped {
+			ic.lead = leadFor(pad, width)
+			l.blocks(out, item, width, ic, true)
+			attachMarker(out, start, marker, width)
+
+			continue
+		}
+
 		l.blocks(out, item, max(width-pad, 1), ic, true)
 
 		if len(out.lines) == start {
 			out.lines = append(out.lines, nil)
 		}
 
-		rest := l.spaces(pad)
-		if capped {
-			rest = nil
-		}
+		hang(out, start, concat(l.spaces(indent), marker), l.spaces(pad), width, false)
+	}
+}
 
-		hang(out, start, concat(l.spaces(indent), marker), rest, width, false)
+// leadFor is the first-line room a marker of pad cells reserves in width cells;
+// a marker no narrower than the width reserves none, and is dropped unless the
+// line has room for it.
+func leadFor(pad, width int) int {
+	if pad >= width {
+		return 0
+	}
+
+	return pad
+}
+
+// attachMarker draws marker before the first line an item appended since start,
+// when the line has room for it; a line the text fills keeps all its text.
+func attachMarker(out *frag, start int, marker Line, width int) {
+	if len(out.lines) == start {
+		out.lines = append(out.lines, nil)
+	}
+
+	if first := out.lines[start]; len(first) == 0 || lineWidth(first)+lineWidth(marker) <= width {
+		out.lines[start] = fit(concat(marker, first), width)
 	}
 }
 
@@ -143,7 +170,9 @@ func (l *layouter) alert(out *frag, n *alertNode, width int, c blockCtx) {
 		head = concat(Line{st.run("▎ ")}, head)
 	}
 
-	out.lines = append(out.lines, fit(head, width))
+	out.lines = append(out.lines, fit(head, max(width-c.lead, 1)))
+	inner.lead = 0
+
 	l.barred(out, n, width, inner, st, capped)
 }
 

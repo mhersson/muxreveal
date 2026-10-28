@@ -1,0 +1,5 @@
+go test fuzz v1
+[]byte(">>0) >* 0<detAils >000000000000\n>>    >   >0) * >* 0<detAils >00000000000000000000000\n>>    >   >      >   >0) * >* 00<detAils >")
+byte('(')
+bool(true)
+byte('\x00')

@@ -816,6 +816,118 @@ func TestNestedFoldsStopIndenting(t *testing.T) {
 	}
 }
 
+// nestedItem lays out one list item under the given number of quotes. Quotes
+// past maxNest draw no bar, so under maxNest or more quotes the bars take
+// 2*maxNest cells and what is left of width is the item's room.
+func nestedItem(item string, quotes, width int, icons bool) Layout {
+	lines := strings.Split(item, "\n")
+	for range quotes {
+		lines = nestLines("quote", 0, lines)
+	}
+
+	return layoutWith(strings.Join(lines, "\n")+"\n", LayoutOptions{Width: width, Icons: icons}, "")
+}
+
+// TestCappedListKeepsMarksBelowItsFirstLine pins what a capped list item leaves
+// to the lines under its first: a capped item draws its marker on the first line
+// only, so only that line is narrower than the room its quotes leave.
+func TestCappedListKeepsMarksBelowItsFirstLine(t *testing.T) {
+	bars := strings.Repeat("▎ ", maxNest)
+
+	tests := []struct {
+		name  string
+		item  string
+		width int
+		icons bool
+		want  []string
+	}{
+		{
+			// 3 cells of room below the bars: the fold line keeps its mark and cuts its text
+			name:  "a fold under the first line",
+			item:  "- 0<details><summary>S</summary>x</details>",
+			width: 2*maxNest + 3,
+			icons: true,
+			want:  []string{bars + "• 0", bars + "▸ S", bars + "  …"},
+		},
+		{
+			// 8 cells of room: the image line keeps its 7-cell mark and cuts the rest
+			name:  "an image under the first line",
+			item:  "- ab ![i](https://e.com/i.png)",
+			width: 2*maxNest + 8,
+			icons: false,
+			want:  []string{bars + "• ab", bars + "image: …"},
+		},
+		{
+			// 2 cells of room, a 3-cell marker: it reserves nothing and is dropped, and the image keeps its icon
+			name:  "a marker wider than the room",
+			item:  "1. ![i](https://e.com/i.png)",
+			width: 2*maxNest + 2,
+			icons: true,
+			want:  []string{bars + iconImage + "…"},
+		},
+		{
+			name:  "text wraps in the room the marker leaves, then in the whole room",
+			item:  "- aa bb cc dd ee ff",
+			width: 2*maxNest + 8,
+			icons: false,
+			want:  []string{bars + "• aa bb", bars + "cc dd ee", bars + "ff"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := nestedItem(tt.item, maxNest, tt.width, tt.icons)
+			assertSafe(t, l, tt.width)
+			assertReferences(t, l, tt.icons, tt.width)
+			wantLines(t, l, tt.want...)
+		})
+	}
+}
+
+// TestFirstBlockOfACappedItem pins how a block that starts a capped item takes
+// the room its marker leaves, 12 cells under the bars. A block that is one unit
+// (a fold head, a code box, a table, a rule) is laid out whole in the room left
+// after the marker; the marker stays on its first line. The recursive layout
+// (maxNest quotes) and the flat walk (maxDepth quotes) must agree.
+func TestFirstBlockOfACappedItem(t *testing.T) {
+	const room = 12
+
+	bars := strings.Repeat("▎ ", maxNest)
+
+	tests := []struct {
+		name string
+		item string
+		want []string
+	}{
+		{"fold head", "- <details><summary>Summary</summary>body</details>", []string{"• ▸ Summary", "  enter o…"}},
+		{"image", "- ![alt](https://e.com/a.png)", []string{"• image: al…"}},
+		{"code box", "- ```go\n  x := 1\n  ```", []string{"• ╭─ go ───╮", "│ 1 x :… │", "╰────────╯"}},
+		{
+			"table", "- | aaaa | bbbb |\n  |---|---|\n  | 1 | 2 |",
+			[]string{"• ╭──────┬─…", "│ aaaa │ …", "├──────┼─…", "│ 1    │ …", "╰──────┴─…"},
+		},
+		{"rule", "- ***", []string{"• ──────────"}},
+		{"empty item", "-", []string{"• "}},
+	}
+
+	for _, quotes := range []int{maxNest, maxDepth} {
+		for _, tt := range tests {
+			t.Run(fmt.Sprintf("%d quotes/%s", quotes, tt.name), func(t *testing.T) {
+				l := nestedItem(tt.item, quotes, 2*maxNest+room, false)
+				assertSafe(t, l, 2*maxNest+room)
+				assertReferences(t, l, false, 2*maxNest+room)
+
+				want := make([]string, len(tt.want))
+				for i, w := range tt.want {
+					want[i] = bars + w
+				}
+
+				wantLines(t, l, want...)
+			})
+		}
+	}
+}
+
 func TestCappedListKeepsMarkers(t *testing.T) {
 	var b strings.Builder
 	for i := 1; i <= 20; i++ {

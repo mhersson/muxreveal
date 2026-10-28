@@ -150,6 +150,9 @@ type blockCtx struct {
 	depth     int  // lists and quotes entered
 	listDepth int  // lists entered
 	done      bool // the next paragraph is a done task's text
+	// lead is the width of the marker a capped list item will draw before the first
+	// line this block appends; that line is narrower by it.
+	lead int
 }
 
 // frag collects lines with the images and folds on them. Blocks append to it
@@ -193,6 +196,10 @@ func (l *layouter) blocks(out *frag, parent ast.Node, width int, c blockCtx, com
 		if sep {
 			dropBlank(out, before)
 		}
+
+		if len(out.lines) > start {
+			c.lead = 0
+		}
 	}
 }
 
@@ -221,9 +228,9 @@ func (l *layouter) block(out *frag, n ast.Node, width int, c blockCtx) {
 
 	switch n := n.(type) {
 	case *ast.Paragraph:
-		l.flow(out, restyle(l.inlines(n), text, false), width)
+		l.flow(out, restyle(l.inlines(n), text, false), width, c.lead)
 	case *ast.Heading:
-		l.heading(out, n, width)
+		l.heading(out, n, width, c.lead)
 	case *ast.List:
 		l.list(out, n, width, c)
 	case *ast.Blockquote:
@@ -233,15 +240,15 @@ func (l *layouter) block(out *frag, n ast.Node, width int, c blockCtx) {
 	case *foldNode:
 		l.fold(out, n, width, c)
 	case *htmlFragment:
-		l.flow(out, restyle(l.htmlSegs(n.HTML), text, false), width)
+		l.flow(out, restyle(l.htmlSegs(n.HTML), text, false), width, c.lead)
 	case *ast.HTMLBlock:
-		l.htmlBlock(out, n, width, text)
+		l.htmlBlock(out, n, width, text, c.lead)
 	case *ast.CodeBlock:
-		l.codeBlock(out, n, width)
+		l.codeBlock(out, n, max(width-c.lead, 1))
 	case *east.Table:
-		l.table(out, n, width, text)
+		l.table(out, n, max(width-c.lead, 1), text)
 	case *ast.ThematicBreak:
-		out.lines = append(out.lines, l.rule(RoleRule, width))
+		out.lines = append(out.lines, l.rule(RoleRule, max(width-c.lead, 1)))
 	}
 }
 
@@ -271,8 +278,9 @@ func restyle(segs []seg, text Role, bold bool) []seg {
 	return segs
 }
 
-// flow wraps segs, giving each image a line of its own.
-func (l *layouter) flow(out *frag, segs []seg, width int) {
+// flow wraps segs, giving each image a line of its own. The first line it
+// appends is lead cells narrower.
+func (l *layouter) flow(out *frag, segs []seg, width, lead int) {
 	start := 0
 
 	for i, sg := range segs {
@@ -280,14 +288,19 @@ func (l *layouter) flow(out *frag, segs []seg, width int) {
 			continue
 		}
 
-		out.lines = append(out.lines, wrap(segs[start:i], width)...)
+		if lines := wrapLead(segs[start:i], width, lead); len(lines) > 0 {
+			out.lines = append(out.lines, lines...)
+			lead = 0
+		}
+
 		start = afterImageBreak(segs, i+1)
 
 		out.images = append(out.images, Image{Line: len(out.lines), Alt: sg.img.alt, Src: sg.img.src, Link: sg.st.link})
-		out.lines = append(out.lines, fit(l.imageLine(sg), width))
+		out.lines = append(out.lines, fit(l.imageLine(sg), max(width-lead, 1)))
+		lead = 0
 	}
 
-	out.lines = append(out.lines, wrap(segs[start:], width)...)
+	out.lines = append(out.lines, wrapLead(segs[start:], width, lead)...)
 }
 
 // afterImageBreak returns where the text after an image starts: past the first
@@ -306,7 +319,7 @@ func afterImageBreak(segs []seg, from int) int {
 	return from
 }
 
-func (l *layouter) heading(out *frag, h *ast.Heading, width int) {
+func (l *layouter) heading(out *frag, h *ast.Heading, width, lead int) {
 	role := RoleHeading3
 
 	switch h.Level {
@@ -318,14 +331,14 @@ func (l *layouter) heading(out *frag, h *ast.Heading, width int) {
 
 	start := len(out.lines)
 
-	l.flow(out, restyle(l.inlines(h), role, true), width)
+	l.flow(out, restyle(l.inlines(h), role, true), width, lead)
 
 	if h.Level == 1 && len(out.lines) > start {
 		out.lines = append(out.lines, l.rule(RoleRule, width))
 	}
 }
 
-func (l *layouter) htmlBlock(out *frag, h *ast.HTMLBlock, width int, text Role) {
+func (l *layouter) htmlBlock(out *frag, h *ast.HTMLBlock, width int, text Role, lead int) {
 	raw := string(h.Value.Bytes(l.d.src))
 
 	switch h.HTMLBlockKind {
@@ -337,7 +350,7 @@ func (l *layouter) htmlBlock(out *frag, h *ast.HTMLBlock, width int, text Role) 
 		}
 	}
 
-	l.flow(out, restyle(l.htmlSegs(raw), text, false), width)
+	l.flow(out, restyle(l.htmlSegs(raw), text, false), width, lead)
 }
 
 func (l *layouter) spaces(n int) Line {
@@ -352,12 +365,7 @@ func (l *layouter) spaces(n int) Line {
 // the others, cutting lines at width. A later blank line gets rest only when
 // blanks is set.
 func hang(out *frag, start int, first, rest Line, width int, blanks bool) {
-	end := len(out.lines)
-	if len(rest) == 0 {
-		end = min(end, start+1)
-	}
-
-	for i := start; i < end; i++ {
+	for i := start; i < len(out.lines); i++ {
 		prefix := rest
 		if i == start {
 			prefix = first

@@ -43,9 +43,8 @@ type flatList struct {
 
 // flat lays out the container n and everything nested in it without recursing,
 // for n at or past maxDepth. No container draws a bar or indentation there, so
-// one width serves the whole walk, and an item only narrows its own content by
-// its marker. An item's marker goes on its first line when that line has room
-// for it, so a marker never pushes text out.
+// one width serves the whole walk. An item's marker narrows its first line and
+// goes on it when the line has room.
 func (l *layouter) flat(out *frag, n ast.Node, width int, c blockCtx) {
 	stack := l.openFlat(nil, out, n, width, c)
 
@@ -63,15 +62,20 @@ func (l *layouter) flat(out *frag, n ast.Node, width int, c blockCtx) {
 			marker := l.marker(f.list.n, item, f.list.i, f.list.numW, f.list.depth)
 			ic := f.c
 			ic.done = isDone(item)
+			ic.lead = leadFor(lineWidth(marker), width)
 
 			f.list.i++
 
 			stack = append(stack, flatFrame{
 				kind: kindItem, next: item.FirstChild(), c: ic, pending: -1,
-				width: max(width-lineWidth(marker), 1), start: len(out.lines), marker: marker,
+				width: width, start: len(out.lines), marker: marker,
 			})
 
 			continue
+		}
+
+		if f.c.lead > 0 && len(out.lines) > f.start {
+			f.c.lead = 0
 		}
 
 		if f.pending >= 0 {
@@ -82,7 +86,7 @@ func (l *layouter) flat(out *frag, n ast.Node, width int, c blockCtx) {
 		ch := f.next
 		if ch == nil {
 			if f.kind == kindItem {
-				endItem(out, f, width)
+				attachMarker(out, f.start, f.marker, width)
 			}
 
 			stack = stack[:len(stack)-1]
@@ -141,12 +145,14 @@ func (l *layouter) openFlat(stack []flatFrame, out *frag, n ast.Node, w int, c b
 		c.text = RoleQuoteText
 	case *alertNode:
 		head, _ := l.alertTitle(n)
-		out.lines = append(out.lines, fit(head, w))
-		c.text = RoleText
+		out.lines = append(out.lines, fit(head, max(w-c.lead, 1)))
+		c.text, c.lead = RoleText, 0
 	case *foldNode:
-		if !l.foldHead(out, n, w) {
+		if !l.foldHead(out, n, max(w-c.lead, 1)) {
 			return stack
 		}
+
+		c.lead = 0
 	case *ast.List:
 		items, numW := listItems(n)
 		c.listDepth++
@@ -162,16 +168,4 @@ func (l *layouter) openFlat(stack []flatFrame, out *frag, n ast.Node, w int, c b
 	}
 
 	return append(stack, flatFrame{kind: kindBlocks, next: n.FirstChild(), c: c, width: w, start: len(out.lines), pending: -1})
-}
-
-// endItem puts the marker of the finished item f on its first line.
-func endItem(out *frag, f *flatFrame, width int) {
-	if len(out.lines) == f.start {
-		out.lines = append(out.lines, nil)
-	}
-
-	first := out.lines[f.start]
-	if len(first) == 0 || lineWidth(first)+lineWidth(f.marker) <= width {
-		out.lines[f.start] = fit(concat(f.marker, first), width)
-	}
 }

@@ -8,11 +8,12 @@ import (
 
 // fold lays out a <details> block: the summary line, then the body when open.
 func (l *layouter) fold(out *frag, n *foldNode, width int, c blockCtx) {
-	if !l.foldHead(out, n, width) {
+	if !l.foldHead(out, n, max(width-c.lead, 1)) {
 		return
 	}
 
 	c.depth++
+	c.lead = 0
 
 	if c.depth > maxNest {
 		l.blocks(out, n, width, c, false)

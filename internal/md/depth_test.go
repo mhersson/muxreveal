@@ -225,12 +225,10 @@ func TestFlatNesting(t *testing.T) {
 		tests := []struct {
 			name, src string
 			mark      string // the marker the line of the innermost item keeps
-			whole     bool   // the text fits on one line at width 100
 		}{
-			{"bullets", strings.Repeat("- ", levels) + "deep", "▪", true},
-			{"task", strings.Repeat("- ", levels) + "[x] deep", "✓", true},
-			// numbers are wider, so the width the recursive levels leave is too narrow for the word
-			{"numbers", strings.Repeat("7. ", levels) + "deep", "7.", false},
+			{"bullets", strings.Repeat("- ", levels) + "deep", "▪"},
+			{"task", strings.Repeat("- ", levels) + "[x] deep", "✓"},
+			{"numbers", strings.Repeat("7. ", levels) + "deep", "7."},
 		}
 
 		for _, tt := range tests {
@@ -247,7 +245,7 @@ func TestFlatNesting(t *testing.T) {
 					t.Errorf("first line has no marker: %q", plain[0])
 				}
 
-				if tt.whole && slicesIndexLine(plain, "deep") < 0 {
+				if slicesIndexLine(plain, "deep") < 0 {
 					t.Errorf("deep is missing from %q", plain)
 				}
 			})
