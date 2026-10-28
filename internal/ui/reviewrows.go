@@ -35,11 +35,16 @@ const (
 //   - rowGhost: line indexes the old text; block is the ghost block. text is
 //     the line.
 //   - rowFold: line is the block's first old line, other the number of lines.
+//
+// A ghost or fold row also holds edit, the line of the new file an editor
+// opens at for it: the first new line after its block, or the last line when
+// the block ends the file. The old numbers of removed lines mean nothing there.
 type reviewRow struct {
 	kind                    reviewRowKind
 	file, hunk, line, other int
 	text                    string
 	block                   int
+	edit                    int
 }
 
 // rowOpts selects how buildRows lays the result out.
@@ -71,7 +76,7 @@ const (
 )
 
 func newRow(kind reviewRowKind, file int) reviewRow {
-	return reviewRow{kind: kind, file: file, hunk: -1, line: -1, other: -1, block: -1}
+	return reviewRow{kind: kind, file: file, hunk: -1, line: -1, other: -1, block: -1, edit: -1}
 }
 
 func infoRow(file int, text string) reviewRow {
@@ -209,14 +214,17 @@ func appendFull(rows []reviewRow, file int, path string, ft fullText, o rowOpts)
 				folded = o.ghostsStartFolded
 			}
 
+			// The block sits before new line ni; past the end it is the last line.
+			edit := min(ni, len(nw)-1) + 1
+
 			if folded {
 				r := newRow(rowFold, file)
-				r.line, r.other, r.block = oi, n, block
+				r.line, r.other, r.block, r.edit = oi, n, block, edit
 				rows = append(rows, r)
 			} else {
 				for k := range n {
 					r := newRow(rowGhost, file)
-					r.line, r.block, r.text = oi+k, block, old[oi+k]
+					r.line, r.block, r.text, r.edit = oi+k, block, old[oi+k], edit
 					rows = append(rows, r)
 				}
 			}

@@ -491,8 +491,9 @@ func reviewEditor(getenv func(string) string) string {
 }
 
 // editLine is the line of f the row stands for: the cursor line's new number,
-// its old number on a removed line, the hunk's new start on a hunk header and 1
-// on a file header.
+// its old number on a removed line of a hunk, the hunk's new start on a hunk
+// header, the first new line after the block on a ghost line of the full view
+// (the last line when the block ends the file) and 1 on a file header.
 func editLine(f git.FileDiff, r reviewRow) int {
 	line := 1
 
@@ -512,8 +513,10 @@ func editLine(f git.FileDiff, r reviewRow) int {
 		} else {
 			line = l.New
 		}
-	case rowFull, rowGhost, rowFold:
+	case rowFull:
 		line = r.line + 1
+	case rowGhost, rowFold:
+		line = r.edit
 	}
 
 	return max(line, 1)

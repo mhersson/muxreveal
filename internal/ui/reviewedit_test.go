@@ -233,6 +233,38 @@ func TestEditLine(t *testing.T) {
 		return reviewRow{}
 	}
 
+	// Ghost blocks where the old and the new numbering differ, so a ghost's own
+	// old number cannot pass for the line the editor opens at.
+	ghosts := git.Result{Files: []git.FileDiff{
+		{Path: "mid.go", Status: git.Modified},
+		{Path: "end.go", Status: git.Modified},
+		{Path: "start.go", Status: git.Modified},
+		{Path: "none.go", Status: git.Modified},
+	}}
+	ghostText := map[string]fullText{
+		"mid.go":   {old: []string{"x", "g0", "k1", "k2", "g1", "g2", "k3"}, new: []string{"x", "k1", "k2", "k3"}},
+		"end.go":   {old: []string{"x", "k1", "g1", "g2"}, new: []string{"x", "k1"}},
+		"start.go": {old: []string{"g1", "g2", "k1"}, new: []string{"k1"}},
+		"none.go":  {old: []string{"g1", "g2"}, new: nil},
+	}
+	ghostShown := buildRows(ghosts, rowOpts{full: ghostText})
+	ghostFolded := buildRows(ghosts, rowOpts{full: ghostText, ghostsStartFolded: true})
+
+	// inFile is the n-th row of a kind, counting from 0, in the file at index file.
+	inFile := func(rows []reviewRow, file int, kind reviewRowKind, text string, n int) reviewRow {
+		t.Helper()
+
+		var of []reviewRow
+
+		for _, r := range rows {
+			if r.file == file {
+				of = append(of, r)
+			}
+		}
+
+		return nth(of, kind, text, n)
+	}
+
 	tests := []struct {
 		name string
 		file git.FileDiff
@@ -252,10 +284,21 @@ func TestEditLine(t *testing.T) {
 		{"full file, a kept line: its place in the new text", file, nth(shown, rowFull, "keep", 0), 1},
 		{"full file, an added line", file, nth(shown, rowFull, "new", 0), 2},
 		{"full file, the last kept line", file, nth(shown, rowFull, "tail", 0), 3},
-		{"full file, a ghost line: its old number", file, nth(shown, rowGhost, "gone1", 0), 2},
-		{"full file, the next ghost line", file, nth(shown, rowGhost, "gone2", 0), 3},
-		{"full file, a folded block: its first old number", file, nth(folded, rowFold, "", 0), 2},
+		{"full file, a ghost line: the new line after its block", file, nth(shown, rowGhost, "gone1", 0), 2},
+		{"full file, the next ghost line: the same", file, nth(shown, rowGhost, "gone2", 0), 2},
+		{"full file, a folded block: the new line after it", file, nth(folded, rowFold, "", 0), 2},
 		{"an info row: the top of the file", git.FileDiff{Path: "b.bin"}, nth(info, rowInfo, "", 0), 1},
+
+		{"a ghost in the middle: the new line after its block", ghosts.Files[0], inFile(ghostShown, 0, rowGhost, "g1", 0), 4},
+		{"the last ghost of that block: the same line", ghosts.Files[0], inFile(ghostShown, 0, rowGhost, "g2", 0), 4},
+		{"an earlier block of the same file", ghosts.Files[0], inFile(ghostShown, 0, rowGhost, "g0", 0), 2},
+		{"a folded block in the middle", ghosts.Files[0], inFile(ghostFolded, 0, rowFold, "", 1), 4},
+		{"a ghost block at the end: the last line of the new file", ghosts.Files[1], inFile(ghostShown, 1, rowGhost, "g1", 0), 2},
+		{"its last ghost: the same", ghosts.Files[1], inFile(ghostShown, 1, rowGhost, "g2", 0), 2},
+		{"a folded block at the end", ghosts.Files[1], inFile(ghostFolded, 1, rowFold, "", 0), 2},
+		{"a ghost block at the start: the first new line", ghosts.Files[2], inFile(ghostShown, 2, rowGhost, "g2", 0), 1},
+		{"a file with no new lines left: line 1", ghosts.Files[3], inFile(ghostShown, 3, rowGhost, "g2", 0), 1},
+		{"a folded block of a file with no new lines left", ghosts.Files[3], inFile(ghostFolded, 3, rowFold, "", 0), 1},
 	}
 
 	for _, tt := range tests {
