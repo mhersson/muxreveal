@@ -1,0 +1,17 @@
+Intro
+
+‹CodeFrame:╭─ ›‹CodeLang:go›‹CodeFrame: ───────╮›
+‹CodeFrame:│ ›‹LineNumber:1 ›‹CodeText:pack#1›‹CodeText:age…›‹CodeFrame: │›
+‹CodeFrame:│ ›‹LineNumber:2 ›‹CodeText:        ›‹CodeFrame: │›
+‹CodeFrame:│ ›‹LineNumber:3 ›‹CodeText:func#1›‹CodeText: ma…›‹CodeFrame: │›
+‹CodeFrame:│ ›‹LineNumber:4 ›‹CodeText:    pri…›‹CodeFrame: │›
+‹CodeFrame:│ ›‹LineNumber:5 ›‹CodeText:}       ›‹CodeFrame: │›
+‹CodeFrame:╰────────────╯›
+
+‹CodeFrame:╭────────────╮›
+‹CodeFrame:│ ›‹LineNumber:1 ›‹CodeText:indented›‹CodeFrame: │›
+‹CodeFrame:╰────────────╯›
+
+‹CodeFrame:╭────────────╮›
+‹CodeFrame:│ ›‹LineNumber:1 ›‹CodeText:with   …›‹CodeFrame: │›
+‹CodeFrame:╰────────────╯›

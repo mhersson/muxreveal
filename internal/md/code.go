@@ -1,0 +1,257 @@
+package md
+
+import (
+	"strconv"
+	"strings"
+	"unicode"
+	"unicode/utf8"
+
+	"github.com/charmbracelet/x/ansi"
+	"github.com/yuin/goldmark/v2/ast"
+
+	"github.com/mhersson/muxreveal/internal/git/invisible"
+)
+
+const (
+	tabStop     = 4
+	maxLangCell = 20
+)
+
+// codeBlock lays out a fenced or indented code block as a rounded box. Lines
+// are cut with …, never wrapped. The box is built at least numW+6 cells wide
+// (room for one code cell) and then cut to width, so no line is ever wider.
+func (l *layouter) codeBlock(out *frag, n *ast.CodeBlock, width int) {
+	lines := codeLines(n, l.d.src)
+
+	numW := 0
+	if len(lines) > 0 {
+		numW = len(strconv.Itoa(len(lines)))
+	}
+
+	fw := max(width, numW+6)
+	frame := styled(RoleCodeFrame)
+
+	lang := n.Info.Value(l.d.src)
+	if i := strings.IndexAny(lang, " \t"); i >= 0 {
+		lang = lang[:i]
+	}
+
+	var spans [][]Span
+	if len(lines) > 0 && l.highlight != nil {
+		spans = l.highlight(lang, lines)
+	}
+
+	label := cleanProse(lang)
+	if maxL := min(maxLangCell, fw-6); label == "" || maxL < 1 {
+		label = ""
+	} else if ansi.StringWidth(label) > maxL {
+		label = ansi.Truncate(label, maxL-1, "") + "…"
+	}
+
+	var top Line
+
+	if label == "" {
+		top = Line{frame.run("╭" + strings.Repeat("─", fw-2) + "╮")}
+	} else {
+		fill := strings.Repeat("─", fw-5-ansi.StringWidth(label))
+		top = Line{frame.run("╭─ "), styled(RoleCodeLang).run(label), frame.run(" " + fill + "╮")}
+	}
+
+	out.lines = append(out.lines, fit(top, width))
+
+	room := fw - 5 - numW
+
+	for i, text := range lines {
+		var sp []Span
+		if i < len(spans) {
+			sp = spans[i]
+		}
+
+		num := strconv.Itoa(i + 1)
+		row := Line{frame.run("│ "), styled(RoleLineNumber).run(strings.Repeat(" ", numW-len(num)) + num + " ")}
+		row = append(row, codeCells(text, sp, room)...)
+		row = appendRun(row, frame.run(" │"))
+
+		out.lines = append(out.lines, fit(row, width))
+	}
+
+	out.lines = append(out.lines, fit(Line{frame.run("╰" + strings.Repeat("─", fw-2) + "╯")}, width))
+}
+
+// codeLines is the block's lines as written: goldmark's padding applied, the
+// line ending dropped.
+func codeLines(n *ast.CodeBlock, src []byte) []string {
+	segs := n.Value.Segments()
+	lines := make([]string, 0, len(segs))
+
+	for _, sg := range segs {
+		s := string(sg.Bytes(src))
+		s = strings.TrimSuffix(s, "\n")
+		s = strings.TrimSuffix(s, "\r")
+
+		lines = append(lines, s)
+	}
+
+	return lines
+}
+
+// spanClasses spreads spans over the bytes of line: clamped to the line, a
+// later span overriding an earlier one.
+func spanClasses(line string, spans []Span) []uint8 {
+	if len(spans) == 0 {
+		return nil
+	}
+
+	classes := make([]uint8, len(line))
+
+	for _, sp := range spans {
+		start, end := max(sp.Start, 0), min(sp.End, len(line))
+		for i := start; i < end; i++ {
+			classes[i] = sp.Class
+		}
+	}
+
+	return classes
+}
+
+// codeCell is one rune of code laid out: its run and the cells it takes.
+type codeCell struct {
+	run   Run
+	cells int
+}
+
+// codeCells lays line out in exactly room cells: tabs expanded, hidden
+// characters tagged, padded with spaces, or cut to room-1 cells and a …. It
+// stops reading the line once room is full.
+func codeCells(line string, spans []Span, room int) Line {
+	classes := spanClasses(line, spans)
+	cells := make([]codeCell, 0, min(len(line), room+1))
+	col, cut := 0, false
+
+	for i := 0; i < len(line); {
+		r, size := utf8.DecodeRuneInString(line[i:])
+
+		st := styled(RoleCodeText)
+		if classes != nil {
+			st.class = classes[i]
+		}
+
+		i += size
+
+		var text string
+
+		var cw int
+
+		switch {
+		case r == utf8.RuneError && size == 1:
+			text, cw = "�", 1
+		case r == '\t':
+			cw = tabStop - col%tabStop
+			text = strings.Repeat(" ", cw)
+		case unicode.IsControl(r) || invisible.Rune(r):
+			text = hiddenTag(r)
+			cw = ansi.StringWidth(text)
+			st.role, st.bold, st.class = RoleHidden, true, 0
+		default:
+			text = string(r)
+			cw = ansi.StringWidth(text)
+		}
+
+		if col+cw > room {
+			cut = true
+
+			break
+		}
+
+		cells = append(cells, codeCell{run: st.run(text), cells: cw})
+		col += cw
+	}
+
+	if cut {
+		for col > room-1 {
+			col -= cells[len(cells)-1].cells
+			cells = cells[:len(cells)-1]
+		}
+	}
+
+	out := make(Line, 0, 4)
+	for _, c := range cells {
+		out = appendRun(out, c.run)
+	}
+
+	pad := styled(RoleCodeText)
+
+	if cut {
+		out = appendRun(out, pad.run(strings.Repeat(" ", room-1-col)))
+		out = appendRun(out, pad.run("…"))
+	} else {
+		out = appendRun(out, pad.run(strings.Repeat(" ", room-col)))
+	}
+
+	return out
+}
+
+// appendRun adds r to line, merging it into the last run when the styles match
+// and skipping empty text.
+func appendRun(line Line, r Run) Line {
+	if r.Text == "" {
+		return line
+	}
+
+	if n := len(line); n > 0 && sameStyle(line[n-1], r) {
+		line[n-1].Text += r.Text
+
+		return line
+	}
+
+	return append(line, r)
+}
+
+// appendCode adds code text as segs in st: characters that draw nothing or
+// control the terminal become a RoleHidden tag, so they stay visible. A tab
+// becomes a space.
+func appendCode(segs []seg, s string, st style) []seg {
+	hidden := st
+	hidden.role, hidden.bold = RoleHidden, true
+
+	var plain strings.Builder
+
+	flush := func() {
+		if plain.Len() > 0 {
+			segs = append(segs, seg{text: plain.String(), st: st, sp: spaceKeep})
+			plain.Reset()
+		}
+	}
+
+	for i := 0; i < len(s); {
+		r, size := utf8.DecodeRuneInString(s[i:])
+		i += size
+
+		switch {
+		case r == utf8.RuneError && size == 1:
+			plain.WriteRune('�')
+		case r == '\t':
+			plain.WriteByte(' ')
+		case unicode.IsControl(r) || invisible.Rune(r):
+			flush()
+
+			segs = append(segs, seg{text: hiddenTag(r), st: hidden})
+		default:
+			plain.WriteRune(r)
+		}
+	}
+
+	flush()
+
+	return segs
+}
+
+// hiddenTag spells r as ⟨U+XXXX⟩.
+func hiddenTag(r rune) string {
+	h := strings.ToUpper(strconv.FormatInt(int64(r), 16))
+	if len(h) < 4 {
+		h = strings.Repeat("0", 4-len(h)) + h
+	}
+
+	return "⟨U+" + h + "⟩"
+}

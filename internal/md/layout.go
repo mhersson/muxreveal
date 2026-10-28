@@ -133,11 +133,12 @@ func (l Layout) Plain() []string {
 
 // layouter holds the state of one Layout call; the Doc stays untouched.
 type layouter struct {
-	d     *Doc
-	width int
-	open  map[int]bool
-	icons bool
-	out   Layout
+	d         *Doc
+	width     int
+	open      map[int]bool
+	icons     bool
+	highlight Highlighter
+	out       Layout
 }
 
 // blockCtx is what a block inherits from the containers around it.
@@ -158,7 +159,7 @@ type frag struct {
 
 // Layout wraps the document to o.Width cells (at most 100, at least 1).
 func (d *Doc) Layout(o LayoutOptions) Layout {
-	l := &layouter{d: d, width: min(max(o.Width, 1), maxWidth), open: o.Open, icons: o.Icons}
+	l := &layouter{d: d, width: min(max(o.Width, 1), maxWidth), open: o.Open, icons: o.Icons, highlight: o.Highlight}
 
 	var f frag
 
@@ -190,7 +191,7 @@ func (l *layouter) blocks(out *frag, parent ast.Node, width int, c blockCtx, com
 	}
 }
 
-// block appends one block. Code blocks and tables lay out nothing yet.
+// block appends one block. Tables lay out nothing yet.
 func (l *layouter) block(out *frag, n ast.Node, width int, c blockCtx) {
 	text := c.text
 	if c.done {
@@ -216,6 +217,8 @@ func (l *layouter) block(out *frag, n ast.Node, width int, c blockCtx) {
 		l.flow(out, restyle(l.htmlSegs(n.HTML), text, false), width)
 	case *ast.HTMLBlock:
 		l.htmlBlock(out, n, width, text)
+	case *ast.CodeBlock:
+		l.codeBlock(out, n, width)
 	case *ast.ThematicBreak:
 		out.lines = append(out.lines, l.rule(RoleRule, width))
 	}

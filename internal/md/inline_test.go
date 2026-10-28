@@ -464,13 +464,12 @@ func TestFootnoteRef(t *testing.T) {
 	}
 }
 
-func TestParagraphsAndSkippedCode(t *testing.T) {
+func TestParagraphs(t *testing.T) {
 	tests := []struct {
 		name, src string
 		want      []string
 	}{
 		{"one blank line between paragraphs", "a\n\nb\n\n\n\nc", []string{"a", "", "b", "", "c"}},
-		{"code blocks lay out nothing yet", "a\n\n```\ncode\n```\n\nb", []string{"a", "", "b"}},
 		{"empty paragraph lays out nothing", "<!-- x -->\n\na", []string{"a"}},
 		{"empty document", "", nil},
 	}

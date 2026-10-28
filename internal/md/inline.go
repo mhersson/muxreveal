@@ -7,7 +7,6 @@ import (
 	"strconv"
 	"strings"
 	"unicode"
-	"unicode/utf8"
 
 	"github.com/yuin/goldmark/v2/ast"
 	east "github.com/yuin/goldmark/v2/extension/ast"
@@ -565,53 +564,4 @@ func cleanProse(s string) string {
 	}
 
 	return b.String()
-}
-
-// appendCode adds code text as segs in st: characters that draw nothing or
-// control the terminal become a RoleHidden tag, so they stay visible. A tab
-// becomes a space. Code blocks reuse it.
-func appendCode(segs []seg, s string, st style) []seg {
-	hidden := st
-	hidden.role, hidden.bold = RoleHidden, true
-
-	var plain strings.Builder
-
-	flush := func() {
-		if plain.Len() > 0 {
-			segs = append(segs, seg{text: plain.String(), st: st, sp: spaceKeep})
-			plain.Reset()
-		}
-	}
-
-	for i := 0; i < len(s); {
-		r, size := utf8.DecodeRuneInString(s[i:])
-		i += size
-
-		switch {
-		case r == utf8.RuneError && size == 1:
-			plain.WriteRune('�')
-		case r == '\t':
-			plain.WriteByte(' ')
-		case unicode.IsControl(r) || invisible.Rune(r):
-			flush()
-
-			segs = append(segs, seg{text: hiddenTag(r), st: hidden})
-		default:
-			plain.WriteRune(r)
-		}
-	}
-
-	flush()
-
-	return segs
-}
-
-// hiddenTag spells r as ⟨U+XXXX⟩.
-func hiddenTag(r rune) string {
-	h := strings.ToUpper(strconv.FormatInt(int64(r), 16))
-	if len(h) < 4 {
-		h = strings.Repeat("0", 4-len(h)) + h
-	}
-
-	return "⟨U+" + h + "⟩"
 }
