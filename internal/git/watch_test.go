@@ -492,6 +492,20 @@ func TestWatchBatchWaitsForTheDebounce(t *testing.T) {
 	}
 }
 
+// The watcher has no clock seam, and a timing bound on a real run would flake
+// under load, so the default is pinned on the options the watcher runs with.
+func TestWatchDefaultDebounce(t *testing.T) {
+	w := startWatch(t, baseRepo(t), WatchOptions{})
+
+	if got, want := w.opts.Debounce, 100*time.Millisecond; got != want {
+		t.Errorf("default debounce = %v, want %v", got, want)
+	}
+
+	if got, want := w.opts.MaxDelay, time.Second; got != want {
+		t.Errorf("default max delay = %v, want %v", got, want)
+	}
+}
+
 func TestWatchGitignoreChangeAddsDirectoryWatch(t *testing.T) {
 	dir := newRepo(t)
 	writeFile(t, dir, ".gitignore", "vendor/\n")

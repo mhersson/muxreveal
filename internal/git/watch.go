@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	defaultDebounce = 150 * time.Millisecond
+	defaultDebounce = 100 * time.Millisecond
 	defaultMaxDelay = time.Second
 	eventBuffer     = 8192
 	errorBuffer     = 16
@@ -39,7 +39,7 @@ type Batch struct {
 
 // WatchOptions tunes the debounce. Zero values select the defaults.
 type WatchOptions struct {
-	Debounce time.Duration // quiet time before a batch goes out; 150 ms when zero
+	Debounce time.Duration // quiet time before a batch goes out; 100 ms when zero
 	MaxDelay time.Duration // longest an unsent change waits while events keep coming; 1 s when zero
 	SeqBase  uint64        // Seq's starting value, so a restarted watcher never repeats one
 
