@@ -696,13 +696,21 @@ type Limits struct{ Files, Bytes, Lines int }
 
 func DefaultLimits() Limits // Files 400, Bytes 2 << 20, Lines 5000
 
-var ErrNoSnapshot, ErrNoTurns, ErrNotFetched error
+var ErrNoSnapshot, ErrNoTurns, ErrNotFetched, ErrTooLarge error
 
-type Engine struct{ /* limits, temp dir, cache */ }
+type Engine struct{ /* limits, temp dir, index cache, hunk cache, repos */ }
 
-func NewEngine(l Limits, tempDir string) *Engine // zero fields of l take the defaults
+type EngineOptions struct {
+	Limits     Limits // zero fields take the defaults
+	TempDir    string // where working-tree snapshots keep their temporary index
+	IndexCache string // keeps a refreshed index copy per worktree; empty = none
+}
+
+func NewEngine(o EngineOptions) *Engine
 func (e *Engine) Diff(ctx context.Context, src Source) (Result, error)
+func (e *Engine) Update(ctx context.Context, prev Result, src Source, b Batch) (Result, error) // live mode, below
 func (e *Engine) Stats(ctx context.Context, src Source) (Stats, error) // Files, Added, Removed: the listing pass only
+func (e *Engine) FileText(ctx context.Context, worktree string, f FileDiff) (old, nw []string, err error) // both sides' lines from the object database; ErrTooLarge for a side over 8 MiB
 ```
 
 - Diffs compare two tree ids in two passes. The listing (`git diff --raw --numstat -z -M -C --histogram`) gives every file's status, modes, full blob ids, line counts and binary flag. The hunk pass is one `git diff --histogram -U3 -M -C --full-index` over the files that need hunks (a rename's or copy's old path goes in the pathspec too, so git detects it again), parsed with `gitdiff.Parse`. The working tree becomes a tree through the temporary-index machinery of a snapshot, without the ref, so agent commits mid-turn never break a diff.
