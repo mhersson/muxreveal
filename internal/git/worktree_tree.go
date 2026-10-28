@@ -19,22 +19,47 @@ type WorkTree struct {
 	Skipped   []string // untracked paths over the size cap, left out
 }
 
+// TreeOptions tune WorkingTree.
+type TreeOptions struct {
+	TempDir      string // where the temporary index is created
+	IndexCache   string // keeps a refreshed index copy per worktree; empty = none
+	MaxUntracked int64  // bytes; 0 = 50 MiB, negative = no cap
+}
+
 // WorkingTree writes the worktree's current content as a tree through a
 // temporary copy of its index, so the real index, refs and files are only read.
-// maxUntracked caps untracked files in bytes: 0 means 50 MiB, negative no cap.
-func WorkingTree(ctx context.Context, r Repo, tempDir string, maxUntracked int64) (WorkTree, error) {
+func WorkingTree(ctx context.Context, r Repo, o TreeOptions) (WorkTree, error) {
+	maxUntracked := o.MaxUntracked
 	if maxUntracked == 0 {
 		maxUntracked = defaultMaxUntracked
 	}
 
-	idx, err := newTempIndex(tempDir)
+	idx, err := newTempIndex(o.TempDir)
 	if err != nil {
 		return WorkTree{}, err
 	}
 	defer idx.remove()
 
-	if idx.copyFrom(filepath.Join(r.GitDir, "index")) && !idx.isSplit(ctx, r) {
-		wt, err := idx.stage(ctx, r, maxUntracked)
+	realIndex := filepath.Join(r.GitDir, "index")
+	cache := openIndexCache(o.IndexCache, r.GitDir, realIndex)
+
+	if p := cache.path(); p != "" && idx.copyFrom(p) {
+		wt, err := idx.stage(ctx, r, maxUntracked, func(changed bool) {
+			if changed {
+				cache.store(idx.path)
+			}
+		})
+		if err == nil {
+			return wt, nil
+		}
+
+		if ctx.Err() != nil {
+			return WorkTree{}, err
+		}
+	}
+
+	if idx.copyFrom(realIndex) && !idx.isSplit(ctx, r) {
+		wt, err := idx.stage(ctx, r, maxUntracked, func(bool) { cache.store(idx.path) })
 		if err == nil {
 			return wt, nil
 		}
@@ -48,7 +73,7 @@ func WorkingTree(ctx context.Context, r Repo, tempDir string, maxUntracked int64
 		return WorkTree{}, err
 	}
 
-	return idx.stage(ctx, r, maxUntracked)
+	return idx.stage(ctx, r, maxUntracked, nil)
 }
 
 // tempIndex is a throwaway index file. Its name starts with the pid and
@@ -173,8 +198,10 @@ func headCommit(ctx context.Context, dir string) (string, error) {
 }
 
 // stage brings the temporary index in line with the files on disk and writes
-// the tree.
-func (t *tempIndex) stage(ctx context.Context, r Repo, maxUntracked int64) (WorkTree, error) {
+// the tree. afterTracked, when set, runs once the modified tracked paths are
+// staged and before deleted and untracked ones are, so a copy taken there holds
+// neither; changed tells whether staging wrote the index.
+func (t *tempIndex) stage(ctx context.Context, r Repo, maxUntracked int64, afterTracked func(changed bool)) (WorkTree, error) {
 	out, err := run(ctx, call{
 		dir:  r.Root,
 		args: []string{"ls-files", "-t", "-z", "--modified", "--deleted", "--others", "--exclude-standard"},
@@ -185,7 +212,7 @@ func (t *tempIndex) stage(ctx context.Context, r Repo, maxUntracked int64) (Work
 		return WorkTree{}, err
 	}
 
-	tracked, others := splitListing(out)
+	tracked, deleted, others := splitListing(out)
 
 	skip, err := t.gitlinks(ctx, r, tracked)
 	if err != nil {
@@ -194,15 +221,24 @@ func (t *tempIndex) stage(ctx context.Context, r Repo, maxUntracked int64) (Work
 
 	var wt WorkTree
 
-	var stdin bytes.Buffer
+	var trackedIn, othersIn bytes.Buffer
 
-	// Tracked paths go first: a removed file must leave the index before a
-	// directory of the same name is added.
+	// Modified paths are staged first and cached. Deleted ones go in the second
+	// pass, ahead of untracked paths: a removed file must leave the index before
+	// a directory of the same name is added, and the cache keeps its entry so the
+	// file is not listed as untracked if it comes back.
 	for _, p := range tracked {
-		if !skip[p] {
-			stdin.WriteString(p)
-			stdin.WriteByte(0)
+		if skip[p] {
+			continue
 		}
+
+		in := &trackedIn
+		if deleted[p] {
+			in = &othersIn
+		}
+
+		in.WriteString(p)
+		in.WriteByte(0)
 	}
 
 	for _, p := range others {
@@ -217,20 +253,20 @@ func (t *tempIndex) stage(ctx context.Context, r Repo, maxUntracked int64) (Work
 		}
 
 		wt.Untracked = append(wt.Untracked, p)
-		stdin.WriteString(p)
-		stdin.WriteByte(0)
+		othersIn.WriteString(p)
+		othersIn.WriteByte(0)
 	}
 
-	if stdin.Len() > 0 {
-		_, err = run(ctx, call{
-			dir:   r.Root,
-			args:  []string{"update-index", "--add", "--remove", "-z", "--stdin"},
-			env:   t.env(),
-			stdin: &stdin,
-		})
-		if err != nil {
-			return WorkTree{}, err
-		}
+	if err := t.updateIndex(ctx, r, &trackedIn); err != nil {
+		return WorkTree{}, err
+	}
+
+	if afterTracked != nil {
+		afterTracked(trackedIn.Len() > 0)
+	}
+
+	if err := t.updateIndex(ctx, r, &othersIn); err != nil {
+		return WorkTree{}, err
 	}
 
 	tree, err := run(ctx, call{dir: r.Root, args: []string{"write-tree"}, env: t.env()})
@@ -243,9 +279,26 @@ func (t *tempIndex) stage(ctx context.Context, r Repo, maxUntracked int64) (Work
 	return wt, nil
 }
 
+// updateIndex stages the NUL-separated paths in in; an empty list is a no-op.
+func (t *tempIndex) updateIndex(ctx context.Context, r Repo, in *bytes.Buffer) error {
+	if in.Len() == 0 {
+		return nil
+	}
+
+	_, err := run(ctx, call{
+		dir:   r.Root,
+		args:  []string{"update-index", "--add", "--remove", "-z", "--stdin"},
+		env:   t.env(),
+		stdin: in,
+	})
+
+	return err
+}
+
 // splitListing separates `ls-files -t -z` records into tracked (modified or
-// deleted, each path once) and untracked paths.
-func splitListing(out []byte) (tracked, others []string) {
+// deleted, each path once), the deleted ones among them, and untracked paths.
+func splitListing(out []byte) (tracked []string, deleted map[string]bool, others []string) {
+	deleted = map[string]bool{}
 	seen := map[string]bool{}
 
 	for rec := range bytes.SplitSeq(out, []byte{0}) {
@@ -258,6 +311,10 @@ func splitListing(out []byte) (tracked, others []string) {
 		case "?":
 			others = append(others, path)
 		case "C", "R":
+			if tag == "R" {
+				deleted[path] = true
+			}
+
 			if !seen[path] {
 				seen[path] = true
 
@@ -266,7 +323,7 @@ func splitListing(out []byte) (tracked, others []string) {
 		}
 	}
 
-	return tracked, others
+	return tracked, deleted, others
 }
 
 // gitlinks returns the tracked paths that are submodules. Staging one would

@@ -27,7 +27,8 @@ func fixedState() core.State {
 		Tabs: []core.Tab{
 			{
 				ID: "t1", Name: "api", Focus: "p2", Zoomed: true,
-				Mode: core.ModeBSP, Panes: []core.PaneID{"p1", "p2", "p3"},
+				Review: &core.Review{Pane: "p2", Mode: core.ReviewTurn},
+				Mode:   core.ModeBSP, Panes: []core.PaneID{"p1", "p2", "p3"},
 				Layout: split(core.SplitVertical, 0.333333,
 					leaf("p1"),
 					split(core.SplitHorizontal, 0.5, leaf("p2"), leaf("p3"))),
@@ -610,6 +611,63 @@ func TestDecodeRailByVersion(t *testing.T) {
 			st, _, err := decodeDefault([]byte(data))
 			noErr(t, err)
 			eq(t, st.Rail, tt.want)
+		})
+	}
+}
+
+func TestReviewPersistence(t *testing.T) {
+	open := fixedState()
+	open.Tabs[0].Review = &core.Review{Pane: "p2", Mode: core.ReviewBranch}
+
+	data, err := Encode(open)
+	noErr(t, err)
+
+	if !strings.Contains(string(data), `"review": {`) || !strings.Contains(string(data), `"version": 2`) {
+		t.Errorf("open drawer or version not written as expected:\n%s", data)
+	}
+
+	got, rep, err := decodeDefault(data)
+	noErr(t, err)
+	eq(t, rep, Report{})
+	eq(t, got.Tabs[0].Review, open.Tabs[0].Review)
+	eq(t, got.Tabs[1].Review, (*core.Review)(nil))
+
+	closed := fixedState()
+	closed.Tabs[0].Review = nil
+
+	data, err = Encode(closed)
+	noErr(t, err)
+
+	if strings.Contains(string(data), `"review":`) {
+		t.Errorf("closed drawer is written:\n%s", data)
+	}
+}
+
+func TestReviewDecodeDropsBadFields(t *testing.T) {
+	tests := []struct {
+		name, review string
+		want         *core.Review
+	}{
+		{"valid", `{"pane":"p2","mode":"turn"}`, &core.Review{Pane: "p2", Mode: core.ReviewTurn}},
+		{"unknown pane", `{"pane":"p9","mode":"turn"}`, nil},
+		{"pane of another tab", `{"pane":"p3","mode":"turn"}`, nil},
+		{"unknown mode", `{"pane":"p2","mode":"x"}`, nil},
+		{"missing mode", `{"pane":"p2"}`, nil},
+		{"null", `null`, nil},
+		{"wrong type", `"p2"`, nil},
+		{"pane is a number", `{"pane":2,"mode":"turn"}`, nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t1 := strings.Replace(tabDoc("t1", "p1", `"p1","p2"`, twoLayout), `"mode":"bsp",`, `"mode":"bsp","review":`+tt.review+`,`, 1)
+			t2 := tabDoc("t2", "p3", `"p3"`, `{"pane":"p3"}`)
+			panes := twoPanes + `,"p3":{"kind":"shell"}`
+
+			st, rep, err := decodeDefault([]byte(doc("2", "0", t1+","+t2, panes)))
+			noErr(t, err)
+			eq(t, rep, Report{})
+			eq(t, st.Tabs[0].Review, tt.want)
+			eq(t, len(st.Tabs[0].Panes), 2)
 		})
 	}
 }

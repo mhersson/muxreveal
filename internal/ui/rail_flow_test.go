@@ -1060,7 +1060,7 @@ func TestRailKeyboardAfterLeaderCommands(t *testing.T) {
 			case ' ':
 				press(f.App, keyLeader, tea.KeyPressMsg{Code: tea.KeySpace, Text: " "})
 			default:
-				press(f.App, keyLeader, keyRune(tt.key))
+				chord(f.App, tt.key)
 			}
 
 			if f.rail.focused != tt.stays {

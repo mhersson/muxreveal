@@ -353,8 +353,18 @@ func virtualBody() Rect { return Rect{0, 0, 10000, 10000} }
 // rects Arrange lays out in area (the virtual rect when area is zero), or by
 // the column rule in scrolling.
 func neighbour(t Tab, d Dir, area Rect, lc LayoutConfig) (PaneID, bool) {
+	return NeighbourSkipping(t, d, area, lc, nil)
+}
+
+// NeighbourSkipping is the pane a focus move reaches from the tab's focused
+// pane in direction d, as FocusDir finds it, but passing over every pane skip
+// reports as out of reach; a nil skip passes over none. skip gets the pane and
+// the rect it is drawn at, which in scrolling is the rect after the focus has
+// moved to it, since that scrolls the columns. A pane that is not drawn is
+// never skipped. It reads the tab and changes nothing.
+func NeighbourSkipping(t Tab, d Dir, area Rect, lc LayoutConfig, skip func(PaneID, Rect) bool) (PaneID, bool) {
 	if t.Mode == ModeScrolling {
-		return scrollNeighbour(t, d)
+		return scrollNeighbourSkipping(t, d, area, lc, skip)
 	}
 
 	side, ok := sideOf(d)
@@ -383,7 +393,7 @@ func neighbour(t Tab, d Dir, area Rect, lc LayoutConfig) (PaneID, bool) {
 	)
 
 	for _, id := range t.Panes {
-		if r, ok := rects[id]; ok && id != t.Focus {
+		if r, ok := rects[id]; ok && id != t.Focus && (skip == nil || !skip(id, r)) {
 			ids = append(ids, id)
 			cands = append(cands, tiling.Rect(r))
 		}
@@ -395,4 +405,27 @@ func neighbour(t Tab, d Dir, area Rect, lc LayoutConfig) (PaneID, bool) {
 	}
 
 	return ids[i], true
+}
+
+// scrollNeighbourSkipping steps by column until it reaches a pane skip lets
+// through. t is a copy, so moving its focus scrolls only the copy.
+func scrollNeighbourSkipping(t Tab, d Dir, area Rect, lc LayoutConfig, skip func(PaneID, Rect) bool) (PaneID, bool) {
+	for range len(t.Panes) {
+		id, ok := scrollNeighbour(t, d)
+		if !ok {
+			return "", false
+		}
+
+		if skip == nil {
+			return id, true
+		}
+
+		t.setFocus(id)
+
+		if r, drawn := Arrange(t, area, lc).Rects[id]; !drawn || !skip(id, r) {
+			return id, true
+		}
+	}
+
+	return "", false
 }

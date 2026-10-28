@@ -4,7 +4,7 @@ Update this file at the end of every session: tick what's done, set the next ste
 
 ## Current milestones
 
-M1e Tiling, tab moves and chrome is merged (PR #12), M2a Worktrees and diff engine is merged (PR #11) and M3a GitHub and push backend is merged (PR #15); the reboot part of the M1e gate is still the operator's check. The build, CI and lint tooling work (Makefile, GitHub Actions CI with Dependabot, stricter golangci-lint config) is complete. M1f Agents rail is merged (PR #16). M2b Review pane is next, then M3b.
+M1e Tiling, tab moves and chrome is merged (PR #12), M2a Worktrees and diff engine is merged (PR #11) and M3a GitHub and push backend is merged (PR #15); the reboot part of the M1e gate is still the operator's check. The build, CI and lint tooling work (Makefile, GitHub Actions CI with Dependabot, stricter golangci-lint config) is complete. M1f Agents rail is merged (PR #16). M2b Review drawer is the current milestone, then M3b.
 
 ## M1 Terminal core
 
@@ -205,7 +205,7 @@ Inputs: recordings `~/.cache/muxreveal-spike/recordings/pane-2.rec` (run a), `~/
 
 ### M1f Agents rail
 
-A framed rail on the left lists every agent in every tab as a card (state, project, branch, current action, diff stats), stays open until closed, takes the keyboard on `leader a`, searches with `/` and jumps to any agent with `enter`; the tray's agents module goes away. Covers AG-13.
+A framed rail on the left lists every agent in every tab as a card (state, session name or project, branch, current action, diff stats), stays open until closed, takes the keyboard on `leader a`, searches with `/` and jumps to any agent with `enter`; the tray's agents module goes away. Covers AG-13.
 
 - [x] Hooks carry the agent's current action into the pane state
 - [x] The rail's open state is saved, and panes lay out beside it
@@ -428,7 +428,7 @@ Build M1's terminal layer on `tuios.dev/vt` v0.3.1 (pure Go) behind the `VT` int
 
 ## M2 Worktrees and agent diff
 
-Goal: worktree discovery and creation, turn snapshots, one diff engine for branch and turn modes, live updates, and the review pane with file tree and full-file toggle. Covers WT-1, WT-2, DF-1 to DF-6.
+Goal: worktree discovery and creation, turn snapshots, one diff engine for branch and turn modes, live updates, and the review drawer with file tree and full-file toggle. Covers WT-1, WT-2, DF-1 to DF-6.
 
 Gate: a saved file shows in the diff within 300 ms, and turn mode isolates the last turn's changes.
 
@@ -470,22 +470,33 @@ Large repo (`kubernetes/kubernetes`, `--depth 1`, 31,509 tracked files, 20 track
 
 In a fresh-clone snapshot `ls-files` takes 1.45 s and `update-index` 1.42 s; with a refreshed index they take 96 ms and 30 ms, `write-tree` is 20-30 ms in both, and every other subcommand is under 2 ms. Every snapshot is therefore over the 1.4 s hook budget until something refreshes the user's index, because the temporary copy's refresh is discarded: the gate cancels it and the turn gets a "no snapshot" marker; the watcher's unchanged hint (M2b) skips the snapshot when nothing changed.
 
-### M2b Review pane
+### M2b Review drawer
 
-The review pane (a layout pane of kind `review`), the ported `diffview` renderer, file tree, full-file view, the worktree picker for `leader n`, and the review-pane keys. Covers DF-4, DF-5, DF-6. Planned after M1e and M2a merge.
+The review drawer: an overlay that slides over the right half of the body and shows the focused pane's diff (an agent's last turn, or its branch against the base), with the ported `diffview` renderer, file tree, full-file view, live updates and the drawer keys; the worktree picker for `leader n`; and per-agent watchers that drive the live updates, the turn-snapshot skip and the agents rail's branch and stats. It is per-tab state saved like the rail, not a layout pane kind. Covers DF-4, DF-5, DF-6.
 
 - [ ] Port tuios's `diffview` with its lexers
-- [ ] Review pane kind, state and persistence
-- [ ] Unified and side-by-side rendering with highlighting and invisible characters
-- [ ] File tree with per-file stats
-- [ ] Full-file view with ghost lines
-- [ ] Live updates that keep the cursor on its hunk
-- [ ] Worktree picker and new worktree
-- [ ] Review-pane keys and commands
-- [ ] Watchers per agent pane, and the snapshot skip they enable
-- [ ] `[worktrees]` and `[diff]` config
+- [ ] Drive `diffview` from the theme, with the `Review` role
+- [ ] The hook's deadline carried on the turn-start event
+- [ ] Index refresh cache for snapshots and diffs
+- [ ] Watcher events that kqueue reports
+- [ ] Watch set, and the snapshot skip it enables
+- [ ] Watches per agent pane, and the rail's re-probes
+- [ ] Drawer state in core and the state file
+- [x] The rows of the diff column and the file tree
+- [x] Drawing the drawer: frame, tags, tree, diff, unified and side-by-side rendering with highlighting and invisible characters, full-file view with ghost lines
+- [x] Loading, turns and live updates that keep the cursor on its hunk, and the `[diff]` config
+- [x] Drawer keys, commands, focus, mouse and the slide
+- [x] Worktree picker and new worktree, and the `[worktrees]` config
+- [x] The rail's cards name each agent by its session's custom name, else the project
+- [ ] Bench, idle CPU and the gate
 
-Gate: a saved file shows in the open review pane within 300 ms; turn mode shows only the last turn's changes and `,`/`.` step through earlier turns; six-pane bench p99 at most 8 ms with one review pane open on a busy agent, and scrolling a 10,000-line file diff stays inside the frame budget; idle CPU at most 1 % of one core with a review pane open.
+Gate:
+
+- a saved file shows in the open drawer within 300 ms (median);
+- turn mode shows only the last turn's changes, and `,`/`.` step through earlier turns;
+- six-pane bench p99 at most 8 ms with the drawer open over a busy agent whose diff keeps updating, in runs a, b and c, also with the rail open;
+- scrolling a 10,000-line file diff has p99 at most 8 ms and no frame over 16.7 ms;
+- idle CPU at most 1 % of one core with the drawer open.
 
 ## M3 GitHub loop
 
@@ -538,7 +549,7 @@ Test counts from `go test -count=1 -v`, counting `--- PASS` lines (top-level tes
 
 ### M3b Pull requests on screen
 
-The PR list (agent branches), the PR view with its diff in the review pane, the CI view, the compose overlay with `$EDITOR`, the approve and merge confirms, the push command, the tray's PR and CI module, the PR and CI line on the rail's cards, and the core events and state behind them. Planned after M2b.
+The PR list (agent branches), the PR view with its diff in the review drawer, the CI view, the compose overlay with `$EDITOR`, the approve and merge confirms, the push command, the tray's PR and CI module, the PR and CI line on the rail's cards, and the core events and state behind them. Planned after M2b.
 
 ## M4 Markdown and polish
 
@@ -591,7 +602,7 @@ Rendered markdown on screen (including images and the `Code` theme role), the PR
 
 ## Next
 
-M1e Tiling, tab moves and chrome is merged (PR #12); the reboot part of its gate is still the operator's check. The build, CI and lint tooling work (Makefile, GitHub Actions CI with Dependabot, stricter golangci-lint config) is complete; the macOS test step in CI is non-blocking until the macOS test failures listed in Later are fixed. M3a GitHub and push backend is merged (PR #15). M1f Agents rail is merged (PR #16); M2b Review pane is next, then M3b.
+M1e Tiling, tab moves and chrome is merged (PR #12); the reboot part of its gate is still the operator's check. The build, CI and lint tooling work (Makefile, GitHub Actions CI with Dependabot, stricter golangci-lint config) is complete; the macOS test step in CI is non-blocking until the macOS test failures listed in Later are fixed. M3a GitHub and push backend is merged (PR #15). M1f Agents rail is merged (PR #16); M2b Review drawer is the current milestone, then M3b.
 
 ## Done
 
@@ -625,7 +636,7 @@ M1e Tiling, tab moves and chrome is merged (PR #12); the reboot part of its gate
 | 2026-10-27 | The layout mode shows in the status bar, left of the cwd | Always visible, at little cost |
 | 2026-10-27 | The directory watcher is `fsnotify` with our own walk instead of `rjeczalik/notify` | notify is unmaintained since 2023 and uses FSEvents on macOS only with cgo; our walk skips ignored directories |
 | 2026-10-27 | Turn snapshots copy the worktree's index to a temporary index and stage only what changed | A fresh index rehashes every file; the copy keeps git's stat cache (about 100 ms on 50k files) |
-| 2026-10-27 | Every prompt takes a snapshot until the review pane wires watchers to panes; the snapshotter already takes an "unchanged" hint | The watcher's lifecycle belongs to the pane, which the parallel UI milestone owns |
+| 2026-10-27 | Every prompt takes a snapshot until the review drawer's milestone wires watchers to agent panes; the snapshotter already takes an "unchanged" hint | The watcher's lifecycle belongs to the pane, which the parallel UI milestone owns |
 | 2026-10-27 | Each pane gets its own rounded frame and frames touch, with no gap, no junctions and no outer frame | The operator's pick from the chrome comparison |
 | 2026-10-27 | A full-width rule in `Border` sits on row 1, under the workspace bar | The operator's pick from the chrome comparison |
 | 2026-10-27 | The status bar is hidden and its contents move: notices become a toast, copy mode and its search prompt go into the copy pane's borders, the sequence prefix opens a popup, the legends and the cwd are dropped, and the layout mode waits for the tray module (this replaces the layout-mode-in-the-status-bar row) | The operator's pick from the chrome comparison; the body gets the last row |
@@ -647,6 +658,11 @@ M1e Tiling, tab moves and chrome is merged (PR #12); the reboot part of its gate
 | 2026-10-27 | While the agents rail has the keyboard, the focused pane is drawn as an unfocused one (`Border` frame, `Muted` title) | Only one thing should look focused; the rail's `Accent` border says where the keys go |
 | 2026-10-27 | The rail's list scrolls by whole cards, keeping the selected card whole | A half-cut card hides its state and action; the counts in the border say what is out of sight |
 | 2026-10-27 | The rail keeps its last lines in a cache keyed by the store version, size, query, selection and animation phase | The rail is redrawn on every frame while a badge animates; a frame in which nothing changed in the rail reuses its lines |
+| 2026-10-27 | Review is an overlay drawer over the right half of the body, one per tab in `core.Tab.Review`, not a layout pane of kind `review` (this replaces the review-pane decision) | The panes keep their rects and PTY sizes, so opening it never resizes an agent's terminal, and `core.Arrange` stays untouched |
+| 2026-10-27 | One `git.WatchSet` watcher per worktree serves every agent pane in it; its change counter lets the turn gate skip unchanged snapshots, and its batches update the drawer and re-probe the rail | Watching is per worktree, not per pane, so six agents in one repo cost one watcher |
+| 2026-10-27 | `leader n` opens a worktree picker in a git repository, with a page to create a worktree | Starting an agent in a worktree is the common case, and the picker needs no separate command |
+| 2026-10-28 | Card line 1 shows the agent session's custom name (set with `--name` or `/rename`, read from its transcript by a rail probe), else the project; the pane's frame title stays its OSC title | Three agents in one repo all read the same project; a `<project> · <title>` line would leave no room on a 44-column rail for the model and context meter planned for line 1 |
+| 2026-10-28 | The which-key popup folds `s` and `v` into one row, `s v  Split below/right` | The `d  Review drawer` row made the Panes group one row too tall for a 24-row terminal; the popup fits whole there again |
 | 2026-10-27 | Markdown is parsed by goldmark v2 (v2.1.9) with GFM and footnotes, and laid out by our own code in `internal/md`, not by a port of tuios's `internal/markdown` | v2 is faster on most hostile inputs and linear on repeated backticks, where v1 is not; the tuios port reads only the subset agents write (HTML, reference links and footnotes stay raw text, there are no images, and input is capped at 32 KiB), and PR templates need the rest |
 | 2026-10-27 | Only `http`, `https` and `mailto` links are linked; relative links resolve against a URL base or, against a local base, to a path M4b follows inside MuxReveal | Markdown from PRs and agents is untrusted; OSC 8 must not carry arbitrary schemes |
 | 2026-10-27 | M4 ships as M4a, the headless markdown layout beside M2b, and M4b, the rest of M4 | New-package work runs beside the UI milestone; UI work stays serial |
@@ -702,8 +718,8 @@ Ideas and requests that came up outside the current milestone go here.
   - `internal/git` on APFS:
     - `TestSnapshotTreeContent`: an invalid-UTF-8 file name is refused ("illegal byte sequence").
     - `TestDiffOddPaths`: the golden differs.
-    - `TestListWorktrees`: no worktree records found, likely `/var` vs `/private/var`.
-  - `internal/git` watcher on kqueue: `TestWatchWriteTrackedFile` and both `TestWatchSnapshotRefsDoNotWake` cases get a batch with `Git:true` from a plain write. This may be a real watcher bug on macOS, not only a test issue.
+    - `TestListWorktrees`: no worktree records found, likely `/var` vs `/private/var`; the test now resolves its temp dir's symlinks, pending a macOS CI run.
+  - `internal/git` watcher on kqueue: `TestWatchWriteTrackedFile` and both `TestWatchSnapshotRefsDoNotWake` cases got a batch with `Git:true` from a plain write; the watcher now ignores kqueue's directory Write and Chmod notes in the git dirs (tested with synthetic events on Linux), pending a macOS CI run. Any that still fail stay here with their output.
   - `internal/ui`: `TestToastGoesWithTheFirstKey` ("the key reached the pane as "", want "x"").
 - PRs from a fork: agent branches pushed to a fork and PRs opened against the upstream repository; the backend handles same-repository PRs only.
 - Live write tests (create, merge, branch delete) against a sandbox repository, run on request.

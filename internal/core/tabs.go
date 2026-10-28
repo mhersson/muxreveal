@@ -39,6 +39,7 @@ type Tab struct {
 	Columns   []Column   // scrolling columns, left to right
 	First     int        // first visible scrolling column
 	Preselect Dir        // NoDir when none; BSP only, not saved
+	Review    *Review    // the open review drawer; nil when closed
 }
 
 // Empty reports whether the tab has no pane.
@@ -48,6 +49,12 @@ func (t Tab) clone() Tab {
 	t.Panes = slices.Clone(t.Panes)
 
 	t.Layout = t.Layout.clone()
+
+	if t.Review != nil {
+		r := *t.Review
+		t.Review = &r
+	}
+
 	if t.Columns != nil {
 		cols := make([]Column, len(t.Columns))
 		for i, c := range t.Columns {

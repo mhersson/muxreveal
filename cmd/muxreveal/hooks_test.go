@@ -16,6 +16,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/mhersson/muxreveal/internal/core"
+	"github.com/mhersson/muxreveal/internal/git"
 )
 
 func discardLogger() *slog.Logger { return slog.New(slog.NewTextHandler(io.Discard, nil)) }
@@ -23,6 +24,7 @@ func discardLogger() *slog.Logger { return slog.New(slog.NewTextHandler(io.Disca
 func TestRunServesHooks(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
 	stateHome := t.TempDir()
 	t.Setenv("XDG_STATE_HOME", stateHome)
 
@@ -95,7 +97,7 @@ func TestStartHooksFailureTurnsHooksOff(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	h := startHooks(discardLogger(), stateDir)
+	h := startHooks(discardLogger(), stateDir, "", testWatches(t))
 	defer h.Stop()
 
 	if h.Settings != "" || h.Sock != "" || h.Events != nil {
@@ -110,7 +112,7 @@ func TestStartHooksFailureTurnsHooksOff(t *testing.T) {
 func TestStartHooksNamesAnOverlongSocketPath(t *testing.T) {
 	stateDir := filepath.Join(t.TempDir(), strings.Repeat("d", maxSockPath))
 
-	h := startHooks(discardLogger(), stateDir)
+	h := startHooks(discardLogger(), stateDir, "", testWatches(t))
 	defer h.Stop()
 
 	if h.Settings != "" || h.Sock != "" || h.Events != nil {
@@ -160,7 +162,7 @@ func TestStartHooksSweepsDeadInstances(t *testing.T) {
 		}
 	}
 
-	h := startHooks(discardLogger(), stateDir)
+	h := startHooks(discardLogger(), stateDir, "", testWatches(t))
 	defer h.Stop()
 
 	if h.Notice != "" {
@@ -222,5 +224,52 @@ func waitFor(t *testing.T, cond func() bool) {
 		}
 
 		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+func testWatches(t *testing.T) *git.WatchSet {
+	t.Helper()
+
+	w := git.NewWatchSet(context.Background(), git.WatchOptions{})
+
+	t.Cleanup(func() { _ = w.Close() })
+
+	return w
+}
+
+func TestWatchSeqResolvesTheRootFromASubdirectory(t *testing.T) {
+	dir := seededRepo(t)
+	sub := filepath.Join(dir, "sub")
+
+	if err := os.Mkdir(sub, 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	ctx := context.Background()
+	watches := testWatches(t)
+	seq := watchSeq(watches)
+
+	if root, _, ok := seq(ctx, sub); ok || root != dir {
+		t.Fatalf("unwatched: root = %q, ok = %v", root, ok)
+	}
+
+	r, err := git.Open(ctx, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	release, err := watches.Acquire(ctx, r)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	defer release()
+
+	if root, _, ok := seq(ctx, sub); !ok || root != dir {
+		t.Fatalf("watched: root = %q, ok = %v", root, ok)
+	}
+
+	if _, _, ok := seq(ctx, t.TempDir()); ok {
+		t.Fatal("a directory outside any repository reported a watcher")
 	}
 }

@@ -57,6 +57,13 @@ type tabJSON struct {
 	MasterRatio json.RawMessage `json:"master_ratio,omitempty"`
 	Columns     json.RawMessage `json:"columns,omitempty"`
 	First       json.RawMessage `json:"first,omitempty"`
+
+	Review json.RawMessage `json:"review,omitempty"` // raw so a bad drawer drops alone
+}
+
+type reviewJSON struct {
+	Pane string `json:"pane"`
+	Mode string `json:"mode"`
 }
 
 type paneJSON struct {
@@ -98,6 +105,15 @@ func Encode(st core.State) ([]byte, error) {
 			ID: string(t.ID), Name: t.Name, Focused: string(t.Focus), Zoomed: t.Zoomed,
 			PaneIDs: make([]string, 0, len(ids)),
 		}
+		if t.Review != nil {
+			raw, err := json.Marshal(reviewJSON{Pane: string(t.Review.Pane), Mode: string(t.Review.Mode)})
+			if err != nil {
+				return nil, fmt.Errorf("tab %s: review: %w", t.ID, err)
+			}
+
+			jt.Review = raw
+		}
+
 		if err := encodeMode(&jt, t); err != nil {
 			return nil, fmt.Errorf("tab %s: %w", t.ID, err)
 		}
@@ -342,6 +358,10 @@ func Decode(data []byte, lc core.LayoutConfig) (core.State, Report, error) {
 		}
 
 		tab.Focus, tab.Zoomed = focus, jt.Zoomed && focus != ""
+		if current {
+			tab.Review = decodeReview(jt.Review, owner, jt.ID)
+		}
+
 		tab.KeepVisible()
 		st.Tabs = append(st.Tabs, tab)
 	}
@@ -353,6 +373,22 @@ func Decode(data []byte, lc core.LayoutConfig) (core.State, Report, error) {
 	}
 
 	return st, rep, nil
+}
+
+// decodeReview reads a tab's drawer; anything unreadable, or naming a pane
+// outside that tab or an unknown mode, is dropped.
+func decodeReview(raw json.RawMessage, owner map[core.PaneID]string, tabID string) *core.Review {
+	var jr reviewJSON
+	if len(raw) == 0 || json.Unmarshal(raw, &jr) != nil {
+		return nil
+	}
+
+	pane, mode := core.PaneID(jr.Pane), core.ReviewMode(jr.Mode)
+	if owner[pane] != tabID || !mode.Valid() {
+		return nil
+	}
+
+	return &core.Review{Pane: pane, Mode: mode}
 }
 
 // tabMode reads the mode; anything but a string is "", which no mode matches.

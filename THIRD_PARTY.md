@@ -26,6 +26,18 @@ MuxReveal includes material copied from the projects below, each under the MIT L
 - Copyright (c) 2025 Gaurav Gosain
 - Used in `internal/core/tiling/`: `arrange.go`, `bsp.go`, `bsp_move.go`, `master.go`, `neighbour.go`, `scrolling.go`, `tiling.go` and their tests (`arrange_test.go`, `bsp_test.go`, `bsp_split_close_test.go`, `bsp_resize_axis_test.go`, `master_test.go`, `neighbour_test.go`, `tiling_test.go`, `export_test.go`).
 
+## tuios diffview
+
+- Source: https://github.com/Gaurav-Gosain/tuios (`internal/diffview/`, commit `aaaa128cd35b38ba8aa08a5f69e688f01385ec3e`)
+- Copyright (c) 2025 Gaurav Gosain
+- Used in `internal/ui/diffview/`: `diffview.go`, `highlight.go`, `pair.go`, `render.go`, `theme.go` and `lexers/` (`coded.go`, `gen.go`, `registry.go`): the diff line renderer, word-level change ranges and syntax highlighting. `shim.go` is MuxReveal's own.
+
+## chroma lexer definitions
+
+- Source: https://github.com/alecthomas/chroma (`lexers/embedded/*.xml` and the Go and Markdown lexers in `lexers/`) at v2.27.0, as carried by tuios `internal/diffview/lexers/`; the licence is in `internal/ui/diffview/lexers/COPYING`
+- Copyright (c) 2017 Alec Thomas
+- Used in `internal/ui/diffview/lexers/`: the gzipped `.xml.gz` definitions and `coded.go`.
+
 ## MIT License
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:

@@ -54,7 +54,7 @@ func (a *App) onHook(ev harness.Event) tea.Cmd {
 	}
 
 	a.railEntry(ev.Pane).hookAt = a.clock.Now()
-	probes := a.railHook(ev.Pane, ev.Start, ev.State == core.AgentIdle)
+	a.watchRetry(ev.Pane)
 
 	if ev.State == core.AgentIdle {
 		a.markUnseen(ev.Pane)
@@ -76,6 +76,9 @@ func (a *App) onHook(ev harness.Event) tea.Cmd {
 	if ev.ActionSet {
 		_ = a.dispatch(core.SetAgentAction{ID: ev.Pane, Action: ev.Action})
 	}
+
+	// After the session is recorded: the name probe reads the transcript it reports.
+	probes := tea.Batch(a.railHook(ev.Pane, ev.Start, ev.State == core.AgentIdle), a.reviewHook(ev.Pane, ev.TurnStart, ev.Snapped))
 
 	if ev.State == core.AgentUnknown {
 		return probes

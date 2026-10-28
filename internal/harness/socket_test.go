@@ -373,6 +373,12 @@ func TestListenKeepsNonSocketFile(t *testing.T) {
 func startHeldServer(t *testing.T, hold time.Duration) *served {
 	t.Helper()
 
+	return startBudgetServer(t, hold, 0)
+}
+
+func startBudgetServer(t *testing.T, hold, budget time.Duration) *served {
+	t.Helper()
+
 	path := socketPath(t)
 
 	srv, err := Listen(path)
@@ -381,6 +387,7 @@ func startHeldServer(t *testing.T, hold time.Duration) *served {
 	}
 
 	srv.Hold = hold
+	srv.Budget = budget
 	s := &served{srv: srv, out: make(chan Event, 4), path: path, done: make(chan error, 1)}
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -500,4 +507,29 @@ func TestCloseDuringHoldDoesNotWait(t *testing.T) {
 	if r := <-res; r.err == nil {
 		t.Error("Send() succeeded though the server closed mid-hold")
 	}
+}
+
+func TestServerStampsTheTurnDeadline(t *testing.T) {
+	const budget = 1400 * time.Millisecond
+
+	s := startBudgetServer(t, 300*time.Millisecond, budget)
+
+	before := time.Now()
+	res := sendAsync(s.path, Event{Pane: "p", Name: "UserPromptSubmit", TurnStart: true})
+	turn := recv(t, s.out)
+	after := time.Now()
+
+	turn.Done()
+	<-res
+
+	if turn.Deadline.Before(before.Add(budget)) || turn.Deadline.After(after.Add(budget+50*time.Millisecond)) {
+		t.Errorf("turn Deadline = %v, want read time + %v (between %v and %v)", turn.Deadline, budget, before.Add(budget), after.Add(budget))
+	}
+
+	res = sendAsync(s.path, Event{Pane: "p", Name: "Stop"})
+	if stop := recv(t, s.out); !stop.Deadline.IsZero() {
+		t.Errorf("non-turn Deadline = %v, want zero", stop.Deadline)
+	}
+
+	<-res
 }

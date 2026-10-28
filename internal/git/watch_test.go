@@ -492,6 +492,20 @@ func TestWatchBatchWaitsForTheDebounce(t *testing.T) {
 	}
 }
 
+// The watcher has no clock seam, and a timing bound on a real run would flake
+// under load, so the default is pinned on the options the watcher runs with.
+func TestWatchDefaultDebounce(t *testing.T) {
+	w := startWatch(t, baseRepo(t), WatchOptions{})
+
+	if got, want := w.opts.Debounce, 100*time.Millisecond; got != want {
+		t.Errorf("default debounce = %v, want %v", got, want)
+	}
+
+	if got, want := w.opts.MaxDelay, time.Second; got != want {
+		t.Errorf("default max delay = %v, want %v", got, want)
+	}
+}
+
 func TestWatchGitignoreChangeAddsDirectoryWatch(t *testing.T) {
 	dir := newRepo(t)
 	writeFile(t, dir, ".gitignore", "vendor/\n")
@@ -792,5 +806,259 @@ func TestWatchOverflowRewalksUnwatchedDirectories(t *testing.T) {
 
 	if !b.Overflow || !slices.Contains(b.Paths, "fresh/deep/a.go") {
 		t.Errorf("batch = %+v, want overflow and fresh/deep/a.go", b)
+	}
+}
+
+// eventWatcher is a Watcher that was never started, for feeding handle
+// synthetic events (what kqueue reports on macOS) on any platform.
+func eventWatcher(t *testing.T) *Watcher {
+	t.Helper()
+
+	dir := baseRepo(t)
+
+	r, err := Open(t.Context(), dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	fsw, err := fsnotify.NewWatcher()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	t.Cleanup(func() { _ = fsw.Close() })
+
+	w := &Watcher{
+		repo:       r,
+		fs:         fsw,
+		refsDir:    filepath.Join(r.CommonDir, "refs"),
+		ownRefsDir: filepath.Join(r.CommonDir, "refs", "muxreveal"),
+		watched:    map[string]struct{}{},
+	}
+
+	for _, d := range []string{
+		r.GitDir, w.refsDir, filepath.Join(w.refsDir, "heads"), w.ownRefsDir, filepath.Join(r.Root, "src"),
+	} {
+		w.watched[d] = struct{}{}
+	}
+
+	return w
+}
+
+func TestKqueueEvents(t *testing.T) {
+	w := eventWatcher(t)
+	gitDir, refs := w.repo.GitDir, w.refsDir
+
+	tests := []struct {
+		name     string
+		ev       fsnotify.Event
+		wantGit  bool
+		wantPath string
+		accepted bool
+	}{
+		{name: "dir write on refs", ev: fsnotify.Event{Name: refs, Op: fsnotify.Write}},
+		{name: "dir write on refs/heads", ev: fsnotify.Event{Name: filepath.Join(refs, "heads"), Op: fsnotify.Write}},
+		{name: "dir write on own refs", ev: fsnotify.Event{Name: w.ownRefsDir, Op: fsnotify.Write}},
+		{name: "file write in own refs", ev: fsnotify.Event{Name: filepath.Join(w.ownRefsDir, "s1"), Op: fsnotify.Write}},
+		{name: "chmod on index", ev: fsnotify.Event{Name: filepath.Join(gitDir, "index"), Op: fsnotify.Chmod}},
+		{name: "chmod on a ref", ev: fsnotify.Event{Name: filepath.Join(refs, "heads", "main"), Op: fsnotify.Chmod}},
+		{name: "write on HEAD", ev: fsnotify.Event{Name: filepath.Join(gitDir, "HEAD"), Op: fsnotify.Write}, wantGit: true, accepted: true},
+		{name: "write on index", ev: fsnotify.Event{Name: filepath.Join(gitDir, "index"), Op: fsnotify.Write}, wantGit: true, accepted: true},
+		{name: "write on a ref", ev: fsnotify.Event{Name: filepath.Join(refs, "heads", "main"), Op: fsnotify.Write}, wantGit: true, accepted: true},
+		{name: "write plus chmod on a ref", ev: fsnotify.Event{Name: filepath.Join(refs, "heads", "main"), Op: fsnotify.Write | fsnotify.Chmod}, wantGit: true, accepted: true},
+		{name: "dir write in worktree", ev: fsnotify.Event{Name: filepath.Join(w.repo.Root, "src"), Op: fsnotify.Write}},
+		{name: "dir write plus chmod in worktree", ev: fsnotify.Event{Name: filepath.Join(w.repo.Root, "src"), Op: fsnotify.Write | fsnotify.Chmod}},
+		{name: "dir write plus chmod on refs/heads", ev: fsnotify.Event{Name: filepath.Join(refs, "heads"), Op: fsnotify.Write | fsnotify.Chmod}},
+		{name: "file write in worktree", ev: fsnotify.Event{Name: filepath.Join(w.repo.Root, "src", "a.go"), Op: fsnotify.Write}, wantPath: "src/a.go", accepted: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := newPending()
+			before := w.Seq()
+
+			got := w.handle(tt.ev, p)
+
+			if got != tt.accepted || p.git != tt.wantGit {
+				t.Errorf("handle = %v, git = %v; want %v, %v", got, p.git, tt.accepted, tt.wantGit)
+			}
+
+			if _, ok := p.paths[tt.wantPath]; tt.wantPath != "" && !ok {
+				t.Errorf("paths = %v, want %q", p.paths, tt.wantPath)
+			}
+
+			if tt.wantPath == "" && len(p.paths) != 0 {
+				t.Errorf("paths = %v, want none", p.paths)
+			}
+
+			if rose := w.Seq() - before; (rose == 1) != tt.accepted || rose > 1 {
+				t.Errorf("Seq rose by %d, accepted = %v", rose, tt.accepted)
+			}
+		})
+	}
+}
+
+func TestSeqCountsEventsBeforeTheBatch(t *testing.T) {
+	dir := baseRepo(t)
+	opts := WatchOptions{Debounce: time.Second, MaxDelay: 3 * time.Second, SeqBase: 100}
+	w := startWatch(t, dir, opts)
+
+	if got := w.Seq(); got != 100 {
+		t.Fatalf("Seq at start = %d, want the base 100", got)
+	}
+
+	writeFile(t, dir, "tracked.txt", "two\n")
+
+	eventually(t, "Seq to rise", func() bool { return w.Seq() > 100 })
+
+	select {
+	case b := <-w.Batches():
+		t.Fatalf("batch %+v arrived before the debounce", b)
+	default:
+	}
+
+	waitPaths(t, w, "tracked.txt")
+}
+
+type metaRow struct {
+	name    string
+	ev      fsnotify.Event
+	wantGit bool
+}
+
+func runMetaRows(t *testing.T, w *Watcher, rows []metaRow) {
+	t.Helper()
+
+	for _, tt := range rows {
+		t.Run(tt.name, func(t *testing.T) {
+			p := newPending()
+			before := w.Seq()
+
+			got := w.handle(tt.ev, p)
+			if got != tt.wantGit || p.git != tt.wantGit {
+				t.Errorf("handle = %v, git = %v; want %v", got, p.git, tt.wantGit)
+			}
+
+			want := uint64(0)
+			if tt.wantGit {
+				want = 1
+			}
+
+			if rose := w.Seq() - before; rose != want {
+				t.Errorf("Seq rose by %d, want %d", rose, want)
+			}
+		})
+	}
+}
+
+func TestKqueueMetaOps(t *testing.T) {
+	w := eventWatcher(t)
+	gitDir, refs := w.repo.GitDir, w.refsDir
+	ref := filepath.Join(refs, "heads", "main")
+
+	rows := []metaRow{
+		{name: "lock write", ev: fsnotify.Event{Name: ref + ".lock", Op: fsnotify.Write}},
+		{name: "lock create", ev: fsnotify.Event{Name: ref + ".lock", Op: fsnotify.Create}},
+		{name: "packed-refs write", ev: fsnotify.Event{Name: filepath.Join(gitDir, "packed-refs"), Op: fsnotify.Write}, wantGit: true},
+		{name: "unrelated git file", ev: fsnotify.Event{Name: filepath.Join(gitDir, "config"), Op: fsnotify.Write}},
+	}
+
+	for _, op := range []fsnotify.Op{fsnotify.Create, fsnotify.Remove, fsnotify.Rename} {
+		for name, path := range map[string]string{
+			"HEAD": filepath.Join(gitDir, "HEAD"), "index": filepath.Join(gitDir, "index"), "ref": ref,
+		} {
+			rows = append(rows, metaRow{name: op.String() + " " + name, ev: fsnotify.Event{Name: path, Op: op}, wantGit: true})
+		}
+	}
+
+	runMetaRows(t, w, rows)
+}
+
+func TestKqueueNewDirectoryUnderRefs(t *testing.T) {
+	w := eventWatcher(t)
+	heads := filepath.Join(w.refsDir, "heads")
+
+	mk := func(t *testing.T, dir string, files ...string) string {
+		t.Helper()
+
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+
+		for _, f := range files {
+			if err := os.WriteFile(filepath.Join(dir, f), []byte("x\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		return dir
+	}
+
+	rows := []metaRow{
+		{name: "holding a ref", ev: fsnotify.Event{Name: mk(t, filepath.Join(heads, "feat"), "x"), Op: fsnotify.Create}, wantGit: true},
+		{name: "holding a ref below", ev: fsnotify.Event{Name: mk(t, filepath.Join(heads, "a", "b"), "x"), Op: fsnotify.Create}, wantGit: true},
+		{name: "empty", ev: fsnotify.Event{Name: mk(t, filepath.Join(heads, "empty")), Op: fsnotify.Create}},
+		{name: "only a lock", ev: fsnotify.Event{Name: mk(t, filepath.Join(heads, "locked"), "x.lock"), Op: fsnotify.Create}},
+		{name: "under refs/muxreveal", ev: fsnotify.Event{Name: mk(t, filepath.Join(w.ownRefsDir, "sub"), "x"), Op: fsnotify.Create}},
+	}
+
+	runMetaRows(t, w, rows)
+}
+
+func TestKqueueLinkedWorktreeGitDir(t *testing.T) {
+	main := eventWatcher(t)
+	common := main.repo.CommonDir
+	linkedGit := filepath.Join(common, "worktrees", "x")
+
+	if err := os.MkdirAll(linkedGit, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	linked := &Watcher{
+		repo:       Repo{Root: t.TempDir(), GitDir: linkedGit, CommonDir: common},
+		fs:         main.fs,
+		refsDir:    main.refsDir,
+		ownRefsDir: main.ownRefsDir,
+		watched:    map[string]struct{}{linkedGit: {}},
+	}
+
+	runMetaRows(t, linked, []metaRow{
+		{name: "linked HEAD", ev: fsnotify.Event{Name: filepath.Join(linkedGit, "HEAD"), Op: fsnotify.Write}, wantGit: true},
+		{name: "linked index", ev: fsnotify.Event{Name: filepath.Join(linkedGit, "index"), Op: fsnotify.Write}, wantGit: true},
+		{name: "main HEAD", ev: fsnotify.Event{Name: filepath.Join(main.repo.GitDir, "HEAD"), Op: fsnotify.Write}},
+		{name: "linked config", ev: fsnotify.Event{Name: filepath.Join(linkedGit, "config"), Op: fsnotify.Write}},
+	})
+}
+
+func TestWatchNestedBranchSetsGit(t *testing.T) {
+	dir := baseRepo(t)
+	w := startWatch(t, dir, fastWatch)
+
+	gitOut(t, dir, "update-ref", "refs/heads/a/b", "HEAD")
+
+	collect(t, w, func(b Batch) bool { return b.Git })
+
+	gitOut(t, dir, "update-ref", "refs/heads/a/c/d", "HEAD")
+
+	collect(t, w, func(b Batch) bool { return b.Git })
+}
+
+func TestWatchOverflowBumpsSeq(t *testing.T) {
+	injectErrs := make(chan error, 1)
+	opts := fastWatch
+	opts.injectErrs = injectErrs
+	w := startWatch(t, baseRepo(t), opts)
+	before := w.Seq()
+
+	// The lost events never reach handle, so the overflow itself must count.
+	injectErrs <- fsnotify.ErrEventOverflow
+
+	b := collect(t, w, func(b Batch) bool { return b.Overflow })
+	if !b.Overflow {
+		t.Fatalf("batch = %+v", b)
+	}
+
+	if got := w.Seq(); got <= before {
+		t.Fatalf("Seq = %d after an overflow, was %d", got, before)
 	}
 }

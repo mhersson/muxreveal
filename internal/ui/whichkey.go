@@ -26,6 +26,7 @@ type hintFamily struct {
 
 func hintFamilies() []hintFamily {
 	return []hintFamily{
+		{"pane.split.", []string{"down", "right"}, "Split below/right", " "},
 		{"pane.focus.", []string{"left", "down", "up", "right"}, "Focus pane", " "},
 		{"pane.resize.", []string{"left", "down", "up", "right"}, "Resize pane", " "},
 		{"pane.swap.", []string{"left", "down", "up", "right"}, "Swap pane", ""},

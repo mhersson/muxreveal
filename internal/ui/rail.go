@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"slices"
+	"strings"
 	"time"
 	"unicode"
 
@@ -31,6 +32,7 @@ type railCard struct {
 	tabName    string
 	state      core.AgentState
 	project    string
+	name       string // the session's custom name, cleaned; empty shows the project
 	branch     string
 	action     string // the card's third line; empty for an agent without hooks
 	detached   bool   // branch holds the first 7 characters of the commit
@@ -54,6 +56,7 @@ type railField int
 
 const (
 	railFieldProject railField = iota
+	railFieldName
 	railFieldBranch
 	railFieldAction
 	railFieldTabNumber
@@ -69,6 +72,7 @@ type railHit struct {
 // railProbe is the result of one pane's probes.
 type railProbe struct {
 	project, branch string
+	oid             string // the full commit id; "" on an unborn branch
 	detached        bool
 	repo            bool // the cwd is inside a repository
 	known           bool // a head probe has succeeded
@@ -78,13 +82,22 @@ type railProbe struct {
 	statsCwd        string
 }
 
+// railName is a session's custom name and the transcript it was read from. It
+// shows only while that is still the pane's transcript.
+type railName struct {
+	text       string
+	transcript string
+}
+
 // railPane is the rail's per-pane memory; it lives until the pane closes.
 type railPane struct {
-	hookAt time.Time
-	unseen bool
-	probe  railProbe
-	head   probeSlot
-	stats  probeSlot
+	hookAt   time.Time
+	unseen   bool
+	probe    railProbe
+	name     railName
+	head     probeSlot
+	stats    probeSlot
+	nameSlot probeSlot
 }
 
 // railState is the rail's UI state; core.State only says whether it is open.
@@ -149,6 +162,11 @@ func (a *App) railCards(st core.State) []railGroup {
 				c.project, c.branch, c.detached = rp.probe.project, rp.probe.branch, rp.probe.detached
 			}
 
+			// A name belongs to the transcript it was read from, not to the pane.
+			if m.Transcript != "" && rp.name.transcript == m.Transcript {
+				c.name = rp.name.text
+			}
+
 			if rp.probe.statsKnown {
 				c.stats, c.statsKnown = rp.probe.stats, true
 			}
@@ -158,8 +176,14 @@ func (a *App) railCards(st core.State) []railGroup {
 			c.active = p.lastOut
 		}
 
-		// Printable once, so the matcher and the drawing see the same runes.
+		// Printable once, so the matcher and the drawing see the same runes. The
+		// name is a file's text, so it is cleaned like the rest; a blank one, or
+		// the project's own name, leaves the project alone on the line.
 		c.project, c.branch, c.action = printable(c.project), printable(c.branch), printable(c.action)
+
+		if c.name = strings.TrimSpace(printable(c.name)); c.name == c.project {
+			c.name = ""
+		}
 
 		if _, ok := c.matches(a.rail.query); ok {
 			byState[c.state] = append(byState[c.state], c)
@@ -189,7 +213,8 @@ func cardAction(m core.Pane) string {
 }
 
 // matches reports where query occurs in the card, case-insensitively: project,
-// branch, action, "tab N" and the tab's name. An empty query matches with no hits.
+// session name, branch, action, "tab N" and the tab's name. An empty query
+// matches with no hits.
 func (c railCard) matches(query string) ([]railHit, bool) {
 	if query == "" {
 		return nil, true
@@ -204,6 +229,7 @@ func (c railCard) matches(query string) ([]railHit, bool) {
 		text  string
 	}{
 		{railFieldProject, c.project},
+		{railFieldName, c.name},
 		{railFieldBranch, c.branch},
 		{railFieldAction, c.action},
 		{railFieldTabNumber, fmt.Sprintf("tab %d", c.tab+1)},
@@ -420,16 +446,26 @@ func (a *App) railToggle() tea.Cmd {
 		// dispatch logs its own failures.
 		_ = a.dispatch(core.SetRail{Open: true})
 		cmds = append(cmds, a.railOpened())
-		a.rail.focused = a.railVisible()
+
+		if a.railVisible() {
+			a.railTake()
+		}
 	case !a.railVisible() || a.rail.focused:
 		a.railClose()
 	default:
-		a.rail.focused = true
+		a.railTake()
 	}
 
 	cmds = append(cmds, a.relayout())
 
 	return tea.Batch(cmds...)
+}
+
+// railTake gives the rail the keyboard; the review drawer, which shares it,
+// gives it up.
+func (a *App) railTake() {
+	a.rail.focused = true
+	a.drawerRelease()
 }
 
 // railRelease gives the keyboard back to the panes and ends search typing; the

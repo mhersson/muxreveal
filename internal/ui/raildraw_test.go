@@ -27,6 +27,7 @@ type railAgent struct {
 	stats          *git.Stats
 	unseen         bool
 	noRepo, noHook bool
+	name           string // the session's custom name, read from its transcript
 }
 
 // longNotice is wide enough that its toast box reaches into the rail's columns at 64 columns.
@@ -72,6 +73,12 @@ func drawApp(t *testing.T, themeName string, icons bool, w, h int, agents []rail
 		rp := a.railEntry(id)
 		rp.unseen = ag.unseen
 
+		if ag.name != "" {
+			transcript := "/w/" + ag.project + "/" + string(id) + ".jsonl"
+			openIn(t, a, core.SetAgentSession{ID: id, Session: core.SessionID("s-" + string(id)), Transcript: transcript})
+			rp.name = railName{text: ag.name, transcript: transcript}
+		}
+
 		if !ag.noHook {
 			rp.hookAt = t0.Add(-ag.age)
 		}
@@ -88,6 +95,20 @@ func drawApp(t *testing.T, themeName string, icons bool, w, h int, agents []rail
 	openIn(t, a, core.SetRail{Open: true})
 
 	return a
+}
+
+// namedAgents is one project's agents told apart by their session names, an
+// agent with no name, one named as its project and one with a name too long
+// for the rail.
+func namedAgents() []railAgent {
+	return []railAgent{
+		{newTab: true, project: "muxreveal", branch: "feat/review-drawer", state: core.AgentWorking, action: "Edit internal/ui/rail.go", age: 8 * time.Second, stats: &git.Stats{Files: 4, Added: 80, Removed: 6}, unseen: true, name: "muxr-orchestrator"},
+		{project: "muxreveal", branch: "feat/review-drawer", state: core.AgentBlocked, action: "Allow Bash go test ./...?", age: 40 * time.Second, stats: &git.Stats{Files: 2, Added: 12, Removed: 3}, name: "t16-implementer"},
+		{project: "muxreveal", branch: "feat/review-drawer", state: core.AgentIdle, age: 5 * time.Minute, stats: &git.Stats{}, name: "t15-reviewer"},
+		{project: "muxreveal", branch: "main", state: core.AgentIdle, age: 2 * time.Hour, stats: &git.Stats{}},
+		{project: "muxreveal", branch: "main", state: core.AgentIdle, age: 3 * time.Hour, stats: &git.Stats{}, name: "muxreveal"},
+		{project: "docs", branch: "main", state: core.AgentWorking, action: "Read README.md", age: 3 * time.Second, name: "a-session-name-far-too-long-for-a-forty-four-column-rail"},
+	}
 }
 
 func manyAgents(n, tabs int) []railAgent {
@@ -119,6 +140,19 @@ func railCases() []railCase {
 	fixture := func(w, h int, tune func(a *App)) func(t *testing.T, th string, icons bool) *App {
 		return func(t *testing.T, th string, icons bool) *App {
 			a := drawApp(t, th, icons, w, h, railFixtureAgents())
+			a.rail.sel = "p2"
+
+			if tune != nil {
+				tune(a)
+			}
+
+			return a
+		}
+	}
+
+	named := func(w, h int, tune func(a *App)) func(t *testing.T, th string, icons bool) *App {
+		return func(t *testing.T, th string, icons bool) *App {
+			a := drawApp(t, th, icons, w, h, namedAgents())
 			a.rail.sel = "p2"
 
 			if tune != nil {
@@ -172,6 +206,12 @@ func railCases() []railCase {
 			return a
 		}},
 		{"no-agents", func(t *testing.T, th string, icons bool) *App { return drawApp(t, th, icons, 100, 30, nil) }},
+		{"named", named(100, 50, nil)},
+		{"named-width-70", named(70, 50, nil)},
+		{"named-search", named(100, 30, func(a *App) {
+			a.rail.focused, a.rail.query = true, "orch"
+			a.railNormalize(a.store.State())
+		})},
 	}
 }
 
@@ -578,6 +618,274 @@ func TestRailCardsAreMadePrintableOnce(t *testing.T) {
 	if !ok || len(hitsOf(hits, railFieldProject)) != 1 || len(hitsOf(hits, railFieldAction)) != 1 {
 		t.Errorf("hits = %+v, want one in project and one in action", hits)
 	}
+}
+
+// railTextLines is the rail's lines as plain text, after a frame is drawn.
+func railTextLines(a *App) []string {
+	a.View()
+
+	out := make([]string, len(a.rail.cache.lines))
+	for i, l := range a.rail.cache.lines {
+		out[i] = ansi.Strip(l)
+	}
+
+	return out
+}
+
+// linesWith lists the lines that hold sub.
+func linesWith(lines []string, sub string) []string {
+	var out []string
+
+	for _, l := range lines {
+		if strings.Contains(l, sub) {
+			out = append(out, l)
+		}
+	}
+
+	return out
+}
+
+func cardOf(t *testing.T, a *App, id core.PaneID) railCard {
+	t.Helper()
+
+	for _, c := range a.railShown(a.store.State()) {
+		if c.pane == id {
+			return c
+		}
+	}
+
+	t.Fatalf("no card for %s", id)
+
+	return railCard{}
+}
+
+func TestRailCardShowsTheSessionName(t *testing.T) {
+	a := drawApp(t, "catppuccin-mocha", true, 100, 60, namedAgents())
+	lines := railTextLines(a)
+
+	for id, want := range map[core.PaneID]string{
+		"p1": "muxr-orchestrator", "p2": "t16-implementer", "p3": "t15-reviewer",
+		"p4": "", "p5": "", // no name; a name equal to the project is the project
+	} {
+		if got := cardOf(t, a, id).name; got != want {
+			t.Errorf("%s: card name = %q, want %q", id, got, want)
+		}
+	}
+
+	for _, name := range []string{"muxr-orchestrator", "t16-implementer", "t15-reviewer"} {
+		row := linesWith(lines, " "+name+" ")
+		if len(row) != 1 {
+			t.Fatalf("%q is on %d lines, want 1", name, len(row))
+		}
+
+		if strings.Contains(row[0], "muxreveal") {
+			t.Errorf("the line of %q also shows the project: %q", name, row[0])
+		}
+	}
+
+	// The project shows on the unnamed card, and once on the card named as it.
+	if rows := linesWith(lines, "muxreveal"); len(rows) != 2 {
+		t.Errorf("the project shows on %d lines, want 2 (the unnamed agent and the one named as the project): %q", len(rows), rows)
+	}
+
+	// The branch line stays as it was.
+	if rows := linesWith(lines, "feat/review-drawer"); len(rows) != 3 {
+		t.Errorf("branch lines = %d, want 3", len(rows))
+	}
+}
+
+func TestRailCardFallsBackToTheProject(t *testing.T) {
+	tests := []struct {
+		name   string
+		agent  railAgent
+		change func(t *testing.T, a *App)
+	}{
+		{"no name", railAgent{project: "proj", state: core.AgentIdle}, nil},
+		{"an empty name", railAgent{project: "proj", state: core.AgentIdle, name: "orch"}, func(_ *testing.T, a *App) {
+			a.railEntry("p1").name.text = ""
+		}},
+		{"a name read from an earlier transcript", railAgent{project: "proj", state: core.AgentIdle, name: "orch"}, func(_ *testing.T, a *App) {
+			a.railEntry("p1").name.transcript = "/w/proj/earlier.jsonl"
+		}},
+		{"a session that ended", railAgent{project: "proj", state: core.AgentIdle, name: "orch"}, func(t *testing.T, a *App) {
+			openIn(t, a, core.SetAgentSession{ID: "p1"})
+		}},
+		{"only blanks and invisible characters", railAgent{project: "proj", state: core.AgentIdle, name: "orch"}, func(_ *testing.T, a *App) {
+			a.railEntry("p1").name.text = " \u00a0\u200b\u2028 "
+		}},
+		{"the project's own name", railAgent{project: "proj", state: core.AgentIdle, name: "orch"}, func(_ *testing.T, a *App) {
+			a.railEntry("p1").name.text = "proj"
+		}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			a := drawApp(t, "catppuccin-mocha", true, 100, 30, []railAgent{tt.agent})
+
+			if tt.change != nil {
+				tt.change(t, a)
+			}
+
+			if got := cardOf(t, a, "p1").name; got != "" {
+				t.Errorf("card name = %q, want none", got)
+			}
+
+			lines := railTextLines(a)
+			if rows := linesWith(lines, "proj"); len(rows) != 1 || !strings.Contains(rows[0], " proj ") {
+				t.Errorf("the project shows on %q, want once on the card's first line", rows)
+			}
+
+			if rows := linesWith(lines, "orch"); len(rows) != 0 {
+				t.Errorf("the name shows on %q", rows)
+			}
+		})
+	}
+}
+
+func TestRailCardCutsTheName(t *testing.T) {
+	const (
+		wide   = "\u6f22" // two cells
+		family = "\U0001F468\u200D\U0001F469\u200D\U0001F467"
+	)
+
+	tests := []struct {
+		name string
+		text string
+		keep string // the name before the cut mark
+		unit string // what the last cell group of keep must be whole, if set
+	}{
+		{"ascii", strings.Repeat("0123456789", 6), "01234567890123456789012345678901", ""},
+		{"wide characters on the boundary", strings.Repeat(wide, 60), strings.Repeat(wide, 16), wide},
+		{"wide characters, odd aligned", "a" + strings.Repeat(wide, 59), "a" + strings.Repeat(wide, 15), wide},
+		{"joined emoji on the boundary", strings.Repeat(family, 20), strings.Repeat(family, 16), family},
+		{"joined emoji, odd aligned", "x" + strings.Repeat(family, 20), "x" + strings.Repeat(family, 15), family},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			a := drawApp(t, "catppuccin-mocha", true, 100, 44, []railAgent{
+				{project: "proj", state: core.AgentWorking, action: "x", age: 8 * time.Second, unseen: true, name: tt.text},
+			})
+
+			rows := linesWith(railTextLines(a), " 8s ●")
+			if len(rows) != 1 {
+				t.Fatalf("card lines = %d, want 1", len(rows))
+			}
+
+			row := rows[0]
+
+			// 40 content columns: the glyph and a space, the name, the time and the dot.
+			// The time and the dot stay whole; the name gives way with a cut mark.
+			before, _, ok := strings.Cut(row, "…")
+			if !ok || !strings.Contains(row, " 8s ●") {
+				t.Fatalf("row = %q, want a cut mark before 8s and the dot", row)
+			}
+
+			// The row starts with the edge, a space, the glyph and a space.
+			keep := string([]rune(before)[4:])
+			if keep != tt.keep {
+				t.Errorf("name before the cut = %q, want %q", keep, tt.keep)
+			}
+
+			if !strings.HasSuffix(keep, tt.unit) {
+				t.Errorf("the cut split %q", tt.unit)
+			}
+
+			if w := ansi.StringWidth(row); w != 44 {
+				t.Errorf("row is %d cells wide, want 44", w)
+			}
+		})
+	}
+
+	// The same rule cuts a project.
+	name := strings.Repeat("0123456789", 6)
+
+	b := drawApp(t, "catppuccin-mocha", true, 100, 30, []railAgent{
+		{project: name, state: core.AgentWorking, action: "x", age: 8 * time.Second, unseen: true},
+	})
+
+	if rows := linesWith(railTextLines(b), "0123"); len(rows) != 1 || !strings.Contains(rows[0], " "+name[:32]+"… ") {
+		t.Errorf("project rows = %q, want the project cut to %q", rows, name[:32]+"…")
+	}
+}
+
+// The pane's frame keeps its own title, the guest's OSC title, however its
+// card is named.
+func TestRailNameLeavesThePaneTitleAlone(t *testing.T) {
+	a, _ := framedApp(t, 100, 12, paneSpec{kind: core.KindAgent, cwd: "/w/proj", split: core.SplitVertical, text: "\x1b]2;vim main.go\x07"})
+	openIn(t, a, core.SetRail{Open: true}, core.SetAgentSession{ID: "p1", Session: "s-p1", Transcript: "/w/proj/p1.jsonl"})
+	a.railEntry("p1").name = railName{text: "muxr-orchestrator", transcript: "/w/proj/p1.jsonl"}
+
+	lines := strings.Split(ansi.Strip(a.View().Content), "\n")
+
+	// Row 2 is the top border of both the rail and the pane's frame.
+	if !strings.Contains(lines[2], "vim main.go") || strings.Contains(lines[2], "muxr-orchestrator") {
+		t.Errorf("top border = %q, want the pane's OSC title and not the name", lines[2])
+	}
+
+	if rows := linesWith(lines, "muxr-orchestrator"); len(rows) != 1 || strings.Contains(rows[0], "vim main.go") {
+		t.Errorf("the name is on %q, want the rail's card alone", rows)
+	}
+}
+
+func TestRailCardNameIsCleaned(t *testing.T) {
+	const family = "\U0001F468\u200D\U0001F469\u200D\U0001F467"
+
+	tests := []struct {
+		name, raw, want string
+	}{
+		{"an escape sequence", "a\x1b[31mb\x1b]0;pwn\x07c", "a[31mb]0;pwnc"},
+		{"a bidi override", "ab\u202ecd", "abcd"},
+		{"a single-byte csi", "x\u009b31my", "x31my"},
+		{"a zero-width space", "a\u200bb", "ab"},
+		{"a line break", "a\nb\u2028c", "abc"},
+		{"emoji joined by a joiner stay whole", "x" + family, "x" + family},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			a := drawApp(t, "catppuccin-mocha", true, 100, 30, []railAgent{{project: "proj", state: core.AgentIdle, name: "orch"}})
+			a.railEntry("p1").name.text = tt.raw
+
+			if got := cardOf(t, a, "p1").name; got != tt.want {
+				t.Errorf("card name = %q, want %q", got, tt.want)
+			}
+
+			view := a.View().Content
+			for _, bad := range []string{"\x1b]", "\u202e", "\u009b", "\u200b", "\x07", "\u2028"} {
+				if strings.Contains(view, bad) {
+					t.Errorf("the frame holds %q", bad)
+				}
+			}
+
+			if rows := linesWith(railTextLines(a), tt.want); len(rows) != 1 {
+				t.Errorf("the cleaned name is on %d lines, want 1", len(rows))
+			}
+		})
+	}
+}
+
+func TestRailSearchMatchColourOnTheName(t *testing.T) {
+	a := drawApp(t, "catppuccin-mocha", true, 100, 30, namedAgents())
+	ui := a.current().theme.UI
+	a.rail.focused, a.rail.query = true, "orch"
+	a.railNormalize(a.store.State())
+
+	lines := strings.Split(a.View().Content, "\n")
+
+	for y, l := range lines {
+		plain := ansi.Strip(l)
+		if x := strings.Index(plain, "orch"); x >= 0 && y > 4 {
+			vt := lineVT(t, l, 100)
+			col := ansi.StringWidth(plain[:x])
+			assertColours(t, vt, col, 0, "o", ui.Match, ui.Bg, true)
+			assertColours(t, vt, col+4, 0, "e", ui.Fg, ui.Bg, true)
+
+			return
+		}
+	}
+
+	t.Fatal("no card line carries the match")
 }
 
 func TestSpinFrame(t *testing.T) {

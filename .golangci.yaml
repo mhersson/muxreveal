@@ -41,7 +41,11 @@ linters:
     rules:
     # Code ported from tuios stays close to upstream: no style-only linters.
     - linters: [wsl_v5, nlreturn, godot, whitespace]
-      path: "internal/core/tiling/|internal/git/linediff/|internal/git/invisible/"
+      path: "internal/core/tiling/|internal/git/linediff/|internal/git/invisible/|internal/ui/diffview/(diffview|highlight|pair|render|theme)\\.go$|internal/ui/diffview/lexers/"
+    # The diffview port keeps upstream's integer conversions, parameter names
+    # and bounds-checked indexing.
+    - linters: [gosec, revive, unconvert]
+      path: "internal/ui/diffview/(diffview|highlight|pair|render|theme)\\.go$"
     # G703: src is the repo's own GitDir/index (GitDir comes from git) and the
     # destination is the app's own temp index, so no user-typed path is joined.
     - linters: [gosec]
@@ -144,3 +148,5 @@ formatters:
     - internal/core/tiling/
     - internal/git/linediff/
     - internal/git/invisible/
+    - internal/ui/diffview/(diffview|highlight|pair|render|theme)\.go$
+    - internal/ui/diffview/lexers/

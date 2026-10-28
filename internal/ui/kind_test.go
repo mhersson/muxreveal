@@ -242,7 +242,7 @@ func TestAgentLaunch(t *testing.T) {
 		chord(a, 'n')
 
 		agent := st.cmds[1]
-		if got := agent.Argv[len(agent.Argv)-1]; !strings.Contains(got, "'--settings' '/run/1-claude.json'") {
+		if !hasArgs(argvOf(agent), "--settings", "/run/1-claude.json") {
 			t.Errorf("agent argv = %q, want --settings with the file", agent.Argv)
 		}
 
@@ -267,7 +267,7 @@ func TestAgentLaunch(t *testing.T) {
 		chord(a, 'n')
 
 		agent := st.cmds[1]
-		if got := agent.Argv[len(agent.Argv)-1]; strings.Contains(got, "--settings") {
+		if slices.Contains(argvOf(agent), "--settings") {
 			t.Errorf("agent argv = %q, want no --settings", agent.Argv)
 		}
 
@@ -290,7 +290,7 @@ func TestAgentLaunch(t *testing.T) {
 		}
 
 		cmd := st.cmds[st.count()-1]
-		if got := cmd.Argv[len(cmd.Argv)-1]; !strings.Contains(got, "'--resume' 'abc-123'") {
+		if !hasArgs(argvOf(cmd), "--resume", "abc-123") {
 			t.Errorf("argv = %q, want --resume", cmd.Argv)
 		}
 	})

@@ -52,6 +52,18 @@ type Options struct {
 	// GitTempDir is where the diff engine puts its temporary index for the
 	// rail's diff stats; empty turns the stats off.
 	GitTempDir string
+	// IndexCache is the directory where git keeps a refreshed index copy per
+	// worktree; empty disables the cache.
+	IndexCache string
+	// Watches shares one git watcher per worktree among the agent panes in it;
+	// nil means no watches.
+	Watches *git.WatchSet
+	// Diff is the [diff] config: the review drawer's starting layout and mode and
+	// the diff engine's limits. The zero value means the defaults.
+	Diff core.DiffConfig
+	// Worktrees is the [worktrees] config: where a new worktree goes. The zero
+	// value means inside the main checkout.
+	Worktrees core.WorktreesConfig
 	// Save is called with the state after every successful dispatch; nil saves nothing.
 	Save func(core.State)
 }
@@ -96,8 +108,11 @@ type App struct {
 	clock     clock // the sync hold's and the tray's time source
 	tray      trayState
 	rail      railState
+	drawer    drawerState
+	picker    pickerState
+	watches   watchState
 	storeVer  uint64        // counts the dispatches the store accepted
-	engine    *git.Engine   // nil when the rail's diff stats are off
+	engine    *git.Engine   // nil when the rail's diff stats and the review drawer's diffs are off
 	probeSem  chan struct{} // its capacity bounds the rail's probes running at once
 	clip      *clipboard
 	sel       *paneSelection // the one selection; survives tab switches
@@ -111,6 +126,9 @@ type App struct {
 	events                     <-chan harness.Event
 	spin                       int         // badge spinner frame
 	agentTicking               bool        // an agentTickMsg is outstanding
+	slideTicking               bool        // a drawerSlideMsg is outstanding
+	drawersOpen                bool        // some tab's state holds a review drawer; only dispatch changes it
+	settled                    settleKey   // what settleDrawer last found nothing to change in
 	load                       loadSampler // nil on platforms without a load reading
 	start                      func(ctx context.Context, c term.Command, cols, rows int) (proc, error)
 
@@ -173,15 +191,23 @@ func New(opts Options) (*App, error) {
 		events: opts.Events, notice: opts.Notice, save: opts.Save,
 		log: opts.Logger, store: opts.Store, reg: reg, keymap: km,
 		panes: map[core.PaneID]*pane{}, outerFocused: true,
-		getenv: getenv, cwd: cwd, recordDir: opts.RecordDir, icons: opts.Icons, clock: realClock{}, start: termStart,
+		watches: watchState{set: opts.Watches, open: git.Open, panes: map[core.PaneID]*paneWatch{}, failed: map[string]bool{}},
+		getenv:  getenv, cwd: cwd, recordDir: opts.RecordDir, icons: opts.Icons, clock: realClock{}, start: termStart,
 		load:         newSysLoad(),
 		probeSem:     make(chan struct{}, railProbeMax),
 		focusFollows: opts.FocusFollowsMouse, copyOnSelect: opts.CopyOnSelect,
 		clip: newClipboard(clipboardConfig{OSC52: !opts.NoOSC52, Native: !opts.NoNativeClipboard}, getenv, runtime.GOOS, opts.Logger),
 	}
 
+	a.drawer.cfg = opts.Diff
+	a.picker.cfg = opts.Worktrees
+	a.drawersOpen = anyReview(opts.Store.State())
+
 	if opts.GitTempDir != "" {
-		a.engine = git.NewEngine(git.Limits{}, opts.GitTempDir)
+		a.engine = git.NewEngine(git.EngineOptions{
+			TempDir: opts.GitTempDir, IndexCache: opts.IndexCache,
+			Limits: git.Limits{Files: opts.Diff.MaxFiles, Bytes: opts.Diff.MaxBytes, Lines: opts.Diff.MaxLines},
+		})
 	}
 
 	if err := a.sync(); err != nil {
@@ -222,6 +248,12 @@ func (a *App) dispatch(act core.Action) error {
 		}
 	}
 
+	// A drawer sliding out is closed before an action that could change the active
+	// tab or the drawer, so it is never left open in a tab that is not shown.
+	if a.drawer.closing && mayChangeTab(act) {
+		a.endSlide()
+	}
+
 	prev := a.store.State().Tab()
 	if err := a.store.Dispatch(act); err != nil {
 		if expectedError(err) {
@@ -236,6 +268,8 @@ func (a *App) dispatch(act core.Action) error {
 	a.storeVer++
 
 	st := a.store.State()
+	a.drawersOpen = anyReview(st)
+
 	if a.save != nil && !a.restoring {
 		a.save(st)
 	}
@@ -244,6 +278,7 @@ func (a *App) dispatch(act core.Action) error {
 	a.reportFocusChange(prev.Focus, st.Tab().Focus)
 
 	if st.Tab().ID != prev.ID {
+		a.endSlide()
 		a.renderStale(st)
 	}
 
@@ -260,7 +295,24 @@ func (a *App) dispatch(act core.Action) error {
 	return nil
 }
 
-// dropGoneTab closes a confirm or prompt about a tab that no longer exists.
+// anyReview reports whether some tab of st has a review drawer open.
+func anyReview(st core.State) bool {
+	return slices.ContainsFunc(st.Tabs, func(t core.Tab) bool { return t.Review != nil })
+}
+
+// mayChangeTab reports whether act can change the active tab or its drawer.
+func mayChangeTab(act core.Action) bool {
+	switch act.(type) {
+	case core.SelectTab, core.CycleTab, core.NewTab, core.CloseTab, core.ClosePane, core.MovePane, core.BreakPane,
+		core.OpenReview, core.CloseReview:
+		return true
+	}
+
+	return false
+}
+
+// dropGoneTab closes a confirm or prompt about a tab that no longer exists, and
+// the worktree picker once another tab shows.
 func (a *App) dropGoneTab(st core.State) {
 	has := func(id core.TabID) bool {
 		return slices.ContainsFunc(st.Tabs, func(t core.Tab) bool { return t.ID == id })
@@ -273,6 +325,10 @@ func (a *App) dropGoneTab(st core.State) {
 	if a.prompt != nil && a.prompt.kind == promptRename && !has(a.prompt.tab) {
 		a.prompt = nil
 	}
+
+	if a.picker.open != nil && st.Tab().ID != a.picker.open.tab {
+		a.picker.open = nil
+	}
 }
 
 // Init implements tea.Model.
@@ -282,17 +338,29 @@ func (a *App) Init() tea.Cmd {
 		rail = a.railOpened()
 	}
 
-	return tea.Batch(a.initTray(), a.waitEvent(), rail)
+	return tea.Batch(a.initTray(), a.waitEvent(), a.waitWatch(), rail)
 }
 
 // Update implements tea.Model.
 func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	check := a.railFocusCheck(msg)
+	check := a.keyboardCheck(msg)
 	m, cmd := a.update(msg)
 
 	check()
 	a.syncPaneColors()
 	a.railAfterUpdate()
+
+	if c := a.watchSync(); c != nil {
+		a.later = append(a.later, c)
+	}
+
+	if c := a.reviewSync(); c != nil {
+		a.later = append(a.later, c)
+	}
+
+	if c := a.drawerAfterUpdate(); c != nil {
+		a.later = append(a.later, c)
+	}
 
 	if len(a.later) > 0 {
 		cmd = tea.Batch(append(a.later, cmd)...)
@@ -302,33 +370,47 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-// railFocusCheck starts watching a user-input message and returns the check to
-// run once it is handled: if it moved the active tab or its focused pane, the
-// keyboard returns to the panes. Changes with other causes (a process exit, a
-// hook, a restore) leave the keyboard alone.
-func (a *App) railFocusCheck(msg tea.Msg) func() {
-	if !a.rail.focused || !isUserInput(msg) {
-		return func() {}
+// keyboardCheck starts watching a message and returns the check to run once it
+// is handled. If a user-input message moved the active tab or its focused pane,
+// the keyboard returns to the panes from the rail or the drawer, whichever had
+// it; changes with other causes (a process exit, a hook, a restore) leave it
+// alone. The drawer is then settled (see settleDrawer).
+func (a *App) keyboardCheck(msg tea.Msg) func() {
+	user := isUserInput(msg)
+	railWas, drawerWas, ver := a.rail.focused, a.drawer.focused, a.storeVer
+
+	// The state before the update is copied only when something can depend on it:
+	// the rail or a drawer has the keyboard, or a drawer is open in some tab.
+	var prev core.State
+	if user && (railWas || drawerWas || a.drawersOpen) {
+		prev = a.store.State()
 	}
 
-	before, ver := a.store.State().Tab(), a.storeVer
-
 	return func() {
-		if a.storeVer == ver {
-			return
+		acted := user && a.storeVer != ver
+
+		if acted && (railWas || drawerWas) {
+			if now, was := a.store.State().Tab(), prev.Tab(); now.ID != was.ID || now.Focus != was.Focus {
+				if railWas {
+					a.railRelease()
+				}
+
+				if drawerWas {
+					a.drawerRelease()
+				}
+			}
 		}
 
-		if now := a.store.State().Tab(); now.ID != before.ID || now.Focus != before.Focus {
-			a.railRelease()
-		}
+		a.settleDrawer(prev, acted)
 	}
 }
 
 // isUserInput reports whether msg comes from the operator: keys, pastes, mouse
-// events and a palette choice.
+// events, a palette choice and the answers that carry out a new agent request.
 func isUserInput(msg tea.Msg) bool {
 	switch msg.(type) {
-	case tea.KeyPressMsg, tea.PasteMsg, tea.MouseClickMsg, tea.MouseMotionMsg, tea.MouseReleaseMsg, tea.MouseWheelMsg, palette.ChosenMsg:
+	case tea.KeyPressMsg, tea.PasteMsg, tea.MouseClickMsg, tea.MouseMotionMsg, tea.MouseReleaseMsg, tea.MouseWheelMsg, palette.ChosenMsg,
+		pickerOpenMsg, pickerCreatedMsg:
 		return true
 	}
 
@@ -353,6 +435,8 @@ func (a *App) syncPaneColors() {
 func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
+		a.endSlide()
+
 		a.width, a.height = msg.Width, msg.Height
 		a.log.Debug("window size", "width", msg.Width, "height", msg.Height)
 
@@ -402,6 +486,12 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, a.onKindDue(msg)
 	case hookMsg:
 		return a, tea.Batch(a.onHook(msg.ev), a.waitEvent())
+	case watchMsg:
+		return a, tea.Batch(a.onWatch(msg), a.waitWatch())
+	case paneRepoMsg:
+		return a, a.onPaneRepo(msg)
+	case watchAcquiredMsg:
+		a.onWatchAcquired(msg)
 	case agentTickMsg:
 		return a, a.onAgentTick()
 	case clockMsg:
@@ -412,12 +502,35 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, a.onRailHead(msg)
 	case railStatsMsg:
 		return a, a.onRailStats(msg)
+	case railNameMsg:
+		return a, a.onRailName(msg)
 	case railDueMsg:
 		return a, a.onRailDue(msg)
 	case railPulseMsg:
 		a.onRailPulse()
 	case railFlashMsg:
 		a.onRailFlash(msg)
+	case drawerPaintMsg:
+	case reviewOpenMsg:
+		return a, a.onReviewOpen(msg)
+	case slideOpenMsg:
+		return a, a.onSlideOpen(msg)
+	case drawerSlideMsg:
+		return a, a.onDrawerSlide()
+	case reviewLoadedMsg:
+		return a, a.onReviewLoaded(msg)
+	case reviewSnappedMsg:
+		return a, a.reviewRefresh(msg.pane)
+	case reviewFullMsg:
+		return a, a.onReviewFull(msg)
+	case reviewFlashMsg:
+		a.onReviewFlash(msg)
+	case pickerOpenMsg:
+		return a, a.onPickerOpen(msg)
+	case pickerPageMsg:
+		a.onPickerPage(msg)
+	case pickerCreatedMsg:
+		return a, a.onPickerCreated(msg)
 	case palette.ChosenMsg:
 		return a, a.chosen(msg.ID)
 	case palette.ClosedMsg:
@@ -512,7 +625,7 @@ func (a *App) runLeader(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 	case "esc":
 		return nil, true
 	case a.keymap.leader:
-		if !a.rail.focused {
+		if !a.rail.focused && !a.drawerHasKeys() {
 			a.keyToFocused(msg)
 		}
 
@@ -530,7 +643,15 @@ func (a *App) View() tea.View {
 	lk := a.current()
 	g := a.geometry()
 
-	content := overlayToast(a.frameAt(g), a.width, a.height, a.notice, a.icons, lk.styles)
+	content := a.frameAt(g)
+	st := a.store.State()
+
+	if r, ok := a.drawerRect(st); ok {
+		lines, fits := a.drawerDrawn(st, r)
+		content = a.drawDrawer(content, r, lines, fits)
+	}
+
+	content = overlayToast(content, a.width, a.height, a.notice, a.icons, lk.styles)
 	if a.sequenceOpen() {
 		content = overlayCorner(content, a.width, a.height, sequencePopup(a.keymap.leader, a.prefix, a.icons, lk.styles))
 	}
@@ -541,6 +662,10 @@ func (a *App) View() tea.View {
 
 	if a.overlay != nil {
 		content = overlayOver(content, a.width, a.height, a.overlay.pal)
+	}
+
+	if a.picker.open != nil {
+		content = a.overlayPicker(content, lk)
 	}
 
 	if a.confirm != nil {
@@ -558,7 +683,12 @@ func (a *App) View() tea.View {
 	v.ReportFocus = true
 	// Modified keys arrive with their shifted character, which the legacy encoder needs.
 	v.KeyboardEnhancements.ReportAlternateKeys = true
+
 	v.Cursor = a.cursorAt(g)
+	if a.picker.open != nil {
+		v.Cursor = a.pickerCursor()
+	}
+
 	v.BackgroundColor = lk.theme.UI.Bg
 	v.ForegroundColor = lk.theme.UI.Fg
 

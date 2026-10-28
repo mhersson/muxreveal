@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/mhersson/muxreveal/internal/core"
+	"github.com/mhersson/muxreveal/internal/git/invisible"
 	"github.com/mhersson/muxreveal/internal/ui/theme"
 )
 
@@ -191,9 +192,9 @@ func (a *App) frameBody(g geometry, st core.State, lk look, rail []string, railW
 	focus := st.Tab().Focus
 	leftPane, rightPane := edgePanes(g)
 	now := a.clock.Now()
-	// The focused pane draws as unfocused while the rail has the keyboard, so
-	// one element shows it.
-	railKeys := a.rail.focused && a.railShows(st.Rail)
+	// The focused pane draws as unfocused while the rail or the drawer has the
+	// keyboard, so one element shows it.
+	railKeys := (a.rail.focused && a.railShows(st.Rail)) || a.drawerHasKeys()
 
 	for id, r := range g.rects {
 		own := ownNone
@@ -346,7 +347,9 @@ func fitWidth(s string, w int, body lipgloss.Style) string {
 	return s + spaces(body, w-got)
 }
 
-// printable drops control characters that guest or filesystem text may carry.
+// printable drops the control and invisible characters that guest or
+// filesystem text may carry. Strip goes first and turns U+2028 and U+2029 into
+// a line feed, which the filter then drops.
 func printable(t string) string {
 	return strings.Map(func(r rune) rune {
 		if r < 0x20 || r == 0x7f || (r >= 0x80 && r < 0xa0) {
@@ -354,7 +357,7 @@ func printable(t string) string {
 		}
 
 		return r
-	}, t)
+	}, invisible.Strip(t))
 }
 
 // cursorView places the cursor on screen: the prompt's, copy mode's block or
@@ -388,6 +391,10 @@ func (a *App) cursorBase(g geometry) *tea.Cursor {
 		return a.railCursor(st)
 	}
 
+	if a.drawerHasKeys() {
+		return nil
+	}
+
 	p := a.panes[st.Tab().Focus]
 
 	r, ok := g.rects[st.Tab().Focus]
@@ -399,6 +406,10 @@ func (a *App) cursorBase(g geometry) *tea.Cursor {
 
 	c := contentRect(r)
 	if !visible || pos.X < 0 || pos.Y < 0 || pos.X >= c.W || pos.Y >= c.H {
+		return nil
+	}
+
+	if dr, ok := a.drawerRect(st); ok && c.X+pos.X >= dr.X && c.Y+pos.Y >= dr.Y && c.Y+pos.Y < dr.Y+dr.H {
 		return nil
 	}
 

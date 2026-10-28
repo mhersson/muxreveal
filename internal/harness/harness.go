@@ -1,7 +1,12 @@
 // Package harness adapts external coding-agent CLIs to MuxReveal.
 package harness
 
-import "github.com/mhersson/muxreveal/internal/core"
+import (
+	"context"
+	"time"
+
+	"github.com/mhersson/muxreveal/internal/core"
+)
 
 // Harness adapts one agent CLI: how to launch it, how to hook it, and how to
 // read what its hooks report.
@@ -17,6 +22,9 @@ type Harness interface {
 	Settings(exe string) ([]byte, error)
 	// ParseEvent reads one hook payload as received on stdin.
 	ParseEvent(payload []byte) (Event, error)
+	// CustomName reads the name the user gave the session from its transcript
+	// file; empty when it has none. The name is untrusted text. It does file IO.
+	CustomName(ctx context.Context, transcript string) (string, error)
 }
 
 // Event is one hook payload reduced to what the app needs.
@@ -41,6 +49,12 @@ type Event struct {
 	// Done releases the held answer. The server sets it on a held event; it is
 	// safe to call more than once and concurrently. Nil when nothing is held.
 	Done func() `json:"-"`
+	// Deadline is when the turn snapshot must be done, stamped by the server
+	// as it reads a held turn start; zero when unset.
+	Deadline time.Time `json:"-"`
+	// Snapped is closed when the turn's snapshot (or its marker) is finished,
+	// whether or not it succeeded. Nil when no snapshot is taken for the event.
+	Snapped <-chan struct{} `json:"-"`
 }
 
 // ByID returns the harness saved under id.

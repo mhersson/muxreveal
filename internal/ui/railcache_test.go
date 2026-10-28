@@ -92,6 +92,15 @@ func TestRailCacheKeyCoversEveryInput(t *testing.T) {
 		{name: "stats known", change: func(t *testing.T, a *App) { probe(a, "p1").statsKnown = false }, visible: true},
 		{name: "unseen mark", change: func(t *testing.T, a *App) { a.railEntry("p3").unseen = true }, visible: true},
 		{
+			name: "session name",
+			prep: func(t *testing.T, a *App) {
+				openIn(t, a, core.SetAgentSession{ID: "p2", Session: "s2", Transcript: "/w/web/p2.jsonl"})
+				a.railEntry("p2").name = railName{text: "first", transcript: "/w/web/p2.jsonl"}
+			},
+			change:  func(t *testing.T, a *App) { a.railEntry("p2").name.text = "second" },
+			visible: true,
+		},
+		{
 			name: "tab name",
 			change: func(t *testing.T, a *App) {
 				openIn(t, a, core.RenameTab{ID: a.store.State().Tabs[0].ID, Name: "renamed"})
@@ -147,6 +156,39 @@ func TestRailCacheKeyCoversEveryInput(t *testing.T) {
 				t.Errorf("lines differ = %v, want %v", differs, tt.visible)
 			}
 		})
+	}
+}
+
+func TestRailNameChangeRedrawsTheCard(t *testing.T) {
+	a := cacheApp(t)
+
+	const transcript = "/w/web/p2.jsonl"
+
+	openIn(t, a, core.SetAgentSession{ID: "p2", Session: "s2", Transcript: transcript})
+
+	rp := a.railEntry("p2")
+	rp.name = railName{text: "first", transcript: transcript}
+
+	a.View()
+
+	tests := []struct {
+		name    string
+		change  func()
+		rebuilt bool
+		differs bool
+	}{
+		{"a new name", func() { rp.name.text = "second" }, true, true},
+		{"a name read from another transcript", func() { rp.name.transcript = "/w/web/earlier.jsonl" }, true, true},
+		{"the same name read again", func() { rp.name = railName{text: "second", transcript: "/w/web/earlier.jsonl"} }, false, false},
+		{"the name is back for the pane's transcript", func() { rp.name.transcript = transcript }, true, true},
+		{"nothing", func() {}, false, false},
+	}
+
+	for _, tt := range tests {
+		rebuilt, differs := rebuiltBy(a, tt.change)
+		if rebuilt != tt.rebuilt || differs != tt.differs {
+			t.Errorf("%s: rebuilt = %v, differs = %v; want %v, %v", tt.name, rebuilt, differs, tt.rebuilt, tt.differs)
+		}
 	}
 }
 

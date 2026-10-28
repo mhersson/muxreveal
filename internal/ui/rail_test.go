@@ -254,6 +254,59 @@ func TestRailMatcher(t *testing.T) {
 	}
 }
 
+func TestRailSearchMatchesTheName(t *testing.T) {
+	c := railCard{project: "muxreveal", name: "muxr-Orchestrator", branch: "feat/orch"}
+
+	tests := []struct {
+		q    string
+		want []railHit
+	}{
+		{"orch", []railHit{{railFieldName, 5, 9}, {railFieldBranch, 5, 9}}},
+		{"ORCHESTRA", []railHit{{railFieldName, 5, 14}}},
+		{"muxr", []railHit{{railFieldProject, 0, 4}, {railFieldName, 0, 4}}},
+		{"reveal", []railHit{{railFieldProject, 3, 9}}},
+		{"nothing", nil},
+	}
+
+	for _, tt := range tests {
+		hits, ok := c.matches(tt.q)
+		if ok != (tt.want != nil) || !reflect.DeepEqual(hits, tt.want) {
+			t.Errorf("matches(%q) = %v, %v; want %v", tt.q, hits, ok, tt.want)
+		}
+	}
+
+	if _, ok := (railCard{project: "muxreveal"}).matches("orch"); ok {
+		t.Error("a card with no name matched the text of one")
+	}
+
+	a := drawApp(t, "catppuccin-mocha", true, 100, 30, namedAgents())
+
+	for _, q := range []struct {
+		query string
+		want  []core.PaneID
+	}{
+		{"orch", []core.PaneID{"p1"}},
+		{"T16", []core.PaneID{"p2"}},
+		{"reviewer", []core.PaneID{"p3"}},
+		{"muxreveal", []core.PaneID{"p1", "p2", "p3", "p4", "p5"}}, // the project still matches a named card
+		{"zzz", nil},
+	} {
+		a.railSetSearch(false, q.query)
+
+		var got []core.PaneID
+
+		for _, c := range a.railShown(a.store.State()) {
+			got = append(got, c.pane)
+		}
+
+		slices.Sort(got)
+
+		if !slices.Equal(got, q.want) {
+			t.Errorf("search %q lists %v, want %v", q.query, got, q.want)
+		}
+	}
+}
+
 func TestRailSearchFiltersCards(t *testing.T) {
 	r := newRailApp(t, false)
 	a1 := r.addAgent(t, false, "/w/alpha")

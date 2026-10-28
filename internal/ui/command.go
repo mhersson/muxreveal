@@ -87,7 +87,7 @@ func defaultCommands() []command {
 		id:    "agent.new",
 		icon:  iconAgent,
 		title: "New agent pane",
-		run:   func(a *App) tea.Cmd { return a.openPane(core.KindAgent, core.SplitVertical) },
+		run:   (*App).newAgent,
 	}, {
 		id:    "rail.toggle",
 		icon:  iconAgent,
@@ -109,7 +109,7 @@ func defaultCommands() []command {
 			id:    "pane.focus." + d.name,
 			icon:  iconFocus,
 			title: "Focus " + d.name,
-			run:   func(a *App) tea.Cmd { return a.act(core.FocusDir{Dir: d.dir, Area: a.bodyArea()}) },
+			run:   func(a *App) tea.Cmd { return a.focusDir(d.dir) },
 		})
 	}
 
@@ -187,6 +187,7 @@ func defaultCommands() []command {
 	}
 
 	cmds = append(cmds, layoutCommands()...)
+	cmds = append(cmds, reviewCommands()...)
 
 	cmds = append(cmds, command{
 		id:    "app.quit",

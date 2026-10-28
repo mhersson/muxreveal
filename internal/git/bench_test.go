@@ -183,13 +183,13 @@ func TestBenchLargeRepo(t *testing.T) {
 		return err
 	})
 	measure("WorkingTree", func() error {
-		_, err := WorkingTree(ctx, r, t.TempDir(), 0)
+		_, err := WorkingTree(ctx, r, TreeOptions{TempDir: t.TempDir()})
 
 		return err
 	})
 	// A fresh engine per call keeps the hunk cache out of the timing.
 	measure("Diff against HEAD", func() error {
-		res, err := NewEngine(Limits{}, t.TempDir()).Diff(ctx, BranchSource{Worktree: dir, Base: "HEAD"})
+		res, err := NewEngine(EngineOptions{TempDir: t.TempDir()}).Diff(ctx, BranchSource{Worktree: dir, Base: "HEAD"})
 		if err == nil && len(res.Files) != 20 {
 			err = fmt.Errorf("diff lists %d files, want 20", len(res.Files))
 		}

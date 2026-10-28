@@ -187,17 +187,11 @@ func CreateWorktree(ctx context.Context, r Repo, nw NewWorktree) (Created, error
 		return Created{}, err
 	}
 
-	name, err := WorktreeDir(nw.Branch)
+	path, err := WorktreePath(r, nw.Root, nw.Branch)
 	if err != nil {
 		return Created{}, err
 	}
 
-	root, err := worktreeRoot(r, nw.Root)
-	if err != nil {
-		return Created{}, err
-	}
-
-	path := filepath.Join(root, name)
 	if _, err := os.Lstat(path); err == nil {
 		return Created{}, fmt.Errorf("create worktree %s: %w", path, ErrExists)
 	} else if !errors.Is(err, os.ErrNotExist) {
@@ -244,6 +238,24 @@ func CreateWorktree(ctx context.Context, r Repo, nw NewWorktree) (Created, error
 	return created, fmt.Errorf("create worktree %s: not listed afterwards", path)
 }
 
+// WorktreePath is where CreateWorktree puts a worktree for branch under the
+// root of style. It reads nothing from the disk, so a page can preview it on
+// every frame. It fails with ErrBadBranch when the name has no directory form
+// and with ErrBare when the inside root has no main checkout.
+func WorktreePath(r Repo, style RootStyle, branch string) (string, error) {
+	name, err := WorktreeDir(branch)
+	if err != nil {
+		return "", err
+	}
+
+	root, err := worktreeRoot(r, style)
+	if err != nil {
+		return "", err
+	}
+
+	return filepath.Join(root, name), nil
+}
+
 // checkBranch rejects names git refuses; the name must also survive
 // check-ref-format unchanged, which rules out forms like @{-1}.
 func checkBranch(ctx context.Context, r Repo, branch string) error {
@@ -286,6 +298,9 @@ func worktreeRoot(r Repo, style RootStyle) (string, error) {
 	return filepath.Join(filepath.Dir(r.CommonDir), base+".worktrees"), nil
 }
 
+// addArgs is the `git worktree add` command line. --quiet drops git's progress
+// line, which would otherwise be the first line of stderr and so the whole of
+// the error text, ahead of the line that says why it failed.
 func addArgs(ctx context.Context, r Repo, nw NewWorktree, path string) ([]string, error) {
 	exists, err := refExists(ctx, r, "refs/heads/"+nw.Branch)
 	if err != nil {
@@ -293,7 +308,7 @@ func addArgs(ctx context.Context, r Repo, nw NewWorktree, path string) ([]string
 	}
 
 	if exists {
-		return []string{"worktree", "add", "--", path, nw.Branch}, nil
+		return []string{"worktree", "add", "--quiet", "--", path, nw.Branch}, nil
 	}
 
 	base := nw.Base
@@ -307,7 +322,7 @@ func addArgs(ctx context.Context, r Repo, nw NewWorktree, path string) ([]string
 		return nil, fmt.Errorf("base %q: %w", base, ErrNoBase)
 	}
 
-	return []string{"worktree", "add", "--no-track", "-b", nw.Branch, "--", path, base}, nil
+	return []string{"worktree", "add", "--quiet", "--no-track", "-b", nw.Branch, "--", path, base}, nil
 }
 
 // ensureExcluded appends /.worktrees/ to info/exclude unless a line already

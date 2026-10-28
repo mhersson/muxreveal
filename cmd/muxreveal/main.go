@@ -18,6 +18,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/mhersson/muxreveal/internal/core"
+	"github.com/mhersson/muxreveal/internal/git"
 	"github.com/mhersson/muxreveal/internal/store"
 	"github.com/mhersson/muxreveal/internal/ui"
 	"github.com/mhersson/muxreveal/internal/ui/theme"
@@ -98,6 +99,14 @@ func run(ctx context.Context, env core.Env, configPath, recordDir string, fresh 
 		return fmt.Errorf("config %s: %w", configPath, err)
 	}
 
+	if err := cfg.Diff.Validate(); err != nil {
+		return fmt.Errorf("config %s: %w", configPath, err)
+	}
+
+	if err := cfg.Worktrees.Validate(); err != nil {
+		return fmt.Errorf("config %s: %w", configPath, err)
+	}
+
 	f, err := openLog(core.StateDir(env))
 	if err != nil {
 		return err
@@ -111,7 +120,16 @@ func run(ctx context.Context, env core.Env, configPath, recordDir string, fresh 
 	logger := slog.New(slog.NewTextHandler(f, nil))
 	stateDir := core.StateDir(env)
 
-	hooks := startHooks(logger, stateDir)
+	indexCache := indexCacheDir(logger)
+
+	watches := git.NewWatchSet(context.Background(), git.WatchOptions{})
+	defer func() {
+		if cerr := watches.Close(); cerr != nil {
+			logger.Warn("close watch set", "err", cerr)
+		}
+	}()
+
+	hooks := startHooks(logger, stateDir, indexCache, watches)
 	defer hooks.Stop()
 
 	st, saver, notices, unlock, err := openState(logger, stateDir, cfg, fresh)
@@ -160,6 +178,9 @@ func run(ctx context.Context, env core.Env, configPath, recordDir string, fresh 
 		Getenv: os.Getenv,
 		Cwd:    cwd,
 		Icons:  cfg.IconsOn(),
+		Diff:   cfg.Diff,
+
+		Worktrees: cfg.Worktrees,
 
 		FocusFollowsMouse: cfg.Mouse.FocusFollowsMouse,
 		CopyOnSelect:      cfg.Mouse.CopyOnSelect,
@@ -172,6 +193,8 @@ func run(ctx context.Context, env core.Env, configPath, recordDir string, fresh 
 		HookSock:     hooks.Sock,
 		Events:       hooks.Events,
 		GitTempDir:   hooks.RunDir,
+		IndexCache:   indexCache,
+		Watches:      watches,
 		Notice:       strings.Join(notices, "; "),
 		Save:         save,
 	})

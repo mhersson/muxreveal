@@ -130,6 +130,9 @@ type OpenPane struct {
 	Split   Split
 	Harness string
 	Area    Rect
+	// Beside, when it names a pane of the tab, places the pane beside that one in
+	// place of the focused one. The new pane takes the focus either way.
+	Beside PaneID
 }
 
 func (a OpenPane) apply(s *State) error {
@@ -146,6 +149,10 @@ func (a OpenPane) apply(s *State) error {
 	t := s.cur()
 	if !t.Empty() && a.Split != SplitVertical && a.Split != SplitHorizontal {
 		return fmt.Errorf("core: OpenPane with unknown split %q", a.Split)
+	}
+
+	if a.Beside != "" && slices.Contains(t.Panes, a.Beside) {
+		t.setFocus(a.Beside)
 	}
 
 	if err := t.place(id, a.Split, a.Area, s.Layout); err != nil {
@@ -194,6 +201,7 @@ func (a ClosePane) apply(s *State) error {
 	}
 
 	delete(s.Panes, a.ID)
+	t.dropReview(a.ID)
 
 	t.Zoomed = false
 	t.setFocus(next)

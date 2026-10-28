@@ -16,14 +16,14 @@ import (
 	"github.com/mhersson/muxreveal/internal/harness"
 )
 
-// gitIn runs the real git in dir, with a config that needs nothing from the host.
-func (r *railApp) gitIn(t *testing.T, dir string, args ...string) {
+// gitIn runs the git at bin in dir, with a config that needs nothing from the host.
+func gitIn(t *testing.T, bin, dir string, args ...string) {
 	t.Helper()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, r.real, args...)
+	cmd := exec.CommandContext(ctx, bin, args...)
 	cmd.Dir = dir
 
 	cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_SYSTEM=/dev/null",
@@ -43,10 +43,10 @@ func (r *railApp) repo(t *testing.T, name string) string {
 		t.Fatal(err)
 	}
 
-	r.gitIn(t, dir, "init", "-q", "-b", "main")
+	gitIn(t, r.real, dir, "init", "-q", "-b", "main")
 	write(t, filepath.Join(dir, "a.txt"), "one\n")
-	r.gitIn(t, dir, "add", ".")
-	r.gitIn(t, dir, "commit", "-q", "-m", "init")
+	gitIn(t, r.real, dir, "add", ".")
+	gitIn(t, r.real, dir, "commit", "-q", "-m", "init")
 	write(t, filepath.Join(dir, "a.txt"), "one\ntwo\n")
 
 	// The setup's own git calls are not the probes' business.
@@ -57,6 +57,10 @@ func (r *railApp) repo(t *testing.T, name string) string {
 
 func write(t *testing.T, path, s string) {
 	t.Helper()
+
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
 
 	if err := os.WriteFile(path, []byte(s), 0o644); err != nil {
 		t.Fatal(err)
@@ -99,7 +103,7 @@ func TestRailProbesOnOpen(t *testing.T) {
 func TestRailDetachedHead(t *testing.T) {
 	r := newRailApp(t, false)
 	dir := r.repo(t, "proj")
-	r.gitIn(t, dir, "checkout", "-q", "--detach")
+	gitIn(t, r.real, dir, "checkout", "-q", "--detach")
 	id := r.addAgent(t, false, dir)
 	r.deliver(r.railOpened())
 
@@ -295,13 +299,13 @@ func TestRailProjectNames(t *testing.T) {
 
 	src := r.repo(t, "src")
 	bare := filepath.Join(t.TempDir(), "b.git")
-	r.gitIn(t, filepath.Dir(bare), "init", "-q", "--bare", "-b", "main", bare)
-	r.gitIn(t, src, "push", "-q", bare, "main")
+	gitIn(t, r.real, filepath.Dir(bare), "init", "-q", "--bare", "-b", "main", bare)
+	gitIn(t, r.real, src, "push", "-q", bare, "main")
 	wt := filepath.Join(t.TempDir(), "wt")
-	r.gitIn(t, bare, "worktree", "add", "-q", wt, "main")
+	gitIn(t, r.real, bare, "worktree", "add", "-q", wt, "main")
 
 	wtsrc := filepath.Join(t.TempDir(), "linked")
-	r.gitIn(t, src, "worktree", "add", "-q", "-b", "side", wtsrc)
+	gitIn(t, r.real, src, "worktree", "add", "-q", "-b", "side", wtsrc)
 
 	cases := []struct {
 		name, dir, project, branch string
@@ -624,7 +628,7 @@ func TestRailNonRepoAgentDoesNotRefireItsStatsProbe(t *testing.T) {
 	r.deliver(r.settle())
 
 	// The head probe of the new cwd answered; the stats probe has nothing to count.
-	if got := r.rail.panes[id].stats.cwd; got != second {
+	if got := r.rail.panes[id].stats.target; got != second {
 		t.Errorf("stats slot cwd = %q, want %q so that no update asks again", got, second)
 	}
 }

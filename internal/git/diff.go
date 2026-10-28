@@ -5,7 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+
+	"github.com/mhersson/muxreveal/internal/git/linediff"
 )
+
+// maxFileText bounds one side of Engine.FileText.
+const maxFileText = 8 << 20
 
 var (
 	// ErrNoSnapshot means the requested turn has no snapshot.
@@ -14,6 +19,8 @@ var (
 	ErrNoTurns = errors.New("git: session has no turns")
 	// ErrNotFetched means the pull request refs are not in the repository.
 	ErrNotFetched = errors.New("git: pull request refs not fetched")
+	// ErrTooLarge means a file is too large to read whole.
+	ErrTooLarge = errors.New("git: file too large")
 )
 
 // Source selects what Engine.Diff compares.
@@ -80,8 +87,8 @@ type Hunk struct {
 }
 
 // FileDiff is one changed file. OldPath is set for renames and copies only.
-// Untracked marks a file whose path git does not track, also when git paired
-// it with another file as a rename or copy.
+// Untracked marks a file whose path git does not track and the old side lacks,
+// also when git paired it with another file as a rename or copy.
 // Hunks stay empty for binary files, files without line changes and files
 // marked Truncated; cached hunks are shared, so treat them as read-only.
 type FileDiff struct {
@@ -116,14 +123,24 @@ func DefaultLimits() Limits {
 
 // Engine turns sources into structured diffs. It is safe for concurrent use.
 type Engine struct {
-	limits  Limits
-	tempDir string
-	cache   *hunkCache
+	limits     Limits
+	tempDir    string
+	indexCache string
+	cache      *hunkCache
+	repos      repoCache // the repos Update opened, by worktree path
 }
 
-// NewEngine returns an engine with the given limits; zero fields take the
-// defaults. tempDir is where working-tree snapshots keep their temporary index.
-func NewEngine(l Limits, tempDir string) *Engine {
+// EngineOptions configure NewEngine.
+type EngineOptions struct {
+	Limits     Limits // zero fields take the defaults
+	TempDir    string // where working-tree snapshots keep their temporary index
+	IndexCache string // keeps a refreshed index copy per worktree; empty = none
+}
+
+// NewEngine returns an engine for the given options.
+func NewEngine(o EngineOptions) *Engine {
+	l := o.Limits
+
 	d := DefaultLimits()
 	if l.Files <= 0 {
 		l.Files = d.Files
@@ -137,7 +154,11 @@ func NewEngine(l Limits, tempDir string) *Engine {
 		l.Lines = d.Lines
 	}
 
-	return &Engine{limits: l, tempDir: tempDir, cache: newHunkCache(cacheBytes)}
+	return &Engine{limits: l, tempDir: o.TempDir, indexCache: o.IndexCache, cache: newHunkCache(cacheBytes)}
+}
+
+func (e *Engine) workingTree(ctx context.Context, r Repo) (WorkTree, error) {
+	return WorkingTree(ctx, r, TreeOptions{TempDir: e.tempDir, IndexCache: e.indexCache})
 }
 
 // Diff computes the diff for src.
@@ -194,7 +215,7 @@ func (e *Engine) branchTrees(ctx context.Context, s BranchSource) (Repo, string,
 		return Repo{}, "", WorkTree{}, err
 	}
 
-	wt, err := WorkingTree(ctx, r, e.tempDir, 0)
+	wt, err := e.workingTree(ctx, r)
 	if err != nil {
 		return Repo{}, "", WorkTree{}, fmt.Errorf("diff: %w", err)
 	}
@@ -270,7 +291,7 @@ func (e *Engine) diffTurn(ctx context.Context, s TurnSource) (Result, error) {
 	var res Result
 
 	if next < 0 {
-		wt, err := WorkingTree(ctx, r, e.tempDir, 0)
+		wt, err := e.workingTree(ctx, r)
 		if err != nil {
 			return Result{}, fmt.Errorf("diff: %w", err)
 		}
@@ -315,8 +336,8 @@ func mergeBaseTree(ctx context.Context, r Repo, base string) (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
-// compare diffs oldTree against the new side. Files whose new path is
-// untracked in the working tree are marked, whatever status git guessed.
+// compare diffs oldTree against the new side. Files the old side lacks and the
+// working tree does not track are marked Untracked.
 func (e *Engine) compare(ctx context.Context, r Repo, oldTree string, newSide WorkTree) (Result, error) {
 	res := Result{Old: oldTree, New: newSide.Tree}
 
@@ -340,6 +361,8 @@ func (e *Engine) compare(ctx context.Context, r Repo, oldTree string, newSide Wo
 	return res, nil
 }
 
+// markUntracked marks the files whose path git does not track. A path the old
+// side holds (modified, mode changed) is judged by the comparison alone.
 func markUntracked(files []FileDiff, untracked []string) {
 	set := make(map[string]bool, len(untracked))
 	for _, p := range untracked {
@@ -347,6 +370,49 @@ func markUntracked(files []FileDiff, untracked []string) {
 	}
 
 	for i := range files {
-		files[i].Untracked = set[files[i].Path]
+		f := &files[i]
+
+		switch f.Status {
+		case Added, Renamed, Copied:
+			f.Untracked = set[f.Path]
+		default:
+			f.Untracked = false
+		}
 	}
+}
+
+// FileText returns the lines of both sides of f, read from the object database.
+// An empty id gives an empty side. A side over 8 MiB gives ErrTooLarge.
+func (e *Engine) FileText(ctx context.Context, worktree string, f FileDiff) (old, nw []string, err error) {
+	if old, err = blobLines(ctx, worktree, f.OldOID); err != nil {
+		return nil, nil, fmt.Errorf("read old side of %s: %w", f.Path, err)
+	}
+
+	if nw, err = blobLines(ctx, worktree, f.NewOID); err != nil {
+		return nil, nil, fmt.Errorf("read new side of %s: %w", f.Path, err)
+	}
+
+	return old, nw, nil
+}
+
+func blobLines(ctx context.Context, worktree, oid string) ([]string, error) {
+	if oid == "" {
+		return nil, nil
+	}
+
+	out, err := run(ctx, call{
+		dir:   worktree,
+		args:  []string{"cat-file", "blob", oid},
+		read:  true,
+		limit: maxFileText,
+	})
+	if errors.Is(err, errLimit) {
+		return nil, ErrTooLarge
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	return linediff.Split(string(out)), nil
 }

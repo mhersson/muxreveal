@@ -45,6 +45,7 @@ func refWriteContext(ctx context.Context) (context.Context, context.CancelFunc, 
 // SnapshotOptions tune one snapshot.
 type SnapshotOptions struct {
 	TempDir      string // where the temporary index is created
+	IndexCache   string // keeps a refreshed index copy per worktree; empty = none
 	MaxUntracked int64  // bytes; 0 = 50 MiB, negative = no cap
 	Unchanged    bool   // reuse the previous turn's tree without staging
 }
@@ -94,7 +95,7 @@ func Snapshot(ctx context.Context, dir, session string, opts SnapshotOptions) (T
 	}
 
 	if !reused {
-		wt, err = WorkingTree(ctx, r, opts.TempDir, opts.MaxUntracked)
+		wt, err = WorkingTree(ctx, r, TreeOptions{TempDir: opts.TempDir, IndexCache: opts.IndexCache, MaxUntracked: opts.MaxUntracked})
 		if err != nil {
 			return Turn{}, fmt.Errorf("snapshot %s: %w", r.Root, err)
 		}

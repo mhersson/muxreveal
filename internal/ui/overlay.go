@@ -205,6 +205,113 @@ func overlayLines(base string, width, height, y int, lines []string, pw int) str
 	return overlayAt(base, width, height, (width-pw)/2, y, lines)
 }
 
+// drawerReset ends every style and link a base row leaves open, so the
+// drawer's cells start from nothing.
+const drawerReset = "\x1b[m\x1b]8;;\x1b\\"
+
+// overlayDrawer draws the drawer's lines over base. The drawer always reaches
+// the right edge and spans the body's height, so each line replaces the end of
+// one base row and the compositor's parse of the whole screen is not needed.
+// Anything that shape does not cover goes through the compositor; spliced says
+// which drew it.
+func overlayDrawer(base string, width, height int, r core.Rect, lines []string, fits bool) (out string, spliced bool) {
+	if out, ok := spliceDrawer(base, width, height, r, lines, fits); ok {
+		return out, true
+	}
+
+	return overlayAt(base, width, height, r.X, r.Y, lines), false
+}
+
+// drawDrawer draws the drawer over the frame and counts the frames the
+// compositor drew instead of the splice, each about 3 ms dearer.
+func (a *App) drawDrawer(base string, r core.Rect, lines []string, fits bool) string {
+	out, spliced := overlayDrawer(base, a.width, a.height, r, lines, fits)
+	if !spliced {
+		a.drawer.fallbacks++
+	}
+
+	return out
+}
+
+// spliceDrawer replaces the end of each covered base row with the drawer's line.
+// It reports false, drawing nothing, unless the cells it leaves are the
+// compositor's: the lines must fit (see drawerDrawn), the drawer must reach the
+// right edge inside the screen, and each covered row must end with nothing open
+// and hold nothing uv carries from one cell to another (see carriesAcrossCells).
+// It has no counterpart to overlayAt's bounds guard, which leaves a base wider
+// than the screen undrawn: that differs only for a frame that is already broken.
+func spliceDrawer(base string, width, height int, r core.Rect, lines []string, fits bool) (string, bool) {
+	if !fits || len(lines) == 0 || width < 2 || height < 2 || r.X < 0 || r.X+r.W != width || r.Y < 0 || r.Y+len(lines) > height {
+		return "", false
+	}
+
+	rows := strings.Split(base, "\n")
+	if len(rows) != height {
+		return "", false
+	}
+
+	for i, l := range lines {
+		row := rows[r.Y+i]
+		if !endsClean(row) || carriesAcrossCells(row) {
+			return "", false
+		}
+
+		rows[r.Y+i] = cutRow(row, r.X) + l
+	}
+
+	return strings.Join(rows, "\n"), true
+}
+
+// carriesAcrossCells reports whether s holds something uv carries from one cell
+// to another, which a cut row would change: an APC, DCS, SOS or PM string rides
+// on the next cell drawn, and a carriage return moves the column back.
+func carriesAcrossCells(s string) bool {
+	return strings.Contains(s, "\r") || strings.Contains(s, "\x1b_") || strings.Contains(s, "\x1bP") ||
+		strings.Contains(s, "\x1bX") || strings.Contains(s, "\x1b^")
+}
+
+// endsClean reports whether nothing is left open at the end of s, judged by its
+// last style sequence (a reset) and its last link sequence (a close). A string
+// with neither is clean.
+func endsClean(s string) bool {
+	if i := strings.LastIndex(s, "\x1b["); i >= 0 && !strings.HasPrefix(s[i:], "\x1b[m") && !strings.HasPrefix(s[i:], "\x1b[0m") {
+		return false
+	}
+
+	if i := strings.LastIndex(s, "\x1b]8;"); i >= 0 && !strings.HasPrefix(s[i:], "\x1b]8;;\x1b\\") && !strings.HasPrefix(s[i:], "\x1b]8;;\a") {
+		return false
+	}
+
+	return true
+}
+
+// cutRow is the first x cells of row, then what ends every style and link it
+// left open. A wide character that crosses x leaves a blank in its own style
+// and a row shorter than x ends in plain blanks, as the cell buffer leaves
+// them. Everything after x is dropped, escape sequences too, so nothing from
+// under the drawer reaches the terminal.
+func cutRow(row string, x int) string {
+	p := ansi.GetParser()
+	defer ansi.PutParser(p)
+
+	var state byte
+
+	w := 0
+
+	for i := 0; i < len(row); {
+		_, width, n, next := ansi.DecodeSequence(row[i:], state, p)
+		if width > 0 && w+width > x {
+			return row[:i] + strings.Repeat(" ", x-w) + drawerReset
+		}
+
+		w += width
+		i += n
+		state = next
+	}
+
+	return row + drawerReset + strings.Repeat(" ", x-w)
+}
+
 // overlayAt draws lines over base with the top-left corner at x, y.
 func overlayAt(base string, width, height, x, y int, lines []string) string {
 	if width < 2 || height < 2 || len(lines) == 0 {

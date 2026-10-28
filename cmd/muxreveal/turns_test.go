@@ -27,7 +27,15 @@ type gateRig struct {
 	done chan struct{}
 }
 
+func noSeq(context.Context, string) (string, uint64, bool) { return "", 0, false }
+
 func startGate(t *testing.T, snap, mark snapshotFunc) *gateRig {
+	t.Helper()
+
+	return startSeqGate(t, snap, mark, noSeq)
+}
+
+func startSeqGate(t *testing.T, snap, mark snapshotFunc, seq seqFunc) *gateRig {
 	t.Helper()
 
 	r := &gateRig{in: make(chan harness.Event, 16), out: make(chan harness.Event, 16), done: make(chan struct{})}
@@ -36,7 +44,7 @@ func startGate(t *testing.T, snap, mark snapshotFunc) *gateRig {
 	go func() {
 		defer close(r.done)
 
-		runTurnGate(ctx, r.in, r.out, snap, mark, discardLogger())
+		runTurnGate(ctx, r.in, r.out, snap, mark, seq, discardLogger())
 	}()
 
 	t.Cleanup(func() {
@@ -80,7 +88,7 @@ func notWithin(t *testing.T, ch <-chan struct{}, d time.Duration, what string) {
 
 func TestGateForwardsEventsInOrderWithoutWaiting(t *testing.T) {
 	release := make(chan struct{})
-	snap := func(ctx context.Context, _, _ string) error {
+	snap := func(ctx context.Context, _, _ string, _ bool) error {
 		select {
 		case <-release:
 		case <-ctx.Done():
@@ -89,7 +97,7 @@ func TestGateForwardsEventsInOrderWithoutWaiting(t *testing.T) {
 		return nil
 	}
 
-	r := startGate(t, snap, func(context.Context, string, string) error { return nil })
+	r := startGate(t, snap, func(context.Context, string, string, bool) error { return nil })
 	turn, released := turnEvent("UserPromptSubmit", gateSession, "/repo")
 
 	r.in <- turn
@@ -114,6 +122,248 @@ func TestGateForwardsEventsInOrderWithoutWaiting(t *testing.T) {
 	within(t, released, time.Second, "Done after the snapshot")
 }
 
+// forwarded reads the next event the gate forwards.
+func forwarded(t *testing.T, r *gateRig) harness.Event {
+	t.Helper()
+
+	select {
+	case ev := <-r.out:
+		return ev
+	case <-time.After(time.Second):
+		t.Fatal("the gate forwarded nothing")
+
+		return harness.Event{}
+	}
+}
+
+// A forwarded turn start carries a channel that closes when its snapshot is
+// done, so the app can wait for the turn to exist before it counts turns.
+func TestGateSnappedClosesWhenTheSnapshotIsDone(t *testing.T) {
+	release := make(chan struct{})
+	snap := func(ctx context.Context, _, _ string, _ bool) error {
+		select {
+		case <-release:
+		case <-ctx.Done():
+		}
+
+		return nil
+	}
+
+	r := startGate(t, snap, func(context.Context, string, string, bool) error { return nil })
+	turn, _ := turnEvent("UserPromptSubmit", gateSession, "/repo")
+
+	r.in <- turn
+
+	ev := forwarded(t, r)
+	if ev.Snapped == nil {
+		t.Fatal("the forwarded turn start has no Snapped channel")
+	}
+
+	notWithin(t, ev.Snapped, 100*time.Millisecond, "Snapped before the snapshot returned")
+	close(release)
+	within(t, ev.Snapped, time.Second, "Snapped after the snapshot")
+}
+
+// A turn whose snapshot failed gets a marker that counts as a turn, so Snapped
+// closes after the marker is written, not before.
+func TestGateSnappedWaitsForTheMarkerOfAFailedSnapshot(t *testing.T) {
+	releaseMark := make(chan struct{})
+	snap := func(context.Context, string, string, bool) error { return errors.New("no tree") }
+	mark := func(ctx context.Context, _, _ string, _ bool) error {
+		select {
+		case <-releaseMark:
+		case <-ctx.Done():
+		}
+
+		return nil
+	}
+
+	r := startGate(t, snap, mark)
+	turn, _ := turnEvent("UserPromptSubmit", gateSession, "/repo")
+
+	r.in <- turn
+
+	ev := forwarded(t, r)
+	if ev.Snapped == nil {
+		t.Fatal("the forwarded turn start has no Snapped channel")
+	}
+
+	notWithin(t, ev.Snapped, 100*time.Millisecond, "Snapped before the marker was written")
+	close(releaseMark)
+	within(t, ev.Snapped, time.Second, "Snapped after the marker")
+}
+
+// Only a turn that gets a snapshot carries Snapped: other events and turn
+// starts the gate cannot snapshot leave it nil.
+func TestGateSnappedIsNilWithoutASnapshot(t *testing.T) {
+	fn := func(context.Context, string, string, bool) error { return nil }
+	r := startGate(t, fn, fn)
+
+	r.in <- harness.Event{Name: "PreToolUse"}
+
+	for _, ev := range []struct{ session, cwd string }{{gateSession, ""}, {"not-a-uuid", "/repo"}} {
+		turn, _ := turnEvent("UserPromptSubmit", ev.session, ev.cwd)
+		r.in <- turn
+	}
+
+	for range 3 {
+		if got := forwarded(t, r); got.Snapped != nil {
+			t.Errorf("%s (session %q, cwd %q) carries Snapped, want nil", got.Name, got.Session, got.Cwd)
+		}
+	}
+}
+
+// startUnreadGate runs a gate whose out channel is unbuffered and never read.
+func startUnreadGate(t *testing.T, snap snapshotFunc) chan<- harness.Event {
+	t.Helper()
+
+	in := make(chan harness.Event, 4)
+	done := make(chan struct{})
+	ctx, cancel := context.WithCancel(context.Background())
+
+	go func() {
+		defer close(done)
+
+		runTurnGate(ctx, in, make(chan harness.Event), snap, func(context.Context, string, string, bool) error { return nil }, noSeq, discardLogger())
+	}()
+
+	t.Cleanup(func() {
+		cancel()
+		<-done
+	})
+
+	return in
+}
+
+func TestGateUsesTheEventDeadline(t *testing.T) {
+	got := make(chan time.Time, 1)
+	snap := func(ctx context.Context, _, _ string, _ bool) error {
+		dl, _ := ctx.Deadline()
+		got <- dl
+
+		return nil
+	}
+
+	r := startGate(t, snap, func(context.Context, string, string, bool) error { return nil })
+	turn, _ := turnEvent("UserPromptSubmit", gateSession, "/repo")
+	turn.Deadline = time.Now().Add(300 * time.Millisecond)
+
+	r.in <- turn
+
+	select {
+	case dl := <-got:
+		if !dl.Equal(turn.Deadline) {
+			t.Errorf("snapshot deadline = %v, want the event's %v", dl, turn.Deadline)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("no snapshot")
+	}
+}
+
+func TestGateWithoutDeadlineUsesArrival(t *testing.T) {
+	got := make(chan time.Time, 1)
+	snap := func(ctx context.Context, _, _ string, _ bool) error {
+		dl, _ := ctx.Deadline()
+		got <- dl
+
+		return nil
+	}
+
+	r := startGate(t, snap, func(context.Context, string, string, bool) error { return nil })
+	turn, _ := turnEvent("UserPromptSubmit", gateSession, "/repo")
+
+	before := time.Now()
+
+	r.in <- turn
+
+	select {
+	case dl := <-got:
+		if dl.Before(before.Add(turnBudget)) || dl.After(time.Now().Add(turnBudget)) {
+			t.Errorf("snapshot deadline = %v, want arrival + %v", dl, turnBudget)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("no snapshot")
+	}
+}
+
+func TestGateSnapshotsBeforeTheAppReadsTheEvent(t *testing.T) {
+	snapped := make(chan struct{})
+	snap := func(context.Context, string, string, bool) error {
+		close(snapped)
+
+		return nil
+	}
+
+	in := startUnreadGate(t, snap)
+	turn, released := turnEvent("UserPromptSubmit", gateSession, "/repo")
+
+	in <- turn
+
+	within(t, snapped, time.Second, "the snapshot with the app channel blocked")
+	within(t, released, time.Second, "the hold release with the app channel blocked")
+}
+
+func TestGateSnapshotsOfOneSessionStayInArrivalOrder(t *testing.T) {
+	var (
+		mu       sync.Mutex
+		order    []string
+		inFlight atomic.Int32
+		maxSeen  atomic.Int32
+	)
+
+	snap := func(_ context.Context, cwd, _ string, _ bool) error {
+		n := inFlight.Add(1)
+
+		for {
+			m := maxSeen.Load()
+			if n <= m || maxSeen.CompareAndSwap(m, n) {
+				break
+			}
+		}
+
+		time.Sleep(5 * time.Millisecond)
+
+		mu.Lock()
+
+		order = append(order, cwd)
+
+		mu.Unlock()
+		inFlight.Add(-1)
+
+		return nil
+	}
+
+	r := startGate(t, snap, func(context.Context, string, string, bool) error { return nil })
+
+	var releases []<-chan struct{}
+
+	want := make([]string, 0, 12)
+
+	for i := range 12 {
+		cwd := "/repo" + string(rune('A'+i%26)) + string(rune('a'+i/26))
+		turn, released := turnEvent("UserPromptSubmit", gateSession, cwd)
+		want = append(want, cwd)
+		releases = append(releases, released)
+
+		r.in <- turn
+	}
+
+	for _, released := range releases {
+		within(t, released, 2*time.Second, "a snapshot")
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+
+	if strings.Join(order, ",") != strings.Join(want, ",") {
+		t.Errorf("snapshot order = %v, want %v", order, want)
+	}
+
+	if m := maxSeen.Load(); m != 1 {
+		t.Errorf("snapshots in flight at once = %d, want 1", m)
+	}
+}
+
 func TestGateSlowSnapshotIsCancelledAtTheBudget(t *testing.T) {
 	var (
 		order      []string
@@ -130,7 +380,7 @@ func TestGateSlowSnapshotIsCancelledAtTheBudget(t *testing.T) {
 		mu.Unlock()
 	}
 
-	snap := func(ctx context.Context, _, _ string) error {
+	snap := func(ctx context.Context, _, _ string, _ bool) error {
 		<-ctx.Done()
 		snapErr = ctx.Err()
 
@@ -140,7 +390,7 @@ func TestGateSlowSnapshotIsCancelledAtTheBudget(t *testing.T) {
 		return ctx.Err()
 	}
 	marked := make(chan struct{})
-	mark := func(context.Context, string, string) error {
+	mark := func(context.Context, string, string, bool) error {
 		markedAt = time.Now()
 
 		record("mark")
@@ -184,7 +434,7 @@ func TestGateSerializesTurnsOfOneSession(t *testing.T) {
 		maxRun  int
 	)
 
-	snap := func(_ context.Context, _, _ string) error {
+	snap := func(_ context.Context, _, _ string, _ bool) error {
 		mu.Lock()
 		running++
 		maxRun = max(maxRun, running)
@@ -202,7 +452,7 @@ func TestGateSerializesTurnsOfOneSession(t *testing.T) {
 
 		return errors.New("boom")
 	}
-	mark := func(context.Context, string, string) error {
+	mark := func(context.Context, string, string, bool) error {
 		mu.Lock()
 
 		trace = append(trace, "mark")
@@ -248,13 +498,13 @@ func TestGateSerializesTurnsOfOneSession(t *testing.T) {
 func TestGateBudgetSpentWaitingForTheLockSkipsTheSnapshot(t *testing.T) {
 	var snaps, marks atomic.Int32
 
-	snap := func(ctx context.Context, _, _ string) error {
+	snap := func(ctx context.Context, _, _ string, _ bool) error {
 		snaps.Add(1)
 		<-ctx.Done()
 
 		return ctx.Err()
 	}
-	mark := func(context.Context, string, string) error {
+	mark := func(context.Context, string, string, bool) error {
 		marks.Add(1)
 		time.Sleep(300 * time.Millisecond)
 
@@ -285,7 +535,7 @@ func TestGateBudgetSpentWaitingForTheLockSkipsTheSnapshot(t *testing.T) {
 func TestGateSkipsEventsItCannotSnapshot(t *testing.T) {
 	var calls atomic.Int32
 
-	fn := func(context.Context, string, string) error {
+	fn := func(context.Context, string, string, bool) error {
 		calls.Add(1)
 
 		return nil
@@ -312,8 +562,8 @@ func TestGateNoMarkerOutsideARepository(t *testing.T) {
 	var marks atomic.Int32
 
 	for _, sentinel := range []error{git.ErrNotRepo, git.ErrBadSession} {
-		snap := func(context.Context, string, string) error { return sentinel }
-		mark := func(context.Context, string, string) error {
+		snap := func(context.Context, string, string, bool) error { return sentinel }
+		mark := func(context.Context, string, string, bool) error {
 			marks.Add(1)
 
 			return nil
@@ -341,7 +591,7 @@ func TestGateCancelWaitsForSnapshotsAndWritesNoMarker(t *testing.T) {
 		inSnap = make(chan struct{})
 	)
 
-	snap := func(ctx context.Context, _, _ string) error {
+	snap := func(ctx context.Context, _, _ string, _ bool) error {
 		close(inSnap)
 		<-ctx.Done()
 		time.Sleep(100 * time.Millisecond)
@@ -349,7 +599,7 @@ func TestGateCancelWaitsForSnapshotsAndWritesNoMarker(t *testing.T) {
 
 		return ctx.Err()
 	}
-	mark := func(context.Context, string, string) error {
+	mark := func(context.Context, string, string, bool) error {
 		marks.Add(1)
 
 		return nil
@@ -363,7 +613,7 @@ func TestGateCancelWaitsForSnapshotsAndWritesNoMarker(t *testing.T) {
 	go func() {
 		defer close(returned)
 
-		runTurnGate(ctx, in, out, snap, mark, discardLogger())
+		runTurnGate(ctx, in, out, snap, mark, noSeq, discardLogger())
 	}()
 
 	turn, _ := turnEvent("UserPromptSubmit", gateSession, "/repo")
@@ -401,6 +651,7 @@ func isolateGit(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
 }
 
 // seededRepo returns a repository with one commit and an untracked file, so a
@@ -518,7 +769,7 @@ func TestHookAnswersAfterTheSnapshotExists(t *testing.T) {
 	repo := seededRepo(t)
 	base := runtime.NumGoroutine()
 
-	h, err := setupHooks(discardLogger(), t.TempDir())
+	h, err := setupHooks(discardLogger(), t.TempDir(), "", testWatches(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -549,7 +800,7 @@ func TestHookBudgetSlowSnapshot(t *testing.T) {
 
 	base := runtime.NumGoroutine()
 
-	h, err := setupHooks(discardLogger(), t.TempDir())
+	h, err := setupHooks(discardLogger(), t.TempDir(), "", testWatches(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -589,7 +840,7 @@ func TestHookBudgetServerClosingMidSnapshot(t *testing.T) {
 
 	base := runtime.NumGoroutine()
 
-	h, err := setupHooks(discardLogger(), t.TempDir())
+	h, err := setupHooks(discardLogger(), t.TempDir(), "", testWatches(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -647,7 +898,7 @@ func TestHookBudgetHeldIndexLockDoesNotBlockTheSnapshot(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	h, err := setupHooks(discardLogger(), t.TempDir())
+	h, err := setupHooks(discardLogger(), t.TempDir(), "", testWatches(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -673,7 +924,7 @@ func TestHookBudgetUnsnapshottableTurnsAnswerAtOnce(t *testing.T) {
 	notRepo := t.TempDir()
 	base := runtime.NumGoroutine()
 
-	h, err := setupHooks(discardLogger(), t.TempDir())
+	h, err := setupHooks(discardLogger(), t.TempDir(), "", testWatches(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -694,4 +945,182 @@ func TestHookBudgetUnsnapshottableTurnsAnswerAtOnce(t *testing.T) {
 
 	h.Stop()
 	settles(t, base)
+}
+
+// seqRig is a gate whose snapshots record their unchanged flag and whose
+// watcher counter the test controls.
+type seqRig struct {
+	*gateRig
+
+	n         atomic.Uint64
+	watched   atomic.Bool
+	flags     chan bool
+	beforeSnp func()
+}
+
+func newSeqRig(t *testing.T) *seqRig {
+	t.Helper()
+
+	s := &seqRig{flags: make(chan bool, 16)}
+	s.watched.Store(true)
+
+	snap := func(_ context.Context, _, _ string, unchanged bool) error {
+		if s.beforeSnp != nil {
+			s.beforeSnp()
+		}
+
+		s.flags <- unchanged
+
+		return nil
+	}
+	seq := func(context.Context, string) (string, uint64, bool) {
+		return "/root", s.n.Load(), s.watched.Load()
+	}
+	s.gateRig = startSeqGate(t, snap, func(context.Context, string, string, bool) error { return nil }, seq)
+
+	return s
+}
+
+// turn sends a turn start and returns the unchanged flag its snapshot saw.
+func (s *seqRig) turn(t *testing.T) bool {
+	t.Helper()
+
+	ev, released := turnEvent("UserPromptSubmit", gateSession, "/repo")
+	s.in <- ev
+
+	within(t, released, time.Second, "turn release")
+
+	select {
+	case f := <-s.flags:
+		return f
+	case <-time.After(time.Second):
+		t.Fatal("no snapshot")
+	}
+
+	return false
+}
+
+func TestGateSkipsAnUnchangedTurn(t *testing.T) {
+	s := newSeqRig(t)
+
+	if s.turn(t) {
+		t.Fatal("first turn skipped")
+	}
+
+	if !s.turn(t) {
+		t.Fatal("second turn with an unchanged counter was not skipped")
+	}
+
+	if !s.turn(t) {
+		t.Fatal("third turn was not skipped")
+	}
+}
+
+func TestGateDoesNotSkipAfterAChange(t *testing.T) {
+	s := newSeqRig(t)
+
+	s.turn(t)
+	s.n.Add(1)
+
+	if s.turn(t) {
+		t.Fatal("turn after a change was skipped")
+	}
+
+	if !s.turn(t) {
+		t.Fatal("turn after the changed one was not skipped")
+	}
+}
+
+// The counter rises before the debounce, so a change whose batch has not been
+// sent yet already defeats the skip.
+func TestGateDoesNotSkipAChangeInsideTheDebounce(t *testing.T) {
+	s := newSeqRig(t)
+
+	s.turn(t)
+	s.n.Add(1) // seq rose; no batch was sent
+
+	if s.turn(t) {
+		t.Fatal("a change inside the debounce was skipped")
+	}
+}
+
+func TestGateDoesNotSkipWithoutAWatcher(t *testing.T) {
+	s := newSeqRig(t)
+
+	s.turn(t)
+	s.watched.Store(false)
+
+	if s.turn(t) {
+		t.Fatal("turn without a watcher was skipped")
+	}
+
+	s.watched.Store(true)
+
+	if s.turn(t) {
+		t.Fatal("turn right after an unwatched one was skipped")
+	}
+}
+
+func TestGateDoesNotSkipAfterAChangeDuringTheSnapshot(t *testing.T) {
+	s := newSeqRig(t)
+
+	s.beforeSnp = func() { s.n.Add(1) } // after the counter was read, before the snapshot ends
+	s.turn(t)
+
+	s.beforeSnp = nil
+
+	if s.turn(t) {
+		t.Fatal("turn after a change during the previous snapshot was skipped")
+	}
+}
+
+func TestGateDoesNotSkipAfterAFailedSnapshot(t *testing.T) {
+	var fail atomic.Bool
+
+	flags := make(chan bool, 4)
+	snap := func(_ context.Context, _, _ string, unchanged bool) error {
+		flags <- unchanged
+
+		if fail.Load() {
+			return errors.New("boom")
+		}
+
+		return nil
+	}
+	seq := func(context.Context, string) (string, uint64, bool) { return "/root", 1, true }
+	r := startSeqGate(t, snap, func(context.Context, string, string, bool) error { return nil }, seq)
+
+	send := func() bool {
+		ev, released := turnEvent("UserPromptSubmit", gateSession, "/repo")
+		r.in <- ev
+
+		within(t, released, time.Second, "turn release")
+
+		return <-flags
+	}
+
+	send()
+	fail.Store(true)
+	send()
+	fail.Store(false)
+
+	if send() {
+		t.Fatal("turn after a failed snapshot was skipped")
+	}
+}
+
+func TestGateKeepsSeqPerSession(t *testing.T) {
+	s := newSeqRig(t)
+	other := "99999999-2222-4333-8444-555555555555"
+
+	s.turn(t)
+
+	ev, released := turnEvent("UserPromptSubmit", other, "/repo")
+	s.in <- ev
+
+	within(t, released, time.Second, "turn release")
+
+	if <-s.flags {
+		t.Fatal("another session's first turn was skipped")
+	}
 }

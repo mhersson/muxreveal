@@ -32,33 +32,53 @@ func ShellCommand(env func(string) string, dir string, extraEnv []string) Comman
 }
 
 // AgentCommand runs argv in an interactive login shell, then stays in a shell
-// when the agent exits. Every argument is single-quoted, so nothing in argv is
-// interpreted by the shell. argv must not be empty.
+// when the agent exits. argv reaches the shell as separate arguments after a
+// fixed script, so nothing in it is parsed. argv must not be empty.
 func AgentCommand(env func(string) string, dir string, argv, extraEnv []string) Command {
-	sh := shellPath(env)
+	return runThenShell(env, dir, "", argv, extraEnv)
+}
 
-	quoted := make([]string, len(argv))
-	for i, a := range argv {
-		quoted[i] = quote(a)
+// EditorCommand runs editor with args in an interactive login shell, then stays
+// in a shell when the editor exits. The shell reads editor as git reads
+// $EDITOR, so a value such as `code -w` runs code with -w; args reach the shell
+// as separate arguments after a fixed script, so nothing in them is parsed.
+// editor comes from the operator's own environment and must not be empty.
+func EditorCommand(env func(string) string, dir, editor string, args, extraEnv []string) Command {
+	return runThenShell(env, dir, editor, args, extraEnv)
+}
+
+// runThenShell runs program, or args[0] when program is empty, with args in an
+// interactive login shell, then replaces that shell with a login shell. The
+// script holds only fixed text and the operator's program; args are never part
+// of it, because no quoting is safe in every shell (fish reads a backslash in
+// single quotes as an escape).
+func runThenShell(env func(string) string, dir, program string, args, extraEnv []string) Command {
+	sh := shellPath(env)
+	isFish := filepath.Base(sh) == "fish"
+
+	positional := `"$@"`
+	if isFish {
+		positional = "$argv"
 	}
 
-	script := strings.Join(quoted, " ") + `; exec "$SHELL" -l`
-	if filepath.Base(sh) == "fish" {
-		// fish -c runs commands without job control, so the agent would not
+	script := strings.TrimSpace(program+" "+positional) + `; exec "$SHELL" -l`
+	if isFish {
+		// fish -c runs commands without job control, so the program would not
 		// lead the terminal's foreground group.
 		script = "status job-control full; " + script
 	}
 
+	argv := []string{sh, "-l", "-i", "-c", script}
+	if !isFish {
+		// sh -c takes the next argument as $0; fish -c passes them all to $argv.
+		argv = append(argv, filepath.Base(sh))
+	}
+
 	return Command{
-		Argv: []string{sh, "-l", "-i", "-c", script},
+		Argv: append(argv, args...),
 		Dir:  dir,
 		Env:  shellEnv(sh, extraEnv),
 	}
-}
-
-// quote is POSIX single-quoting; fish reads it alike for arguments without backslashes.
-func quote(s string) string {
-	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
 // shellEnv is the pane environment with SHELL set to the resolved shell, so

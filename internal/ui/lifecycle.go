@@ -66,22 +66,49 @@ func contentSize(r core.Rect) (cols, rows int) {
 // openPane starts a pane of kind next to the focused one, in its cwd, and
 // focuses it. Nothing changes when the process does not start.
 func (a *App) openPane(kind core.PaneKind, split core.Split) tea.Cmd {
+	return a.openPaneIn(kind, split, a.focusedCwd(a.store.State()))
+}
+
+// openPaneIn is openPane in cwd.
+func (a *App) openPaneIn(kind core.PaneKind, split core.Split, cwd string) tea.Cmd {
+	cmd, _ := a.openPaneAt(kind, split, a.store.State().Tab().Focus, cwd, nil)
+
+	return cmd
+}
+
+// focusedCwd is the cwd of st's focused pane, or the launch dir without one.
+func (a *App) focusedCwd(st core.State) string {
+	if m, ok := st.Panes[st.Tab().Focus]; ok && m.Cwd != "" {
+		return m.Cwd
+	}
+
+	return a.cwd
+}
+
+// paneRun is the command line a shell pane starts in place of the plain shell.
+// The shell reads program as git reads $EDITOR, so it may carry arguments; args
+// are passed as given.
+type paneRun struct {
+	program string
+	args    []string
+}
+
+// openPaneAt starts a pane of kind in cwd next to anchor, a pane of the active
+// tab, and focuses it. A shell pane with run set starts that command line in
+// place of the plain shell and keeps a shell after it. It reports whether the
+// pane opened; when it did not, nothing changed.
+func (a *App) openPaneAt(kind core.PaneKind, split core.Split, anchor core.PaneID, cwd string, run *paneRun) (tea.Cmd, bool) {
 	// Without a size there is no rect to start at.
 	if !a.started {
-		return nil
+		return nil, false
 	}
 
 	st := a.store.State()
 	if a.panesFull(st) {
-		return nil
+		return nil, false
 	}
 
-	cwd := a.cwd
-	if m, ok := st.Panes[st.Tab().Focus]; ok && m.Cwd != "" {
-		cwd = m.Cwd
-	}
-
-	act := core.OpenPane{Kind: kind, Cwd: cwd, Split: split, Area: a.bodyArea()}
+	act := core.OpenPane{Kind: kind, Cwd: cwd, Split: split, Area: a.bodyArea(), Beside: anchor}
 	if kind == core.KindAgent {
 		act.Harness = a.harness.ID()
 	}
@@ -98,9 +125,9 @@ func (a *App) openPane(kind core.PaneKind, split core.Split) tea.Cmd {
 		}
 	}
 
-	pn, cwd, err := a.startPane(id, kind, cwd, cols, rows, "")
+	pn, cwd, err := a.startPaneRunning(id, kind, cwd, cols, rows, "", run)
 	if err != nil {
-		return nil
+		return nil, false
 	}
 
 	act.Cwd = cwd
@@ -110,7 +137,7 @@ func (a *App) openPane(kind core.PaneKind, split core.Split) tea.Cmd {
 		a.closeAsync(pn)
 		a.notice = fmt.Sprintf("cannot open %s: %v", kind, err)
 
-		return nil
+		return nil, false
 	}
 
 	cmds := []tea.Cmd{pn.wait(), a.relayout()}
@@ -118,7 +145,7 @@ func (a *App) openPane(kind core.PaneKind, split core.Split) tea.Cmd {
 		cmds = append(cmds, a.kindDueCmd(pn))
 	}
 
-	return tea.Batch(cmds...)
+	return tea.Batch(cmds...), true
 }
 
 // panesFull sets the pane-limit notice and reports true when st holds
@@ -143,16 +170,26 @@ func (a *App) kindDueCmd(p *pane) tea.Cmd {
 // directory used. An agent resumes session resume when it is set. On failure it
 // leaves a notice and registers nothing.
 func (a *App) startPane(id core.PaneID, kind core.PaneKind, cwd string, cols, rows int, resume core.SessionID) (*pane, string, error) {
+	return a.startPaneRunning(id, kind, cwd, cols, rows, resume, nil)
+}
+
+// startPaneRunning is startPane for a shell pane that starts the command line
+// run, when it is set, in place of the plain shell.
+func (a *App) startPaneRunning(id core.PaneID, kind core.PaneKind, cwd string, cols, rows int, resume core.SessionID, run *paneRun) (*pane, string, error) {
 	env := []string{"MUXREVEAL_PANE=" + string(id)}
 	if a.hookSock != "" {
 		env = append(env, "MUXREVEAL_SOCK="+a.hookSock)
 	}
 
 	c := term.ShellCommand(a.getenv, cwd, env)
-	if kind == core.KindAgent {
+
+	switch {
+	case kind == core.KindAgent:
 		// Restored and restarted agents use the app's harness; a second harness
 		// must pass the pane's own (harness.ByID(Pane.Harness)).
 		c = term.AgentCommand(a.getenv, cwd, a.harness.Launch(a.hookSettings, resume), env)
+	case run != nil:
+		c = term.EditorCommand(a.getenv, cwd, run.program, run.args, env)
 	}
 
 	// On the update loop: user-initiated, fork/exec takes a millisecond or two, and State and the registry stay in step.
@@ -596,11 +633,7 @@ func (a *App) newTab() tea.Cmd {
 		return nil
 	}
 
-	cwd := a.cwd
-	if m, ok := st.Panes[st.Tab().Focus]; ok && m.Cwd != "" {
-		cwd = m.Cwd
-	}
-
+	cwd := a.focusedCwd(st)
 	id := st.NewPaneID()
 	cols, rows := contentSize(a.bodyArea())
 
@@ -687,6 +720,9 @@ func (a *App) renameTab() tea.Cmd {
 // its terminal's foreground group, asynchronously after Close returns.
 // It is safe to call twice, and only after the program stopped running Update.
 func (a *App) Close(ctx context.Context) error {
+	a.endSlide()
+	a.watches.holds.closeAll()
+
 	for id, p := range a.panes {
 		delete(a.panes, id)
 		a.closeAsync(p)

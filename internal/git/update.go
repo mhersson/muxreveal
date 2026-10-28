@@ -3,29 +3,111 @@ package git
 import (
 	"context"
 	"fmt"
+	"os"
 	"path"
 	"slices"
 	"strings"
+	"sync"
 )
 
 // maxIncrementalPaths is the most touched paths Update re-lists; a bigger
 // batch is cheaper to recompute whole.
 const maxIncrementalPaths = 200
 
+// repoCache remembers the Repo that Open found for a worktree path. A Repo is
+// only paths, so a hit hands out a copy; two misses that race both Open and the
+// later store wins.
+type repoCache struct {
+	mu sync.Mutex
+	m  map[string]Repo
+}
+
+// get returns the Repo cached for dir while its git dirs are still there. A
+// worktree whose git dir moved or went away must be opened again.
+func (c *repoCache) get(dir string) (Repo, bool) {
+	c.mu.Lock()
+	r, ok := c.m[dir]
+	c.mu.Unlock()
+
+	if ok && !gitDirsExist(r) {
+		c.forget(dir)
+
+		return Repo{}, false
+	}
+
+	return r, ok
+}
+
+func (c *repoCache) put(dir string, r Repo) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.m == nil {
+		c.m = make(map[string]Repo)
+	}
+
+	c.m[dir] = r
+}
+
+func (c *repoCache) forget(dir string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	delete(c.m, dir)
+}
+
+func gitDirsExist(r Repo) bool {
+	for _, d := range []string{r.GitDir, r.CommonDir} {
+		if info, err := os.Stat(d); err != nil || !info.IsDir() {
+			return false
+		}
+	}
+
+	return true
+}
+
 // Update brings prev, the result of Diff for src, up to date after the watcher
 // batch b. It rebuilds the working tree and re-lists only the touched paths;
 // the result equals a fresh Diff. Anything that could change which files pair
-// up, the old side, or which files fall inside the caps runs a full Diff.
+// up, the old side, or which files fall inside the caps runs a full Diff. The
+// Repo opened for a worktree is reused until its git dirs move or an update
+// fails; an update whose context ended keeps it.
 func (e *Engine) Update(ctx context.Context, prev Result, src Source, b Batch) (Result, error) {
 	if !e.canUpdate(prev, src, b) {
 		return e.Diff(ctx, src)
 	}
 
-	r, err := Open(ctx, worktreeOf(src))
+	dir := worktreeOf(src)
+
+	r, cached := e.repos.get(dir)
+	if !cached {
+		var err error
+
+		if r, err = Open(ctx, dir); err != nil {
+			return Result{}, err
+		}
+	}
+
+	res, err := e.update(ctx, r, prev, src, b)
 	if err != nil {
+		// The repo may be what failed (moved, replaced); open it again next time.
+		// A context that ended proves nothing about it.
+		if ctx.Err() == nil {
+			e.repos.forget(dir)
+		}
+
 		return Result{}, err
 	}
 
+	if !cached {
+		e.repos.put(dir, r)
+	}
+
+	return res, nil
+}
+
+// update is Update on the opened repo r.
+func (e *Engine) update(ctx context.Context, r Repo, prev Result, src Source, b Batch) (Result, error) {
 	if ts, ok := src.(TurnSource); ok {
 		turns, err := Turns(ctx, r, ts.Session)
 		if err != nil {
@@ -37,7 +119,7 @@ func (e *Engine) Update(ctx context.Context, prev Result, src Source, b Batch) (
 		}
 	}
 
-	wt, err := WorkingTree(ctx, r, e.tempDir, 0)
+	wt, err := e.workingTree(ctx, r)
 	if err != nil {
 		return Result{}, fmt.Errorf("update: %w", err)
 	}
@@ -57,7 +139,7 @@ func (e *Engine) Update(ctx context.Context, prev Result, src Source, b Batch) (
 
 	// A scratch cache keeps hunks of a result that falls back out of the real
 	// one: cached hunks skip the byte budget, which would skew the full Diff.
-	scratch := &Engine{limits: e.limits, tempDir: e.tempDir, cache: newHunkCache(cacheBytes)}
+	scratch := &Engine{limits: e.limits, tempDir: e.tempDir, indexCache: e.indexCache, cache: newHunkCache(cacheBytes)}
 	if err := scratch.addHunks(ctx, r, prev.Old, wt.Tree, touched); err != nil {
 		return Result{}, err
 	}
