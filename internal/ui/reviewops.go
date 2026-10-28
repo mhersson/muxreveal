@@ -140,6 +140,7 @@ func (a *App) setReviewMode(mode core.ReviewMode) tea.Cmd {
 	}
 
 	session := paneSession(a.store.State(), tab.Review.Pane)
+	v.after = nil
 
 	if mode == core.ReviewTurn {
 		if ok, wait := a.turnsGate(tab.ID, v, session, func() tea.Cmd { return a.setReviewMode(mode) }); !ok {
@@ -165,9 +166,14 @@ func (a *App) turnsGate(tab core.TabID, v *reviewView, session string, retry fun
 	case session == "":
 		a.notice = noticeNoTurns
 	case v.loaded && v.turnsFor != session:
-		v.after = retry
+		// Hold the key only while a probe can answer it.
+		if probe := a.reviewCount(tab, v); probe != nil || v.loading {
+			v.after = retry
 
-		return false, a.reviewCount(tab, v)
+			return false, probe
+		}
+
+		a.notice = noticeNoTurnsYet
 	case v.loaded && v.turns == 0:
 		a.notice = noticeNoTurnsYet
 	default:
@@ -184,6 +190,8 @@ func (a *App) stepReviewTurn(delta int) tea.Cmd {
 	if !ok {
 		return nil
 	}
+
+	v.after = nil
 
 	if ok, wait := a.turnsGate(tab.ID, v, paneSession(a.store.State(), tab.Review.Pane), func() tea.Cmd { return a.stepReviewTurn(delta) }); !ok {
 		return wait

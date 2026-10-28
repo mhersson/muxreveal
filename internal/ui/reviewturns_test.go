@@ -293,3 +293,85 @@ func TestAnswerForAnotherSessionDoesNotSetTheCount(t *testing.T) {
 		t.Error("the count of the ended session was adopted for the new one")
 	}
 }
+
+// A turn key held for the turn count gives way to the user's next key: t then
+// b, inside the one probe, ends in branch mode.
+func TestLaterKeyReplacesTheHeldTurnKey(t *testing.T) {
+	r := newDrawerRig(t)
+	dir := threeTurnRepo(t)
+	root := rootOf(t, dir)
+	snapshotTurn(t, dir, otherSession)
+	id := r.agent(t, dir, testSession)
+
+	r.open(t, id)
+	r.watching(t, id, root)
+	r.run(r.setReviewMode(core.ReviewBranch))
+	r.idle(t)
+
+	r.run(r.step(hookMsg{ev: harness.Event{Pane: id, Name: "SessionEnd", End: true}}))
+	r.run(r.step(hookMsg{ev: harness.Event{Pane: id, Name: "SessionStart", Session: otherSession, Start: true}}))
+
+	// Both keys come before any answer is delivered.
+	r.run(r.setReviewMode(core.ReviewTurn))
+	r.run(r.setReviewMode(core.ReviewBranch))
+	r.until(t, "the probe and the diff to settle", r.viewHolds(func(v *reviewView) bool { return !v.loading && v.turnsFor == string(otherSession) }))
+
+	if v := r.view(); r.coreMode() != core.ReviewBranch || !isBranchSource(v) || v.after != nil {
+		t.Errorf("core mode %q source %T held key %v, want branch with no key held", r.coreMode(), v.src, v.after != nil)
+	}
+}
+
+// A turn key is held only while a probe can answer it. Outside a repository
+// there is none, so the key gets its notice at once.
+func TestTurnKeyOutsideARepositoryAnswersAtOnce(t *testing.T) {
+	r := newDrawerRig(t)
+	id := r.agent(t, t.TempDir(), testSession)
+
+	openIn(t, r.App, core.OpenReview{Pane: id, Mode: core.ReviewTurn})
+	r.settle()
+	r.until(t, "the error", r.viewHolds(func(v *reviewView) bool { return v.err != nil }))
+
+	r.notice = ""
+
+	cmd := r.setReviewMode(core.ReviewTurn)
+
+	if want := "no turns yet"; r.notice != want || cmd != nil || r.view().after != nil {
+		t.Errorf("notice %q command %v held key %v, want the notice at once and nothing held", r.notice, cmd != nil, r.view().after != nil)
+	}
+}
+
+// A new session drops a held turn key: it was pressed for the old one.
+func TestNewSessionDropsAHeldTurnKey(t *testing.T) {
+	r := newDrawerRig(t)
+	dir := threeTurnRepo(t)
+	root := rootOf(t, dir)
+	snapshotTurn(t, dir, otherSession)
+	id := r.agent(t, dir, testSession)
+
+	r.open(t, id)
+	r.watching(t, id, root)
+	r.run(r.setReviewMode(core.ReviewBranch))
+	r.idle(t)
+
+	r.run(r.step(hookMsg{ev: harness.Event{Pane: id, Name: "SessionEnd", End: true}}))
+	r.run(r.step(hookMsg{ev: harness.Event{Pane: id, Name: "SessionStart", Session: otherSession, Start: true}}))
+	r.run(r.setReviewMode(core.ReviewTurn))
+
+	if r.view().after == nil {
+		t.Fatal("setup: the key was not held")
+	}
+
+	// The session ends before the probe answers.
+	r.notice = ""
+	r.run(r.step(hookMsg{ev: harness.Event{Pane: id, Name: "SessionEnd", End: true}}))
+
+	if r.view().after != nil {
+		t.Error("the held key outlived the session it was pressed for")
+	}
+
+	r.until(t, "the loads to settle", r.viewHolds(func(v *reviewView) bool { return !v.loading }))
+
+	if r.notice != "" || r.coreMode() != core.ReviewBranch {
+		t.Errorf("notice %q core mode %q, want the dropped key to do nothing", r.notice, r.coreMode())
+	}
+}

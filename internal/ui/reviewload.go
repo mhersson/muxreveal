@@ -192,7 +192,7 @@ func (a *App) reviewSync() tea.Cmd {
 	}
 
 	if session := paneSession(st, rv.Pane); session != v.session {
-		v.session = session
+		v.session, v.after = session, nil
 		need = need || rv.Mode == core.ReviewTurn
 	}
 
@@ -258,7 +258,7 @@ func (a *App) reviewRetarget(tab core.TabID, v *reviewView, turn int) tea.Cmd {
 	}
 
 	v.epoch = a.drawer.nextEpoch()
-	v.queued = nil
+	v.queued, v.after = nil, nil
 	v.stopReads()
 
 	return a.reviewStart(tab, v, nil, false)
