@@ -630,13 +630,42 @@ func (a *App) reviewBatch(root string, b git.Batch) tea.Cmd {
 
 // reviewHook recomputes the drawers that review the pane when a hook event
 // arrives that the watcher cannot report: a turn's start, whose snapshot ref
-// never wakes it, or any event while no watch is held, which then stands in for
-// the file changes. A hidden tab's drawer is marked stale, as a batch would.
-func (a *App) reviewHook(pane core.PaneID, turnStart bool) tea.Cmd {
-	if w := a.watches.panes[pane]; !turnStart && w != nil && w.root != "" {
+// never wakes it, or any event while the pane's root is not watched, which then
+// stands in for the file changes. A turn start whose snapshot is still being
+// taken (snapped) recomputes once it is done, as the turn exists only then.
+func (a *App) reviewHook(pane core.PaneID, turnStart bool, snapped <-chan struct{}) tea.Cmd {
+	if w := a.watches.panes[pane]; !turnStart && w != nil && w.root != "" && w.root == w.want {
 		return nil
 	}
 
+	if turnStart && snapped != nil {
+		return a.reviewAfterSnapshot(pane, snapped)
+	}
+
+	return a.reviewRefresh(pane)
+}
+
+// reviewSnappedMsg says a turn's snapshot is done.
+type reviewSnappedMsg struct{ pane core.PaneID }
+
+// reviewAfterSnapshot waits for a turn's snapshot or the app's end, off the
+// update loop, and answers with reviewSnappedMsg for the former.
+func (a *App) reviewAfterSnapshot(pane core.PaneID, snapped <-chan struct{}) tea.Cmd {
+	ctx := a.ctx
+
+	return func() tea.Msg {
+		select {
+		case <-snapped:
+			return reviewSnappedMsg{pane: pane}
+		case <-ctx.Done():
+			return nil
+		}
+	}
+}
+
+// reviewRefresh queues a full recompute for every drawer that reviews the pane.
+// A hidden tab's drawer is marked stale, as a batch would.
+func (a *App) reviewRefresh(pane core.PaneID) tea.Cmd {
 	active := a.store.State().Tab().ID
 
 	var cmds []tea.Cmd

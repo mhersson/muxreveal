@@ -152,8 +152,14 @@ func (a *App) releaseAsync(rel func()) {
 }
 
 func (w *paneWatch) clear(a *App) {
+	w.drop(a)
+	w.want = ""
+}
+
+// drop frees the held reference and keeps the root the pane wants.
+func (w *paneWatch) drop(a *App) {
 	a.releaseAsync(w.release)
-	w.release, w.root, w.want = nil, "", ""
+	w.release, w.root = nil, ""
 }
 
 // watchSync reconciles the held watches with the panes that need one, the
@@ -275,6 +281,11 @@ func (a *App) onPaneRepo(msg paneRepoMsg) tea.Cmd {
 func (a *App) onWatchAcquired(msg watchAcquiredMsg) {
 	if msg.err != nil {
 		a.noticeWatchFailed(msg.repo, msg.err)
+
+		// The pane moved here from another root, whose watch would be taken for this one's.
+		if w := a.watches.panes[msg.id]; w != nil && w.want == msg.repo.Root && w.root != "" && w.root != msg.repo.Root {
+			w.drop(a)
+		}
 
 		return
 	}

@@ -122,6 +122,97 @@ func TestGateForwardsEventsInOrderWithoutWaiting(t *testing.T) {
 	within(t, released, time.Second, "Done after the snapshot")
 }
 
+// forwarded reads the next event the gate forwards.
+func forwarded(t *testing.T, r *gateRig) harness.Event {
+	t.Helper()
+
+	select {
+	case ev := <-r.out:
+		return ev
+	case <-time.After(time.Second):
+		t.Fatal("the gate forwarded nothing")
+
+		return harness.Event{}
+	}
+}
+
+// A forwarded turn start carries a channel that closes when its snapshot is
+// done, so the app can wait for the turn to exist before it counts turns.
+func TestGateSnappedClosesWhenTheSnapshotIsDone(t *testing.T) {
+	release := make(chan struct{})
+	snap := func(ctx context.Context, _, _ string, _ bool) error {
+		select {
+		case <-release:
+		case <-ctx.Done():
+		}
+
+		return nil
+	}
+
+	r := startGate(t, snap, func(context.Context, string, string, bool) error { return nil })
+	turn, _ := turnEvent("UserPromptSubmit", gateSession, "/repo")
+
+	r.in <- turn
+
+	ev := forwarded(t, r)
+	if ev.Snapped == nil {
+		t.Fatal("the forwarded turn start has no Snapped channel")
+	}
+
+	notWithin(t, ev.Snapped, 100*time.Millisecond, "Snapped before the snapshot returned")
+	close(release)
+	within(t, ev.Snapped, time.Second, "Snapped after the snapshot")
+}
+
+// A turn whose snapshot failed gets a marker that counts as a turn, so Snapped
+// closes after the marker is written, not before.
+func TestGateSnappedWaitsForTheMarkerOfAFailedSnapshot(t *testing.T) {
+	releaseMark := make(chan struct{})
+	snap := func(context.Context, string, string, bool) error { return errors.New("no tree") }
+	mark := func(ctx context.Context, _, _ string, _ bool) error {
+		select {
+		case <-releaseMark:
+		case <-ctx.Done():
+		}
+
+		return nil
+	}
+
+	r := startGate(t, snap, mark)
+	turn, _ := turnEvent("UserPromptSubmit", gateSession, "/repo")
+
+	r.in <- turn
+
+	ev := forwarded(t, r)
+	if ev.Snapped == nil {
+		t.Fatal("the forwarded turn start has no Snapped channel")
+	}
+
+	notWithin(t, ev.Snapped, 100*time.Millisecond, "Snapped before the marker was written")
+	close(releaseMark)
+	within(t, ev.Snapped, time.Second, "Snapped after the marker")
+}
+
+// Only a turn that gets a snapshot carries Snapped: other events and turn
+// starts the gate cannot snapshot leave it nil.
+func TestGateSnappedIsNilWithoutASnapshot(t *testing.T) {
+	fn := func(context.Context, string, string, bool) error { return nil }
+	r := startGate(t, fn, fn)
+
+	r.in <- harness.Event{Name: "PreToolUse"}
+
+	for _, ev := range []struct{ session, cwd string }{{gateSession, ""}, {"not-a-uuid", "/repo"}} {
+		turn, _ := turnEvent("UserPromptSubmit", ev.session, ev.cwd)
+		r.in <- turn
+	}
+
+	for range 3 {
+		if got := forwarded(t, r); got.Snapped != nil {
+			t.Errorf("%s (session %q, cwd %q) carries Snapped, want nil", got.Name, got.Session, got.Cwd)
+		}
+	}
+}
+
 // startUnreadGate runs a gate whose out channel is unbuffered and never read.
 func startUnreadGate(t *testing.T, snap snapshotFunc) chan<- harness.Event {
 	t.Helper()

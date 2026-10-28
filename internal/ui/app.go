@@ -519,6 +519,8 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, a.onDrawerSlide()
 	case reviewLoadedMsg:
 		return a, a.onReviewLoaded(msg)
+	case reviewSnappedMsg:
+		return a, a.reviewRefresh(msg.pane)
 	case reviewFullMsg:
 		return a, a.onReviewFull(msg)
 	case reviewFlashMsg:

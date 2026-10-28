@@ -70,7 +70,7 @@ func (m *seqMemory) set(session string, v rootSeq, ok bool) {
 // runTurnGate forwards every event from in to out in order and, for a turn
 // start, snapshots the working tree before releasing the held hook answer. The
 // snapshot starts before the event is forwarded, so a full out channel cannot
-// delay it. A snapshot passes unchanged when seq reports the worktree watched
+// delay it; the forwarded event carries the channel the snapshot closes. A snapshot passes unchanged when seq reports the worktree watched
 // and its counter is what it was just before the session's last successful
 // snapshot. It returns when in closes or ctx ends, after its snapshot goroutines.
 func runTurnGate(ctx context.Context, in <-chan harness.Event, out chan<- harness.Event, snap, mark snapshotFunc, seq seqFunc, log *slog.Logger) {
@@ -106,6 +106,7 @@ func runTurnGate(ctx context.Context, in <-chan harness.Event, out chan<- harnes
 				key := strings.ToLower(string(ev.Session))
 				prev, done := tails[key], make(chan struct{})
 				tails[key] = done
+				ev.Snapped = done
 
 				deadline := ev.Deadline
 				if deadline.IsZero() {

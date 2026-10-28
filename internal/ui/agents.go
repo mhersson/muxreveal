@@ -78,7 +78,7 @@ func (a *App) onHook(ev harness.Event) tea.Cmd {
 	}
 
 	// After the session is recorded: the name probe reads the transcript it reports.
-	probes := tea.Batch(a.railHook(ev.Pane, ev.Start, ev.State == core.AgentIdle), a.reviewHook(ev.Pane, ev.TurnStart))
+	probes := tea.Batch(a.railHook(ev.Pane, ev.Start, ev.State == core.AgentIdle), a.reviewHook(ev.Pane, ev.TurnStart, ev.Snapped))
 
 	if ev.State == core.AgentUnknown {
 		return probes

@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -60,10 +61,12 @@ func TestSessionEndAndStartKeepTurnMode(t *testing.T) {
 	r.until(t, "the new session", r.viewHolds(func(v *reviewView) bool { return v.session == string(otherSession) && v.loaded && !v.loading }))
 	branchShown("the branch while the new session has no turns")
 
-	// The new session's first prompt takes its snapshot before the hook arrives.
+	// The new session's first prompt reaches the app before its snapshot exists.
+	snapshot := r.turnStartFirst(t, id)
+
 	snapshotTurn(t, dir, otherSession)
 	write(t, filepath.Join(dir, "x.txt"), "after the first prompt\n")
-	r.run(r.step(hookMsg{ev: harness.Event{Pane: id, Name: "UserPromptSubmit", TurnStart: true, State: core.AgentWorking}}))
+	snapshot()
 	r.until(t, "the new session's turn", r.viewHolds(func(v *reviewView) bool {
 		ts, ok := v.src.(git.TurnSource)
 
@@ -131,14 +134,30 @@ func TestNoTurnsYetNotices(t *testing.T) {
 	}
 }
 
-// A turn's snapshot ref never wakes the watcher, so the turn's start event
-// recomputes the drawer. A turn that changes no files moves the count and the
-// mode row; a past turn only learns the new count.
-func TestTurnStartRefreshesTheDrawer(t *testing.T) {
-	turnStart := func(id core.PaneID) tea.Msg {
-		return hookMsg{ev: harness.Event{Pane: id, Name: "UserPromptSubmit", TurnStart: true, State: core.AgentWorking}}
+// turnStartFirst sends a turn start as the gate orders it in production: before
+// the turn's snapshot exists. The drawer must not load until the returned
+// function has closed the event's Snapped channel.
+func (r *drawerRig) turnStartFirst(t *testing.T, id core.PaneID) (snapshotDone func()) {
+	t.Helper()
+
+	snapped := make(chan struct{})
+	v := r.view()
+	epoch := v.epoch
+
+	r.run(r.step(hookMsg{ev: harness.Event{Pane: id, Name: "UserPromptSubmit", TurnStart: true, State: core.AgentWorking, Snapped: snapped}}))
+
+	if v.loading || v.epoch != epoch {
+		t.Fatalf("loading = %v, epoch %d -> %d: the drawer loaded before the turn's snapshot existed", v.loading, epoch, v.epoch)
 	}
 
+	return func() { close(snapped) }
+}
+
+// A turn's snapshot ref never wakes the watcher, so the turn's start event
+// recomputes the drawer, once the turn's snapshot exists. A turn that changes
+// no files moves the count and the mode row; a past turn only learns the new
+// count.
+func TestTurnStartRefreshesTheDrawer(t *testing.T) {
 	t.Run("a turn that changes no files", func(t *testing.T) {
 		r := newDrawerRig(t)
 		dir := threeTurnRepo(t)
@@ -147,8 +166,10 @@ func TestTurnStartRefreshesTheDrawer(t *testing.T) {
 		r.open(t, id)
 		r.watching(t, id, rootOf(t, dir))
 
+		snapshotDone := r.turnStartFirst(t, id)
+
 		snapshotTurn(t, dir, testSession)
-		r.run(r.step(turnStart(id)))
+		snapshotDone()
 		r.until(t, "turn 4", r.viewHolds(func(v *reviewView) bool { return v.turns == 4 && v.res.Turn == 4 && !v.loading }))
 
 		got := r.drawn(t)
@@ -171,8 +192,10 @@ func TestTurnStartRefreshesTheDrawer(t *testing.T) {
 		v := r.idle(t)
 		gen := v.gen
 
+		snapshotDone := r.turnStartFirst(t, id)
+
 		snapshotTurn(t, dir, testSession)
-		r.run(r.step(turnStart(id)))
+		snapshotDone()
 		r.until(t, "the new count", func() bool { return v.turns == 4 && !v.loading })
 
 		if v.res.Turn != 2 || v.gen != gen {
@@ -181,6 +204,86 @@ func TestTurnStartRefreshesTheDrawer(t *testing.T) {
 
 		if got := r.drawn(t); !strings.Contains(got, "turn 2 of 4") {
 			t.Errorf("the mode row does not read turn 2 of 4:\n%s", got)
+		}
+	})
+
+	// The wait for the snapshot ends with the app, so no command outlives it.
+	t.Run("the app ending ends the wait", func(t *testing.T) {
+		r := newDrawerRig(t)
+		id := r.agent(t, threeTurnRepo(t), testSession)
+		r.open(t, id)
+
+		cmd := r.reviewHook(id, true, make(chan struct{}))
+		if cmd == nil {
+			t.Fatal("a turn start with a snapshot to wait for returned no command")
+		}
+
+		answered := make(chan tea.Msg, 1)
+
+		go func() { answered <- cmd() }()
+
+		r.cancel()
+
+		select {
+		case m := <-answered:
+			if m != nil {
+				t.Errorf("the wait answered %T after the app ended, want nothing", m)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatal("the wait outlived the app")
+		}
+	})
+}
+
+// A drawer on a pane that moved to another repository whose watch cannot start
+// holds nothing for the old repository, and hook events refresh it as they do
+// any drawer without a watch.
+func TestFailedWatchOfANewRepositoryFallsBackToHooks(t *testing.T) {
+	t.Run("a failed acquire releases the old watch", func(t *testing.T) {
+		r := newDrawerRig(t)
+		first, second := editedRepo(t), editedRepo(t)
+		id := r.agent(t, first, "")
+
+		r.open(t, id)
+		r.watching(t, id, rootOf(t, first))
+
+		// A closed set refuses every Acquire.
+		if err := r.set.Close(); err != nil {
+			t.Fatal(err)
+		}
+
+		openIn(t, r.App, core.SetPaneCwd{ID: id, Cwd: second})
+		r.settle()
+		r.until(t, "the old reference to be released", func() bool { return r.held(id) == "" && r.holdCount() == 0 })
+
+		if w := r.watches.panes[id]; w.want != rootOf(t, second) {
+			t.Errorf("wants %q, want the new repository %q", w.want, rootOf(t, second))
+		}
+
+		v := r.idle(t)
+
+		r.run(r.step(hookMsg{ev: harness.Event{Pane: id, Name: "Stop", State: core.AgentIdle}}))
+
+		if !v.loading {
+			t.Error("a hook event did not refresh the drawer of the repository with no watch")
+		}
+	})
+
+	t.Run("the old root's watch does not count while another root is wanted", func(t *testing.T) {
+		r := newDrawerRig(t)
+		dir := editedRepo(t)
+		id := r.agent(t, dir, "")
+
+		v := r.open(t, id)
+		r.watching(t, id, rootOf(t, dir))
+
+		// The pane moved on and the new root's watch has not answered yet.
+		r.watches.panes[id].want = "/another/root"
+
+		r.run(r.reviewHook(id, false, nil))
+
+		if !v.loading {
+			t.Error("a hook event did not refresh while the held watch is for another root")
 		}
 	})
 }
