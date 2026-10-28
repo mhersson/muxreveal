@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"unicode/utf8"
 
@@ -85,7 +86,7 @@ func hostileDoc() []byte {
 		w("</details>\n\n")
 	}
 
-	w("日本語の文章はとても長くなることがあります。折り返しの確認をします。😀😀😀 family 👨‍👩‍👧‍👦 flag 🇳🇴 and é combining\n\n")
+	w("日本語の文章はとても長くなることがあります。折り返しの確認をします。😀😀😀 family 👨\u200d👩\u200d👧\u200d👦 flag 🇳🇴 and é combining\n\n")
 	w("%s\n\n", big)
 	w("```\n%s\n```\n\n", strings.Repeat("x", 10000))
 	w("```\n%s\n```\n\n", strings.Repeat("日", 3000))
@@ -388,5 +389,50 @@ func TestCorpusLinks(t *testing.T) {
 		if counts[name] == 0 {
 			t.Errorf("%s has no links, so the scheme check proves nothing", name)
 		}
+	}
+}
+
+// TestConcurrentLayout lays one Doc out from several goroutines at several
+// widths, with folds open and a highlighter, and checks each result against a
+// sequential layout. The race detector catches a layout that writes to the Doc.
+func TestConcurrentLayout(t *testing.T) {
+	widths := []int{1, 20, 80, 130}
+	opts := func(w int) LayoutOptions {
+		return LayoutOptions{Width: w, Icons: true, Highlight: everyOtherByte}
+	}
+
+	for _, doc := range corpusDocs(t) {
+		t.Run(doc.name, func(t *testing.T) {
+			d := Parse(doc.src, ParseOptions{Base: "https://example.test/docs/"})
+
+			want := make([]string, len(widths))
+			for i, w := range widths {
+				want[i] = strings.Join(layoutAllOpen(d, opts(w)).Plain(), "\n")
+			}
+
+			const perWidth = 2
+
+			got := make([][perWidth]string, len(widths))
+
+			var wg sync.WaitGroup
+
+			for i, w := range widths {
+				for g := range perWidth {
+					wg.Go(func() {
+						got[i][g] = strings.Join(layoutAllOpen(d, opts(w)).Plain(), "\n")
+					})
+				}
+			}
+
+			wg.Wait()
+
+			for i, w := range widths {
+				for g := range perWidth {
+					if got[i][g] != want[i] {
+						t.Errorf("width %d, goroutine %d: the layout differs from the sequential one", w, g)
+					}
+				}
+			}
+		})
 	}
 }
