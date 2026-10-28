@@ -547,3 +547,66 @@ func TestFooterEnterLabel(t *testing.T) {
 		}
 	}
 }
+
+func TestBox(t *testing.T) {
+	th := mustTheme(t, "catppuccin-mocha")
+	strip := ansi.Strip
+
+	t.Run("every piece is as wide as the box", func(t *testing.T) {
+		for _, w := range []int{2, 3, 4, 5, 9, 10, 40} {
+			box := NewBox(th, w)
+
+			pieces := map[string]string{
+				"row":            box.Row("some content that is longer than a small box", box.On(th.UI.Fg)),
+				"short row":      box.Row("", box.On(th.UI.Fg)),
+				"top":            box.Top("A long title for a narrow box"),
+				"divider":        box.Divider(),
+				"bottom":         box.Bottom(" 3 of 9 "),
+				"bottom no tail": box.Bottom(""),
+			}
+			for name, p := range pieces {
+				if got := lipgloss.Width(p); got != w {
+					t.Errorf("width %d: %s is %d cells wide: %q", w, name, got, strip(p))
+				}
+			}
+		}
+	})
+
+	box := NewBox(th, 30)
+
+	dashes := func(n int) string { return strings.Repeat("\u2500", n) }
+
+	for _, tt := range []struct {
+		name, got, want string
+	}{
+		{"row", strip(box.Row("hi", box.On(th.UI.Fg))), "\u2502hi" + strings.Repeat(" ", 26) + "\u2502"},
+		{"top", strip(box.Top("Title")), "\u256d\u2500 Title " + dashes(20) + "\u256e"},
+		{"divider", strip(box.Divider()), "\u251c" + dashes(28) + "\u2524"},
+		{"bottom with count", strip(box.Bottom(" 3 of 9 ")), "\u2570" + dashes(19) + " 3 of 9 \u2500\u256f"},
+		{"bottom without", strip(box.Bottom("")), "\u2570" + dashes(28) + "\u256f"},
+		{"hints", strip(box.Hints([][2]string{{"up/down", "move"}, {"esc", "close"}})), " up/down move   esc close"},
+	} {
+		if tt.got != tt.want {
+			t.Errorf("%s = %q, want %q", tt.name, tt.got, tt.want)
+		}
+	}
+
+	// A count that does not fit is left out, never cut.
+	if got := strip(NewBox(th, 8).Bottom(" 3 of 9 ")); got != "\u2570"+dashes(6)+"\u256f" {
+		t.Errorf("bottom in a narrow box = %q, want no count", got)
+	}
+
+	// The keys are in Key bold and the labels in Muted, on the panel colour.
+	rgb := func(h theme.Hex) string {
+		r, g, b, _ := h.RGBA()
+
+		return fmt.Sprintf("38;2;%d;%d;%d", r>>8, g>>8, b>>8)
+	}
+
+	hints := box.Hints([][2]string{{"esc", "close"}})
+	for _, want := range []string{"1;" + rgb(th.UI.Key) + ";48;2;", rgb(th.UI.Muted) + ";48;2;"} {
+		if !strings.Contains(hints, want) {
+			t.Errorf("hints = %q, want %q in it", hints, want)
+		}
+	}
+}

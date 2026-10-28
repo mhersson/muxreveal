@@ -633,11 +633,7 @@ func (a *App) newTab() tea.Cmd {
 		return nil
 	}
 
-	cwd := a.cwd
-	if m, ok := st.Panes[st.Tab().Focus]; ok && m.Cwd != "" {
-		cwd = m.Cwd
-	}
-
+	cwd := a.focusedCwd(st)
 	id := st.NewPaneID()
 	cols, rows := contentSize(a.bodyArea())
 

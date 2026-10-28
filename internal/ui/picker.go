@@ -173,11 +173,19 @@ func (a *App) onPickerOpen(msg pickerOpenMsg) tea.Cmd {
 		return nil
 	}
 
-	if msg.err != nil && !errors.Is(msg.err, git.ErrNotRepo) {
+	failed := msg.err != nil && !errors.Is(msg.err, git.ErrNotRepo)
+	if failed {
 		a.log.Warn("new agent: list worktrees", "cwd", msg.cwd, "err", msg.err)
 	}
 
-	return a.openPaneIn(core.KindAgent, core.SplitVertical, msg.cwd)
+	cmd := a.openPaneIn(core.KindAgent, core.SplitVertical, msg.cwd)
+
+	// The pane's own notice (it did not open, or fell back to the launch dir) says more.
+	if failed && a.notice == "" {
+		a.notice = "worktrees unavailable: " + gitReason(msg.err)
+	}
+
+	return cmd
 }
 
 // pickerTrees prepares the rows for list, skipping a bare repository's entry,
@@ -311,38 +319,17 @@ func (p *picker) edit(msg tea.Msg) {
 	}
 }
 
-// pickerUpdate handles a message for the open picker and reports whether it
-// took it: keys and pastes edit it, and the pointer reaches nothing under it.
-// The picker closes once another tab shows.
-func (a *App) pickerUpdate(msg tea.Msg) (tea.Cmd, bool) {
+// handlePickerKey edits the open picker. handleKey clears the notice only after
+// this slot, so the picker clears it itself.
+func (a *App) handlePickerKey(msg tea.KeyPressMsg) tea.Cmd {
+	a.notice = ""
+
 	p := a.picker.open
-	if a.store.State().Tab().ID != p.tab {
-		a.picker.open = nil
-
-		return nil, false
+	if p.page == pageNewWorktree {
+		return a.pickerFormKey(p, msg)
 	}
 
-	switch msg := msg.(type) {
-	case tea.KeyPressMsg:
-		a.notice = ""
-
-		if p.page == pageNewWorktree {
-			return a.pickerFormKey(p, msg), true
-		}
-
-		return a.pickerListKey(p, msg), true
-	case tea.PasteMsg:
-		p.edit(msg)
-
-		return nil, true
-	case tea.MouseClickMsg, tea.MouseMotionMsg, tea.MouseReleaseMsg, tea.MouseWheelMsg:
-		a.releaseForwarded()
-		a.mouse.press = nil
-
-		return nil, true
-	}
-
-	return nil, false
+	return a.pickerListKey(p, msg)
 }
 
 func (a *App) pickerListKey(p *picker, msg tea.KeyPressMsg) tea.Cmd {
@@ -489,6 +476,8 @@ func (a *App) pickerCreate(p *picker) tea.Cmd {
 func (a *App) onPickerCreated(msg pickerCreatedMsg) tea.Cmd {
 	p := a.picker.open
 	if p == nil || p.seq != msg.seq || p.form == nil {
+		a.log.Info("new worktree: answer after the picker closed", "path", msg.created.Worktree.Path, "err", msg.err)
+
 		return nil
 	}
 
@@ -536,50 +525,33 @@ func worktreeReason(err error) string {
 		return `no main checkout; set root = "sibling" in [worktrees]`
 	}
 
-	first, _, _ := strings.Cut(err.Error(), "\n")
-
-	return first
+	return gitReason(err)
 }
 
-// worktreePreview is where a worktree for branch would go, and why it cannot.
-// It follows git.CreateWorktree's layout without running git.
-func (a *App) worktreePreview(repo git.Repo, branch string) (string, error) {
-	name, err := git.WorktreeDir(branch)
-	if err != nil {
-		return "", err
-	}
+// gitReason is why git failed, on one line: what git printed after its exit
+// status, else the whole message.
+func gitReason(err error) string {
+	msg, _, _ := strings.Cut(err.Error(), "\n")
 
-	main, mainErr := repo.MainRoot()
-
-	switch {
-	case !a.picker.cfg.Sibling():
-		if mainErr != nil {
-			return "", mainErr
+	if i := strings.Index(msg, "exit status "); i >= 0 {
+		if _, reason, ok := strings.Cut(msg[i:], ": "); ok {
+			return reason
 		}
-
-		return filepath.Join(main, ".worktrees", name), nil
-	case mainErr == nil:
-		return filepath.Join(main+".worktrees", name), nil
 	}
 
-	// Without a main checkout, /x/repo.git gives /x/repo.worktrees.
-	base := strings.TrimSuffix(filepath.Base(repo.CommonDir), ".git")
-	if base == "" {
-		return "", mainErr
-	}
-
-	return filepath.Join(filepath.Dir(repo.CommonDir), base+".worktrees", name), nil
+	return msg
 }
 
-// agentsIn counts the agent panes whose repository root is path.
-func (a *App) agentsIn(path string) int {
-	n := 0
+// agentCounts counts the agent panes by the repository root they work in. It
+// copies the state, so a draw takes it once.
+func (a *App) agentCounts() map[string]int {
+	counts := map[string]int{}
 
 	for _, id := range a.store.State().AgentPanes() {
-		if root, ok := a.paneRoot(id); ok && filepath.Clean(root) == filepath.Clean(path) {
-			n++
+		if root, ok := a.paneRoot(id); ok {
+			counts[filepath.Clean(root)]++
 		}
 	}
 
-	return n
+	return counts
 }

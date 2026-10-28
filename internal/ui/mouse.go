@@ -122,10 +122,10 @@ func (a *App) hitTab(x int) hitResult {
 }
 
 // mouseBlocked reports whether modal UI owns the pointer: a confirm, a prompt,
-// an overlay, copy mode, or a pending leader (with or without its popup). It also drops
+// an overlay, the worktree picker, copy mode, or a pending leader (with or without its popup). It also drops
 // any held button, releasing a forwarded one in its guest, since the modal would swallow the release.
 func (a *App) mouseBlocked() bool {
-	if a.confirm == nil && a.prompt == nil && a.overlay == nil && a.copy == nil && !a.pending {
+	if a.confirm == nil && a.prompt == nil && a.overlay == nil && a.picker.open == nil && a.copy == nil && !a.pending {
 		return false
 	}
 

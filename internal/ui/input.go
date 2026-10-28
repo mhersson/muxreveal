@@ -8,9 +8,9 @@ import (
 )
 
 // handleKey routes a key press: an open confirm first, then an open prompt, then
-// copy mode, then the open overlay, then the leader state machine, then the rail
-// while it has the keyboard, then the review drawer while it has it, then the
-// focused pane.
+// copy mode, then the open overlay or worktree picker, then the leader state
+// machine, then the rail while it has the keyboard, then the review drawer while
+// it has it, then the focused pane.
 func (a *App) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 	if a.confirm != nil {
 		return a.handleConfirmKey(msg)
@@ -26,6 +26,10 @@ func (a *App) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 
 	if a.overlay != nil {
 		return a.updateOverlay(msg)
+	}
+
+	if a.picker.open != nil {
+		return a.handlePickerKey(msg)
 	}
 
 	a.notice = ""
@@ -46,7 +50,7 @@ func (a *App) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 	return nil
 }
 
-// handlePaste sends pasted text to the open prompt or overlay, else to the rail's
+// handlePaste sends pasted text to the open prompt, overlay or picker, else to the rail's
 // or the drawer's search while one has the keyboard, else to the focused pane; an
 // open confirm or copy mode drops it. A paste ends a pending leader sequence.
 func (a *App) handlePaste(msg tea.PasteMsg) tea.Cmd {
@@ -64,6 +68,12 @@ func (a *App) handlePaste(msg tea.PasteMsg) tea.Cmd {
 
 	if a.overlay != nil {
 		return a.updateOverlay(msg)
+	}
+
+	if a.picker.open != nil {
+		a.picker.open.edit(msg)
+
+		return nil
 	}
 
 	a.endLeader()

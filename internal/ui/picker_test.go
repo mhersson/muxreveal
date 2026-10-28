@@ -1,8 +1,11 @@
 package ui
 
 import (
+	"bytes"
 	"context"
+	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -219,8 +222,24 @@ func TestPickerGitFailureOpensTheAgent(t *testing.T) {
 		t.Fatalf("starts = %d, want the agent to start in %s", st.count(), gone)
 	}
 
-	if a.notice != "" {
-		t.Errorf("notice = %q, want none: the agent opens as it always did", a.notice)
+	if !strings.HasPrefix(a.notice, "worktrees unavailable: ") || len(a.notice) <= len("worktrees unavailable: ") {
+		t.Errorf("notice = %q, want worktrees unavailable with a reason", a.notice)
+	}
+
+	if strings.Contains(a.notice, "\n") {
+		t.Errorf("notice = %q, want one line", a.notice)
+	}
+}
+
+func TestPickerGitFailureKeepsThePaneNotice(t *testing.T) {
+	gone := filepath.Join(plainDir(t), "gone")
+	a, st := pickerApp(t, gone)
+	st.err = errors.New("no such directory")
+
+	askPicker(t, a)
+
+	if strings.HasPrefix(a.notice, "worktrees unavailable") || !strings.Contains(a.notice, "cannot start") {
+		t.Errorf("notice = %q, want the pane's own failure to stay", a.notice)
 	}
 }
 
@@ -561,6 +580,59 @@ func TestNewWorktreeErrorStaysInThePage(t *testing.T) {
 	}
 }
 
+func TestNewWorktreeShowsGitsReason(t *testing.T) {
+	tests := []struct {
+		name         string
+		branch, base string
+		want         string
+		cut          bool // the reason is longer than the row
+	}{
+		{name: "base does not exist", branch: "feat/x", base: "nobase", want: "fatal: invalid reference: nobase"},
+		{name: "branch is checked out", branch: "main", want: "fatal: 'main' is already", cut: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := committedRepo(t)
+			a, st := pickerApp(t, dir)
+			askPicker(t, a)
+			openForm(t, a)
+			typeText(a, tt.branch)
+
+			if tt.base != "" {
+				pressRun(a, keyTab, keyBackspace, keyBackspace, keyBackspace, keyBackspace)
+				typeText(a, tt.base)
+			}
+
+			deliver(t, a, press(a, keyEnter))
+
+			view := viewText(a)
+			row := lineWith(view, tt.want)
+
+			if row == "" {
+				t.Fatalf("page lacks git's reason %q:\n%s", tt.want, view)
+			}
+
+			for _, junk := range []string{"create worktree", "exit status", "git worktree:"} {
+				if strings.Contains(view, junk) {
+					t.Errorf("page shows git's wrapper text %q:\n%s", junk, view)
+				}
+			}
+
+			if cut := strings.Contains(row, "\u2026"); cut != tt.cut {
+				t.Errorf("row %q: cut with an ellipsis = %v, want %v", row, cut, tt.cut)
+			}
+
+			if width := lipgloss.Width(row); width != 100 {
+				t.Errorf("row is %d cells wide, want 100", width)
+			}
+
+			if st.count() != 1 || a.picker.open == nil {
+				t.Errorf("starts = %d, picker open = %v, want no agent and the page open", st.count(), a.picker.open != nil)
+			}
+		})
+	}
+}
+
 func TestNewWorktreeRetryAfterAnError(t *testing.T) {
 	dir := committedRepo(t)
 	if err := os.MkdirAll(filepath.Join(dir, ".worktrees", "feat-x"), 0o755); err != nil {
@@ -580,6 +652,50 @@ func TestNewWorktreeRetryAfterAnError(t *testing.T) {
 	if st.count() != 2 || st.cmds[1].Dir != filepath.Join(dir, ".worktrees", "feat-y") {
 		t.Fatalf("starts = %d, want an agent in feat-y after fixing the name", st.count())
 	}
+}
+
+func TestNewWorktreeCreatedAnswer(t *testing.T) {
+	path := "/home/me/code/api/.worktrees/x"
+
+	t.Run("opens the agent", func(t *testing.T) {
+		a, st := pickerApp(t, "/work")
+		injectPicker(t, a, sampleRepo, sampleTrees())
+		openSampleForm(t, a)
+
+		a.Update(pickerCreatedMsg{seq: a.picker.open.seq, created: git.Created{Worktree: git.Worktree{Path: path}}})
+
+		if a.picker.open != nil || st.count() != 2 || st.cmds[1].Dir != path || a.notice != "created .worktrees/x" {
+			t.Errorf("picker open = %v, starts = %d, notice = %q, want an agent in %s", a.picker.open != nil, st.count(), a.notice, path)
+		}
+	})
+
+	t.Run("a worktree git could not list still opens", func(t *testing.T) {
+		a, st := pickerApp(t, "/work")
+		injectPicker(t, a, sampleRepo, sampleTrees())
+		openSampleForm(t, a)
+
+		a.Update(pickerCreatedMsg{
+			seq: a.picker.open.seq, created: git.Created{Worktree: git.Worktree{Path: path}}, err: errors.New("not listed afterwards"),
+		})
+
+		if st.count() != 2 || a.picker.open != nil {
+			t.Errorf("starts = %d, picker open = %v, want the agent opened", st.count(), a.picker.open != nil)
+		}
+	})
+
+	t.Run("the pane cannot start", func(t *testing.T) {
+		a, st := pickerApp(t, "/work")
+		injectPicker(t, a, sampleRepo, sampleTrees())
+		openSampleForm(t, a)
+
+		st.err = errors.New("boom")
+
+		a.Update(pickerCreatedMsg{seq: a.picker.open.seq, created: git.Created{Worktree: git.Worktree{Path: path}}})
+
+		if !strings.HasPrefix(a.notice, "created .worktrees/x; cannot start") {
+			t.Errorf("notice = %q, want the creation and why there is no pane", a.notice)
+		}
+	})
 }
 
 func TestNewWorktreeNeedsABranch(t *testing.T) {
@@ -768,6 +884,11 @@ func TestPickerStaleAnswersAreDropped(t *testing.T) {
 	t.Run("created after the picker closed", func(t *testing.T) {
 		dir := committedRepo(t)
 		a, st := pickerApp(t, dir)
+
+		var logs bytes.Buffer
+
+		a.log = slog.New(slog.NewTextHandler(&logs, nil))
+
 		askPicker(t, a)
 		openForm(t, a)
 		typeText(a, "feat/x")
@@ -779,6 +900,11 @@ func TestPickerStaleAnswersAreDropped(t *testing.T) {
 
 		if st.count() != 1 || a.picker.open != nil {
 			t.Errorf("starts = %d, picker open = %v, want the late answer dropped", st.count(), a.picker.open != nil)
+		}
+
+		// The worktree exists, so the log says where.
+		if want := filepath.Join(dir, ".worktrees", "feat-x"); !strings.Contains(logs.String(), want) {
+			t.Errorf("log = %q, want it to name %s", logs.String(), want)
 		}
 	})
 
@@ -799,6 +925,101 @@ func TestPickerStaleAnswersAreDropped(t *testing.T) {
 			t.Errorf("starts = %d, picker open = %v, want the new picker untouched", st.count(), a.picker.open != nil)
 		}
 	})
+}
+
+func TestPickerDoesNotOpenOverAModal(t *testing.T) {
+	tests := []struct {
+		name string
+		open func(a *App)
+	}{
+		{"confirm", func(a *App) {
+			a.openConfirm(confirm{action: "Quit", prompt: "Quit?", yes: func(*App) tea.Cmd { return nil }})
+		}},
+		{"prompt", func(a *App) {
+			a.openPrompt(a.store.State().Tab().ID, "", func(*App, string) tea.Cmd { return nil })
+		}},
+		{"copy mode", func(a *App) { a.enterCopyMode() }},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := committedRepo(t)
+			a, st := pickerApp(t, dir)
+
+			cmd := press(a, keyLeader, keyRune('n'))
+
+			tt.open(a)
+			a.Update(cmd())
+
+			if a.picker.open != nil || st.count() != 1 {
+				t.Errorf("picker open = %v, starts = %d, want the answer dropped", a.picker.open != nil, st.count())
+			}
+		})
+	}
+}
+
+func TestPickerGivesWayToAConfirm(t *testing.T) {
+	a, st := pickerApp(t, "/work")
+	injectPicker(t, a, sampleRepo, sampleTrees())
+	typeText(a, "au")
+
+	a.openConfirm(confirm{action: "Quit", prompt: "Quit?", yes: func(*App) tea.Cmd { return nil }})
+
+	// The confirm swallows every key it does not answer (y and n answer it).
+	typeText(a, "xzw")
+
+	if got := a.picker.open.query.Value(); got != "au" {
+		t.Errorf("query = %q, want au: a key reached the picker under the confirm", got)
+	}
+
+	if a.confirm == nil {
+		t.Fatal("the confirm closed on keys it does not answer")
+	}
+
+	press(a, keyRune('n'))
+
+	if a.confirm != nil || a.picker.open == nil {
+		t.Fatalf("confirm open = %v, picker open = %v, want the picker alone", a.confirm != nil, a.picker.open != nil)
+	}
+
+	typeText(a, "t")
+
+	if a.picker.open.query.Value() != "aut" {
+		t.Errorf("query = %q, want the picker to have its keys back", a.picker.open.query.Value())
+	}
+
+	if st.proc(0).sent() != "" {
+		t.Errorf("the pane got %q", st.proc(0).sent())
+	}
+}
+
+func TestPickerClosesWhenItsTabGoes(t *testing.T) {
+	a, st := pickerApp(t, "/work")
+	openIn(t, a, core.NewTab{Kind: core.KindShell, Cwd: "/work"}, core.SelectTab{Index: 0})
+	injectPicker(t, a, sampleRepo, sampleTrees())
+	seq := a.picker.open.seq
+
+	// Its last pane exits: the tab goes and another one shows.
+	pane := a.store.State().Tab().Focus
+	a.Update(paneExitedMsg{id: pane, p: a.panes[pane]})
+
+	if got := len(a.store.State().Tabs); got != 1 {
+		t.Fatalf("tabs = %d, want the picker's tab gone", got)
+	}
+
+	if a.picker.open != nil {
+		t.Error("the picker is still open once its tab is gone")
+	}
+
+	if view := viewText(a); strings.Contains(view, "New agent") {
+		t.Errorf("the box is still drawn:\n%s", view)
+	}
+
+	// A creation that finishes now has nowhere to open.
+	a.Update(pickerCreatedMsg{seq: seq, created: git.Created{Worktree: git.Worktree{Path: "/home/me/code/api/.worktrees/x"}}})
+
+	if st.count() != 1 || len(a.store.State().Tab().Panes) != 1 {
+		t.Errorf("starts = %d, panes in the shown tab = %d, want no agent opened there", st.count(), len(a.store.State().Tab().Panes))
+	}
 }
 
 func TestPickerOwnsInput(t *testing.T) {
@@ -859,16 +1080,111 @@ func TestPickerClosesWhenTheTabChanges(t *testing.T) {
 	}
 }
 
-func TestPickerReleasesTheRailsKeyboard(t *testing.T) {
-	dir := plainDir(t)
-	a, _ := pickerApp(t, dir)
+// railHasKeys opens the rail and gives it the keyboard.
+func railHasKeys(t *testing.T, a *App) {
+	t.Helper()
+
+	openIn(t, a, core.SetRail{Open: true})
 	a.rail.focused = true
+	a.Update(struct{}{})
 
-	askPicker(t, a)
-
-	if a.rail.focused {
-		t.Error("the rail kept the keyboard after leader n opened an agent")
+	if !a.rail.focused {
+		t.Fatal("setup: the rail has no keyboard")
 	}
+}
+
+func TestPickerReleasesTheRailsKeyboard(t *testing.T) {
+	t.Run("outside a repository", func(t *testing.T) {
+		dir := plainDir(t)
+		a, _ := pickerApp(t, dir)
+		railHasKeys(t, a)
+
+		askPicker(t, a)
+
+		if a.rail.focused {
+			t.Error("the rail kept the keyboard after leader n opened an agent")
+		}
+	})
+
+	t.Run("choosing a worktree", func(t *testing.T) {
+		dir := committedRepo(t)
+		gitIn(t, "git", dir, "worktree", "add", "-q", "-b", "feat/x", filepath.Join(dir, ".worktrees", "feat-x"))
+
+		a, st := pickerApp(t, dir)
+		railHasKeys(t, a)
+
+		askPicker(t, a)
+
+		if a.picker.open == nil || !a.rail.focused {
+			t.Fatalf("picker open = %v, rail focused = %v, want the picker open over a rail that still has the keyboard",
+				a.picker.open != nil, a.rail.focused)
+		}
+
+		pressRun(a, keyDown)
+		press(a, keyEnter)
+
+		if st.count() != 2 || a.rail.focused {
+			t.Errorf("starts = %d, rail focused = %v, want an agent and the keyboard back with the panes", st.count(), a.rail.focused)
+		}
+	})
+
+	t.Run("creating a worktree", func(t *testing.T) {
+		dir := committedRepo(t)
+		a, st := pickerApp(t, dir)
+		railHasKeys(t, a)
+
+		askPicker(t, a)
+		openForm(t, a)
+		typeText(a, "feat/x")
+		deliver(t, a, press(a, keyEnter))
+
+		if st.count() != 2 || a.rail.focused {
+			t.Errorf("starts = %d, rail focused = %v, want an agent and the keyboard back with the panes", st.count(), a.rail.focused)
+		}
+	})
+}
+
+func TestPickerReleasesTheDrawersKeyboard(t *testing.T) {
+	t.Run("a drawer over the new pane closes", func(t *testing.T) {
+		dir := plainDir(t)
+		a, st := pickerApp(t, dir)
+		openIn(t, a, core.OpenReview{Pane: a.store.State().Tab().Focus, Mode: core.ReviewBranch})
+		a.drawerTake()
+
+		if !a.drawerHasKeys() {
+			t.Fatal("setup: the drawer has no keyboard")
+		}
+
+		askPicker(t, a)
+
+		if st.count() != 2 || a.drawer.focused || a.store.State().Tab().Review != nil {
+			t.Errorf("starts = %d, drawer focused = %v, drawer open = %v, want an agent and the drawer closed",
+				st.count(), a.drawer.focused, a.store.State().Tab().Review != nil)
+		}
+	})
+
+	t.Run("choosing a worktree", func(t *testing.T) {
+		dir := committedRepo(t)
+		gitIn(t, "git", dir, "worktree", "add", "-q", "-b", "feat/x", filepath.Join(dir, ".worktrees", "feat-x"))
+
+		a, st := pickerApp(t, dir)
+		openIn(t, a, core.OpenReview{Pane: a.store.State().Tab().Focus, Mode: core.ReviewBranch})
+		a.drawerTake()
+
+		askPicker(t, a)
+
+		if a.picker.open == nil || !a.drawerHasKeys() {
+			t.Fatalf("picker open = %v, drawer has keys = %v, want the picker over a drawer that still has the keyboard",
+				a.picker.open != nil, a.drawerHasKeys())
+		}
+
+		pressRun(a, keyDown)
+		press(a, keyEnter)
+
+		if st.count() != 2 || a.drawer.focused {
+			t.Errorf("starts = %d, drawer focused = %v, want an agent and the drawer released", st.count(), a.drawer.focused)
+		}
+	})
 }
 
 func TestPickerCursor(t *testing.T) {

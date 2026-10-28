@@ -259,52 +259,28 @@ func (m Model) View(width int) string {
 	}
 
 	ui := m.theme.UI
-	inner := width - 2
-	panel := lipgloss.NewStyle().Background(ui.Panel).Foreground(ui.Fg)
-	border := lipgloss.NewStyle().Background(ui.Panel).Foreground(ui.BorderFocus)
+	box := NewBox(m.theme, width)
+	inner := box.inner
+	panel := box.On(ui.Fg)
 
-	// fit clips content to the inner width and pads it with fill's background.
-	fit := func(content string, fill lipgloss.Style) string {
-		content = ansi.Truncate(content, inner, "")
-		pad := fill.Render(strings.Repeat(" ", max(0, inner-lipgloss.Width(content))))
-
-		return border.Render("│") + content + pad + border.Render("│")
-	}
-
-	// The title starts two cells from the corner: the corner, one dash, then the title.
-	dash := min(1, inner)
-	title := ansi.Truncate(" "+m.title+" ", inner-dash, "")
-	top := border.Render("╭"+strings.Repeat("─", dash)) +
-		panel.Foreground(ui.Accent).Bold(true).Render(title) +
-		border.Render(strings.Repeat("─", inner-dash-lipgloss.Width(title))+"╮")
-	lines := []string{top}
+	lines := []string{box.Top(m.title)}
 
 	in := m.input
 	in.SetWidth(max(1, inner-4))
-	lines = append(lines, fit(panel.Render(" ")+in.View(), panel))
-	lines = append(lines, border.Render("├"+strings.Repeat("─", inner)+"┤"))
+	lines = append(lines, box.Row(panel.Render(" ")+in.View(), panel), box.Divider())
 
 	if len(m.matches) == 0 {
-		lines = append(lines, fit(panel.Render(" ")+panel.Foreground(ui.Subtle).Render("No matches"), panel))
+		lines = append(lines, box.Row(panel.Render(" ")+panel.Foreground(ui.Subtle).Render("No matches"), panel))
 	}
 
 	end := min(len(m.matches), m.top+MaxRows)
 	for i := m.top; i < end; i++ {
-		lines = append(lines, m.row(i, inner))
+		lines = append(lines, m.row(i, box))
 	}
 
-	lines = append(lines, border.Render("├"+strings.Repeat("─", inner)+"┤"), fit(m.footer(panel), panel))
-
-	// The count ends one dash before the corner; it is left out when it does not fit.
+	hints := box.Hints([][2]string{{"up/down", "move"}, {"enter", m.enter}, {"esc", "close"}})
 	count := " " + strconv.Itoa(max(m.sel+1, 0)) + " of " + strconv.Itoa(len(m.matches)) + " "
-
-	cw := lipgloss.Width(count)
-	if inner >= cw+1 {
-		lines = append(lines, border.Render("╰"+strings.Repeat("─", inner-cw-1))+
-			panel.Foreground(ui.Muted).Render(count)+border.Render("─╯"))
-	} else {
-		lines = append(lines, border.Render("╰"+strings.Repeat("─", inner)+"╯"))
-	}
+	lines = append(lines, box.Divider(), box.Row(hints, panel), box.Bottom(count))
 
 	for i, l := range lines {
 		lines[i] = ansi.Truncate(l, width, "")
@@ -313,21 +289,86 @@ func (m Model) View(width int) string {
 	return strings.Join(lines, "\n")
 }
 
-// footer is the key hint row: each key in Key bold, its label in Muted, the
-// pairs three cells apart, after one cell of margin.
-func (m Model) footer(panel lipgloss.Style) string {
-	ui := m.theme.UI
+// Box paints the frame of a list box on the panel colour: the side borders, the
+// title in the top border, the dividers, the count in the bottom border and the
+// key hint row. The palette and the overlays styled like it draw with one, so
+// they stay alike.
+type Box struct {
+	ui    theme.UI
+	inner int // the cells between the side borders
+}
+
+// NewBox returns the painter of a box width cells wide.
+func NewBox(t theme.Theme, width int) Box { return Box{ui: t.UI, inner: max(width-2, 0)} }
+
+// UI is the theme's roles, for the colours of a box's own rows.
+func (b Box) UI() theme.UI { return b.ui }
+
+// Inner is the cells between the side borders.
+func (b Box) Inner() int { return b.inner }
+
+// On is a style with fg on the panel colour.
+func (b Box) On(fg theme.Hex) lipgloss.Style {
+	return lipgloss.NewStyle().Background(b.ui.Panel).Foreground(fg)
+}
+
+func (b Box) border() lipgloss.Style { return b.On(b.ui.BorderFocus) }
+
+// Row puts content between the side borders, cut or padded to the inner width;
+// fill paints the padding.
+func (b Box) Row(content string, fill lipgloss.Style) string {
+	content = ansi.Truncate(content, b.inner, "")
+	pad := fill.Render(strings.Repeat(" ", max(0, b.inner-lipgloss.Width(content))))
+	border := b.border()
+
+	return border.Render("│") + content + pad + border.Render("│")
+}
+
+// Top is the top border with title in Accent, bold, two cells from the corner:
+// the corner, one dash, then the title.
+func (b Box) Top(title string) string {
+	border := b.border()
+	dash := min(1, b.inner)
+	title = ansi.Truncate(" "+title+" ", b.inner-dash, "")
+
+	return border.Render("╭"+strings.Repeat("─", dash)) + b.On(b.ui.Accent).Bold(true).Render(title) +
+		border.Render(strings.Repeat("─", b.inner-dash-lipgloss.Width(title))+"╮")
+}
+
+// Divider is a row joined to both sides.
+func (b Box) Divider() string {
+	return b.border().Render("├" + strings.Repeat("─", b.inner) + "┤")
+}
+
+// Bottom is the bottom border with count in Muted ending one dash before the
+// corner. The count is left out when it does not fit or is empty.
+func (b Box) Bottom(count string) string {
+	border := b.border()
+
+	cw := lipgloss.Width(count)
+	if count == "" || b.inner < cw+1 {
+		return border.Render("╰" + strings.Repeat("─", b.inner) + "╯")
+	}
+
+	return border.Render("╰"+strings.Repeat("─", b.inner-cw-1)) + b.On(b.ui.Muted).Render(count) + border.Render("─╯")
+}
+
+// Hints is the key hint row for Row: each key in Key bold and its label in
+// Muted, the pairs three cells apart, after one cell of margin.
+func (b Box) Hints(pairs [][2]string) string {
+	fill := b.On(b.ui.Fg)
 
 	var sb strings.Builder
-	sb.WriteString(panel.Render(" "))
 
-	for i, h := range [][2]string{{"up/down", "move"}, {"enter", m.enter}, {"esc", "close"}} {
+	sb.WriteString(fill.Render(" "))
+
+	for i, h := range pairs {
 		if i > 0 {
-			sb.WriteString(panel.Render("   "))
+			sb.WriteString(fill.Render("   "))
 		}
 
-		sb.WriteString(panel.Foreground(ui.Key).Bold(true).Render(h[0]))
-		sb.WriteString(panel.Foreground(ui.Muted).Render(" " + h[1]))
+		sb.WriteString(b.On(b.ui.Key).Bold(true).Render(h[0]))
+		sb.WriteString(b.On(b.ui.Muted).Render(" " + h[1]))
 	}
 
 	return sb.String()
@@ -335,9 +376,10 @@ func (m Model) footer(panel lipgloss.Style) string {
 
 // row draws match i: icon, title with matched runes emphasised, and the hint
 // right-aligned.
-func (m Model) row(i, inner int) string {
+func (m Model) row(i int, box Box) string {
 	ui := m.theme.UI
-	base := lipgloss.NewStyle().Background(ui.Panel).Foreground(ui.Fg)
+	inner := box.inner
+	base := box.On(ui.Fg)
 	selected := i == m.sel
 	icon := base.Foreground(ui.Muted)
 
@@ -349,7 +391,6 @@ func (m Model) row(i, inner int) string {
 	}
 
 	hit := base.Foreground(ui.Match).Bold(true)
-	border := lipgloss.NewStyle().Background(ui.Panel).Foreground(ui.BorderFocus)
 
 	mt := m.matches[i]
 	it := m.items[mt.item]
@@ -418,8 +459,5 @@ func (m Model) row(i, inner int) string {
 			base.Foreground(ui.Key).Bold(true).Render(hint)
 	}
 
-	content = ansi.Truncate(content, inner, "")
-	pad := base.Render(strings.Repeat(" ", max(0, inner-lipgloss.Width(content))))
-
-	return border.Render("│") + content + pad + border.Render("│")
+	return box.Row(content, base)
 }

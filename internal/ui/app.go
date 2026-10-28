@@ -311,7 +311,8 @@ func mayChangeTab(act core.Action) bool {
 	return false
 }
 
-// dropGoneTab closes a confirm or prompt about a tab that no longer exists.
+// dropGoneTab closes a confirm or prompt about a tab that no longer exists, and
+// the worktree picker once another tab shows.
 func (a *App) dropGoneTab(st core.State) {
 	has := func(id core.TabID) bool {
 		return slices.ContainsFunc(st.Tabs, func(t core.Tab) bool { return t.ID == id })
@@ -323,6 +324,10 @@ func (a *App) dropGoneTab(st core.State) {
 
 	if a.prompt != nil && a.prompt.kind == promptRename && !has(a.prompt.tab) {
 		a.prompt = nil
+	}
+
+	if a.picker.open != nil && st.Tab().ID != a.picker.open.tab {
+		a.picker.open = nil
 	}
 }
 
@@ -428,12 +433,6 @@ func (a *App) syncPaneColors() {
 }
 
 func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	if a.picker.open != nil {
-		if cmd, ok := a.pickerUpdate(msg); ok {
-			return a, cmd
-		}
-	}
-
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		a.endSlide()

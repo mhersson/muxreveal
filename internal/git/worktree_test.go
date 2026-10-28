@@ -386,6 +386,95 @@ func TestCreateWorktreeBare(t *testing.T) {
 	}
 }
 
+// WorktreePath names the path CreateWorktree makes, for every root, without
+// touching the disk.
+func TestWorktreePath(t *testing.T) {
+	dir, r := seededRepo(t)
+	parent, _, wt := bareWithWorktree(t)
+
+	linked, err := Open(t.Context(), wt)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		name   string
+		repo   Repo
+		style  RootStyle
+		branch string
+		want   string
+		err    error
+	}{
+		{name: "inside", repo: r, style: RootInside, branch: "feat/auth", want: filepath.Join(dir, ".worktrees", "feat-auth")},
+		{name: "sibling", repo: r, style: RootSibling, branch: "feat/s", want: dir + ".worktrees/feat-s"},
+		{name: "bare sibling", repo: linked, style: RootSibling, branch: "x", want: filepath.Join(parent, "repo.worktrees", "x")},
+		{name: "bare inside", repo: linked, style: RootInside, branch: "x", err: ErrBare},
+		{name: "no directory name", repo: r, style: RootInside, branch: "!!!", err: ErrBadBranch},
+		{name: "empty", repo: r, style: RootSibling, branch: "", err: ErrBadBranch},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := WorktreePath(tt.repo, tt.style, tt.branch)
+			if !errors.Is(err, tt.err) || got != tt.want {
+				t.Fatalf("WorktreePath() = %q, %v, want %q, %v", got, err, tt.want, tt.err)
+			}
+
+			// It reads nothing: the path does not exist and still has an answer.
+			if _, statErr := os.Lstat(got); got != "" && !errors.Is(statErr, os.ErrNotExist) {
+				t.Errorf("Lstat(%s) = %v, want not exist", got, statErr)
+			}
+		})
+	}
+
+	// What it names is what a creation makes, inside and sibling.
+	for _, style := range []RootStyle{RootInside, RootSibling} {
+		want, err := WorktreePath(r, style, "made")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		got, err := CreateWorktree(t.Context(), r, NewWorktree{Branch: "made", Root: style})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if got.Worktree.Path != want {
+			t.Errorf("style %d: created %s, WorktreePath said %s", style, got.Worktree.Path, want)
+		}
+
+		gitOut(t, dir, "worktree", "remove", "--force", want)
+		gitOut(t, dir, "branch", "-D", "made")
+	}
+}
+
+// git's first line of stderr is its progress report; a failure must carry the
+// line that says why.
+func TestCreateWorktreeFailureNamesGitsReason(t *testing.T) {
+	_, r := seededRepo(t)
+
+	tests := []struct {
+		name string
+		nw   NewWorktree
+		want string
+	}{
+		{"branch checked out elsewhere", NewWorktree{Branch: "main", Root: RootInside}, "fatal: 'main' is already"},
+		{"base does not exist", NewWorktree{Branch: "feat/x", Base: "nobase", Root: RootInside}, "fatal: invalid reference: nobase"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := CreateWorktree(t.Context(), r, tt.nw)
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("err = %v, want it to contain %q", err, tt.want)
+			}
+
+			if strings.Contains(err.Error(), "Preparing worktree") {
+				t.Errorf("err = %v, want git's reason and not its progress line", err)
+			}
+		})
+	}
+}
+
 func TestCreateWorktreeRefusals(t *testing.T) {
 	dir, r := seededRepo(t)
 
