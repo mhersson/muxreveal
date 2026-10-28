@@ -302,6 +302,9 @@ func testEnv(t *testing.T) (env core.Env, cfg string) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	t.Setenv("SHELL", "/bin/sh")
 
+	// run launches in the cwd; inside a repository leader n opens the worktree picker.
+	t.Chdir(t.TempDir())
+
 	env, err := core.DefaultEnv()
 	if err != nil {
 		t.Fatal(err)
@@ -421,9 +424,10 @@ func fakeClaude(t *testing.T) (logPath string) {
 		t.Fatal(err)
 	}
 
-	// Agents run `$SHELL -l -i -c '<script>'` and then `exec $SHELL -l`.
+	// Agents run `$SHELL -l -i -c '<script>' sh <argv...>` and then `exec $SHELL -l`;
+	// after shift 3, "$@" hands /bin/sh the script, its $0 and the agent's argv.
 	shell := "#!/bin/sh\nPATH='" + bin + ":'\"$PATH\"\nexport PATH\n" +
-		"if [ \"$3\" = -c ]; then exec /bin/sh -c \"$4\"; fi\nexec /bin/sh\n"
+		"if [ \"$3\" = -c ]; then shift 3; exec /bin/sh -c \"$@\"; fi\nexec /bin/sh\n"
 	shellPath := filepath.Join(dir, "sh")
 
 	if err := os.WriteFile(shellPath, []byte(shell), 0o700); err != nil {
@@ -524,7 +528,12 @@ func TestRunRestoresTheSession(t *testing.T) {
 	// Second run: the same tabs and layout, agents resumed.
 	second := startSession(t, env, cfg, false)
 
-	waitFor(t, func() bool { return strings.Count(readFile(t, logPath), "--resume") == 2 })
+	// The log does not exist until some agent has started.
+	waitFor(t, func() bool {
+		data, err := os.ReadFile(logPath)
+
+		return err == nil && strings.Count(string(data), "--resume") == 2
+	})
 
 	log := readFile(t, logPath)
 	for id, session := range map[core.PaneID]string{agents[0]: sessionA, agents[1]: sessionB} {
