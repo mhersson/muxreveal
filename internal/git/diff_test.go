@@ -643,6 +643,66 @@ func TestDiffTurnLiveAndPast(t *testing.T) {
 	}
 }
 
+// A file untracked when a turn started is in that turn's snapshot, so a later
+// edit is a modification of it, not an added file.
+func TestDiffTurnJudgesAFileTheSnapshotHoldsByTheComparison(t *testing.T) {
+	dir := seedRepo(t)
+	writeFile(t, dir, "x.go", numbered("x", 40))
+	snap(t, dir, sessA, SnapshotOptions{})
+
+	edited := strings.Replace(numbered("x", 40), "x 35\n", "x 35\nx 35a\nx 35b\n", 1)
+	writeFile(t, dir, "x.go", edited)
+	writeFile(t, dir, "fresh.go", "fresh\n")
+
+	src := TurnSource{Worktree: dir, Session: sessA}
+	e := testEngine(t)
+	res := diffOK(t, e, src)
+
+	x := fileByPath(t, res, "x.go")
+	if x.Status != Modified || x.Untracked || len(x.Hunks) != 1 || x.Added != 2 || x.Removed != 0 {
+		t.Errorf("x.go = %+v, want a modification with one hunk and +2 -0", x)
+	}
+
+	if fresh := fileByPath(t, res, "fresh.go"); fresh.Status != Added || !fresh.Untracked {
+		t.Errorf("fresh.go = %+v, want an untracked added file", fresh)
+	}
+
+	t.Run("update", func(t *testing.T) {
+		writeFile(t, dir, "x.go", edited+"tail\n")
+
+		upd := updateOK(t, e, res, src, Batch{Paths: []string{"x.go"}})
+		if x := fileByPath(t, upd, "x.go"); x.Status != Modified || x.Untracked {
+			t.Errorf("x.go after update = %+v, want a modification", x)
+		}
+
+		sameAsFull(t, upd, src)
+	})
+}
+
+func TestMarkUntracked(t *testing.T) {
+	tests := []struct {
+		status Status
+		want   bool
+	}{
+		{Added, true},
+		{Renamed, true},
+		{Copied, true},
+		{Modified, false},
+		{ModeChanged, false},
+		{Deleted, false},
+	}
+
+	for _, tt := range tests {
+		files := []FileDiff{{Path: "p", Status: tt.status}, {Path: "other", Status: tt.status}}
+
+		markUntracked(files, []string{"p"})
+
+		if files[0].Untracked != tt.want || files[1].Untracked {
+			t.Errorf("%s: Untracked = %v, other = %v, want %v and false", tt.status, files[0].Untracked, files[1].Untracked, tt.want)
+		}
+	}
+}
+
 func TestDiffTurnSkipsMissingSnapshots(t *testing.T) {
 	ctx := context.Background()
 	dir := turnRepo(t)

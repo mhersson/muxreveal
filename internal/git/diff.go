@@ -87,8 +87,8 @@ type Hunk struct {
 }
 
 // FileDiff is one changed file. OldPath is set for renames and copies only.
-// Untracked marks a file whose path git does not track, also when git paired
-// it with another file as a rename or copy.
+// Untracked marks a file whose path git does not track and the old side lacks,
+// also when git paired it with another file as a rename or copy.
 // Hunks stay empty for binary files, files without line changes and files
 // marked Truncated; cached hunks are shared, so treat them as read-only.
 type FileDiff struct {
@@ -335,8 +335,8 @@ func mergeBaseTree(ctx context.Context, r Repo, base string) (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
-// compare diffs oldTree against the new side. Files whose new path is
-// untracked in the working tree are marked, whatever status git guessed.
+// compare diffs oldTree against the new side. Files the old side lacks and the
+// working tree does not track are marked Untracked.
 func (e *Engine) compare(ctx context.Context, r Repo, oldTree string, newSide WorkTree) (Result, error) {
 	res := Result{Old: oldTree, New: newSide.Tree}
 
@@ -360,6 +360,8 @@ func (e *Engine) compare(ctx context.Context, r Repo, oldTree string, newSide Wo
 	return res, nil
 }
 
+// markUntracked marks the files whose path git does not track. A path the old
+// side holds (modified, mode changed) is judged by the comparison alone.
 func markUntracked(files []FileDiff, untracked []string) {
 	set := make(map[string]bool, len(untracked))
 	for _, p := range untracked {
@@ -367,7 +369,14 @@ func markUntracked(files []FileDiff, untracked []string) {
 	}
 
 	for i := range files {
-		files[i].Untracked = set[files[i].Path]
+		f := &files[i]
+
+		switch f.Status {
+		case Added, Renamed, Copied:
+			f.Untracked = set[f.Path]
+		default:
+			f.Untracked = false
+		}
 	}
 }
 
