@@ -66,10 +66,15 @@ type mouseState struct {
 
 // hit finds what lies under the screen cell (x, y): a pane's content or top
 // border, a tab segment of the workspace bar, or nothing. A pane's side and
-// bottom borders and the rule under the workspace bar are nothing.
+// bottom borders, the rule under the workspace bar and whatever the review
+// drawer covers are nothing.
 func (a *App) hit(x, y int) hitResult {
 	if y == 0 {
 		return a.hitTab(x)
+	}
+
+	if a.inDrawer(x, y) {
+		return hitResult{}
 	}
 
 	for id, r := range a.geometry().rects {
@@ -175,12 +180,28 @@ func (a *App) handleClick(msg tea.MouseClickMsg) tea.Cmd {
 		return a.railClick(m.X, m.Y)
 	}
 
+	if a.inDrawer(m.X, m.Y) {
+		a.mouse.click = clickState{}
+
+		if m.Button == tea.MouseLeft && !a.drawer.closing {
+			a.drawerClick(m.X, m.Y)
+		}
+
+		return nil
+	}
+
 	if h.area != hitContent || m.Button != tea.MouseLeft {
 		a.mouse.click = clickState{}
 	}
 
-	if a.rail.focused && (h.area == hitContent || h.area == hitHeader) {
-		a.railRelease()
+	if h.area == hitContent || h.area == hitHeader {
+		if a.rail.focused {
+			a.railRelease()
+		}
+
+		if a.drawer.focused {
+			a.drawerRelease()
+		}
 	}
 
 	switch {
@@ -416,6 +437,17 @@ func (a *App) handleWheel(msg tea.MouseWheelMsg) {
 			a.onRailWheel(1)
 		case tea.MouseWheelUp:
 			a.onRailWheel(-1)
+		}
+
+		return
+	}
+
+	if a.inDrawer(m.X, m.Y) {
+		switch m.Button {
+		case tea.MouseWheelDown:
+			a.drawerWheel(1)
+		case tea.MouseWheelUp:
+			a.drawerWheel(-1)
 		}
 
 		return

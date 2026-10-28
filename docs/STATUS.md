@@ -485,7 +485,7 @@ The review drawer: an overlay that slides over the right half of the body and sh
 - [ ] The rows of the diff column and the file tree
 - [ ] Drawing the drawer: frame, tags, tree, diff, unified and side-by-side rendering with highlighting and invisible characters, full-file view with ghost lines
 - [x] Loading, turns and live updates that keep the cursor on its hunk, and the `[diff]` config
-- [ ] Drawer keys, commands, focus, mouse and the slide
+- [x] Drawer keys, commands, focus, mouse and the slide
 - [ ] Worktree picker and new worktree, and the `[worktrees]` config
 - [ ] Bench, idle CPU and the gate
 
@@ -611,6 +611,7 @@ M1e Tiling, tab moves and chrome is merged (PR #12); the reboot part of its gate
 | 2026-10-27 | Review is an overlay drawer over the right half of the body, one per tab in `core.Tab.Review`, not a layout pane of kind `review` (this replaces the review-pane decision) | The panes keep their rects and PTY sizes, so opening it never resizes an agent's terminal, and `core.Arrange` stays untouched |
 | 2026-10-27 | One `git.WatchSet` watcher per worktree serves every agent pane in it; its change counter lets the turn gate skip unchanged snapshots, and its batches update the drawer and re-probe the rail | Watching is per worktree, not per pane, so six agents in one repo cost one watcher |
 | 2026-10-27 | `leader n` opens a worktree picker in a git repository, with a page to create a worktree | Starting an agent in a worktree is the common case, and the picker needs no separate command |
+| 2026-10-28 | The which-key popup folds `s` and `v` into one row, `s v  Split below/right` | The `d  Review drawer` row made the Panes group one row too tall for a 24-row terminal; the popup fits whole there again |
 
 ## Later
 
@@ -624,6 +625,7 @@ Ideas and requests that came up outside the current milestone go here.
 - A go-to picker over agents, tabs and panes.
 - Sessions above tabs (PR-5).
 - Keep each layout mode's arrangement (BSP ratios, master ratio, column widths) per tab across mode switches.
+- A layout switch (`leader space`, `layout.set.*`) rebuilds the tab without its `Review`, so it closes the tab's review drawer; `Tab.setMode` in `internal/core` should keep it.
 - tuios `composer` for the PR compose body (M3).
 - tuios `markdown` and `tuios.dev/sketch` for Mermaid (M4).
 - `tuios.dev/swatch` for TH-3.

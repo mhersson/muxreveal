@@ -66,7 +66,8 @@ func (a *App) railPaste(text string) {
 }
 
 // railJump makes an agent's tab active, focuses its pane, flashes its frame and
-// hands it the keyboard; the rail stays open. A pane that is gone does nothing.
+// hands it the keyboard; the rail stays open, and a drawer that covers the pane
+// closes. A pane that is gone does nothing.
 func (a *App) railJump(id core.PaneID) tea.Cmd {
 	st := a.store.State()
 
@@ -84,6 +85,7 @@ func (a *App) railJump(id core.PaneID) tea.Cmd {
 	cmds = append(cmds, a.act(core.FocusPane{ID: id}))
 
 	a.railRelease()
+	a.uncoverFocus()
 	a.rail.flashPane, a.rail.flashUntil = id, a.clock.Now().Add(railFlashFor)
 	a.rail.flashSeq++
 	seq := a.rail.flashSeq
@@ -135,7 +137,7 @@ func (a *App) onRailWheel(delta int) {
 // railClick gives the rail the keyboard, selects the card under the pointer and
 // jumps on a double click.
 func (a *App) railClick(x, y int) tea.Cmd {
-	a.rail.focused = true
+	a.railTake()
 
 	v, ok := a.railViewOf(a.store.State())
 	if !ok {

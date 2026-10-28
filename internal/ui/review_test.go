@@ -581,6 +581,8 @@ func TestOpenWithoutTheKeyboard(t *testing.T) {
 	r := newDrawerRig(t)
 	id := r.shell(t, editedRepo(t))
 
+	// The new shell lies under the drawer, so the first pane keeps the keyboard.
+	openIn(t, r.App, core.FocusPane{ID: "p1"})
 	r.run(r.openReview(id, false))
 	r.until(t, "the drawer to open", func() bool { return r.store.State().Tab().Review != nil })
 
@@ -774,8 +776,8 @@ func TestRestoredDrawerLoadsWhenItsTabShows(t *testing.T) {
 	dir := editedRepo(t)
 	id := r.shell(t, dir)
 
-	// A restored state has the drawer open and no view.
-	openIn(t, r.App, core.OpenReview{Pane: id, Mode: core.ReviewBranch})
+	// A restored state has the drawer open and no view; the focused pane is not under it.
+	openIn(t, r.App, core.FocusPane{ID: "p1"}, core.OpenReview{Pane: id, Mode: core.ReviewBranch})
 	r.settle()
 	r.idle(t)
 

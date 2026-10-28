@@ -122,6 +122,8 @@ type App struct {
 	events                     <-chan harness.Event
 	spin                       int         // badge spinner frame
 	agentTicking               bool        // an agentTickMsg is outstanding
+	slideTicking               bool        // a drawerSlideMsg is outstanding
+	settled                    settleKey   // what settleDrawer last found nothing to change in
 	load                       loadSampler // nil on platforms without a load reading
 	start                      func(ctx context.Context, c term.Command, cols, rows int) (proc, error)
 
@@ -239,6 +241,12 @@ func (a *App) dispatch(act core.Action) error {
 		}
 	}
 
+	// A drawer sliding out is closed before an action that could change the active
+	// tab or the drawer, so it is never left open in a tab that is not shown.
+	if a.drawer.closing && mayChangeTab(act) {
+		a.endSlide()
+	}
+
 	prev := a.store.State().Tab()
 	if err := a.store.Dispatch(act); err != nil {
 		if expectedError(err) {
@@ -261,6 +269,7 @@ func (a *App) dispatch(act core.Action) error {
 	a.reportFocusChange(prev.Focus, st.Tab().Focus)
 
 	if st.Tab().ID != prev.ID {
+		a.endSlide()
 		a.renderStale(st)
 	}
 
@@ -275,6 +284,17 @@ func (a *App) dispatch(act core.Action) error {
 	}
 
 	return nil
+}
+
+// mayChangeTab reports whether act can change the active tab or its drawer.
+func mayChangeTab(act core.Action) bool {
+	switch act.(type) {
+	case core.SelectTab, core.CycleTab, core.NewTab, core.CloseTab, core.ClosePane, core.MovePane, core.BreakPane,
+		core.OpenReview, core.CloseReview:
+		return true
+	}
+
+	return false
 }
 
 // dropGoneTab closes a confirm or prompt about a tab that no longer exists.
@@ -304,7 +324,7 @@ func (a *App) Init() tea.Cmd {
 
 // Update implements tea.Model.
 func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	check := a.railFocusCheck(msg)
+	check := a.keyboardCheck(msg)
 	m, cmd := a.update(msg)
 
 	check()
@@ -331,25 +351,37 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-// railFocusCheck starts watching a user-input message and returns the check to
-// run once it is handled: if it moved the active tab or its focused pane, the
-// keyboard returns to the panes. Changes with other causes (a process exit, a
-// hook, a restore) leave the keyboard alone.
-func (a *App) railFocusCheck(msg tea.Msg) func() {
-	if !a.rail.focused || !isUserInput(msg) {
-		return func() {}
+// keyboardCheck starts watching a message and returns the check to run once it
+// is handled. If a user-input message moved the active tab or its focused pane,
+// the keyboard returns to the panes from the rail or the drawer, whichever had
+// it; changes with other causes (a process exit, a hook, a restore) leave it
+// alone. The drawer is then settled (see settleDrawer).
+func (a *App) keyboardCheck(msg tea.Msg) func() {
+	user := isUserInput(msg)
+
+	var prev core.State
+	if user {
+		prev = a.store.State()
 	}
 
-	before, ver := a.store.State().Tab(), a.storeVer
+	railWas, drawerWas, ver := a.rail.focused, a.drawer.focused, a.storeVer
 
 	return func() {
-		if a.storeVer == ver {
-			return
+		acted := user && a.storeVer != ver
+
+		if acted && (railWas || drawerWas) {
+			if now, was := a.store.State().Tab(), prev.Tab(); now.ID != was.ID || now.Focus != was.Focus {
+				if railWas {
+					a.railRelease()
+				}
+
+				if drawerWas {
+					a.drawerRelease()
+				}
+			}
 		}
 
-		if now := a.store.State().Tab(); now.ID != before.ID || now.Focus != before.Focus {
-			a.railRelease()
-		}
+		a.settleDrawer(prev, acted)
 	}
 }
 
@@ -382,6 +414,8 @@ func (a *App) syncPaneColors() {
 func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
+		a.endSlide()
+
 		a.width, a.height = msg.Width, msg.Height
 		a.log.Debug("window size", "width", msg.Width, "height", msg.Height)
 
@@ -456,6 +490,10 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case drawerPaintMsg:
 	case reviewOpenMsg:
 		return a, a.onReviewOpen(msg)
+	case slideOpenMsg:
+		return a, a.onSlideOpen(msg)
+	case drawerSlideMsg:
+		return a, a.onDrawerSlide()
 	case reviewLoadedMsg:
 		return a, a.onReviewLoaded(msg)
 	case reviewFullMsg:
@@ -556,7 +594,7 @@ func (a *App) runLeader(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 	case "esc":
 		return nil, true
 	case a.keymap.leader:
-		if !a.rail.focused {
+		if !a.rail.focused && !a.drawerHasKeys(a.store.State()) {
 			a.keyToFocused(msg)
 		}
 

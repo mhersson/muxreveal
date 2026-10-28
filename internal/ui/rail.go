@@ -421,16 +421,26 @@ func (a *App) railToggle() tea.Cmd {
 		// dispatch logs its own failures.
 		_ = a.dispatch(core.SetRail{Open: true})
 		cmds = append(cmds, a.railOpened())
-		a.rail.focused = a.railVisible()
+
+		if a.railVisible() {
+			a.railTake()
+		}
 	case !a.railVisible() || a.rail.focused:
 		a.railClose()
 	default:
-		a.rail.focused = true
+		a.railTake()
 	}
 
 	cmds = append(cmds, a.relayout())
 
 	return tea.Batch(cmds...)
+}
+
+// railTake gives the rail the keyboard; the review drawer, which shares it,
+// gives it up.
+func (a *App) railTake() {
+	a.rail.focused = true
+	a.drawerRelease()
 }
 
 // railRelease gives the keyboard back to the panes and ends search typing; the
