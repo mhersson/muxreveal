@@ -107,14 +107,7 @@ func classifyBase(s string) base {
 func (d *Doc) parse() {
 	pc := parser.NewContext()
 
-	defer func() {
-		// goldmark is not ours; a bug in it must not take the UI down.
-		if recover() != nil {
-			d.root = ast.NewDocument()
-			d.folds = 0
-			d.footnotes = extension.ContextFootnotes(parser.NewContext())
-		}
-	}()
+	defer d.recoverParse()
 
 	p := parser.New(parser.WithExtensions(extension.NewGFMParser(), extension.NewFootnoteParser()))
 	d.root = p.Parse(d.src, parser.WithContext(pc))
@@ -122,6 +115,17 @@ func (d *Doc) parse() {
 	d.restructure(d.root)
 	d.numberFolds()
 	d.indexNotes()
+}
+
+// recoverParse is deferred by parse. goldmark is not ours; a bug in it must not
+// take the UI down, so a panic leaves an empty document.
+func (d *Doc) recoverParse() {
+	if recover() != nil {
+		d.root = ast.NewDocument()
+		d.folds = 0
+		d.notes = noteIndex{}
+		d.footnotes = extension.ContextFootnotes(parser.NewContext())
+	}
 }
 
 // restructure runs the alert and fold passes over root's block descendants,

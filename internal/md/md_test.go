@@ -537,6 +537,33 @@ func TestParseNeverPanics(t *testing.T) {
 	}
 }
 
+// TestParseRecoveryEmptiesTheDoc runs the handler parse defers over a Doc whose
+// parse finished, by panicking inside a function that defers it.
+func TestParseRecoveryEmptiesTheDoc(t *testing.T) {
+	d := Parse([]byte("<details><summary>s</summary>x</details>\n\nref[^1]\n\n[^1]: note\n"), ParseOptions{})
+	if d.folds == 0 || len(d.notes.labels) == 0 || len(d.notes.defs) == 0 || len(d.Layout(LayoutOptions{Width: 40}).Lines) == 0 {
+		t.Fatalf("the parsed doc is empty: folds %d, notes %+v", d.folds, d.notes)
+	}
+
+	func() {
+		defer d.recoverParse()
+
+		panic("a goldmark failure")
+	}()
+
+	if d.root.HasChildren() || d.folds != 0 {
+		t.Errorf("root has children %v, folds %d", d.root.HasChildren(), d.folds)
+	}
+
+	if len(d.notes.labels) != 0 || len(d.notes.defs) != 0 {
+		t.Errorf("note index kept %d labels and %d definitions", len(d.notes.labels), len(d.notes.defs))
+	}
+
+	if l := d.Layout(LayoutOptions{Width: 40}); len(l.Lines) != 0 || len(l.Folds) != 0 {
+		t.Errorf("layout of the emptied doc = %q", l.Plain())
+	}
+}
+
 func TestParseClassifiesBase(t *testing.T) {
 	tests := []struct {
 		base     string
