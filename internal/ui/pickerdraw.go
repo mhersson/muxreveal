@@ -82,10 +82,16 @@ func (a *App) pickerCursor() *tea.Cursor {
 }
 
 // fieldView draws an input's text in at most w cells, scrolled left so the
-// cursor's cell stays inside, and returns the cursor's column in it.
+// cursor's cell stays inside, and returns the cursor's column in it. The text
+// is drawn without control and invisible characters, a default branch from git
+// among it, while the input keeps its value; the cursor stands after the visible
+// characters before it, so it does not move over a hidden one.
 func fieldView(in textinput.Model, w int, style lipgloss.Style) (string, int) {
-	runes := []rune(in.Value())
-	pos := min(in.Position(), len(runes))
+	raw := []rune(in.Value())
+	pos := min(in.Position(), len(raw))
+
+	runes := []rune(printable(string(raw)))
+	pos = min(len([]rune(printable(string(raw[:pos])))), len(runes))
 	start := 0
 
 	for start < pos && drawnWidth(string(runes[start:pos])) >= w {

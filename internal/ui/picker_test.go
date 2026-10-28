@@ -514,6 +514,87 @@ func TestNewWorktreeCreatesAndOpens(t *testing.T) {
 	}
 }
 
+// The base prefilled from git is drawn without invisible characters, but the
+// value stays as git named it: the worktree is created from that exact ref, which
+// a cleaned name would not be.
+func TestNewWorktreeBaseIsCleanedOnlyForDisplay(t *testing.T) {
+	dir := committedRepo(t)
+
+	// origin/HEAD names a branch with a bidi override, which git allows in a ref name.
+	const hostile = "e\u202evil"
+
+	gitIn(t, "git", dir, "update-ref", "refs/remotes/origin/"+hostile, "HEAD")
+	gitIn(t, "git", dir, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/"+hostile)
+
+	a, st := pickerApp(t, dir)
+	askPicker(t, a)
+
+	press(a, keyUp)
+	deliver(t, a, press(a, keyEnter))
+
+	if got := a.picker.open.form.base.Value(); got != "origin/"+hostile {
+		t.Fatalf("setup: base = %q, want the default branch as git names it", got)
+	}
+
+	if strings.Contains(a.View().Content, "\u202e") {
+		t.Error("the frame holds the bidi override")
+	}
+
+	if got := lineWith(viewText(a), "base"); !strings.Contains(got, "origin/evil") {
+		t.Errorf("base row %q, want the cleaned name origin/evil", got)
+	}
+
+	typeText(a, "feat")
+	deliver(t, a, press(a, keyEnter))
+
+	if a.picker.open != nil {
+		t.Fatalf("the picker stays open: %q", viewText(a))
+	}
+
+	want := filepath.Join(dir, ".worktrees", "feat")
+	if st.count() != 2 || st.cmds[1].Dir != want {
+		t.Fatalf("starts = %d, want an agent in %s: the raw base did not reach git", st.count(), want)
+	}
+}
+
+// A field draws its text without control and invisible characters while the
+// input keeps the value; the cursor stands after the visible characters before it.
+func TestFieldViewDrawsCleanTextAndMapsTheCursor(t *testing.T) {
+	const value = "e\u202evil"
+
+	tests := []struct {
+		name     string
+		cursor   int // runes of the raw value before the cursor
+		width    int
+		wantText string
+		wantCol  int
+	}{
+		{"at the start", 0, 20, "evil", 0},
+		{"before the override", 1, 20, "evil", 1},
+		{"after the override", 2, 20, "evil", 1},
+		{"in the word", 4, 20, "evil", 3},
+		{"at the end", 5, 20, "evil", 4},
+		{"scrolled to the cursor", 5, 3, "il", 2},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			in := newPickerInput()
+			in.SetValue(value)
+			in.SetCursor(tt.cursor)
+
+			text, col := fieldView(in, tt.width, lipgloss.NewStyle())
+			if ansi.Strip(text) != tt.wantText || col != tt.wantCol {
+				t.Errorf("fieldView = %q, %d; want %q, %d", ansi.Strip(text), col, tt.wantText, tt.wantCol)
+			}
+
+			if in.Value() != value {
+				t.Errorf("the value became %q", in.Value())
+			}
+		})
+	}
+}
+
 func TestNewWorktreeErrorStaysInThePage(t *testing.T) {
 	tests := []struct {
 		name   string
