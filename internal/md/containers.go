@@ -23,18 +23,7 @@ func (l *layouter) list(out *frag, n *ast.List, width int, c blockCtx) {
 	inner.depth++
 	inner.listDepth++
 
-	var items []ast.Node
-
-	for ch := n.FirstChild(); ch != nil; ch = ch.NextSibling() {
-		if _, ok := ch.(*ast.ListItem); ok {
-			items = append(items, ch)
-		}
-	}
-
-	numW := 0
-	if n.IsOrdered() {
-		numW = max(len(strconv.Itoa(n.Start)), len(strconv.Itoa(n.Start+len(items)-1)))
-	}
+	items, numW := listItems(n)
 
 	for i, item := range items {
 		marker := l.marker(n, item, i, numW, c.listDepth)
@@ -58,6 +47,21 @@ func (l *layouter) list(out *frag, n *ast.List, width int, c blockCtx) {
 
 		hang(out, start, concat(l.spaces(indent), marker), rest, width, false)
 	}
+}
+
+// listItems returns the items of n and the digits of its largest number.
+func listItems(n *ast.List) (items []ast.Node, numW int) {
+	for ch := n.FirstChild(); ch != nil; ch = ch.NextSibling() {
+		if _, ok := ch.(*ast.ListItem); ok {
+			items = append(items, ch)
+		}
+	}
+
+	if n.IsOrdered() {
+		numW = max(len(strconv.Itoa(n.Start)), len(strconv.Itoa(n.Start+len(items)-1)))
+	}
+
+	return items, numW
 }
 
 func isDone(item ast.Node) bool {
@@ -128,12 +132,24 @@ var alertTitles = [...]struct {
 }
 
 func (l *layouter) alert(out *frag, n *alertNode, width int, c blockCtx) {
-	a := alertTitles[n.Alert]
+	head, st := l.alertTitle(n)
 	capped := c.depth >= maxNest
 
 	inner := c
 	inner.text = RoleText
 	inner.depth++
+
+	if !capped {
+		head = concat(Line{st.run("▎ ")}, head)
+	}
+
+	out.lines = append(out.lines, fit(head, width))
+	l.barred(out, n, width, inner, st, capped)
+}
+
+// alertTitle is the title line of n without its bar, and the alert's style.
+func (l *layouter) alertTitle(n *alertNode) (Line, style) {
+	a := alertTitles[n.Alert]
 
 	title := a.title
 	if l.icons {
@@ -144,10 +160,5 @@ func (l *layouter) alert(out *frag, n *alertNode, width int, c blockCtx) {
 	head := Line{st.run(title)}
 	head[0].Bold = true
 
-	if !capped {
-		head = concat(Line{st.run("▎ ")}, head)
-	}
-
-	out.lines = append(out.lines, fit(head, width))
-	l.barred(out, n, width, inner, st, capped)
+	return head, st
 }

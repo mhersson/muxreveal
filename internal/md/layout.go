@@ -14,6 +14,9 @@ const (
 	maxWidth = 100
 	// maxNest is the depth past which lists and quotes add no more indentation.
 	maxNest = 16
+	// maxDepth is the deepest the layout recurses into nested containers; flat
+	// lays out what nests deeper without recursion.
+	maxDepth = 32
 )
 
 // Role says what a run is for. The UI maps each role to theme colours; the
@@ -180,15 +183,25 @@ func (l *layouter) blocks(out *frag, parent ast.Node, width int, c blockCtx, com
 
 	for ch := parent.FirstChild(); ch != nil; ch = ch.NextSibling() {
 		before := len(out.lines)
-		if before > start && !compact {
+		sep := before > start && !compact
+
+		if sep {
 			out.lines = append(out.lines, nil)
 		}
 
 		l.block(out, ch, width, c)
 
-		if len(out.lines) == before+1 && out.lines[before] == nil && before > start && !compact {
-			out.lines = out.lines[:before]
+		if sep {
+			dropBlank(out, before)
 		}
+	}
+}
+
+// dropBlank removes the separator line at index at when the block after it
+// drew nothing.
+func dropBlank(out *frag, at int) {
+	if len(out.lines) == at+1 && out.lines[at] == nil {
+		out.lines = out.lines[:at]
 	}
 }
 
@@ -200,6 +213,12 @@ func (l *layouter) block(out *frag, n ast.Node, width int, c blockCtx) {
 	}
 
 	c.done = false
+
+	if c.depth >= maxDepth && nests(n) {
+		l.flat(out, n, width, c)
+
+		return
+	}
 
 	switch n := n.(type) {
 	case *ast.Paragraph:

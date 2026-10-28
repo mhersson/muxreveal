@@ -12,6 +12,7 @@ import (
 
 	"github.com/yuin/goldmark/v2/ast"
 	"github.com/yuin/goldmark/v2/extension"
+	east "github.com/yuin/goldmark/v2/extension/ast"
 	"github.com/yuin/goldmark/v2/parser"
 )
 
@@ -32,6 +33,14 @@ type Doc struct {
 	cut       bool
 	base      base
 	footnotes extension.Footnotes
+	notes     noteIndex
+}
+
+// noteIndex is what the footnote section needs from the tree, found once at
+// parse so a layout does not walk the whole tree for it.
+type noteIndex struct {
+	labels map[int]string                      // the label of each referenced note, by goldmark's number
+	defs   map[string]*east.FootnoteDefinition // the definition of each label
 }
 
 // Cut reports that the input was longer than MaxBytes and was cut.
@@ -112,39 +121,72 @@ func (d *Doc) parse() {
 	d.footnotes = extension.ContextFootnotes(pc)
 	d.restructure(d.root)
 	d.numberFolds()
+	d.indexNotes()
 }
 
-// restructure runs the alert and fold passes over n's block descendants.
-func (d *Doc) restructure(n ast.Node) {
-	switch n.(type) {
-	case *ast.Paragraph, *ast.Heading:
-		return
-	}
+// restructure runs the alert and fold passes over root's block descendants,
+// each container after its children. It walks by parent links instead of
+// recursing, so nesting depth costs no stack.
+func (d *Doc) restructure(root ast.Node) {
+	n, c := root, root.FirstChild()
 
-	for c := n.FirstChild(); c != nil; {
-		next := c.NextSibling()
+	for {
+		if c == nil {
+			d.groupDetails(n)
+
+			if n == root {
+				return
+			}
+
+			n, c = n.Parent(), n.NextSibling()
+
+			continue
+		}
+
 		if q, ok := c.(*ast.Blockquote); ok {
 			c = d.convertAlert(q)
 		}
 
-		if c.HasChildren() {
-			d.restructure(c)
+		switch c.(type) {
+		case *ast.Paragraph, *ast.Heading:
+		default:
+			if c.HasChildren() {
+				n, c = c, c.FirstChild()
+
+				continue
+			}
 		}
 
-		c = next
+		c = c.NextSibling()
 	}
-
-	d.groupDetails(n)
 }
 
 func (d *Doc) numberFolds() {
-	_ = ast.Walk(d.root, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
-		if f, ok := n.(*foldNode); ok && entering {
+	walkTree(d.root, func(n ast.Node) bool {
+		if f, ok := n.(*foldNode); ok {
 			f.ID = d.folds
 			d.folds++
 		}
 
-		return ast.WalkContinue, nil
+		return true
+	})
+}
+
+// indexNotes finds the footnote references and definitions of the tree.
+func (d *Doc) indexNotes() {
+	d.notes = noteIndex{labels: map[int]string{}, defs: map[string]*east.FootnoteDefinition{}}
+
+	walkTree(d.root, func(n ast.Node) bool {
+		switch n := n.(type) {
+		case *east.FootnoteDefinition:
+			d.notes.defs[n.Label.Value(d.src)] = n
+
+			return false
+		case *east.FootnoteReference:
+			d.notes.labels[n.Index] = n.Label.Value(d.src)
+		}
+
+		return true
 	})
 }
 

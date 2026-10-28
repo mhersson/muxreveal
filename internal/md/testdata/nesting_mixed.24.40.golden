@@ -1,0 +1,62 @@
+‹QuoteBar:▎ ›  ‹Bullet:• ›‹AlertNote:▎ ›‹AlertNote,b:󰋽 Note›
+‹QuoteBar:▎ ›    ‹AlertNote:▎ ›‹SummaryMark,b:▾ ›‹Summary,b:F3›
+‹QuoteBar:▎ ›    ‹AlertNote:▎ ›  ‹Bullet:7. ›‹TaskDone,b:✓ ›‹TaskDoneText:done›
+‹QuoteBar:▎ ›    ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›‹Bullet:▪ ›‹AlertNote:▎ ›‹AlertNote,b:󰋽 Note›
+‹QuoteBar:▎ ›    ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›‹SummaryMark,b:▾ ›‹Summary,b:F9›
+‹QuoteBar:▎ ›    ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›  ‹Bullet:7. ›‹TaskDone,b:✓ ›‹TaskDoneText:done›
+‹QuoteBar:▎ ›    ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›‹Bullet:▪ ›‹AlertNote:▎ ›‹AlertNote,b:󰋽 Note›
+‹QuoteBar:▎ ›    ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›‹SummaryMark,b:▾ ›‹Summary,b:F15›
+‹QuoteBar:▎ ›    ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›  ‹Bullet:7. ›‹TaskDone,b:…›
+‹QuoteBar:▎ ›    ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›  ‹TaskDoneText:o›
+‹QuoteBar:▎ ›    ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›  ‹TaskDoneText:n›
+‹QuoteBar:▎ ›    ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›  ‹TaskDoneText:e›
+‹QuoteBar:▎ ›    ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›  ‹Bullet:…›
+‹QuoteBar:▎ ›    ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›  ‹SummaryMark,b:…›
+‹QuoteBar:▎ ›    ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›  …
+‹QuoteBar:▎ ›    ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›  …
+‹QuoteBar:▎ ›    ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›  ‹Bullet:…›
+‹QuoteBar:▎ ›    ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›  ‹TaskDoneText:o›
+‹QuoteBar:▎ ›    ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›  ‹TaskDoneText:n›
+‹QuoteBar:▎ ›    ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›  ‹TaskDoneText:e›
+‹QuoteBar:▎ ›    ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›  ‹TaskDoneText:f›
+‹QuoteBar:▎ ›    ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›  ‹TaskDoneText:i›
+‹QuoteBar:▎ ›    ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›  ‹TaskDoneText:r›
+‹QuoteBar:▎ ›    ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›  ‹TaskDoneText:s›
+‹QuoteBar:▎ ›    ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›  ‹TaskDoneText:t›
+‹QuoteBar:▎ ›    ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›  ‹TaskDoneText:p›
+‹QuoteBar:▎ ›    ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›  ‹TaskDoneText:a›
+‹QuoteBar:▎ ›    ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›  ‹TaskDoneText:r›
+‹QuoteBar:▎ ›    ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›  ‹TaskDoneText:a›
+‹QuoteBar:▎ ›    ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›  ‹TaskDoneText:g›
+‹QuoteBar:▎ ›    ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›  ‹TaskDoneText:r›
+‹QuoteBar:▎ ›    ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›  ‹TaskDoneText:a›
+‹QuoteBar:▎ ›    ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›  ‹TaskDoneText:p›
+‹QuoteBar:▎ ›    ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›  ‹TaskDoneText:h›
+‹QuoteBar:▎ ›    ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›  ‹TaskDoneText:s›
+‹QuoteBar:▎ ›    ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›  ‹TaskDoneText:e›
+‹QuoteBar:▎ ›    ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›  ‹TaskDoneText:c›
+‹QuoteBar:▎ ›    ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›  ‹TaskDoneText:o›
+‹QuoteBar:▎ ›    ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›  ‹TaskDoneText:n›
+‹QuoteBar:▎ ›    ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›  ‹TaskDoneText:d›
+‹QuoteBar:▎ ›    ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›  ‹Code: ›
+‹QuoteBar:▎ ›    ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›  ‹Code:c›
+‹QuoteBar:▎ ›    ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›  ‹Code:o›
+‹QuoteBar:▎ ›    ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›  ‹Code:d›
+‹QuoteBar:▎ ›    ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›  ‹Code:e›
+‹QuoteBar:▎ ›    ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›  ‹Code: ›
+‹QuoteBar:▎ ›    ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›  ‹TaskDoneText:a›
+‹QuoteBar:▎ ›    ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›  ‹TaskDoneText:n›
+‹QuoteBar:▎ ›    ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›  ‹TaskDoneText:d›
+‹QuoteBar:▎ ›    ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›  ‹Link,u:l›
+‹QuoteBar:▎ ›    ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›  ‹Link,u:i›
+‹QuoteBar:▎ ›    ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›  ‹Link,u:n›
+‹QuoteBar:▎ ›    ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›  ‹Link,u:k›
+‹QuoteBar:▎ ›    ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›  ‹CodeFrame:…›
+‹QuoteBar:▎ ›    ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›  ‹CodeFrame:…›
+‹QuoteBar:▎ ›    ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›  ‹CodeFrame:…›
+‹QuoteBar:▎ ›    ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›  ‹TableFrame:…›
+‹QuoteBar:▎ ›    ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›  ‹TableFrame:…›
+‹QuoteBar:▎ ›    ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›  ‹TableFrame:…›
+‹QuoteBar:▎ ›    ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›  ‹TableFrame:…›
+‹QuoteBar:▎ ›    ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›  ‹TableFrame:…›
+‹QuoteBar:▎ ›    ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›       ‹QuoteBar:▎ ›  ‹AlertNote:▎ ›  ‹Rule:─›

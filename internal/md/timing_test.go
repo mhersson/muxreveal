@@ -70,6 +70,7 @@ func TestPathological(t *testing.T) {
 		{"open brackets", strings.Repeat("[", 100_000), 1000, ""},
 		{"quote markers", strings.Repeat(">", 10_000), 0, ""}, // empty nested quotes draw nothing
 		{"quote markers with text", strings.Repeat(">", 10_000) + " deep", 1, "deep"},
+		{"quote markers to the size limit", strings.Repeat(">", MaxBytes-len(" deep")) + " deep", 1, "deep"},
 		{"list items", strings.Repeat("- a\n", 100_000), 100_000, ""},
 		{"one 4 MiB paragraph", words, 40_000, ""},
 		{"3000 nested details", nested.String(), 3000, ""},

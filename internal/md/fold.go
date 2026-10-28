@@ -4,13 +4,31 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-
-	"github.com/yuin/goldmark/v2/ast"
-	east "github.com/yuin/goldmark/v2/extension/ast"
 )
 
 // fold lays out a <details> block: the summary line, then the body when open.
 func (l *layouter) fold(out *frag, n *foldNode, width int, c blockCtx) {
+	if !l.foldHead(out, n, width) {
+		return
+	}
+
+	c.depth++
+
+	if c.depth > maxNest {
+		l.blocks(out, n, width, c, false)
+
+		return
+	}
+
+	start := len(out.lines)
+
+	l.blocks(out, n, max(width-2, 1), c, false)
+	hang(out, start, l.spaces(2), l.spaces(2), width, false)
+}
+
+// foldHead appends the summary lines of n, with the hint when it is folded, and
+// reports whether n is open.
+func (l *layouter) foldHead(out *frag, n *foldNode, width int) bool {
 	open := n.Open
 	if v, ok := l.open[n.ID]; ok {
 		open = v
@@ -59,46 +77,13 @@ func (l *layouter) fold(out *frag, n *foldNode, width int, c blockCtx) {
 		out.lines[i] = fit(out.lines[i], width)
 	}
 
-	if !open {
-		return
-	}
-
-	c.depth++
-
-	if c.depth > maxNest {
-		l.blocks(out, n, width, c, false)
-
-		return
-	}
-
-	start := len(out.lines)
-
-	l.blocks(out, n, max(width-2, 1), c, false)
-	hang(out, start, l.spaces(2), l.spaces(2), width, false)
+	return open
 }
 
 // footnotes lays out the section after the body: a rule, then each referenced
 // definition in reference order.
 func (l *layouter) footnotes(out *frag, width int) {
-	defs := map[string]*east.FootnoteDefinition{}
-	labels := map[int]string{}
-
-	_ = ast.Walk(l.d.root, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
-		if !entering {
-			return ast.WalkContinue, nil
-		}
-
-		switch n := n.(type) {
-		case *east.FootnoteDefinition:
-			defs[n.Label.Value(l.d.src)] = n
-
-			return ast.WalkSkipChildren, nil
-		case *east.FootnoteReference:
-			labels[n.Index] = n.Label.Value(l.d.src)
-		}
-
-		return ast.WalkContinue, nil
-	})
+	defs, labels := l.d.notes.defs, l.d.notes.labels
 
 	if len(labels) == 0 {
 		return

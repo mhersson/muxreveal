@@ -291,11 +291,7 @@ func (in *inliner) image(alt, dest string, st style) {
 func (in *inliner) altText(n ast.Node) string {
 	var b strings.Builder
 
-	_ = ast.Walk(n, func(c ast.Node, entering bool) (ast.WalkStatus, error) {
-		if !entering {
-			return ast.WalkContinue, nil
-		}
-
+	walkTree(n, func(c ast.Node) bool {
 		switch c := c.(type) {
 		case *ast.Text:
 			b.WriteString(c.Value.Value(in.l.d.src))
@@ -306,10 +302,10 @@ func (in *inliner) altText(n ast.Node) string {
 		case *ast.CodeSpan:
 			b.WriteString(c.Value.Value(in.l.d.src))
 
-			return ast.WalkSkipChildren, nil
+			return false
 		}
 
-		return ast.WalkContinue, nil
+		return true
 	})
 
 	return b.String()
