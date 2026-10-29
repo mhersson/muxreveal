@@ -105,6 +105,7 @@ func TestRailCacheKeyCoversEveryInput(t *testing.T) {
 		{name: "project", change: func(t *testing.T, a *App) { probe(a, "p2").project = "other" }, visible: true},
 		{name: "branch", change: func(t *testing.T, a *App) { probe(a, "p2").branch = "fix/other" }, visible: true},
 		{name: "detached", change: func(t *testing.T, a *App) { probe(a, "p2").detached = true }},
+		{name: "ahead", change: func(t *testing.T, a *App) { probe(a, "p2").ahead = 3 }, visible: true},
 		{name: "stats", change: func(t *testing.T, a *App) { probe(a, "p2").stats.Added = 999 }, visible: true},
 		{name: "stats known", change: func(t *testing.T, a *App) { probe(a, "p1").statsKnown = false }, visible: true},
 		{name: "unseen mark", change: func(t *testing.T, a *App) { a.railEntry("p3").unseen = true }, visible: true},

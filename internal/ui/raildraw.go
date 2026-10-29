@@ -15,6 +15,10 @@ import (
 
 const iconSearch = "\U000F0349" // nf-md-magnify
 
+// railBranchMin is the fewest cells line 2 cuts a branch to before it gives up
+// the commits-ahead count instead.
+const railBranchMin = 8
+
 // railRun is a piece of rail text in one colour on the panes' ground.
 type railRun struct {
 	text string
@@ -433,12 +437,12 @@ func (a *App) railCardLine(ui theme.UI, c railCard, hits []railHit, n, cw int) [
 			return nil
 		}
 
-		runs := []railRun{indent}
+		lead := []railRun{indent}
 		if a.icons {
-			runs = append(runs, railRun{text: iconGit, fg: ui.Git}, railRun{text: " ", fg: ui.Fg})
+			lead = append(lead, railRun{text: iconGit, fg: ui.Git}, railRun{text: " ", fg: ui.Fg})
 		}
 
-		return append(runs, hiRuns(c.branch, hitsOf(hits, railFieldBranch), ui.Dim, ui.Match, false)...)
+		return railBranchLine(ui, lead, c, hits, cw)
 	case 2:
 		fg, bold := ui.Muted, false
 		if c.state == core.AgentBlocked {
@@ -465,6 +469,29 @@ func (a *App) railCardLine(ui theme.UI, c railCard, hits []railHit, n, cw int) [
 		{text: "  ", fg: ui.Fg},
 		{text: files, fg: ui.Subtle},
 	}
+}
+
+// railBranchLine is the branch after lead, with the commits ahead of its upstream
+// at the right end. Short of room the branch is cut first, down to railBranchMin
+// cells (fewer for a shorter branch), then the count goes.
+func railBranchLine(ui theme.UI, lead []railRun, c railCard, hits []railHit, cw int) []railRun {
+	branch := hiRuns(c.branch, hitsOf(hits, railFieldBranch), ui.Dim, ui.Match, false)
+	if c.ahead <= 0 {
+		return slices.Concat(lead, branch)
+	}
+
+	ahead := railRun{text: "\u2191" + strconv.Itoa(c.ahead), fg: ui.Info, bold: true}
+
+	// One cell separates the branch from the count.
+	room := cw - runsWidth(lead) - runsWidth([]railRun{ahead}) - 1
+	if room < min(runsWidth(branch), railBranchMin) {
+		return cutRuns(slices.Concat(lead, branch), cw)
+	}
+
+	left := slices.Concat(lead, cutRuns(branch, room))
+	pad := cw - runsWidth(left) - runsWidth([]railRun{ahead})
+
+	return append(left, railRun{text: strings.Repeat(" ", pad), fg: ui.Fg}, ahead)
 }
 
 // railTitleLine is a card's first line: state glyph, the session's name or else

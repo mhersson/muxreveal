@@ -161,7 +161,7 @@ func TestRailFollowsTheAgentCwd(t *testing.T) {
 	write(t, filepath.Join(tr.linked, "a.txt"), "one\ntwo\n")
 
 	id := r.addAgent(t, false, tr.main)
-	r.deliver(r.railOpened())
+	r.openRail()
 
 	if c, _ := r.card(id); c.project != filepath.Base(tr.main) || c.branch != "main" || !c.statsKnown || c.stats.Files != 0 {
 		t.Fatalf("card at the launch directory = %+v, want main with no changes", c)
@@ -193,7 +193,7 @@ func TestRailShowsAnAgentDirectoryOutsideARepository(t *testing.T) {
 	}
 
 	id := r.addAgent(t, false, tr.main)
-	r.deliver(r.railOpened())
+	r.openRail()
 	r.clk.Advance(11 * time.Second)
 	r.deliver(hook(r.App, cwdHook(id, elsewhere)))
 
@@ -206,7 +206,7 @@ func TestRailCwdChangesAreThrottled(t *testing.T) {
 	r := newRailApp(t, true)
 	tr := newAgentTrees(t, r.real)
 	id := r.addAgent(t, false, tr.main)
-	r.deliver(r.railOpened())
+	r.openRail()
 	r.clk.Advance(11 * time.Second)
 
 	dirs := make([]string, 6)
@@ -246,7 +246,7 @@ func TestRailCwdChangesAreThrottled(t *testing.T) {
 	// The delayed head probe asks for the directory the agent is in by then.
 	r.clk.Advance(5 * time.Second)
 
-	heads, _ := probedCwds(flatten(r.step(railDueMsg{pane: id, kind: probeHead, gen: r.rail.gen})))
+	heads, _ := probedCwds(flatten(r.step(railDueMsg{pane: id, kind: probeHead})))
 	if want := []string{dirs[len(dirs)-1]}; !slices.Equal(heads, want) {
 		t.Errorf("delayed head probes for %v, want %v", heads, want)
 	}

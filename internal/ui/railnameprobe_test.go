@@ -66,8 +66,9 @@ func TestRailNameProbeOnOpen(t *testing.T) {
 	bare := r.addAgent(t, true, dir)
 	r.session(t, named, transcriptNamed(t, "muxr-orchestrator"))
 
-	if cmd := r.settle(); cmd != nil {
-		t.Fatal("a probe ran while the rail was closed")
+	// With the rail closed only the heads are probed.
+	if msgs := r.deliver(r.settle()); countOf[railHeadMsg](msgs) != 2 || len(msgs) != 2 {
+		t.Fatalf("settling with the rail closed ran %v, want two head probes", msgs)
 	}
 
 	msgs := r.deliver(r.railOpened())
@@ -89,7 +90,7 @@ func TestRailNameProbeOnOpen(t *testing.T) {
 func TestRailNameProbeTriggers(t *testing.T) {
 	r := newRailApp(t, false)
 	id := r.addAgent(t, false, r.repo(t, "proj"))
-	r.deliver(r.railOpened())
+	r.openRail()
 
 	transcript := transcriptNamed(t, "first")
 
@@ -143,7 +144,7 @@ func TestRailNameProbeAfterASessionStartReadsTheNewTranscript(t *testing.T) {
 	r := newRailApp(t, false)
 	id := r.addAgent(t, false, r.repo(t, "proj"))
 	r.session(t, id, transcriptNamed(t, "old"))
-	r.deliver(r.railOpened())
+	r.openRail()
 
 	if got := r.name(t, id); got != "old" {
 		t.Fatalf("setup name = %q", got)
@@ -169,7 +170,7 @@ func TestRailNameProbeAfterASessionStartReadsTheNewTranscript(t *testing.T) {
 
 func TestRailNameProbeForAPaneThatBecomesAnAgent(t *testing.T) {
 	r := newRailApp(t, false)
-	r.deliver(r.railOpened())
+	r.openRail()
 
 	id := r.addAgent(t, false, r.repo(t, "proj"))
 	r.session(t, id, transcriptNamed(t, "newcomer"))
@@ -193,7 +194,7 @@ func TestRailNameProbeInterval(t *testing.T) {
 	id := r.addAgent(t, false, r.repo(t, "proj"))
 	transcript := transcriptNamed(t, "first")
 	r.session(t, id, transcript)
-	r.deliver(r.railOpened())
+	r.openRail()
 
 	r.clk.Advance(time.Second)
 	rewriteTranscript(t, transcript, "second")
@@ -362,7 +363,7 @@ func TestRailNameProbeFailures(t *testing.T) {
 		id := r.addAgent(t, false, r.repo(t, "proj"))
 		transcript := transcriptNamed(t, "kept")
 		r.session(t, id, transcript)
-		r.deliver(r.railOpened())
+		r.openRail()
 
 		if got := r.name(t, id); got != "kept" {
 			t.Fatalf("setup name = %q", got)
@@ -473,7 +474,7 @@ func TestRailNameProbeFailures(t *testing.T) {
 func TestRailNameProbeSharesTheProbeSlots(t *testing.T) {
 	r := newRailApp(t, false)
 	id := r.addAgent(t, false, r.repo(t, "proj"))
-	r.deliver(r.railOpened())
+	r.openRail()
 	r.session(t, id, transcriptNamed(t, "waited"))
 
 	cmd := r.railFire(r.store.State(), id, probeName)
@@ -515,7 +516,7 @@ func TestRailNameProbeCleansWhatItReads(t *testing.T) {
 	r := newRailApp(t, false)
 	id := r.addAgent(t, false, r.repo(t, "proj"))
 	r.session(t, id, transcriptNamed(t, "ok\x1b]0;pwn\x07\u202eed\u009b2J"))
-	r.deliver(r.railOpened())
+	r.openRail()
 
 	if got := r.name(t, id); got != "ok]0;pwned2J" {
 		t.Errorf("name = %q, want the hostile characters dropped", got)

@@ -30,6 +30,7 @@ type railAgent struct {
 	name           string // the session's custom name, read from its transcript
 	model          string // the model its status line reported
 	meter          *int   // the context percentage its status line reported; nil reports none
+	ahead          int    // the commits its branch has past its upstream
 }
 
 func pct(n int) *int { return &n }
@@ -76,6 +77,7 @@ func drawApp(t *testing.T, themeName string, icons bool, w, h int, agents []rail
 
 		rp := a.railEntry(id)
 		rp.unseen = ag.unseen
+		rp.head.target = "/w/" + ag.project // the probe results below stand for an answered head probe
 
 		if ag.name != "" {
 			transcript := "/w/" + ag.project + "/" + string(id) + ".jsonl"
@@ -97,7 +99,7 @@ func drawApp(t *testing.T, themeName string, icons bool, w, h int, agents []rail
 		}
 
 		if !ag.noRepo {
-			rp.probe = railProbe{known: true, repo: true, project: ag.project, branch: ag.branch, detached: ag.detached}
+			rp.probe = railProbe{known: true, repo: true, project: ag.project, branch: ag.branch, detached: ag.detached, ahead: ag.ahead}
 		}
 
 		if ag.stats != nil {
@@ -108,6 +110,17 @@ func drawApp(t *testing.T, themeName string, icons bool, w, h int, agents []rail
 	openIn(t, a, core.SetRail{Open: true})
 
 	return a
+}
+
+// aheadAgents is a mix of branches ahead of their upstream by one, two and three
+// digits, one cut by the rail's width, and some with nothing ahead.
+func aheadAgents() []railAgent {
+	return []railAgent{
+		{newTab: true, project: "api", branch: "main", state: core.AgentIdle, age: 8 * time.Second, stats: &git.Stats{}},
+		{project: "web", branch: "feat/login", state: core.AgentWorking, action: "Edit src/login.tsx", age: 4 * time.Minute, stats: &git.Stats{Files: 5, Added: 120, Removed: 14}, ahead: 2},
+		{newTab: true, project: "muxreveal", branch: "feat/agents-rail-with-a-long-branch-name", state: core.AgentBlocked, action: "Allow Bash go test ./...?", age: 95 * time.Second, stats: &git.Stats{Files: 9, Added: 340, Removed: 12}, ahead: 14},
+		{project: "docs", branch: "main", state: core.AgentIdle, age: 2 * time.Hour, stats: &git.Stats{}, ahead: 123},
+	}
 }
 
 // namedAgents is one project's agents told apart by their session names, an
@@ -189,6 +202,15 @@ func railCases() []railCase {
 		}
 	}
 
+	ahead := func(w, h int) func(t *testing.T, th string, icons bool) *App {
+		return func(t *testing.T, th string, icons bool) *App {
+			a := drawApp(t, th, icons, w, h, aheadAgents())
+			a.rail.sel = "p2"
+
+			return a
+		}
+	}
+
 	metered := func(w, h int) func(t *testing.T, th string, icons bool) *App {
 		return func(t *testing.T, th string, icons bool) *App {
 			a := drawApp(t, th, icons, w, h, meteredAgents())
@@ -246,6 +268,9 @@ func railCases() []railCase {
 		{"metered", metered(100, 50)},
 		{"metered-width-70", metered(70, 50)},
 		{"metered-width-64", metered(64, 50)},
+		{"ahead", ahead(100, 40)},
+		{"ahead-width-70", ahead(70, 40)},
+		{"ahead-width-64", ahead(64, 40)},
 		{"named-search", named(100, 30, func(a *App) {
 			a.rail.focused, a.rail.query = true, "orch"
 			a.railNormalize(a.store.State())

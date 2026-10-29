@@ -135,8 +135,9 @@ func TestShellDoesNotAcquire(t *testing.T) {
 
 	openIn(t, w.App, core.OpenPane{Kind: core.KindShell, Cwd: dir, Split: core.SplitVertical, Area: w.bodyArea()})
 
-	if cmd := w.settle(); cmd != nil {
-		t.Errorf("a shell raised %d message(s)", len(flatten(cmd)))
+	// A focused shell is probed for its branch; it is not watched.
+	if msgs := flatten(w.settle()); len(msgs) != 1 || countOf[railHeadMsg](msgs) != 1 {
+		t.Errorf("a shell raised %v, want its head probe alone", msgs)
 	}
 
 	if len(w.watches.panes) != 0 || w.watched(root) {
