@@ -104,7 +104,11 @@ func TestAgentMovingIntoAWorktreeTakesTheRailAndDrawer(t *testing.T) {
 	r.until(t, "the card to show the worktree", cardIs("feat/x", 2))
 	r.until(t, "the drawer to follow the agent", r.viewHolds(func(v *reviewView) bool { return v.root == rootLinked && v.loaded && !v.loading }))
 
-	c, _ := railCardOf(r.App, id)
+	c, ok := railCardOf(r.App, id)
+	if !ok {
+		t.Fatal("the agent has no card on the rail")
+	}
+
 	if c.project != filepath.Base(mainDir) || c.stats.Files != 1 || c.stats.Removed != 0 {
 		t.Errorf("card = %+v, want project %s with one file of two added lines", c, filepath.Base(mainDir))
 	}
@@ -129,7 +133,6 @@ func TestAgentMovingIntoAWorktreeTakesTheRailAndDrawer(t *testing.T) {
 	turnStart(linked)
 	r.until(t, "turn 2", r.viewHolds(func(v *reviewView) bool { return v.res.Turn == 2 && v.turns == 2 && v.loaded && !v.loading }))
 
-	r.notice = ""
 	r.keys(keyRune(','))
 	r.until(t, "turn 1", r.viewHolds(func(v *reviewView) bool { return v.res.Turn == 1 && !v.res.Live && v.loaded && !v.loading }))
 
