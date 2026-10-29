@@ -22,6 +22,19 @@ const (
 // errLimit reports that git wrote more than call.limit bytes and was killed.
 var errLimit = errors.New("git: output over limit")
 
+// gitPathKey is a context key whose value is the path of a git executable.
+// Only tests set it, to wrap git without changing PATH.
+type gitPathKey struct{}
+
+// gitPath is the git executable ctx asks for, else git on PATH.
+func gitPath(ctx context.Context) string {
+	if path, ok := ctx.Value(gitPathKey{}).(string); ok {
+		return path
+	}
+
+	return "git"
+}
+
 // call describes one git invocation. All git in this package goes through run
 // or stream.
 type call struct {
@@ -142,7 +155,7 @@ func isSchemeByte(c byte) bool {
 // session, so no controlling terminal) and a bounded wait.
 func (c call) command(ctx context.Context) *exec.Cmd {
 	args := append([]string{"-c", "core.fsmonitor=false", "-c", "core.quotePath=false"}, c.args...)
-	cmd := exec.CommandContext(ctx, "git", args...)
+	cmd := exec.CommandContext(ctx, gitPath(ctx), args...)
 	cmd.Dir = c.dir
 	cmd.Stdin = c.stdin
 	cmd.Env = append(cleanEnv(os.Environ()), c.env...)

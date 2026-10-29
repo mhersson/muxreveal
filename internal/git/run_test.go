@@ -91,6 +91,44 @@ func TestRunConfigArguments(t *testing.T) {
 	}
 }
 
+func TestRunTakesGitFromTheContext(t *testing.T) {
+	t.Parallel()
+
+	root := newRepo(t)
+	ctx, logPath := wrapGit(t, "")
+
+	if _, err := run(ctx, call{dir: root, args: []string{"status", "-z"}, read: true}); err != nil {
+		t.Fatal(err)
+	}
+
+	derived, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	rc, err := stream(derived, call{dir: root, args: []string{"ls-files", "-z"}, read: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, _ = io.Copy(io.Discard, rc)
+	must(t, rc.Close())
+
+	if _, err := run(context.Background(), call{dir: root, args: []string{"rev-parse", "--git-dir"}, read: true}); err != nil {
+		t.Fatal(err)
+	}
+
+	data, err := os.ReadFile(logPath)
+	must(t, err)
+
+	log := string(data)
+	if !strings.Contains(log, "status -z") || !strings.Contains(log, "ls-files -z") {
+		t.Errorf("calls given the context did not run the wrapper:\n%s", log)
+	}
+
+	if strings.Contains(log, "rev-parse --git-dir") {
+		t.Errorf("a call without the context ran the wrapper:\n%s", log)
+	}
+}
+
 func TestRunStdin(t *testing.T) {
 	t.Parallel()
 	root := newRepo(t)

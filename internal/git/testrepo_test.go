@@ -1,6 +1,7 @@
 package git
 
 import (
+	"context"
 	"errors"
 	"os"
 	"os/exec"
@@ -127,21 +128,44 @@ func gitInput(t *testing.T, dir, stdin string, args ...string) string {
 func fakeGit(t *testing.T, extraShell string) (logPath string) {
 	t.Helper()
 
-	gitPath, err := exec.LookPath("git")
+	script, logPath := writeGitWrapper(t, extraShell)
+
+	t.Setenv("PATH", filepath.Dir(script)+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	return logPath
+}
+
+// wrapGit returns a context whose git calls go through the logging wrapper of
+// fakeGit. Only calls given ctx (or a context derived from it) are wrapped; it
+// leaves PATH alone, so the test can run in parallel.
+func wrapGit(t *testing.T, extraShell string) (ctx context.Context, logPath string) {
+	t.Helper()
+
+	script, logPath := writeGitWrapper(t, extraShell)
+
+	return context.WithValue(context.Background(), gitPathKey{}, script), logPath
+}
+
+// writeGitWrapper writes a git wrapper script and returns its path and its log.
+// The script appends its arguments, one call per line, to the log, runs
+// extraShell (which may use $LOG), then execs the real git.
+func writeGitWrapper(t *testing.T, extraShell string) (script, logPath string) {
+	t.Helper()
+
+	realGit, err := exec.LookPath("git")
 	if err != nil {
 		t.Skip("git not found")
 	}
 
 	dir := t.TempDir()
 	logPath = filepath.Join(dir, "calls.log")
-	script := "#!/bin/sh\nLOG='" + logPath + "'\nprintf '%s ' \"$@\" >> \"$LOG\"\necho >> \"$LOG\"\n" +
-		extraShell + "\nexec '" + gitPath + "' \"$@\"\n"
+	body := "#!/bin/sh\nLOG='" + logPath + "'\nprintf '%s ' \"$@\" >> \"$LOG\"\necho >> \"$LOG\"\n" +
+		extraShell + "\nexec '" + realGit + "' \"$@\"\n"
+	script = filepath.Join(dir, "git")
 
-	if err := os.WriteFile(filepath.Join(dir, "git"), []byte(script), 0o755); err != nil {
+	if err := os.WriteFile(script, []byte(body), 0o755); err != nil {
 		t.Fatal(err)
 	}
 
-	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
-
-	return logPath
+	return script, logPath
 }

@@ -107,6 +107,11 @@ linters:
     - linters: [gosec]
       text: "G204"
       path: "internal/ui/clipboard\\.go$"
+    # G204: argv[0] is "git" unless a test set the context key; the arguments
+    # are explicit argv with no shell.
+    - linters: [gosec]
+      text: "G204"
+      path: "internal/git/run\\.go$"
     # G301/G302: git's own modes for .git/info and info/exclude; the path comes
     # from git's reported git dir.
     - linters: [gosec]
