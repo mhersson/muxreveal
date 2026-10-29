@@ -865,7 +865,8 @@ func assertProcessGone(t *testing.T, pidFile string) {
 }
 
 func TestDiffFileCap(t *testing.T) {
-	for _, n := range []int{450, 10000} {
+	// The cap is lowered to keep the fixture small; TestNewEngineDefaults pins the default.
+	for _, n := range []int{25, 250} {
 		t.Run(strconv.Itoa(n)+" files", func(t *testing.T) {
 			dir := branchRepo(t, func(dir string) { writeFile(t, dir, "base.txt", "b\n") }, func(dir string) {
 				for i := range n {
@@ -874,14 +875,14 @@ func TestDiffFileCap(t *testing.T) {
 			})
 
 			logPath := fakeGit(t, "")
-			res := branchDiff(t, dir)
+			res := diffOK(t, NewEngine(EngineOptions{Limits: Limits{Files: 20}, TempDir: t.TempDir()}), BranchSource{Worktree: dir, Base: "main"})
 
 			if len(res.Files) != n || !res.Truncated {
 				t.Fatalf("files = %d, Truncated = %v, want %d and true", len(res.Files), res.Truncated, n)
 			}
 
 			for i, f := range res.Files {
-				wantTrunc := i >= 400
+				wantTrunc := i >= 20
 				if f.Truncated != wantTrunc || f.Added != 3 || (len(f.Hunks) > 0) == wantTrunc {
 					t.Fatalf("file %d %q: Truncated=%v Added=%d hunks=%d", i, f.Path, f.Truncated, f.Added, len(f.Hunks))
 				}

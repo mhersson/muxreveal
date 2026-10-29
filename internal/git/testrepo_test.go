@@ -83,8 +83,16 @@ func commitAll(t *testing.T, dir, msg string) {
 func gitOut(t *testing.T, dir string, args ...string) string {
 	t.Helper()
 
+	return gitInput(t, dir, "", args...)
+}
+
+// gitInput is gitOut with stdin on the command's standard input.
+func gitInput(t *testing.T, dir, stdin string, args ...string) string {
+	t.Helper()
+
 	cmd := exec.Command("git", args...)
 	cmd.Dir = dir
+	cmd.Stdin = strings.NewReader(stdin)
 
 	out, err := cmd.CombinedOutput()
 	if err != nil {

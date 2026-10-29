@@ -61,9 +61,19 @@ func TestLogCaps(t *testing.T) {
 	commitAll(t, dir, "init")
 	gitOut(t, dir, "switch", "-q", "-c", "feat")
 
+	var stream strings.Builder
+
 	for i := range 260 {
-		gitOut(t, dir, "commit", "-q", "--allow-empty", "-m", fmt.Sprintf("c%03d", i))
+		fmt.Fprintf(&stream, "commit refs/heads/feat\ncommitter Test <test@example.com> %d +0000\ndata 5\nc%03d\n", 1700000000+i, i)
+
+		if i == 0 {
+			stream.WriteString("from refs/heads/feat^0\n")
+		}
+
+		stream.WriteString("\n")
 	}
+
+	gitInput(t, dir, stream.String(), "fast-import", "--quiet")
 
 	got, err := Log(context.Background(), openRepo(t, dir), "main")
 	if err != nil {
