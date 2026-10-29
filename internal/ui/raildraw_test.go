@@ -78,7 +78,7 @@ func drawApp(t *testing.T, themeName string, icons bool, w, h int, agents []rail
 
 		rp := a.railEntry(id)
 		rp.unseen = ag.unseen
-		rp.head.target = "/w/" + ag.project // the probe results below stand for an answered head probe
+		rp.head.target, rp.head.own = "/w/"+ag.project, "/w/"+ag.project // the probe results below stand for an answered head probe
 
 		if ag.name != "" {
 			transcript := "/w/" + ag.project + "/" + string(id) + ".jsonl"

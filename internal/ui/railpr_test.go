@@ -506,7 +506,7 @@ func TestPRWaitsForTheNewRepositoryAfterAMove(t *testing.T) {
 
 			// The head probes are not run; their results are fed in by hand.
 			head := func(id core.PaneID, cwd string) tea.Cmd {
-				return p.step(railHeadMsg{pane: id, cwd: cwd, res: railProbe{known: true, repo: true, project: "p", branch: "x", headCwd: cwd}})
+				return p.step(railHeadMsg{pane: id, cwd: cwd, own: cwd, res: railProbe{known: true, repo: true, project: "p", branch: "x", headCwd: cwd}})
 			}
 			// check compares the card's PR number (0 for none) and the tray module.
 			check := func(stage string, wantPR int, wantTray bool) {

@@ -164,9 +164,10 @@ func (w *paneWatch) drop(a *App) {
 
 // watchSync reconciles the held watches with the panes that need one, the
 // agents (while there is a set to hold watches in) and the panes a drawer
-// reviews: it starts resolving a pane whose working directory changed and releases those of
-// panes that closed, stopped being agents or are no longer reviewed. A pane that
-// closed or stopped being an agent also loses its cached edit place.
+// reviews: it starts resolving a pane whose followed directory changed and
+// releases those of panes that closed, stopped being agents or are no longer
+// reviewed. A pane that closed or stopped being an agent also loses its cached
+// edit place.
 func (a *App) watchSync() tea.Cmd {
 	st := a.store.State()
 	reviewed := reviewedPanes(st)
@@ -197,7 +198,7 @@ func (a *App) watchSync() tea.Cmd {
 	var cmds []tea.Cmd
 
 	for _, id := range ids {
-		cwd := st.Panes[id].WorkDir()
+		cwd := st.Panes[id].FollowDir()
 		if cwd == "" {
 			continue
 		}

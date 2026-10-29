@@ -26,6 +26,12 @@ const (
 	noticeFirstTurn  = "turn 1 is the first turn"
 )
 
+// drawerDir is the directory the drawer reviews for a pane of tab: the pane's
+// followed place.
+func (a *App) drawerDir(st core.State, _ core.Tab, pane core.PaneID) string {
+	return st.Panes[pane].FollowDir()
+}
+
 // openReview opens the active tab's drawer on a pane of that tab. Whether the
 // pane is in a repository, and whether it has turns, are found off the update
 // loop; the drawer opens when they answer, in turn mode when the pane has turns
@@ -34,18 +40,18 @@ func (a *App) openReview(pane core.PaneID, focus bool) tea.Cmd {
 	st := a.store.State()
 	tab := st.Tab()
 
-	m, ok := st.Panes[pane]
-	if !ok || !slices.Contains(tab.Panes, pane) {
+	if _, ok := st.Panes[pane]; !ok || !slices.Contains(tab.Panes, pane) {
 		return nil
 	}
 
-	if m.WorkDir() == "" {
+	cwd := a.drawerDir(st, tab, pane)
+	if cwd == "" {
 		a.notice = noticeNotRepo
 
 		return nil
 	}
 
-	cwd, session, tabID := m.WorkDir(), paneSession(st, pane), tab.ID
+	session, tabID := paneSession(st, pane), tab.ID
 
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(a.ctx, reviewOpenTimeout)
@@ -68,8 +74,7 @@ func (a *App) openReview(pane core.PaneID, focus bool) tea.Cmd {
 func (a *App) onReviewOpen(msg reviewOpenMsg) tea.Cmd {
 	st := a.store.State()
 
-	m, ok := st.Panes[msg.pane]
-	if !ok || st.Tab().ID != msg.tab || m.WorkDir() != msg.cwd || !slices.Contains(st.Tab().Panes, msg.pane) {
+	if _, ok := st.Panes[msg.pane]; !ok || st.Tab().ID != msg.tab || a.drawerDir(st, st.Tab(), msg.pane) != msg.cwd || !slices.Contains(st.Tab().Panes, msg.pane) {
 		return nil
 	}
 

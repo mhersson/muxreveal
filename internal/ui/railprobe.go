@@ -5,7 +5,6 @@ import (
 	"errors"
 	"log/slog"
 	"path/filepath"
-	"strings"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -42,14 +41,17 @@ type probeSlot struct {
 	busy    bool      // a probe is in flight
 	pending bool      // a trigger arrived that has not run yet
 	timer   bool      // a delayed probe is scheduled
-	target  string    // what the latest probe was started for: the cwd, or the transcript for the name probe
+	target  string    // what the latest probe was started for: the followed directory, or the transcript for the name probe
+	own     string    // the agent's own directory, which the head probe also depends on
 	force   bool      // the next run ignores the interval
 }
 
-// railHeadMsg is a head probe's answer; it carries the cwd it ran for.
+// railHeadMsg is a head probe's answer; it carries the followed directory it
+// ran in and the agent's own directory that named its project.
 type railHeadMsg struct {
 	pane core.PaneID
 	cwd  string
+	own  string
 	res  railProbe
 	err  error
 }
@@ -117,21 +119,23 @@ func (a *App) railClosed() {
 	}
 }
 
-// railHeadSync probes the head of each agent whose working directory differs
-// from the one its head was last probed for, and of a shell pane that took focus
-// or changed directory.
+// railHeadSync probes the head of each agent whose followed directory or own
+// directory differs from the pair its head was last probed for, and of a shell
+// pane that took focus or changed directory.
 func (a *App) railHeadSync(st core.State) {
 	focus := st.Tab().Focus
 	took := focus != a.rail.focus
 	a.rail.focus = focus
 
 	probe := func(id core.PaneID, force bool) {
-		cwd := st.Panes[id].WorkDir()
+		m := st.Panes[id]
+
+		cwd := m.FollowDir()
 		if cwd == "" {
 			return
 		}
 
-		if rp := a.rail.panes[id]; force || rp == nil || rp.head.target != cwd {
+		if rp := a.rail.panes[id]; force || rp == nil || rp.head.target != cwd || rp.head.own != m.WorkDir() {
 			if cmd := a.railFire(st, id, probeHead); cmd != nil {
 				a.later = append(a.later, cmd)
 			}
@@ -147,7 +151,7 @@ func (a *App) railHeadSync(st core.State) {
 	}
 }
 
-// railSync probes the stats of an agent whose working directory differs from the
+// railSync probes the stats of an agent whose followed directory differs from the
 // one they last ran for, and the name of one whose transcript differs from the
 // one its name was last read from.
 func (a *App) railSync(st core.State, id core.PaneID, cwd string) tea.Cmd {
@@ -214,8 +218,8 @@ func (a *App) probeCtx(k railProbeKind) (context.Context, int) {
 func (a *App) railFire(st core.State, id core.PaneID, k railProbeKind) tea.Cmd {
 	m := st.Panes[id]
 
-	// The git probes run in the agent's directory; the name probe reads the transcript.
-	cwd := m.WorkDir()
+	// The git probes run in the followed directory; the name probe reads the transcript.
+	cwd, own := m.FollowDir(), m.WorkDir()
 
 	target := cwd
 	if k == probeName {
@@ -275,6 +279,9 @@ func (a *App) railFire(st core.State, id core.PaneID, k railProbeKind) tea.Cmd {
 	}
 
 	s.pending, s.busy, s.last, s.target = false, true, a.clock.Now(), target
+	if k == probeHead {
+		s.own = own
+	}
 
 	ctx, gen := a.probeCtx(k)
 
@@ -317,13 +324,13 @@ func (a *App) railFire(st core.State, id core.PaneID, k railProbeKind) tea.Cmd {
 	return func() tea.Msg {
 		ctx, done, err := admit(ctx, sem)
 		if err != nil {
-			return railHeadMsg{pane: id, cwd: cwd, err: err}
+			return railHeadMsg{pane: id, cwd: cwd, own: own, err: err}
 		}
 		defer done()
 
-		res, err := probeHeadOf(ctx, log, cwd)
+		res, err := probeHeadOf(ctx, log, cwd, own)
 
-		return railHeadMsg{pane: id, cwd: cwd, res: res, err: err}
+		return railHeadMsg{pane: id, cwd: cwd, own: own, res: res, err: err}
 	}
 }
 
@@ -376,8 +383,10 @@ func (a *App) railLive(id core.PaneID, gen int, k railProbeKind) *railPane {
 	return rp
 }
 
-// railFresh reports whether an answer still applies, and frees the slot.
-func (a *App) railFresh(id core.PaneID, cwd string, gen int, k railProbeKind) (*railPane, bool) {
+// railFresh reports whether an answer still applies, and frees the slot. An
+// answer is of the followed directory cwd, and a head answer also of the own
+// directory own: it is stale when either changed.
+func (a *App) railFresh(id core.PaneID, cwd, own string, gen int, k railProbeKind) (*railPane, bool) {
 	rp := a.railLive(id, gen, k)
 	if rp == nil {
 		return nil, false
@@ -385,7 +394,7 @@ func (a *App) railFresh(id core.PaneID, cwd string, gen int, k railProbeKind) (*
 
 	m, ok := a.store.State().Panes[id]
 
-	return rp, ok && (k == probeHead || m.Kind == core.KindAgent) && m.WorkDir() == cwd
+	return rp, ok && (k == probeHead || m.Kind == core.KindAgent) && m.FollowDir() == cwd && (k != probeHead || m.WorkDir() == own)
 }
 
 // onRailName keeps a name read for the pane's current transcript. A completed
@@ -420,7 +429,7 @@ func (a *App) onRailName(msg railNameMsg) tea.Cmd {
 }
 
 func (a *App) onRailHead(msg railHeadMsg) tea.Cmd {
-	rp, fresh := a.railFresh(msg.pane, msg.cwd, 0, probeHead)
+	rp, fresh := a.railFresh(msg.pane, msg.cwd, msg.own, 0, probeHead)
 	if rp == nil {
 		return nil
 	}
@@ -452,6 +461,11 @@ func (a *App) onRailHead(msg railHeadMsg) tea.Cmd {
 
 				cmds = append(cmds, a.railFire(a.store.State(), msg.pane, probeStats))
 			}
+
+			// The place is gone: the agent falls back to its next edit, probed at once.
+			if msg.res.gone && a.forgetEdit(msg.pane, msg.cwd) {
+				rp.head.force = true
+			}
 		}
 
 		a.prProbed(msg.pane)
@@ -465,7 +479,7 @@ func (a *App) onRailHead(msg railHeadMsg) tea.Cmd {
 }
 
 func (a *App) onRailStats(msg railStatsMsg) tea.Cmd {
-	rp, fresh := a.railFresh(msg.pane, msg.cwd, msg.gen, probeStats)
+	rp, fresh := a.railFresh(msg.pane, msg.cwd, "", msg.gen, probeStats)
 	if rp == nil {
 		return nil
 	}
@@ -492,33 +506,49 @@ func (a *App) onRailStats(msg railStatsMsg) tea.Cmd {
 	return nil
 }
 
-// probeHeadOf finds a cwd's project, branch and detached state. A cwd outside a
-// repository, or gone, is reported as a project named after it with no branch.
-func probeHeadOf(ctx context.Context, log *slog.Logger, cwd string) (railProbe, error) {
-	res := railProbe{project: filepath.Base(cwd), known: true, headCwd: cwd}
+// probeHeadOf finds the branch and detached state of dir, the directory a card
+// follows, and names the project from own, the agent's own directory, so a card
+// keeps its agent's project. A dir outside a repository, or gone, reports no
+// branch, and gone says it does not exist.
+func probeHeadOf(ctx context.Context, log *slog.Logger, dir, own string) (railProbe, error) {
+	res := railProbe{project: filepath.Base(own), known: true, headCwd: dir, gone: !usableDir(dir)}
 
-	if !usableDir(cwd) {
-		return res, nil
+	var (
+		r      git.Repo
+		inRepo bool
+	)
+
+	if !res.gone {
+		var err error
+
+		switch r, err = git.Open(ctx, dir); {
+		case errors.Is(err, git.ErrNotRepo):
+		case err != nil:
+			return railProbe{}, err
+		default:
+			inRepo = true
+		}
 	}
 
-	r, err := git.Open(ctx, cwd)
-
 	switch {
-	case errors.Is(err, git.ErrNotRepo):
+	case own == dir:
+		if inRepo {
+			res.project = r.Name()
+		}
+	case usableDir(own):
+		switch o, err := git.Open(ctx, own); {
+		case err == nil:
+			res.project = o.Name()
+		case !errors.Is(err, git.ErrNotRepo):
+			return railProbe{}, err
+		}
+	}
+
+	if !inRepo {
 		return res, nil
-	case err != nil:
-		return railProbe{}, err
 	}
 
 	res.repo = true
-
-	if root, err := r.MainRoot(); err == nil {
-		res.project = filepath.Base(root)
-	} else if errors.Is(err, git.ErrBare) {
-		res.project = strings.TrimSuffix(filepath.Base(r.CommonDir), ".git")
-	} else {
-		return railProbe{}, err
-	}
 
 	h, err := git.Head(ctx, r)
 	if err != nil {
@@ -542,7 +572,7 @@ func probeHeadOf(ctx context.Context, log *slog.Logger, cwd string) (railProbe, 
 		case ctx.Err() != nil:
 			return railProbe{}, aerr
 		default:
-			log.Debug("ahead count", "cwd", cwd, "err", aerr)
+			log.Debug("ahead count", "cwd", dir, "err", aerr)
 		}
 	}
 

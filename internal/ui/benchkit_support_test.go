@@ -414,7 +414,7 @@ func fillBenchCards(app *App, ids []core.PaneID) error {
 		}
 
 		rp := app.railEntry(id)
-		rp.head.target, rp.hookAt = cwd, now.Add(-time.Duration(n)*time.Minute)
+		rp.head.target, rp.head.own, rp.hookAt = cwd, cwd, now.Add(-time.Duration(n)*time.Minute)
 		rp.probe = railProbe{
 			known: true, repo: true, project: project, branch: branch, ahead: n, headCwd: cwd,
 			stats: git.Stats{Files: 3 * n, Added: 40 * n, Removed: 5 * n}, statsKnown: true, statsCwd: cwd,

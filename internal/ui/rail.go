@@ -80,10 +80,11 @@ type railProbe struct {
 	project, branch string
 	oid             string // the full commit id; "" on an unborn branch
 	detached        bool
-	ahead           int  // commits past the branch's upstream; 0 with none or no upstream
-	repo            bool // the cwd is inside a repository
-	known           bool // a head probe has succeeded
-	headCwd         string
+	ahead           int    // commits past the branch's upstream; 0 with none or no upstream
+	repo            bool   // the cwd is inside a repository
+	known           bool   // a head probe has succeeded
+	headCwd         string // the followed directory the head was probed in
+	gone            bool   // headCwd does not exist
 	stats           git.Stats
 	statsKnown      bool
 	statsCwd        string
@@ -394,7 +395,7 @@ func (a *App) railAfterUpdate() {
 	}
 
 	for _, id := range st.AgentPanes() {
-		if cmd := a.railSync(st, id, st.Panes[id].WorkDir()); cmd != nil {
+		if cmd := a.railSync(st, id, st.Panes[id].FollowDir()); cmd != nil {
 			a.later = append(a.later, cmd)
 		}
 	}

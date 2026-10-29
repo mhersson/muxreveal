@@ -98,6 +98,24 @@ func (a *App) onEditPlace(msg editPlaceMsg) {
 	}})
 }
 
+// forgetEdit forgets the followed place of a pane when it is root, which is gone,
+// and its cached place with it, so the same path resolves afresh. It reports
+// whether the pane followed root.
+func (a *App) forgetEdit(pane core.PaneID, root string) bool {
+	if e, ok := a.store.State().Panes[pane].Followed(); !ok || e.Root != root {
+		return false
+	}
+
+	// dispatch logs its own failures.
+	_ = a.dispatch(core.ForgetEdit{ID: pane, Root: root})
+
+	if l, ok := a.edits.last[pane]; ok && l.place.Root == root {
+		delete(a.edits.last, pane)
+	}
+
+	return true
+}
+
 // dropEdits forgets the cached edit of every pane that closed or stopped being an agent.
 func (a *App) dropEdits(st core.State) {
 	for id := range a.edits.last {

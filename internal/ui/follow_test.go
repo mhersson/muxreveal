@@ -1,0 +1,638 @@
+package ui
+
+import (
+	"context"
+	"fmt"
+	"path/filepath"
+	"slices"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	tea "charm.land/bubbletea/v2"
+
+	"github.com/mhersson/muxreveal/internal/core"
+	"github.com/mhersson/muxreveal/internal/git"
+	"github.com/mhersson/muxreveal/internal/harness"
+)
+
+// followRig is the drawer rig with an agent launched in repository A, which has
+// a linked worktree b on branch b under .worktrees, and another repository C on
+// branch other. A hides .worktrees and *.log through its own exclude file.
+type followRig struct {
+	*drawerRig
+	id                  core.PaneID
+	dirA, dirB, dirC    string
+	rootA, rootB, rootC string
+
+	mu       sync.Mutex
+	resolved []string // the paths the edit resolver ran for
+
+	epochRoot map[int]string // the root each drawer epoch loads
+}
+
+func newFollowRig(t *testing.T, session core.SessionID) *followRig {
+	t.Helper()
+
+	r := &followRig{drawerRig: newDrawerRig(t), epochRoot: map[int]string{}}
+
+	r.dirA = newRepoDir(t)
+	write(t, filepath.Join(r.dirA, "a.txt"), "one\n")
+	commitEverything(t, r.dirA, "init")
+	write(t, filepath.Join(r.dirA, ".git", "info", "exclude"), ".worktrees/\n*.log\n")
+
+	r.dirB = filepath.Join(r.dirA, ".worktrees", "b")
+	gitIn(t, "git", r.dirA, "worktree", "add", "-q", "-b", "b", r.dirB)
+
+	r.dirC = newRepoDir(t)
+	write(t, filepath.Join(r.dirC, "c.txt"), "one\n")
+	commitEverything(t, r.dirC, "init")
+	gitIn(t, "git", r.dirC, "checkout", "-q", "-b", "other")
+
+	r.rootA, r.rootB, r.rootC = rootOf(t, r.dirA), rootOf(t, r.dirB), rootOf(t, r.dirC)
+
+	inner := r.edits.resolve
+	r.edits.resolve = func(ctx context.Context, path string) (git.Place, error) {
+		r.mu.Lock()
+		r.resolved = append(r.resolved, path)
+		r.mu.Unlock()
+
+		return inner(ctx, path)
+	}
+
+	r.id = r.agent(t, r.dirA, session)
+	r.settle()
+	r.watching(t, r.id, r.rootA)
+
+	return r
+}
+
+func (r *followRig) resolverCalls() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	return len(r.resolved)
+}
+
+func (r *followRig) pane() core.Pane { return r.store.State().Panes[r.id] }
+
+// addLines leaves five uncommitted lines in the file at path.
+func (r *followRig) addLines(t *testing.T, path string) {
+	t.Helper()
+	write(t, path, "one\n"+numberedLines("added", 5))
+}
+
+// hookNow delivers a hook and then every answer of the commands it raised, in
+// order, so an edit is recorded when it returns. What those answers start runs
+// off the test's goroutine, and a test waits for it with until.
+func (r *followRig) hookNow(ev harness.Event) {
+	for _, m := range flatten(hook(r.App, ev)) {
+		if m != nil {
+			r.run(r.step(m))
+		}
+	}
+}
+
+func (r *followRig) editHook(path string) harness.Event {
+	return harness.Event{Pane: r.id, Name: "PostToolUse", Edit: path}
+}
+
+func (r *followRig) edit(path string) { r.hookNow(r.editHook(path)) }
+
+// openRail opens the rail and waits until the agent's card knows its branch and changes.
+func (r *followRig) openRail(t *testing.T, branch string) {
+	t.Helper()
+
+	r.run(r.railOpened())
+	r.until(t, "the card to know "+branch, func() bool {
+		c, ok := r.card()
+
+		return ok && c.branch == branch && c.statsKnown
+	})
+}
+
+func (r *followRig) card() (railCard, bool) { return railCardOf(r.App, r.id) }
+
+// cardOn is a condition on the agent's card: it shows branch, and when added is
+// not negative its changes have that many added lines.
+func (r *followRig) cardOn(branch string, added int) func() bool {
+	return func() bool {
+		c, ok := r.card()
+
+		return ok && c.branch == branch && (added < 0 || c.statsKnown && c.stats.Added == added)
+	}
+}
+
+// quiet feeds what is still in flight to the app until nothing arrives for a while.
+func (r *followRig) quiet() {
+	for {
+		select {
+		case m := <-r.pm.msgs:
+			r.run(r.step(m))
+		case <-time.After(150 * time.Millisecond):
+			return
+		}
+	}
+}
+
+// onRoot reports whether the watch and the open drawer settled on root.
+func (r *followRig) onRoot(root string) func() bool {
+	return func() bool {
+		if r.held(r.id) != root || r.watched(r.rootA) != (root == r.rootA) {
+			return false
+		}
+
+		v := r.view()
+
+		return v == nil || v.root == root && v.loaded && !v.loading
+	}
+}
+
+// feed delivers one message and checks that the drawer applied a load only for
+// the root that load was started for.
+func (r *followRig) feed(t *testing.T, m tea.Msg) {
+	t.Helper()
+
+	before := r.view()
+	gen := 0
+
+	if before != nil {
+		gen = before.gen
+	}
+
+	r.run(r.step(m))
+
+	after := r.view()
+	if after == nil {
+		return
+	}
+
+	if loaded, ok := m.(reviewLoadedMsg); ok && after == before && after.gen != gen {
+		if want, known := r.epochRoot[loaded.gen]; !known || want != after.root {
+			t.Errorf("the drawer applied a load started for %q while it shows %q", want, after.root)
+		}
+	}
+
+	r.epochRoot[after.epoch] = after.root
+}
+
+func TestFollowWatchesTheFollowedPlace(t *testing.T) {
+	r := newFollowRig(t, "")
+
+	r.edit(filepath.Join(r.dirB, "a.txt"))
+	r.until(t, "the worktree b to be watched and A's reference released", r.onRoot(r.rootB))
+
+	if got, ok := r.paneRoot(r.id); !ok || got != r.rootB {
+		t.Errorf("paneRoot() = %q, %v, want %q", got, ok, r.rootB)
+	}
+}
+
+func TestRailFollowsEdits(t *testing.T) {
+	tests := []struct {
+		name   string
+		dir    func(r *followRig) string
+		file   string
+		branch string
+	}{
+		{"a worktree of the agent's repository", func(r *followRig) string { return r.dirB }, "a.txt", "b"},
+		{"another repository", func(r *followRig) string { return r.dirC }, "c.txt", "other"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := newFollowRig(t, "")
+			dir := tt.dir(r)
+			r.addLines(t, filepath.Join(dir, tt.file))
+			r.openRail(t, "main")
+
+			r.clk.Advance(11 * time.Second)
+			r.edit(filepath.Join(dir, tt.file))
+			r.until(t, "the card to follow the edit", func() bool {
+				c, ok := r.card()
+
+				return ok && c.branch == tt.branch && c.statsKnown && c.stats.Added == 5
+			})
+
+			// The project is the agent's own, whatever it edits.
+			if c, _ := r.card(); c.project != filepath.Base(r.dirA) || c.stats.Files != 1 {
+				t.Errorf("card = %+v, want project %s and one changed file", c, filepath.Base(r.dirA))
+			}
+		})
+	}
+}
+
+func TestDrawerFollowsEdits(t *testing.T) {
+	r := newFollowRig(t, "")
+	r.addLines(t, filepath.Join(r.dirB, "a.txt"))
+
+	if v := r.open(t, r.id); v.root != r.rootA || len(viewPaths(v)) != 0 {
+		t.Fatalf("drawer shows %v on %q before the edit, want nothing on A", viewPaths(v), v.root)
+	}
+
+	r.edit(filepath.Join(r.dirB, "a.txt"))
+	r.until(t, "the drawer to follow the edit", r.viewHolds(func(v *reviewView) bool {
+		return v.root == r.rootB && v.loaded && !v.loading
+	}))
+
+	v := r.view()
+	if got := viewPaths(v); !slices.Equal(got, []string{"a.txt"}) || v.branch != "b" {
+		t.Errorf("drawer shows %v on %q, want a.txt on b", got, v.branch)
+	}
+
+	if title := r.drawn(t); !strings.Contains(title, filepath.Base(r.dirA)+" · b") {
+		t.Errorf("drawer reads\n%s\nwant a title %q", title, filepath.Base(r.dirA)+" · b")
+	}
+}
+
+func TestCwdChangeAfterEditKeepsFollowedPlace(t *testing.T) {
+	for _, cwd := range []func(r *followRig) string{
+		func(r *followRig) string { return r.dirA },
+		func(r *followRig) string { return filepath.Join(r.dirA, "pkg") },
+		func(r *followRig) string { return r.dirC },
+	} {
+		r := newFollowRig(t, "")
+		r.addLines(t, filepath.Join(r.dirB, "a.txt"))
+		r.open(t, r.id)
+		r.openRail(t, "main")
+
+		r.clk.Advance(11 * time.Second)
+		r.edit(filepath.Join(r.dirB, "a.txt"))
+		r.until(t, "the watch and the drawer to follow", r.onRoot(r.rootB))
+		r.until(t, "the card to follow", r.cardOn("b", 5))
+
+		r.clk.Advance(11 * time.Second)
+		r.hookNow(cwdHook(r.id, cwd(r)))
+		r.quiet()
+
+		if got := r.pane().FollowDir(); got != r.dirB {
+			t.Fatalf("FollowDir() = %q after a hook in %q, want %q", got, cwd(r), r.dirB)
+		}
+
+		if c, _ := r.card(); c.branch != "b" || c.stats.Added != 5 {
+			t.Errorf("card = %+v, want branch b with its 5 added lines", c)
+		}
+
+		if got := r.held(r.id); got != r.rootB {
+			t.Errorf("the watch holds %q, want %q", got, r.rootB)
+		}
+
+		if v := r.view(); v.root != r.rootB {
+			t.Errorf("drawer root = %q, want %q", v.root, r.rootB)
+		}
+	}
+}
+
+func TestCwdChangeBeforeEditMoves(t *testing.T) {
+	r := newFollowRig(t, "")
+	r.addLines(t, filepath.Join(r.dirB, "a.txt"))
+	r.open(t, r.id)
+	r.openRail(t, "main")
+
+	r.clk.Advance(11 * time.Second)
+	r.hookNow(cwdHook(r.id, r.dirB))
+	r.until(t, "the watch and the drawer to move", r.onRoot(r.rootB))
+	r.until(t, "the card to move", r.cardOn("b", 5))
+
+	if got := r.pane().FollowDir(); got != r.dirB {
+		t.Errorf("FollowDir() = %q, want %q", got, r.dirB)
+	}
+}
+
+func TestReviewerSubagentKeepsImplementersPlace(t *testing.T) {
+	r := newFollowRig(t, "")
+	r.addLines(t, filepath.Join(r.dirB, "a.txt"))
+	r.open(t, r.id)
+	r.openRail(t, "main")
+
+	sub := func(name, cwd, edit string) harness.Event {
+		return harness.Event{Pane: r.id, Name: name, Subagent: true, Cwd: cwd, Edit: edit}
+	}
+
+	// The implementer works in b and edits there.
+	r.clk.Advance(11 * time.Second)
+	r.hookNow(sub("PostToolUse", r.dirB, filepath.Join(r.dirB, "a.txt")))
+	r.until(t, "the watch and the drawer to follow", r.onRoot(r.rootB))
+	r.until(t, "the card to follow", r.cardOn("b", -1))
+
+	steps := []struct {
+		name string
+		ev   harness.Event
+	}{
+		// The reviewer reads in b and diffs it, from A.
+		{"reviewer pre-read", sub("PreToolUse", r.dirA, "")},
+		{"reviewer post-read", sub("PostToolUse", r.dirA, "")},
+		{"reviewer git -C b diff", sub("PostToolUse", r.dirA, "")},
+		// The agent itself reports from A and writes a file git ignores.
+		{"agent's own hook", harness.Event{Pane: r.id, Name: "PostToolUse", Cwd: r.dirA}},
+		{"agent writes an ignored file", harness.Event{Pane: r.id, Name: "PostToolUse", Cwd: r.dirA, Edit: filepath.Join(r.dirA, "debug.log")}},
+	}
+
+	for _, s := range steps {
+		r.clk.Advance(11 * time.Second)
+		r.hookNow(s.ev)
+		r.quiet()
+
+		if got := r.pane().FollowDir(); got != r.dirB {
+			t.Fatalf("after %s: FollowDir() = %q, want %q", s.name, got, r.dirB)
+		}
+
+		if c, _ := r.card(); c.branch != "b" {
+			t.Errorf("after %s: card branch = %q, want b", s.name, c.branch)
+		}
+
+		if got, v := r.held(r.id), r.view(); got != r.rootB || v.root != r.rootB {
+			t.Errorf("after %s: the watch holds %q and the drawer shows %q, want %q", s.name, got, v.root, r.rootB)
+		}
+	}
+}
+
+func TestEditInOwnDirectoryMovesBack(t *testing.T) {
+	r := newFollowRig(t, "")
+	r.open(t, r.id)
+	r.openRail(t, "main")
+
+	r.clk.Advance(11 * time.Second)
+	r.edit(filepath.Join(r.dirB, "a.txt"))
+	r.until(t, "the watch and the drawer to follow", r.onRoot(r.rootB))
+	r.until(t, "the card to follow", r.cardOn("b", -1))
+
+	r.clk.Advance(11 * time.Second)
+	r.edit(filepath.Join(r.dirA, "a.txt"))
+	r.until(t, "the watch and the drawer to move back", r.onRoot(r.rootA))
+	r.until(t, "the card to move back", r.cardOn("main", -1))
+
+	if got := r.pane().FollowDir(); got != r.dirA {
+		t.Errorf("FollowDir() = %q, want %q", got, r.dirA)
+	}
+}
+
+func TestTabNameAndSplitsKeepOwnDirectory(t *testing.T) {
+	r := newFollowRig(t, "")
+
+	r.edit(filepath.Join(r.dirC, "c.txt"))
+
+	if got := r.pane().FollowDir(); got != r.dirC {
+		t.Fatalf("FollowDir() = %q, want %q", got, r.dirC)
+	}
+
+	if got := r.tabInfos()[0].name; got != filepath.Base(r.dirA) {
+		t.Errorf("tab name = %q, want %q", got, filepath.Base(r.dirA))
+	}
+
+	if got := r.focusedCwd(r.store.State()); got != r.dirA {
+		t.Errorf("focusedCwd = %q, want %q", got, r.dirA)
+	}
+
+	next := r.store.State().NewPaneID()
+	r.openPane(core.KindShell, core.SplitVertical)
+
+	if m, ok := r.store.State().Panes[next]; !ok || m.Cwd != r.dirA {
+		t.Errorf("new pane = %+v, want a shell in %q", m, r.dirA)
+	}
+}
+
+func TestRemovedFollowedWorktreeIsForgotten(t *testing.T) {
+	r := newFollowRig(t, "")
+	r.open(t, r.id)
+	r.openRail(t, "main")
+
+	path := filepath.Join(r.dirB, "a.txt")
+
+	r.clk.Advance(11 * time.Second)
+	r.edit(path)
+	r.until(t, "the watch and the drawer to follow", r.onRoot(r.rootB))
+	r.until(t, "the card to follow", r.cardOn("b", -1))
+
+	if _, ok := r.edits.last[r.id]; !ok {
+		t.Fatal("no cached place for the edit just resolved")
+	}
+
+	gitIn(t, "git", r.dirA, "worktree", "remove", "--force", r.dirB)
+
+	r.clk.Advance(11 * time.Second)
+	r.hookNow(idleHook(r.id))
+	r.until(t, "the watch and the drawer to fall back to A", r.onRoot(r.rootA))
+	r.until(t, "the card to fall back to A", r.cardOn("main", -1))
+
+	if p := r.pane(); len(p.Edits) != 0 || p.FollowDir() != r.dirA {
+		t.Errorf("pane = %d edits, FollowDir %q, want none and %q", len(p.Edits), p.FollowDir(), r.dirA)
+	}
+
+	if _, ok := r.edits.last[r.id]; ok {
+		t.Error("the cached place of the removed worktree is kept")
+	}
+
+	// The same path again resolves afresh and no longer moves the pane to b.
+	calls := r.resolverCalls()
+
+	r.edit(path)
+	r.quiet()
+
+	if got := r.resolverCalls(); got != calls+1 {
+		t.Errorf("the resolver ran %d times for the repeated path, want 1", got-calls)
+	}
+
+	if got := r.pane().FollowDir(); got != r.dirA {
+		t.Errorf("FollowDir() = %q after an edit in the removed worktree, want %q", got, r.dirA)
+	}
+}
+
+func TestAlternatingEditsEndOnLatest(t *testing.T) {
+	r := newFollowRig(t, "")
+	r.addLines(t, filepath.Join(r.dirB, "a.txt"))
+	r.addLines(t, filepath.Join(r.dirC, "c.txt"))
+	r.open(t, r.id)
+
+	// Each edit is a new path, so every one resolves through git.
+	const edits = 20
+
+	answers := make([][]tea.Msg, edits)
+
+	for i := range edits {
+		dir := r.dirB
+		if i%2 == 1 {
+			dir = r.dirC
+		}
+
+		answers[i] = flatten(hook(r.App, r.editHook(filepath.Join(dir, fmt.Sprintf("f%d.go", i)))))
+	}
+
+	for i := edits - 1; i >= 0; i-- {
+		for _, m := range answers[i] {
+			if m != nil {
+				r.feed(t, m)
+			}
+		}
+	}
+
+	last, ok := r.pane().Followed()
+	if !ok || last.Root != r.dirC || last.Seq != edits || r.pane().FollowDir() != r.dirC {
+		t.Fatalf("Followed() = %+v, %v, want the last edit's root %q with Seq %d", last, ok, r.dirC, edits)
+	}
+
+	// The drawer's loads come back as the rig returns them.
+	deadline := time.Now().Add(r.wait)
+
+	for {
+		if v := r.view(); v != nil && v.root == r.rootC && v.loaded && !v.loading && r.held(r.id) == r.rootC {
+			break
+		}
+
+		select {
+		case m := <-r.pm.msgs:
+			r.feed(t, m)
+		case <-time.After(10 * time.Millisecond):
+			r.run(r.step(struct{}{}))
+		}
+
+		if time.Now().After(deadline) {
+			t.Fatal("timed out waiting for the drawer to settle on C")
+		}
+	}
+
+	if got := viewPaths(r.view()); !slices.Equal(got, []string{"c.txt"}) {
+		t.Errorf("drawer shows %v, want C's change", got)
+	}
+}
+
+func TestNewSessionReturnsToOwnDirectory(t *testing.T) {
+	r := newFollowRig(t, testSession)
+	r.addLines(t, filepath.Join(r.dirC, "c.txt"))
+	r.open(t, r.id)
+	r.openRail(t, "main")
+
+	r.clk.Advance(11 * time.Second)
+	r.edit(filepath.Join(r.dirC, "c.txt"))
+	r.until(t, "the watch and the drawer to follow", r.onRoot(r.rootC))
+	r.until(t, "the card to follow", r.cardOn("other", -1))
+
+	r.clk.Advance(11 * time.Second)
+	r.hookNow(harness.Event{Pane: r.id, Name: "SessionStart", Start: true, Session: otherSession, Cwd: r.dirA})
+	r.until(t, "the watch and the drawer to return", r.onRoot(r.rootA))
+	r.until(t, "the card to return", r.cardOn("main", -1))
+
+	if p := r.pane(); len(p.Edits) != 0 || p.FollowDir() != r.dirA {
+		t.Errorf("pane = %d edits, FollowDir %q, want none and %q", len(p.Edits), p.FollowDir(), r.dirA)
+	}
+}
+
+func TestProbeHeadOf(t *testing.T) {
+	r := newFollowRig(t, "")
+	scratch := t.TempDir()
+	gone := filepath.Join(t.TempDir(), "gone")
+	nameA := filepath.Base(r.dirA)
+
+	tests := []struct {
+		name         string
+		dir, own     string
+		project      string
+		branch       string
+		repo, isGone bool
+	}{
+		{"the same directory", r.dirA, r.dirA, nameA, "main", true, false},
+		{"a worktree of the own repository", r.dirB, r.dirA, nameA, "b", true, false},
+		{"another repository, named from the own directory", r.dirC, r.dirA, nameA, "other", true, false},
+		{"own directory in a linked worktree", r.dirC, r.dirB, nameA, "other", true, false},
+		{"own directory outside any repository", r.dirC, scratch, filepath.Base(scratch), "other", true, false},
+		{"own directory gone", r.dirA, gone, "gone", "main", true, false},
+		{"followed directory outside any repository", scratch, r.dirA, nameA, "", false, false},
+		{"followed directory gone", gone, r.dirA, nameA, "", false, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := probeHeadOf(context.Background(), r.log, tt.dir, tt.own)
+			if err != nil {
+				t.Fatalf("probeHeadOf: %v", err)
+			}
+
+			if got.project != tt.project || got.branch != tt.branch || got.repo != tt.repo || got.gone != tt.isGone ||
+				!got.known || got.headCwd != tt.dir {
+				t.Errorf("probeHeadOf(%q, %q) = %+v, want project %q, branch %q, repo %v, gone %v for %q",
+					tt.dir, tt.own, got, tt.project, tt.branch, tt.repo, tt.isGone, tt.dir)
+			}
+		})
+	}
+}
+
+func TestDrawerDirIsTheFollowedPlace(t *testing.T) {
+	t.Parallel()
+
+	r := newHookEditRig(t, map[string]git.Place{"/w/b/x.go": placeAt("/w/b")}, nil)
+	st := r.store.State()
+	own := st.Panes[r.id].WorkDir()
+
+	if got := r.drawerDir(st, st.Tab(), r.id); got != own {
+		t.Errorf("drawerDir() = %q before an edit, want the own directory %q", got, own)
+	}
+
+	r.deliver(r.hook(r.event("PostToolUse", "/w/b/x.go")))
+
+	st = r.store.State()
+	if got := r.drawerDir(st, st.Tab(), r.id); got != "/w/b" {
+		t.Errorf("drawerDir() = %q after an edit, want /w/b", got)
+	}
+}
+
+// deliverAll is deliver that also runs the commands the answers raise, until none is left.
+func (r *railApp) deliverAll(cmd tea.Cmd) []tea.Msg {
+	var all []tea.Msg
+
+	for range 10 {
+		var cmds []tea.Cmd
+
+		for _, m := range flatten(cmd) {
+			if m != nil {
+				all = append(all, m)
+				cmds = append(cmds, r.step(m))
+			}
+		}
+
+		if cmd = tea.Batch(cmds...); cmd == nil {
+			break
+		}
+	}
+
+	return all
+}
+
+func TestHeadProbeTargetIsFollowedAndOwnDirectory(t *testing.T) {
+	r := newRailApp(t, false)
+	tr := newAgentTrees(t, r.real)
+	other := r.repo(t, "other")
+	id := r.addAgent(t, false, tr.main)
+	r.openRail()
+
+	r.clk.Advance(6 * time.Second)
+	r.deliverAll(hook(r.App, harness.Event{Pane: id, Name: "PostToolUse", Edit: filepath.Join(tr.linked, "a.txt")}))
+
+	if c, _ := r.card(id); c.branch != "feat" || c.project != filepath.Base(tr.main) {
+		t.Fatalf("card = %+v, want branch feat of project %s", c, filepath.Base(tr.main))
+	}
+
+	// A move of the own directory alone probes the followed place again, and the
+	// project follows the own directory.
+	r.clk.Advance(6 * time.Second)
+
+	heads, _ := probedCwds(r.deliverAll(hook(r.App, cwdHook(id, other))))
+	if want := []string{tr.linked}; !slices.Equal(heads, want) {
+		t.Fatalf("head probes for %v after the own directory moved, want %v", heads, want)
+	}
+
+	if c, _ := r.card(id); c.branch != "feat" || c.project != "other" {
+		t.Fatalf("card = %+v, want branch feat of project other", c)
+	}
+
+	// An answer is stale when either directory changed since it started.
+	for _, msg := range []railHeadMsg{
+		{pane: id, cwd: tr.linked, own: tr.main, res: railProbe{project: "stale", branch: "stale", known: true, headCwd: tr.linked}},
+		{pane: id, cwd: tr.main, own: other, res: railProbe{project: "stale", branch: "stale", known: true, headCwd: tr.main}},
+	} {
+		r.step(msg)
+
+		if c, _ := r.card(id); c.project != "other" || c.branch != "feat" {
+			t.Errorf("card = %+v after a stale answer for (%s, %s), want it unchanged", c, msg.cwd, msg.own)
+		}
+	}
+}

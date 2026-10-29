@@ -453,7 +453,7 @@ func TestRailCardKeepsItsResultUntilTheNewCwdAnswers(t *testing.T) {
 	}
 
 	// A failed probe of the new cwd clears it.
-	r.step(railHeadMsg{pane: id, cwd: second, err: context.DeadlineExceeded})
+	r.step(railHeadMsg{pane: id, cwd: second, own: second, err: context.DeadlineExceeded})
 	r.step(railStatsMsg{pane: id, cwd: second, gen: r.rail.gen, err: context.DeadlineExceeded})
 
 	c, _ := r.card(id)
@@ -468,7 +468,7 @@ func TestRailFailedProbeOfTheSameCwdKeepsTheResult(t *testing.T) {
 	r.openRail()
 
 	cwd := r.store.State().Panes[id].Cwd
-	r.step(railHeadMsg{pane: id, cwd: cwd, err: context.DeadlineExceeded})
+	r.step(railHeadMsg{pane: id, cwd: cwd, own: cwd, err: context.DeadlineExceeded})
 	r.step(railStatsMsg{pane: id, cwd: cwd, gen: r.rail.gen, err: context.DeadlineExceeded})
 
 	if c, _ := r.card(id); c.branch != "main" || !c.statsKnown {

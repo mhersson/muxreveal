@@ -127,7 +127,7 @@ func (a *App) push() tea.Cmd {
 // resolvePush reads what pushing the branch checked out in cwd would do. err is
 // a failure that is none of the states.
 func resolvePush(ctx context.Context, log *slog.Logger, pane core.PaneID, cwd, home string) (pushTarget, pushState, error) {
-	head, err := probeHeadOf(ctx, log, cwd)
+	head, err := probeHeadOf(ctx, log, cwd, cwd)
 
 	switch {
 	case err != nil:
