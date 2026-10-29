@@ -90,6 +90,8 @@ type App struct {
 	marked  toastMark // the level the toast text was raised at
 	pushSeq int       // push request counter; an answer for another request is stale
 
+	pushing map[string]string // worktree root -> the branch being pushed there
+
 	// theme, styles and sample follow store.State().Theme; only sync updates them.
 	theme  theme.Theme
 	styles styles

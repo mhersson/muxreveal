@@ -30,6 +30,7 @@ const (
 
 	noticePushNotRepo  = "push: not a git repository"
 	noticePushDetached = "push: HEAD is detached"
+	noticePushBusy     = "push: %s is already being pushed"
 	unreadableURL      = "(unreadable url)"
 )
 
@@ -200,6 +201,7 @@ func (a *App) onPushResolved(msg pushResolvedMsg) {
 	}
 
 	t := msg.target
+	busy, isBusy := a.pushing[t.root]
 
 	switch {
 	case errors.Is(msg.err, context.Canceled):
@@ -207,6 +209,8 @@ func (a *App) onPushResolved(msg pushResolvedMsg) {
 		a.toast(levelError, "push: timed out reading the repository")
 	case msg.err != nil:
 		a.toast(levelError, "push: "+gitReason(msg.err))
+	case isBusy:
+		a.notice = fmt.Sprintf(noticePushBusy, busy)
 	case msg.state == pushNotRepo:
 		a.notice = noticePushNotRepo
 	case msg.state == pushDetached:
@@ -225,8 +229,21 @@ func (a *App) onPushResolved(msg pushResolvedMsg) {
 // pushRun pushes exactly t, off the update loop, under a timeout derived from the
 // app's context. It checks the worktree's branch, head, push remote and push URLs
 // in the same command, so the window between the check and the push is as short
-// as it can be.
+// as it can be. The worktree stays marked as being pushed until onPushed runs.
 func (a *App) pushRun(t pushTarget) tea.Cmd {
+	if busy, ok := a.pushing[t.root]; ok {
+		a.notice = fmt.Sprintf(noticePushBusy, busy)
+
+		return nil
+	}
+
+	if a.pushing == nil {
+		a.pushing = map[string]string{}
+	}
+
+	a.pushing[t.root] = t.branch
+	a.notice = pushingNotice(t)
+
 	appCtx, resolve := a.ctx, a.prs.resolve
 
 	return func() tea.Msg {
@@ -250,6 +267,11 @@ func (a *App) pushRun(t pushTarget) tea.Cmd {
 
 		return msg
 	}
+}
+
+// pushingNotice is what shows while t's push runs.
+func pushingNotice(t pushTarget) string {
+	return fmt.Sprintf("pushing %s to %s…", t.branch, t.remote)
 }
 
 // runPush pushes t's branch from its worktree unless the branch, its head, its
@@ -294,6 +316,12 @@ func runPush(ctx context.Context, t pushTarget) (git.PushResult, error) {
 // the pane's head again and asks the poller to refresh the repository.
 func (a *App) onPushed(msg pushedMsg) tea.Cmd {
 	t := msg.target
+
+	delete(a.pushing, t.root)
+
+	if a.notice == pushingNotice(t) {
+		a.notice = ""
+	}
 
 	switch {
 	case errors.Is(msg.err, context.Canceled):

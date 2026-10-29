@@ -557,6 +557,80 @@ func TestPushConfirmHeadMoved(t *testing.T) {
 	}
 }
 
+func TestPushInFlight(t *testing.T) {
+	r := newPushRig(t)
+	r.askOpen(t)
+
+	// The command is held, as a push still running is.
+	held := press(r.App, keyEnter)
+
+	if want := "pushing feat/x to origin…"; r.notice != want || r.noticeLevel() != levelNotice {
+		t.Errorf("toast = %q at level %v, want %q at the notice level", r.notice, r.noticeLevel(), want)
+	}
+
+	if r.confirm != nil {
+		t.Error("the confirm is still open after enter")
+	}
+
+	r.ask(t)
+
+	if want := "push: feat/x is already being pushed"; r.notice != want || r.noticeLevel() != levelNotice {
+		t.Errorf("toast = %q at level %v, want %q at the notice level", r.notice, r.noticeLevel(), want)
+	}
+
+	if r.confirm != nil {
+		t.Error("a confirm opened for a worktree being pushed")
+	}
+
+	if n := r.pushCalls(); n != 0 {
+		t.Errorf("git pushed %d times before the first push ran", n)
+	}
+
+	r.churn(t, held)
+
+	if want := "pushed feat/x to origin: 2 commits"; r.notice != want || r.noticeLevel() != levelSuccess {
+		t.Errorf("toast = %q at level %v, want %q at the success level", r.notice, r.noticeLevel(), want)
+	}
+
+	if len(r.pushing) != 0 {
+		t.Errorf("%v still marked as being pushed after the result", r.pushing)
+	}
+
+	gitIn(t, r.real, r.dir, "commit", "-q", "--allow-empty", "-m", "more")
+	r.askOpen(t)
+	r.churn(t, press(r.App, keyEnter))
+
+	if want := "pushed feat/x to origin: 1 commit"; r.notice != want {
+		t.Errorf("toast = %q, want %q", r.notice, want)
+	}
+
+	if n := r.pushCalls(); n != 2 {
+		t.Errorf("git pushed %d times, want 2", n)
+	}
+}
+
+func TestPushInFlightStopsAnotherAnswer(t *testing.T) {
+	r := newPushRig(t)
+	r.askOpen(t)
+
+	// A push of this worktree began after the confirm opened.
+	r.pushing = map[string]string{r.confirm.push.root: "feat/x"}
+
+	r.churn(t, press(r.App, keyEnter))
+
+	if want := "push: feat/x is already being pushed"; r.notice != want {
+		t.Errorf("toast = %q, want %q", r.notice, want)
+	}
+
+	if n := r.pushCalls(); n != 0 {
+		t.Errorf("git pushed %d times for a worktree already being pushed", n)
+	}
+
+	if got := r.remoteRefs(t); got != "refs/heads/main" {
+		t.Errorf("the remote holds %q, want only main", got)
+	}
+}
+
 func TestPushUpToDate(t *testing.T) {
 	r := newPushRig(t)
 	gitIn(t, r.real, r.dir, "push", "-q", "-u", "origin", "feat/x")
@@ -718,6 +792,10 @@ func TestPushStopsWithTheApp(t *testing.T) {
 
 		if r.notice != "" || r.pushCalls() != 0 {
 			t.Errorf("toast %q, %d pushes after the app's context ended, want none", r.notice, r.pushCalls())
+		}
+
+		if len(r.pushing) != 0 {
+			t.Errorf("%v still marked as being pushed after the app's context ended", r.pushing)
 		}
 
 		if got := r.remoteRefs(t); got != "refs/heads/main" {
