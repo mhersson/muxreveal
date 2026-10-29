@@ -34,6 +34,7 @@ type reviewInfo struct {
 	project, branch, base string
 	turns                 int
 	noSnapshot            bool
+	foreign               bool
 	hidden                []bool
 }
 
@@ -190,9 +191,15 @@ func (a *App) reviewSync() tea.Cmd {
 	}
 
 	// A turn drawer that showed the branch because its session had no turns
-	// shows the session's latest turn as soon as there is one.
-	if _, isTurn := v.src.(git.TurnSource); rv.Mode == core.ReviewTurn && !isTurn && v.loaded && v.session != "" &&
-		v.turnsFor == v.session && v.turns > 0 {
+	// shows the session's latest turn as soon as there is one. One that shows a
+	// turn of a worktree that is not the agent's own shows the branch.
+	_, isTurn := v.src.(git.TurnSource)
+
+	switch {
+	case rv.Mode == core.ReviewTurn && !isTurn && v.loaded && v.session != "" && !v.foreign &&
+		v.turnsFor == v.session && v.turns > 0:
+		need = true
+	case isTurn && v.loaded && v.foreign:
 		need = true
 	}
 
@@ -200,8 +207,9 @@ func (a *App) reviewSync() tea.Cmd {
 		return a.reviewRetarget(tab.ID, v, 0)
 	}
 
-	if v.loaded && v.session != "" && v.turnsFor != v.session {
-		// The count is the previous session's.
+	// The count is the previous session's, or the own directory moved, which
+	// changes whether the shown root is foreign.
+	if v.loaded && v.session != "" && (v.turnsFor != v.session || v.own != st.Panes[rv.Pane].WorkDir()) {
 		return a.reviewCount(tab.ID, v)
 	}
 
@@ -233,14 +241,15 @@ func (a *App) reviewReset(tab core.TabID, pane core.PaneID) *reviewView {
 }
 
 // reviewRetarget points the view at its mode's source, turn being the turn to
-// show (0 is the latest), and loads it. A turn view of a pane with no session
-// shows the branch; core keeps the mode.
+// show (0 is the latest), and loads it. A turn view of a pane with no session,
+// or of a worktree that is not the agent's own, shows the branch; core keeps the
+// mode.
 func (a *App) reviewRetarget(tab core.TabID, v *reviewView, turn int) tea.Cmd {
 	if v.root == "" {
 		return nil
 	}
 
-	if v.mode == core.ReviewTurn && v.session != "" {
+	if v.mode == core.ReviewTurn && v.session != "" && !v.foreign {
 		v.src = git.TurnSource{Worktree: v.root, Session: v.session, Turn: turn}
 	} else {
 		v.src = git.BranchSource{Worktree: v.root}
@@ -261,6 +270,7 @@ type reviewJob struct {
 	src      git.Source
 	root     string
 	session  string
+	own      string     // the pane's own directory; its turns are the only ones the drawer shows
 	batch    *git.Batch // nil: a full diff of src
 	infoOnly bool       // skip the diff: refresh only what describe finds
 	prev     git.Result // the result batch updates
@@ -280,13 +290,15 @@ func (a *App) reviewStart(tab core.TabID, v *reviewView, b *git.Batch, infoOnly 
 	ctx, cancel := context.WithTimeout(a.ctx, reviewLoadTimeout)
 	v.cancel, v.loading = cancel, true
 
-	keep := reviewInfo{project: v.project, branch: v.branch, base: v.base}
+	keep := reviewInfo{project: v.project, branch: v.branch, base: v.base, foreign: v.foreign}
 	if v.turnsFor == v.session {
 		keep.turns = v.turns
 	}
 
+	v.own = a.store.State().Panes[v.pane].WorkDir()
+
 	job := reviewJob{
-		tab: tab, epoch: v.epoch, src: v.src, root: v.root, session: v.session, batch: b, infoOnly: infoOnly, prev: v.res,
+		tab: tab, epoch: v.epoch, src: v.src, root: v.root, session: v.session, own: v.own, batch: b, infoOnly: infoOnly, prev: v.res,
 		keep: keep, eng: a.engine, log: a.log,
 	}
 
@@ -306,10 +318,19 @@ func (j reviewJob) run(ctx context.Context) reviewLoadedMsg {
 		return msg
 	}
 
+	msg.info.foreign = j.foreign(ctx)
+
 	if j.infoOnly {
 		j.describe(ctx, &msg.info)
 
 		return msg
+	}
+
+	// The snapshots are of the agent's own directory, so a turn of it is not a
+	// turn of another worktree.
+	if _, ok := j.src.(git.TurnSource); ok && msg.info.foreign {
+		j.src = git.BranchSource{Worktree: j.root}
+		msg.src = j.src
 	}
 
 	// What the drawing shows besides the diff is found beside the diff, so a
@@ -357,11 +378,51 @@ func (j reviewJob) diff(ctx context.Context, src git.Source) (git.Result, error)
 	return j.eng.Diff(ctx, src)
 }
 
-// describe fills what the drawing shows besides the diff. The head and the base
-// change only with git's own state, so a batch of plain paths keeps them.
+// foreign reports whether the root the job loads is not the root of the agent's
+// own directory. A pane with no session has no turns to be foreign to.
+func (j reviewJob) foreign(ctx context.Context) bool {
+	if j.session == "" {
+		return false
+	}
+
+	foreign, err := isForeign(ctx, j.own, j.root)
+	if err != nil {
+		return j.keep.foreign
+	}
+
+	return foreign
+}
+
+// isForeign reports whether root is not the root of the agent's own directory
+// own, as when own is in no repository or gone. Turns are snapshotted in the
+// own directory only, so no other worktree has any. It returns ctx's error
+// when the check was cut short.
+func isForeign(ctx context.Context, own, root string) (bool, error) {
+	switch own {
+	case "":
+		return true, nil
+	case root:
+		return false, nil
+	}
+
+	r, err := git.Open(ctx, own)
+	if err != nil && ctx.Err() != nil {
+		return false, ctx.Err()
+	}
+
+	return err != nil || !sameDir(r.Root, root), nil
+}
+
+// describe fills what the drawing shows besides the diff, and reports no turns
+// for a foreign root. The head and the base change only with git's own state,
+// so a batch of plain paths keeps them.
 func (j reviewJob) describe(ctx context.Context, info *reviewInfo) {
+	if info.foreign {
+		info.turns = 0
+	}
+
 	probe := j.batch == nil || j.batch.Git || j.batch.Overflow || info.project == ""
-	if !probe && j.session == "" {
+	if !probe && (j.session == "" || info.foreign) {
 		return
 	}
 
@@ -396,7 +457,7 @@ func (j reviewJob) describe(ctx context.Context, info *reviewInfo) {
 		info.base = base
 	}
 
-	if j.session == "" {
+	if j.session == "" || info.foreign {
 		info.turns = 0
 
 		return
@@ -427,7 +488,7 @@ func (a *App) onReviewLoaded(msg reviewLoadedMsg) tea.Cmd {
 
 	if msg.infoOnly {
 		in := msg.info
-		v.project, v.branch, v.base = in.project, in.branch, in.base
+		v.project, v.branch, v.base, v.foreign = in.project, in.branch, in.base, in.foreign
 		v.adoptTurns(msg.session, in.turns)
 
 		return tea.Batch(a.reviewResume(active, v), a.reviewFlush(active, msg.tab, v))
@@ -474,7 +535,7 @@ func (a *App) reviewApply(v *reviewView, msg reviewLoadedMsg) tea.Cmd {
 	live := msg.live && msg.src == nil && v.loaded && v.err == nil && msg.err == nil
 	prev := v.res
 
-	v.project, v.branch, v.base, v.noSnapshot = in.project, in.branch, in.base, in.noSnapshot
+	v.project, v.branch, v.base, v.noSnapshot, v.foreign = in.project, in.branch, in.base, in.noSnapshot, in.foreign
 	v.adoptTurns(msg.session, in.turns)
 	v.hiddenIn, v.err, v.loaded = in.hidden, msg.err, true
 

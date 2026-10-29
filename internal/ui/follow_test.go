@@ -35,10 +35,10 @@ type followRig struct {
 	parked    []reviewLoadedMsg // the load answers feed kept
 }
 
-func newFollowRig(t *testing.T, session core.SessionID) *followRig {
+func newFollowRig(t *testing.T, session core.SessionID, opts ...func(*Options)) *followRig {
 	t.Helper()
 
-	r := &followRig{drawerRig: newDrawerRig(t), epochRoot: map[int]string{}}
+	r := &followRig{drawerRig: newDrawerRig(t, opts...), epochRoot: map[int]string{}}
 
 	r.dirA = newRepoDir(t)
 	write(t, filepath.Join(r.dirA, "a.txt"), "one\n")

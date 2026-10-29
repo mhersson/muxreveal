@@ -21,6 +21,7 @@ const (
 	noticeNoDrawer   = "no review drawer is open"
 	noticeNoTurns    = "no turns: this pane has no agent session"
 	noticeNoTurnsYet = "no turns yet"
+	noticeNoTurnsIn  = "no turns in %s · %s yet"
 	noticeNotRepo    = "not a git repository"
 	noticeBinaryFull = "a binary file has no full view"
 	noticeFirstTurn  = "turn 1 is the first turn"
@@ -51,7 +52,7 @@ func (a *App) openReview(pane core.PaneID, focus bool) tea.Cmd {
 		return nil
 	}
 
-	session, tabID := paneSession(st, pane), tab.ID
+	session, own, tabID := paneSession(st, pane), st.Panes[pane].WorkDir(), tab.ID
 
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(a.ctx, reviewOpenTimeout)
@@ -59,10 +60,24 @@ func (a *App) openReview(pane core.PaneID, focus bool) tea.Cmd {
 
 		msg := reviewOpenMsg{tab: tabID, pane: pane, cwd: cwd, focus: focus}
 
-		if msg.repo, msg.err = git.Open(ctx, cwd); msg.err == nil && session != "" {
-			if turns, err := git.Turns(ctx, msg.repo, session); err == nil {
-				msg.turns = len(turns)
-			}
+		if msg.repo, msg.err = git.Open(ctx, cwd); msg.err != nil || session == "" {
+			return msg
+		}
+
+		// Only the own directory has turns.
+		foreign, err := isForeign(ctx, own, msg.repo.Root)
+		if err != nil {
+			msg.err = err
+
+			return msg
+		}
+
+		if foreign {
+			return msg
+		}
+
+		if turns, err := git.Turns(ctx, msg.repo, session); err == nil {
+			msg.turns = len(turns)
 		}
 
 		return msg
@@ -161,14 +176,17 @@ func (a *App) setReviewMode(mode core.ReviewMode) tea.Cmd {
 	return a.reviewRetarget(tab.ID, v, 0)
 }
 
-// turnsGate decides whether a turn key can go on. A pane with no turns gets
-// the notice that says why. While the count is another session's, which a new
-// session leaves behind, the key waits: the answer of the probe for the new
-// session runs retry again.
+// turnsGate decides whether a turn key can go on. A pane with no turns, or a
+// drawer on a worktree that is not the agent's own, gets the notice that says
+// why. While the count is another session's, which a new session leaves
+// behind, the key waits: the answer of the probe for the new session runs retry
+// again.
 func (a *App) turnsGate(tab core.TabID, v *reviewView, session string, retry func() tea.Cmd) (bool, tea.Cmd) {
 	switch {
 	case session == "":
 		a.notice = noticeNoTurns
+	case v.loaded && v.foreign:
+		a.notice = fmt.Sprintf(noticeNoTurnsIn, printable(v.project), printable(v.branch))
 	case v.loaded && v.turnsFor != session:
 		// Hold the key only while a probe can answer it.
 		if probe := a.reviewCount(tab, v); probe != nil || v.loading {
