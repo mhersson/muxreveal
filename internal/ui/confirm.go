@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/mhersson/muxreveal/internal/core"
@@ -53,28 +54,44 @@ func (a *App) handleConfirmKey(msg tea.KeyPressMsg) tea.Cmd {
 	return nil
 }
 
+// boxStyle is what differs between the confirm boxes: the border and title
+// styles, and the marker that ends a row that does not fit.
+type boxStyle struct {
+	border, title lipgloss.Style
+	cut           string
+}
+
+// boxFrame draws the frame of a confirm box w cells wide: the top border with
+// title set into it two cells from the corner, the row function that indents its
+// content two cells from the border and fills to the edge, and the bottom border.
+func boxFrame(w int, title string, bs boxStyle, st styles) (top string, row func(content string) string, bottom string) {
+	inner := w - 2
+
+	row = func(content string) string {
+		content = ansi.Truncate(st.popup.Render("  ")+content, inner, bs.cut)
+		fill := st.popup.Render(strings.Repeat(" ", inner-ansi.StringWidth(content)))
+
+		return bs.border.Render("│") + content + fill + bs.border.Render("│")
+	}
+
+	// The title starts two cells from the corner: the corner, one dash, then the title.
+	title = ansi.Truncate(title, max(inner-1, 0), "")
+	top = bs.border.Render("╭─") + bs.title.Render(title) +
+		bs.border.Render(strings.Repeat("─", max(inner-1-ansi.StringWidth(title), 0))+"╮")
+	bottom = bs.border.Render("╰" + strings.Repeat("─", inner) + "╯")
+
+	return top, row, bottom
+}
+
 // confirmBox draws the box w cells wide: a rounded border in Error with the
 // action set into the top edge, the question, its detail and the answer keys.
 func confirmBox(c confirm, w int, icons bool, st styles) []string {
-	inner := w - 2
-
-	// row indents its content two cells from the border and fills to the edge.
-	row := func(content string) string {
-		content = ansi.Truncate(st.popup.Render("  ")+content, inner, "")
-		fill := st.popup.Render(strings.Repeat(" ", inner-ansi.StringWidth(content)))
-
-		return st.confirmBorder.Render("│") + content + fill + st.confirmBorder.Render("│")
-	}
-
 	title := " " + c.action + " "
 	if icons {
 		title = " " + iconAlert + " " + c.action + " "
 	}
 
-	// The title starts two cells from the corner: the corner, one dash, then the title.
-	title = ansi.Truncate(title, max(inner-1, 0), "")
-	top := st.confirmBorder.Render("╭─") + st.confirmTitle.Render(title) +
-		st.confirmBorder.Render(strings.Repeat("─", max(inner-1-ansi.StringWidth(title), 0))+"╮")
+	top, row, bottom := boxFrame(w, title, boxStyle{border: st.confirmBorder, title: st.confirmTitle}, st)
 
 	answer := func(key, label string) string {
 		return st.popupSubtle.Render("[") + st.confirmKey.Render(key) + st.popupSubtle.Render("]") +
@@ -88,26 +105,29 @@ func confirmBox(c confirm, w int, icons bool, st styles) []string {
 		row(st.popupMuted.Render(c.detail)),
 		row(""),
 		row(answer("y", c.action) + st.popup.Render("    ") + answer("n", "Cancel")),
-		st.confirmBorder.Render("╰" + strings.Repeat("─", inner) + "╯"),
+		bottom,
 	}
 }
 
 // overlayConfirm draws the confirm box over base, centred with its top at a
 // third of the height, clipped to the terminal.
 func overlayConfirm(base string, width, height int, c confirm, icons bool, st styles) string {
+	maxW := maxConfirmWidth
 	if c.push != nil {
-		w := min(maxPushWidth, width-2)
-		if w < 4 {
-			return base
-		}
-
-		return overlayLines(base, width, height, max(1, height/3), pushBox(*c.push, w, icons, st), w)
+		maxW = maxPushWidth
 	}
 
-	w := min(maxConfirmWidth, width-2)
+	w := min(maxW, width-2)
 	if w < 4 {
 		return base
 	}
 
-	return overlayLines(base, width, height, max(1, height/3), confirmBox(c, w, icons, st), w)
+	var lines []string
+	if c.push != nil {
+		lines = pushBox(*c.push, w, icons, st)
+	} else {
+		lines = confirmBox(c, w, icons, st)
+	}
+
+	return overlayLines(base, width, height, max(1, height/3), lines, w)
 }

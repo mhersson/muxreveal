@@ -10,7 +10,6 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/charmbracelet/x/ansi"
 
 	"github.com/mhersson/muxreveal/internal/core"
 	"github.com/mhersson/muxreveal/internal/git"
@@ -54,7 +53,8 @@ type pushTarget struct {
 type pushState uint8
 
 const (
-	pushAsk      pushState = iota // there is something to push: the confirm opens
+	pushFailed   pushState = iota // resolving failed; err says why and takes precedence
+	pushAsk                       // there is something to push: the confirm opens
 	pushUpToDate                  // the remote has every commit
 	pushNotRepo
 	pushDetached
@@ -121,7 +121,7 @@ func resolvePush(ctx context.Context, log *slog.Logger, pane core.PaneID, cwd, h
 
 	switch {
 	case err != nil:
-		return pushTarget{}, pushAsk, err
+		return pushTarget{}, pushFailed, err
 	case !head.repo:
 		return pushTarget{}, pushNotRepo, nil
 	case head.detached:
@@ -135,7 +135,7 @@ func resolvePush(ctx context.Context, log *slog.Logger, pane core.PaneID, cwd, h
 
 	r, err := git.Open(ctx, cwd)
 	if err != nil {
-		return pushTarget{}, pushAsk, err
+		return pushTarget{}, pushFailed, err
 	}
 
 	t.root = r.Root
@@ -146,18 +146,18 @@ func resolvePush(ctx context.Context, log *slog.Logger, pane core.PaneID, cwd, h
 	case errors.Is(err, git.ErrNoRemote):
 		return t, pushNoRemote, nil
 	case err != nil:
-		return pushTarget{}, pushAsk, err
+		return pushTarget{}, pushFailed, err
 	}
 
 	raw, err := git.RemoteURL(ctx, r, t.remote)
 	if err != nil {
-		return pushTarget{}, pushAsk, err
+		return pushTarget{}, pushFailed, err
 	}
 
 	t.url = remoteDisplay(raw, home)
 
 	if t.commits, err = git.Unpushed(ctx, r, t.remote); err != nil {
-		return pushTarget{}, pushAsk, err
+		return pushTarget{}, pushFailed, err
 	}
 
 	if t.commits == 0 {
@@ -166,14 +166,14 @@ func resolvePush(ctx context.Context, log *slog.Logger, pane core.PaneID, cwd, h
 
 	has, err := git.HasUpstream(ctx, r, t.branch)
 	if err != nil {
-		return pushTarget{}, pushAsk, err
+		return pushTarget{}, pushFailed, err
 	}
 
 	t.setsUpstream = !has
 
 	c, err := git.HeadCommit(ctx, r)
 	if err != nil {
-		return pushTarget{}, pushAsk, err
+		return pushTarget{}, pushFailed, err
 	}
 
 	t.short, t.subject = c.OID[:min(shortOIDLen, len(c.OID))], c.Subject
@@ -361,17 +361,6 @@ func remoteDisplay(raw, home string) string {
 // branch, what is about to be pushed and where, and the two answers. Text that
 // comes from the repository is drawn without control and invisible characters.
 func pushBox(t pushTarget, w int, icons bool, st styles) []string {
-	inner := w - 2
-	border := st.popupBorder
-
-	// row indents its content two cells from the border and fills to the edge.
-	row := func(content string) string {
-		content = ansi.Truncate(st.popup.Render("  ")+content, inner, "…")
-		fill := st.popup.Render(strings.Repeat(" ", inner-ansi.StringWidth(content)))
-
-		return border.Render("│") + content + fill + border.Render("│")
-	}
-
 	field := func(name, value string) string { return st.popupMuted.Render(fmt.Sprintf("%-9s", name)) + value }
 	hint := func(key, label string) string { return st.popupKey.Render(key) + st.popupMuted.Render(" "+label) }
 
@@ -380,10 +369,8 @@ func pushBox(t pushTarget, w int, icons bool, st styles) []string {
 		title = " " + iconPush + " Push " + printable(t.branch) + " "
 	}
 
-	// The title starts two cells from the corner: the corner, one dash, then the title.
-	title = ansi.Truncate(title, max(inner-1, 0), "")
-	top := border.Render("╭─") + st.pushTitle.Render(title) +
-		border.Render(strings.Repeat("─", max(inner-1-ansi.StringWidth(title), 0))+"╮")
+	// A cut URL or subject must not read as complete, so a row that does not fit ends in "…".
+	top, row, bottom := boxFrame(w, title, boxStyle{border: st.popupBorder, title: st.pushTitle, cut: "…"}, st)
 
 	upstream := "upstream already set"
 	if t.setsUpstream {
@@ -400,6 +387,6 @@ func pushBox(t pushTarget, w int, icons bool, st styles) []string {
 		row(field("newest", st.popupSubtle.Render(printable(t.short+" "+t.subject)))),
 		row(""),
 		row(hint("enter", "push") + st.popup.Render("    ") + hint("esc", "cancel")),
-		border.Render("╰" + strings.Repeat("─", inner) + "╯"),
+		bottom,
 	}
 }

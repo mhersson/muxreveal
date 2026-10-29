@@ -231,6 +231,25 @@ func TestPushConfirmNamesTheTarget(t *testing.T) {
 	}
 }
 
+func TestPushConfirmNamesAnUpstreamAlreadySet(t *testing.T) {
+	r := newPushRig(t)
+	gitIn(t, r.real, r.dir, "push", "-q", "-u", "origin", "feat/x")
+	gitIn(t, r.real, r.dir, "commit", "-q", "--allow-empty", "-m", "one more")
+
+	r.askOpen(t)
+
+	text := r.overlayText()
+	if !strings.Contains(text, "1 commit, upstream already set") || strings.Contains(text, "sets the upstream") {
+		t.Errorf("the overlay lacks the upstream label:\n%s", text)
+	}
+
+	r.churn(t, press(r.App, keyEnter))
+
+	if want := "pushed feat/x to origin: 1 commit"; r.notice != want {
+		t.Errorf("toast = %q, want %q", r.notice, want)
+	}
+}
+
 func TestPushConfirmShowsALocalRemote(t *testing.T) {
 	r := newPushRig(t)
 	gitIn(t, r.real, r.dir, "remote", "set-url", "origin", "../remote.git")
