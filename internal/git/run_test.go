@@ -218,6 +218,77 @@ wait`)
 	}
 }
 
+// The wrapper forks without pause, so the cancel lands mid-fork: a child that
+// misses the group kill would hold git's pipes open until WaitDelay.
+func TestRunCancelKillsChildrenForkedDuringTheKill(t *testing.T) {
+	root := newRepo(t)
+	ctx, logPath := wrapGit(t, `echo $$ > "$LOG.pgid"
+i=0
+while [ $i -lt 300 ]; do
+	sh -c 'echo $$ >> "$1"; exec sleep 30' sh "$LOG.pids" &
+	i=$((i+1))
+done
+wait`)
+
+	t.Cleanup(func() {
+		if raw, err := os.ReadFile(logPath + ".pgid"); err == nil {
+			if pgid, err := strconv.Atoi(strings.TrimSpace(string(raw))); err == nil {
+				_ = syscall.Kill(-pgid, syscall.SIGKILL)
+			}
+		}
+	})
+
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	cancelled := make(chan time.Time, 1)
+
+	go func() {
+		for ctx.Err() == nil {
+			if raw, err := os.ReadFile(logPath + ".pids"); err == nil && strings.Count(string(raw), "\n") >= 5 {
+				cancelled <- time.Now()
+
+				cancel()
+
+				return
+			}
+
+			time.Sleep(time.Millisecond)
+		}
+	}()
+
+	_, err := run(ctx, call{dir: root, args: []string{"status"}})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("err = %v, want canceled", err)
+	}
+
+	if d := time.Since(<-cancelled); d > time.Second {
+		t.Errorf("run took %v after cancel", d)
+	}
+
+	raw, err := os.ReadFile(logPath + ".pids")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	deadline := time.Now().Add(time.Second)
+
+	for _, field := range strings.Fields(string(raw)) {
+		pid, err := strconv.Atoi(field)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		for alive(pid) && time.Now().Before(deadline) {
+			time.Sleep(10 * time.Millisecond)
+		}
+
+		if alive(pid) {
+			t.Errorf("child %d survived cancel", pid)
+		}
+	}
+}
+
 func TestRunLimit(t *testing.T) {
 	t.Parallel()
 
