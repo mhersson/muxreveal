@@ -105,12 +105,13 @@ func drawApp(t *testing.T, themeName string, icons bool, w, h int, agents []rail
 			rp.probe = railProbe{known: true, repo: true, project: ag.project, branch: ag.branch, place: ag.place, detached: ag.detached, ahead: ag.ahead}
 		}
 
-		if ag.stats != nil {
-			rp.probe.stats, rp.probe.statsKnown = *ag.stats, true
-		}
-
 		if ag.pr != nil && !ag.noRepo {
 			seedPR(t, a, id, "/w/"+ag.project, ag.branch, *ag.pr)
+		}
+
+		// The counts are of the place the head names, which seedPR may have set.
+		if ag.stats != nil {
+			rp.probe.stats, rp.probe.statsKnown, rp.probe.statsCwd = *ag.stats, true, rp.probe.headCwd
 		}
 	}
 

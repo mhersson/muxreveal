@@ -445,21 +445,33 @@ func (a *App) onRailHead(msg railHeadMsg) tea.Cmd {
 				rp.probe = railProbe{}
 			}
 		} else {
-			stats := rp.probe
-			moved := stats.known && stats.headCwd == msg.cwd && stats.repo && msg.res.repo &&
-				(stats.branch != msg.res.branch || stats.detached != msg.res.detached || stats.oid != msg.res.oid)
+			prev := rp.probe
+			moved := prev.known && prev.headCwd == msg.cwd && prev.repo && msg.res.repo &&
+				(prev.branch != msg.res.branch || prev.detached != msg.res.detached || prev.oid != msg.res.oid)
+
+			// Counts of another place are dropped; this place's own, read or being
+			// read before its head answered, stand.
+			counted := prev.statsCwd == msg.cwd || rp.stats.busy && rp.stats.target == msg.cwd
+			relocated := prev.headCwd != msg.cwd && msg.res.repo && !counted
+
 			rp.probe = msg.res
-			rp.probe.stats, rp.probe.statsKnown, rp.probe.statsCwd = stats.stats, stats.statsKnown, stats.statsCwd
+			if prev.statsCwd == msg.cwd {
+				rp.probe.stats, rp.probe.statsKnown, rp.probe.statsCwd = prev.stats, prev.statsKnown, prev.statsCwd
+			}
 
 			if !msg.res.repo {
 				rp.probe.stats, rp.probe.statsKnown = git.Stats{}, false
 			}
 
-			// A switch or a commit changes the totals; the interval waits otherwise.
-			if moved && a.railIsOpen() {
+			// A switch, a commit or a move to another place changes the counts; the
+			// interval waits otherwise. The force outlasts a closed rail, so opening
+			// it counts at once.
+			if moved || relocated {
 				rp.stats.force = true
 
-				cmds = append(cmds, a.railFire(a.store.State(), msg.pane, probeStats))
+				if a.railIsOpen() {
+					cmds = append(cmds, a.railFire(a.store.State(), msg.pane, probeStats))
+				}
 			}
 
 			// The place is gone: the agent falls back to its next edit, probed at once.

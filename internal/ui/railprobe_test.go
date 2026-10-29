@@ -404,6 +404,8 @@ func TestRailAnswerOfAnEarlierOpenIsDropped(t *testing.T) {
 	dir := r.repo(t, "proj")
 	id := r.addAgent(t, false, dir)
 
+	// Heads are known when the rail opens; a card shows counts only of the place its head names.
+	r.deliver(r.settle())
 	r.railOpened()
 	oldGen := r.rail.gen
 	r.railClosed()

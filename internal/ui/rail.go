@@ -84,7 +84,7 @@ type railProbe struct {
 	oid             string // the full commit id; "" on an unborn branch
 	detached        bool
 	ahead           int    // commits past the branch's upstream; 0 with none or no upstream
-	repo            bool   // the cwd is inside a repository
+	repo            bool   // the followed place is inside a repository
 	known           bool   // a head probe has succeeded
 	headCwd         string // the followed directory the head was probed in
 	gone            bool   // headCwd does not exist
@@ -177,7 +177,8 @@ func (a *App) railCards(st core.State) []railGroup {
 				c.branch, c.place, c.detached, c.ahead = rp.probe.branch, rp.probe.place, rp.probe.detached, rp.probe.ahead
 			}
 
-			if rp.probe.statsKnown {
+			// The counts belong to the place the branch line names.
+			if rp.probe.statsKnown && rp.probe.statsCwd == rp.probe.headCwd {
 				c.stats, c.statsKnown = rp.probe.stats, true
 			}
 		}

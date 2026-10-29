@@ -710,3 +710,201 @@ func TestHeadProbeTargetIsFollowedAndOwnDirectory(t *testing.T) {
 		}
 	}
 }
+
+// pump delivers cmd's messages and those of the commands they raise, except the
+// probes' answers and due messages: those come back undelivered, so a test
+// decides in which order they arrive.
+func (r *railApp) pump(cmd tea.Cmd) []tea.Msg {
+	var held []tea.Msg
+
+	for range 10 {
+		var cmds []tea.Cmd
+
+		for _, m := range flatten(cmd) {
+			switch m.(type) {
+			case nil:
+			case railHeadMsg, railStatsMsg, railDueMsg:
+				held = append(held, m)
+			default:
+				cmds = append(cmds, r.step(m))
+			}
+		}
+
+		if cmd = tea.Batch(cmds...); cmd == nil {
+			break
+		}
+	}
+
+	return held
+}
+
+// release steps the held messages and returns what they raise, still held.
+func (r *railApp) release(held []tea.Msg) []tea.Msg {
+	var next []tea.Msg
+
+	for _, m := range held {
+		next = append(next, r.pump(r.step(m))...)
+	}
+
+	return next
+}
+
+// movedFollow is an agent launched in a repository's main checkout, whose card
+// shows branch main with one added line, followed to a linked worktree (branch
+// feat, three added lines) by an edit a second later: the probes of the new
+// place wait out their intervals, the head's for 4 s more and the stats' for 9 s.
+type movedFollow struct {
+	*railApp
+	id       core.PaneID
+	linked   string
+	dueHead  railDueMsg
+	dueStats railDueMsg
+}
+
+func newMovedFollow(t *testing.T) *movedFollow {
+	t.Helper()
+
+	r := newRailApp(t, true)
+	tr := newAgentTrees(t, r.real)
+	write(t, filepath.Join(tr.main, "a.txt"), "one\ntwo\n")
+	write(t, filepath.Join(tr.linked, "a.txt"), "one\ntwo\nthree\nfour\n")
+
+	id := r.addAgent(t, false, tr.main)
+	r.openRail()
+
+	if c, _ := r.card(id); c.branch != "main" || !c.statsKnown || c.stats.Added != 1 {
+		t.Fatalf("setup: card = %+v, want main with one added line", c)
+	}
+
+	r.clk.Advance(time.Second)
+
+	held := r.pump(hook(r.App, harness.Event{Pane: id, Name: "PostToolUse", Edit: filepath.Join(tr.linked, "a.txt")}))
+	if countOf[railDueMsg](held) != 2 || len(held) != 2 {
+		t.Fatalf("an edit inside both intervals ran %v, want one delayed head probe and one delayed stats probe", held)
+	}
+
+	return &movedFollow{
+		railApp:  r,
+		id:       id,
+		linked:   tr.linked,
+		dueHead:  railDueMsg{pane: id, kind: probeHead},
+		dueStats: railDueMsg{pane: id, kind: probeStats, gen: r.rail.gen},
+	}
+}
+
+// onePlace fails the test when the card shows one place's branch with the
+// other's counts.
+func (m *movedFollow) onePlace(t *testing.T, when string) {
+	t.Helper()
+
+	c, ok := m.card(m.id)
+	if !ok {
+		t.Fatalf("%s: no card", when)
+	}
+
+	if c.statsKnown && (c.branch != "main" || c.stats.Added != 1) && (c.branch != "feat" || c.stats.Added != 3) {
+		t.Errorf("%s: the card shows branch %q with %d added lines", when, c.branch, c.stats.Added)
+	}
+}
+
+// answers delivers the held messages one at a time, the first that early accepts
+// before the others, and does the same with what each raises. It checks the card
+// after every delivery.
+func (m *movedFollow) answers(t *testing.T, held []tea.Msg, early func(tea.Msg) bool) {
+	t.Helper()
+
+	for range 10 {
+		if len(held) == 0 {
+			return
+		}
+
+		i := max(slices.IndexFunc(held, early), 0)
+		msg := held[i]
+		held = append(slices.Delete(held, i, i+1), m.pump(m.step(msg))...)
+
+		m.onePlace(t, "after an answer")
+	}
+}
+
+func isMsg[T any](msg tea.Msg) bool {
+	_, ok := msg.(T)
+
+	return ok
+}
+
+func TestCardCountsStayOnThePlaceItNames(t *testing.T) {
+	tests := []struct {
+		name string
+		run  func(t *testing.T, m *movedFollow)
+	}{
+		{"the head answers first", func(t *testing.T, m *movedFollow) {
+			m.clk.Advance(4 * time.Second)
+			m.answers(t, m.pump(m.step(m.dueHead)), isMsg[railHeadMsg])
+
+			m.clk.Advance(5 * time.Second)
+			m.answers(t, m.pump(m.step(m.dueStats)), isMsg[railHeadMsg])
+		}},
+		// The next update starts the head probe as soon as its interval is over, so
+		// the stats probe's due message starts both.
+		{"the stats answer first", func(t *testing.T, m *movedFollow) {
+			m.clk.Advance(9 * time.Second)
+			m.answers(t, m.pump(m.step(m.dueStats)), isMsg[railStatsMsg])
+		}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := newMovedFollow(t)
+			m.onePlace(t, "after the edit")
+
+			tt.run(t, m)
+
+			if c, _ := m.card(m.id); c.branch != "feat" || !c.statsKnown || c.stats.Added != 3 {
+				t.Errorf("card = %+v, want feat with its three added lines", c)
+			}
+		})
+	}
+}
+
+func TestPlaceChangeProbesItsStatsAtOnce(t *testing.T) {
+	m := newMovedFollow(t)
+
+	// The head's answer comes with 5 s left of the stats interval.
+	m.clk.Advance(4 * time.Second)
+
+	held := m.release(m.pump(m.step(m.dueHead)))
+	if len(held) != 1 {
+		t.Fatalf("the head answer for the new place raised %v, want one stats probe", held)
+	}
+
+	if sm, ok := held[0].(railStatsMsg); !ok || sm.cwd != m.linked {
+		t.Fatalf("the head answer raised %+v, want a stats probe of %s", held[0], m.linked)
+	}
+
+	m.release(held)
+
+	if c, _ := m.card(m.id); c.branch != "feat" || !c.statsKnown || c.stats.Added != 3 {
+		t.Errorf("card = %+v, want feat with its three added lines", c)
+	}
+}
+
+func TestPlaceChangeWithTheRailClosedCountsWhenItOpens(t *testing.T) {
+	m := newMovedFollow(t)
+	m.railClosed()
+
+	m.clk.Advance(4 * time.Second)
+
+	if held := m.release(m.pump(m.step(m.dueHead))); len(held) != 0 {
+		t.Fatalf("a head answer with the rail closed raised %v, want nothing", held)
+	}
+
+	// The stats interval has 5 s left; the move's own force outlasts the closed rail.
+	held := m.pump(m.railOpened())
+	if len(held) != 1 {
+		t.Fatalf("opening the rail raised %v, want one stats probe", held)
+	}
+
+	if sm, ok := held[0].(railStatsMsg); !ok || sm.cwd != m.linked {
+		t.Fatalf("opening the rail raised %+v, want a stats probe of %s", held[0], m.linked)
+	}
+}
