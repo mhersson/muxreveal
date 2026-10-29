@@ -1,12 +1,14 @@
 package ui
 
 import (
+	"context"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 	"time"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/mhersson/muxreveal/internal/core"
@@ -32,7 +34,8 @@ func seedBranch(a *App, id core.PaneID, cwd, branch string) github.Repo {
 		a.prs.panes = map[core.PaneID]*prPane{}
 	}
 
-	a.prs.panes[id] = &prPane{key: prKey{cwd: cwd, branch: branch}, repo: repo, ok: true}
+	key := prKey{cwd: cwd, branch: branch}
+	a.prs.panes[id] = &prPane{key: key, answered: key, repo: repo, ok: true}
 
 	return repo
 }
@@ -59,6 +62,10 @@ func seedPR(t *testing.T, a *App, id core.PaneID, cwd, branch string, pr core.PR
 func checksRunning(p *core.PRInfo) { p.ChecksTotal, p.ChecksDone = 5, 3 }
 func checksPassed(p *core.PRInfo)  { p.ChecksTotal, p.ChecksDone = 5, 5 }
 func checksFailing(p *core.PRInfo) { p.ChecksTotal, p.ChecksDone, p.ChecksFailed = 5, 3, 2 }
+
+// Failures that do not look like checksFailing: every check done, and none counted at all.
+func checksDoneFailing(p *core.PRInfo)     { p.ChecksTotal, p.ChecksDone, p.ChecksFailed = 5, 5, 2 }
+func checksFailedUncounted(p *core.PRInfo) { p.ChecksTotal, p.ChecksDone, p.ChecksFailed = 0, 0, 1 }
 
 func prInfo(state string, tunes ...func(p *core.PRInfo)) core.PRInfo {
 	p := core.PRInfo{Number: 24, State: state}
@@ -110,9 +117,10 @@ func TestRailLineTwoPR(t *testing.T) {
 	}{
 		{"open, checks running", ptr(prInfo("OPEN", checksRunning)), 0, true, iconPR + " #24 " + iconRunning + " 3/5"},
 		{"open, checks passed", ptr(prInfo("OPEN", checksPassed)), 0, true, iconPR + " #24 " + iconPassed + " 5/5"},
-		{"open, checks failed", ptr(prInfo("OPEN", checksFailing)), 0, true, iconPR + " #24 " + iconFailed + " 2 failed"},
+		{"open, checks failed, others still running", ptr(prInfo("OPEN", checksFailing)), 0, true, iconPR + " #24 " + iconFailed + " 2 failed"},
 		{"open, no checks", ptr(prInfo("OPEN")), 0, true, iconPR + " #24"},
-		{"a failure outranks a check still running", ptr(prInfo("OPEN", checksFailing)), 0, true, iconPR + " #24 " + iconFailed + " 2 failed"},
+		{"failed with every check done", ptr(prInfo("OPEN", checksDoneFailing)), 0, true, iconPR + " #24 " + iconFailed + " 2 failed"},
+		{"failed with no check counted", ptr(prInfo("OPEN", checksFailedUncounted)), 0, true, iconPR + " #24 " + iconFailed + " 1 failed"},
 		{"approved", ptr(prInfo("OPEN", checksRunning, prReview("APPROVED"))), 0, true, iconPR + " #24 " + iconRunning + " 3/5 " + iconApproved},
 		{"approved, no checks", ptr(prInfo("OPEN", prReview("APPROVED"))), 0, true, iconPR + " #24 " + iconApproved},
 		{"changes requested", ptr(prInfo("OPEN", checksPassed, prReview("CHANGES_REQUESTED"))), 0, true, iconPR + " #24 " + iconPassed + " 5/5 " + iconChanges},
@@ -128,6 +136,8 @@ func TestRailLineTwoPR(t *testing.T) {
 		{"icons off, running", ptr(prInfo("OPEN", checksRunning)), 0, false, "#24 ci 3/5"},
 		{"icons off, passed", ptr(prInfo("OPEN", checksPassed)), 0, false, "#24 ci 5/5"},
 		{"icons off, failed", ptr(prInfo("OPEN", checksFailing)), 0, false, "#24 ci 2 failed"},
+		{"icons off, failed with every check done", ptr(prInfo("OPEN", checksDoneFailing)), 0, false, "#24 ci 2 failed"},
+		{"icons off, failed with no check counted", ptr(prInfo("OPEN", checksFailedUncounted)), 0, false, "#24 ci 1 failed"},
 		{"icons off, no checks", ptr(prInfo("OPEN")), 0, false, "#24"},
 		{"icons off, approved", ptr(prInfo("OPEN", checksRunning, prReview("APPROVED"))), 0, false, "#24 ci 3/5 approved"},
 		{"icons off, changes requested", ptr(prInfo("OPEN", checksPassed, prReview("CHANGES_REQUESTED"))), 0, false, "#24 ci 5/5 changes"},
@@ -413,10 +423,10 @@ func TestRailCardsTakeTheirPRFromTheStore(t *testing.T) {
 	a := drawApp(t, "catppuccin-mocha", true, 100, 30, agents)
 
 	// p4's repository is not on GitHub, p5's was resolved for another branch and
-	// p7's latest resolution failed.
+	// p7's latest resolution failed, so its answer is for an earlier branch.
 	a.prs.panes["p4"].ok = false
-	a.prs.panes["p5"].key.branch = "feat/elsewhere"
-	a.prs.panes["p7"].failed = true
+	a.prs.panes["p5"].answered.branch = "feat/elsewhere"
+	a.prs.panes["p7"].failed, a.prs.panes["p7"].answered.branch = true, "feat/old"
 
 	byProject := map[string]railCard{}
 
@@ -460,5 +470,85 @@ func TestRailPRShowsInTheFrame(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Errorf("the view lacks %q:\n%s", want, out)
 		}
+	}
+}
+
+// While a pane's move into another repository is still being resolved, its card
+// and the tray show nothing of the repository it left, even for a branch of the
+// same name; the new repository's PR shows once the answer arrives.
+func TestPRWaitsForTheNewRepositoryAfterAMove(t *testing.T) {
+	repoB := github.Repo{Host: "github.com", Owner: "o", Name: "other"}
+
+	tests := []struct {
+		name     string
+		seedA    func(t *testing.T, p *prApp)
+		wantA    int
+		trayShow bool // the PR is open, so the tray shows it
+	}{
+		{"an open PR", func(t *testing.T, p *prApp) { p.churn(t, p.step(snapshotOf(openPRIn(5, "x")))) }, 5, true},
+		{"a looked-up merged PR", func(t *testing.T, p *prApp) {
+			openIn(t, p.App, core.SetBranchPR{Repo: prRepoKey, Branch: "x", PR: core.PRInfo{Number: 5, State: "MERGED"}, Found: true})
+		}, 5, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := newPRApp(t)
+			p.prs.resolve = func(_ context.Context, cwd, _ string) (github.Repo, error) {
+				if cwd == "/w/b" {
+					return repoB, nil
+				}
+
+				return prRepo, nil
+			}
+
+			var id core.PaneID
+
+			// The head probes are not run; their results are fed in by hand.
+			head := func(id core.PaneID, cwd string) tea.Cmd {
+				return p.step(railHeadMsg{pane: id, cwd: cwd, res: railProbe{known: true, repo: true, project: "p", branch: "x", headCwd: cwd}})
+			}
+			// check compares the card's PR number (0 for none) and the tray module.
+			check := func(stage string, wantPR int, wantTray bool) {
+				t.Helper()
+
+				c, ok := p.card(id)
+				if !ok {
+					t.Fatalf("%s: no card", stage)
+				}
+
+				gotPR := 0
+				if c.hasPR {
+					gotPR = c.pr.Number
+				}
+
+				if gotPR != wantPR {
+					t.Errorf("%s: the card shows PR #%d, want #%d", stage, gotPR, wantPR)
+				}
+
+				if _, shows := findPRModule(p.App); shows != wantTray {
+					t.Errorf("%s: tray module shown = %v, want %v", stage, shows, wantTray)
+				}
+			}
+
+			id = p.addAgent(t, false, "/w/a")
+			p.settle()
+			p.churn(t, head(id, "/w/a"))
+			tt.seedA(t, p)
+			check("in the first repository", tt.wantA, tt.trayShow)
+
+			// The agent moves; its new head result is in and the resolution is not.
+			hook(p.App, cwdHook(id, "/w/b"))
+
+			held := head(id, "/w/b")
+
+			check("while the new repository resolves", 0, false)
+
+			p.churn(t, held)
+			check("once the new repository answered, before its poll", 0, false)
+
+			p.churn(t, p.step(prSnapshotMsg{Snapshot: github.Snapshot{Repo: repoB, PRs: []github.PR{openPRIn(9, "x")}}}))
+			check("after the new repository's poll", 9, true)
+		})
 	}
 }

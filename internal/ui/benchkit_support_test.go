@@ -421,7 +421,8 @@ func fillBenchCards(app *App, ids []core.PaneID) error {
 		}
 
 		repo := github.Repo{Host: "github.com", Owner: "acme", Name: project}
-		app.prs.panes[id] = &prPane{key: prKey{cwd: cwd, branch: branch}, repo: repo, ok: true}
+		key := prKey{cwd: cwd, branch: branch}
+		app.prs.panes[id] = &prPane{key: key, answered: key, repo: repo, ok: true}
 
 		pr := forms[i%len(forms)]
 		pr.Number, pr.HeadBranch = 100+n, branch

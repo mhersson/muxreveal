@@ -65,10 +65,11 @@ type prKey struct{ cwd, branch string }
 
 // prPane is one pane's repository.
 type prPane struct {
-	key    prKey       // the latest cwd and branch, answered or not
-	repo   github.Repo // the repository of the latest answer
-	ok     bool        // repo is set; a remote that is not on GitHub clears it
-	failed bool        // the latest resolution failed; a head result retries it
+	key      prKey       // the latest cwd and branch, answered or not
+	repo     github.Repo // the repository of the latest answer
+	answered prKey       // the cwd and branch the latest answer was for
+	ok       bool        // repo is set; a remote that is not on GitHub clears it
+	failed   bool        // the latest resolution failed; a head result retries it
 }
 
 // prBranch is a branch of a repository.
@@ -340,7 +341,7 @@ func (a *App) onPRResolved(msg prResolvedMsg) tea.Cmd {
 
 	switch {
 	case msg.err == nil:
-		pp.repo, pp.ok, pp.failed = msg.repo, true, false
+		pp.repo, pp.answered, pp.ok, pp.failed = msg.repo, msg.key, true, false
 	case errors.Is(msg.err, context.Canceled):
 		return nil
 	case errors.Is(msg.err, github.ErrNotGitHub), errors.Is(msg.err, git.ErrNoRemote), errors.Is(msg.err, git.ErrNotRepo), errors.Is(msg.err, git.ErrBadBranch):

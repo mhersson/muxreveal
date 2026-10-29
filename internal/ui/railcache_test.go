@@ -126,9 +126,9 @@ func TestRailCacheKeyCoversEveryInput(t *testing.T) {
 			name: "pull request branch resolved for",
 			prep: func(t *testing.T, a *App) {
 				seedPR(t, a, "p2", "/w/web", "feat/login", prInfo("OPEN", checksRunning))
-				a.prs.panes["p2"].key.branch = "feat/other"
+				a.prs.panes["p2"].answered.branch = "feat/other"
 			},
-			change:  func(t *testing.T, a *App) { a.prs.panes["p2"].key.branch = "feat/login" },
+			change:  func(t *testing.T, a *App) { a.prs.panes["p2"].answered.branch = "feat/login" },
 			visible: true,
 		},
 		{name: "stats", change: func(t *testing.T, a *App) { probe(a, "p2").stats.Added = 999 }, visible: true},

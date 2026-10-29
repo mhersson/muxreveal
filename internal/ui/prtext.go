@@ -15,19 +15,19 @@ const (
 	prClosedState = "CLOSED"
 )
 
-// prRepoOf is the repository the pane's latest resolution found for the branch
-// the pane is on. A detached HEAD, a pane no head probe answered for, a failed
-// resolution (its earlier answer may be another repository's) and a remote that
-// is not on GitHub have none.
+// prRepoOf is the repository a resolution answered for the working directory
+// and branch the pane's head probe last found. Until that answer arrives (after
+// a move, a switch or a failed resolution), for a detached HEAD, a pane no head
+// probe answered for and a remote that is not on GitHub, the pane has none.
 func (a *App) prRepoOf(id core.PaneID) (github.Repo, bool) {
 	rp, pp := a.rail.panes[id], a.prs.panes[id]
 
 	switch {
-	case rp == nil || pp == nil || !pp.ok || pp.failed:
+	case rp == nil || pp == nil || !pp.ok:
 		return github.Repo{}, false
 	case !rp.probe.known || !rp.probe.repo || rp.probe.detached || rp.probe.branch == "":
 		return github.Repo{}, false
-	case pp.key.branch != rp.probe.branch:
+	case pp.answered != prKey{cwd: rp.probe.headCwd, branch: rp.probe.branch}:
 		return github.Repo{}, false
 	}
 
@@ -167,12 +167,11 @@ func (p prText) runs(s prStage) []railRun {
 	return out
 }
 
-// railRightEnds are the right ends of a card's second line from the fullest to
-// the leanest: the commits ahead, then the pull request. Each stage drops one
-// part: the review, the commits ahead, the check counts (or the word of a draft,
-// merged or closed pull request), the check glyph. pinned
-// means the last end shows however little room the branch is left, since the
-// pull request's number always stays.
+// railRightEnds are the right ends of a card's second line, fullest first: the
+// commits ahead, then the pull request. Each end drops one more part than the
+// one before: the review, the commits ahead, the check counts (or the word of a
+// draft, merged or closed pull request), the check glyph. pinned means the last
+// end shows however little room the branch is left, since the number always stays.
 func railRightEnds(ui theme.UI, c railCard, icons bool) (ends [][]railRun, pinned bool) {
 	var ahead []railRun
 	if c.ahead > 0 {

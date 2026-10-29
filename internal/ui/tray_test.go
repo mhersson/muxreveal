@@ -262,9 +262,10 @@ func TestTrayPRModule(t *testing.T) {
 	}{
 		{"the focused agent's PR with checks running", true, agentApp, ptr(prInfo("OPEN", checksRunning)), nil, " " + iconPR + " #24 " + iconRunning + " 3/5 "},
 		{"checks passed", true, agentApp, ptr(prInfo("OPEN", checksPassed)), nil, " " + iconPR + " #24 " + iconPassed + " 5/5 "},
-		{"checks failed", true, agentApp, ptr(prInfo("OPEN", checksFailing)), nil, " " + iconPR + " #24 " + iconFailed + " 2 failed "},
+		{"checks failed, others still running", true, agentApp, ptr(prInfo("OPEN", checksFailing)), nil, " " + iconPR + " #24 " + iconFailed + " 2 failed "},
 		{"no checks", true, agentApp, ptr(prInfo("OPEN")), nil, " " + iconPR + " #24 "},
-		{"a failure outranks a check still running", true, agentApp, ptr(prInfo("OPEN", checksFailing)), nil, " " + iconPR + " #24 " + iconFailed + " 2 failed "},
+		{"failed with every check done", true, agentApp, ptr(prInfo("OPEN", checksDoneFailing)), nil, " " + iconPR + " #24 " + iconFailed + " 2 failed "},
+		{"failed with no check counted", true, agentApp, ptr(prInfo("OPEN", checksFailedUncounted)), nil, " " + iconPR + " #24 " + iconFailed + " 1 failed "},
 		{"the review decision stays on the card", true, agentApp, ptr(prInfo("OPEN", checksRunning, prReview("APPROVED"))), nil, " " + iconPR + " #24 " + iconRunning + " 3/5 "},
 		{"a focused shell pane on a branch with a PR", true, shellApp, ptr(prInfo("OPEN", checksRunning)), nil, " " + iconPR + " #24 " + iconRunning + " 3/5 "},
 		{"icons off", false, agentApp, ptr(prInfo("OPEN", checksRunning)), nil, " #24 ci 3/5 "},
@@ -278,8 +279,12 @@ func TestTrayPRModule(t *testing.T) {
 		{"a merged PR hides it", true, agentApp, ptr(prInfo("MERGED")), nil, ""},
 		{"a closed PR hides it", true, shellApp, ptr(prInfo("CLOSED")), nil, ""},
 		{"a repository not on GitHub hides it", true, agentApp, ptr(prInfo("OPEN")), func(a *App) { a.prs.panes["p1"].ok = false }, ""},
-		{"a branch the repository was not resolved for hides it", true, agentApp, ptr(prInfo("OPEN")), func(a *App) { a.prs.panes["p1"].key.branch = "other" }, ""},
-		{"a failed resolution hides it", true, agentApp, ptr(prInfo("OPEN")), func(a *App) { a.prs.panes["p1"].failed = true }, ""},
+		{"a repository resolved for another branch hides it", true, agentApp, ptr(prInfo("OPEN")), func(a *App) { a.prs.panes["p1"].answered.branch = "other" }, ""},
+		{"a repository resolved for another directory hides it", true, agentApp, ptr(prInfo("OPEN")), func(a *App) { a.prs.panes["p1"].answered.cwd = "/w/elsewhere" }, ""},
+		{"a failed resolution hides it", true, agentApp, ptr(prInfo("OPEN")), func(a *App) {
+			pp := a.prs.panes["p1"]
+			pp.failed, pp.answered.branch = true, "feat/old"
+		}, ""},
 		{"a detached head hides it", true, agentApp, ptr(prInfo("OPEN")), func(a *App) { a.railEntry("p1").probe.detached = true }, ""},
 		{"a pane the head probe has not answered for hides it", true, agentApp, ptr(prInfo("OPEN")), func(a *App) { a.railEntry("p1").probe.known = false }, ""},
 	}
