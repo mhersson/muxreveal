@@ -27,6 +27,24 @@ func configGet(ctx context.Context, r Repo, key string) (value string, ok bool, 
 	return strings.TrimSpace(string(out)), true, nil
 }
 
+// HasUpstream reports whether branch has an upstream configured, whether or not
+// its remote-tracking ref exists. Push sets an upstream exactly when this is false.
+func HasUpstream(ctx context.Context, r Repo, branch string) (bool, error) {
+	if err := checkBranch(ctx, r, branch); err != nil {
+		return false, err
+	}
+
+	return upstreamSet(ctx, r, branch)
+}
+
+// upstreamSet is the config test HasUpstream and Push share, for a branch that
+// is already validated.
+func upstreamSet(ctx context.Context, r Repo, branch string) (bool, error) {
+	_, ok, err := configGet(ctx, r, "branch."+branch+".merge")
+
+	return ok, err
+}
+
 // PushRemote names the remote a push of branch goes to: branch.<b>.pushRemote,
 // else remote.pushDefault, else branch.<b>.remote (unless "."), else origin.
 // It must be a configured remote.

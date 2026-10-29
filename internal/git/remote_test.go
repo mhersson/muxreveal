@@ -3,6 +3,7 @@ package git
 import (
 	"context"
 	"errors"
+	"os"
 	"strings"
 	"testing"
 )
@@ -92,6 +93,97 @@ func TestRemoteURLNeverEchoesItsArgument(t *testing.T) {
 	for _, leak := range []string{"secret", "example.invalid"} {
 		if strings.Contains(err.Error(), leak) {
 			t.Errorf("error %q contains %q", err, leak)
+		}
+	}
+}
+
+func TestHasUpstream(t *testing.T) {
+	tests := []struct {
+		name  string
+		setup func(t *testing.T, f pushFixture)
+		want  bool
+	}{
+		{
+			name:  "no upstream",
+			setup: func(*testing.T, pushFixture) {},
+		},
+		{
+			name: "upstream set",
+			setup: func(t *testing.T, f pushFixture) {
+				gitOut(t, f.root, "push", "-q", "-u", "origin", "feat")
+			},
+			want: true,
+		},
+		{
+			name: "upstream configured and its tracking ref gone",
+			setup: func(t *testing.T, f pushFixture) {
+				gitOut(t, f.root, "push", "-q", "-u", "origin", "feat")
+				gitOut(t, f.root, "update-ref", "-d", "refs/remotes/origin/feat")
+
+				if _, ok, err := Ahead(context.Background(), f.repo); err != nil || ok {
+					t.Fatalf("setup: Ahead = ok %v, err %v, want no comparison", ok, err)
+				}
+			},
+			want: true,
+		},
+		{
+			name: "upstream on a local branch",
+			setup: func(t *testing.T, f pushFixture) {
+				gitOut(t, f.root, "branch", "--set-upstream-to=main")
+			},
+			want: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f := newPushFixture(t)
+			tt.setup(t, f)
+
+			got, err := HasUpstream(context.Background(), f.repo, "feat")
+			if err != nil || got != tt.want {
+				t.Fatalf("HasUpstream = %v, %v; want %v", got, err, tt.want)
+			}
+
+			// Push sets the upstream exactly when HasUpstream said there was none.
+			res, err := Push(context.Background(), f.repo, "feat")
+			if err != nil {
+				t.Fatalf("Push: %v", err)
+			}
+
+			if res.SetUpstream == got {
+				t.Errorf("Push SetUpstream = %v with HasUpstream = %v, want them opposite", res.SetUpstream, got)
+			}
+		})
+	}
+}
+
+func TestHasUpstreamRefusesBadBranches(t *testing.T) {
+	f := newPushFixture(t)
+
+	for _, branch := range []string{"", "-x", "a..b", "feat?"} {
+		if _, err := HasUpstream(context.Background(), f.repo, branch); !errors.Is(err, ErrBadBranch) {
+			t.Errorf("HasUpstream(%q) err = %v, want ErrBadBranch", branch, err)
+		}
+	}
+}
+
+func TestHasUpstreamIsARead(t *testing.T) {
+	f := newPushFixture(t)
+	log := fakeGit(t, `echo "locks=$GIT_OPTIONAL_LOCKS" >> "$LOG.locks"`)
+
+	if _, err := HasUpstream(context.Background(), f.repo, "feat"); err != nil {
+		t.Fatal(err)
+	}
+
+	locks, err := os.ReadFile(log + ".locks")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, line := range strings.Fields(string(locks)) {
+		if line != "locks=0" {
+			t.Errorf("a git call ran with %s, want GIT_OPTIONAL_LOCKS=0", line)
 		}
 	}
 }

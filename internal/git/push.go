@@ -28,7 +28,7 @@ func Push(ctx context.Context, r Repo, branch string) (PushResult, error) {
 		return PushResult{}, err
 	}
 
-	_, hasUpstream, err := configGet(ctx, r, "branch."+branch+".merge")
+	hasUpstream, err := upstreamSet(ctx, r, branch)
 	if err != nil {
 		return PushResult{}, err
 	}
