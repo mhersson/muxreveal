@@ -104,6 +104,25 @@ func TestSendRoundTrip(t *testing.T) {
 	}
 }
 
+func TestServerDeliversEditAndSubagent(t *testing.T) {
+	t.Parallel()
+
+	s := startServer(t, 1, nil)
+	want := Event{Pane: "p1", Name: "PreToolUse", Cwd: "/r", Edit: "/r/a.go", Subagent: true}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	if err := Send(ctx, s.path, want); err != nil {
+		t.Fatalf("Send() error = %v", err)
+	}
+
+	got := recv(t, s.out)
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("event = %+v, want %+v", got, want)
+	}
+}
+
 func TestSocketMode(t *testing.T) {
 	s := startServer(t, 1, nil)
 

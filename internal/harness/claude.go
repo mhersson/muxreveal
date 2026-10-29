@@ -131,6 +131,7 @@ type claudePayload struct {
 	Source           string `json:"source"`
 	ToolName         string `json:"tool_name"`
 	NotificationType string `json:"notification_type"`
+	AgentID          string `json:"agent_id"`
 	// Lenient: a payload with an odd shape here must not drop the state.
 	ToolInput json.RawMessage `json:"tool_input"`
 	Message   json.RawMessage `json:"message"`
@@ -206,6 +207,31 @@ func toolTarget(tool, cwd string, fields map[string]json.RawMessage) string {
 	return tool
 }
 
+// editTools maps each tool that changes a file to the tool_input key naming
+// it. MultiEdit is no longer documented and stays for older Claude Code.
+func editTools() map[string]string {
+	return map[string]string{
+		"Edit": "file_path", "Write": "file_path", "MultiEdit": "file_path",
+		"NotebookEdit": "notebook_path",
+	}
+}
+
+// editPath is the cleaned absolute path an edit tool's input names, or "" when
+// the tool is not an edit tool or the path is missing, relative or holds a NUL.
+func editPath(tool string, input json.RawMessage) string {
+	key, ok := editTools()[tool]
+	if !ok {
+		return ""
+	}
+
+	path := jsonString(objectFields(input)[key])
+	if !filepath.IsAbs(path) || strings.ContainsRune(path, 0) {
+		return ""
+	}
+
+	return filepath.Clean(path)
+}
+
 // objectFields reads a tool_input leniently; anything but an object gives nil.
 func objectFields(input json.RawMessage) map[string]json.RawMessage {
 	var fields map[string]json.RawMessage
@@ -274,6 +300,7 @@ func (Claude) ParseEvent(payload []byte) (Event, error) {
 		Transcript: p.TranscriptPath,
 		Cwd:        p.Cwd,
 		TurnStart:  p.Name == "UserPromptSubmit",
+		Subagent:   p.AgentID != "",
 	}
 	switch p.Name {
 	case "SessionStart":
@@ -291,6 +318,10 @@ func (Claude) ParseEvent(payload []byte) (Event, error) {
 	case "PostToolUse", "PostToolUseFailure":
 		ev.State, ev.ActionSet = core.AgentWorking, true
 		ev.Action = clip(toolTarget(printable(p.ToolName), p.Cwd, objectFields(p.ToolInput)))
+
+		if p.Name == "PostToolUse" {
+			ev.Edit = editPath(p.ToolName, p.ToolInput)
+		}
 	case "ElicitationResult":
 		ev.State = core.AgentWorking
 	case "PreToolUse":
@@ -300,6 +331,7 @@ func (Claude) ParseEvent(payload []byte) (Event, error) {
 		}
 
 		ev.Action = toolAction(p.ToolName, p.Cwd, p.ToolInput)
+		ev.Edit = editPath(p.ToolName, p.ToolInput)
 	case "PermissionRequest":
 		ev.State, ev.ActionSet = core.AgentBlocked, true
 		ev.Action = permissionAction(p.ToolName, p.Cwd, p.ToolInput)
