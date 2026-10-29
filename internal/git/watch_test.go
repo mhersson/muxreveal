@@ -405,35 +405,31 @@ func TestWatchBurstCoalesces(t *testing.T) {
 	dir := baseRepo(t)
 	w := startWatch(t, dir, fastWatch)
 
-	want := make([]string, 0, 1000)
+	const files = 1000
 
-	for i := range 1000 {
+	// A batch also carries the burst directory's own path, so wait on the files
+	// themselves and not on a count of paths.
+	waiting := make(map[string]bool, files)
+
+	for i := range files {
 		rel := fmt.Sprintf("burst/f%04d.txt", i)
-		want = append(want, rel)
+		waiting[rel] = true
 		writeFile(t, dir, rel, "x\n")
 	}
 
 	batches := 0
-
-	seen := map[string]bool{}
 	deadline := time.After(watchWait)
 
-	for len(seen) < len(want) {
+	for len(waiting) > 0 {
 		select {
 		case b := <-w.Batches():
 			batches++
 
 			for _, p := range b.Paths {
-				seen[p] = true
+				delete(waiting, p)
 			}
 		case <-deadline:
-			t.Fatalf("saw %d of %d paths", len(seen), len(want))
-		}
-	}
-
-	for _, p := range want {
-		if !seen[p] {
-			t.Fatalf("missing %s", p)
+			t.Fatalf("%d of %d files never arrived", len(waiting), files)
 		}
 	}
 
