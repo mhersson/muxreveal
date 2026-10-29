@@ -631,22 +631,39 @@ func TestPushInFlightStopsAnotherAnswer(t *testing.T) {
 	}
 }
 
-func TestPushUpToDate(t *testing.T) {
-	r := newPushRig(t)
-	gitIn(t, r.real, r.dir, "push", "-q", "-u", "origin", "feat/x")
-
-	r.ask(t)
-
-	if r.confirm != nil {
-		t.Error("a confirm opened with nothing to push")
+func TestPushNothingToSend(t *testing.T) {
+	tests := []struct {
+		name  string
+		setup func(t *testing.T, r *pushRig)
+		want  string
+	}{
+		{"the remote has the branch", func(t *testing.T, r *pushRig) {
+			gitIn(t, r.real, r.dir, "push", "-q", "-u", "origin", "feat/x")
+		}, "feat/x is up to date on origin"},
+		{"the remote lacks the branch", func(t *testing.T, r *pushRig) {
+			gitIn(t, r.real, r.dir, "reset", "-q", "--hard", "main")
+		}, "feat/x has nothing to push to origin"},
 	}
 
-	if want := "feat/x is up to date on origin"; r.notice != want || r.noticeLevel() != levelNotice {
-		t.Errorf("toast = %q at level %v, want %q at the notice level", r.notice, r.noticeLevel(), want)
-	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := newPushRig(t)
+			tt.setup(t, r)
 
-	if n := r.pushCalls(); n != 0 {
-		t.Errorf("git pushed %d times", n)
+			r.ask(t)
+
+			if r.confirm != nil {
+				t.Error("a confirm opened with nothing to push")
+			}
+
+			if r.notice != tt.want || r.noticeLevel() != levelNotice {
+				t.Errorf("toast = %q at level %v, want %q at the notice level", r.notice, r.noticeLevel(), tt.want)
+			}
+
+			if n := r.pushCalls(); n != 0 {
+				t.Errorf("git pushed %d times", n)
+			}
+		})
 	}
 }
 

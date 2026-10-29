@@ -69,6 +69,7 @@ const (
 	pushDetached
 	pushUnborn // the branch has no commits
 	pushNoRemote
+	pushNothing // no commit to send, and the remote has no such branch
 )
 
 // pushResolvedMsg is the answer of reading what a push of one pane's branch would do.
@@ -171,6 +172,15 @@ func resolvePush(ctx context.Context, log *slog.Logger, pane core.PaneID, cwd, h
 	}
 
 	if t.commits == 0 {
+		onRemote, err := git.RemoteHasBranch(ctx, r, t.remote, t.branch)
+		if err != nil {
+			return pushTarget{}, pushFailed, err
+		}
+
+		if !onRemote {
+			return t, pushNothing, nil
+		}
+
 		return t, pushUpToDate, nil
 	}
 
@@ -221,6 +231,8 @@ func (a *App) onPushResolved(msg pushResolvedMsg) {
 		a.notice = fmt.Sprintf("push: %s has no remote to push to", t.branch)
 	case msg.state == pushUpToDate:
 		a.notice = fmt.Sprintf("%s is up to date on %s", t.branch, t.remote)
+	case msg.state == pushNothing:
+		a.notice = fmt.Sprintf("%s has nothing to push to %s", t.branch, t.remote)
 	default:
 		a.openConfirm(confirm{push: &t, yes: func(a *App) tea.Cmd { return a.pushRun(t) }})
 	}
