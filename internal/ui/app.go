@@ -122,6 +122,7 @@ type App struct {
 	picker    pickerState
 	watches   watchState
 	prs       prState
+	edits     editState
 	storeVer  uint64        // counts the dispatches the store accepted
 	engine    *git.Engine   // nil when the rail's diff stats and the review drawer's diffs are off
 	probeSem  chan struct{} // its capacity bounds the head, stats and name probes running at once
@@ -206,6 +207,7 @@ func New(opts Options) (*App, error) {
 		getenv:  getenv, cwd: cwd, recordDir: opts.RecordDir, icons: opts.Icons, clock: realClock{}, start: termStart,
 		load:         newSysLoad(),
 		probeSem:     make(chan struct{}, railProbeMax),
+		edits:        editState{last: map[core.PaneID]lastEdit{}, resolve: git.EditPlace},
 		focusFollows: opts.FocusFollowsMouse, copyOnSelect: opts.CopyOnSelect,
 		clip: newClipboard(clipboardConfig{OSC52: !opts.NoOSC52, Native: !opts.NoNativeClipboard}, getenv, runtime.GOOS, opts.Logger),
 	}
@@ -505,6 +507,8 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, a.onKindDue(msg)
 	case hookMsg:
 		return a, tea.Batch(a.onHook(msg.ev), a.waitEvent())
+	case editPlaceMsg:
+		a.onEditPlace(msg)
 	case watchMsg:
 		return a, tea.Batch(a.onWatch(msg), a.waitWatch())
 	case paneRepoMsg:
