@@ -60,7 +60,13 @@ func TestRunServesHooks(t *testing.T) {
 	sock := filepath.Join(runDir, pid+".sock")
 	settings := filepath.Join(runDir, pid+"-claude.json")
 
-	waitFor(t, func() bool { return exists(sock) && exists(settings) })
+	// Listen binds the socket before it chmods it, so the file can exist at the
+	// umask's mode first: wait for the final mode, not for the file.
+	waitUntil(t, "the hook socket never reached mode 0600, or the settings file never appeared", func() bool {
+		fi, err := os.Lstat(sock)
+
+		return err == nil && fi.Mode().Perm() == 0o600 && exists(settings)
+	})
 
 	if fi, err := os.Stat(runDir); err != nil || fi.Mode().Perm() != 0o700 {
 		t.Errorf("run dir = %v, %v, want mode 0700", fi, err)
@@ -267,10 +273,18 @@ func exists(path string) bool {
 func waitFor(t *testing.T, cond func() bool) {
 	t.Helper()
 
+	waitUntil(t, "condition not met in time", cond)
+}
+
+// waitUntil polls cond until it holds and fails the test with failure if it
+// still does not after 10 seconds.
+func waitUntil(t *testing.T, failure string, cond func() bool) {
+	t.Helper()
+
 	deadline := time.Now().Add(10 * time.Second)
 	for !cond() {
 		if time.Now().After(deadline) {
-			t.Fatal("condition not met in time")
+			t.Fatal(failure)
 		}
 
 		time.Sleep(10 * time.Millisecond)
