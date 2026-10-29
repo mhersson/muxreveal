@@ -64,7 +64,7 @@ func (t *Tab) setMode(mode LayoutMode, area Rect, lc LayoutConfig) error {
 	}
 
 	order := slices.Clone(t.Panes)
-	next := Tab{ID: t.ID, Name: t.Name, Focus: t.Focus, Review: t.Review}
+	next := Tab{ID: t.ID, Name: t.Name, Focus: t.Focus, Review: t.Review, Pin: t.Pin}
 
 	switch mode {
 	case ModeMaster:

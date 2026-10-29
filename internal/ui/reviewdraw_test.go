@@ -81,6 +81,24 @@ func reviewCases() []reviewCase {
 				v.cursor = rowWith(t, v, "review.toggle")
 			}
 		})},
+		{"pinned", with(func(s *reviewScene) { s.pinned = true })},
+		{"pinned-split", with(func(s *reviewScene) {
+			s.pinned = true
+			s.tune = func(t *testing.T, a *App, v *reviewView) {
+				v.split = true
+				v.rebuild(true)
+			}
+		})},
+		{"pinned-narrow", with(func(s *reviewScene) { s.pinned, s.w, s.h = true, 40, 40 })},
+		{"pinned-narrower", with(func(s *reviewScene) { s.pinned, s.w, s.h = true, 28, 40 })},
+		{"worktree-removed", with(func(s *reviewScene) {
+			s.pinned, s.branch, s.res = true, true, git.Result{}
+			s.tune = func(t *testing.T, a *App, v *reviewView) {
+				a.getenv = func(string) string { return "/home/me" }
+				v.err = errWorktreeRemoved{root: "/home/me/code/muxreveal/.worktrees/b"}
+				v.rebuild(false)
+			}
+		})},
 		{"unfocused", with(func(s *reviewScene) {
 			s.focused = false
 			s.tune = func(t *testing.T, a *App, v *reviewView) { v.cursor = rowWith(t, v, "review.toggle") }

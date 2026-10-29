@@ -270,3 +270,110 @@ func TestLayoutSwitchKeepsTheReviewDrawer(t *testing.T) {
 		}
 	})
 }
+
+func TestPinReview(t *testing.T) {
+	t.Parallel()
+
+	open := func(t *testing.T) State {
+		t.Helper()
+
+		return dispatch(t, reviewState(t), OpenReview{Pane: "p1", Mode: ReviewTurn})
+	}
+	pinned := func(t *testing.T) State {
+		t.Helper()
+
+		return dispatch(t, open(t), PinReview{Root: "/w/b"})
+	}
+	want := &Pin{Pane: "p1", Root: "/w/b"}
+
+	tests := []struct {
+		name string
+		do   func(t *testing.T) State
+		want *Pin
+	}{
+		{"pin", pinned, want},
+		{"unpin", func(t *testing.T) State { return dispatch(t, pinned(t), PinReview{}) }, nil},
+		{"open on the same pane keeps it", func(t *testing.T) State {
+			return dispatch(t, pinned(t), OpenReview{Pane: "p1", Mode: ReviewBranch})
+		}, want},
+		{"open on another pane drops it", func(t *testing.T) State {
+			return dispatch(t, pinned(t), OpenReview{Pane: "p2", Mode: ReviewTurn})
+		}, nil},
+		{"close keeps it", func(t *testing.T) State { return dispatch(t, pinned(t), CloseReview{}) }, want},
+		{"closing the pinned pane drops it", func(t *testing.T) State {
+			return dispatch(t, pinned(t), ClosePane{ID: "p1"})
+		}, nil},
+		{"closing another pane keeps it", func(t *testing.T) State {
+			return dispatch(t, pinned(t), ClosePane{ID: "p2"})
+		}, want},
+		{"moving the pinned pane out drops it", func(t *testing.T) State {
+			return dispatch(t, pinned(t), MovePane{ID: "p1", Tab: 1, Area: modeInner})
+		}, nil},
+		{"a layout mode switch keeps it", func(t *testing.T) State {
+			return dispatch(t, pinned(t), SetLayoutMode{Mode: ModeMaster, Area: modeInner})
+		}, want},
+		{"a layout cycle keeps it", func(t *testing.T) State {
+			return dispatch(t, pinned(t), CycleLayoutMode{Area: modeInner})
+		}, want},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := tt.do(t).Tabs[0].Pin
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("Pin = %+v, want %+v", got, tt.want)
+			}
+		})
+	}
+
+	t.Run("no drawer is an error", func(t *testing.T) {
+		t.Parallel()
+
+		if err := moveErr(reviewState(t), PinReview{Root: "/w/b"}); !errors.Is(err, errNoReview) {
+			t.Errorf("PinReview without a drawer: error = %v, want errNoReview", err)
+		}
+	})
+
+	t.Run("a drawer in another tab does not count", func(t *testing.T) {
+		t.Parallel()
+
+		s := dispatch(t, open(t), SelectTab{Index: 1})
+		if err := moveErr(s, PinReview{Root: "/w/b"}); !errors.Is(err, errNoReview) {
+			t.Errorf("PinReview on a tab without a drawer: error = %v, want errNoReview", err)
+		}
+	})
+
+	t.Run("a state taken before keeps its own pin", func(t *testing.T) {
+		t.Parallel()
+
+		st := NewStore(open(t))
+		before := st.State()
+
+		if err := st.Dispatch(PinReview{Root: "/w/b"}); err != nil {
+			t.Fatal(err)
+		}
+
+		if before.Tabs[0].Pin != nil {
+			t.Errorf("earlier state got the pin: %+v", before.Tabs[0].Pin)
+		}
+
+		got := st.State()
+		got.Tabs[0].Pin.Root = "/elsewhere"
+
+		if root := st.State().Tabs[0].Pin.Root; root != "/w/b" {
+			t.Errorf("editing a copy changed the store's pin: %q", root)
+		}
+	})
+
+	t.Run("the pin is per tab", func(t *testing.T) {
+		t.Parallel()
+
+		s := dispatch(t, pinned(t), SelectTab{Index: 1})
+		s = dispatch(t, s, OpenReview{Pane: "p3", Mode: ReviewTurn})
+
+		if s.Tabs[1].Pin != nil || !reflect.DeepEqual(s.Tabs[0].Pin, want) {
+			t.Errorf("pins = %+v, %+v", s.Tabs[0].Pin, s.Tabs[1].Pin)
+		}
+	})
+}

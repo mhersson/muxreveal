@@ -22,15 +22,25 @@ const (
 	noticeNoTurns    = "no turns: this pane has no agent session"
 	noticeNoTurnsYet = "no turns yet"
 	noticeNoTurnsIn  = "no turns in %s · %s yet"
+	noticeRemoved    = "worktree removed: "
 	noticeNotRepo    = "not a git repository"
 	noticeBinaryFull = "a binary file has no full view"
 	noticeFirstTurn  = "turn 1 is the first turn"
 )
 
-// drawerDir is the directory the drawer reviews for a pane of tab: the pane's
-// followed place.
-func (a *App) drawerDir(st core.State, _ core.Tab, pane core.PaneID) string {
+// drawerDir is the directory the drawer reviews for a pane of tab: the root it
+// is pinned to, else the pane's followed place.
+func (a *App) drawerDir(st core.State, tab core.Tab, pane core.PaneID) string {
+	if pinnedTo(tab, pane) {
+		return tab.Pin.Root
+	}
+
 	return st.Panes[pane].FollowDir()
+}
+
+// pinnedTo reports whether tab holds its drawer for pane on a pinned root.
+func pinnedTo(tab core.Tab, pane core.PaneID) bool {
+	return tab.Pin != nil && tab.Pin.Pane == pane
 }
 
 // openReview opens the active tab's drawer on a pane of that tab. Whether the
@@ -52,7 +62,7 @@ func (a *App) openReview(pane core.PaneID, focus bool) tea.Cmd {
 		return nil
 	}
 
-	session, own, tabID := paneSession(st, pane), st.Panes[pane].WorkDir(), tab.ID
+	session, own, tabID, pinned := paneSession(st, pane), st.Panes[pane].WorkDir(), tab.ID, pinnedTo(tab, pane)
 
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(a.ctx, reviewOpenTimeout)
@@ -60,7 +70,16 @@ func (a *App) openReview(pane core.PaneID, focus bool) tea.Cmd {
 
 		msg := reviewOpenMsg{tab: tabID, pane: pane, cwd: cwd, focus: focus}
 
-		if msg.repo, msg.err = git.Open(ctx, cwd); msg.err != nil || session == "" {
+		if msg.repo, msg.err = git.Open(ctx, cwd); msg.err != nil {
+			// A pinned worktree that went still opens a drawer, which says so.
+			if pinned && !usableDir(cwd) {
+				msg.err = errWorktreeRemoved{root: cwd}
+			}
+
+			return msg
+		}
+
+		if session == "" {
 			return msg
 		}
 
@@ -93,9 +112,13 @@ func (a *App) onReviewOpen(msg reviewOpenMsg) tea.Cmd {
 		return nil
 	}
 
+	var gone errWorktreeRemoved
+
 	switch {
 	case errors.Is(msg.err, context.Canceled):
 		return nil
+	case errors.As(msg.err, &gone):
+		// The drawer opens to show it.
 	case errors.Is(msg.err, git.ErrNotRepo):
 		a.notice = noticeNotRepo
 
@@ -121,7 +144,11 @@ func (a *App) onReviewOpen(msg reviewOpenMsg) tea.Cmd {
 	}
 
 	// The check found the pane's repository: hand it to the watch bookkeeping
-	// so the drawer need not resolve it again.
+	// so the drawer need not resolve it again. A pinned root is not the pane's.
+	if pinnedTo(st.Tab(), msg.pane) {
+		return nil
+	}
+
 	w := a.watches.panes[msg.pane]
 	if w == nil {
 		w = &paneWatch{}

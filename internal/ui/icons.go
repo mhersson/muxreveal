@@ -53,6 +53,7 @@ const (
 	iconFolder     = "\U000F0256" // nf-md-folder_outline
 
 	iconNewWorktree = "\U000F14CA" // nf-md-source_branch_plus
+	iconPin         = "\U000F0403" // nf-md-pin
 
 	iconPR       = "\uF407"     // nf-oct-git_pull_request
 	iconPRDraft  = "\uF4DD"     // nf-oct-git_pull_request_draft

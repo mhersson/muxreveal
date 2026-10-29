@@ -276,6 +276,7 @@ type reviewScene struct {
 	noSnap  bool
 	focused bool
 	tree    bool // the drawer's file tree is open
+	pinned  bool // the drawer is held on its root
 	tune    func(t *testing.T, a *App, v *reviewView)
 }
 
@@ -313,6 +314,10 @@ func (s reviewScene) build(t *testing.T) *App {
 	}
 
 	openIn(t, a, core.OpenReview{Pane: "p1", Mode: mode})
+
+	if s.pinned {
+		openIn(t, a, core.PinReview{Root: "/w/p1"})
+	}
 
 	if s.tree {
 		openIn(t, a, core.SetReviewTree{Open: true})

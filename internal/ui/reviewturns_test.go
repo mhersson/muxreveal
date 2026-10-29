@@ -286,8 +286,9 @@ func TestFailedWatchOfANewRepositoryFallsBackToHooks(t *testing.T) {
 		v := r.open(t, id)
 		r.watching(t, id, rootOf(t, dir))
 
-		// The pane moved on and the new root's watch has not answered yet.
+		// The pane moved on, so the drawer is on the new root, whose watch has not answered yet.
 		r.watches.panes[id].want = "/another/root"
+		v.root = "/another/root"
 
 		r.run(r.reviewHook(id, false, nil))
 

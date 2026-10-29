@@ -746,7 +746,12 @@ func TestWorktreeDeletedShowsTheError(t *testing.T) {
 		t.Errorf("a deleted worktree still shows %d files and %d rows", len(v.res.Files), len(v.rows))
 	}
 
-	if got := r.drawn(t); !strings.Contains(got, "open ") {
+	var gone errWorktreeRemoved
+	if !errors.As(v.err, &gone) || gone.root != root {
+		t.Errorf("error = %v, want the worktree %q reported removed", v.err, root)
+	}
+
+	if got := r.drawn(t); !strings.Contains(got, "worktree removed: ") {
 		t.Errorf("the drawer does not show the error %q:\n%s", v.err, got)
 	}
 }

@@ -23,6 +23,11 @@ const (
 	maxQueuedPaths = 1000
 )
 
+// errWorktreeRemoved says the worktree a drawer reviews is gone.
+type errWorktreeRemoved struct{ root string }
+
+func (e errWorktreeRemoved) Error() string { return noticeRemoved + e.root }
+
 var (
 	errNotRepo  = errors.New(noticeNotRepo)
 	errDiffsOff = errors.New("diffs are off: no run directory for temporary indexes")
@@ -160,6 +165,9 @@ func (a *App) reviewSync() tea.Cmd {
 	}
 
 	root, resolved := a.paneRoot(rv.Pane)
+	if pinnedTo(tab, rv.Pane) {
+		root, resolved = tab.Pin.Root, true
+	}
 
 	switch {
 	case !resolved:
@@ -314,6 +322,13 @@ func (j reviewJob) run(ctx context.Context) reviewLoadedMsg {
 
 	if j.eng == nil {
 		msg.err = errDiffsOff
+
+		return msg
+	}
+
+	// What the view last knew stays, so the title still names the worktree.
+	if !usableDir(j.root) {
+		msg.err, msg.infoOnly = errWorktreeRemoved{root: j.root}, false
 
 		return msg
 	}
@@ -682,19 +697,19 @@ func (a *App) reviewBatch(root string, b git.Batch) tea.Cmd {
 
 // reviewHook recomputes the drawers that review the pane when a hook event
 // arrives that the watcher cannot report: a turn's start, whose snapshot ref
-// never wakes it, or any event while the pane's root is not watched, which then
+// never wakes it, or any event while a drawer's root is not watched, which then
 // stands in for the file changes. A turn start whose snapshot is still being
 // taken (snapped) recomputes once it is done, as the turn exists only then.
 func (a *App) reviewHook(pane core.PaneID, turnStart bool, snapped <-chan struct{}) tea.Cmd {
-	if w := a.watches.panes[pane]; !turnStart && w != nil && w.root != "" && w.root == w.want {
-		return nil
-	}
-
 	if turnStart && snapped != nil {
 		return a.reviewAfterSnapshot(pane, snapped)
 	}
 
-	return a.reviewRefresh(pane)
+	if turnStart {
+		return a.reviewRefresh(pane)
+	}
+
+	return a.refreshViews(pane, func(v *reviewView) bool { return !a.rootWatched(v.root) })
 }
 
 // reviewSnappedMsg says a turn's snapshot is done.
@@ -717,13 +732,16 @@ func (a *App) reviewAfterSnapshot(pane core.PaneID, snapped <-chan struct{}) tea
 
 // reviewRefresh queues a full recompute for every drawer that reviews the pane.
 // A hidden tab's drawer is marked stale, as a batch would.
-func (a *App) reviewRefresh(pane core.PaneID) tea.Cmd {
+func (a *App) reviewRefresh(pane core.PaneID) tea.Cmd { return a.refreshViews(pane, nil) }
+
+// refreshViews is reviewRefresh for the drawers of the pane that pick holds for.
+func (a *App) refreshViews(pane core.PaneID, pick func(v *reviewView) bool) tea.Cmd {
 	active := a.store.State().Tab().ID
 
 	var cmds []tea.Cmd
 
 	for id, v := range a.drawer.views {
-		if v.pane != pane || v.root == "" {
+		if v.pane != pane || v.root == "" || pick != nil && !pick(v) {
 			continue
 		}
 

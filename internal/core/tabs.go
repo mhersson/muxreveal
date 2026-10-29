@@ -40,6 +40,7 @@ type Tab struct {
 	First     int        // first visible scrolling column
 	Preselect Dir        // NoDir when none; BSP only, not saved
 	Review    *Review    // the open review drawer; nil when closed
+	Pin       *Pin       // the worktree the drawer is held on; not saved
 }
 
 // Empty reports whether the tab has no pane.
@@ -53,6 +54,11 @@ func (t Tab) clone() Tab {
 	if t.Review != nil {
 		r := *t.Review
 		t.Review = &r
+	}
+
+	if t.Pin != nil {
+		p := *t.Pin
+		t.Pin = &p
 	}
 
 	if t.Columns != nil {

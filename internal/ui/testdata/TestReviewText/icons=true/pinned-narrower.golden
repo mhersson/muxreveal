@@ -1,0 +1,40 @@
+ 1  p1    󰛽 master-stack 
+────────────────────────────
+╭─  muxrev… ─ 󰋚 turn 4/4 ─╮
+│▎ M …core/state.go  +9 -1 │
+│  @@ -22,5 +22,13 @@ type…│
+│  22  22       ID    Pane…│
+│  23  23       Kind  Pane…│
+│  24  24       Cwd   stri…│
+│  25     -     Title stri…│
+│      25 +     Title  str…│
+│      26 +     Review *Re…│
+│  26  27   }              │
+│      28 +                │
+│      29 + // ReviewSourc…│
+│      30 + type ReviewSou…│
+│      31 +     Agent Pane…│
+│      32 +     Mode  Revi…│
+│      33 +     Turn  int …│
+│      34 + }              │
+│  M …nal/ui/app.go  +4 -3 │
+│  @@ -40,9 +40,10 @@ func…│
+│  40  40                  │
+│  41  41   // openReview …│
+│  42  42   func (a *App) …│
+│  43     -     if a.store…│
+│  44     -         return…│
+│  45     -     }          │
+│      43 +     p, ok := a…│
+│      44 +     if !ok || …│
+│      45 +         return…│
+│      46 +     }          │
+│  46  47                  │
+│  47  48       if r, ok :…│
+│  48  49           return…│
+│  R …/ui/keymap.go  +1 -0 │
+│  @@ -3,6 +3,7 @@         │
+│   3   3   // defaultLead…│
+│   4   4   var defaultLea…│
+│ j/k line   ]/[ hunk      │
+╰──────────────────────────╯

@@ -785,3 +785,31 @@ func TestReviewDecodeDropsBadFields(t *testing.T) {
 		})
 	}
 }
+
+func TestPinNotSaved(t *testing.T) {
+	t.Parallel()
+
+	st := fixedState()
+	st.Tabs[0].Pin = &core.Pin{Pane: "p2", Root: "/home/me/code/other"}
+
+	data, err := Encode(st)
+	noErr(t, err)
+
+	if strings.Contains(string(data), "/home/me/code/other") {
+		t.Errorf("the pinned worktree is written:\n%s", data)
+	}
+
+	want, err := Encode(fixedState())
+	noErr(t, err)
+	eq(t, string(data), string(want))
+
+	got, rep, err := decodeDefault(data)
+	noErr(t, err)
+	eq(t, rep, Report{})
+
+	if got.Tabs[0].Pin != nil {
+		t.Errorf("round trip has a pin: %+v", got.Tabs[0].Pin)
+	}
+
+	eq(t, got, roundTripped())
+}

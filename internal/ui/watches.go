@@ -48,10 +48,26 @@ type paneWatch struct {
 	notRepo bool // the latest resolution found no repository
 }
 
+// pinWatch is a tab's reference on its pinned root: held when release is set,
+// being acquired or failed when it is nil.
+type pinWatch struct {
+	root    string
+	release func()
+}
+
+// pinAcquiredMsg carries the reference the Acquire for a tab's pin took.
+type pinAcquiredMsg struct {
+	tab     core.TabID
+	root    string
+	release func()
+	err     error
+}
+
 type watchState struct {
 	set    *git.WatchSet
 	open   func(context.Context, string) (git.Repo, error)
 	panes  map[core.PaneID]*paneWatch
+	pins   map[core.TabID]*pinWatch
 	failed map[string]bool // roots whose failure was already shown
 	holds  holds
 }
@@ -167,7 +183,7 @@ func (w *paneWatch) drop(a *App) {
 // reviews: it starts resolving a pane whose followed directory changed and
 // releases those of panes that closed, stopped being agents or are no longer
 // reviewed. A pane that closed or stopped being an agent also loses its cached
-// edit place.
+// edit place. It also syncs the pins' watches.
 func (a *App) watchSync() tea.Cmd {
 	st := a.store.State()
 	reviewed := reviewedPanes(st)
@@ -217,7 +233,7 @@ func (a *App) watchSync() tea.Cmd {
 		cmds = append(cmds, a.resolveCmd(id, cwd))
 	}
 
-	return tea.Batch(cmds...)
+	return tea.Batch(append(cmds, a.pinSync())...)
 }
 
 func (a *App) resolveCmd(id core.PaneID, cwd string) tea.Cmd {
@@ -369,4 +385,119 @@ func (a *App) onWatch(msg watchMsg) tea.Cmd {
 	cmds = append(cmds, a.reviewBatch(msg.Root, b))
 
 	return tea.Batch(cmds...)
+}
+
+// rootWatched reports whether a held reference watches root, so its changes
+// reach the drawers that review it without a hook event.
+func (a *App) rootWatched(root string) bool {
+	if root == "" {
+		return false
+	}
+
+	for _, w := range a.watches.panes {
+		if w.root == root {
+			return true
+		}
+	}
+
+	for _, p := range a.watches.pins {
+		if p.release != nil && p.root == root {
+			return true
+		}
+	}
+
+	return false
+}
+
+// pinSync reconciles the pin watches with the tabs whose open drawer reviews
+// its pin's pane: it starts taking the watch of a root not yet held and
+// releases the watch of a pin that changed, ended or lost its drawer.
+func (a *App) pinSync() tea.Cmd {
+	st := a.store.State()
+
+	want := map[core.TabID]string{}
+
+	if a.watches.set != nil {
+		for _, t := range st.Tabs {
+			if t.Review != nil && pinnedTo(t, t.Review.Pane) {
+				want[t.ID] = t.Pin.Root
+			}
+		}
+	}
+
+	for id, pw := range a.watches.pins {
+		if root, ok := want[id]; ok && root == pw.root {
+			continue
+		}
+
+		a.releaseAsync(pw.release)
+		delete(a.watches.pins, id)
+	}
+
+	var cmds []tea.Cmd
+
+	for id, root := range want {
+		if a.watches.pins[id] != nil {
+			continue
+		}
+
+		a.watches.pins[id] = &pinWatch{root: root}
+		cmds = append(cmds, a.pinAcquire(id, root))
+	}
+
+	return tea.Batch(cmds...)
+}
+
+// pinAcquire takes the watch of a pinned root off the update loop. A root that
+// is gone is no failure: the drawer says so.
+func (a *App) pinAcquire(tab core.TabID, root string) tea.Cmd {
+	set, open := a.watches.set, a.watches.open
+
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(a.ctx, watchResolveTimeout)
+		defer cancel()
+
+		r, err := open(ctx, root)
+		if err != nil {
+			if !usableDir(root) {
+				err = errWorktreeRemoved{root: root}
+			}
+
+			return pinAcquiredMsg{tab: tab, root: root, err: err}
+		}
+
+		rel, err := set.Acquire(a.ctx, r)
+		if err != nil {
+			return pinAcquiredMsg{tab: tab, root: root, err: err}
+		}
+
+		return pinAcquiredMsg{tab: tab, root: root, release: a.watches.holds.add(rel)}
+	}
+}
+
+// onPinAcquired keeps the new reference for its tab's pin. One for a root the
+// pin has since left, or already holds, is released. A failure is not retried
+// until the pin changes or its drawer closes; the drawer's hook events stand
+// in for the watch meanwhile.
+func (a *App) onPinAcquired(msg pinAcquiredMsg) {
+	pw := a.watches.pins[msg.tab]
+	current := pw != nil && pw.root == msg.root && pw.release == nil
+
+	var gone errWorktreeRemoved
+
+	switch {
+	case msg.err == nil:
+		delete(a.watches.failed, "root "+msg.root)
+
+		if !current {
+			a.releaseAsync(msg.release)
+
+			return
+		}
+
+		pw.release = msg.release
+	case current && !errors.As(msg.err, &gone):
+		a.log.Warn("watch pinned root", "root", msg.root, "err", msg.err)
+		a.noticeOnce("root "+msg.root, filepath.Base(msg.root), msg.err)
+	}
 }
