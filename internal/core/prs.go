@@ -104,27 +104,32 @@ func (s *State) setRepoPRs(repo string, r RepoPRs) {
 	s.PRs = prs
 }
 
-// PRFor returns the pull request of a branch of the repository keyed
-// "host/owner/name": the newest same-repository open one, else the one a lookup
-// found. Newest is the highest number, which is the order of creation.
-func (s State) PRFor(repo, branch string) (PRInfo, bool) {
-	r := s.PRs[repo]
-
+// OpenPRFor returns the newest same-repository open pull request of a branch
+// in the repository keyed "host/owner/name", from the last poll alone. Newest is
+// the highest number, which is the order of creation.
+func (s State) OpenPRFor(repo, branch string) (PRInfo, bool) {
 	var best PRInfo
 
 	found := false
 
-	for _, p := range r.Open {
+	for _, p := range s.PRs[repo].Open {
 		if p.HeadBranch == branch && !p.CrossRepo && (!found || p.Number > best.Number) {
 			best, found = p, true
 		}
 	}
 
-	if found {
-		return best, true
+	return best, found
+}
+
+// PRFor returns the pull request of a branch of the repository keyed
+// "host/owner/name": the open one the last poll lists (see OpenPRFor), else the
+// one a lookup found.
+func (s State) PRFor(repo, branch string) (PRInfo, bool) {
+	if p, ok := s.OpenPRFor(repo, branch); ok {
+		return p, true
 	}
 
-	p, ok := r.Branch[branch]
+	p, ok := s.PRs[repo].Branch[branch]
 	if !ok || p.CrossRepo {
 		return PRInfo{}, false
 	}

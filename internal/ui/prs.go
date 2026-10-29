@@ -22,7 +22,7 @@ const (
 	// it may run ssh.
 	prResolveTimeout = 10 * time.Second
 	prLookupTimeout  = 15 * time.Second
-	prOpen           = "OPEN"
+	prOpenState      = "OPEN"
 )
 
 // prSource is the poller as the app uses it.
@@ -276,7 +276,7 @@ func (a *App) prWatches(st core.State) []github.Watch {
 		}
 
 		nums := visible[pp.repo]
-		if pr, ok := openPR(st, pp.repo.String(), pp.key.branch); ok {
+		if pr, ok := st.OpenPRFor(pp.repo.String(), pp.key.branch); ok {
 			nums = append(nums, pr.Number)
 		}
 
@@ -310,13 +310,6 @@ func (a *App) prSetWatches(st core.State) {
 
 	p.set, p.sent = ws, true
 	p.src.Set(slices.Clone(ws))
-}
-
-// openPR is the open same-repository pull request of a branch.
-func openPR(st core.State, repo, branch string) (core.PRInfo, bool) {
-	pr, ok := st.PRFor(repo, branch)
-
-	return pr, ok && pr.State == prOpen
 }
 
 // prResolveCmd resolves the repository of a pane's branch off the loop, under
@@ -432,10 +425,10 @@ func (a *App) setRepoPRs(cur core.RepoPRs, repo, defaultBranch string, open []co
 	_ = a.dispatch(core.SetRepoPRs{Repo: repo, DefaultBranch: defaultBranch, Open: open, Err: errText})
 }
 
-// prLookupCmd looks up the pull request of a branch that has no open one in st,
-// unless it was looked up since it last had one: a branch with an open pull
-// request is forgotten, so the poll that loses it asks again. It returns nil
-// when no lookup is due.
+// prLookupCmd looks up the pull request of a branch that the poll in st lists no
+// open one for, unless it was looked up since it last had one: a branch the poll
+// lists is forgotten, so the poll that loses it asks again. It returns nil when
+// no lookup is due.
 func (a *App) prLookupCmd(st core.State, repo github.Repo, branch string) tea.Cmd {
 	p := &a.prs
 	if p.lookup == nil {
@@ -444,7 +437,7 @@ func (a *App) prLookupCmd(st core.State, repo github.Repo, branch string) tea.Cm
 
 	k := prBranch{repo: repo, branch: branch}
 
-	if _, open := openPR(st, repo.String(), branch); open {
+	if _, open := st.OpenPRFor(repo.String(), branch); open {
 		delete(p.looked, k)
 
 		return nil
@@ -473,6 +466,9 @@ func (a *App) onPRBranch(msg prBranchMsg) {
 	repo := msg.repo.String()
 
 	switch {
+	case msg.err == nil && msg.pr.State == prOpenState:
+		// Open PRs come from the poll alone; the branch stays looked up until the
+		// poll lists one and later loses it.
 	case msg.err == nil:
 		_ = a.dispatch(core.SetBranchPR{Repo: repo, Branch: msg.branch, PR: prInfoOf(msg.pr), Found: true})
 	case errors.Is(msg.err, github.ErrNoPR):

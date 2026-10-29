@@ -193,3 +193,45 @@ func TestPRFor(t *testing.T) {
 		})
 	}
 }
+
+func TestOpenPRForReadsOnlyThePollsOpenList(t *testing.T) {
+	openLookup := PRInfo{Number: 11, State: "OPEN", HeadBranch: "feat"}
+	merged := PRInfo{Number: 3, State: "MERGED", HeadBranch: "feat"}
+	fork := PRInfo{Number: 9, State: "OPEN", HeadBranch: "feat", CrossRepo: true}
+
+	tests := []struct {
+		name string
+		acts []Action
+		want int // 0 for none
+	}{
+		{"nothing known", nil, 0},
+		{
+			"the newest open PR of the list",
+			[]Action{SetRepoPRs{Repo: repoKey, Open: []PRInfo{{Number: 5, HeadBranch: "feat"}, {Number: 8, HeadBranch: "feat"}, {Number: 6, HeadBranch: "other"}}}},
+			8,
+		},
+		{
+			"a lookup is not the poll, even one that reads open",
+			[]Action{SetBranchPR{Repo: repoKey, Branch: "feat", PR: openLookup, Found: true}},
+			0,
+		},
+		{
+			"a lookup does not stand in for an open PR that is missing",
+			[]Action{
+				SetBranchPR{Repo: repoKey, Branch: "feat", PR: merged, Found: true},
+				SetRepoPRs{Repo: repoKey, Open: []PRInfo{{Number: 1, HeadBranch: "other"}}},
+			},
+			0,
+		},
+		{"a cross-repository PR never matches", []Action{SetRepoPRs{Repo: repoKey, Open: []PRInfo{fork}}}, 0},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pr, ok := prState(t, tt.acts...).OpenPRFor(repoKey, "feat")
+			if ok != (tt.want != 0) || pr.Number != tt.want {
+				t.Errorf("OpenPRFor = #%d, %v, want #%d", pr.Number, ok, tt.want)
+			}
+		})
+	}
+}

@@ -495,6 +495,63 @@ func TestBranchWithNoPRRecordsNothing(t *testing.T) {
 	}
 }
 
+// A lookup that reads open is no poll: open PRs come only from the poll's list.
+func TestLookupFindingAnOpenPRRecordsNothing(t *testing.T) {
+	p := newPRApp(t)
+	dir := p.prRepo(t, "proj", "feat", "https://github.com/o/r.git")
+	p.addAgent(t, false, dir)
+	p.churn(t, p.settle())
+
+	// The PR is open but not among the poll's PRs, as when it is older than the
+	// poll's page or was opened since the poll.
+	p.found["feat"] = github.PR{Number: 11, State: "OPEN", HeadBranch: "feat"}
+
+	p.churn(t, p.step(snapshotOf()))
+
+	if got := p.lookedUp(); len(got) != 1 {
+		t.Fatalf("lookups = %v, want one", got)
+	}
+
+	if pr, ok := p.prFor("feat"); ok {
+		t.Errorf("PR of feat = #%d from a lookup that read open, want none", pr.Number)
+	}
+
+	if got := p.store.State().PRs[prRepoKey].Branch; len(got) != 0 {
+		t.Errorf("Branch = %+v, want nothing recorded", got)
+	}
+
+	if got := p.src.last(); len(got) != 1 || len(got[0].Visible) != 0 {
+		t.Errorf("watches = %+v, want nothing visible", got)
+	}
+
+	// It counts as looked up while the poll does not list it.
+	p.churn(t, p.step(snapshotOf()))
+
+	if got := p.lookedUp(); len(got) != 1 {
+		t.Fatalf("lookups = %v after another poll, want still one", got)
+	}
+
+	// Once the poll lists it, it is visible; when it leaves the list, the next
+	// lookup records how it ended.
+	p.churn(t, p.step(snapshotOf(openPRIn(11, "feat"))))
+
+	if got := p.src.last(); len(got) != 1 || !slices.Equal(got[0].Visible, []int{11}) {
+		t.Fatalf("watches = %+v, want PR 11 visible once the poll lists it", got)
+	}
+
+	p.found["feat"] = github.PR{Number: 11, State: "MERGED", HeadBranch: "feat"}
+
+	p.churn(t, p.step(snapshotOf()))
+
+	if got := p.lookedUp(); len(got) != 2 {
+		t.Fatalf("lookups = %v after the PR left the list, want exactly one more", got)
+	}
+
+	if pr, ok := p.prFor("feat"); !ok || pr.Number != 11 || pr.State != "MERGED" {
+		t.Errorf("PR of feat = %+v, %v, want #11 merged", pr, ok)
+	}
+}
+
 func TestNewBranchOfAPolledRepositoryIsLookedUpWhenSeen(t *testing.T) {
 	p := newPRApp(t)
 	dir := p.prRepo(t, "proj", "feat-a", "https://github.com/o/r.git")
@@ -638,6 +695,48 @@ func TestFailedResolutionIsTriedAgainAtTheNextHeadProbe(t *testing.T) {
 	}
 }
 
+// An answer that ended with the app's context is neither news nor a failure to retry.
+func TestCancelledAnswersAreNoFailure(t *testing.T) {
+	p := newPRApp(t)
+	dir := p.prRepo(t, "proj", "feat", "https://github.com/o/r.git")
+	id := p.addAgent(t, false, dir)
+	p.churn(t, p.settle())
+
+	pp := p.prs.panes[id]
+	if pp == nil || !pp.ok {
+		t.Fatalf("setup: the pane's repository is not resolved: %+v", pp)
+	}
+
+	key, resolves := pp.key, p.resolves.Load()
+
+	p.step(prResolvedMsg{id: id, key: key, err: context.Canceled})
+
+	if pp.failed || !pp.ok || pp.key != key {
+		t.Errorf("pane = %+v after a cancelled resolution, want it as it was", pp)
+	}
+
+	if p.notice != "" {
+		t.Errorf("notice = %q after a cancelled resolution, want none", p.notice)
+	}
+
+	// Nothing but a head result retries, and a cancelled answer asks for none.
+	p.churn(t, p.settle())
+
+	if p.resolves.Load() != resolves {
+		t.Error("a cancelled resolution was tried again")
+	}
+
+	p.step(errSnapshot(fmt.Errorf("github: query PullRequests: %w", context.Canceled)))
+
+	if p.notice != "" {
+		t.Errorf("notice = %q after a cancelled poll, want none", p.notice)
+	}
+
+	if _, ok := p.store.State().PRs[prRepoKey]; ok {
+		t.Error("a cancelled poll left a repository in the state")
+	}
+}
+
 func TestAnswerForAnotherBranchIsDropped(t *testing.T) {
 	p := newPRApp(t)
 	dir := p.prRepo(t, "proj", "feat", "https://github.com/o/r.git")
@@ -729,13 +828,6 @@ func TestPollerAndResolverEndWithTheApp(t *testing.T) {
 			}
 		case <-time.After(5 * time.Second):
 			t.Fatal("the resolution outlived the app's context")
-		}
-
-		// The answer of a cancelled resolution is no failure to show or retry.
-		p.step(prResolvedMsg{id: "p1", key: prKey{cwd: "/w", branch: "b"}, err: context.Canceled})
-
-		if p.notice != "" {
-			t.Errorf("notice = %q, want none", p.notice)
 		}
 	})
 
