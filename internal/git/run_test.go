@@ -92,6 +92,7 @@ func TestRunConfigArguments(t *testing.T) {
 }
 
 func TestRunStdin(t *testing.T) {
+	t.Parallel()
 	root := newRepo(t)
 
 	out, err := run(context.Background(), call{dir: root, args: []string{"hash-object", "--stdin"}, stdin: strings.NewReader("hello\n")})
@@ -105,6 +106,7 @@ func TestRunStdin(t *testing.T) {
 }
 
 func TestRunErrorCarriesStderrFirstLine(t *testing.T) {
+	t.Parallel()
 	root := newRepo(t)
 
 	_, err := run(context.Background(), call{dir: root, args: []string{"rev-parse", "--verify", "nope"}, read: true})
@@ -188,6 +190,7 @@ func TestRunLimit(t *testing.T) {
 }
 
 func TestRunLimitNotReached(t *testing.T) {
+	t.Parallel()
 	root := newRepo(t)
 
 	out, err := run(context.Background(), call{dir: root, args: []string{"rev-parse", "--git-dir"}, limit: 1000})
@@ -197,6 +200,7 @@ func TestRunLimitNotReached(t *testing.T) {
 }
 
 func TestStream(t *testing.T) {
+	t.Parallel()
 	root := newRepo(t)
 
 	rc, err := stream(context.Background(), call{dir: root, args: []string{"rev-parse", "--git-dir"}, read: true})
@@ -285,6 +289,8 @@ func TestNetCallHasNoTerminal(t *testing.T) {
 }
 
 func TestHideURLs(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct{ in, want string }{
 		{"", ""},
 		{"fatal: no url", "fatal: no url"},

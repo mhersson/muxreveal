@@ -220,6 +220,7 @@ func TestSnapshotRoundTrip(t *testing.T) {
 }
 
 func TestTurnsSortNumerically(t *testing.T) {
+	t.Parallel()
 	dir := seedRepo(t)
 
 	for range 11 {
@@ -243,6 +244,7 @@ func TestTurnsSortNumerically(t *testing.T) {
 }
 
 func TestSnapshotTreeContent(t *testing.T) {
+	t.Parallel()
 	dir := seedRepo(t)
 	writeFile(t, dir, ".gitignore", "ignored.log\nbuild/\n")
 	writeFile(t, dir, "mod.txt", "old\n")
@@ -318,6 +320,7 @@ func TestSnapshotTreeContent(t *testing.T) {
 }
 
 func TestSnapshotSubmoduleStaysAtRecordedCommit(t *testing.T) {
+	t.Parallel()
 	dir := seedRepo(t)
 
 	sub := newRepo(t)
@@ -346,6 +349,7 @@ func TestSnapshotSubmoduleStaysAtRecordedCommit(t *testing.T) {
 }
 
 func TestSnapshotUntrackedSizeCap(t *testing.T) {
+	t.Parallel()
 	dir := seedRepo(t)
 
 	big := filepath.Join(dir, "big\nfile.bin")
@@ -617,6 +621,7 @@ func TestSnapshotLeavesUserStateAlone(t *testing.T) {
 }
 
 func TestSnapshotUnbornHead(t *testing.T) {
+	t.Parallel()
 	dir := newRepo(t)
 	writeFile(t, dir, "f.txt", "f\n")
 	gitOut(t, dir, "add", "f.txt")
@@ -643,6 +648,7 @@ func TestSnapshotUnbornHead(t *testing.T) {
 }
 
 func TestSnapshotDetachedHead(t *testing.T) {
+	t.Parallel()
 	dir := seedRepo(t)
 	gitOut(t, dir, "checkout", "-q", "--detach")
 	writeFile(t, dir, "a.txt", "changed\n")
@@ -659,6 +665,7 @@ func TestSnapshotDetachedHead(t *testing.T) {
 }
 
 func TestSnapshotLinkedWorktree(t *testing.T) {
+	t.Parallel()
 	dir := seedRepo(t)
 	wt := filepath.Join(filepath.Dir(dir), filepath.Base(dir)+"-linked")
 	gitOut(t, dir, "worktree", "add", "-q", "-b", "feat", wt)
@@ -687,6 +694,7 @@ func TestSnapshotLinkedWorktree(t *testing.T) {
 }
 
 func TestSnapshotLinkedWorktreeOfBareRepo(t *testing.T) {
+	t.Parallel()
 	src := seedRepo(t)
 	bare := filepath.Join(t.TempDir(), "bare.git")
 	gitOut(t, src, "clone", "-q", "--bare", src, bare)
@@ -741,12 +749,15 @@ func TestSnapshotSplitIndex(t *testing.T) {
 }
 
 func TestSnapshotUnusableIndex(t *testing.T) {
+	t.Parallel()
+
 	for name, content := range map[string][]byte{
 		"garbage": []byte("this is not an index file at all, not even close"),
 		"empty":   nil,
 		"missing": nil,
 	} {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 			dir := seedRepo(t)
 			writeFile(t, dir, "u.txt", "u\n")
 
@@ -768,6 +779,7 @@ func TestSnapshotUnusableIndex(t *testing.T) {
 }
 
 func TestSnapshotPathShapeChanges(t *testing.T) {
+	t.Parallel()
 	dir := seedRepo(t)
 	writeFile(t, dir, "d/inner.txt", "i\n")
 	commitAll(t, dir, "d")
@@ -849,6 +861,7 @@ func TestSnapshotUnchangedReusesPreviousTree(t *testing.T) {
 }
 
 func TestMarkMissing(t *testing.T) {
+	t.Parallel()
 	dir := seedRepo(t)
 	ctx := context.Background()
 
@@ -885,6 +898,7 @@ func TestMarkMissing(t *testing.T) {
 }
 
 func TestBadSession(t *testing.T) {
+	t.Parallel()
 	dir := seedRepo(t)
 	ctx := context.Background()
 	tmp := t.TempDir()
@@ -915,6 +929,8 @@ func TestBadSession(t *testing.T) {
 }
 
 func TestSnapshotNotInRepo(t *testing.T) {
+	t.Parallel()
+
 	_, err := Snapshot(context.Background(), t.TempDir(), sessA, SnapshotOptions{TempDir: t.TempDir()})
 	if !errors.Is(err, ErrNotRepo) {
 		t.Errorf("error = %v, want ErrNotRepo", err)
@@ -954,6 +970,7 @@ esac`)
 }
 
 func TestPrune(t *testing.T) {
+	t.Parallel()
 	dir := seedRepo(t)
 	ctx := context.Background()
 
@@ -1005,6 +1022,7 @@ func TestPrune(t *testing.T) {
 }
 
 func TestSnapshotCancelledLeavesNoTempFileOrRef(t *testing.T) {
+	t.Parallel()
 	dir := seedRepo(t)
 	tmp := t.TempDir()
 
@@ -1023,6 +1041,7 @@ func TestSnapshotCancelledLeavesNoTempFileOrRef(t *testing.T) {
 }
 
 func TestTempIndexNameAndLockCleanup(t *testing.T) {
+	t.Parallel()
 	tmp := t.TempDir()
 
 	idx, err := newTempIndex(tmp)
@@ -1075,6 +1094,7 @@ esac`)
 }
 
 func TestWriteTurnWithDoneContextWritesNothing(t *testing.T) {
+	t.Parallel()
 	dir := seedRepo(t)
 	r := openRepo(t, dir)
 

@@ -27,6 +27,8 @@ func seededRepo(t *testing.T) (string, Repo) {
 }
 
 func TestWorktreeDir(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		branch  string
 		want    string
@@ -58,6 +60,7 @@ func TestWorktreeDir(t *testing.T) {
 }
 
 func TestListWorktrees(t *testing.T) {
+	t.Parallel()
 	dir, r := seededRepo(t)
 
 	base, err := filepath.EvalSymlinks(t.TempDir())
@@ -127,6 +130,7 @@ func TestListWorktrees(t *testing.T) {
 }
 
 func TestListWorktreesBare(t *testing.T) {
+	t.Parallel()
 	_, _, wt := bareWithWorktree(t)
 
 	r, err := Open(t.Context(), wt)
@@ -168,6 +172,7 @@ func bareWithWorktree(t *testing.T) (parent, bare, wt string) {
 }
 
 func TestCreateWorktreeInside(t *testing.T) {
+	t.Parallel()
 	dir, r := seededRepo(t)
 
 	got, err := CreateWorktree(t.Context(), r, NewWorktree{Branch: "feat/auth", Root: RootInside})
@@ -212,6 +217,8 @@ func TestCreateWorktreeInside(t *testing.T) {
 }
 
 func TestCreateWorktreeExcludeFile(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name         string
 		existing     string // "" = file absent
@@ -227,6 +234,7 @@ func TestCreateWorktreeExcludeFile(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			dir, r := seededRepo(t)
 			info := filepath.Join(dir, ".git", "info")
 			path := filepath.Join(info, "exclude")
@@ -256,6 +264,7 @@ func TestCreateWorktreeExcludeFile(t *testing.T) {
 }
 
 func TestCreateWorktreeSibling(t *testing.T) {
+	t.Parallel()
 	dir, r := seededRepo(t)
 
 	got, err := CreateWorktree(t.Context(), r, NewWorktree{Branch: "feat/s", Root: RootSibling})
@@ -278,6 +287,7 @@ func TestCreateWorktreeSibling(t *testing.T) {
 }
 
 func TestCreateWorktreeToolProblemsDoNotFail(t *testing.T) {
+	t.Parallel()
 	dir, r := seededRepo(t)
 	writeFile(t, dir, ".vscode", "a file, not a directory")
 
@@ -298,6 +308,7 @@ func TestCreateWorktreeToolProblemsDoNotFail(t *testing.T) {
 }
 
 func TestCreateWorktreeExistingBranch(t *testing.T) {
+	t.Parallel()
 	dir, r := seededRepo(t)
 	gitOut(t, dir, "branch", "topic")
 
@@ -312,6 +323,7 @@ func TestCreateWorktreeExistingBranch(t *testing.T) {
 }
 
 func TestCreateWorktreeBase(t *testing.T) {
+	t.Parallel()
 	dir, r := seededRepo(t)
 	gitOut(t, dir, "branch", "release")
 	writeFile(t, dir, "b.txt", "b\n")
@@ -333,6 +345,7 @@ func TestCreateWorktreeBase(t *testing.T) {
 }
 
 func TestCreateWorktreeFromLinked(t *testing.T) {
+	t.Parallel()
 	dir, r := seededRepo(t)
 
 	first, err := CreateWorktree(t.Context(), r, NewWorktree{Branch: "one", Root: RootInside})
@@ -364,6 +377,7 @@ func TestCreateWorktreeFromLinked(t *testing.T) {
 }
 
 func TestCreateWorktreeBare(t *testing.T) {
+	t.Parallel()
 	parent, _, wt := bareWithWorktree(t)
 
 	r, err := Open(t.Context(), wt)
@@ -389,6 +403,7 @@ func TestCreateWorktreeBare(t *testing.T) {
 // WorktreePath names the path CreateWorktree makes, for every root, without
 // touching the disk.
 func TestWorktreePath(t *testing.T) {
+	t.Parallel()
 	dir, r := seededRepo(t)
 	parent, _, wt := bareWithWorktree(t)
 
@@ -451,6 +466,7 @@ func TestWorktreePath(t *testing.T) {
 // git's first line of stderr is its progress report; a failure must carry the
 // line that says why.
 func TestCreateWorktreeFailureNamesGitsReason(t *testing.T) {
+	t.Parallel()
 	_, r := seededRepo(t)
 
 	tests := []struct {
@@ -476,6 +492,7 @@ func TestCreateWorktreeFailureNamesGitsReason(t *testing.T) {
 }
 
 func TestCreateWorktreeRefusals(t *testing.T) {
+	t.Parallel()
 	dir, r := seededRepo(t)
 
 	if err := os.MkdirAll(filepath.Join(dir, ".worktrees", "taken"), 0o755); err != nil {
@@ -504,6 +521,7 @@ func TestCreateWorktreeRefusals(t *testing.T) {
 }
 
 func TestCreateWorktreeReportsTools(t *testing.T) {
+	t.Parallel()
 	dir, r := seededRepo(t)
 	writeFile(t, dir, ".idea/workspace.xml", "x")
 
@@ -518,7 +536,9 @@ func TestCreateWorktreeReportsTools(t *testing.T) {
 }
 
 func TestDefaultBranch(t *testing.T) {
+	t.Parallel()
 	t.Run("origin head", func(t *testing.T) {
+		t.Parallel()
 		src, _ := seededRepo(t)
 		gitOut(t, src, "branch", "trunk")
 
@@ -537,17 +557,20 @@ func TestDefaultBranch(t *testing.T) {
 	})
 
 	t.Run("main only", func(t *testing.T) {
+		t.Parallel()
 		_, r := seededRepo(t)
 		assertDefault(t, r, "main")
 	})
 
 	t.Run("master only", func(t *testing.T) {
+		t.Parallel()
 		dir, r := seededRepo(t)
 		gitOut(t, dir, "branch", "-m", "main", "master")
 		assertDefault(t, r, "master")
 	})
 
 	t.Run("neither", func(t *testing.T) {
+		t.Parallel()
 		dir, r := seededRepo(t)
 		gitOut(t, dir, "branch", "-m", "main", "dev")
 
@@ -558,6 +581,7 @@ func TestDefaultBranch(t *testing.T) {
 	})
 
 	t.Run("origin head outside origin", func(t *testing.T) {
+		t.Parallel()
 		dir, r := seededRepo(t)
 		gitOut(t, dir, "update-ref", "refs/remotes/up/dev", "HEAD")
 		gitOut(t, dir, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/up/dev")
@@ -565,6 +589,7 @@ func TestDefaultBranch(t *testing.T) {
 	})
 
 	t.Run("origin head dangling", func(t *testing.T) {
+		t.Parallel()
 		dir, r := seededRepo(t)
 		gitOut(t, dir, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/gone")
 		assertDefault(t, r, "main")
@@ -592,6 +617,7 @@ func readFile(t *testing.T, path string) string {
 }
 
 func TestCreateWorktreeTracksNothing(t *testing.T) {
+	t.Parallel()
 	src, _ := seededRepo(t)
 
 	remote := filepath.Join(t.TempDir(), "remote.git")

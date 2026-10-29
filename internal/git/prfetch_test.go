@@ -52,6 +52,7 @@ func newPRFixture(t *testing.T) prFixture {
 }
 
 func TestFetchPRWritesOnlyItsRefs(t *testing.T) {
+	t.Parallel()
 	f := newPRFixture(t)
 	before := refs(t, f.work)
 	remoteMain := gitOut(t, f.work, "rev-parse", "refs/remotes/origin/main")
@@ -99,6 +100,7 @@ func TestFetchPRWritesOnlyItsRefs(t *testing.T) {
 }
 
 func TestFetchPRForcePushedHead(t *testing.T) {
+	t.Parallel()
 	f := newPRFixture(t)
 
 	first, err := FetchPR(context.Background(), f.repo, "origin", 7, "main")
@@ -126,6 +128,7 @@ func TestFetchPRForcePushedHead(t *testing.T) {
 }
 
 func TestFetchPRMissing(t *testing.T) {
+	t.Parallel()
 	f := newPRFixture(t)
 
 	_, err := FetchPR(context.Background(), f.repo, "origin", 99, "main")
@@ -210,6 +213,7 @@ func TestFetchPRErrorHidesTheURL(t *testing.T) {
 }
 
 func TestDiffPRSourceShowsOnlyThePR(t *testing.T) {
+	t.Parallel()
 	f := newPRFixture(t)
 
 	pr, err := FetchPR(context.Background(), f.repo, "origin", 7, "main")
@@ -238,6 +242,7 @@ func TestDiffPRSourceShowsOnlyThePR(t *testing.T) {
 }
 
 func TestDiffPRSourceNotFetched(t *testing.T) {
+	t.Parallel()
 	f := newPRFixture(t)
 
 	_, err := testEngine(t).Diff(context.Background(), PRSource{Worktree: f.work, Number: 7})
@@ -247,6 +252,7 @@ func TestDiffPRSourceNotFetched(t *testing.T) {
 }
 
 func TestDeletePRRefs(t *testing.T) {
+	t.Parallel()
 	f := newPRFixture(t)
 
 	if _, err := FetchPR(context.Background(), f.repo, "origin", 7, "main"); err != nil {
@@ -265,6 +271,7 @@ func TestDeletePRRefs(t *testing.T) {
 }
 
 func TestEngineUpdateOnPRSourceRunsFullDiff(t *testing.T) {
+	t.Parallel()
 	f := newPRFixture(t)
 
 	if _, err := FetchPR(context.Background(), f.repo, "origin", 7, "main"); err != nil {

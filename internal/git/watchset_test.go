@@ -108,6 +108,7 @@ func TestWatchSetStopsAfterTheLastRelease(t *testing.T) {
 }
 
 func TestWatchSetReacquireNeverRepeatsSeq(t *testing.T) {
+	t.Parallel()
 	dir := newRepo(t)
 	s := newWatchSet(t)
 	r := openRepo(t, dir)
@@ -184,6 +185,8 @@ func TestWatchSetCloseStopsEverything(t *testing.T) {
 }
 
 func TestWatchSetReleaseAfterCloseIsSafe(t *testing.T) {
+	t.Parallel()
+
 	s := NewWatchSet(context.Background(), fastWatch)
 
 	rel, err := s.Acquire(context.Background(), openRepo(t, newRepo(t)))
@@ -232,6 +235,7 @@ func TestWatchSetReportsAFailedWatch(t *testing.T) {
 }
 
 func TestWatchSetFailedAcquireNeverBlocksWithoutAReader(t *testing.T) {
+	t.Parallel()
 	r := openRepo(t, newRepo(t))
 	ctx, cancel := context.WithCancel(context.Background())
 	s := NewWatchSet(ctx, fastWatch)
@@ -257,6 +261,7 @@ func TestWatchSetFailedAcquireNeverBlocksWithoutAReader(t *testing.T) {
 }
 
 func TestWatchSetConcurrentAcquireRelease(t *testing.T) {
+	t.Parallel()
 	dir := newRepo(t)
 	s := newWatchSet(t)
 	r := openRepo(t, dir)
@@ -342,11 +347,14 @@ func TestWatchSetReportsARealStartFailure(t *testing.T) {
 // A watcher that reported an error may be missing events from then on, so its
 // counter must not allow a skip until it is restarted.
 func TestWatchSetSeqIsOffAfterAWatcherError(t *testing.T) {
+	t.Parallel()
+
 	for name, injected := range map[string]error{
 		"read error": errors.New("read failed"),
 		"overflow":   fsnotify.ErrEventOverflow,
 	} {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 			dir := newRepo(t)
 			injectErrs := make(chan error, 1)
 			opts := fastWatch

@@ -77,6 +77,7 @@ func refs(t *testing.T, dir string) string {
 }
 
 func TestPushFirstSetsUpstream(t *testing.T) {
+	t.Parallel()
 	f := newPushFixture(t)
 
 	res, err := Push(context.Background(), f.repo, "feat")
@@ -99,6 +100,7 @@ func TestPushFirstSetsUpstream(t *testing.T) {
 }
 
 func TestPushAgainFastForwards(t *testing.T) {
+	t.Parallel()
 	f := newPushFixture(t)
 	ctx := context.Background()
 
@@ -124,6 +126,7 @@ func TestPushAgainFastForwards(t *testing.T) {
 }
 
 func TestPushUpToDate(t *testing.T) {
+	t.Parallel()
 	f := newPushFixture(t)
 	ctx := context.Background()
 
@@ -142,6 +145,7 @@ func TestPushUpToDate(t *testing.T) {
 }
 
 func TestPushIgnoresUpstreamOfAnotherName(t *testing.T) {
+	t.Parallel()
 	f := newPushFixture(t)
 	gitOut(t, f.root, "config", "branch.feat.remote", "origin")
 	gitOut(t, f.root, "config", "branch.feat.merge", "refs/heads/other")
@@ -165,6 +169,7 @@ func TestPushIgnoresUpstreamOfAnotherName(t *testing.T) {
 }
 
 func TestPushNeverLandsOnTheBaseBranch(t *testing.T) {
+	t.Parallel()
 	f := newPushFixture(t)
 	ctx := context.Background()
 
@@ -226,6 +231,7 @@ func TestPushRefusesURLAsRemote(t *testing.T) {
 }
 
 func TestPushKeepsUpstreamOnAnotherRemote(t *testing.T) {
+	t.Parallel()
 	f := newPushFixture(t)
 	ctx := context.Background()
 
@@ -260,6 +266,7 @@ func TestPushKeepsUpstreamOnAnotherRemote(t *testing.T) {
 }
 
 func TestPushRejectedChangesNothing(t *testing.T) {
+	t.Parallel()
 	f := newPushFixture(t)
 	ctx := context.Background()
 
@@ -337,6 +344,7 @@ func TestPushNeverForces(t *testing.T) {
 }
 
 func TestPushRefusesBadBranch(t *testing.T) {
+	t.Parallel()
 	f := newPushFixture(t)
 
 	for _, b := range []string{"-x", "a..b", ""} {

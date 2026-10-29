@@ -10,6 +10,7 @@ import (
 )
 
 func TestOpen(t *testing.T) {
+	t.Parallel()
 	root := newRepo(t)
 	writeFile(t, root, "sub/a.txt", "a\n")
 	commitAll(t, root, "init")
@@ -37,6 +38,8 @@ func TestOpen(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			got, err := Open(context.Background(), tt.dir)
 			if err != nil {
 				t.Fatal(err)
@@ -50,6 +53,8 @@ func TestOpen(t *testing.T) {
 }
 
 func TestOpenOutsideRepo(t *testing.T) {
+	t.Parallel()
+
 	_, err := Open(context.Background(), t.TempDir())
 	if !errors.Is(err, ErrNotRepo) {
 		t.Fatalf("err = %v, want ErrNotRepo", err)
@@ -57,6 +62,7 @@ func TestOpenOutsideRepo(t *testing.T) {
 }
 
 func TestOpenBareIsNotAWorkTree(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	gitOut(t, dir, "init", "-q", "--bare")
 
@@ -86,6 +92,8 @@ func TestOpenFailureIsNotErrNotRepo(t *testing.T) {
 }
 
 func TestMainRoot(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name    string
 		repo    Repo

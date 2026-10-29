@@ -32,6 +32,7 @@ func totals(res Result) Stats {
 }
 
 func TestStatsMatchDiffTotals(t *testing.T) {
+	t.Parallel()
 	dir := branchRepo(t, func(dir string) {
 		for _, n := range []string{"mod", "del", "ren"} {
 			writeFile(t, dir, n+".txt", numbered(n, 20))
@@ -65,6 +66,7 @@ func TestStatsMatchDiffTotals(t *testing.T) {
 }
 
 func TestStatsCountsEachKind(t *testing.T) {
+	t.Parallel()
 	dir := branchRepo(t, func(dir string) {
 		writeFile(t, dir, "del.txt", numbered("del", 4))
 		writeFile(t, dir, "bin.dat", "\x00a")
@@ -81,6 +83,7 @@ func TestStatsCountsEachKind(t *testing.T) {
 }
 
 func TestStatsDefaultBaseAndClean(t *testing.T) {
+	t.Parallel()
 	dir := branchRepo(t, func(dir string) { writeFile(t, dir, "a.txt", "a\n") }, func(string) {})
 
 	if got := statsOf(t, testEngine(t), BranchSource{Worktree: dir}); got != (Stats{}) {
@@ -107,6 +110,7 @@ func TestStatsRunsNoHunkPass(t *testing.T) {
 }
 
 func TestStatsErrors(t *testing.T) {
+	t.Parallel()
 	e := testEngine(t)
 
 	if _, err := e.Stats(context.Background(), TurnSource{}); err == nil {

@@ -95,6 +95,7 @@ func TestSavedFileReachesTheDiff(t *testing.T) {
 }
 
 func TestTurnModeIsolatesTheLastTurn(t *testing.T) {
+	t.Parallel()
 	dir := seedRepo(t)
 	writeFile(t, dir, "d.txt", "d\n")
 	writeFile(t, dir, "e.txt", "e\n")

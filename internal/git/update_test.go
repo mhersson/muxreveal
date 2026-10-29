@@ -104,43 +104,46 @@ func TestUpdateTouchedFileEqualsFullDiff(t *testing.T) {
 }
 
 func TestUpdateShapesEqualFullDiff(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name    string
-		setup   func(dir string) // before prev is computed
-		change  func(dir string)
+		setup   func(t *testing.T, dir string) // before prev is computed
+		change  func(t *testing.T, dir string)
 		touched []string
 	}{
-		{"modify", nil, func(dir string) { writeFile(t, dir, "c.txt", "changed\n") }, []string{"c.txt"}},
-		{"revert a changed file", nil, func(dir string) { writeFile(t, dir, "a.txt", numbered("a.txt", 30)) }, []string{"a.txt"}},
-		{"delete", nil, func(dir string) { must(t, os.Remove(filepath.Join(dir, "b.txt"))) }, []string{"b.txt"}},
-		{"untracked file", nil, func(dir string) { writeFile(t, dir, "new.txt", "fresh\nfile\n") }, []string{"new.txt"}},
-		{"removed directory", nil, func(dir string) { must(t, os.RemoveAll(filepath.Join(dir, "dir"))) }, []string{"dir"}},
-		{"touched path that never existed", nil, func(dir string) {}, []string{"ghost.txt"}},
-		{"two files", nil, func(dir string) {
+		{"modify", nil, func(t *testing.T, dir string) { writeFile(t, dir, "c.txt", "changed\n") }, []string{"c.txt"}},
+		{"revert a changed file", nil, func(t *testing.T, dir string) { writeFile(t, dir, "a.txt", numbered("a.txt", 30)) }, []string{"a.txt"}},
+		{"delete", nil, func(t *testing.T, dir string) { must(t, os.Remove(filepath.Join(dir, "b.txt"))) }, []string{"b.txt"}},
+		{"untracked file", nil, func(t *testing.T, dir string) { writeFile(t, dir, "new.txt", "fresh\nfile\n") }, []string{"new.txt"}},
+		{"removed directory", nil, func(t *testing.T, dir string) { must(t, os.RemoveAll(filepath.Join(dir, "dir"))) }, []string{"dir"}},
+		{"touched path that never existed", nil, func(t *testing.T, dir string) {}, []string{"ghost.txt"}},
+		{"two files", nil, func(t *testing.T, dir string) {
 			writeFile(t, dir, "b.txt", "x\n")
 			writeFile(t, dir, "c.txt", "y\n")
 		}, []string{"b.txt", "c.txt"}},
-		{"deleted file next to an untouched modification", nil, func(dir string) { must(t, os.Remove(filepath.Join(dir, "dir/e.txt"))) }, []string{"dir/e.txt"}},
-		{"identical content added while another file is deleted", func(dir string) {
+		{"deleted file next to an untouched modification", nil, func(t *testing.T, dir string) { must(t, os.Remove(filepath.Join(dir, "dir/e.txt"))) }, []string{"dir/e.txt"}},
+		{"identical content added while another file is deleted", func(t *testing.T, dir string) {
 			must(t, os.Remove(filepath.Join(dir, "c.txt")))
-		}, func(dir string) {
+		}, func(t *testing.T, dir string) {
 			writeFile(t, dir, "moved.txt", numbered("c.txt", 30))
 		}, []string{"moved.txt"}},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			dir := updateRepo(t)
 			src := BranchSource{Worktree: dir, Base: "main"}
 			e := testEngine(t)
 
 			if tt.setup != nil {
-				tt.setup(dir)
+				tt.setup(t, dir)
 			}
 
 			prev := diffOK(t, e, src)
 
-			tt.change(dir)
+			tt.change(t, dir)
 
 			res := updateOK(t, e, prev, src, Batch{Paths: tt.touched})
 			sameAsFull(t, res, src)
@@ -342,6 +345,7 @@ func TestUpdateLiveTurn(t *testing.T) {
 }
 
 func TestUpdateKeepsCaps(t *testing.T) {
+	t.Parallel()
 	dir := branchRepo(t, func(dir string) {
 		for i := range 6 {
 			writeFile(t, dir, fmt.Sprintf("f%d.txt", i), numbered("x", 10))
@@ -532,6 +536,7 @@ func TestUpdateReopensAWorktreeWhoseGitDirMoved(t *testing.T) {
 }
 
 func TestUpdateOfAGoneWorktreeIsAnError(t *testing.T) {
+	t.Parallel()
 	dir := updateRepo(t)
 	src := BranchSource{Worktree: dir, Base: "main"}
 	e := testEngine(t)
@@ -552,6 +557,7 @@ func TestUpdateOfAGoneWorktreeIsAnError(t *testing.T) {
 // git dirs still exist and the error comes from running git in the gone
 // directory; the entry is dropped all the same.
 func TestUpdateOfAGoneLinkedWorktreeIsAnError(t *testing.T) {
+	t.Parallel()
 	dir := updateRepo(t)
 	wt := filepath.Join(t.TempDir(), "wt")
 	gitOut(t, dir, "worktree", "add", "-q", "-b", "other", wt, "main")
@@ -668,6 +674,8 @@ func TestUpdateKeepsItsRepoWhenItsContextEnds(t *testing.T) {
 }
 
 func TestUpdateRunsFromSeveralGoroutines(t *testing.T) {
+	t.Parallel()
+
 	var srcs []BranchSource
 
 	prevs := map[string]Result{}

@@ -159,6 +159,7 @@ func baseRepo(t *testing.T) string {
 }
 
 func TestWatchWriteTrackedFile(t *testing.T) {
+	t.Parallel()
 	dir := baseRepo(t)
 	w := startWatch(t, dir, fastWatch)
 
@@ -171,6 +172,7 @@ func TestWatchWriteTrackedFile(t *testing.T) {
 }
 
 func TestWatchNewNestedDirectory(t *testing.T) {
+	t.Parallel()
 	dir := baseRepo(t)
 	w := startWatch(t, dir, fastWatch)
 
@@ -216,6 +218,7 @@ func TestWatchDeletedAndRecreatedDirectory(t *testing.T) {
 }
 
 func TestWatchIgnoredDirectoryGetsNoWatch(t *testing.T) {
+	t.Parallel()
 	dir := newRepo(t)
 	writeFile(t, dir, ".gitignore", "node_modules/\n*.log\n")
 	writeFile(t, dir, "tracked.txt", "one\n")
@@ -268,6 +271,7 @@ func TestWatchNewIgnoredDirectoryWithManyFiles(t *testing.T) {
 }
 
 func TestWatchIgnoredFileInWatchedDirectory(t *testing.T) {
+	t.Parallel()
 	dir := newRepo(t)
 	writeFile(t, dir, ".gitignore", "*.log\n")
 	writeFile(t, dir, "src/a.go", "package a\n")
@@ -294,6 +298,7 @@ func TestWatchIgnoredFileInWatchedDirectory(t *testing.T) {
 }
 
 func TestWatchTrackedFileMatchingIgnorePatternIsReported(t *testing.T) {
+	t.Parallel()
 	dir := newRepo(t)
 	writeFile(t, dir, ".gitignore", "*.log\n")
 	writeFile(t, dir, "kept.log", "one\n")
@@ -307,6 +312,7 @@ func TestWatchTrackedFileMatchingIgnorePatternIsReported(t *testing.T) {
 }
 
 func TestWatchMainCheckoutSkipsWorktreesDirectory(t *testing.T) {
+	t.Parallel()
 	dir := baseRepo(t)
 	writeFile(t, dir, ".worktrees/feat/file.txt", "x\n")
 
@@ -496,6 +502,7 @@ func TestWatchBatchWaitsForTheDebounce(t *testing.T) {
 // The watcher has no clock seam, and a timing bound on a real run would flake
 // under load, so the default is pinned on the options the watcher runs with.
 func TestWatchDefaultDebounce(t *testing.T) {
+	t.Parallel()
 	w := startWatch(t, baseRepo(t), WatchOptions{})
 
 	if got, want := w.opts.Debounce, 100*time.Millisecond; got != want {
@@ -508,6 +515,7 @@ func TestWatchDefaultDebounce(t *testing.T) {
 }
 
 func TestWatchGitignoreChangeAddsDirectoryWatch(t *testing.T) {
+	t.Parallel()
 	dir := newRepo(t)
 	writeFile(t, dir, ".gitignore", "vendor/\n")
 	writeFile(t, dir, "vendor/lib/lib.go", "package lib\n")
@@ -561,6 +569,7 @@ func TestWatchLinkedWorktree(t *testing.T) {
 }
 
 func TestWatchCheckoutOfManyFiles(t *testing.T) {
+	t.Parallel()
 	dir := newRepo(t)
 
 	for i := range 2000 {
@@ -701,6 +710,8 @@ func TestWatchSlowConsumerKeepsLatestChanges(t *testing.T) {
 }
 
 func TestWatchErrorNamesInotifyLimit(t *testing.T) {
+	t.Parallel()
+
 	err := watchError("/repo/dir", syscall.ENOSPC)
 	if !errors.Is(err, syscall.ENOSPC) || !strings.Contains(err.Error(), "fs.inotify.max_user_watches") {
 		t.Fatalf("got %v", err)
@@ -713,6 +724,8 @@ func TestWatchErrorNamesInotifyLimit(t *testing.T) {
 }
 
 func TestMergeBatches(t *testing.T) {
+	t.Parallel()
+
 	got := mergeBatches(Batch{Paths: []string{"b", "a"}, Git: true}, Batch{Paths: []string{"c", "a"}, Overflow: true})
 
 	want := Batch{Paths: []string{"a", "b", "c"}, Git: true, Overflow: true}
@@ -722,6 +735,7 @@ func TestMergeBatches(t *testing.T) {
 }
 
 func TestWatchSkipsSubmodulesAndNestedRepositories(t *testing.T) {
+	t.Parallel()
 	sub := newRepo(t)
 	writeFile(t, sub, "src/a.txt", "a\n")
 	commitAll(t, sub, "sub")
@@ -753,6 +767,8 @@ func TestWatchSkipsSubmodulesAndNestedRepositories(t *testing.T) {
 }
 
 func TestWatchErrorNamesInstanceLimit(t *testing.T) {
+	t.Parallel()
+
 	err := instanceError("/repo", syscall.EMFILE)
 	if !errors.Is(err, syscall.EMFILE) || !strings.Contains(err.Error(), "fs.inotify.max_user_instances") {
 		t.Fatalf("got %v", err)
@@ -764,6 +780,7 @@ func TestWatchErrorNamesInstanceLimit(t *testing.T) {
 }
 
 func TestWatchOverflowRewalksUnwatchedDirectories(t *testing.T) {
+	t.Parallel()
 	dir := baseRepo(t)
 
 	r, err := Open(context.Background(), dir)
@@ -953,6 +970,7 @@ func runMetaRows(t *testing.T, w *Watcher, rows []metaRow) {
 }
 
 func TestKqueueMetaOps(t *testing.T) {
+	t.Parallel()
 	w := eventWatcher(t)
 	gitDir, refs := w.repo.GitDir, w.refsDir
 	ref := filepath.Join(refs, "heads", "main")
@@ -976,6 +994,7 @@ func TestKqueueMetaOps(t *testing.T) {
 }
 
 func TestKqueueNewDirectoryUnderRefs(t *testing.T) {
+	t.Parallel()
 	w := eventWatcher(t)
 	heads := filepath.Join(w.refsDir, "heads")
 
@@ -1007,6 +1026,7 @@ func TestKqueueNewDirectoryUnderRefs(t *testing.T) {
 }
 
 func TestKqueueLinkedWorktreeGitDir(t *testing.T) {
+	t.Parallel()
 	main := eventWatcher(t)
 	common := main.repo.CommonDir
 	linkedGit := filepath.Join(common, "worktrees", "x")
@@ -1032,6 +1052,7 @@ func TestKqueueLinkedWorktreeGitDir(t *testing.T) {
 }
 
 func TestWatchNestedBranchSetsGit(t *testing.T) {
+	t.Parallel()
 	dir := baseRepo(t)
 	w := startWatch(t, dir, fastWatch)
 
@@ -1065,6 +1086,8 @@ func TestWatchOverflowBumpsSeq(t *testing.T) {
 }
 
 func TestWatchIgnoresVanishedPaths(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name         string
 		errno        syscall.Errno
@@ -1076,6 +1099,7 @@ func TestWatchIgnoresVanishedPaths(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			dir := baseRepo(t)
 			injectErrs := make(chan error, 1)
 			opts := fastWatch

@@ -9,6 +9,7 @@ import (
 )
 
 func TestLog(t *testing.T) {
+	t.Parallel()
 	dir := newRepo(t)
 	writeFile(t, dir, "a.txt", "a\n")
 	commitAll(t, dir, "init")
@@ -56,6 +57,7 @@ func TestLog(t *testing.T) {
 }
 
 func TestLogCaps(t *testing.T) {
+	t.Parallel()
 	dir := newRepo(t)
 	writeFile(t, dir, "a.txt", "a\n")
 	commitAll(t, dir, "init")
@@ -111,6 +113,7 @@ func TestLogRefusesOptionBase(t *testing.T) {
 }
 
 func TestLogUnknownBase(t *testing.T) {
+	t.Parallel()
 	dir := newRepo(t)
 	writeFile(t, dir, "a.txt", "a\n")
 	commitAll(t, dir, "init")
