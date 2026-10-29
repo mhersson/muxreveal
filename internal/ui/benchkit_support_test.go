@@ -446,14 +446,18 @@ func benchReviewMsg(app *App, res git.Result, live bool) reviewLoadedMsg {
 	}
 }
 
-// openBenchDrawer opens the drawer on pane in branch mode, with the keyboard,
-// and answers its first load with the fake engine's first result. The app has
+// openBenchDrawer opens the drawer on pane in branch mode, with its tree open
+// and the keyboard, and answers its first load with the fake engine's first result. The app has
 // no engine: an answer is the one message a load ends in, so the sync that
 // starts the load and the apply of its answer run as in the app. The load's
 // command is not run, so its context is ended here.
 func openBenchDrawer(app *App, pane core.PaneID) error {
 	if err := app.dispatch(core.OpenReview{Pane: pane, Mode: core.ReviewBranch}); err != nil {
 		return fmt.Errorf("open the drawer: %w", err)
+	}
+
+	if err := app.dispatch(core.SetReviewTree{Open: true}); err != nil {
+		return fmt.Errorf("open the drawer's tree: %w", err)
 	}
 
 	app.watches.panes[pane] = &paneWatch{cwd: app.store.State().Panes[pane].Cwd, want: benchReviewRoot}
