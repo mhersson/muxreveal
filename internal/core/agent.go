@@ -2,6 +2,7 @@ package core
 
 import (
 	"fmt"
+	"math"
 	"slices"
 )
 
@@ -33,7 +34,8 @@ func (s AgentState) String() string {
 }
 
 // SetPaneKind changes what a pane is. An agent names its harness; becoming a
-// shell clears Harness, Session, Transcript, State, Action and AgentCwd.
+// shell clears Harness, Session, Transcript, State, Action, AgentCwd and the
+// reported status.
 type SetPaneKind struct {
 	ID      PaneID
 	Kind    PaneKind
@@ -79,7 +81,9 @@ func (s *State) agentPane(id PaneID) (Pane, error) {
 }
 
 // SetAgentSession records the session an agent reported and its transcript
-// file. An empty Session clears both.
+// file. An empty Session clears both. An end or a change of session also clears
+// the reported status, unless that status already belongs to the new session:
+// a status line can report before its SessionStart hook.
 type SetAgentSession struct {
 	ID         PaneID
 	Session    SessionID
@@ -92,6 +96,10 @@ func (a SetAgentSession) apply(s *State) error {
 		return err
 	}
 
+	if a.Session == "" || (a.Session != p.Session && a.Session != p.StatusSession) {
+		p.clearStatus()
+	}
+
 	p.Session, p.Transcript = a.Session, a.Transcript
 	if a.Session == "" {
 		p.Transcript = ""
@@ -100,6 +108,45 @@ func (a SetAgentSession) apply(s *State) error {
 	s.Panes[a.ID] = p
 
 	return nil
+}
+
+// SetAgentStatus records the model and context an agent's status line
+// reported for Session. A false ContextKnown clears the meter and keeps the
+// model; Context is floored and otherwise taken as reported.
+type SetAgentStatus struct {
+	ID           PaneID
+	Session      SessionID
+	Model        string
+	Context      float64
+	ContextKnown bool
+}
+
+func (a SetAgentStatus) apply(s *State) error {
+	p, err := s.agentPane(a.ID)
+	if err != nil {
+		return err
+	}
+
+	p.Model, p.StatusSession = a.Model, a.Session
+	p.Context, p.ContextKnown = a.percent(), a.ContextKnown
+	s.Panes[a.ID] = p
+
+	return nil
+}
+
+// Matches reports whether p already holds the status a would record.
+func (a SetAgentStatus) Matches(p Pane) bool {
+	return p.Model == a.Model && p.StatusSession == a.Session &&
+		p.ContextKnown == a.ContextKnown && p.Context == a.percent()
+}
+
+// percent is the floored context, 0 when none was reported.
+func (a SetAgentStatus) percent() int {
+	if !a.ContextKnown {
+		return 0
+	}
+
+	return int(math.Floor(a.Context))
 }
 
 // SetAgentState records what an agent is doing; AgentUnknown clears the badge.

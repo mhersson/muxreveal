@@ -590,6 +590,31 @@ func TestAgentCwdIsNotPersisted(t *testing.T) {
 	eq(t, got, roundTripped())
 }
 
+func TestAgentStatusIsNotPersisted(t *testing.T) {
+	st := fixedState()
+	p := st.Panes["p1"]
+	p.Model, p.Context, p.ContextKnown, p.StatusSession = "Opus 4.8", 73, true, "status-session"
+	st.Panes["p1"] = p
+
+	data, err := Encode(st)
+	noErr(t, err)
+
+	for _, leak := range []string{"Opus 4.8", "status-session", "context", "model"} {
+		if strings.Contains(string(data), leak) {
+			t.Errorf("the status is written (%q):\n%s", leak, data)
+		}
+	}
+
+	got, rep, err := decodeDefault(data)
+	noErr(t, err)
+	eq(t, rep, Report{})
+	eq(t, got.Panes["p1"].Model, "")
+	eq(t, got.Panes["p1"].Context, 0)
+	eq(t, got.Panes["p1"].ContextKnown, false)
+	eq(t, got.Panes["p1"].StatusSession, core.SessionID(""))
+	eq(t, got, roundTripped())
+}
+
 func TestRailPersistence(t *testing.T) {
 	open := fixedState()
 	open.Rail = true

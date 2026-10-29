@@ -33,7 +33,7 @@ func TestAgentStateString(t *testing.T) {
 }
 
 func TestSetPaneKind(t *testing.T) {
-	full := Pane{Kind: KindAgent, Cwd: "/w", Harness: "claude-code", Session: "s1", Transcript: "/t", State: AgentWorking, Action: "Edit a.go", AgentCwd: "/w/sub"}
+	full := Pane{Kind: KindAgent, Cwd: "/w", Harness: "claude-code", Session: "s1", Transcript: "/t", State: AgentWorking, Action: "Edit a.go", AgentCwd: "/w/sub", Model: "Opus 4.8", Context: 42, ContextKnown: true, StatusSession: "s1"}
 
 	tests := []struct {
 		name string
@@ -80,6 +80,8 @@ func TestAgentActionErrors(t *testing.T) {
 		{"action of shell pane", SetAgentAction{ID: "p1", Action: "x"}},
 		{"cwd of unknown pane", SetAgentCwd{ID: "p9", Cwd: "/x"}},
 		{"cwd of shell pane", SetAgentCwd{ID: "p1", Cwd: "/x"}},
+		{"status of unknown pane", SetAgentStatus{ID: "p9", Session: "s", Model: "Opus 4.8"}},
+		{"status of shell pane", SetAgentStatus{ID: "p1", Session: "s", Model: "Opus 4.8"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -242,5 +244,169 @@ func TestAgentPanes(t *testing.T) {
 		if got[i] != want[i] {
 			t.Fatalf("AgentPanes() = %v, want %v", got, want)
 		}
+	}
+}
+
+func TestSetAgentStatus(t *testing.T) {
+	reported := Pane{Kind: KindAgent, Harness: "claude-code", Session: "s1", Transcript: "/t", State: AgentWorking, Action: "Edit a.go", Model: "Opus 4.8", Context: 55, ContextKnown: true, StatusSession: "s1"}
+
+	tests := []struct {
+		name    string
+		from    Pane
+		act     SetAgentStatus
+		want    Pane
+		wantErr bool
+	}{
+		{
+			name: "set",
+			from: Pane{Kind: KindAgent, Harness: "claude-code"},
+			act:  SetAgentStatus{Session: "s1", Model: "Opus 4.8", Context: 42, ContextKnown: true},
+			want: Pane{Kind: KindAgent, Harness: "claude-code", Model: "Opus 4.8", Context: 42, ContextKnown: true, StatusSession: "s1"},
+		},
+		{
+			name: "69.9 floors to 69",
+			from: Pane{Kind: KindAgent, Harness: "claude-code"},
+			act:  SetAgentStatus{Session: "s1", Model: "Opus 4.8", Context: 69.9, ContextKnown: true},
+			want: Pane{Kind: KindAgent, Harness: "claude-code", Model: "Opus 4.8", Context: 69, ContextKnown: true, StatusSession: "s1"},
+		},
+		{
+			name: "zero percent is known",
+			from: Pane{Kind: KindAgent, Harness: "claude-code"},
+			act:  SetAgentStatus{Session: "s1", Model: "Opus 4.8", Context: 0.4, ContextKnown: true},
+			want: Pane{Kind: KindAgent, Harness: "claude-code", Model: "Opus 4.8", Context: 0, ContextKnown: true, StatusSession: "s1"},
+		},
+		{
+			name: "over 100 is kept as floored",
+			from: Pane{Kind: KindAgent, Harness: "claude-code"},
+			act:  SetAgentStatus{Session: "s1", Model: "Opus 4.8", Context: 130.5, ContextKnown: true},
+			want: Pane{Kind: KindAgent, Harness: "claude-code", Model: "Opus 4.8", Context: 130, ContextKnown: true, StatusSession: "s1"},
+		},
+		{
+			name: "negative floors down",
+			from: Pane{Kind: KindAgent, Harness: "claude-code"},
+			act:  SetAgentStatus{Session: "s1", Model: "Opus 4.8", Context: -3.2, ContextKnown: true},
+			want: Pane{Kind: KindAgent, Harness: "claude-code", Model: "Opus 4.8", Context: -4, ContextKnown: true, StatusSession: "s1"},
+		},
+		{
+			name: "a null percentage keeps the model and clears the meter",
+			from: reported,
+			act:  SetAgentStatus{Session: "s1", Model: "Opus 4.8", Context: 77},
+			want: Pane{Kind: KindAgent, Harness: "claude-code", Session: "s1", Transcript: "/t", State: AgentWorking, Action: "Edit a.go", Model: "Opus 4.8", StatusSession: "s1"},
+		},
+		{
+			name: "a new model and percentage replace the old",
+			from: reported,
+			act:  SetAgentStatus{Session: "s1", Model: "Sonnet 5.5", Context: 91.2, ContextKnown: true},
+			want: Pane{Kind: KindAgent, Harness: "claude-code", Session: "s1", Transcript: "/t", State: AgentWorking, Action: "Edit a.go", Model: "Sonnet 5.5", Context: 91, ContextKnown: true, StatusSession: "s1"},
+		},
+		{
+			name:    "a shell pane errors",
+			from:    Pane{Kind: KindShell, Cwd: "/w"},
+			act:     SetAgentStatus{Session: "s1", Model: "Opus 4.8", Context: 42, ContextKnown: true},
+			want:    Pane{Kind: KindShell, Cwd: "/w"},
+			wantErr: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.act.ID = "p1"
+			st := NewStore(agentState(map[PaneID]Pane{"p1": tt.from}, leaf("p1"), "p1"))
+
+			err := st.Dispatch(tt.act)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("Dispatch() error = %v, wantErr %v", err, tt.wantErr)
+			}
+
+			if got := st.State().Panes["p1"]; got != tt.want {
+				t.Errorf("pane = %+v, want %+v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestSessionChangeClearsStatus(t *testing.T) {
+	reported := func(session SessionID) Pane {
+		return Pane{Kind: KindAgent, Harness: "claude-code", Session: session, Transcript: "/t", Model: "Opus 4.8", Context: 40, ContextKnown: true, StatusSession: "s1"}
+	}
+
+	tests := []struct {
+		name string
+		from Pane
+		act  SetAgentSession
+		want Pane
+	}{
+		{
+			name: "a new session clears it",
+			from: reported("s1"),
+			act:  SetAgentSession{Session: "s2", Transcript: "/t2"},
+			want: Pane{Kind: KindAgent, Harness: "claude-code", Session: "s2", Transcript: "/t2"},
+		},
+		{
+			name: "the same session keeps it",
+			from: reported("s1"),
+			act:  SetAgentSession{Session: "s1", Transcript: "/t"},
+			want: reported("s1"),
+		},
+		{
+			name: "an end clears it",
+			from: reported("s1"),
+			act:  SetAgentSession{},
+			want: Pane{Kind: KindAgent, Harness: "claude-code"},
+		},
+		{
+			name: "an end clears a status that came before any session",
+			from: Pane{Kind: KindAgent, Harness: "claude-code", Model: "Opus 4.8", Context: 40, ContextKnown: true, StatusSession: "s1"},
+			act:  SetAgentSession{},
+			want: Pane{Kind: KindAgent, Harness: "claude-code"},
+		},
+		{
+			name: "a status that already carries the new session survives its SessionStart",
+			from: Pane{Kind: KindAgent, Harness: "claude-code", Model: "Opus 4.8", Context: 40, ContextKnown: true, StatusSession: "s1"},
+			act:  SetAgentSession{Session: "s1", Transcript: "/t"},
+			want: reported("s1"),
+		},
+		{
+			name: "a status from another session does not survive",
+			from: Pane{Kind: KindAgent, Harness: "claude-code", Model: "Opus 4.8", Context: 40, ContextKnown: true, StatusSession: "s9"},
+			act:  SetAgentSession{Session: "s1", Transcript: "/t"},
+			want: Pane{Kind: KindAgent, Harness: "claude-code", Session: "s1", Transcript: "/t"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.act.ID = "p1"
+
+			got := dispatch(t, agentState(map[PaneID]Pane{"p1": tt.from}, leaf("p1"), "p1"), tt.act)
+			if got.Panes["p1"] != tt.want {
+				t.Errorf("pane = %+v, want %+v", got.Panes["p1"], tt.want)
+			}
+		})
+	}
+}
+
+func TestSetAgentStatusMatches(t *testing.T) {
+	p := Pane{Kind: KindAgent, Model: "Opus 4.8", Context: 69, ContextKnown: true, StatusSession: "s1"}
+
+	tests := []struct {
+		name string
+		pane Pane
+		act  SetAgentStatus
+		want bool
+	}{
+		{"identical", p, SetAgentStatus{Session: "s1", Model: "Opus 4.8", Context: 69, ContextKnown: true}, true},
+		{"same floor", p, SetAgentStatus{Session: "s1", Model: "Opus 4.8", Context: 69.9, ContextKnown: true}, true},
+		{"other floor", p, SetAgentStatus{Session: "s1", Model: "Opus 4.8", Context: 70, ContextKnown: true}, false},
+		{"other model", p, SetAgentStatus{Session: "s1", Model: "Sonnet 5.5", Context: 69, ContextKnown: true}, false},
+		{"other session", p, SetAgentStatus{Session: "s2", Model: "Opus 4.8", Context: 69, ContextKnown: true}, false},
+		{"meter cleared", p, SetAgentStatus{Session: "s1", Model: "Opus 4.8"}, false},
+		{"a null percentage ignores the number", Pane{Kind: KindAgent, Model: "Opus 4.8", StatusSession: "s1"}, SetAgentStatus{Session: "s1", Model: "Opus 4.8", Context: 33}, true},
+		{"nothing yet", Pane{Kind: KindAgent}, SetAgentStatus{Session: "s1", Model: "Opus 4.8"}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.act.Matches(tt.pane); got != tt.want {
+				t.Errorf("Matches() = %v, want %v", got, tt.want)
+			}
+		})
 	}
 }

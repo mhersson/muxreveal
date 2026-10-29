@@ -44,12 +44,18 @@ func (a *App) waitEvent() tea.Cmd {
 	}
 }
 
-// onHook applies a hook event. An event for a pane that is not an open agent is
-// ignored, so a late or misaddressed event never disturbs the state.
+// onHook applies a hook or status event. An event for a pane that is not an open
+// agent is ignored, so a late or misaddressed event never disturbs the state.
 func (a *App) onHook(ev harness.Event) tea.Cmd {
 	m, ok := a.store.State().Panes[ev.Pane]
 	if !ok || m.Kind != core.KindAgent {
 		a.log.Debug("hook event ignored", "pane", ev.Pane, "event", ev.Name)
+
+		return nil
+	}
+
+	if ev.Status {
+		a.onStatus(m, ev)
 
 		return nil
 	}
@@ -92,6 +98,26 @@ func (a *App) onHook(ev harness.Event) tea.Cmd {
 	}
 
 	return tea.Batch(probes, a.setAgentState(ev.Pane, ev.State))
+}
+
+// onStatus records the model and context a status event reports. It has none of
+// a hook's effects, and an update that changes nothing dispatches nothing: a busy
+// session sends many.
+func (a *App) onStatus(m core.Pane, ev harness.Event) {
+	// A status carries its session; one from a session the pane has left is stale.
+	if ev.Session == "" || (m.Session != "" && ev.Session != m.Session) {
+		a.log.Debug("status event ignored", "pane", ev.Pane, "session", ev.Session)
+
+		return
+	}
+
+	act := core.SetAgentStatus{ID: ev.Pane, Session: ev.Session, Model: ev.Model, Context: ev.Context, ContextKnown: ev.ContextKnown}
+	if act.Matches(m) {
+		return
+	}
+
+	// dispatch logs its own failures.
+	_ = a.dispatch(act)
 }
 
 // setAgentState records a state. Entering or staying in working restarts the

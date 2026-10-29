@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"reflect"
 	"testing"
 	"time"
 
@@ -448,5 +449,190 @@ func TestStartNotice(t *testing.T) {
 
 	if a.notice != "agent hooks are off: boom" {
 		t.Errorf("notice = %q, want the start notice", a.notice)
+	}
+}
+
+func statusEvent(pane core.PaneID, session core.SessionID, model string, pct float64, known bool) harness.Event {
+	return harness.Event{Pane: pane, Name: "statusline", Status: true, Session: session, Model: model, Context: pct, ContextKnown: known}
+}
+
+func TestStatusEventSkipsHookEffects(t *testing.T) {
+	// With no watch a hook event refreshes the drawer, so the drawer's silence is the test.
+	r := newDrawerRig(t, func(o *Options) { o.Watches = nil })
+	id := r.agent(t, editedRepo(t), "s1")
+	v := r.open(t, id)
+
+	r.run(r.railOpened())
+	r.until(t, "the rail's head probe", func() bool { return r.rail.panes[id] != nil && r.rail.panes[id].probe.known })
+
+	// Another pane has the focus, so a hook that idles the agent marks it unseen.
+	openIn(t, r.App, core.FocusPane{ID: "p1"})
+	r.settle()
+
+	// Past every probe interval, so a hook event would start probes at once.
+	r.clk.Advance(time.Minute)
+
+	entry := *r.railEntry(id)
+
+	if cmd := hook(r.App, statusEvent(id, "s1", "Opus 4.8", 41.7, true)); cmd != nil {
+		t.Errorf("a status event raised a command: %v", flatten(cmd))
+	}
+
+	if got := *r.railEntry(id); !reflect.DeepEqual(got, entry) {
+		t.Errorf("the card's memory changed:\n got %+v\nwant %+v", got, entry)
+	}
+
+	if r.view() != v || v.queued != nil || v.loading {
+		t.Errorf("a status event refreshed the drawer: queued %v, loading %v", v.queued, v.loading)
+	}
+
+	m := r.store.State().Panes[id]
+	if m.Model != "Opus 4.8" || m.Context != 41 || !m.ContextKnown || m.StatusSession != "s1" || m.Session != "s1" {
+		t.Errorf("pane = %+v, want the model, 41%% and both sessions s1", m)
+	}
+
+	// The same checks fail for a hook event, so they would catch a status that took its path.
+	hook(r.App, idleHook(id))
+
+	if got := r.railEntry(id); !got.hookAt.After(entry.hookAt) || !got.unseen || !got.head.busy || !v.loading {
+		t.Errorf("a hook event left the card's memory (hookAt %v, unseen %v), the head probe (busy %v) or the drawer (loading %v) alone",
+			got.hookAt, got.unseen, got.head.busy, v.loading)
+	}
+}
+
+func TestStatusFloodBumpsNoVersion(t *testing.T) {
+	a, _, _ := agentApp(t)
+	hook(a, harness.Event{Pane: "p2", Name: "SessionStart", Session: "s1", Start: true})
+
+	saves := 0
+	a.save = func(core.State) { saves++ }
+
+	steps := []struct {
+		name  string
+		ev    harness.Event
+		moves bool
+	}{
+		{"first status", statusEvent("p2", "s1", "Opus 4.8", 41.2, true), true},
+		{"repeated", statusEvent("p2", "s1", "Opus 4.8", 41.2, true), false},
+		{"same floor", statusEvent("p2", "s1", "Opus 4.8", 41.9, true), false},
+		{"next floor", statusEvent("p2", "s1", "Opus 4.8", 42, true), true},
+		{"other model", statusEvent("p2", "s1", "Sonnet 5.5", 42, true), true},
+		{"meter cleared", statusEvent("p2", "s1", "Sonnet 5.5", 0, false), true},
+		{"still null, other number", statusEvent("p2", "s1", "Sonnet 5.5", 12, false), false},
+		{"meter back", statusEvent("p2", "s1", "Sonnet 5.5", 12, true), true},
+		{"repeated again", statusEvent("p2", "s1", "Sonnet 5.5", 12, true), false},
+	}
+
+	for _, s := range steps {
+		ver, was := a.storeVer, saves
+
+		if cmd := hook(a, s.ev); cmd != nil {
+			t.Errorf("%s: command = %v, want none", s.name, cmd)
+		}
+
+		if moved := a.storeVer != ver; moved != s.moves {
+			t.Errorf("%s: store version moved = %v, want %v", s.name, moved, s.moves)
+		}
+
+		if saved := saves != was; saved != s.moves {
+			t.Errorf("%s: saved = %v, want %v", s.name, saved, s.moves)
+		}
+	}
+
+	t.Run("status session on a pane with no session", func(t *testing.T) {
+		a, _, _ := agentApp(t)
+
+		for _, s := range []struct {
+			name  string
+			ev    harness.Event
+			moves bool
+		}{
+			{"first", statusEvent("p2", "s1", "Opus 4.8", 10, true), true},
+			{"repeated", statusEvent("p2", "s1", "Opus 4.8", 10, true), false},
+			{"other session", statusEvent("p2", "s2", "Opus 4.8", 10, true), true},
+			{"repeated other", statusEvent("p2", "s2", "Opus 4.8", 10, true), false},
+		} {
+			ver := a.storeVer
+
+			hook(a, s.ev)
+
+			if moved := a.storeVer != ver; moved != s.moves {
+				t.Errorf("%s: store version moved = %v, want %v", s.name, moved, s.moves)
+			}
+		}
+	})
+}
+
+func TestStatusEventsThatDoNotFit(t *testing.T) {
+	a, _, _ := agentApp(t)
+
+	hook(a, harness.Event{Pane: "p2", Name: "SessionStart", Session: "s2", Start: true})
+	hook(a, statusEvent("p2", "s2", "Opus 4.8", 50, true))
+
+	before := a.store.State()
+
+	tests := []struct {
+		name string
+		ev   harness.Event
+	}{
+		{"unknown pane", statusEvent("p9", "s2", "Haiku 4.5", 10, true)},
+		{"empty pane", statusEvent("", "s2", "Haiku 4.5", 10, true)},
+		{"shell pane", statusEvent("p1", "s2", "Haiku 4.5", 10, true)},
+		{"empty session", statusEvent("p2", "", "Haiku 4.5", 10, true)},
+		{"older session", statusEvent("p2", "s1", "Haiku 4.5", 10, true)},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ver := a.storeVer
+
+			if cmd := hook(a, tt.ev); cmd != nil {
+				t.Errorf("command = %v, want none", cmd)
+			}
+
+			if got := a.store.State(); got.Panes["p1"] != before.Panes["p1"] || got.Panes["p2"] != before.Panes["p2"] || a.storeVer != ver {
+				t.Errorf("panes changed: %+v", got.Panes)
+			}
+		})
+	}
+
+	t.Run("closed pane", func(t *testing.T) {
+		a.closePane("p2")
+
+		hook(a, statusEvent("p2", "s2", "Opus 4.8", 50, true))
+
+		if _, ok := a.store.State().Panes["p2"]; ok {
+			t.Error("a status event reopened a closed pane")
+		}
+	})
+}
+
+func TestStatusFollowsTheSession(t *testing.T) {
+	a, _, _ := agentApp(t)
+
+	steps := []struct {
+		name    string
+		ev      harness.Event
+		model   string
+		context int
+		known   bool
+	}{
+		{"status before its session starts", statusEvent("p2", "s1", "Opus 4.8", 20, true), "Opus 4.8", 20, true},
+		{"its session starts", harness.Event{Pane: "p2", Name: "SessionStart", Session: "s1", Start: true}, "Opus 4.8", 20, true},
+		{"a status of the session", statusEvent("p2", "s1", "Opus 4.8", 33.3, true), "Opus 4.8", 33, true},
+		{"compact empties the meter", statusEvent("p2", "s1", "Opus 4.8", 0, false), "Opus 4.8", 0, false},
+		{"clear starts a new session", harness.Event{Pane: "p2", Name: "SessionStart", Session: "s2", Start: true}, "", 0, false},
+		{"a late status of the old session", statusEvent("p2", "s1", "Opus 4.8", 90, true), "", 0, false},
+		{"a status of the new session", statusEvent("p2", "s2", "Sonnet 5.5", 5, true), "Sonnet 5.5", 5, true},
+		{"the session ends", harness.Event{Pane: "p2", Name: "SessionEnd", End: true}, "", 0, false},
+	}
+
+	for _, s := range steps {
+		hook(a, s.ev)
+
+		m := a.store.State().Panes["p2"]
+		if m.Model != s.model || m.Context != s.context || m.ContextKnown != s.known {
+			t.Errorf("%s: model %q context %d known %v, want %q %d %v", s.name, m.Model, m.Context, m.ContextKnown, s.model, s.context, s.known)
+		}
 	}
 }
