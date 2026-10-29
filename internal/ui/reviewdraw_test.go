@@ -647,9 +647,9 @@ func TestDrawerKeyHints(t *testing.T) {
 	}
 }
 
-// The turn hint shows only while the drawer shows turns: a branch drawer, and a
-// turn-mode drawer on another worktree's branch, leave it out so the row holds
-// the hints that work.
+// The turn hint shows only while the drawer shows a turn, as the mode tag does:
+// a drawer that shows the branch leaves it out so the row holds the hints that
+// work, whatever mode core keeps.
 func TestDrawerTurnHintShowsOnlyForTurns(t *testing.T) {
 	t.Parallel()
 
@@ -661,45 +661,62 @@ func TestDrawerTurnHintShowsOnlyForTurns(t *testing.T) {
 		wideEdit = viaEdit + "   / search"
 	)
 
-	foreign := func(s *reviewScene) {
-		s.tune = func(t *testing.T, a *App, v *reviewView) {
-			v.foreign, v.src, v.base = true, git.BranchSource{Worktree: "/w/p1"}, "origin/main"
+	// A turn-mode drawer that shows the branch while core keeps turn mode.
+	branchInTurnMode := func(session string, turns int, foreign bool) func(s *reviewScene) {
+		return func(s *reviewScene) {
+			s.tune = func(t *testing.T, a *App, v *reviewView) {
+				v.src, v.base, v.session, v.turns, v.foreign = git.BranchSource{Worktree: "/w/p1"}, "origin/main", session, turns, foreign
+			}
 		}
 	}
 
 	tests := []struct {
 		name  string
-		w     int
 		scene func(s *reviewScene)
-		want  string
+		turn  bool // the row holds the turn hint
 	}{
-		{"branch mode, wide", 240, func(s *reviewScene) { s.branch = true }, wideEdit},
-		{"turn mode on the agent's worktree, wide", 240, func(s *reviewScene) {}, wideTurn},
-		{"turn mode on another worktree, wide", 240, foreign, wideEdit},
-		{"branch mode, usual width", 200, func(s *reviewScene) { s.branch = true }, viaEdit},
-		{"turn mode on the agent's worktree, usual width", 200, func(s *reviewScene) {}, viaTurn},
-		{"turn mode on another worktree, usual width", 200, foreign, viaEdit},
+		{"branch mode", func(s *reviewScene) { s.branch = true }, false},
+		{"turn mode on the agent's worktree", func(s *reviewScene) {}, true},
+		{"turn mode on another worktree", branchInTurnMode("s", 0, true), false},
+		{"turn mode with no session", branchInTurnMode("", 0, false), false},
+		{"turn mode with no turns yet", branchInTurnMode("s", 0, false), false},
+	}
+
+	widths := []struct {
+		name       string
+		w          int
+		turn, edit string // the end of the row with and without the turn hint
+	}{
+		{"wide", 240, wideTurn, wideEdit},
+		{"usual width", 200, viaTurn, viaEdit},
 	}
 
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
+		for _, wd := range widths {
+			t.Run(tt.name+", "+wd.name, func(t *testing.T) {
+				t.Parallel()
 
-			s := reviewScene{theme: "catppuccin-mocha", icons: false, w: tt.w, h: 52, res: turn4Result(), turn: 4, turns: 4, focused: true}
-			tt.scene(&s)
+				s := reviewScene{theme: "catppuccin-mocha", icons: false, w: wd.w, h: 52, res: turn4Result(), turn: 4, turns: 4, focused: true}
+				tt.scene(&s)
 
-			var row string
+				var row string
 
-			for l := range strings.SplitSeq(ansi.Strip(s.build(t).View().Content), "\n") {
-				if strings.Contains(l, "j/k line") {
-					row = strings.TrimRight(strings.TrimRight(l, " │"), " ")
+				for l := range strings.SplitSeq(ansi.Strip(s.build(t).View().Content), "\n") {
+					if strings.Contains(l, "j/k line") {
+						row = strings.TrimRight(strings.TrimRight(l, " │"), " ")
+					}
 				}
-			}
 
-			if !strings.HasSuffix(row, tt.want) {
-				t.Errorf("the hint row is\n%q\nwant it to end with\n%q", row, tt.want)
-			}
-		})
+				want := wd.edit
+				if tt.turn {
+					want = wd.turn
+				}
+
+				if !strings.HasSuffix(row, want) {
+					t.Errorf("the hint row is\n%q\nwant it to end with\n%q", row, want)
+				}
+			})
+		}
 	}
 }
 

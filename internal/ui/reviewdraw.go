@@ -186,7 +186,6 @@ type drawKey struct {
 	resTurn, resThrough  int
 	noSnapshot           bool
 	pinned               bool
-	showsTurns           bool
 	list                 wtKey
 	err                  string
 	hasErr               bool
@@ -203,7 +202,7 @@ func (d *drawCtx) key(r core.Rect, name string) drawKey {
 		query: d.query, searching: v.search != nil,
 		src: v.src, project: v.project, branch: v.branch, base: v.base,
 		turns: v.turns, resTurn: v.res.Turn, resThrough: v.res.Through, noSnapshot: v.noSnapshot, pinned: d.pinned,
-		showsTurns: v.showsTurns(), list: d.listKey(),
+		list: d.listKey(),
 	}
 
 	if v.err != nil {
@@ -481,13 +480,18 @@ func (v *reviewView) shownTurn() int {
 	return v.turns
 }
 
-// showsTurns reports whether the drawer shows turns. A foreign root shows the
-// branch while core keeps turn mode, so it has none.
-func (v *reviewView) showsTurns() bool { return v.mode == core.ReviewTurn && !v.foreign }
+// showsTurn reports whether the drawer shows a turn. A turn-mode drawer with no
+// session, no turns yet or a foreign root shows the branch while core keeps
+// turn mode.
+func (v *reviewView) showsTurn() bool {
+	_, ok := v.src.(git.TurnSource)
+
+	return ok
+}
 
 // modeTag is the text of the mode tag.
 func (d *drawCtx) modeTag() string {
-	if _, ok := d.v.src.(git.TurnSource); ok {
+	if d.v.showsTurn() {
 		return d.withIcon(iconTurn, "turn "+strconv.Itoa(d.v.shownTurn())+"/"+strconv.Itoa(d.v.turns))
 	}
 
@@ -537,7 +541,7 @@ func (d *drawCtx) hintRuns(cw int) []railRun {
 		{"b/t", "mode"},
 	}
 
-	if d.v.showsTurns() {
+	if d.v.showsTurn() {
 		pairs = append(pairs, [2]string{",/.", "turn"})
 	}
 
