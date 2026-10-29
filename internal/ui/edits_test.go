@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"path/filepath"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 
@@ -60,7 +61,7 @@ type hookEditRig struct {
 	*App
 	id  core.PaneID
 	res *fakeResolver
-	log *bytes.Buffer // warnings and worse
+	log *bytes.Buffer // everything the app logs, debug included
 }
 
 func newHookEditRig(t *testing.T, places map[string]git.Place, errs map[string]error) *hookEditRig {
@@ -73,7 +74,7 @@ func newHookEditRig(t *testing.T, places map[string]git.Place, errs map[string]e
 
 	r := &hookEditRig{App: a, id: "p2", res: &fakeResolver{places: places, errs: errs}, log: &bytes.Buffer{}}
 	a.edits.resolve = r.res.resolve
-	a.log = slog.New(slog.NewTextHandler(r.log, &slog.HandlerOptions{Level: slog.LevelWarn}))
+	a.log = slog.New(slog.NewTextHandler(r.log, &slog.HandlerOptions{Level: slog.LevelDebug}))
 
 	return r
 }
@@ -152,21 +153,23 @@ func TestEditAnswersOutOfOrder(t *testing.T) {
 func TestEditNotCounted(t *testing.T) {
 	t.Parallel()
 
+	// level is how the answer's error is logged; "" for not at all, since an
+	// error that names the edited path must not reach the log for a normal case.
 	tests := []struct {
-		name    string
-		errs    map[string]error
-		wantLog bool
+		name  string
+		err   error
+		level string
 	}{
-		{"not counted", nil, false},
-		{"another error", map[string]error{"/w/b/x.go": errors.New("git exploded")}, true},
-		{"the context ends", map[string]error{"/w/b/x.go": context.Canceled}, false},
+		{"not counted", fmt.Errorf("edit /w/b/x.go: %w: outside any work tree", git.ErrNotCounted), ""},
+		{"another error", errors.New("edit /w/b/x.go: git exploded"), "WARN"},
+		{"the context ends", context.Canceled, "DEBUG"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			r := newHookEditRig(t, nil, tt.errs)
+			r := newHookEditRig(t, nil, map[string]error{"/w/b/x.go": tt.err})
 			own := r.pane().FollowDir()
 
 			r.deliver(r.hook(r.event("PostToolUse", "/w/b/x.go")))
@@ -183,8 +186,27 @@ func TestEditNotCounted(t *testing.T) {
 				t.Errorf("notice = %q, want none", r.notice)
 			}
 
-			if logged := r.log.Len() > 0; logged != tt.wantLog {
-				t.Errorf("logged = %v, want %v: %q", logged, tt.wantLog, r.log.String())
+			var levels []string
+
+			for _, line := range strings.Split(r.log.String(), "\n") {
+				if !strings.Contains(line, tt.err.Error()) {
+					continue
+				}
+
+				for _, f := range strings.Fields(line) {
+					if l, ok := strings.CutPrefix(f, "level="); ok {
+						levels = append(levels, l)
+					}
+				}
+			}
+
+			var want []string
+			if tt.level != "" {
+				want = []string{tt.level}
+			}
+
+			if !slices.Equal(levels, want) {
+				t.Errorf("the error was logged at %v, want %v", levels, want)
 			}
 		})
 	}

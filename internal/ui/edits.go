@@ -74,9 +74,12 @@ func (a *App) noteEdit(m core.Pane, id core.PaneID, path string) tea.Cmd {
 // does not count, or fails to resolve, changes nothing and raises no notice.
 func (a *App) onEditPlace(msg editPlaceMsg) {
 	if msg.err != nil {
-		if errors.Is(msg.err, git.ErrNotCounted) || errors.Is(msg.err, context.Canceled) {
-			a.log.Debug("edit not counted", "pane", msg.pane, "err", msg.err)
-		} else {
+		// Not counted is the normal case, and its error names the edited path: not logged.
+		switch {
+		case errors.Is(msg.err, git.ErrNotCounted):
+		case errors.Is(msg.err, context.Canceled):
+			a.log.Debug("resolve edit place", "pane", msg.pane, "err", msg.err)
+		default:
 			a.log.Warn("resolve edit place", "pane", msg.pane, "err", msg.err)
 		}
 
