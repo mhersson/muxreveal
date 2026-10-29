@@ -121,17 +121,10 @@ func newPushRig(t *testing.T) *pushRig {
 	rec := &refreshRec{fakePRs: p.src}
 	p.prs.src = rec
 
-	dir := p.prRepo(t, "proj", "feat/x", pushRemoteURL)
-	bare := filepath.Join(filepath.Dir(dir), "remote.git")
+	root := t.TempDir()
+	copyPushTemplate(t, p.real, root)
 
-	gitIn(t, p.real, filepath.Dir(bare), "init", "-q", "--bare", "-b", "main", bare)
-	gitIn(t, p.real, dir, "push", "-q", "origin", "main")
-
-	for _, msg := range []string{"add the lexer", "fix the parser"} {
-		gitIn(t, p.real, dir, "commit", "-q", "--allow-empty", "-m", msg)
-	}
-
-	_ = os.Remove(p.log)
+	dir, bare := filepath.Join(root, "proj"), filepath.Join(root, "remote.git")
 
 	r := &pushRig{prApp: p, rec: rec, dir: dir, bare: bare}
 	r.agent = r.addAgent(t, false, dir)
