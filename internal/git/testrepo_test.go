@@ -176,7 +176,14 @@ func writeGitWrapper(t *testing.T, extraShell string) (script, logPath string) {
 		extraShell + "\nexec '" + realGit + "' \"$@\"\n"
 	script = filepath.Join(dir, "git")
 
-	if err := os.WriteFile(script, []byte(body), 0o755); err != nil {
+	// A concurrent fork can inherit the write fd and make exec fail with ETXTBSY (go.dev/issue/22315).
+	syscall.ForkLock.RLock()
+
+	err = os.WriteFile(script, []byte(body), 0o755)
+
+	syscall.ForkLock.RUnlock()
+
+	if err != nil {
 		t.Fatal(err)
 	}
 
