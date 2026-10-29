@@ -205,19 +205,25 @@ type Harness interface {
 }
 
 type Event struct {
-	Pane       core.PaneID     `json:"pane"`
-	Name       string          `json:"name"`                 // the harness's hook event name, for logs
-	Session    core.SessionID  `json:"session,omitempty"`
-	Transcript string          `json:"transcript,omitempty"`
-	State      core.AgentState `json:"state,omitempty"`      // AgentUnknown leaves the state as it is
-	Start      bool            `json:"start,omitempty"`      // Session is now the pane's current session
-	End        bool            `json:"end,omitempty"`        // the session ended
-	Cwd        string          `json:"cwd,omitempty"`        // the agent's working directory, from the hook
-	TurnStart  bool            `json:"turn_start,omitempty"` // a prompt was submitted
-	Action     string          `json:"action,omitempty"`     // the agent's current action (see Current action)
-	ActionSet  bool            `json:"action_set,omitempty"` // Action replaces the pane's action, an empty one clears it
-	Done       func()          `json:"-"`                    // set by the server on a held event; call it once the turn snapshot is taken
-	Snapped    <-chan struct{} `json:"-"`                    // set by the turn gate on a turn start it snapshots; closed when that snapshot is finished
+	Pane         core.PaneID     `json:"pane"`
+	Name         string          `json:"name"` // the harness's hook event name, or "statusline", for logs
+	Session      core.SessionID  `json:"session,omitempty"`
+	Transcript   string          `json:"transcript,omitempty"`
+	State        core.AgentState `json:"state,omitempty"`      // AgentUnknown leaves the state as it is
+	Start        bool            `json:"start,omitempty"`      // Session is now the pane's current session
+	End          bool            `json:"end,omitempty"`        // the session ended
+	Cwd          string          `json:"cwd,omitempty"`        // the agent's working directory, from the hook
+	TurnStart    bool            `json:"turn_start,omitempty"` // a prompt was submitted
+	Action       string          `json:"action,omitempty"`     // the agent's current action (see Current action)
+	ActionSet    bool            `json:"action_set,omitempty"` // Action replaces the pane's action, an empty one clears it
+	Status       bool            `json:"status,omitempty"`     // a statusline update, not a hook (see Status line)
+	Model        string          `json:"model,omitempty"`      // the model's display name
+	Context      float64         `json:"context,omitempty"`    // percent of the context window in use, when ContextKnown
+	ContextKnown bool            `json:"context_known,omitempty"`
+	Window       int             `json:"window,omitempty"`       // the context window size in tokens
+	InputTokens  int             `json:"input_tokens,omitempty"` // input tokens used so far
+	Done         func()          `json:"-"`                      // set by the server on a held event; call it once the turn snapshot is taken
+	Snapped      <-chan struct{} `json:"-"`                      // set by the turn gate on a turn start it snapshots; closed when that snapshot is finished
 }
 ```
 
@@ -531,7 +537,7 @@ The palette shows each command's icon: `palette.open` , `theme.pick` and `the
 
 ### Claude Code integration via hooks
 
-MuxReveal never edits the user's Claude settings. Every agent it launches runs `claude --settings <file>` (plus `--resume <id>` on a restore) with `MUXREVEAL_PANE` and `MUXREVEAL_SOCK` in the PTY environment. The settings file is generated per instance at `<state dir>/run/<pid>-claude.json` (mode 0600). Each event in the state table below gets one synchronous command handler, `timeout` 5, in the exec form, so no shell parses the path of the running binary:
+MuxReveal never edits the user's Claude settings. Every agent it launches runs `claude --settings <file>` (plus `--resume <id>` on a restore) with `MUXREVEAL_PANE` and `MUXREVEAL_SOCK` in the PTY environment. The settings file is generated per instance at `<state dir>/run/<pid>-claude.json` (mode 0600). Each event in the state table below gets one synchronous command handler, `timeout` 5, in the exec form, so no shell parses the path of the running binary, and a `statusLine` entry that runs through a shell (see Status line):
 
 ```json
 {
@@ -539,11 +545,14 @@ MuxReveal never edits the user's Claude settings. Every agent it launches runs `
     "SessionStart":     [{"hooks": [{"type": "command", "command": "/opt/muxreveal/bin/muxreveal", "args": ["hook", "claude-code"], "timeout": 5}]}],
     "UserPromptSubmit": [{"hooks": [{"type": "command", "command": "/opt/muxreveal/bin/muxreveal", "args": ["hook", "claude-code"], "timeout": 5}]}],
     "Stop":             [{"hooks": [{"type": "command", "command": "/opt/muxreveal/bin/muxreveal", "args": ["hook", "claude-code"], "timeout": 5}]}]
-  }
+  },
+  "statusLine": {"type": "command", "command": "'/opt/muxreveal/bin/muxreveal' statusline"}
 }
 ```
 
 The example shows three events; the generated file has the same handler for every event in the table. The command is the absolute path of the running binary. Synchronous handlers keep the events in order, and the hook answers in milliseconds, except a turn start, which waits for its snapshot (see below).
+
+**Status line.** Claude Code runs `statusLine.command` through a shell and has no exec form or `args` field for it, so the generated command is the running binary's absolute path in single quotes, then `statusline`. Single quotes read the same in sh, bash, zsh and fish only when the path holds no `'` and no `\` (fish reads `\` inside them), and a control character could end the line. `harness.QuotePath` refuses a path with any of these, and then the settings file holds the hooks and no `statusLine`. `Claude.ParseStatus` reads the statusline JSON into an `Event` with `Status` set: the session, `model.display_name` (printable runes only, cut like an action), `context_window.used_percentage` (`ContextKnown` is false when it is null or missing), `context_window.context_window_size` and `context_window.total_input_tokens`. The event is named `statusline` whatever `hook_event_name` the payload carries. A configured status line hides most of Claude's footer hints, `esc to interrupt` included.
 
 **State rules**
 
