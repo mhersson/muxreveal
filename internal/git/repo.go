@@ -68,3 +68,13 @@ func (r Repo) MainRoot() (string, error) {
 
 	return filepath.Dir(r.CommonDir), nil
 }
+
+// Name is the repository's name as the rail shows it: the main checkout's
+// directory name, or for a bare repository the common dir's name without ".git".
+func (r Repo) Name() string {
+	if root, err := r.MainRoot(); err == nil {
+		return filepath.Base(root)
+	}
+
+	return strings.TrimSuffix(filepath.Base(r.CommonDir), ".git")
+}

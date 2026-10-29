@@ -4,9 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
-	"path/filepath"
 	"slices"
-	"strings"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -129,17 +127,8 @@ func paneSession(st core.State, id core.PaneID) string {
 	return ""
 }
 
-// repoProject is the main checkout's directory name, or for a bare repository
-// the common dir's name without ".git".
-func repoProject(r git.Repo) string {
-	if root, err := r.MainRoot(); err == nil {
-		return filepath.Base(root)
-	} else if errors.Is(err, git.ErrBare) {
-		return strings.TrimSuffix(filepath.Base(r.CommonDir), ".git")
-	}
-
-	return filepath.Base(r.Root)
-}
+// repoProject is the name the rail gives the repository of r.
+func repoProject(r git.Repo) string { return r.Name() }
 
 // reviewSync brings the active tab's view in line with core's drawer: it makes
 // the view for a new or retargeted drawer, loads it when it has no result or
