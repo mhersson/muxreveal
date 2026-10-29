@@ -34,6 +34,7 @@ type railCard struct {
 	project    string
 	name       string // the session's custom name, cleaned; empty shows the project
 	branch     string
+	place      string // the followed repository's name when it is not the agent's own; empty otherwise
 	action     string // the card's third line; empty for an agent without hooks
 	detached   bool   // branch holds the first 7 characters of the commit
 	stats      git.Stats
@@ -63,6 +64,7 @@ type railField int
 const (
 	railFieldProject railField = iota
 	railFieldName
+	railFieldPlace
 	railFieldBranch
 	railFieldAction
 	railFieldTabNumber
@@ -78,6 +80,7 @@ type railHit struct {
 // railProbe is the result of one pane's probes.
 type railProbe struct {
 	project, branch string
+	place           string // the followed place's repository name when it differs from the own directory's; "" otherwise
 	oid             string // the full commit id; "" on an unborn branch
 	detached        bool
 	ahead           int    // commits past the branch's upstream; 0 with none or no upstream
@@ -171,7 +174,7 @@ func (a *App) railCards(st core.State) []railGroup {
 		if rp != nil {
 			c.unseen, c.active = rp.unseen, rp.hookAt
 			if rp.probe.known {
-				c.project, c.branch, c.detached, c.ahead = rp.probe.project, rp.probe.branch, rp.probe.detached, rp.probe.ahead
+				c.project, c.branch, c.place, c.detached, c.ahead = rp.probe.project, rp.probe.branch, rp.probe.place, rp.probe.detached, rp.probe.ahead
 			}
 
 			// A name belongs to the transcript it was read from, not to the pane.
@@ -193,7 +196,7 @@ func (a *App) railCards(st core.State) []railGroup {
 		// Printable once, so the matcher and the drawing see the same runes. The
 		// name is a file's text, so it is cleaned like the rest; a blank one, or
 		// the project's own name, leaves the project alone on the line.
-		c.project, c.branch, c.action = printable(c.project), printable(c.branch), printable(c.action)
+		c.project, c.branch, c.place, c.action = printable(c.project), printable(c.branch), printable(c.place), printable(c.action)
 
 		if c.name = strings.TrimSpace(printable(c.name)); c.name == c.project {
 			c.name = ""
@@ -227,8 +230,8 @@ func cardAction(m core.Pane) string {
 }
 
 // matches reports where query occurs in the card, case-insensitively: project,
-// session name, branch, action, "tab N" and the tab's name. An empty query
-// matches with no hits.
+// session name, the other repository's name, branch, action, "tab N" and the
+// tab's name. An empty query matches with no hits.
 func (c railCard) matches(query string) ([]railHit, bool) {
 	if query == "" {
 		return nil, true
@@ -244,6 +247,7 @@ func (c railCard) matches(query string) ([]railHit, bool) {
 	}{
 		{railFieldProject, c.project},
 		{railFieldName, c.name},
+		{railFieldPlace, c.place},
 		{railFieldBranch, c.branch},
 		{railFieldAction, c.action},
 		{railFieldTabNumber, fmt.Sprintf("tab %d", c.tab+1)},

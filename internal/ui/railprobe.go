@@ -508,8 +508,9 @@ func (a *App) onRailStats(msg railStatsMsg) tea.Cmd {
 
 // probeHeadOf finds the branch and detached state of dir, the directory a card
 // follows, and names the project from own, the agent's own directory, so a card
-// keeps its agent's project. A dir outside a repository, or gone, reports no
-// branch, and gone says it does not exist.
+// keeps its agent's project. When dir is in another repository than own, or own
+// is in none, place names dir's repository. A dir outside a repository, or gone,
+// reports no branch, and gone says it does not exist.
 func probeHeadOf(ctx context.Context, log *slog.Logger, dir, own string) (railProbe, error) {
 	res := railProbe{project: filepath.Base(own), known: true, headCwd: dir, gone: !usableDir(dir)}
 
@@ -530,18 +531,25 @@ func probeHeadOf(ctx context.Context, log *slog.Logger, dir, own string) (railPr
 		}
 	}
 
+	// ownCommon is the own directory's common dir; "" when it is in no repository.
+	var ownCommon string
+
 	switch {
 	case own == dir:
 		if inRepo {
-			res.project = r.Name()
+			res.project, ownCommon = r.Name(), r.CommonDir
 		}
 	case usableDir(own):
 		switch o, err := git.Open(ctx, own); {
 		case err == nil:
-			res.project = o.Name()
+			res.project, ownCommon = o.Name(), o.CommonDir
 		case !errors.Is(err, git.ErrNotRepo):
 			return railProbe{}, err
 		}
+	}
+
+	if inRepo && !sameDir(ownCommon, r.CommonDir) {
+		res.place = r.Name()
 	}
 
 	if !inRepo {
@@ -577,4 +585,27 @@ func probeHeadOf(ctx context.Context, log *slog.Logger, dir, own string) (railPr
 	}
 
 	return res, nil
+}
+
+// sameDir reports whether a and b are one directory once symlinks are resolved,
+// since git may name a directory by the path it was reached through; "" is none.
+func sameDir(a, b string) bool {
+	if a == b {
+		return a != ""
+	}
+
+	if a == "" || b == "" {
+		return false
+	}
+
+	return resolved(a) == resolved(b)
+}
+
+// resolved is p with symlinks resolved, or p itself when that fails.
+func resolved(p string) string {
+	if r, err := filepath.EvalSymlinks(p); err == nil {
+		return r
+	}
+
+	return p
 }

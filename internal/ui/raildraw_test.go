@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -20,6 +21,7 @@ type railAgent struct {
 	newTab         bool
 	project        string
 	branch         string
+	place          string // the other repository the agent follows; empty in its own
 	detached       bool
 	state          core.AgentState
 	action         string
@@ -100,7 +102,7 @@ func drawApp(t *testing.T, themeName string, icons bool, w, h int, agents []rail
 		}
 
 		if !ag.noRepo {
-			rp.probe = railProbe{known: true, repo: true, project: ag.project, branch: ag.branch, detached: ag.detached, ahead: ag.ahead}
+			rp.probe = railProbe{known: true, repo: true, project: ag.project, branch: ag.branch, place: ag.place, detached: ag.detached, ahead: ag.ahead}
 		}
 
 		if ag.stats != nil {
@@ -167,6 +169,15 @@ func prAgents() []railAgent {
 		{project: "ops", branch: "fix/ops", state: core.AgentIdle, age: 3 * time.Hour, stats: &git.Stats{}, pr: ptr(prInfo("CLOSED", prNumber(20)))},
 		{project: "tools", branch: "feat/tools", state: core.AgentIdle, age: 5 * time.Minute, stats: &git.Stats{}, pr: ptr(prInfo("OPEN", prNumber(5)))},
 		{project: "scratch", noRepo: true, noHook: true},
+	}
+}
+
+// placeAgents is an agent on a worktree of its own repository and one on a
+// branch of another repository, with commits ahead.
+func placeAgents() []railAgent {
+	return []railAgent{
+		{newTab: true, project: "muxreveal", branch: "feat/follow-edits", state: core.AgentWorking, action: "Edit internal/ui/rail.go", age: 8 * time.Second, stats: &git.Stats{Files: 4, Added: 80, Removed: 6}, model: "Opus 5.5", meter: pct(41)},
+		{project: "contextmatrix", branch: "feat/retry", place: "contextmatrix-agent", state: core.AgentWorking, action: "Write internal/claim/retry.go", age: 6 * time.Second, stats: &git.Stats{Files: 4, Added: 120, Removed: 18}, model: "Opus 5.5", meter: pct(62), ahead: 2},
 	}
 }
 
@@ -249,6 +260,15 @@ func railCases() []railCase {
 		}
 	}
 
+	withPlace := func(w, h int) func(t *testing.T, th string, icons bool) *App {
+		return func(t *testing.T, th string, icons bool) *App {
+			a := drawApp(t, th, icons, w, h, placeAgents())
+			a.rail.sel = "p2"
+
+			return a
+		}
+	}
+
 	return []railCase{
 		{"cards", fixture(100, 30, nil)},
 		{"focused-blocked-selected", fixture(100, 30, func(a *App) { a.rail.focused, a.rail.sel = true, "p1" })},
@@ -303,6 +323,7 @@ func railCases() []railCase {
 		{"ahead", ahead(100, 40)},
 		{"ahead-width-70", ahead(70, 40)},
 		{"ahead-width-64", ahead(64, 40)},
+		{"place", withPlace(100, 30)},
 		{"named-search", named(100, 30, func(a *App) {
 			a.rail.focused, a.rail.query = true, "orch"
 			a.railNormalize(a.store.State())
@@ -1202,4 +1223,129 @@ func TestRailFocusRules(t *testing.T) {
 			t.Errorf("after esc: frame %s, title %s, want %s", border, title, kindC)
 		}
 	})
+}
+
+func TestRailLineTwoPlace(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	ui := a.current().theme.UI
+
+	lead := func(icons bool) string {
+		if icons {
+			return "  " + iconGit + " "
+		}
+
+		return "  "
+	}
+
+	tests := []struct {
+		name     string
+		project  string
+		place    string
+		branch   string
+		detached bool
+		ahead    int
+		icons    bool
+		cw       int
+		want     string
+	}{
+		{"same repository", "contextmatrix", "", "feat/claim-retry", false, 0, true, 50, lead(true) + "feat/claim-retry"},
+		{"another repository", "contextmatrix", "contextmatrix-agent", "feat/claim-retry", false, 0, true, 50, lead(true) + "contextmatrix-agent · feat/claim-retry"},
+		{"own directory in no repository", "scratch", "api", "main", false, 0, true, 50, lead(true) + "api · main"},
+		{"detached HEAD in another repository", "contextmatrix", "api", "a1b2c3d", true, 0, true, 50, lead(true) + "api · a1b2c3d"},
+		{"icons off", "contextmatrix", "contextmatrix-agent", "feat/claim-retry", false, 0, false, 50, lead(false) + "contextmatrix-agent · feat/claim-retry"},
+		{"room for the commits ahead", "contextmatrix", "contextmatrix-agent", "feat/claim-retry", false, 2, true, 45, lead(true) + "contextmatrix-agent · feat/claim-retry ↑2"},
+		{"the branch is cut first", "contextmatrix", "contextmatrix-agent", "feat/claim-retry", false, 2, true, 40, lead(true) + "contextmatrix-agent · feat/claim… ↑2"},
+		{"then the name", "contextmatrix", "contextmatrix-agent", "feat/claim-retry", false, 2, true, 25, lead(true) + "contextmatrix-age… ↑2"},
+		{"down to 8 cells", "contextmatrix", "contextmatrix-agent", "feat/claim-retry", false, 2, true, 15, lead(true) + "context… ↑2"},
+		{"under 8 cells the commits ahead go", "contextmatrix", "contextmatrix-agent", "feat/claim-retry", false, 2, true, 14, lead(true) + "contextma…"},
+		{"icons off, cut", "contextmatrix", "contextmatrix-agent", "feat/claim-retry", false, 2, false, 25, lead(false) + "contextmatrix-agent… ↑2"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			a.icons = tt.icons
+
+			c := railCard{
+				pane: "p1", state: core.AgentIdle, project: tt.project, place: tt.place,
+				branch: tt.branch, detached: tt.detached, ahead: tt.ahead,
+			}
+
+			runs := a.railCardLine(ui, c, nil, 1, tt.cw)
+			if got := runsText(runs); got != tt.want {
+				t.Errorf("line = %q, want %q", got, tt.want)
+			}
+
+			if w := runsWidth(runs); w > tt.cw {
+				t.Errorf("line is %d cells wide, want at most %d", w, tt.cw)
+			}
+		})
+	}
+}
+
+func TestRailLineTwoPlaceColours(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+	ui := a.current().theme.UI
+
+	if ui.Dim == ui.Muted {
+		t.Fatal("the theme's Dim and Muted are one colour, so this test tells nothing")
+	}
+
+	c := railCard{pane: "p1", state: core.AgentIdle, project: "contextmatrix", place: "contextmatrix-agent", branch: "feat/claim-retry"}
+	runs := a.railCardLine(ui, c, nil, 1, 60)
+
+	want := []railRun{
+		{text: "contextmatrix-agent", fg: ui.Dim, bold: true},
+		{text: " · ", fg: ui.Muted},
+		{text: "feat/claim-retry", fg: ui.Dim},
+	}
+
+	for _, w := range want {
+		i := slices.IndexFunc(runs, func(r railRun) bool { return r.text == w.text })
+		if i < 0 {
+			t.Errorf("no run %q in %q", w.text, runsText(runs))
+
+			continue
+		}
+
+		if r := runs[i]; r.fg != w.fg || r.bold != w.bold {
+			t.Errorf("%q is %v bold %v, want %v bold %v", w.text, r.fg, r.bold, w.fg, w.bold)
+		}
+	}
+}
+
+func TestRailSearchMatchesPlace(t *testing.T) {
+	t.Parallel()
+
+	a := drawApp(t, "catppuccin-mocha", true, 100, 30, placeAgents())
+	ui := a.current().theme.UI
+	a.rail.focused, a.rail.query = true, "agent"
+	a.railNormalize(a.store.State())
+
+	shown := a.railShown(a.store.State())
+	if len(shown) != 1 || shown[0].pane != "p2" {
+		t.Fatalf("shown = %+v, want only the card that follows contextmatrix-agent", shown)
+	}
+
+	hits, _ := shown[0].matches("agent")
+	if got := hitsOf(hits, railFieldPlace); len(got) != 1 || got[0].start != 14 || got[0].end != 19 {
+		t.Errorf("place hits = %+v, want one at [14, 19)", got)
+	}
+
+	for y, l := range strings.Split(a.View().Content, "\n") {
+		if x := strings.Index(ansi.Strip(l), "contextmatrix-agent"); x >= 0 && y > 4 {
+			col := ansi.StringWidth(ansi.Strip(l)[:x]) + 14
+
+			vt := lineVT(t, l, 100)
+			assertColours(t, vt, col, 0, "a", ui.Match, ui.Bg, true)
+			assertColours(t, vt, col-1, 0, "-", ui.Dim, ui.Bg, true)
+
+			return
+		}
+	}
+
+	t.Fatal("no card line names the place")
 }
