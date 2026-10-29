@@ -1530,15 +1530,20 @@ func pickerScene(t *testing.T, theme string, icons, page bool) *App {
 	return a
 }
 
-var pickerGoldenCases = []struct {
+func pickerGoldenCases() []struct {
 	name string
 	page bool
-}{{"list", false}, {"new-page", true}}
+} {
+	return []struct {
+		name string
+		page bool
+	}{{"list", false}, {"new-page", true}}
+}
 
 func TestPickerGolden(t *testing.T) {
 	t.Parallel()
 
-	for _, c := range pickerGoldenCases {
+	for _, c := range pickerGoldenCases() {
 		t.Run("catppuccin-mocha/icons=true/"+c.name, func(t *testing.T) {
 			t.Parallel()
 			a := pickerScene(t, "catppuccin-mocha", true, c.page)
@@ -1552,7 +1557,7 @@ func TestPickerText(t *testing.T) {
 	t.Parallel()
 
 	for _, icons := range []bool{true, false} {
-		for _, c := range pickerGoldenCases {
+		for _, c := range pickerGoldenCases() {
 			t.Run(fmt.Sprintf("icons=%v/%s", icons, c.name), func(t *testing.T) {
 				t.Parallel()
 				a := pickerScene(t, "catppuccin-mocha", icons, c.page)
