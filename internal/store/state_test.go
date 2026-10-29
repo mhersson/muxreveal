@@ -664,12 +664,54 @@ func TestReviewPersistence(t *testing.T) {
 	}
 }
 
+// Each tab's drawer saves and loads its own tree state.
+func TestReviewTreePersistence(t *testing.T) {
+	tests := []struct {
+		name         string
+		tree1, tree2 bool
+		saved        int
+	}{
+		{"first open, second closed", true, false, 1},
+		{"first closed, second open", false, true, 1},
+		{"both open", true, true, 2},
+		{"both closed", false, false, 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			st := fixedState()
+			st.Tabs[0].Review = &core.Review{Pane: "p2", Mode: core.ReviewBranch, Tree: tt.tree1}
+			st.Tabs[1].Review = &core.Review{Pane: "p4", Mode: core.ReviewTurn, Tree: tt.tree2}
+
+			data, err := Encode(st)
+			noErr(t, err)
+
+			if n := strings.Count(string(data), `"tree": true`); n != tt.saved {
+				t.Errorf("%d tree entries written, want %d:\n%s", n, tt.saved, data)
+			}
+
+			if strings.Contains(string(data), `"tree": false`) {
+				t.Errorf("a closed tree is written:\n%s", data)
+			}
+
+			got, rep, err := decodeDefault(data)
+			noErr(t, err)
+			eq(t, rep, Report{})
+			eq(t, got.Tabs[0].Review, st.Tabs[0].Review)
+			eq(t, got.Tabs[1].Review, st.Tabs[1].Review)
+		})
+	}
+}
+
 func TestReviewDecodeDropsBadFields(t *testing.T) {
 	tests := []struct {
 		name, review string
 		want         *core.Review
 	}{
 		{"valid", `{"pane":"p2","mode":"turn"}`, &core.Review{Pane: "p2", Mode: core.ReviewTurn}},
+		{"tree open", `{"pane":"p2","mode":"branch","tree":true}`, &core.Review{Pane: "p2", Mode: core.ReviewBranch, Tree: true}},
+		{"tree closed", `{"pane":"p2","mode":"turn","tree":false}`, &core.Review{Pane: "p2", Mode: core.ReviewTurn}},
+		{"tree is a string", `{"pane":"p2","mode":"turn","tree":"yes"}`, nil},
+		{"unknown field", `{"pane":"p2","mode":"turn","later":1}`, &core.Review{Pane: "p2", Mode: core.ReviewTurn}},
 		{"unknown pane", `{"pane":"p9","mode":"turn"}`, nil},
 		{"pane of another tab", `{"pane":"p3","mode":"turn"}`, nil},
 		{"unknown mode", `{"pane":"p2","mode":"x"}`, nil},

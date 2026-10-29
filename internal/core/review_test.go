@@ -1,6 +1,7 @@
 package core
 
 import (
+	"errors"
 	"reflect"
 	"testing"
 )
@@ -66,6 +67,108 @@ func TestReviewActionErrors(t *testing.T) {
 	open := dispatch(t, s, OpenReview{Pane: "p1", Mode: ReviewTurn})
 	if err := moveErr(open, SetReviewMode{Mode: "x"}); err == nil {
 		t.Error("SetReviewMode with an unknown mode: error = nil")
+	}
+}
+
+func TestSetReviewTree(t *testing.T) {
+	s := dispatch(t, reviewState(t), OpenReview{Pane: "p1", Mode: ReviewTurn})
+	if s.Tabs[0].Review.Tree {
+		t.Fatal("a new drawer starts with the tree open")
+	}
+
+	s = dispatch(t, s, SetReviewTree{Open: true})
+	if got, want := s.Tabs[0].Review, (&Review{Pane: "p1", Mode: ReviewTurn, Tree: true}); !reflect.DeepEqual(got, want) {
+		t.Fatalf("after open: Review = %+v, want %+v", got, want)
+	}
+
+	s = dispatch(t, s, SetReviewTree{Open: true})
+	if !s.Tabs[0].Review.Tree {
+		t.Error("opening an open tree closed it")
+	}
+
+	s = dispatch(t, s, SetReviewTree{Open: false})
+	if got, want := s.Tabs[0].Review, (&Review{Pane: "p1", Mode: ReviewTurn}); !reflect.DeepEqual(got, want) {
+		t.Fatalf("after close: Review = %+v, want %+v", got, want)
+	}
+}
+
+func TestSetReviewTreeWithoutDrawer(t *testing.T) {
+	s := reviewState(t)
+
+	for _, open := range []bool{true, false} {
+		if err := moveErr(s, SetReviewTree{Open: open}); !errors.Is(err, errNoReview) {
+			t.Errorf("SetReviewTree{Open: %t} without a drawer: error = %v, want errNoReview", open, err)
+		}
+	}
+
+	// A drawer in another tab does not count.
+	s = dispatch(t, s, OpenReview{Pane: "p1", Mode: ReviewTurn})
+
+	s = dispatch(t, s, SelectTab{Index: 1})
+	if err := moveErr(s, SetReviewTree{Open: true}); !errors.Is(err, errNoReview) {
+		t.Errorf("SetReviewTree on a tab without a drawer: error = %v, want errNoReview", err)
+	}
+}
+
+func TestSetReviewTreeIsPerTab(t *testing.T) {
+	s := reviewState(t)
+	s = dispatch(t, s, OpenReview{Pane: "p1", Mode: ReviewTurn})
+	s = dispatch(t, s, SelectTab{Index: 1})
+	s = dispatch(t, s, OpenReview{Pane: "p3", Mode: ReviewBranch})
+	s = dispatch(t, s, SetReviewTree{Open: true})
+
+	if !s.Tabs[1].Review.Tree {
+		t.Fatalf("active tab's tree is closed: %+v", s.Tabs[1].Review)
+	}
+
+	if got, want := s.Tabs[0].Review, (&Review{Pane: "p1", Mode: ReviewTurn}); !reflect.DeepEqual(got, want) {
+		t.Errorf("other tab's drawer = %+v, want %+v", got, want)
+	}
+
+	s = dispatch(t, s, SelectTab{Index: 0})
+	s = dispatch(t, s, SetReviewTree{Open: true})
+	s = dispatch(t, s, SelectTab{Index: 1})
+	s = dispatch(t, s, SetReviewTree{Open: false})
+
+	if got, want := s.Tabs[0].Review, (&Review{Pane: "p1", Mode: ReviewTurn, Tree: true}); !reflect.DeepEqual(got, want) {
+		t.Errorf("closing the other tab's tree changed this one: %+v, want %+v", got, want)
+	}
+
+	if s.Tabs[1].Review.Tree {
+		t.Errorf("tab 1's tree is still open: %+v", s.Tabs[1].Review)
+	}
+}
+
+func TestOpenReviewClosesTheTree(t *testing.T) {
+	tests := []struct {
+		name string
+		pane PaneID
+		mode ReviewMode
+	}{
+		{"another pane", "p2", ReviewTurn},
+		{"the same pane", "p1", ReviewTurn},
+		{"another mode", "p1", ReviewBranch},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := dispatch(t, reviewState(t), OpenReview{Pane: "p1", Mode: ReviewTurn})
+			s = dispatch(t, s, SetReviewTree{Open: true})
+			s = dispatch(t, s, OpenReview{Pane: tt.pane, Mode: tt.mode})
+
+			if got, want := s.Tabs[0].Review, (&Review{Pane: tt.pane, Mode: tt.mode}); !reflect.DeepEqual(got, want) {
+				t.Errorf("Review = %+v, want %+v", got, want)
+			}
+		})
+	}
+}
+
+func TestSetReviewModeKeepsTheTree(t *testing.T) {
+	s := dispatch(t, reviewState(t), OpenReview{Pane: "p2", Mode: ReviewTurn})
+	s = dispatch(t, s, SetReviewTree{Open: true})
+	s = dispatch(t, s, SetReviewMode{Mode: ReviewBranch})
+
+	if got, want := s.Tabs[0].Review, (&Review{Pane: "p2", Mode: ReviewBranch, Tree: true}); !reflect.DeepEqual(got, want) {
+		t.Errorf("Review = %+v, want %+v", got, want)
 	}
 }
 
