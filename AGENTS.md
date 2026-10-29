@@ -24,6 +24,9 @@ design; propose an edit to DESIGN.md instead.
   maintainer approves.
 - Run an approved plan as written with
   `superpowers:subagent-driven-development`.
+- Small changes skip the plan: a fix, or a test-only or tooling change the
+  maintainer approves as a short scope, is built test-first, reviewed once and
+  opened as its own PR.
 - One branch and one PR per plan. Each task is its own reviewed commit; review
   fixes are separate commits, never squashed into it.
 - Commit messages: Conventional Commits, e.g.
@@ -114,8 +117,10 @@ Dependency rules:
 - Tests check behavior. A test that fails only when someone rewords text no code
   reads is not a test: don't write it, and delete it when found. Rendering
   goldens are behavior.
-- New tests call `t.Parallel()` unless they use `t.Setenv`, change the process's
-  working directory, or assert on wall-clock time.
+- New tests call `t.Parallel()` unless they use `t.Setenv` or change the
+  process's working directory.
+- New tests don't assert on wall-clock durations: inject a clock or wait for
+  the event. A real-time budget belongs in a test behind the `bench` tag.
 - Rendering: golden files under `testdata/` (`-update` flag to regenerate);
   `teatest` for Bubble Tea flows.
 - Diff engine: golden-file tests for hunks, word spans and full-file view.
@@ -144,8 +149,9 @@ runs CI's Linux gates locally when you need them without a push.
 - No session links in commits or PRs, and no trailers: no `Co-Authored-By`,
   `Claude-Session` or "Generated with" lines.
 - **Never commit to `main`.** Work on a feature branch; tasks of a plan or scope
-  the user approved commit there without asking again. Never push without
-  explicit user approval.
+  the user approved commit there without asking again.
+- Push only feature branches, and only with the user's approval; a standing
+  approval may cover a plan's branch and its draft pull request.
 - Conventional commits: `type(scope): concise summary`. Always include a scope.
 - Body uses bullet points for the what and why - no long paragraphs.
 - Never reference requirement IDs, milestones, plan phases, task numbers, or
