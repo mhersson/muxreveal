@@ -131,6 +131,10 @@ what to do about it. Skim it before your first commit each session.
   `PATH` with `t.Setenv`, which rules out `t.Parallel()`. Read the log with
   `wrappedCalls`, which fails when it is empty, so an assertion that a call
   never ran cannot pass because nothing was wrapped.
+- A watcher reports a write about 20 ms after its debounce, so wait for its
+  report before taking a baseline: on Linux the drawer rig's `open` returns
+  sooner, and a late batch then reloads the drawer after the test read its
+  `epoch` or `gen`. The rig's `reportedAll` waits for the paths written.
 - `t.Setenv` and `t.Chdir` panic in a parallel test. That is why tests that
   use them, and tests that assert on wall-clock time, skip `t.Parallel()`.
 - Writing an executable and then running it while parallel tests fork can
