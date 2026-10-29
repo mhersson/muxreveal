@@ -61,8 +61,15 @@ func TestRunServesHooks(t *testing.T) {
 	settings := filepath.Join(runDir, pid+"-claude.json")
 
 	// Listen binds the socket before it chmods it, so the file can exist at the
-	// umask's mode first: wait for the final mode, not for the file.
+	// umask's mode first: wait for the final mode, not for the file. A run that
+	// returns first removes both files, so its error is the failure.
 	waitUntil(t, "the hook socket never reached mode 0600, or the settings file never appeared", func() bool {
+		select {
+		case err := <-done:
+			t.Fatalf("run() returned before it served hooks: %v", err)
+		default:
+		}
+
 		fi, err := os.Lstat(sock)
 
 		return err == nil && fi.Mode().Perm() == 0o600 && exists(settings)

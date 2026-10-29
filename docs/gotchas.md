@@ -41,6 +41,11 @@ what to do about it. Skim it before your first commit each session.
 - APFS is case-insensitive by default, so two paths that differ only in case
   are one file on a Mac. CI's `static-checks` job fails on such paths, also
   when they differ only after dropping their file extensions.
+- Go's `File.Sync` on macOS is `F_FULLFSYNC`: the drive flushes all its
+  buffered data, every process's, so the call costs more the busier the
+  machine's disk is. Sync only what must survive a crash, such as `state.json`
+  (`store.WriteAtomic`); write a per-run file, like the hook settings file,
+  with `store.WriteAtomicNoSync`.
 - `t.TempDir()` on macOS is under `/var/folders`, and `/var` is a symlink to
   `/private/var`; git reports the resolved path. Run a temp dir through
   `filepath.EvalSymlinks` before comparing it with git output, as `newRepo`

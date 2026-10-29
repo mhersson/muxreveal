@@ -134,33 +134,53 @@ func TestSaverSurvivesWriteFailure(t *testing.T) {
 	eq(t, len(ents), 1)
 }
 
+var atomicWriters = []struct {
+	name  string
+	write func(path string, data []byte) error
+}{
+	{"synced", WriteAtomic},
+	{"unsynced", WriteAtomicNoSync},
+}
+
 func TestWriteAtomic(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "state.json")
-	noErr(t, WriteAtomic(path, []byte("one")))
-	noErr(t, WriteAtomic(path, []byte("two")))
-	got, err := os.ReadFile(path)
-	noErr(t, err)
-	eq(t, string(got), "two")
+	for _, w := range atomicWriters {
+		t.Run(w.name, func(t *testing.T) {
+			t.Parallel()
 
-	info, err := os.Stat(path)
-	noErr(t, err)
-	eq(t, info.Mode().Perm(), os.FileMode(0o600))
+			dir := t.TempDir()
+			path := filepath.Join(dir, "state.json")
+			noErr(t, w.write(path, []byte("one")))
+			noErr(t, w.write(path, []byte("two")))
+			got, err := os.ReadFile(path)
+			noErr(t, err)
+			eq(t, string(got), "two")
 
-	ents, err := os.ReadDir(dir)
-	noErr(t, err)
-	eq(t, len(ents), 1)
+			info, err := os.Stat(path)
+			noErr(t, err)
+			eq(t, info.Mode().Perm(), os.FileMode(0o600))
+
+			ents, err := os.ReadDir(dir)
+			noErr(t, err)
+			eq(t, len(ents), 1)
+		})
+	}
 }
 
 func TestWriteAtomicFailureLeavesNothing(t *testing.T) {
-	dir := t.TempDir()
-	target := filepath.Join(dir, "state.json")
-	noErr(t, os.Mkdir(target, 0o700)) // rename onto a directory fails
-	wantErr(t, WriteAtomic(target, []byte("x")))
+	for _, w := range atomicWriters {
+		t.Run(w.name, func(t *testing.T) {
+			t.Parallel()
 
-	ents, err := os.ReadDir(dir)
-	noErr(t, err)
-	eq(t, len(ents), 1)
+			dir := t.TempDir()
+			target := filepath.Join(dir, "state.json")
+			noErr(t, os.Mkdir(target, 0o700)) // rename onto a directory fails
+			wantErr(t, w.write(target, []byte("x")))
 
-	wantErr(t, WriteAtomic(filepath.Join(dir, "missing", "state.json"), []byte("x")))
+			ents, err := os.ReadDir(dir)
+			noErr(t, err)
+			eq(t, len(ents), 1)
+
+			wantErr(t, w.write(filepath.Join(dir, "missing", "state.json"), []byte("x")))
+		})
+	}
 }
