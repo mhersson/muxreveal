@@ -113,7 +113,7 @@ type App struct {
 	watches   watchState
 	storeVer  uint64        // counts the dispatches the store accepted
 	engine    *git.Engine   // nil when the rail's diff stats and the review drawer's diffs are off
-	probeSem  chan struct{} // its capacity bounds the rail's probes running at once
+	probeSem  chan struct{} // its capacity bounds the head, stats and name probes running at once
 	clip      *clipboard
 	sel       *paneSelection // the one selection; survives tab switches
 	copy      *copyState     // copy mode; owns every key and ignores the mouse while set

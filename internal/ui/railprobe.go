@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"path/filepath"
 	"strings"
 	"time"
@@ -19,7 +20,7 @@ const (
 	nameEvery        = 5 * time.Second
 	statsEvery       = 10 * time.Second
 	shortOIDLen      = 7
-	// railProbeMax bounds the rail's probes running at once.
+	// railProbeMax bounds the head, stats and name probes running at once.
 	railProbeMax = 4
 )
 
@@ -221,7 +222,7 @@ func (a *App) railFire(st core.State, id core.PaneID, k railProbeKind) tea.Cmd {
 		target = m.Transcript
 	}
 
-	served := m.Kind == core.KindAgent || k == probeHead && st.Tab().Focus == id
+	served := m.Kind == core.KindAgent || (k == probeHead && st.Tab().Focus == id)
 	if !served || target == "" || k.railBound() && !a.railIsOpen() {
 		return nil
 	}
@@ -311,6 +312,8 @@ func (a *App) railFire(st core.State, id core.PaneID, k railProbeKind) tea.Cmd {
 		}
 	}
 
+	log := a.log
+
 	return func() tea.Msg {
 		ctx, done, err := admit(ctx, sem)
 		if err != nil {
@@ -318,7 +321,7 @@ func (a *App) railFire(st core.State, id core.PaneID, k railProbeKind) tea.Cmd {
 		}
 		defer done()
 
-		res, err := probeHeadOf(ctx, cwd)
+		res, err := probeHeadOf(ctx, log, cwd)
 
 		return railHeadMsg{pane: id, cwd: cwd, res: res, err: err}
 	}
@@ -489,7 +492,7 @@ func (a *App) onRailStats(msg railStatsMsg) tea.Cmd {
 
 // probeHeadOf finds a cwd's project, branch and detached state. A cwd outside a
 // repository, or gone, is reported as a project named after it with no branch.
-func probeHeadOf(ctx context.Context, cwd string) (railProbe, error) {
+func probeHeadOf(ctx context.Context, log *slog.Logger, cwd string) (railProbe, error) {
 	res := railProbe{project: filepath.Base(cwd), known: true, headCwd: cwd}
 
 	if !usableDir(cwd) {
@@ -525,10 +528,19 @@ func probeHeadOf(ctx context.Context, cwd string) (railProbe, error) {
 		res.branch = h.OID[:min(shortOIDLen, len(h.OID))]
 	}
 
-	// Only a branch with a commit can be ahead of an upstream.
+	// Only a branch with a commit can be ahead of an upstream. The count is the
+	// lesser datum: when it fails the branch still shows, with no count, unless
+	// the probe's own budget ran out.
 	if h.Branch != "" && h.OID != "" {
-		if res.ahead, _, err = git.Ahead(ctx, r); err != nil {
-			return railProbe{}, err
+		n, _, aerr := git.Ahead(ctx, r)
+
+		switch {
+		case aerr == nil:
+			res.ahead = n
+		case ctx.Err() != nil:
+			return railProbe{}, aerr
+		default:
+			log.Debug("ahead count", "cwd", cwd, "err", aerr)
 		}
 	}
 

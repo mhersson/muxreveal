@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -261,5 +262,84 @@ func TestFocusedShellHeadIsProbed(t *testing.T) {
 
 	if heads, _ := probedCwds(flatten(r.settle())); len(heads) != 1 || heads[0] != second {
 		t.Errorf("a cwd change probed %v, want %s", heads, second)
+	}
+}
+
+// brokenUpstream points the upstream ref at a missing commit: it still resolves,
+// but rev-list cannot walk it.
+func brokenUpstream(t *testing.T, dir string) {
+	t.Helper()
+	write(t, filepath.Join(dir, ".git", "refs", "remotes", "origin", "main"), strings.Repeat("1", 40)+"\n")
+}
+
+func TestHeadProbeKeepsTheBranchWhenTheCountFails(t *testing.T) {
+	t.Run("same cwd", func(t *testing.T) {
+		r := newRailApp(t, false)
+		dir := r.repoAhead(t, "proj", 2)
+		id := r.addAgent(t, false, dir)
+		r.deliver(r.settle())
+
+		if c, _ := r.card(id); c.branch != "main" || c.ahead != 2 {
+			t.Fatalf("card = branch %q ahead %d, want main, 2", c.branch, c.ahead)
+		}
+
+		// A checkout onto a branch whose upstream cannot be counted still shows.
+		gitIn(t, r.real, dir, "checkout", "-q", "-b", "feat2", "--track", "origin/main")
+		brokenUpstream(t, dir)
+		r.clk.Advance(time.Second)
+		r.gitBatch(t, id, dir, git.Batch{Git: true})
+
+		if c, _ := r.card(id); c.branch != "feat2" || c.ahead != 0 {
+			t.Errorf("card = branch %q ahead %d, want feat2 with no count", c.branch, c.ahead)
+		}
+	})
+
+	t.Run("new cwd", func(t *testing.T) {
+		r := newRailApp(t, false)
+		first, second := r.repoAhead(t, "first", 2), r.repoAhead(t, "second", 1)
+		brokenUpstream(t, second)
+
+		id := r.addAgent(t, false, first)
+		r.deliver(r.settle())
+
+		openIn(t, r.App, core.SetPaneCwd{ID: id, Cwd: second})
+		r.clk.Advance(6 * time.Second)
+		r.deliver(r.settle())
+
+		c, _ := r.card(id)
+		if c.project != "second" || c.branch != "main" || c.ahead != 0 {
+			t.Errorf("card = project %q branch %q ahead %d, want second on main with no count", c.project, c.branch, c.ahead)
+		}
+	})
+}
+
+func TestHeadProbeCountTimeoutIsNoAnswer(t *testing.T) {
+	r := newRailApp(t, false)
+	dir := r.repoAhead(t, "proj", 1)
+	id := r.addAgent(t, false, dir)
+	r.deliver(r.settle())
+
+	// Only rev-list hangs: the probe's own budget runs out inside the count.
+	script := "#!/bin/sh\ncase \"$*\" in *rev-list*) exec sleep 30;; esac\nexec '" + r.real + "' \"$@\"\n"
+	if err := os.WriteFile(filepath.Join(filepath.Dir(r.log), "git"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	r.clk.Advance(time.Minute)
+
+	msgs := flatten(hook(r.App, idleHook(id)))
+	if len(msgs) != 1 {
+		t.Fatalf("msgs = %v", msgs)
+	}
+
+	hm, ok := msgs[0].(railHeadMsg)
+	if !ok || !errors.Is(hm.err, context.DeadlineExceeded) {
+		t.Fatalf("msg = %+v, want a deadline error", msgs[0])
+	}
+
+	r.step(hm)
+
+	if c, _ := r.card(id); c.branch != "main" || c.ahead != 1 {
+		t.Errorf("card = branch %q ahead %d, want the previous result", c.branch, c.ahead)
 	}
 }
