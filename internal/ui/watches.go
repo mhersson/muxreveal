@@ -110,7 +110,7 @@ func (h *holds) closeAll() {
 	}
 }
 
-// paneRoot returns the worktree root resolved for a pane's cwd.
+// paneRoot returns the worktree root resolved for a pane's working directory.
 func (a *App) paneRoot(id core.PaneID) (string, bool) {
 	w := a.watches.panes[id]
 	if w == nil || w.want == "" {
@@ -164,7 +164,7 @@ func (w *paneWatch) drop(a *App) {
 
 // watchSync reconciles the held watches with the panes that need one, the
 // agents (while there is a set to hold watches in) and the panes a drawer
-// reviews: it starts resolving a pane whose cwd changed and releases those of
+// reviews: it starts resolving a pane whose working directory changed and releases those of
 // panes that closed, stopped being agents or are no longer reviewed.
 func (a *App) watchSync() tea.Cmd {
 	st := a.store.State()
@@ -230,7 +230,7 @@ func (a *App) resolveCmd(id core.PaneID, cwd string) tea.Cmd {
 }
 
 // onPaneRepo starts holding the watch of the resolved root. An answer for a
-// pane that closed, stopped being an agent or moved on to another cwd is dropped.
+// pane that closed, stopped being an agent or moved on to another directory is dropped.
 func (a *App) onPaneRepo(msg paneRepoMsg) tea.Cmd {
 	w := a.watches.panes[msg.id]
 	if w == nil || w.cwd != msg.cwd {

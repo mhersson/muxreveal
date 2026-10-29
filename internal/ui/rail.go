@@ -348,7 +348,7 @@ func (a *App) changeAgentState(id core.PaneID, s core.AgentState) error {
 
 // railAfterUpdate runs after every update: it clears the mark of the focused
 // pane, forgets closed panes, keeps the selection valid and starts the probes
-// that panes new to the rail or with a new cwd need.
+// that panes new to the rail or with a new working directory need.
 func (a *App) railAfterUpdate() {
 	// A rail the width rule hides cannot hold the keyboard.
 	if a.rail.focused && !a.railVisible() {
