@@ -186,6 +186,7 @@ type drawKey struct {
 	resTurn, resThrough  int
 	noSnapshot           bool
 	pinned               bool
+	showsTurns           bool
 	list                 wtKey
 	err                  string
 	hasErr               bool
@@ -202,7 +203,7 @@ func (d *drawCtx) key(r core.Rect, name string) drawKey {
 		query: d.query, searching: v.search != nil,
 		src: v.src, project: v.project, branch: v.branch, base: v.base,
 		turns: v.turns, resTurn: v.res.Turn, resThrough: v.res.Through, noSnapshot: v.noSnapshot, pinned: d.pinned,
-		list: d.listKey(),
+		showsTurns: v.showsTurns(), list: d.listKey(),
 	}
 
 	if v.err != nil {
@@ -480,6 +481,10 @@ func (v *reviewView) shownTurn() int {
 	return v.turns
 }
 
+// showsTurns reports whether the drawer shows turns. A foreign root shows the
+// branch while core keeps turn mode, so it has none.
+func (v *reviewView) showsTurns() bool { return v.mode == core.ReviewTurn && !v.foreign }
+
 // modeTag is the text of the mode tag.
 func (d *drawCtx) modeTag() string {
 	if _, ok := d.v.src.(git.TurnSource); ok {
@@ -530,10 +535,13 @@ func (d *drawCtx) hintRuns(cw int) []railRun {
 		{"f", "full"},
 		{"u", "split"},
 		{"b/t", "mode"},
-		{",/.", "turn"},
-		{"e", "edit"},
-		{"/", "search"},
 	}
+
+	if d.v.showsTurns() {
+		pairs = append(pairs, [2]string{",/.", "turn"})
+	}
+
+	pairs = append(pairs, [2]string{"e", "edit"}, [2]string{"/", "search"})
 
 	if d.tree {
 		pairs = [][2]string{{"j/k", "file"}, {"enter", "jump"}, {"tab", "hide"}, {"esc", "back"}}

@@ -174,6 +174,8 @@ func TestDrawerLinesFollowTheirInputs(t *testing.T) {
 		}, differs: true},
 		{name: "the project and branch change", scene: small, change: func(t *testing.T, a *App, v *reviewView) { v.project, v.branch = "other", "fix/it" }, differs: true},
 		{name: "the base changes", scene: func(s *reviewScene) { s.branch, s.tree = true, true }, change: func(t *testing.T, a *App, v *reviewView) { v.base = "origin/dev" }, differs: true},
+		{name: "core enters turn mode", scene: func(s *reviewScene) { s.branch, s.tree = true, true }, change: func(t *testing.T, a *App, v *reviewView) { v.mode = core.ReviewTurn }, differs: true},
+		{name: "the shown root turns foreign", scene: small, change: func(t *testing.T, a *App, v *reviewView) { v.foreign = true }, differs: true},
 		{name: "the turn has no snapshot", scene: func(s *reviewScene) { s.res, s.turn, s.tree = git.Result{Turn: 3}, 3, true }, change: func(t *testing.T, a *App, v *reviewView) { v.noSnapshot = true }, differs: true},
 		{name: "the load fails", scene: func(s *reviewScene) { s.res, s.branch = git.Result{}, true }, change: func(t *testing.T, a *App, v *reviewView) { v.err = errors.New("git: boom") }, differs: true},
 	}

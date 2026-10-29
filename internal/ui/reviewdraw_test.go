@@ -647,6 +647,62 @@ func TestDrawerKeyHints(t *testing.T) {
 	}
 }
 
+// The turn hint shows only while the drawer shows turns: a branch drawer, and a
+// turn-mode drawer on another worktree's branch, leave it out so the row holds
+// the hints that work.
+func TestDrawerTurnHintShowsOnlyForTurns(t *testing.T) {
+	t.Parallel()
+
+	const (
+		head     = "j/k line   ]/[ hunk   }/{ file   tab tree   w worktree   f full   u split   b/t mode"
+		viaTurn  = head + "   ,/. turn"
+		viaEdit  = head + "   e edit"
+		wideTurn = viaTurn + "   e edit   / search"
+		wideEdit = viaEdit + "   / search"
+	)
+
+	foreign := func(s *reviewScene) {
+		s.tune = func(t *testing.T, a *App, v *reviewView) {
+			v.foreign, v.src, v.base = true, git.BranchSource{Worktree: "/w/p1"}, "origin/main"
+		}
+	}
+
+	tests := []struct {
+		name  string
+		w     int
+		scene func(s *reviewScene)
+		want  string
+	}{
+		{"branch mode, wide", 240, func(s *reviewScene) { s.branch = true }, wideEdit},
+		{"turn mode on the agent's worktree, wide", 240, func(s *reviewScene) {}, wideTurn},
+		{"turn mode on another worktree, wide", 240, foreign, wideEdit},
+		{"branch mode, usual width", 200, func(s *reviewScene) { s.branch = true }, viaEdit},
+		{"turn mode on the agent's worktree, usual width", 200, func(s *reviewScene) {}, viaTurn},
+		{"turn mode on another worktree, usual width", 200, foreign, viaEdit},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			s := reviewScene{theme: "catppuccin-mocha", icons: false, w: tt.w, h: 52, res: turn4Result(), turn: 4, turns: 4, focused: true}
+			tt.scene(&s)
+
+			var row string
+
+			for l := range strings.SplitSeq(ansi.Strip(s.build(t).View().Content), "\n") {
+				if strings.Contains(l, "j/k line") {
+					row = strings.TrimRight(strings.TrimRight(l, " │"), " ")
+				}
+			}
+
+			if !strings.HasSuffix(row, tt.want) {
+				t.Errorf("the hint row is\n%q\nwant it to end with\n%q", row, tt.want)
+			}
+		})
+	}
+}
+
 func TestDrawerSplitFallsBackWhenNarrow(t *testing.T) {
 	s := reviewScene{theme: "catppuccin-mocha", icons: false, w: 124, h: 40, res: turn4Result(), turn: 4, turns: 4, focused: true}
 	s.tune = func(t *testing.T, a *App, v *reviewView) { v.split = true }
