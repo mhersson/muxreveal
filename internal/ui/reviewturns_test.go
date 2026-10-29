@@ -26,7 +26,7 @@ func isBranchSource(v *reviewView) bool {
 // drawer's turn mode alone: it shows the branch until the new session has a
 // turn, then that turn.
 func TestSessionEndAndStartKeepTurnMode(t *testing.T) {
-	r := newDrawerRig(t)
+	r := newDrawerRig(t, turnFirst)
 	dir := threeTurnRepo(t)
 	root := rootOf(t, dir)
 	id := r.agent(t, dir, testSession)
@@ -162,7 +162,7 @@ func (r *drawerRig) turnStartFirst(t *testing.T, id core.PaneID) (snapshotDone f
 // count.
 func TestTurnStartRefreshesTheDrawer(t *testing.T) {
 	t.Run("a turn that changes no files", func(t *testing.T) {
-		r := newDrawerRig(t)
+		r := newDrawerRig(t, turnFirst)
 		dir := threeTurnRepo(t)
 		id := r.agent(t, dir, testSession)
 
@@ -187,7 +187,7 @@ func TestTurnStartRefreshesTheDrawer(t *testing.T) {
 	})
 
 	t.Run("a past turn", func(t *testing.T) {
-		r := newDrawerRig(t)
+		r := newDrawerRig(t, turnFirst)
 		dir := threeTurnRepo(t)
 		id := r.agent(t, dir, testSession)
 

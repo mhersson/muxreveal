@@ -132,8 +132,8 @@ func (c LayoutConfig) columnWidth() float64 {
 }
 
 // DiffConfig is the [diff] section. Validate rejects an unknown name or a
-// non-positive limit from a file. A hand-built DiffConfig reads a zero Layout
-// as unified and a zero Mode as turn first; DefaultConfig sets branch.
+// non-positive limit from a file; the accessors read a zero field as its
+// default so a hand-built DiffConfig behaves as the defaults.
 type DiffConfig struct {
 	Layout   string `toml:"layout"`    // unified | split: the layout a drawer starts in
 	Mode     string `toml:"mode"`      // turn | branch: what a new drawer opens in
@@ -169,7 +169,7 @@ func (c DiffConfig) Split() bool { return c.Layout == "split" }
 
 // BranchFirst reports whether a new drawer opens in branch mode even when the
 // pane has turns.
-func (c DiffConfig) BranchFirst() bool { return c.Mode == string(ReviewBranch) }
+func (c DiffConfig) BranchFirst() bool { return c.Mode != string(ReviewTurn) }
 
 // WorktreesConfig is the [worktrees] section. Validate rejects an unknown root
 // from a file; Sibling reads a zero field as the default, so a hand-built

@@ -18,7 +18,7 @@ import (
 )
 
 func TestDrawerOpensInTurnMode(t *testing.T) {
-	r := newDrawerRig(t)
+	r := newDrawerRig(t, turnFirst)
 	dir := threeTurnRepo(t)
 	id := r.agent(t, dir, testSession)
 
@@ -86,10 +86,11 @@ func TestDrawerOpenModeFollowsTurnsAndConfig(t *testing.T) {
 		cfg     core.DiffConfig
 		want    core.ReviewMode
 	}{
-		{"an agent with turns", testSession, core.DiffConfig{}, core.ReviewTurn},
-		{"an agent without a session", "", core.DiffConfig{}, core.ReviewBranch},
-		{"a session without turns", otherSession, core.DiffConfig{}, core.ReviewBranch},
+		{"an agent with turns", testSession, core.DiffConfig{Mode: "turn"}, core.ReviewTurn},
+		{"an agent without a session", "", core.DiffConfig{Mode: "turn"}, core.ReviewBranch},
+		{"a session without turns", otherSession, core.DiffConfig{Mode: "turn"}, core.ReviewBranch},
 		{"the config asks for branch", testSession, core.DiffConfig{Mode: "branch"}, core.ReviewBranch},
+		{"the config leaves the mode unset", testSession, core.DiffConfig{}, core.ReviewBranch},
 	}
 
 	for _, tt := range tests {
@@ -116,6 +117,7 @@ func TestNewDrawerOpensInBranchMode(t *testing.T) {
 		want core.ReviewMode
 	}{
 		{"by default", core.DefaultConfig().Diff, core.ReviewBranch},
+		{"with a zero config", core.DiffConfig{}, core.ReviewBranch},
 		{"with mode turn", turnFirst, core.ReviewTurn},
 	}
 
@@ -201,7 +203,7 @@ func TestDrawerWithoutAnEngineShowsTheError(t *testing.T) {
 }
 
 func TestTurnStepping(t *testing.T) {
-	r := newDrawerRig(t)
+	r := newDrawerRig(t, turnFirst)
 	dir := threeTurnRepo(t)
 	missingTurn(t, dir, testSession)
 
@@ -294,7 +296,7 @@ func TestStepInBranchModeEntersTurnMode(t *testing.T) {
 }
 
 func TestTurnModeReturnsToTheLatestTurn(t *testing.T) {
-	r := newDrawerRig(t)
+	r := newDrawerRig(t, turnFirst)
 	id := r.agent(t, threeTurnRepo(t), testSession)
 
 	r.open(t, id)
@@ -312,7 +314,7 @@ func TestTurnModeReturnsToTheLatestTurn(t *testing.T) {
 }
 
 func TestStaleLoadIsDropped(t *testing.T) {
-	r := newDrawerRig(t)
+	r := newDrawerRig(t, turnFirst)
 	id := r.agent(t, threeTurnRepo(t), testSession)
 
 	v := r.open(t, id)
@@ -524,7 +526,7 @@ func TestHiddenTabDrawerRecomputesWhenShown(t *testing.T) {
 }
 
 func TestSessionChangeRetargets(t *testing.T) {
-	r := newDrawerRig(t)
+	r := newDrawerRig(t, turnFirst)
 	dir := threeTurnRepo(t)
 	snapshotTurn(t, dir, otherSession)
 	write(t, filepath.Join(dir, "x.txt"), "after the other session began\n")
@@ -593,7 +595,7 @@ func TestSessionChangeRetargets(t *testing.T) {
 // Batches reach only the drawers that review their root, and a past turn,
 // which does not change with the files, ignores them.
 func TestBatchesRouteToTheirRootAndSkipPastTurns(t *testing.T) {
-	r := newDrawerRig(t)
+	r := newDrawerRig(t, turnFirst)
 	dir := threeTurnRepo(t)
 	root := rootOf(t, dir)
 	id := r.agent(t, dir, testSession)

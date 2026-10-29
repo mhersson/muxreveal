@@ -194,6 +194,10 @@ type drawerRig struct {
 	wait  time.Duration // how long until gives up
 }
 
+// turnFirst makes a new drawer open in turn mode when its pane has turns; the
+// rig's zero [diff] config opens in branch mode.
+func turnFirst(o *Options) { o.Diff.Mode = string(core.ReviewTurn) }
+
 func newDrawerRig(t *testing.T, opts ...func(*Options)) *drawerRig {
 	t.Helper()
 

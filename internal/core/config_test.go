@@ -296,6 +296,18 @@ func TestDiffDefaults(t *testing.T) {
 	}
 }
 
+func TestZeroDiffConfigReadsAsTheDefaults(t *testing.T) {
+	var zero DiffConfig
+
+	if !zero.BranchFirst() {
+		t.Error("a zero DiffConfig: BranchFirst() = false, want the branch default")
+	}
+
+	if zero.Split() {
+		t.Error("a zero DiffConfig: Split() = true, want the unified default")
+	}
+}
+
 func TestDiffBranchFirstFollowsTheFile(t *testing.T) {
 	tests := []struct {
 		name, content string

@@ -621,7 +621,7 @@ func TestViewKeys(t *testing.T) {
 
 	t.Run("modes and turns", func(t *testing.T) {
 		dir := threeTurnRepo(t)
-		r := newKeysRig(t, dir)
+		r := newKeysRig(t, dir, turnFirst)
 		id := r.agent(t, dir, testSession)
 		openIn(t, r.App, core.FocusPane{ID: id})
 
