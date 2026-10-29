@@ -1,4 +1,4 @@
-.PHONY: help build build-darwin run test test-race vet lint fmt fmt-check tidy-check scan check-fast check install clean
+.PHONY: help build build-darwin run test test-changed test-race vet lint fmt fmt-check tidy-check scan scan-commits check-fast check install clean
 
 help:
 	@echo "Targets:"
@@ -7,6 +7,7 @@ help:
 	@echo "  build-darwin cross-compile everything for darwin"
 	@echo "  run          run the app; pass arguments with ARGS=..."
 	@echo "  test         run the tests"
+	@echo "  test-changed run the tests of the changed packages; TEST_PKGS=... overrides"
 	@echo "  test-race    run the tests with the race detector"
 	@echo "  vet          go vet, with and without the bench and live tags"
 	@echo "  lint         golangci-lint run"
@@ -14,8 +15,9 @@ help:
 	@echo "  fmt-check    fail and show the diff if formatting is needed"
 	@echo "  tidy-check   fail if go mod tidy would change go.mod or go.sum"
 	@echo "  scan         fail on private-use glyphs in Go source and em-dashes in Go and Markdown files"
-	@echo "  check-fast   the per-commit check: build, fmt-check, vet, lint, test, scan"
-	@echo "  check        the full gate: build, build-darwin, fmt-check, vet, lint, test-race, tidy-check, scan"
+	@echo "  scan-commits fail on IDs, trailers, em-dashes and big blobs in SCAN_BASE..SCAN_HEAD (origin/main..HEAD)"
+	@echo "  check-fast   the per-commit check: build, fmt-check, vet, lint, test-changed, scan"
+	@echo "  check        the Linux go-checks gates of CI: build, build-darwin, fmt-check, vet, lint, test-race, tidy-check, scan"
 	@echo "  install      go install the binary into GOBIN, else GOPATH/bin"
 	@echo "  clean        remove bin/"
 
@@ -30,6 +32,14 @@ run:
 
 test:
 	go test ./...
+
+# A failing package lookup tests everything rather than nothing.
+test-changed:
+	@pkgs="$(TEST_PKGS)"; \
+	if [ -z "$$pkgs" ]; then pkgs=$$(sh scripts/changed-packages.sh) || pkgs=./...; fi; \
+	if [ -z "$$pkgs" ]; then echo "test-changed: no Go package changed"; exit 0; fi; \
+	echo "go test $$pkgs"; \
+	go test $$pkgs
 
 test-race:
 	CGO_ENABLED=1 go test -race ./...
@@ -84,7 +94,10 @@ scan:
 	fi; \
 	[ -z "$$fail" ]
 
-check-fast: build fmt-check vet lint test scan
+scan-commits:
+	@sh scripts/scan-commits.sh "$(SCAN_BASE)" "$(SCAN_HEAD)"
+
+check-fast: build fmt-check vet lint test-changed scan
 
 check: build build-darwin fmt-check vet lint test-race tidy-check scan
 

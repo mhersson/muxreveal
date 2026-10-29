@@ -24,6 +24,9 @@ design; propose an edit to DESIGN.md instead.
   maintainer approves.
 - Run an approved plan as written with
   `superpowers:subagent-driven-development`.
+- Small changes skip the plan: a fix, or a test-only or tooling change the
+  maintainer approves as a short scope, is built test-first, reviewed once and
+  opened as its own PR.
 - One branch and one PR per plan. Each task is its own reviewed commit; review
   fixes are separate commits, never squashed into it.
 - Commit messages: Conventional Commits, e.g.
@@ -38,12 +41,14 @@ design; propose an edit to DESIGN.md instead.
 make build        # bin/muxreveal
 make run          # run the app; make run ARGS="..." passes arguments
 make test         # go test ./...
+make test-changed # the tests of the changed packages; TEST_PKGS=... overrides
 make test-race    # go test -race ./...
 make lint         # golangci-lint run
 make fmt          # golangci-lint fmt
 make scan         # the glyph and em-dash scan
+make scan-commits # IDs, trailers, em-dashes and big blobs in the branch's commits
 make check-fast   # the per-commit check
-make check        # the full gate, once per branch head
+make check        # CI's Linux go-checks gates, for a local run
 make install      # go install into $GOBIN, else $GOPATH/bin
 ```
 
@@ -61,6 +66,7 @@ make install      # go install into $GOBIN, else $GOPATH/bin
 | `internal/md`      | Markdown to styled cells plus image references                    |
 | `internal/store`   | `state.json` and SQLite persistence                               |
 | `spikes/`          | Throwaway experiments; nothing outside `spikes/` imports them     |
+| `scripts/`         | POSIX shell helpers for the Makefile                              |
 
 Dependency rules:
 
@@ -111,8 +117,10 @@ Dependency rules:
 - Tests check behavior. A test that fails only when someone rewords text no code
   reads is not a test: don't write it, and delete it when found. Rendering
   goldens are behavior.
-- New tests call `t.Parallel()` unless they use `t.Setenv`, change the process's
-  working directory, or assert on wall-clock time.
+- New tests call `t.Parallel()` unless they use `t.Setenv` or change the
+  process's working directory.
+- New tests don't assert on wall-clock durations: inject a clock or wait for
+  the event. A real-time budget belongs in a test behind the `bench` tag.
 - Rendering: golden files under `testdata/` (`-update` flag to regenerate);
   `teatest` for Bubble Tea flows.
 - Diff engine: golden-file tests for hunks, word spans and full-file view.
@@ -125,20 +133,27 @@ Dependency rules:
 
 ## Commit discipline
 
-Run `make check-fast` before every commit; it must be clean. It builds and runs
-the format check, vet, lint, the tests and the glyph and em-dash scan. A commit
-that touches goroutines, channels or locks also runs `go test -race` on the
-packages it changes.
+Run `make check-fast` before every commit; it must be clean. It runs the format
+check, lint, the glyph and em-dash scan and the tests of the packages the change
+touches (`make check-fast TEST_PKGS=./...` runs them all), and it builds and
+vets the whole module, so a change that stops another package or its tests from
+compiling fails it. Whether the other packages still behave is CI's to check. A
+change to goroutines, channels or locks also runs the race detector on the tests
+it adds or changes: `go test -race -run '<those tests>' ./<package>`.
 
-Run the full `make check` once at the branch head, before the final review and
-the push. It adds the darwin build, the race tests and `go mod tidy`, and CI
-runs the same gates on every pull request that changes Go code.
+CI runs the full gates on every pull request that changes Go code (every test
+under the race detector, the darwin build, `go mod tidy` and the native macOS
+tests) and the commit scan on every pull request. A branch goes up as a draft
+pull request, so CI checks it while the work finishes. Run `make scan-commits`
+before every push; `make check` runs CI's Linux go-checks gates locally when you
+need them without a push.
 
 - No session links in commits or PRs, and no trailers: no `Co-Authored-By`,
   `Claude-Session` or "Generated with" lines.
 - **Never commit to `main`.** Work on a feature branch; tasks of a plan or scope
-  the user approved commit there without asking again. Never push without
-  explicit user approval.
+  the user approved commit there without asking again.
+- Push only feature branches, and only with the user's approval; a standing
+  approval may cover a plan's branch and its draft pull request.
 - Conventional commits: `type(scope): concise summary`. Always include a scope.
 - Body uses bullet points for the what and why - no long paragraphs.
 - Never reference requirement IDs, milestones, plan phases, task numbers, or
