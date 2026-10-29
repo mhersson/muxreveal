@@ -112,7 +112,7 @@ func (a SetAgentSession) apply(s *State) error {
 
 // SetAgentStatus records the model and context an agent's status line
 // reported for Session. A false ContextKnown clears the meter and keeps the
-// model; Context is floored and otherwise taken as reported.
+// model; Context is floored and clamped to 0-100.
 type SetAgentStatus struct {
 	ID           PaneID
 	Session      SessionID
@@ -140,13 +140,14 @@ func (a SetAgentStatus) Matches(p Pane) bool {
 		p.ContextKnown == a.ContextKnown && p.Context == a.percent()
 }
 
-// percent is the floored context, 0 when none was reported.
+// percent is the floored context clamped to 0-100, 0 when none was reported.
+// The clamp comes before the conversion, which is undefined outside the int range.
 func (a SetAgentStatus) percent() int {
-	if !a.ContextKnown {
+	if !a.ContextKnown || math.IsNaN(a.Context) {
 		return 0
 	}
 
-	return int(math.Floor(a.Context))
+	return int(min(max(math.Floor(a.Context), 0), 100))
 }
 
 // SetAgentState records what an agent is doing; AgentUnknown clears the badge.

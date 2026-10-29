@@ -1,6 +1,9 @@
 package core
 
-import "testing"
+import (
+	"math"
+	"testing"
+)
 
 func agentState(panes map[PaneID]Pane, layout *Node, focus PaneID) State {
 	s := stateOf(layout, focus)
@@ -276,16 +279,34 @@ func TestSetAgentStatus(t *testing.T) {
 			want: Pane{Kind: KindAgent, Harness: "claude-code", Model: "Opus 4.8", Context: 0, ContextKnown: true, StatusSession: "s1"},
 		},
 		{
-			name: "over 100 is kept as floored",
+			name: "over 100 clamps to 100",
 			from: Pane{Kind: KindAgent, Harness: "claude-code"},
 			act:  SetAgentStatus{Session: "s1", Model: "Opus 4.8", Context: 130.5, ContextKnown: true},
-			want: Pane{Kind: KindAgent, Harness: "claude-code", Model: "Opus 4.8", Context: 130, ContextKnown: true, StatusSession: "s1"},
+			want: Pane{Kind: KindAgent, Harness: "claude-code", Model: "Opus 4.8", Context: 100, ContextKnown: true, StatusSession: "s1"},
 		},
 		{
-			name: "negative floors down",
+			name: "negative clamps to 0",
 			from: Pane{Kind: KindAgent, Harness: "claude-code"},
 			act:  SetAgentStatus{Session: "s1", Model: "Opus 4.8", Context: -3.2, ContextKnown: true},
-			want: Pane{Kind: KindAgent, Harness: "claude-code", Model: "Opus 4.8", Context: -4, ContextKnown: true, StatusSession: "s1"},
+			want: Pane{Kind: KindAgent, Harness: "claude-code", Model: "Opus 4.8", Context: 0, ContextKnown: true, StatusSession: "s1"},
+		},
+		{
+			name: "a float far past the int range clamps to 100",
+			from: Pane{Kind: KindAgent, Harness: "claude-code"},
+			act:  SetAgentStatus{Session: "s1", Model: "Opus 4.8", Context: 1e300, ContextKnown: true},
+			want: Pane{Kind: KindAgent, Harness: "claude-code", Model: "Opus 4.8", Context: 100, ContextKnown: true, StatusSession: "s1"},
+		},
+		{
+			name: "a float far below the int range clamps to 0",
+			from: Pane{Kind: KindAgent, Harness: "claude-code"},
+			act:  SetAgentStatus{Session: "s1", Model: "Opus 4.8", Context: -1e300, ContextKnown: true},
+			want: Pane{Kind: KindAgent, Harness: "claude-code", Model: "Opus 4.8", Context: 0, ContextKnown: true, StatusSession: "s1"},
+		},
+		{
+			name: "not a number reads as 0",
+			from: Pane{Kind: KindAgent, Harness: "claude-code"},
+			act:  SetAgentStatus{Session: "s1", Model: "Opus 4.8", Context: math.NaN(), ContextKnown: true},
+			want: Pane{Kind: KindAgent, Harness: "claude-code", Model: "Opus 4.8", Context: 0, ContextKnown: true, StatusSession: "s1"},
 		},
 		{
 			name: "a null percentage keeps the model and clears the meter",
@@ -396,6 +417,8 @@ func TestSetAgentStatusMatches(t *testing.T) {
 		{"identical", p, SetAgentStatus{Session: "s1", Model: "Opus 4.8", Context: 69, ContextKnown: true}, true},
 		{"same floor", p, SetAgentStatus{Session: "s1", Model: "Opus 4.8", Context: 69.9, ContextKnown: true}, true},
 		{"other floor", p, SetAgentStatus{Session: "s1", Model: "Opus 4.8", Context: 70, ContextKnown: true}, false},
+		{"same clamp", Pane{Kind: KindAgent, Model: "Opus 4.8", Context: 100, ContextKnown: true, StatusSession: "s1"}, SetAgentStatus{Session: "s1", Model: "Opus 4.8", Context: 130, ContextKnown: true}, true},
+		{"same clamp below", Pane{Kind: KindAgent, Model: "Opus 4.8", Context: 0, ContextKnown: true, StatusSession: "s1"}, SetAgentStatus{Session: "s1", Model: "Opus 4.8", Context: -5, ContextKnown: true}, true},
 		{"other model", p, SetAgentStatus{Session: "s1", Model: "Sonnet 5.5", Context: 69, ContextKnown: true}, false},
 		{"other session", p, SetAgentStatus{Session: "s2", Model: "Opus 4.8", Context: 69, ContextKnown: true}, false},
 		{"meter cleared", p, SetAgentStatus{Session: "s1", Model: "Opus 4.8"}, false},
