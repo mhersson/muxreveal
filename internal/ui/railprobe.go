@@ -453,6 +453,8 @@ func (a *App) onRailHead(msg railHeadMsg) tea.Cmd {
 				cmds = append(cmds, a.railFire(a.store.State(), msg.pane, probeStats))
 			}
 		}
+
+		a.prProbed(msg.pane)
 	}
 
 	if rp.head.pending {

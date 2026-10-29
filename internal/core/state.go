@@ -16,6 +16,11 @@ type State struct {
 	NextTabID int          // last tab number handed out
 	Layout    LayoutConfig // settings Arrange and the placement helpers read
 	Rail      bool         // the agents rail is open; it narrows every pane's body
+
+	// PRs holds each GitHub repository's pull requests, keyed "host/owner/name".
+	// It is not saved. Copies of the state share it, so actions replace the map
+	// and its values and never edit them in place.
+	PRs map[string]RepoPRs
 }
 
 // InitialState returns the state of a fresh session: one empty tab.
@@ -114,7 +119,8 @@ func (s *Store) Dispatch(a Action) error {
 	return nil
 }
 
-// State returns a deep copy of the current state.
+// State returns a copy of the current state; tabs and panes are deep copies,
+// and PRs is shared (see State.PRs).
 func (s *Store) State() State {
 	return s.state.clone()
 }

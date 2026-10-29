@@ -66,6 +66,12 @@ type Options struct {
 	Worktrees core.WorktreesConfig
 	// Save is called with the state after every successful dispatch; nil saves nothing.
 	Save func(core.State)
+	// PRs polls the pull requests of the repositories the agents work in; nil
+	// turns every pull request feature off.
+	PRs prSource
+	// PRLookup finds the merged or closed pull request of a branch whose open one
+	// is gone; nil means no lookups.
+	PRLookup PRLookup
 }
 
 // App is the root Bubble Tea model.
@@ -111,6 +117,7 @@ type App struct {
 	drawer    drawerState
 	picker    pickerState
 	watches   watchState
+	prs       prState
 	storeVer  uint64        // counts the dispatches the store accepted
 	engine    *git.Engine   // nil when the rail's diff stats and the review drawer's diffs are off
 	probeSem  chan struct{} // its capacity bounds the head, stats and name probes running at once
@@ -197,6 +204,10 @@ func New(opts Options) (*App, error) {
 		probeSem:     make(chan struct{}, railProbeMax),
 		focusFollows: opts.FocusFollowsMouse, copyOnSelect: opts.CopyOnSelect,
 		clip: newClipboard(clipboardConfig{OSC52: !opts.NoOSC52, Native: !opts.NoNativeClipboard}, getenv, runtime.GOOS, opts.Logger),
+	}
+
+	if opts.PRs != nil {
+		a.prs = newPRState(opts.PRs, opts.PRLookup)
 	}
 
 	a.drawer.cfg = opts.Diff
@@ -338,7 +349,7 @@ func (a *App) Init() tea.Cmd {
 		rail = a.railOpened()
 	}
 
-	return tea.Batch(a.initTray(), a.waitEvent(), a.waitWatch(), rail)
+	return tea.Batch(a.initTray(), a.waitEvent(), a.waitWatch(), a.waitPRs(), rail)
 }
 
 // Update implements tea.Model.
@@ -351,6 +362,10 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	a.railAfterUpdate()
 
 	if c := a.watchSync(); c != nil {
+		a.later = append(a.later, c)
+	}
+
+	if c := a.prSync(); c != nil {
 		a.later = append(a.later, c)
 	}
 
@@ -490,6 +505,12 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, tea.Batch(a.onWatch(msg), a.waitWatch())
 	case paneRepoMsg:
 		return a, a.onPaneRepo(msg)
+	case prSnapshotMsg:
+		return a, tea.Batch(a.onPRSnapshot(msg.Snapshot), a.waitPRs())
+	case prResolvedMsg:
+		return a, a.onPRResolved(msg)
+	case prBranchMsg:
+		a.onPRBranch(msg)
 	case watchAcquiredMsg:
 		a.onWatchAcquired(msg)
 	case agentTickMsg:
