@@ -50,10 +50,17 @@ func openRepo(t *testing.T, dir string) Repo {
 func snap(t *testing.T, dir, session string, opts SnapshotOptions) Turn {
 	t.Helper()
 
+	return snapContext(context.Background(), t, dir, session, opts)
+}
+
+// snapContext is snap with the context its git calls run under.
+func snapContext(ctx context.Context, t *testing.T, dir, session string, opts SnapshotOptions) Turn {
+	t.Helper()
+
 	tmp := t.TempDir()
 	opts.TempDir = tmp
 
-	turn, err := Snapshot(context.Background(), dir, session, opts)
+	turn, err := Snapshot(ctx, dir, session, opts)
 	if err != nil {
 		t.Fatalf("Snapshot: %v", err)
 	}
@@ -220,6 +227,7 @@ func TestSnapshotRoundTrip(t *testing.T) {
 }
 
 func TestTurnsSortNumerically(t *testing.T) {
+	t.Parallel()
 	dir := seedRepo(t)
 
 	for range 11 {
@@ -243,6 +251,7 @@ func TestTurnsSortNumerically(t *testing.T) {
 }
 
 func TestSnapshotTreeContent(t *testing.T) {
+	t.Parallel()
 	dir := seedRepo(t)
 	writeFile(t, dir, ".gitignore", "ignored.log\nbuild/\n")
 	writeFile(t, dir, "mod.txt", "old\n")
@@ -318,6 +327,7 @@ func TestSnapshotTreeContent(t *testing.T) {
 }
 
 func TestSnapshotSubmoduleStaysAtRecordedCommit(t *testing.T) {
+	t.Parallel()
 	dir := seedRepo(t)
 
 	sub := newRepo(t)
@@ -346,6 +356,7 @@ func TestSnapshotSubmoduleStaysAtRecordedCommit(t *testing.T) {
 }
 
 func TestSnapshotUntrackedSizeCap(t *testing.T) {
+	t.Parallel()
 	dir := seedRepo(t)
 
 	big := filepath.Join(dir, "big\nfile.bin")
@@ -617,6 +628,7 @@ func TestSnapshotLeavesUserStateAlone(t *testing.T) {
 }
 
 func TestSnapshotUnbornHead(t *testing.T) {
+	t.Parallel()
 	dir := newRepo(t)
 	writeFile(t, dir, "f.txt", "f\n")
 	gitOut(t, dir, "add", "f.txt")
@@ -643,6 +655,7 @@ func TestSnapshotUnbornHead(t *testing.T) {
 }
 
 func TestSnapshotDetachedHead(t *testing.T) {
+	t.Parallel()
 	dir := seedRepo(t)
 	gitOut(t, dir, "checkout", "-q", "--detach")
 	writeFile(t, dir, "a.txt", "changed\n")
@@ -659,6 +672,7 @@ func TestSnapshotDetachedHead(t *testing.T) {
 }
 
 func TestSnapshotLinkedWorktree(t *testing.T) {
+	t.Parallel()
 	dir := seedRepo(t)
 	wt := filepath.Join(filepath.Dir(dir), filepath.Base(dir)+"-linked")
 	gitOut(t, dir, "worktree", "add", "-q", "-b", "feat", wt)
@@ -687,6 +701,7 @@ func TestSnapshotLinkedWorktree(t *testing.T) {
 }
 
 func TestSnapshotLinkedWorktreeOfBareRepo(t *testing.T) {
+	t.Parallel()
 	src := seedRepo(t)
 	bare := filepath.Join(t.TempDir(), "bare.git")
 	gitOut(t, src, "clone", "-q", "--bare", src, bare)
@@ -713,6 +728,8 @@ func TestSnapshotLinkedWorktreeOfBareRepo(t *testing.T) {
 }
 
 func TestSnapshotSplitIndex(t *testing.T) {
+	t.Parallel()
+
 	dir := seedRepo(t)
 	gitOut(t, dir, "config", "core.splitIndex", "true")
 	gitOut(t, dir, "update-index", "--split-index")
@@ -727,8 +744,8 @@ func TestSnapshotSplitIndex(t *testing.T) {
 	}
 
 	before := captureState(t, dir)
-	logPath := fakeGit(t, "")
-	turn := snap(t, dir, sessA, SnapshotOptions{})
+	ctx, logPath := wrapGit(t, "")
+	turn := snapContext(ctx, t, dir, sessA, SnapshotOptions{})
 	assertSameState(t, before, captureState(t, dir))
 
 	if want := scratchTree(t, dir); turn.Tree != want {
@@ -741,12 +758,15 @@ func TestSnapshotSplitIndex(t *testing.T) {
 }
 
 func TestSnapshotUnusableIndex(t *testing.T) {
+	t.Parallel()
+
 	for name, content := range map[string][]byte{
 		"garbage": []byte("this is not an index file at all, not even close"),
 		"empty":   nil,
 		"missing": nil,
 	} {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 			dir := seedRepo(t)
 			writeFile(t, dir, "u.txt", "u\n")
 
@@ -768,6 +788,7 @@ func TestSnapshotUnusableIndex(t *testing.T) {
 }
 
 func TestSnapshotPathShapeChanges(t *testing.T) {
+	t.Parallel()
 	dir := seedRepo(t)
 	writeFile(t, dir, "d/inner.txt", "i\n")
 	commitAll(t, dir, "d")
@@ -808,6 +829,8 @@ func TestSnapshotPathShapeChanges(t *testing.T) {
 }
 
 func TestSnapshotUnchangedReusesPreviousTree(t *testing.T) {
+	t.Parallel()
+
 	dir := seedRepo(t)
 
 	if first := snap(t, dir, sessA, SnapshotOptions{Unchanged: true}); first.N != 1 || first.Tree != scratchTree(t, dir) {
@@ -821,10 +844,10 @@ func TestSnapshotUnchangedReusesPreviousTree(t *testing.T) {
 	}
 
 	second := snap(t, dir, sessA, SnapshotOptions{})
-	logPath := fakeGit(t, "")
+	ctx, logPath := wrapGit(t, "")
 
 	// Marker in between: the reuse skips it and takes the real snapshot's tree.
-	if _, err := MarkMissing(context.Background(), dir, sessA); err != nil {
+	if _, err := MarkMissing(ctx, dir, sessA); err != nil {
 		t.Fatal(err)
 	}
 
@@ -832,7 +855,7 @@ func TestSnapshotUnchangedReusesPreviousTree(t *testing.T) {
 
 	writeFile(t, dir, "ignored-by-reuse.txt", "x\n")
 
-	fourth := snap(t, dir, sessA, SnapshotOptions{Unchanged: true})
+	fourth := snapContext(ctx, t, dir, sessA, SnapshotOptions{Unchanged: true})
 
 	if fourth.N != 4 || fourth.Tree != second.Tree || !slices.Equal(fourth.Skipped, second.Skipped) {
 		t.Errorf("fourth = %+v, want turn 4 with %s and skipped %q", fourth, second.Tree, second.Skipped)
@@ -841,6 +864,10 @@ func TestSnapshotUnchangedReusesPreviousTree(t *testing.T) {
 	logAfter, _ := os.ReadFile(logPath)
 
 	calls := string(logAfter[len(logBefore):])
+	if calls == "" {
+		t.Fatal("the git wrapper saw no call of the unchanged snapshot")
+	}
+
 	for _, sub := range []string{"update-index", "write-tree", "ls-files"} {
 		if strings.Contains(calls, sub) {
 			t.Errorf("Unchanged ran %s:\n%s", sub, calls)
@@ -849,6 +876,7 @@ func TestSnapshotUnchangedReusesPreviousTree(t *testing.T) {
 }
 
 func TestMarkMissing(t *testing.T) {
+	t.Parallel()
 	dir := seedRepo(t)
 	ctx := context.Background()
 
@@ -885,6 +913,7 @@ func TestMarkMissing(t *testing.T) {
 }
 
 func TestBadSession(t *testing.T) {
+	t.Parallel()
 	dir := seedRepo(t)
 	ctx := context.Background()
 	tmp := t.TempDir()
@@ -915,7 +944,7 @@ func TestBadSession(t *testing.T) {
 }
 
 func TestSnapshotNotInRepo(t *testing.T) {
-	isolateGit(t)
+	t.Parallel()
 
 	_, err := Snapshot(context.Background(), t.TempDir(), sessA, SnapshotOptions{TempDir: t.TempDir()})
 	if !errors.Is(err, ErrNotRepo) {
@@ -924,6 +953,8 @@ func TestSnapshotNotInRepo(t *testing.T) {
 }
 
 func TestSnapshotRetriesWhenTheRefExists(t *testing.T) {
+	t.Parallel()
+
 	dir := seedRepo(t)
 
 	realGit, err := exec.LookPath("git")
@@ -932,7 +963,7 @@ func TestSnapshotRetriesWhenTheRefExists(t *testing.T) {
 	}
 
 	// A racing writer takes number 1 right before our update-ref, once.
-	fakeGit(t, `case "$*" in
+	ctx, _ := wrapGit(t, `case "$*" in
 *update-ref*--no-deref*)
 	if [ ! -e "$LOG.raced" ]; then
 		: > "$LOG.raced"
@@ -940,7 +971,7 @@ func TestSnapshotRetriesWhenTheRefExists(t *testing.T) {
 	fi;;
 esac`)
 
-	turn := snap(t, dir, sessA, SnapshotOptions{})
+	turn := snapContext(ctx, t, dir, sessA, SnapshotOptions{})
 	if turn.N != 2 {
 		t.Errorf("turn = %d, want 2 after the retry", turn.N)
 	}
@@ -956,6 +987,7 @@ esac`)
 }
 
 func TestPrune(t *testing.T) {
+	t.Parallel()
 	dir := seedRepo(t)
 	ctx := context.Background()
 
@@ -1007,6 +1039,7 @@ func TestPrune(t *testing.T) {
 }
 
 func TestSnapshotCancelledLeavesNoTempFileOrRef(t *testing.T) {
+	t.Parallel()
 	dir := seedRepo(t)
 	tmp := t.TempDir()
 
@@ -1025,6 +1058,7 @@ func TestSnapshotCancelledLeavesNoTempFileOrRef(t *testing.T) {
 }
 
 func TestTempIndexNameAndLockCleanup(t *testing.T) {
+	t.Parallel()
 	tmp := t.TempDir()
 
 	idx, err := newTempIndex(tmp)
@@ -1046,15 +1080,17 @@ func TestTempIndexNameAndLockCleanup(t *testing.T) {
 }
 
 func TestSnapshotRefWriteSurvivesTheContextEnding(t *testing.T) {
+	t.Parallel()
+
 	dir := seedRepo(t)
 	r := openRepo(t, dir)
 
 	// update-ref outlasts the deadline; the ref write must not be killed.
-	fakeGit(t, `case "$*" in
+	ctx, logPath := wrapGit(t, `case "$*" in
 *update-ref*) sleep 1.5;;
 esac`)
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(ctx, time.Second)
 	defer cancel()
 
 	turn, err := Snapshot(ctx, dir, sessA, SnapshotOptions{TempDir: t.TempDir()})
@@ -1064,6 +1100,10 @@ esac`)
 
 	if turn.N != 1 {
 		t.Errorf("turn = %d, want 1", turn.N)
+	}
+
+	if calls := wrappedCalls(t, logPath); !strings.Contains(calls, "update-ref") {
+		t.Errorf("the ref write never ran through the wrapper:\n%s", calls)
 	}
 
 	locks, err := filepath.Glob(filepath.Join(r.CommonDir, "refs", "muxreveal", "*", "*.lock"))
@@ -1077,6 +1117,7 @@ esac`)
 }
 
 func TestWriteTurnWithDoneContextWritesNothing(t *testing.T) {
+	t.Parallel()
 	dir := seedRepo(t)
 	r := openRepo(t, dir)
 

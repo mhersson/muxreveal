@@ -8,6 +8,8 @@ import (
 )
 
 func TestPushRemoteOrder(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name    string
 		config  [][]string
@@ -25,6 +27,7 @@ func TestPushRemoteOrder(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			root := newRepo(t)
 			gitOut(t, root, "remote", "add", "origin", "/nonexistent/origin.git")
 			gitOut(t, root, "remote", "add", "second", "/nonexistent/second.git")
@@ -46,6 +49,7 @@ func TestPushRemoteOrder(t *testing.T) {
 }
 
 func TestPushRemoteNoRemotes(t *testing.T) {
+	t.Parallel()
 	root := newRepo(t)
 
 	if _, err := PushRemote(context.Background(), openRepo(t, root), "feat"); !errors.Is(err, ErrNoRemote) {
@@ -54,6 +58,7 @@ func TestPushRemoteNoRemotes(t *testing.T) {
 }
 
 func TestRemoteURLAppliesInsteadOf(t *testing.T) {
+	t.Parallel()
 	root := newRepo(t)
 	gitOut(t, root, "remote", "add", "origin", "gh:o/r.git")
 	gitOut(t, root, "config", "url.https://example.invalid/.insteadOf", "gh:")
@@ -73,6 +78,7 @@ func TestRemoteURLAppliesInsteadOf(t *testing.T) {
 }
 
 func TestRemoteURLRefusesOptionNames(t *testing.T) {
+	t.Parallel()
 	root := newRepo(t)
 
 	if _, err := RemoteURL(context.Background(), openRepo(t, root), "--all"); !errors.Is(err, ErrNoRemote) {
@@ -81,6 +87,7 @@ func TestRemoteURLRefusesOptionNames(t *testing.T) {
 }
 
 func TestRemoteURLNeverEchoesItsArgument(t *testing.T) {
+	t.Parallel()
 	root := newRepo(t)
 	arg := "https://user:secret@example.invalid/o/r.git" //nolint:gosec // G101: fixture URL, no real credential
 

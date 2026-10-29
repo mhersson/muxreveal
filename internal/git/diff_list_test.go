@@ -17,6 +17,8 @@ func raw(om, nm, oo, no, status string, paths ...string) string {
 }
 
 func TestParseListing(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name string
 		in   string
@@ -87,6 +89,8 @@ func TestParseListing(t *testing.T) {
 }
 
 func TestParseListingRejectsMalformedInput(t *testing.T) {
+	t.Parallel()
+
 	ok := raw("100644", "100644", oidA, oidB, "M", "a") + "1\t1\ta\x00"
 	rename := raw("100644", "100644", oidA, oidB, "R090", "o", "n") + "1\t1\t\x00o\x00n\x00"
 

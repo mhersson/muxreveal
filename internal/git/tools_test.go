@@ -7,6 +7,8 @@ import (
 )
 
 func TestDetectTools(t *testing.T) {
+	t.Parallel()
+
 	const (
 		vscodeNoKey  = `{"editor.tabSize": 2}`
 		vscodeOther  = `{"files.watcherExclude": {"**/node_modules/**": true}}`
@@ -99,6 +101,7 @@ func TestDetectTools(t *testing.T) {
 }
 
 func TestDetectToolsOrder(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	writeFile(t, root, "Dockerfile", "FROM x")
 	writeFile(t, root, ".eslintrc", "{}")

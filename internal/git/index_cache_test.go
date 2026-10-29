@@ -69,6 +69,7 @@ func wantCacheName(t *testing.T, r Repo) string {
 }
 
 func TestWorkingTreeWritesTheIndexCache(t *testing.T) {
+	t.Parallel()
 	dir, cache, tmp, r := cacheRepo(t)
 	writeFile(t, dir, "a.txt", "changed\n")
 
@@ -85,6 +86,7 @@ func TestWorkingTreeWritesTheIndexCache(t *testing.T) {
 // A hit with nothing left to stage leaves the cache file untouched: same inode
 // and mtime, where a miss would have written a new one.
 func TestWorkingTreeReusesTheCache(t *testing.T) {
+	t.Parallel()
 	dir, cache, tmp, r := cacheRepo(t)
 	writeFile(t, dir, "a.txt", "changed\n")
 	treeOf(t, r, cache, tmp)
@@ -109,6 +111,7 @@ func TestWorkingTreeReusesTheCache(t *testing.T) {
 }
 
 func TestWorkingTreeIgnoresAStaleCache(t *testing.T) {
+	t.Parallel()
 	dir, cache, tmp, r := cacheRepo(t)
 	treeOf(t, r, cache, tmp)
 
@@ -133,6 +136,7 @@ func TestWorkingTreeIgnoresAStaleCache(t *testing.T) {
 }
 
 func TestWorkingTreeNeverWritesTheUserIndex(t *testing.T) {
+	t.Parallel()
 	dir, cache, tmp, r := cacheRepo(t)
 	writeFile(t, dir, "a.txt", "changed\n")
 	writeFile(t, dir, "new.txt", "new\n")
@@ -154,6 +158,7 @@ func TestWorkingTreeNeverWritesTheUserIndex(t *testing.T) {
 }
 
 func TestTwoWorktreesKeepTwoCaches(t *testing.T) {
+	t.Parallel()
 	dir, cache, tmp, r := cacheRepo(t)
 	other := filepath.Join(filepath.Dir(dir), filepath.Base(dir)+"-wt")
 	gitOut(t, dir, "worktree", "add", "-q", "-b", "side", other)
@@ -176,6 +181,8 @@ func TestTwoWorktreesKeepTwoCaches(t *testing.T) {
 }
 
 func TestCacheWriteIsAtomic(t *testing.T) {
+	t.Parallel()
+
 	dir, cache, tmp, r := cacheRepo(t)
 	for i := range 40 {
 		writeFile(t, dir, fmt.Sprintf("f%02d.txt", i), "x\n")
@@ -232,6 +239,7 @@ func TestCacheWriteIsAtomic(t *testing.T) {
 // must treat the entry as racy and compare content. A copy stamped with the
 // copy time instead would trust the entry's size and mtime and miss the edit.
 func TestWorkingTreeSeesAnEditAfterTheCache(t *testing.T) {
+	t.Parallel()
 	dir, cache, tmp, r := cacheRepo(t)
 	// The rewrite changes ctime, which would mask the mtime check.
 	gitOut(t, dir, "config", "core.trustctime", "false")
@@ -265,6 +273,7 @@ func TestWorkingTreeSeesAnEditAfterTheCache(t *testing.T) {
 }
 
 func TestWorkingTreeKeepsADeletedTrackedFileTracked(t *testing.T) {
+	t.Parallel()
 	dir, cache, tmp, r := cacheRepo(t)
 
 	if err := os.Remove(filepath.Join(dir, "a.txt")); err != nil {
@@ -288,6 +297,7 @@ func TestWorkingTreeKeepsADeletedTrackedFileTracked(t *testing.T) {
 }
 
 func TestWorkingTreeKeepsUntrackedOutOfTheCache(t *testing.T) {
+	t.Parallel()
 	dir, cache, tmp, r := cacheRepo(t)
 	writeFile(t, dir, "new.txt", "new\n")
 
