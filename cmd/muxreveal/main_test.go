@@ -20,10 +20,10 @@ func TestRootRejectsBadConfig(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Setenv("HOME", t.TempDir())
+			t.Setenv("HOME", shortDir(t))
 			t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 			t.Setenv("XDG_CACHE_HOME", t.TempDir())
-			stateHome := t.TempDir()
+			stateHome := shortDir(t)
 			t.Setenv("XDG_STATE_HOME", stateHome)
 
 			path := filepath.Join(t.TempDir(), "config.toml")
@@ -64,10 +64,10 @@ func TestRootRejectsBadLayoutConfig(t *testing.T) {
 		"[layout]\ncolumn_width = 5\n",
 	} {
 		t.Run(strings.TrimSpace(content), func(t *testing.T) {
-			t.Setenv("HOME", t.TempDir())
+			t.Setenv("HOME", shortDir(t))
 			t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 			t.Setenv("XDG_CACHE_HOME", t.TempDir())
-			stateHome := t.TempDir()
+			stateHome := shortDir(t)
 			t.Setenv("XDG_STATE_HOME", stateHome)
 
 			path := filepath.Join(t.TempDir(), "config.toml")
@@ -104,10 +104,10 @@ func TestRootRejectsBadDiffConfig(t *testing.T) {
 		"[diff]\nmax_bytes = -1\n",
 	} {
 		t.Run(strings.TrimSpace(content), func(t *testing.T) {
-			t.Setenv("HOME", t.TempDir())
+			t.Setenv("HOME", shortDir(t))
 			t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 			t.Setenv("XDG_CACHE_HOME", t.TempDir())
-			stateHome := t.TempDir()
+			stateHome := shortDir(t)
 			t.Setenv("XDG_STATE_HOME", stateHome)
 
 			path := filepath.Join(t.TempDir(), "config.toml")
@@ -142,10 +142,10 @@ func TestRootRejectsBadWorktreesConfig(t *testing.T) {
 		"[worktrees]\nroot = \"\"\n",
 	} {
 		t.Run(strings.TrimSpace(content), func(t *testing.T) {
-			t.Setenv("HOME", t.TempDir())
+			t.Setenv("HOME", shortDir(t))
 			t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 			t.Setenv("XDG_CACHE_HOME", t.TempDir())
-			stateHome := t.TempDir()
+			stateHome := shortDir(t)
 			t.Setenv("XDG_STATE_HOME", stateHome)
 
 			path := filepath.Join(t.TempDir(), "config.toml")
@@ -175,10 +175,10 @@ func TestRootRejectsBadWorktreesConfig(t *testing.T) {
 }
 
 func TestRootRejectsUnknownTheme(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	t.Setenv("HOME", shortDir(t))
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
-	stateHome := t.TempDir()
+	stateHome := shortDir(t)
 	t.Setenv("XDG_STATE_HOME", stateHome)
 
 	path := filepath.Join(t.TempDir(), "config.toml")

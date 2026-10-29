@@ -109,9 +109,8 @@ func TestToastGoesWithTheFirstKey(t *testing.T) {
 		t.Errorf("notice = %q, toast still drawn after a key", a.notice)
 	}
 
-	if got := procs["p2"].sent(); got != "x" {
-		t.Errorf("the key reached the pane as %q, want %q", got, "x")
-	}
+	// Keys reach the process through the emulator's drain goroutine.
+	eventually(t, "the key at the pane", func() bool { return procs["p2"].sent() == "x" })
 }
 
 func TestToastTakesNoClicks(t *testing.T) {

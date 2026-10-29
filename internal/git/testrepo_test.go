@@ -1,10 +1,12 @@
 package git
 
 import (
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 )
 
@@ -53,6 +55,22 @@ func writeFile(t *testing.T, dir, rel, content string) {
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// fsAcceptsName reports whether the temp filesystem takes name; APFS refuses names that are not valid UTF-8.
+func fsAcceptsName(t *testing.T, name string) bool {
+	t.Helper()
+
+	err := os.WriteFile(filepath.Join(t.TempDir(), name), nil, 0o600)
+	if errors.Is(err, syscall.EILSEQ) {
+		return false
+	}
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return true
 }
 
 func commitAll(t *testing.T, dir, msg string) {
