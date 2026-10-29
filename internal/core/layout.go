@@ -99,6 +99,17 @@ type Pane struct {
 	Transcript string     // that session's transcript file, as the harness reported it
 	State      AgentState // not persisted
 	Action     string     // the agent's current action from its hooks; not persisted
+	AgentCwd   string     // the directory the agent last reported in a hook; not persisted
+}
+
+// WorkDir is the directory the pane works in: the one its agent last reported,
+// else the one it was opened in.
+func (p Pane) WorkDir() string {
+	if p.AgentCwd != "" {
+		return p.AgentCwd
+	}
+
+	return p.Cwd
 }
 
 // Dir is a direction for focus, resize and preselection. The zero value is

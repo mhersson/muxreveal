@@ -18,13 +18,16 @@ const (
 // Valid reports whether m is a known mode.
 func (m ReviewMode) Valid() bool { return m == ReviewTurn || m == ReviewBranch }
 
-// Review is a tab's open review drawer: the pane it reviews and its mode.
+// Review is a tab's open review drawer: the pane it reviews, its mode and
+// whether its file tree is open.
 type Review struct {
 	Pane PaneID
 	Mode ReviewMode
+	Tree bool
 }
 
-// errNoReview is returned by SetReviewMode when the active tab has no drawer.
+// errNoReview is returned by SetReviewMode and SetReviewTree when the active
+// tab has no drawer.
 var errNoReview = errors.New("core: no review drawer is open")
 
 // dropReview closes the drawer when it reviews id, which is leaving the tab.
@@ -80,7 +83,23 @@ func (a SetReviewMode) apply(s *State) error {
 		return fmt.Errorf("core: unknown review mode %q", a.Mode)
 	}
 
-	t.Review = &Review{Pane: t.Review.Pane, Mode: a.Mode}
+	t.Review.Mode = a.Mode
+
+	return nil
+}
+
+// SetReviewTree opens or closes the open drawer's file tree.
+type SetReviewTree struct {
+	Open bool
+}
+
+func (a SetReviewTree) apply(s *State) error {
+	t := s.cur()
+	if t.Review == nil {
+		return errNoReview
+	}
+
+	t.Review.Tree = a.Open
 
 	return nil
 }

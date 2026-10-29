@@ -19,8 +19,6 @@ const (
 	drawerMinW = 60
 	// splitMinCode is the least code columns each side of a side by side row needs.
 	splitMinCode = 24
-	// treeMinInner is the inner width from which the tree always shows.
-	treeMinInner = 80
 	// hintsMinInner is the inner height from which the key hints show.
 	hintsMinInner = 12
 )
@@ -55,7 +53,6 @@ type reviewView struct {
 	rows        []reviewRow
 	cursor, top int
 	split       bool // side by side is wanted; rowsSplit says whether the rows are laid out so
-	treeOpen    bool // a drawer too narrow for the tree shows it
 	full        map[string]fullText
 	folded      map[string]bool
 	flashUntil  time.Time
@@ -260,6 +257,13 @@ func (a *App) slideEase() float64 {
 	t := float64(a.clock.Now().Sub(a.drawer.slideFrom)) / float64(slideFor)
 
 	return easeOutCubic(min(max(t, 0), 1))
+}
+
+// drawerTree reports whether the active tab's drawer has its file tree open.
+func drawerTree(st core.State) bool {
+	rv := st.Tab().Review
+
+	return rv != nil && rv.Tree
 }
 
 // drawerFull is the active tab's drawer once it has slid in: the right half of

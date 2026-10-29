@@ -194,6 +194,10 @@ type drawerRig struct {
 	wait  time.Duration // how long until gives up
 }
 
+// turnFirst makes a new drawer open in turn mode when its pane has turns; the
+// rig's zero [diff] config opens in branch mode.
+func turnFirst(o *Options) { o.Diff.Mode = string(core.ReviewTurn) }
+
 func newDrawerRig(t *testing.T, opts ...func(*Options)) *drawerRig {
 	t.Helper()
 
@@ -217,7 +221,6 @@ func newDrawerRigWatching(t *testing.T, wo git.WatchOptions, opts ...func(*Optio
 	r := &drawerRig{App: a, ticks: &heldTicks{}, clk: clk, pm: newPump(t), set: set, wait: watchWait}
 	a.tick = r.ticks.tick
 
-	// A wide window shows the file tree and its mode row.
 	sized(t, a, 200, 50)
 	r.pm.run(a.waitWatch())
 
@@ -372,6 +375,27 @@ func (r *drawerRig) drawn(t *testing.T) string {
 	}
 
 	return ansi.Strip(strings.Join(r.drawerLines(st, rect), "\n"))
+}
+
+// layout is the active drawer's layout as the update loop reads it.
+func (r *drawerRig) layout(t *testing.T) drawerLayout {
+	t.Helper()
+
+	return r.drawerLayoutOf(mustRect(t, r), r.view(), treeIsOpen(r.App))
+}
+
+// showTree opens the active drawer's file tree in core; the diff keeps the keyboard.
+func (r *drawerRig) showTree(t *testing.T) {
+	t.Helper()
+	openIn(t, r.App, core.SetReviewTree{Open: true})
+	r.settle()
+}
+
+// treeIsOpen reports whether the active tab's drawer has its file tree open.
+func treeIsOpen(a *App) bool {
+	rv := a.store.State().Tab().Review
+
+	return rv != nil && rv.Tree
 }
 
 // diffLineAt is the text of the diff line under row i, "" for other rows.

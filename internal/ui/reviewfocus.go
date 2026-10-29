@@ -294,6 +294,12 @@ func (a *App) settleDrawer(prev core.State, acted bool) {
 func (a *App) settleDrawerNow(prev core.State, acted bool) bool {
 	st := a.store.State()
 
+	// The tree has the keyboard only while the active drawer shows it; a tab switch
+	// that is not a key leaves the flag where it was.
+	if a.drawer.tree && !drawerTree(st) {
+		a.drawer.tree = false
+	}
+
 	box, shown := a.drawerFull(st)
 	if !shown {
 		if a.drawer.focused {

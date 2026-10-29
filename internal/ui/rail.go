@@ -154,7 +154,7 @@ func (a *App) railCards(st core.State) []railGroup {
 		}
 
 		rp := a.rail.panes[id]
-		c.project, c.branch = filepath.Base(m.Cwd), ""
+		c.project, c.branch = filepath.Base(m.WorkDir()), ""
 
 		if rp != nil {
 			c.unseen, c.active = rp.unseen, rp.hookAt
@@ -348,7 +348,7 @@ func (a *App) changeAgentState(id core.PaneID, s core.AgentState) error {
 
 // railAfterUpdate runs after every update: it clears the mark of the focused
 // pane, forgets closed panes, keeps the selection valid and starts the probes
-// that panes new to the rail or with a new cwd need.
+// that panes new to the rail or with a new working directory need.
 func (a *App) railAfterUpdate() {
 	// A rail the width rule hides cannot hold the keyboard.
 	if a.rail.focused && !a.railVisible() {
@@ -382,7 +382,7 @@ func (a *App) railAfterUpdate() {
 	}
 
 	for _, id := range st.AgentPanes() {
-		if cmd := a.railSync(st, id, st.Panes[id].Cwd); cmd != nil {
+		if cmd := a.railSync(st, id, st.Panes[id].WorkDir()); cmd != nil {
 			a.later = append(a.later, cmd)
 		}
 	}

@@ -242,7 +242,7 @@ func (a *App) tabInfos() []tabInfo {
 	for i, t := range st.Tabs {
 		name := t.Name
 		if name == "" {
-			if cwd := st.Panes[t.Focus].Cwd; cwd != "" {
+			if cwd := st.Panes[t.Focus].WorkDir(); cwd != "" {
 				name = printable(filepath.Base(cwd))
 			}
 		}

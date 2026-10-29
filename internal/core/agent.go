@@ -33,7 +33,7 @@ func (s AgentState) String() string {
 }
 
 // SetPaneKind changes what a pane is. An agent names its harness; becoming a
-// shell clears Harness, Session, Transcript, State and Action.
+// shell clears Harness, Session, Transcript, State, Action and AgentCwd.
 type SetPaneKind struct {
 	ID      PaneID
 	Kind    PaneKind
@@ -137,6 +137,24 @@ func (a SetAgentAction) apply(s *State) error {
 	}
 
 	p.Action = a.Action
+	s.Panes[a.ID] = p
+
+	return nil
+}
+
+// SetAgentCwd records the directory an agent reported in a hook; empty clears it.
+type SetAgentCwd struct {
+	ID  PaneID
+	Cwd string
+}
+
+func (a SetAgentCwd) apply(s *State) error {
+	p, err := s.agentPane(a.ID)
+	if err != nil {
+		return err
+	}
+
+	p.AgentCwd = a.Cwd
 	s.Panes[a.ID] = p
 
 	return nil

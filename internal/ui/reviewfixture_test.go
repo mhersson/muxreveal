@@ -275,6 +275,7 @@ type reviewScene struct {
 	branch  bool
 	noSnap  bool
 	focused bool
+	tree    bool // the drawer's file tree is open
 	tune    func(t *testing.T, a *App, v *reviewView)
 }
 
@@ -312,6 +313,10 @@ func (s reviewScene) build(t *testing.T) *App {
 	}
 
 	openIn(t, a, core.OpenReview{Pane: "p1", Mode: mode})
+
+	if s.tree {
+		openIn(t, a, core.SetReviewTree{Open: true})
+	}
 
 	texts := map[core.PaneID]string{
 		"p1": "$ claude\r\nreviewing the diff of the last turn\r\n",

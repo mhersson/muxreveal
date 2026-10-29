@@ -55,9 +55,9 @@ func reviewCases() []reviewCase {
 		})},
 		{"narrow-tree-hidden", with(func(s *reviewScene) { s.w, s.h, s.rail = 160, 48, true })},
 		{"narrow-tree-open", with(func(s *reviewScene) {
-			s.w, s.h, s.rail = 160, 48, true
+			s.w, s.h, s.rail, s.tree = 160, 48, true, true
 			s.tune = func(t *testing.T, a *App, v *reviewView) {
-				v.treeOpen, v.treeSel = true, 1
+				v.treeSel = 1
 				a.drawer.tree = true
 			}
 		})},
@@ -297,13 +297,13 @@ const stepRatio = 10
 func TestDrawerRowsAreExactWidth(t *testing.T) {
 	type variant struct {
 		name string
-		tune func(a *App, v *reviewView, long longLines)
+		tune func(t *testing.T, a *App, v *reviewView, long longLines)
 	}
 
 	variants := []variant{
-		{"unified", func(a *App, v *reviewView, long longLines) {}},
-		{"split", func(a *App, v *reviewView, long longLines) { v.split = true }},
-		{"full file", func(a *App, v *reviewView, long longLines) {
+		{"unified", func(t *testing.T, a *App, v *reviewView, long longLines) {}},
+		{"split", func(t *testing.T, a *App, v *reviewView, long longLines) { v.split = true }},
+		{"full file", func(t *testing.T, a *App, v *reviewView, long longLines) {
 			v.full = map[string]fullText{}
 			for _, f := range v.res.Files {
 				v.full[f.Path] = hostileFullOf(long)
@@ -311,8 +311,11 @@ func TestDrawerRowsAreExactWidth(t *testing.T) {
 
 			v.rebuild(v.split)
 		}},
-		{"tree open", func(a *App, v *reviewView, long longLines) { v.treeOpen = true; a.drawer.tree = true }},
-		{"search", func(a *App, v *reviewView, long longLines) { v.search = ptr("e\x1bv") }},
+		{"tree open", func(t *testing.T, a *App, v *reviewView, long longLines) {
+			openIn(t, a, core.SetReviewTree{Open: true})
+			a.drawer.tree = true
+		}},
+		{"search", func(t *testing.T, a *App, v *reviewView, long longLines) { v.search = ptr("e\x1bv") }},
 	}
 
 	for _, icons := range []bool{true, false} {
@@ -333,7 +336,7 @@ func TestDrawerRowsAreExactWidth(t *testing.T) {
 				build := func(long longLines) *App {
 					s := reviewScene{theme: "catppuccin-mocha", icons: icons, w: widths[0], h: 30, res: hostileResultOf(long), turn: 2, turns: 3, focused: true}
 					s.tune = func(t *testing.T, a *App, v *reviewView) {
-						vr.tune(a, v, long)
+						vr.tune(t, a, v, long)
 						v.cursor = min(4, len(v.rows)-1)
 					}
 
@@ -535,7 +538,7 @@ func TestDrawerTitleAndTags(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			s := reviewScene{theme: "catppuccin-mocha", icons: tt.icons, w: 200, h: 52, res: turn4Result(), turn: 4, turns: 4, focused: true}
+			s := reviewScene{theme: "catppuccin-mocha", icons: tt.icons, w: 200, h: 52, res: turn4Result(), turn: 4, turns: 4, focused: true, tree: true}
 			tt.scene(&s)
 
 			a := s.build(t)
@@ -556,28 +559,55 @@ func TestDrawerTitleAndTags(t *testing.T) {
 	}
 }
 
+// Without the tree the mode shows only in the tag, and the diff takes the whole width.
+func TestDrawerModeShowsOnlyInTheTagWithoutTheTree(t *testing.T) {
+	s := reviewScene{theme: "catppuccin-mocha", icons: false, w: 200, h: 52, res: turn4Result(), turn: 4, turns: 4, focused: true}
+	text := ansi.Strip(s.build(t).View().Content)
+
+	for _, want := range []string{" turn 4/4 ─╮"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("the frame lacks %q:\n%s", want, text)
+		}
+	}
+
+	for _, not := range []string{"turn 4 of 4, live", "4 files"} {
+		if strings.Contains(text, not) {
+			t.Errorf("the frame holds %q although the tree is hidden:\n%s", not, text)
+		}
+	}
+}
+
 func TestDrawerKeyHints(t *testing.T) {
-	build := func(h int, tree bool) string {
-		s := reviewScene{theme: "catppuccin-mocha", icons: false, w: 240, h: h, res: turn4Result(), turn: 4, turns: 4, focused: true}
-		s.tune = func(t *testing.T, a *App, v *reviewView) { a.drawer.tree = tree }
+	const (
+		diffHints = "j/k line   ]/[ hunk   }/{ file   tab tree   f full   u split   b/t mode   ,/. turn   e edit   / search"
+		treeHints = "j/k file   enter jump   tab hide   esc back"
+	)
+
+	build := func(h int, tree, keys bool) string {
+		s := reviewScene{theme: "catppuccin-mocha", icons: false, w: 240, h: h, res: turn4Result(), turn: 4, turns: 4, focused: true, tree: tree}
+		s.tune = func(t *testing.T, a *App, v *reviewView) { a.drawer.tree = keys }
 
 		return ansi.Strip(s.build(t).View().Content)
 	}
 
-	if got := build(52, false); !strings.Contains(got, "j/k line   ]/[ hunk   }/{ file   tab tree   f full   u split   b/t mode   ,/. turn   e edit   / search") {
-		t.Errorf("diff hints missing:\n%s", got)
+	if got := build(52, false, false); !strings.Contains(got, diffHints) {
+		t.Errorf("diff hints missing with the tree hidden:\n%s", got)
 	}
 
-	if got := build(52, true); !strings.Contains(got, "j/k file   enter open   tab diff") || strings.Contains(got, "hunk") {
+	if got := build(52, true, false); !strings.Contains(got, diffHints) {
+		t.Errorf("diff hints missing with the tree shown and the keyboard in the diff:\n%s", got)
+	}
+
+	if got := build(52, true, true); !strings.Contains(got, treeHints) || strings.Contains(got, "hunk") || strings.Contains(got, "tab diff") {
 		t.Errorf("tree hints wrong:\n%s", got)
 	}
 
 	// An inner height under 12 shows no hints: 12 rows of body plus the frame is 14, plus the bar and the rule 16.
-	if got := build(15, false); strings.Contains(got, "j/k line") {
+	if got := build(15, false, false); strings.Contains(got, "j/k line") {
 		t.Errorf("hints shown with an inner height of 11:\n%s", got)
 	}
 
-	if got := build(16, false); !strings.Contains(got, "j/k line") {
+	if got := build(16, false, false); !strings.Contains(got, "j/k line") {
 		t.Errorf("hints missing with an inner height of 12:\n%s", got)
 	}
 }
@@ -707,7 +737,7 @@ func TestDrawerGhostLinesCarryNoNumber(t *testing.T) {
 }
 
 func TestDrawerTreeLayout(t *testing.T) {
-	s := reviewScene{theme: "catppuccin-mocha", icons: false, w: 200, h: 52, res: turn4Result(), turn: 4, turns: 4, focused: true}
+	s := reviewScene{theme: "catppuccin-mocha", icons: false, w: 200, h: 52, res: turn4Result(), turn: 4, turns: 4, focused: true, tree: true}
 	text := ansi.Strip(s.build(t).View().Content)
 
 	for _, want := range []string{"internal/", "core/", "state.go", "A review_test.go", "R keymap.go", "! +11 -0"} {

@@ -16,9 +16,8 @@ func (a *App) inDrawer(x, y int) bool {
 }
 
 // drawerClick gives the drawer the keyboard; on a diff row it moves the cursor
-// there and on a tree file it jumps to it. The click lands on what was drawn, so
-// the layout is read before the diff takes the keyboard from the tree, which a
-// narrow drawer hides it for.
+// there and on a tree file it jumps to it. The tree's scroll depends on who held
+// the keyboard when it was drawn, so that is read before the diff takes it.
 func (a *App) drawerClick(x, y int) {
 	st := a.store.State()
 	treeWas := a.drawer.focused && a.drawer.tree
@@ -33,7 +32,7 @@ func (a *App) drawerClick(x, y int) {
 		return
 	}
 
-	lay := a.drawerLayoutOf(box, v)
+	lay := a.drawerLayoutOf(box, v, drawerTree(st))
 	ix, iy := x-r.X-1, y-r.Y-1
 
 	if iy < 0 || iy >= lay.bodyH || ix < 0 || ix >= lay.innerW {

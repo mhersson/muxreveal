@@ -33,7 +33,7 @@ func TestAgentStateString(t *testing.T) {
 }
 
 func TestSetPaneKind(t *testing.T) {
-	full := Pane{Kind: KindAgent, Cwd: "/w", Harness: "claude-code", Session: "s1", Transcript: "/t", State: AgentWorking, Action: "Edit a.go"}
+	full := Pane{Kind: KindAgent, Cwd: "/w", Harness: "claude-code", Session: "s1", Transcript: "/t", State: AgentWorking, Action: "Edit a.go", AgentCwd: "/w/sub"}
 
 	tests := []struct {
 		name string
@@ -78,6 +78,8 @@ func TestAgentActionErrors(t *testing.T) {
 		{"state of shell pane", SetAgentState{ID: "p1", State: AgentIdle}},
 		{"action of unknown pane", SetAgentAction{ID: "p9", Action: "x"}},
 		{"action of shell pane", SetAgentAction{ID: "p1", Action: "x"}},
+		{"cwd of unknown pane", SetAgentCwd{ID: "p9", Cwd: "/x"}},
+		{"cwd of shell pane", SetAgentCwd{ID: "p1", Cwd: "/x"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -119,6 +121,47 @@ func TestSetAgentAction(t *testing.T) {
 
 	if got := s.Panes["p1"].Action; got != "" {
 		t.Errorf("a shell pane kept the action: %q", got)
+	}
+}
+
+func TestSetAgentCwd(t *testing.T) {
+	s := agentState(map[PaneID]Pane{"p1": {Kind: KindAgent, Cwd: "/w", Harness: "claude-code"}}, leaf("p1"), "p1")
+
+	tests := []struct {
+		name    string
+		cwd     string
+		want    string
+		wantDir string
+	}{
+		{"set", "/w/sub", "/w/sub", "/w/sub"},
+		{"overwrite", "/other", "/other", "/other"},
+		{"clear", "", "", "/w"},
+	}
+	for _, tt := range tests {
+		s = dispatch(t, s, SetAgentCwd{ID: "p1", Cwd: tt.cwd})
+
+		p := s.Panes["p1"]
+		if p.AgentCwd != tt.want || p.Cwd != "/w" || p.WorkDir() != tt.wantDir {
+			t.Errorf("%s: pane = %+v, WorkDir = %q; want AgentCwd %q, Cwd /w, WorkDir %q", tt.name, p, p.WorkDir(), tt.want, tt.wantDir)
+		}
+	}
+}
+
+func TestPaneWorkDir(t *testing.T) {
+	tests := []struct {
+		name string
+		pane Pane
+		want string
+	}{
+		{"cwd alone", Pane{Cwd: "/w"}, "/w"},
+		{"agent cwd wins", Pane{Cwd: "/w", AgentCwd: "/w/sub"}, "/w/sub"},
+		{"agent cwd without cwd", Pane{AgentCwd: "/w/sub"}, "/w/sub"},
+		{"neither", Pane{}, ""},
+	}
+	for _, tt := range tests {
+		if got := tt.pane.WorkDir(); got != tt.want {
+			t.Errorf("%s: WorkDir() = %q, want %q", tt.name, got, tt.want)
+		}
 	}
 }
 

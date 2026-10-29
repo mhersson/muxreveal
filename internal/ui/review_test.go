@@ -18,7 +18,7 @@ import (
 )
 
 func TestDrawerOpensInTurnMode(t *testing.T) {
-	r := newDrawerRig(t)
+	r := newDrawerRig(t, turnFirst)
 	dir := threeTurnRepo(t)
 	id := r.agent(t, dir, testSession)
 
@@ -86,10 +86,11 @@ func TestDrawerOpenModeFollowsTurnsAndConfig(t *testing.T) {
 		cfg     core.DiffConfig
 		want    core.ReviewMode
 	}{
-		{"an agent with turns", testSession, core.DiffConfig{}, core.ReviewTurn},
-		{"an agent without a session", "", core.DiffConfig{}, core.ReviewBranch},
-		{"a session without turns", otherSession, core.DiffConfig{}, core.ReviewBranch},
+		{"an agent with turns", testSession, core.DiffConfig{Mode: "turn"}, core.ReviewTurn},
+		{"an agent without a session", "", core.DiffConfig{Mode: "turn"}, core.ReviewBranch},
+		{"a session without turns", otherSession, core.DiffConfig{Mode: "turn"}, core.ReviewBranch},
 		{"the config asks for branch", testSession, core.DiffConfig{Mode: "branch"}, core.ReviewBranch},
+		{"the config leaves the mode unset", testSession, core.DiffConfig{}, core.ReviewBranch},
 	}
 
 	for _, tt := range tests {
@@ -101,6 +102,44 @@ func TestDrawerOpenModeFollowsTurnsAndConfig(t *testing.T) {
 
 			if got := r.store.State().Tab().Review.Mode; got != tt.want {
 				t.Errorf("opened in %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestNewDrawerOpensInBranchMode(t *testing.T) {
+	turnCfg := core.DefaultConfig().Diff
+	turnCfg.Mode = "turn"
+
+	tests := []struct {
+		name string
+		cfg  core.DiffConfig
+		want core.ReviewMode
+	}{
+		{"by default", core.DefaultConfig().Diff, core.ReviewBranch},
+		{"with a zero config", core.DiffConfig{}, core.ReviewBranch},
+		{"with mode turn", turnCfg, core.ReviewTurn},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := newDrawerRig(t, func(o *Options) { o.Diff = tt.cfg })
+			id := r.agent(t, threeTurnRepo(t), testSession)
+
+			v := r.open(t, id)
+
+			if got := r.store.State().Tab().Review.Mode; got != tt.want {
+				t.Fatalf("opened in %q, want %q", got, tt.want)
+			}
+
+			if _, isTurn := v.src.(git.TurnSource); isTurn != (tt.want == core.ReviewTurn) {
+				t.Errorf("source = %+v in %q mode", v.src, tt.want)
+			}
+
+			r.run(r.setReviewMode(core.ReviewTurn))
+
+			if v := r.idle(t); r.store.State().Tab().Review.Mode != core.ReviewTurn || v.res.Turn != 3 {
+				t.Errorf("t gives mode %q turn %d, want turn mode on the latest turn", r.store.State().Tab().Review.Mode, v.res.Turn)
 			}
 		})
 	}
@@ -164,12 +203,15 @@ func TestDrawerWithoutAnEngineShowsTheError(t *testing.T) {
 }
 
 func TestTurnStepping(t *testing.T) {
-	r := newDrawerRig(t)
+	r := newDrawerRig(t, turnFirst)
 	dir := threeTurnRepo(t)
 	missingTurn(t, dir, testSession)
 
 	id := r.agent(t, dir, testSession)
 	v := r.open(t, id)
+
+	// The mode row is the tree's first row.
+	r.showTree(t)
 
 	// The latest turn took no snapshot: it reads as such, with its two info rows.
 	if !v.noSnapshot || v.turns != 4 || v.err != nil || len(v.res.Files) != 0 {
@@ -254,7 +296,7 @@ func TestStepInBranchModeEntersTurnMode(t *testing.T) {
 }
 
 func TestTurnModeReturnsToTheLatestTurn(t *testing.T) {
-	r := newDrawerRig(t)
+	r := newDrawerRig(t, turnFirst)
 	id := r.agent(t, threeTurnRepo(t), testSession)
 
 	r.open(t, id)
@@ -272,7 +314,7 @@ func TestTurnModeReturnsToTheLatestTurn(t *testing.T) {
 }
 
 func TestStaleLoadIsDropped(t *testing.T) {
-	r := newDrawerRig(t)
+	r := newDrawerRig(t, turnFirst)
 	id := r.agent(t, threeTurnRepo(t), testSession)
 
 	v := r.open(t, id)
@@ -484,7 +526,7 @@ func TestHiddenTabDrawerRecomputesWhenShown(t *testing.T) {
 }
 
 func TestSessionChangeRetargets(t *testing.T) {
-	r := newDrawerRig(t)
+	r := newDrawerRig(t, turnFirst)
 	dir := threeTurnRepo(t)
 	snapshotTurn(t, dir, otherSession)
 	write(t, filepath.Join(dir, "x.txt"), "after the other session began\n")
@@ -553,7 +595,7 @@ func TestSessionChangeRetargets(t *testing.T) {
 // Batches reach only the drawers that review their root, and a past turn,
 // which does not change with the files, ignores them.
 func TestBatchesRouteToTheirRootAndSkipPastTurns(t *testing.T) {
-	r := newDrawerRig(t)
+	r := newDrawerRig(t, turnFirst)
 	dir := threeTurnRepo(t)
 	root := rootOf(t, dir)
 	id := r.agent(t, dir, testSession)

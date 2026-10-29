@@ -82,10 +82,10 @@ func TestLoadConfig(t *testing.T) {
 		},
 		{name: "unknown layout key", content: "[layout]\nmaster = 3\n", wantErr: true, errHas: []string{"unknown key layout.master"}},
 		{
-			name: "diff section", content: "[diff]\nlayout = \"split\"\nmode = \"branch\"\nmax_files = 10\n",
+			name: "diff section", content: "[diff]\nlayout = \"split\"\nmode = \"turn\"\nmax_files = 10\n",
 			want: func() Config {
 				c := DefaultConfig()
-				c.Diff.Layout, c.Diff.Mode, c.Diff.MaxFiles = "split", "branch", 10
+				c.Diff.Layout, c.Diff.Mode, c.Diff.MaxFiles = "split", "turn", 10
 
 				return c
 			}(),
@@ -282,13 +282,57 @@ func TestLoadConfigLayoutOutOfRangeFailsValidate(t *testing.T) {
 func TestDiffDefaults(t *testing.T) {
 	got := DefaultConfig().Diff
 
-	want := DiffConfig{Layout: "unified", Mode: "turn", MaxFiles: 400, MaxBytes: 2097152, MaxLines: 5000}
+	want := DiffConfig{Layout: "unified", Mode: "branch", MaxFiles: 400, MaxBytes: 2097152, MaxLines: 5000}
 	if got != want {
 		t.Errorf("default diff = %+v, want %+v", got, want)
 	}
 
+	if !got.BranchFirst() {
+		t.Error("default diff: BranchFirst() = false, want a new drawer to open in branch mode")
+	}
+
 	if err := got.Validate(); err != nil {
 		t.Errorf("default diff: Validate() = %v", err)
+	}
+}
+
+func TestZeroDiffConfigReadsAsTheDefaults(t *testing.T) {
+	var zero DiffConfig
+
+	if !zero.BranchFirst() {
+		t.Error("a zero DiffConfig: BranchFirst() = false, want the branch default")
+	}
+
+	if zero.Split() {
+		t.Error("a zero DiffConfig: Split() = true, want the unified default")
+	}
+}
+
+func TestDiffBranchFirstFollowsTheFile(t *testing.T) {
+	tests := []struct {
+		name, content string
+		want          bool
+	}{
+		{"no diff section", "", true},
+		{"mode branch", "[diff]\nmode = \"branch\"\n", true},
+		{"mode turn", "[diff]\nmode = \"turn\"\n", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "config.toml")
+			if err := os.WriteFile(path, []byte(tt.content), 0o600); err != nil {
+				t.Fatal(err)
+			}
+
+			cfg, err := LoadConfig(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if got := cfg.Diff.BranchFirst(); got != tt.want {
+				t.Errorf("BranchFirst() = %v with mode %q, want %v", got, cfg.Diff.Mode, tt.want)
+			}
+		})
 	}
 }
 
@@ -305,7 +349,7 @@ func TestDiffConfigValidate(t *testing.T) {
 		c    DiffConfig
 	}{
 		{"split", with(func(c *DiffConfig) { c.Layout = "split" })},
-		{"branch", with(func(c *DiffConfig) { c.Mode = "branch" })},
+		{"turn", with(func(c *DiffConfig) { c.Mode = "turn" })},
 		{"smallest limits", with(func(c *DiffConfig) { c.MaxFiles, c.MaxBytes, c.MaxLines = 1, 1, 1 })},
 	}
 	for _, tt := range good {

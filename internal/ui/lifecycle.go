@@ -63,8 +63,8 @@ func contentSize(r core.Rect) (cols, rows int) {
 	return max(c.W, 1), max(c.H, 1)
 }
 
-// openPane starts a pane of kind next to the focused one, in its cwd, and
-// focuses it. Nothing changes when the process does not start.
+// openPane starts a pane of kind next to the focused one, in its working
+// directory, and focuses it. Nothing changes when the process does not start.
 func (a *App) openPane(kind core.PaneKind, split core.Split) tea.Cmd {
 	return a.openPaneIn(kind, split, a.focusedCwd(a.store.State()))
 }
@@ -76,10 +76,12 @@ func (a *App) openPaneIn(kind core.PaneKind, split core.Split, cwd string) tea.C
 	return cmd
 }
 
-// focusedCwd is the cwd of st's focused pane, or the launch dir without one.
+// focusedCwd is the directory st's focused pane works in, or the launch dir
+// without one.
 func (a *App) focusedCwd(st core.State) string {
-	if m, ok := st.Panes[st.Tab().Focus]; ok && m.Cwd != "" {
-		return m.Cwd
+	m := st.Panes[st.Tab().Focus]
+	if dir := m.WorkDir(); dir != "" {
+		return dir
 	}
 
 	return a.cwd
@@ -621,8 +623,8 @@ func (a *App) quit() tea.Cmd {
 	return nil
 }
 
-// newTab implements tab.new: a shell in the focused pane's cwd, in a new tab
-// that becomes active. Nothing changes when the process does not start.
+// newTab implements tab.new: a shell in the focused pane's working directory,
+// in a new tab that becomes active. Nothing changes when the process does not start.
 func (a *App) newTab() tea.Cmd {
 	if !a.started {
 		return nil

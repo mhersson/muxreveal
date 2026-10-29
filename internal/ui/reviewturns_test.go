@@ -26,13 +26,16 @@ func isBranchSource(v *reviewView) bool {
 // drawer's turn mode alone: it shows the branch until the new session has a
 // turn, then that turn.
 func TestSessionEndAndStartKeepTurnMode(t *testing.T) {
-	r := newDrawerRig(t)
+	r := newDrawerRig(t, turnFirst)
 	dir := threeTurnRepo(t)
 	root := rootOf(t, dir)
 	id := r.agent(t, dir, testSession)
 
 	v := r.open(t, id)
 	r.watching(t, id, root)
+
+	// The mode row is the tree's first row.
+	r.showTree(t)
 
 	if _, ok := v.src.(git.TurnSource); !ok {
 		t.Fatalf("setup: source = %T, want the turn source", v.src)
@@ -159,12 +162,15 @@ func (r *drawerRig) turnStartFirst(t *testing.T, id core.PaneID) (snapshotDone f
 // count.
 func TestTurnStartRefreshesTheDrawer(t *testing.T) {
 	t.Run("a turn that changes no files", func(t *testing.T) {
-		r := newDrawerRig(t)
+		r := newDrawerRig(t, turnFirst)
 		dir := threeTurnRepo(t)
 		id := r.agent(t, dir, testSession)
 
 		r.open(t, id)
 		r.watching(t, id, rootOf(t, dir))
+
+		// The mode row is the tree's first row.
+		r.showTree(t)
 
 		snapshotDone := r.turnStartFirst(t, id)
 
@@ -181,12 +187,13 @@ func TestTurnStartRefreshesTheDrawer(t *testing.T) {
 	})
 
 	t.Run("a past turn", func(t *testing.T) {
-		r := newDrawerRig(t)
+		r := newDrawerRig(t, turnFirst)
 		dir := threeTurnRepo(t)
 		id := r.agent(t, dir, testSession)
 
 		r.open(t, id)
 		r.watching(t, id, rootOf(t, dir))
+		r.showTree(t)
 		r.run(r.stepReviewTurn(-1))
 
 		v := r.idle(t)

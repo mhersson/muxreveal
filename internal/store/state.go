@@ -64,6 +64,7 @@ type tabJSON struct {
 type reviewJSON struct {
 	Pane string `json:"pane"`
 	Mode string `json:"mode"`
+	Tree bool   `json:"tree,omitempty"`
 }
 
 type paneJSON struct {
@@ -106,7 +107,7 @@ func Encode(st core.State) ([]byte, error) {
 			PaneIDs: make([]string, 0, len(ids)),
 		}
 		if t.Review != nil {
-			raw, err := json.Marshal(reviewJSON{Pane: string(t.Review.Pane), Mode: string(t.Review.Mode)})
+			raw, err := json.Marshal(reviewJSON{Pane: string(t.Review.Pane), Mode: string(t.Review.Mode), Tree: t.Review.Tree})
 			if err != nil {
 				return nil, fmt.Errorf("tab %s: review: %w", t.ID, err)
 			}
@@ -388,7 +389,7 @@ func decodeReview(raw json.RawMessage, owner map[core.PaneID]string, tabID strin
 		return nil
 	}
 
-	return &core.Review{Pane: pane, Mode: mode}
+	return &core.Review{Pane: pane, Mode: mode, Tree: jr.Tree}
 }
 
 // tabMode reads the mode; anything but a string is "", which no mode matches.

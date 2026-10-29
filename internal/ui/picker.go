@@ -115,8 +115,8 @@ type pickerSource []pickerTree
 func (s pickerSource) String(i int) string { return s[i].label + " " + s[i].short }
 func (s pickerSource) Len() int            { return len(s) }
 
-// newAgent implements agent.new. Whether the focused pane's cwd is in a
-// repository is found off the update loop: in one the picker opens on its
+// newAgent implements agent.new. Whether the focused pane's working directory
+// is in a repository is found off the update loop: in one the picker opens on its
 // worktrees, elsewhere the agent opens at once.
 func (a *App) newAgent() tea.Cmd {
 	if !a.started {

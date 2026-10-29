@@ -169,7 +169,7 @@ func (c DiffConfig) Split() bool { return c.Layout == "split" }
 
 // BranchFirst reports whether a new drawer opens in branch mode even when the
 // pane has turns.
-func (c DiffConfig) BranchFirst() bool { return c.Mode == string(ReviewBranch) }
+func (c DiffConfig) BranchFirst() bool { return c.Mode != string(ReviewTurn) }
 
 // WorktreesConfig is the [worktrees] section. Validate rejects an unknown root
 // from a file; Sibling reads a zero field as the default, so a hand-built
@@ -225,7 +225,7 @@ func DefaultConfig() Config {
 			DefaultMode: string(ModeBSP), AutoScheme: "spiral", MasterRatio: 50, MasterPosition: tiling.MasterPositionLeft,
 			MasterCount: 1, MasterGrid: new(true), ColumnWidth: 50,
 		},
-		Diff:      DiffConfig{Layout: "unified", Mode: string(ReviewTurn), MaxFiles: 400, MaxBytes: 2 << 20, MaxLines: 5000},
+		Diff:      DiffConfig{Layout: "unified", Mode: string(ReviewBranch), MaxFiles: 400, MaxBytes: 2 << 20, MaxLines: 5000},
 		Worktrees: WorktreesConfig{Root: "inside"},
 	}
 }

@@ -39,13 +39,13 @@ func (a *App) openReview(pane core.PaneID, focus bool) tea.Cmd {
 		return nil
 	}
 
-	if m.Cwd == "" {
+	if m.WorkDir() == "" {
 		a.notice = noticeNotRepo
 
 		return nil
 	}
 
-	cwd, session, tabID := m.Cwd, paneSession(st, pane), tab.ID
+	cwd, session, tabID := m.WorkDir(), paneSession(st, pane), tab.ID
 
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(a.ctx, reviewOpenTimeout)
@@ -69,7 +69,7 @@ func (a *App) onReviewOpen(msg reviewOpenMsg) tea.Cmd {
 	st := a.store.State()
 
 	m, ok := st.Panes[msg.pane]
-	if !ok || st.Tab().ID != msg.tab || m.Cwd != msg.cwd || !slices.Contains(st.Tab().Panes, msg.pane) {
+	if !ok || st.Tab().ID != msg.tab || m.WorkDir() != msg.cwd || !slices.Contains(st.Tab().Panes, msg.pane) {
 		return nil
 	}
 
