@@ -192,7 +192,7 @@ jobs:
       # Empty outside a pull request (workflow_dispatch), where the scan falls
       # back to origin/main..HEAD.
       - name: make scan-commits
-        run: make scan-commits BASE="$BASE_SHA" HEAD_REF="$HEAD_SHA"
+        run: make scan-commits SCAN_BASE="$BASE_SHA" SCAN_HEAD="$HEAD_SHA"
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}

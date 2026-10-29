@@ -5,11 +5,14 @@
 # files outside every package (docs, CI, the Makefile) print nothing.
 set -eu
 export LC_ALL=C
+cd "$(git rev-parse --show-toplevel)"
 
-if [ -n "$(git status --porcelain --untracked-files=all)" ]; then
-	files=$(git diff --name-only --no-renames HEAD; git ls-files --others --exclude-standard)
+# Unquoted, root-relative paths, so non-ASCII names and untracked files map too.
+g() { git -c core.quotePath=false "$@"; }
+if [ -n "$(g status --porcelain --untracked-files=all)" ]; then
+	files=$(g diff --name-only --no-renames HEAD; g ls-files --full-name --others --exclude-standard)
 else
-	files=$(git diff --name-only --no-renames HEAD~1 HEAD 2>/dev/null || :)
+	files=$(g diff --name-only --no-renames HEAD~1 HEAD 2>/dev/null || :)
 fi
 
 if printf '%s\n' "$files" | grep -Eqx 'go\.(mod|sum)'; then
@@ -18,7 +21,7 @@ if printf '%s\n' "$files" | grep -Eqx 'go\.(mod|sum)'; then
 fi
 
 root=$(go list -m -f '{{.Dir}}')
-dirs=$(go list -f '{{.Dir}}' ./...)
+dirs=$(go list -e -f '{{.Dir}}' ./...)
 
 # A file belongs to the nearest package directory above it, so testdata files
 # count for the package that reads them.

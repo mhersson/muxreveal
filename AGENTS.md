@@ -48,7 +48,7 @@ make fmt          # golangci-lint fmt
 make scan         # the glyph and em-dash scan
 make scan-commits # IDs, trailers, em-dashes and big blobs in the branch's commits
 make check-fast   # the per-commit check
-make check        # CI's Linux gates, for a local run
+make check        # CI's Linux go-checks gates, for a local run
 make install      # go install into $GOBIN, else $GOPATH/bin
 ```
 
@@ -133,18 +133,20 @@ Dependency rules:
 
 ## Commit discipline
 
-Run `make check-fast` before every commit; it must be clean. It builds and vets
-the whole module, so a change that breaks another package's code or tests fails
-it, and runs the format check, lint, the glyph and em-dash scan and the tests of
-the packages the change touches (`make check-fast TEST_PKGS=./...` runs them
-all). A change to goroutines, channels or locks also runs the race detector on
-the tests it adds or changes: `go test -race -run '<those tests>' ./<package>`.
+Run `make check-fast` before every commit; it must be clean. It runs the format
+check, lint, the glyph and em-dash scan and the tests of the packages the change
+touches (`make check-fast TEST_PKGS=./...` runs them all), and it builds and
+vets the whole module, so a change that stops another package or its tests from
+compiling fails it. Whether the other packages still behave is CI's to check. A
+change to goroutines, channels or locks also runs the race detector on the tests
+it adds or changes: `go test -race -run '<those tests>' ./<package>`.
 
-The full gates run in CI on every pull request that changes Go code: every test
-under the race detector, the darwin build, `go mod tidy`, the native macOS tests
-and the commit scan. A branch goes up as a draft pull request, so CI checks it
-while the work finishes. Run `make scan-commits` before every push; `make check`
-runs CI's Linux gates locally when you need them without a push.
+CI runs the full gates on every pull request that changes Go code (every test
+under the race detector, the darwin build, `go mod tidy` and the native macOS
+tests) and the commit scan on every pull request. A branch goes up as a draft
+pull request, so CI checks it while the work finishes. Run `make scan-commits`
+before every push; `make check` runs CI's Linux go-checks gates locally when you
+need them without a push.
 
 - No session links in commits or PRs, and no trailers: no `Co-Authored-By`,
   `Claude-Session` or "Generated with" lines.
