@@ -25,6 +25,9 @@ import (
 // show them are the same on every run.
 const pushDate = "2026-10-29T12:00:00+0000"
 
+// gitFileOnly limits git to local transports, so no push test can reach a network.
+const gitFileOnly = "GIT_ALLOW_PROTOCOL=file"
+
 // refreshRec records the repositories the poller was asked to refresh.
 type refreshRec struct {
 	*fakePRs
@@ -57,7 +60,7 @@ func gitRead(t *testing.T, bin, dir string, args ...string) string {
 	cmd := exec.CommandContext(ctx, bin, args...)
 	cmd.Dir = dir
 
-	cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_SYSTEM=/dev/null")
+	cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_SYSTEM=/dev/null", gitFileOnly)
 
 	out, err := cmd.Output()
 	if err != nil {
@@ -111,9 +114,12 @@ type pushRig struct {
 func newPushRig(t *testing.T) *pushRig {
 	t.Helper()
 
-	// The app's own git reads no user configuration.
+	allow, protocols, _ := strings.Cut(gitFileOnly, "=")
+
+	// The app's own git reads no user configuration and speaks no network transport.
 	t.Setenv("GIT_CONFIG_GLOBAL", "/dev/null")
 	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
+	t.Setenv(allow, protocols)
 	t.Setenv("GIT_AUTHOR_DATE", pushDate)
 	t.Setenv("GIT_COMMITTER_DATE", pushDate)
 
@@ -617,6 +623,28 @@ func TestPushInFlightStopsAnotherAnswer(t *testing.T) {
 
 	if n := r.pushCalls(); n != 0 {
 		t.Errorf("git pushed %d times for a worktree already being pushed", n)
+	}
+
+	if got := r.remoteRefs(t); got != "refs/heads/main" {
+		t.Errorf("the remote holds %q, want only main", got)
+	}
+}
+
+func TestPushRefusesATransportThatReachesTheNetwork(t *testing.T) {
+	r := newPushRig(t)
+	gitIn(t, r.real, r.dir, "remote", "set-url", "origin", "https://git.example.invalid/o/r.git")
+
+	r.askOpen(t)
+	r.churn(t, press(r.App, keyEnter))
+
+	if r.noticeLevel() != levelError || !strings.Contains(r.notice, "transport 'https' not allowed") {
+		t.Errorf("toast = %q at level %v, want git's refusal of the transport at the error level", r.notice, r.noticeLevel())
+	}
+
+	for _, leak := range []string{"example.invalid", "https://"} {
+		if strings.Contains(r.notice, leak) {
+			t.Errorf("toast %q holds the remote %q", r.notice, leak)
+		}
 	}
 
 	if got := r.remoteRefs(t); got != "refs/heads/main" {

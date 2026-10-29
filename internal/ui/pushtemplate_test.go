@@ -103,7 +103,7 @@ func templateGit(gitBin, dir string, args ...string) error {
 
 	cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_SYSTEM=/dev/null",
 		"GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t", "GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t",
-		"GIT_AUTHOR_DATE="+pushDate, "GIT_COMMITTER_DATE="+pushDate)
+		"GIT_AUTHOR_DATE="+pushDate, "GIT_COMMITTER_DATE="+pushDate, gitFileOnly)
 
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("git %v: %w\n%s", args, err, out)
