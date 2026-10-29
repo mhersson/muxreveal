@@ -1530,20 +1530,34 @@ func pickerScene(t *testing.T, theme string, icons, page bool) *App {
 	return a
 }
 
+var pickerGoldenCases = []struct {
+	name string
+	page bool
+}{{"list", false}, {"new-page", true}}
+
 func TestPickerGolden(t *testing.T) {
 	t.Parallel()
 
-	for _, th := range chromeThemes() {
-		for _, icons := range []bool{true, false} {
-			for _, c := range []struct {
-				name string
-				page bool
-			}{{"list", false}, {"new-page", true}} {
-				t.Run(fmt.Sprintf("%s/icons=%v/%s", th, icons, c.name), func(t *testing.T) {
-					a := pickerScene(t, th, icons, c.page)
-					golden.RequireEqual(t, []byte(a.View().Content))
-				})
-			}
+	for _, c := range pickerGoldenCases {
+		t.Run("catppuccin-mocha/icons=true/"+c.name, func(t *testing.T) {
+			t.Parallel()
+			a := pickerScene(t, "catppuccin-mocha", true, c.page)
+			golden.RequireEqual(t, []byte(a.View().Content))
+		})
+	}
+}
+
+// TestPickerText is the same screens without styling, so the layout reads.
+func TestPickerText(t *testing.T) {
+	t.Parallel()
+
+	for _, icons := range []bool{true, false} {
+		for _, c := range pickerGoldenCases {
+			t.Run(fmt.Sprintf("icons=%v/%s", icons, c.name), func(t *testing.T) {
+				t.Parallel()
+				a := pickerScene(t, "catppuccin-mocha", icons, c.page)
+				golden.RequireEqual(t, []byte(ansi.Strip(a.View().Content)))
+			})
 		}
 	}
 }

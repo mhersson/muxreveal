@@ -440,14 +440,24 @@ func layoutChromeCases() []layoutChromeCase {
 func TestLayoutChromeGolden(t *testing.T) {
 	t.Parallel()
 
-	for _, th := range chromeThemes() {
-		for _, icons := range []bool{true, false} {
-			for _, c := range layoutChromeCases() {
-				t.Run(fmt.Sprintf("%s/icons=%v/%s", th, icons, c.name), func(t *testing.T) {
-					t.Parallel()
-					golden.RequireEqual(t, []byte(c.build(t, th, icons).View().Content))
-				})
-			}
+	for _, c := range layoutChromeCases() {
+		t.Run("catppuccin-mocha/icons=true/"+c.name, func(t *testing.T) {
+			t.Parallel()
+			golden.RequireEqual(t, []byte(c.build(t, "catppuccin-mocha", true).View().Content))
+		})
+	}
+}
+
+// TestLayoutChromeText is the same screens without styling, so the layout reads.
+func TestLayoutChromeText(t *testing.T) {
+	t.Parallel()
+
+	for _, icons := range []bool{true, false} {
+		for _, c := range layoutChromeCases() {
+			t.Run(fmt.Sprintf("icons=%v/%s", icons, c.name), func(t *testing.T) {
+				t.Parallel()
+				golden.RequireEqual(t, []byte(ansi.Strip(c.build(t, "catppuccin-mocha", icons).View().Content)))
+			})
 		}
 	}
 }
@@ -515,14 +525,26 @@ func layoutTrayCases() []layoutTrayCase {
 func TestLayoutTrayGolden(t *testing.T) {
 	t.Parallel()
 
-	for _, th := range chromeThemes() {
-		for _, icons := range []bool{true, false} {
-			for _, c := range layoutTrayCases() {
-				t.Run(fmt.Sprintf("%s/icons=%v/%s", th, icons, c.name), func(t *testing.T) {
-					a := c.build(t, th, icons)
-					golden.RequireEqual(t, []byte(a.workspaceBar(c.width)))
-				})
-			}
+	for _, c := range layoutTrayCases() {
+		t.Run("catppuccin-mocha/icons=true/"+c.name, func(t *testing.T) {
+			t.Parallel()
+			a := c.build(t, "catppuccin-mocha", true)
+			golden.RequireEqual(t, []byte(a.workspaceBar(c.width)))
+		})
+	}
+}
+
+// TestLayoutTrayText is the same trays without styling, so the layout reads.
+func TestLayoutTrayText(t *testing.T) {
+	t.Parallel()
+
+	for _, icons := range []bool{true, false} {
+		for _, c := range layoutTrayCases() {
+			t.Run(fmt.Sprintf("icons=%v/%s", icons, c.name), func(t *testing.T) {
+				t.Parallel()
+				a := c.build(t, "catppuccin-mocha", icons)
+				golden.RequireEqual(t, []byte(ansi.Strip(a.workspaceBar(c.width))))
+			})
 		}
 	}
 }

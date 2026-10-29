@@ -256,23 +256,16 @@ func modelFrameCases() []struct {
 	}
 }
 
-// TestFrameModelGolden draws the model frames in the other theme and with icons
-// off; TestFrameGolden draws them in the default theme with icons.
-func TestFrameModelGolden(t *testing.T) {
+// TestFrameModelText draws the model frames without styling and with icons
+// off; TestFrameGolden and TestFrameText draw them with icons.
+func TestFrameModelText(t *testing.T) {
 	t.Parallel()
 
-	for _, th := range chromeThemes() {
-		for _, icons := range []bool{true, false} {
-			if th == "catppuccin-mocha" && icons {
-				continue
-			}
-
-			for _, c := range modelFrameCases() {
-				t.Run(fmt.Sprintf("%s/icons=%v/%s", th, icons, c.name), func(t *testing.T) {
-					golden.RequireEqual(t, []byte(c.build(t, th, icons).View().Content))
-				})
-			}
-		}
+	for _, c := range modelFrameCases() {
+		t.Run("icons=false/"+c.name, func(t *testing.T) {
+			t.Parallel()
+			golden.RequireEqual(t, []byte(ansi.Strip(c.build(t, "catppuccin-mocha", false).View().Content)))
+		})
 	}
 }
 

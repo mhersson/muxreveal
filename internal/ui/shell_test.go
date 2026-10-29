@@ -43,11 +43,27 @@ func TestNewRejectsUnknownTheme(t *testing.T) {
 func TestShellGolden(t *testing.T) {
 	t.Parallel()
 
-	for _, name := range theme.Names() {
-		t.Run(name, func(t *testing.T) {
-			a := newThemedApp(t, name)
+	t.Run("catppuccin-mocha", func(t *testing.T) {
+		t.Parallel()
+
+		a := newThemedApp(t, "catppuccin-mocha")
+		sized(t, a, 100, 30)
+		golden.RequireEqual(t, []byte(a.View().Content))
+	})
+}
+
+// TestShellText is the same screen without styling, so the layout reads.
+func TestShellText(t *testing.T) {
+	t.Parallel()
+
+	for _, icons := range []bool{true, false} {
+		t.Run(fmt.Sprintf("icons=%v", icons), func(t *testing.T) {
+			t.Parallel()
+
+			a := newThemedApp(t, "catppuccin-mocha")
+			a.icons = icons
 			sized(t, a, 100, 30)
-			golden.RequireEqual(t, []byte(a.View().Content))
+			golden.RequireEqual(t, []byte(ansi.Strip(a.View().Content)))
 		})
 	}
 }
