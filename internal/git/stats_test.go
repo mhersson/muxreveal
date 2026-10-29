@@ -11,7 +11,14 @@ import (
 func statsOf(t *testing.T, e *Engine, src Source) Stats {
 	t.Helper()
 
-	got, err := e.Stats(context.Background(), src)
+	return statsOfContext(context.Background(), t, e, src)
+}
+
+// statsOfContext is statsOf with the context its git calls run under.
+func statsOfContext(ctx context.Context, t *testing.T, e *Engine, src Source) Stats {
+	t.Helper()
+
+	got, err := e.Stats(ctx, src)
 	if err != nil {
 		t.Fatalf("Stats: %v", err)
 	}
@@ -32,6 +39,7 @@ func totals(res Result) Stats {
 }
 
 func TestStatsMatchDiffTotals(t *testing.T) {
+	t.Parallel()
 	dir := branchRepo(t, func(dir string) {
 		for _, n := range []string{"mod", "del", "ren"} {
 			writeFile(t, dir, n+".txt", numbered(n, 20))
@@ -65,6 +73,7 @@ func TestStatsMatchDiffTotals(t *testing.T) {
 }
 
 func TestStatsCountsEachKind(t *testing.T) {
+	t.Parallel()
 	dir := branchRepo(t, func(dir string) {
 		writeFile(t, dir, "del.txt", numbered("del", 4))
 		writeFile(t, dir, "bin.dat", "\x00a")
@@ -81,6 +90,7 @@ func TestStatsCountsEachKind(t *testing.T) {
 }
 
 func TestStatsDefaultBaseAndClean(t *testing.T) {
+	t.Parallel()
 	dir := branchRepo(t, func(dir string) { writeFile(t, dir, "a.txt", "a\n") }, func(string) {})
 
 	if got := statsOf(t, testEngine(t), BranchSource{Worktree: dir}); got != (Stats{}) {
@@ -89,12 +99,14 @@ func TestStatsDefaultBaseAndClean(t *testing.T) {
 }
 
 func TestStatsRunsNoHunkPass(t *testing.T) {
+	t.Parallel()
+
 	dir := branchRepo(t, func(dir string) { writeFile(t, dir, "a.txt", numbered("a", 10)) }, func(dir string) {
 		writeFile(t, dir, "a.txt", numbered("a", 10)+"more\n")
 	})
 
-	logPath := fakeGit(t, "")
-	statsOf(t, testEngine(t), BranchSource{Worktree: dir, Base: "main"})
+	ctx, logPath := wrapGit(t, "")
+	statsOfContext(ctx, t, testEngine(t), BranchSource{Worktree: dir, Base: "main"})
 
 	data, err := os.ReadFile(logPath)
 	if err != nil || len(data) == 0 {
@@ -107,6 +119,7 @@ func TestStatsRunsNoHunkPass(t *testing.T) {
 }
 
 func TestStatsErrors(t *testing.T) {
+	t.Parallel()
 	e := testEngine(t)
 
 	if _, err := e.Stats(context.Background(), TurnSource{}); err == nil {

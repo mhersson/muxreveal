@@ -9,7 +9,9 @@ import (
 )
 
 func TestHead(t *testing.T) {
+	t.Parallel()
 	t.Run("branch", func(t *testing.T) {
+		t.Parallel()
 		dir := newRepo(t)
 		writeFile(t, dir, "a.txt", "a\n")
 		commitAll(t, dir, "one")
@@ -24,6 +26,7 @@ func TestHead(t *testing.T) {
 	})
 
 	t.Run("detached", func(t *testing.T) {
+		t.Parallel()
 		dir := newRepo(t)
 		writeFile(t, dir, "a.txt", "a\n")
 		commitAll(t, dir, "one")
@@ -42,6 +45,7 @@ func TestHead(t *testing.T) {
 	})
 
 	t.Run("unborn", func(t *testing.T) {
+		t.Parallel()
 		dir := newRepo(t)
 
 		got := headOf(t, dir)
@@ -68,6 +72,7 @@ func headOf(t *testing.T, dir string) HeadInfo {
 }
 
 func TestHeadReportsFailures(t *testing.T) {
+	t.Parallel()
 	dir := newRepo(t)
 	writeFile(t, dir, "a.txt", "a\n")
 	commitAll(t, dir, "one")

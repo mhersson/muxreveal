@@ -152,7 +152,14 @@ func testEngine(t *testing.T) *Engine {
 func diffOK(t *testing.T, e *Engine, src Source) Result {
 	t.Helper()
 
-	res, err := e.Diff(context.Background(), src)
+	return diffOKContext(context.Background(), t, e, src)
+}
+
+// diffOKContext is diffOK with the context its git calls run under.
+func diffOKContext(ctx context.Context, t *testing.T, e *Engine, src Source) Result {
+	t.Helper()
+
+	res, err := e.Diff(ctx, src)
 	if err != nil {
 		t.Fatalf("Diff: %v", err)
 	}
@@ -216,10 +223,18 @@ func branchRepo(t *testing.T, base, work func(dir string)) string {
 func branchDiff(t *testing.T, dir string) Result {
 	t.Helper()
 
-	return diffOK(t, testEngine(t), BranchSource{Worktree: dir, Base: "main"})
+	return branchDiffContext(context.Background(), t, dir)
+}
+
+// branchDiffContext is branchDiff with the context its git calls run under.
+func branchDiffContext(ctx context.Context, t *testing.T, dir string) Result {
+	t.Helper()
+
+	return diffOKContext(ctx, t, testEngine(t), BranchSource{Worktree: dir, Base: "main"})
 }
 
 func TestDiffStatuses(t *testing.T) {
+	t.Parallel()
 	dir := branchRepo(t, func(dir string) {
 		for _, n := range []string{"mod", "del", "ren", "renedit", "src"} {
 			writeFile(t, dir, n+".txt", numbered(n, 20))
@@ -278,6 +293,7 @@ func must(t *testing.T, err error) {
 }
 
 func TestDiffSymlinksAndTypeChanges(t *testing.T) {
+	t.Parallel()
 	dir := branchRepo(t, func(dir string) {
 		writeFile(t, dir, "target.txt", "t\n")
 		writeFile(t, dir, "tolink.txt", "was a file\n")
@@ -305,7 +321,6 @@ func TestDiffSymlinksAndTypeChanges(t *testing.T) {
 }
 
 func TestDiffSubmoduleAndNestedRepo(t *testing.T) {
-	isolateGit(t)
 	t.Setenv("GIT_AUTHOR_DATE", "2026-01-01T00:00:00Z")
 	t.Setenv("GIT_COMMITTER_DATE", "2026-01-01T00:00:00Z")
 
@@ -346,6 +361,7 @@ func TestDiffSubmoduleAndNestedRepo(t *testing.T) {
 }
 
 func TestDiffLineEndings(t *testing.T) {
+	t.Parallel()
 	dir := branchRepo(t, func(dir string) {
 		writeFile(t, dir, "crlf.txt", "a\r\nb\r\nc\r\n")
 		writeFile(t, dir, "noeol.txt", "x\ny")
@@ -374,6 +390,8 @@ func TestDiffLineEndings(t *testing.T) {
 }
 
 func TestDiffOddPaths(t *testing.T) {
+	t.Parallel()
+
 	names := []string{"sp ace.txt", "uni/ünï-日本.txt", "new\nline.txt", "quo\"te.txt", "tab\there.txt", "back\\slash.txt"}
 
 	dir := branchRepo(t, func(dir string) {
@@ -396,6 +414,8 @@ func TestDiffOddPaths(t *testing.T) {
 }
 
 func TestDiffInvalidUTF8Path(t *testing.T) {
+	t.Parallel()
+
 	name := "inv\xffalid.txt"
 	if !fsAcceptsName(t, name) {
 		t.Skip("the filesystem refuses names that are not valid UTF-8")
@@ -418,6 +438,7 @@ func TestDiffInvalidUTF8Path(t *testing.T) {
 }
 
 func TestDiffPathShapeChanges(t *testing.T) {
+	t.Parallel()
 	dir := branchRepo(t, func(dir string) {
 		writeFile(t, dir, "x", "was a file\n")
 		writeFile(t, dir, "d/inner.txt", "inner\n")
@@ -432,6 +453,7 @@ func TestDiffPathShapeChanges(t *testing.T) {
 }
 
 func TestDiffBranchUsesMergeBase(t *testing.T) {
+	t.Parallel()
 	dir := newRepo(t)
 	writeFile(t, dir, "shared.txt", numbered("shared", 10))
 	writeFile(t, dir, "feature.txt", numbered("feature", 5))
@@ -469,6 +491,7 @@ func TestDiffBranchUsesMergeBase(t *testing.T) {
 }
 
 func TestDiffBranchErrors(t *testing.T) {
+	t.Parallel()
 	e := testEngine(t)
 	ctx := context.Background()
 
@@ -545,7 +568,9 @@ func TestDiffBranchErrors(t *testing.T) {
 }
 
 func TestDiffOddRepositories(t *testing.T) {
+	t.Parallel()
 	t.Run("detached HEAD", func(t *testing.T) {
+		t.Parallel()
 		dir := seedRepo(t)
 		writeFile(t, dir, "a.txt", "changed\n")
 		commitAll(t, dir, "second")
@@ -559,6 +584,7 @@ func TestDiffOddRepositories(t *testing.T) {
 	})
 
 	t.Run("linked worktree of a bare repository", func(t *testing.T) {
+		t.Parallel()
 		src := seedRepo(t)
 		bare := filepath.Join(t.TempDir(), "bare.git")
 		gitOut(t, src, "clone", "-q", "--bare", src, bare)
@@ -577,6 +603,7 @@ func TestDiffOddRepositories(t *testing.T) {
 	})
 
 	t.Run("split index", func(t *testing.T) {
+		t.Parallel()
 		dir := seedRepo(t)
 		gitOut(t, dir, "config", "core.splitIndex", "true")
 		gitOut(t, dir, "update-index", "--split-index")
@@ -591,6 +618,7 @@ func TestDiffOddRepositories(t *testing.T) {
 	})
 
 	t.Run("untracked file over the snapshot cap", func(t *testing.T) {
+		t.Parallel()
 		dir := seedRepo(t)
 
 		f, err := os.Create(filepath.Join(dir, "huge.bin"))
@@ -620,6 +648,7 @@ func turnRepo(t *testing.T) string {
 }
 
 func TestDiffTurnLiveAndPast(t *testing.T) {
+	t.Parallel()
 	dir := turnRepo(t)
 	writeFile(t, dir, "a.txt", "turn two\n")
 	writeFile(t, dir, "two.txt", "two\n")
@@ -662,6 +691,7 @@ func TestDiffTurnLiveAndPast(t *testing.T) {
 // A file untracked when a turn started is in that turn's snapshot, so a later
 // edit is a modification of it, not an added file.
 func TestDiffTurnJudgesAFileTheSnapshotHoldsByTheComparison(t *testing.T) {
+	t.Parallel()
 	dir := seedRepo(t)
 	writeFile(t, dir, "x.go", numbered("x", 40))
 	snap(t, dir, sessA, SnapshotOptions{})
@@ -696,6 +726,8 @@ func TestDiffTurnJudgesAFileTheSnapshotHoldsByTheComparison(t *testing.T) {
 }
 
 func TestMarkUntracked(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		status Status
 		want   bool
@@ -720,6 +752,8 @@ func TestMarkUntracked(t *testing.T) {
 }
 
 func TestDiffTurnSkipsMissingSnapshots(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	dir := turnRepo(t)
 	writeFile(t, dir, "a.txt", "between\n")
@@ -763,6 +797,7 @@ func TestDiffTurnSkipsMissingSnapshots(t *testing.T) {
 }
 
 func TestDiffTurnErrors(t *testing.T) {
+	t.Parallel()
 	dir := seedRepo(t)
 	e := testEngine(t)
 	ctx := context.Background()
@@ -783,6 +818,8 @@ func TestDiffTurnErrors(t *testing.T) {
 }
 
 func TestDiffTurnAgentCommitChangesNothing(t *testing.T) {
+	t.Parallel()
+
 	build := func(commit bool) Result {
 		dir := turnRepo(t)
 		writeFile(t, dir, "a.txt", "agent edit\n")
@@ -811,6 +848,7 @@ func TestDiffTurnAgentCommitChangesNothing(t *testing.T) {
 }
 
 func TestDiffTurnUnbornHead(t *testing.T) {
+	t.Parallel()
 	dir := newRepo(t)
 	writeFile(t, dir, "a.txt", "a\n")
 	snap(t, dir, sessA, SnapshotOptions{})
@@ -835,15 +873,15 @@ func hunkPasses(t *testing.T, logPath string) int {
 	return strings.Count(string(data), " -U3 ")
 }
 
-// recordPid makes the fake git write its pid for hunk passes. The wrapper execs
-// git, so the pid is git's.
-func recordPid(t *testing.T) (logPath, pidFile string) {
+// recordPid makes the wrapped git write its pid for hunk passes. The wrapper
+// execs git, so the pid is git's.
+func recordPid(t *testing.T) (ctx context.Context, logPath, pidFile string) {
 	t.Helper()
 
 	pidFile = filepath.Join(t.TempDir(), "pid")
-	logPath = fakeGit(t, "case \"$*\" in *-U3*) echo $$ > '"+pidFile+"';; esac")
+	ctx, logPath = wrapGit(t, "case \"$*\" in *-U3*) echo $$ > '"+pidFile+"';; esac")
 
-	return logPath, pidFile
+	return ctx, logPath, pidFile
 }
 
 func assertProcessGone(t *testing.T, pidFile string) {
@@ -865,23 +903,28 @@ func assertProcessGone(t *testing.T, pidFile string) {
 }
 
 func TestDiffFileCap(t *testing.T) {
-	for _, n := range []int{450, 10000} {
+	t.Parallel()
+
+	// The cap is lowered to keep the fixture small; TestNewEngineDefaults pins the default.
+	for _, n := range []int{25, 250} {
 		t.Run(strconv.Itoa(n)+" files", func(t *testing.T) {
+			t.Parallel()
+
 			dir := branchRepo(t, func(dir string) { writeFile(t, dir, "base.txt", "b\n") }, func(dir string) {
 				for i := range n {
 					writeFile(t, dir, fmt.Sprintf("d%02d/f%05d.txt", i%50, i), fmt.Sprintf("file %d\nsecond\nthird\n", i))
 				}
 			})
 
-			logPath := fakeGit(t, "")
-			res := branchDiff(t, dir)
+			ctx, logPath := wrapGit(t, "")
+			res := diffOKContext(ctx, t, NewEngine(EngineOptions{Limits: Limits{Files: 20}, TempDir: t.TempDir()}), BranchSource{Worktree: dir, Base: "main"})
 
 			if len(res.Files) != n || !res.Truncated {
 				t.Fatalf("files = %d, Truncated = %v, want %d and true", len(res.Files), res.Truncated, n)
 			}
 
 			for i, f := range res.Files {
-				wantTrunc := i >= 400
+				wantTrunc := i >= 20
 				if f.Truncated != wantTrunc || f.Added != 3 || (len(f.Hunks) > 0) == wantTrunc {
 					t.Fatalf("file %d %q: Truncated=%v Added=%d hunks=%d", i, f.Path, f.Truncated, f.Added, len(f.Hunks))
 				}
@@ -894,8 +937,44 @@ func TestDiffFileCap(t *testing.T) {
 	}
 }
 
+func TestDiffListingLargerThanAPipeBuffer(t *testing.T) {
+	t.Parallel()
+
+	const files = 300
+
+	long := strings.Repeat("long", 60)
+	path := func(i int) string { return fmt.Sprintf("%s/f%03d.txt", long, i) }
+
+	// The listing carries each path twice; it must outgrow the 64 KB pipe buffer.
+	if files*len(path(0)) <= 64<<10 {
+		t.Fatalf("%d paths of %d bytes do not exceed a pipe buffer", files, len(path(0)))
+	}
+
+	dir := branchRepo(t, func(dir string) { writeFile(t, dir, "base.txt", "b\n") }, func(dir string) {
+		for i := range files {
+			writeFile(t, dir, path(i), fmt.Sprintf("file %d\n", i))
+		}
+	})
+
+	res := branchDiff(t, dir)
+
+	if res.Truncated || len(res.Files) != files {
+		t.Fatalf("files = %d, Truncated = %v, want %d and false", len(res.Files), res.Truncated, files)
+	}
+
+	for i, f := range res.Files {
+		if f.Path != path(i) || f.Added != 1 || f.Truncated || len(f.Hunks) != 1 {
+			t.Fatalf("file %d %q: Added=%d Truncated=%v hunks=%d, want %q, 1, false, 1", i, f.Path, f.Added, f.Truncated, len(f.Hunks), path(i))
+		}
+	}
+}
+
 func TestDiffLineCap(t *testing.T) {
+	t.Parallel()
+
 	t.Run("6000 changed lines", func(t *testing.T) {
+		t.Parallel()
+
 		dir := branchRepo(t, func(dir string) {
 			writeFile(t, dir, "big.txt", numbered("base", 10))
 			writeFile(t, dir, "small.txt", "s\n")
@@ -920,17 +999,21 @@ func TestDiffLineCap(t *testing.T) {
 	})
 
 	t.Run("100000-line file", func(t *testing.T) {
+		t.Parallel()
+
 		dir := branchRepo(t, func(dir string) { writeFile(t, dir, "a.txt", "a\n") }, func(dir string) {
 			writeFile(t, dir, "huge.txt", numbered("l", 100000))
 		})
 
-		logPath := fakeGit(t, "")
-		res := branchDiff(t, dir)
+		ctx, logPath := wrapGit(t, "")
+		res := branchDiffContext(ctx, t, dir)
 
 		f := fileByPath(t, res, "huge.txt")
 		if !f.Truncated || f.Added != 100000 || len(f.Hunks) != 0 || !res.Truncated {
 			t.Errorf("huge.txt = Truncated:%v +%d hunks:%d", f.Truncated, f.Added, len(f.Hunks))
 		}
+
+		wrappedCalls(t, logPath)
 
 		if got := hunkPasses(t, logPath); got != 0 {
 			t.Errorf("hunk passes = %d, want none for a file over the line cap", got)
@@ -945,6 +1028,8 @@ func withoutHunks(f FileDiff) FileDiff {
 }
 
 func TestDiffByteCapStopsGit(t *testing.T) {
+	t.Parallel()
+
 	const files = 20
 
 	line := strings.Repeat("x", 40) + "\n"
@@ -956,8 +1041,8 @@ func TestDiffByteCapStopsGit(t *testing.T) {
 		}
 	})
 
-	logPath, pidFile := recordPid(t)
-	res := branchDiff(t, dir)
+	ctx, logPath, pidFile := recordPid(t)
+	res := branchDiffContext(ctx, t, dir)
 
 	assertProcessGone(t, pidFile)
 
@@ -991,13 +1076,15 @@ func TestDiffByteCapStopsGit(t *testing.T) {
 }
 
 func TestDiffHugeSingleLine(t *testing.T) {
+	t.Parallel()
+
 	dir := branchRepo(t, func(dir string) { writeFile(t, dir, "base.txt", "b\n") }, func(dir string) {
 		writeFile(t, dir, "small.txt", "small\n")
 		writeFile(t, dir, "z-one-line.txt", strings.Repeat("y", 50<<20))
 	})
 
-	_, pidFile := recordPid(t)
-	res := branchDiff(t, dir)
+	ctx, _, pidFile := recordPid(t)
+	res := branchDiffContext(ctx, t, dir)
 
 	assertProcessGone(t, pidFile)
 
@@ -1012,6 +1099,8 @@ func TestDiffHugeSingleLine(t *testing.T) {
 }
 
 func TestDiffBinaryFiles(t *testing.T) {
+	t.Parallel()
+
 	dir := branchRepo(t, func(dir string) {
 		writeFile(t, dir, "old.bin", "\x00old")
 		writeFile(t, dir, "gone.bin", "\x00gone")
@@ -1021,8 +1110,8 @@ func TestDiffBinaryFiles(t *testing.T) {
 		writeFile(t, dir, "added.bin", "\x00"+strings.Repeat("z", 1<<20))
 	})
 
-	logPath := fakeGit(t, "")
-	res := branchDiff(t, dir)
+	ctx, logPath := wrapGit(t, "")
+	res := branchDiffContext(ctx, t, dir)
 	golden(t, "diff_binary", res)
 
 	for _, f := range res.Files {
@@ -1035,6 +1124,8 @@ func TestDiffBinaryFiles(t *testing.T) {
 		t.Error("binary files do not truncate a result")
 	}
 
+	wrappedCalls(t, logPath)
+
 	if got := hunkPasses(t, logPath); got != 0 {
 		t.Errorf("hunk passes = %d, want none", got)
 	}
@@ -1043,17 +1134,19 @@ func TestDiffBinaryFiles(t *testing.T) {
 // Cache.
 
 func TestDiffCacheSkipsTheHunkPass(t *testing.T) {
+	t.Parallel()
+
 	dir := branchRepo(t, func(dir string) { writeFile(t, dir, "a.txt", numbered("a", 10)) }, func(dir string) {
 		writeFile(t, dir, "a.txt", numbered("a", 10)+"more\n")
 		writeFile(t, dir, "b.txt", "new\n")
 	})
 
-	logPath := fakeGit(t, "")
+	ctx, logPath := wrapGit(t, "")
 	e := testEngine(t)
 	src := BranchSource{Worktree: dir, Base: "main"}
 
-	first := diffOK(t, e, src)
-	second := diffOK(t, e, src)
+	first := diffOKContext(ctx, t, e, src)
+	second := diffOKContext(ctx, t, e, src)
 
 	if got := hunkPasses(t, logPath); got != 1 {
 		t.Errorf("hunk passes after two diffs = %d, want 1", got)
@@ -1064,7 +1157,7 @@ func TestDiffCacheSkipsTheHunkPass(t *testing.T) {
 	}
 
 	writeFile(t, dir, "b.txt", "changed\n")
-	diffOK(t, e, src)
+	diffOKContext(ctx, t, e, src)
 
 	if got := hunkPasses(t, logPath); got != 2 {
 		t.Errorf("hunk passes after a changed file = %d, want 2", got)
@@ -1072,6 +1165,8 @@ func TestDiffCacheSkipsTheHunkPass(t *testing.T) {
 }
 
 func TestHunkCacheEvictsLeastRecentlyUsed(t *testing.T) {
+	t.Parallel()
+
 	c := newHunkCache(cacheBytes)
 	hunks := []Hunk{{Lines: []Line{{Text: "x"}}}}
 	key := func(i int) hunkKey { return hunkKey{old: strconv.Itoa(i), new: "n"} }
@@ -1102,6 +1197,8 @@ func TestHunkCacheEvictsLeastRecentlyUsed(t *testing.T) {
 }
 
 func TestHunkCacheBoundsTheTextItHolds(t *testing.T) {
+	t.Parallel()
+
 	c := newHunkCache(1000)
 	big := []Hunk{{Lines: []Line{{Text: strings.Repeat("x", 400)}}}}
 
@@ -1121,6 +1218,7 @@ func TestHunkCacheBoundsTheTextItHolds(t *testing.T) {
 }
 
 func TestDiffConcurrent(t *testing.T) {
+	t.Parallel()
 	dir := branchRepo(t, func(dir string) { writeFile(t, dir, "a.txt", numbered("a", 10)) }, func(dir string) {
 		writeFile(t, dir, "a.txt", numbered("a", 10)+"more\n")
 		writeFile(t, dir, "b.txt", "new\n")
@@ -1164,6 +1262,8 @@ func TestDiffConcurrent(t *testing.T) {
 }
 
 func TestNewEngineDefaults(t *testing.T) {
+	t.Parallel()
+
 	e := NewEngine(EngineOptions{Limits: Limits{Files: 7}})
 
 	if want := (Limits{Files: 7, Bytes: 2 << 20, Lines: 5000}); e.limits != want {
@@ -1176,6 +1276,7 @@ func TestNewEngineDefaults(t *testing.T) {
 }
 
 func TestDiffByteCapInsideTheFirstFile(t *testing.T) {
+	t.Parallel()
 	dir := branchRepo(t, func(dir string) { writeFile(t, dir, "base.txt", "b\n") }, func(dir string) {
 		writeFile(t, dir, "a.txt", numbered("first", 200))
 		writeFile(t, dir, "b.txt", "tiny\n")
@@ -1195,6 +1296,8 @@ func TestDiffByteCapInsideTheFirstFile(t *testing.T) {
 }
 
 func TestWholeFiles(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct{ in, want string }{
 		{"", ""},
 		{"diff --git a/x b/x\n+one\n", ""},
@@ -1262,7 +1365,6 @@ func hostileDiffConfig(t *testing.T, dir string) (mark string) {
 }
 
 func TestDiffIgnoresUserDiffConfig(t *testing.T) {
-	isolateGit(t)
 	t.Setenv("GIT_AUTHOR_DATE", "2026-01-01T00:00:00Z")
 	t.Setenv("GIT_COMMITTER_DATE", "2026-01-01T00:00:00Z")
 

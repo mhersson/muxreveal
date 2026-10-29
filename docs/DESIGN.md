@@ -186,10 +186,10 @@ One Go module, `github.com/mhersson/muxreveal`.
 | --- | --- |
 | `cmd/muxreveal` | Binary: CLI, `hook` and `statusline` subcommands, wiring |
 | `internal/core` | Event bus, state store, actions, config, tab layouts (`internal/core/tiling`) |
-| `internal/ui` | Compositor, widgets, keymap, themes, image placement |
+| `internal/ui` | Compositor, widgets, keymap, themes, syntax highlighting, image placement |
 | `internal/term` | PTY plus the `VT` interface; `tuios.dev/vt` adapter (fallback `charmbracelet/x/vt`) |
 | `internal/harness` | `Harness` interface; Claude Code adapter (launch args, hook settings, resume, a session's custom name from its transcript) |
-| `internal/git` | Worktrees, turn snapshots, watcher and watch set, diff engine, highlighting; `linediff` and `invisible` (ported from tuios) |
+| `internal/git` | Worktrees, turn snapshots, watcher and watch set, diff engine; `linediff` and `invisible` (ported from tuios) |
 | `internal/github` | Auth via `gh`, GraphQL and REST client, poller, PR actions |
 | `internal/md` | Markdown to width-wrapped lines of styled runs, with link targets, image references and folds; no UI imports |
 | `internal/store` | `state.json` and SQLite persistence |

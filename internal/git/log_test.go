@@ -9,6 +9,7 @@ import (
 )
 
 func TestLog(t *testing.T) {
+	t.Parallel()
 	dir := newRepo(t)
 	writeFile(t, dir, "a.txt", "a\n")
 	commitAll(t, dir, "init")
@@ -56,14 +57,25 @@ func TestLog(t *testing.T) {
 }
 
 func TestLogCaps(t *testing.T) {
+	t.Parallel()
 	dir := newRepo(t)
 	writeFile(t, dir, "a.txt", "a\n")
 	commitAll(t, dir, "init")
 	gitOut(t, dir, "switch", "-q", "-c", "feat")
 
+	var stream strings.Builder
+
 	for i := range 260 {
-		gitOut(t, dir, "commit", "-q", "--allow-empty", "-m", fmt.Sprintf("c%03d", i))
+		fmt.Fprintf(&stream, "commit refs/heads/feat\ncommitter Test <test@example.com> %d +0000\ndata 5\nc%03d\n", 1700000000+i, i)
+
+		if i == 0 {
+			stream.WriteString("from refs/heads/feat^0\n")
+		}
+
+		stream.WriteString("\n")
 	}
+
+	gitInput(t, dir, stream.String(), "fast-import", "--quiet")
 
 	got, err := Log(context.Background(), openRepo(t, dir), "main")
 	if err != nil {
@@ -80,14 +92,16 @@ func TestLogCaps(t *testing.T) {
 }
 
 func TestLogRefusesOptionBase(t *testing.T) {
+	t.Parallel()
+
 	dir := newRepo(t)
 	writeFile(t, dir, "a.txt", "a\n")
 	commitAll(t, dir, "init")
 
-	logPath := fakeGit(t, "")
+	ctx, logPath := wrapGit(t, "")
 
 	for _, base := range []string{"--all", "-n1"} {
-		if _, err := Log(context.Background(), openRepo(t, dir), base); err == nil {
+		if _, err := Log(ctx, openRepo(t, dir), base); err == nil {
 			t.Errorf("Log(%q) succeeded", base)
 		}
 	}
@@ -101,6 +115,7 @@ func TestLogRefusesOptionBase(t *testing.T) {
 }
 
 func TestLogUnknownBase(t *testing.T) {
+	t.Parallel()
 	dir := newRepo(t)
 	writeFile(t, dir, "a.txt", "a\n")
 	commitAll(t, dir, "init")

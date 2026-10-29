@@ -21,6 +21,7 @@ func hashBlob(t *testing.T, dir, content string) string {
 }
 
 func TestFileTextReadsBothSides(t *testing.T) {
+	t.Parallel()
 	dir := newRepo(t)
 	e := NewEngine(EngineOptions{})
 	oldOID := hashBlob(t, dir, "a\nb\n")
@@ -38,6 +39,8 @@ func TestFileTextReadsBothSides(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			old, nw, err := e.FileText(context.Background(), dir, tt.f)
 			if err != nil {
 				t.Fatal(err)
@@ -51,6 +54,7 @@ func TestFileTextReadsBothSides(t *testing.T) {
 }
 
 func TestFileTextTooLarge(t *testing.T) {
+	t.Parallel()
 	dir := newRepo(t)
 	e := NewEngine(EngineOptions{})
 	big := hashBlob(t, dir, string(make([]byte, maxFileText+1)))
@@ -69,6 +73,8 @@ func TestFileTextTooLarge(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			_, _, err := e.FileText(context.Background(), dir, tt.f)
 			if !errors.Is(err, tt.want) {
 				t.Errorf("err = %v, want %v", err, tt.want)

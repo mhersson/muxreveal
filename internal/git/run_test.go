@@ -50,11 +50,13 @@ func TestRunIgnoresInheritedRepoVariables(t *testing.T) {
 }
 
 func TestRunEnvAndLocks(t *testing.T) {
+	t.Parallel()
+
 	root := newRepo(t)
-	envLog := fakeGit(t, `env > "$LOG.env"`)
+	ctx, envLog := wrapGit(t, `env > "$LOG.env"`)
 	idx := filepath.Join(t.TempDir(), "index")
 
-	if _, err := run(context.Background(), call{dir: root, args: []string{"status", "-z"}, env: []string{"GIT_INDEX_FILE=" + idx}}); err != nil {
+	if _, err := run(ctx, call{dir: root, args: []string{"status", "-z"}, env: []string{"GIT_INDEX_FILE=" + idx}}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -73,10 +75,12 @@ func TestRunEnvAndLocks(t *testing.T) {
 }
 
 func TestRunConfigArguments(t *testing.T) {
-	root := newRepo(t)
-	logPath := fakeGit(t, "")
+	t.Parallel()
 
-	if _, err := run(context.Background(), call{dir: root, args: []string{"status", "-z"}}); err != nil {
+	root := newRepo(t)
+	ctx, logPath := wrapGit(t, "")
+
+	if _, err := run(ctx, call{dir: root, args: []string{"status", "-z"}}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -91,7 +95,46 @@ func TestRunConfigArguments(t *testing.T) {
 	}
 }
 
+func TestRunTakesGitFromTheContext(t *testing.T) {
+	t.Parallel()
+
+	root := newRepo(t)
+	ctx, logPath := wrapGit(t, "")
+
+	if _, err := run(ctx, call{dir: root, args: []string{"status", "-z"}, read: true}); err != nil {
+		t.Fatal(err)
+	}
+
+	derived, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	rc, err := stream(derived, call{dir: root, args: []string{"ls-files", "-z"}, read: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, _ = io.Copy(io.Discard, rc)
+	must(t, rc.Close())
+
+	if _, err := run(context.Background(), call{dir: root, args: []string{"rev-parse", "--git-dir"}, read: true}); err != nil {
+		t.Fatal(err)
+	}
+
+	data, err := os.ReadFile(logPath)
+	must(t, err)
+
+	log := string(data)
+	if !strings.Contains(log, "status -z") || !strings.Contains(log, "ls-files -z") {
+		t.Errorf("calls given the context did not run the wrapper:\n%s", log)
+	}
+
+	if strings.Contains(log, "rev-parse --git-dir") {
+		t.Errorf("a call without the context ran the wrapper:\n%s", log)
+	}
+}
+
 func TestRunStdin(t *testing.T) {
+	t.Parallel()
 	root := newRepo(t)
 
 	out, err := run(context.Background(), call{dir: root, args: []string{"hash-object", "--stdin"}, stdin: strings.NewReader("hello\n")})
@@ -105,6 +148,7 @@ func TestRunStdin(t *testing.T) {
 }
 
 func TestRunErrorCarriesStderrFirstLine(t *testing.T) {
+	t.Parallel()
 	root := newRepo(t)
 
 	_, err := run(context.Background(), call{dir: root, args: []string{"rev-parse", "--verify", "nope"}, read: true})
@@ -175,10 +219,12 @@ wait`)
 }
 
 func TestRunLimit(t *testing.T) {
-	root := newRepo(t)
-	fakeGit(t, "exec yes")
+	t.Parallel()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	root := newRepo(t)
+	ctx, _ := wrapGit(t, "exec yes")
+
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
 	_, err := run(ctx, call{dir: root, args: []string{"status"}, limit: 1000})
@@ -188,6 +234,7 @@ func TestRunLimit(t *testing.T) {
 }
 
 func TestRunLimitNotReached(t *testing.T) {
+	t.Parallel()
 	root := newRepo(t)
 
 	out, err := run(context.Background(), call{dir: root, args: []string{"rev-parse", "--git-dir"}, limit: 1000})
@@ -197,6 +244,7 @@ func TestRunLimitNotReached(t *testing.T) {
 }
 
 func TestStream(t *testing.T) {
+	t.Parallel()
 	root := newRepo(t)
 
 	rc, err := stream(context.Background(), call{dir: root, args: []string{"rev-parse", "--git-dir"}, read: true})
@@ -285,6 +333,8 @@ func TestNetCallHasNoTerminal(t *testing.T) {
 }
 
 func TestHideURLs(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct{ in, want string }{
 		{"", ""},
 		{"fatal: no url", "fatal: no url"},
