@@ -937,6 +937,38 @@ func TestDiffFileCap(t *testing.T) {
 	}
 }
 
+func TestDiffListingLargerThanAPipeBuffer(t *testing.T) {
+	t.Parallel()
+
+	const files = 300
+
+	long := strings.Repeat("long", 60)
+	path := func(i int) string { return fmt.Sprintf("%s/f%03d.txt", long, i) }
+
+	// The listing carries each path twice; it must outgrow the 64 KB pipe buffer.
+	if files*len(path(0)) <= 64<<10 {
+		t.Fatalf("%d paths of %d bytes do not exceed a pipe buffer", files, len(path(0)))
+	}
+
+	dir := branchRepo(t, func(dir string) { writeFile(t, dir, "base.txt", "b\n") }, func(dir string) {
+		for i := range files {
+			writeFile(t, dir, path(i), fmt.Sprintf("file %d\n", i))
+		}
+	})
+
+	res := branchDiff(t, dir)
+
+	if res.Truncated || len(res.Files) != files {
+		t.Fatalf("files = %d, Truncated = %v, want %d and false", len(res.Files), res.Truncated, files)
+	}
+
+	for i, f := range res.Files {
+		if f.Path != path(i) || f.Added != 1 || f.Truncated || len(f.Hunks) != 1 {
+			t.Fatalf("file %d %q: Added=%d Truncated=%v hunks=%d, want %q, 1, false, 1", i, f.Path, f.Added, f.Truncated, len(f.Hunks), path(i))
+		}
+	}
+}
+
 func TestDiffLineCap(t *testing.T) {
 	t.Parallel()
 
