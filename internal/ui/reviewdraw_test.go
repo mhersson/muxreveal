@@ -99,6 +99,23 @@ func reviewCases() []reviewCase {
 				v.rebuild(false)
 			}
 		})},
+		{"worktree-list", with(func(s *reviewScene) {
+			s.tune = func(t *testing.T, a *App, v *reviewView) { showList(a, wtDemoRows(), "other · main", 0) }
+		})},
+		{"worktree-list-pinned", with(func(s *reviewScene) {
+			s.pinned = true
+			s.tune = func(t *testing.T, a *App, v *reviewView) { showList(a, wtDemoRows(), "other · main", 4) }
+		})},
+		{"worktree-list-narrow", with(func(s *reviewScene) {
+			s.w, s.h = 40, 40
+			s.tune = func(t *testing.T, a *App, v *reviewView) {
+				rows := wtDemoRows()
+				rows[2].branch = "feature/follow-the-agents-edits"
+				rows[3].branch = "feature/worktree-list"
+
+				showList(a, rows, "other · feature/follow-the-agents-edits", 3)
+			}
+		})},
 		{"unfocused", with(func(s *reviewScene) {
 			s.focused = false
 			s.tune = func(t *testing.T, a *App, v *reviewView) { v.cursor = rowWith(t, v, "review.toggle") }
@@ -597,7 +614,7 @@ func TestDrawerModeShowsOnlyInTheTagWithoutTheTree(t *testing.T) {
 
 func TestDrawerKeyHints(t *testing.T) {
 	const (
-		diffHints = "j/k line   ]/[ hunk   }/{ file   tab tree   f full   u split   b/t mode   ,/. turn   e edit   / search"
+		diffHints = "j/k line   ]/[ hunk   }/{ file   tab tree   w worktree   f full   u split   b/t mode   ,/. turn   e edit   / search"
 		treeHints = "j/k file   enter jump   tab hide   esc back"
 	)
 

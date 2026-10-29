@@ -134,8 +134,9 @@ type drawCtx struct {
 	query string
 	top   int
 
-	pinned bool   // the drawer is held on its root
-	home   string // shortens the paths it names
+	pinned bool    // the drawer is held on its root
+	home   string  // shortens the paths it names
+	list   *wtList // the open worktree list, drawn over the drawer
 }
 
 // diffKeys reports whether the diff, not the tree, has the keyboard.
@@ -185,6 +186,7 @@ type drawKey struct {
 	resTurn, resThrough  int
 	noSnapshot           bool
 	pinned               bool
+	list                 wtKey
 	err                  string
 	hasErr               bool
 }
@@ -200,6 +202,7 @@ func (d *drawCtx) key(r core.Rect, name string) drawKey {
 		query: d.query, searching: v.search != nil,
 		src: v.src, project: v.project, branch: v.branch, base: v.base,
 		turns: v.turns, resTurn: v.res.Turn, resThrough: v.res.Through, noSnapshot: v.noSnapshot, pinned: d.pinned,
+		list: d.listKey(),
 	}
 
 	if v.err != nil {
@@ -279,7 +282,7 @@ func (a *App) drawCtxFor(st core.State) (d *drawCtx, name string, ok bool) {
 
 	d = &drawCtx{
 		ui: lk.theme.UI, icons: a.icons, v: v, c: v.derived(), now: a.clock.Now(), keys: a.drawer.focused, tree: a.drawer.focused && a.drawer.tree,
-		pinned: tab.Review != nil && pinnedTo(tab, tab.Review.Pane), home: a.getenv("HOME"),
+		pinned: tab.Review != nil && pinnedTo(tab, tab.Review.Pane), home: a.getenv("HOME"), list: a.listFor(tab),
 	}
 	d.lay = a.drawerLayoutOf(box, v, drawerTree(st))
 	d.dv, d.flash = a.diffThemes(lk)
@@ -350,7 +353,10 @@ func (d *drawCtx) render() []string {
 		lines = append(lines, side+railPainter{bg: d.ui.Bg}.line(hints, lay.innerW)+side)
 	}
 
-	return append(lines, d.bottomBorder())
+	lines = append(lines, d.bottomBorder())
+	d.overlayList(lines)
+
+	return lines
 }
 
 // borderLine is a border row: the corner and a dash, the left runs, dashes,
@@ -520,6 +526,7 @@ func (d *drawCtx) hintRuns(cw int) []railRun {
 		{"]/[", "hunk"},
 		{"}/{", "file"},
 		{"tab", "tree"},
+		{"w", "worktree"},
 		{"f", "full"},
 		{"u", "split"},
 		{"b/t", "mode"},

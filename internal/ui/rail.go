@@ -169,17 +169,12 @@ func (a *App) railCards(st core.State) []railGroup {
 		}
 
 		rp := a.rail.panes[id]
-		c.project, c.branch = filepath.Base(m.WorkDir()), ""
+		c.project, c.name = cardLabels(m, rp)
 
 		if rp != nil {
 			c.unseen, c.active = rp.unseen, rp.hookAt
 			if rp.probe.known {
-				c.project, c.branch, c.place, c.detached, c.ahead = rp.probe.project, rp.probe.branch, rp.probe.place, rp.probe.detached, rp.probe.ahead
-			}
-
-			// A name belongs to the transcript it was read from, not to the pane.
-			if m.Transcript != "" && rp.name.transcript == m.Transcript {
-				c.name = rp.name.text
+				c.branch, c.place, c.detached, c.ahead = rp.probe.branch, rp.probe.place, rp.probe.detached, rp.probe.ahead
 			}
 
 			if rp.probe.statsKnown {
@@ -193,14 +188,8 @@ func (a *App) railCards(st core.State) []railGroup {
 			c.active = p.lastOut
 		}
 
-		// Printable once, so the matcher and the drawing see the same runes. The
-		// name is a file's text, so it is cleaned like the rest; a blank one, or
-		// the project's own name, leaves the project alone on the line.
-		c.project, c.branch, c.place, c.action = printable(c.project), printable(c.branch), printable(c.place), printable(c.action)
-
-		if c.name = strings.TrimSpace(printable(c.name)); c.name == c.project {
-			c.name = ""
-		}
+		// Printable once, so the matcher and the drawing see the same runes.
+		c.branch, c.place, c.action = printable(c.branch), printable(c.place), printable(c.action)
 
 		if _, ok := c.matches(a.rail.query); ok {
 			byState[c.state] = append(byState[c.state], c)
@@ -216,6 +205,42 @@ func (a *App) railCards(st core.State) []railGroup {
 	}
 
 	return out
+}
+
+// cardLabels are the project and the session's name card line 1 can show, both
+// cleaned. The name is a file's text; a blank one, or the project's own name,
+// leaves the project alone on the line.
+func cardLabels(m core.Pane, rp *railPane) (project, name string) {
+	project = filepath.Base(m.WorkDir())
+
+	if rp != nil {
+		if rp.probe.known {
+			project = rp.probe.project
+		}
+
+		// A name belongs to the transcript it was read from, not to the pane.
+		if m.Transcript != "" && rp.name.transcript == m.Transcript {
+			name = rp.name.text
+		}
+	}
+
+	project = printable(project)
+
+	if name = strings.TrimSpace(printable(name)); name == project {
+		name = ""
+	}
+
+	return project, name
+}
+
+// cardName is what card line 1 calls the agent: its session's name, else its project.
+func (a *App) cardName(st core.State, id core.PaneID) string {
+	project, name := cardLabels(st.Panes[id], a.rail.panes[id])
+	if name != "" {
+		return name
+	}
+
+	return project
 }
 
 func cardAction(m core.Pane) string {

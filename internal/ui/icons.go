@@ -54,6 +54,8 @@ const (
 
 	iconNewWorktree = "\U000F14CA" // nf-md-source_branch_plus
 	iconPin         = "\U000F0403" // nf-md-pin
+	iconFollow      = "\U000F01A4" // nf-md-crosshairs_gps
+	iconWorktrees   = "\U000F0CD0" // nf-md-source_repository_multiple
 
 	iconPR       = "\uF407"     // nf-oct-git_pull_request
 	iconPRDraft  = "\uF4DD"     // nf-oct-git_pull_request_draft

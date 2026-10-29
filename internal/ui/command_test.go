@@ -138,6 +138,7 @@ func TestDefaultCommands(t *testing.T) {
 		want{"review.turn.prev", "Review: previous turn", iconReview},
 		want{"review.turn.next", "Review: next turn", iconReview},
 		want{"review.search", "Review: search", iconReview},
+		want{"review.worktrees", "Review: worktrees", iconReview},
 		want{"review.edit", "Review: open in the editor", iconReview},
 		want{"review.back", "Review: back to the panes", iconReview},
 		want{"git.push", "Push branch", iconPush},

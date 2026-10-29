@@ -48,5 +48,5 @@
 │                                                                                                   │   7   8       "s": "pane.split.down",                                                            │
 │                                                                                                   │   8   9       "v": "pane.split.right",                                                           │
 │                                                                                                   │  A internal/ui/review_test.go                                        ! hidden characters  +11 -0 │
-│                                                                                                   │ j/k line   ]/[ hunk   }/{ file   tab tree   f full   u split   b/t mode   ,/. turn   e edit      │
+│                                                                                                   │ j/k line   ]/[ hunk   }/{ file   tab tree   w worktree   f full   u split   b/t mode   ,/. turn  │
 ╰───────────────────────────────────────────────────────────────────────────────────────────────────╰──────────────────────────────────────────────────────────────────────────────────────────────────╯

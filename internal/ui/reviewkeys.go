@@ -45,6 +45,7 @@ var reviewKeys = []reviewKey{
 	{",", "review.turn.prev"},
 	{".", "review.turn.next"},
 	{"/", "review.search"},
+	{"w", "review.worktrees"},
 	{"e", "review.edit"},
 	{"esc", "review.back"},
 }
@@ -96,6 +97,7 @@ func reviewCommands() []command {
 		cmd("review.turn.prev", "Review: previous turn", turn(-1)),
 		cmd("review.turn.next", "Review: next turn", turn(1)),
 		cmd("review.search", "Review: search", (*App).reviewSearch),
+		cmd("review.worktrees", "Review: worktrees", (*App).openWorktrees),
 		cmd("review.edit", "Review: open in the editor", (*App).reviewEdit),
 		cmd("review.back", "Review: back to the panes", (*App).reviewBack),
 	}
@@ -105,9 +107,13 @@ func reviewCommands() []command {
 
 // handleDrawerKey runs a key while the drawer has the keyboard.
 func (a *App) handleDrawerKey(msg tea.KeyPressMsg) tea.Cmd {
-	_, v, ok := a.reviewActive()
+	tab, v, ok := a.reviewActive()
 	if !ok {
 		return nil
+	}
+
+	if a.listFor(tab) != nil {
+		return a.handleWorktreesKey(msg)
 	}
 
 	if v.search != nil {
@@ -191,6 +197,7 @@ func (a *App) reviewSearch() tea.Cmd {
 	}
 
 	a.drawerTake()
+	a.closeWorktrees()
 
 	q := ""
 	v.search = &q

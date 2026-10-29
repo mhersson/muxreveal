@@ -379,6 +379,8 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.later = append(a.later, c)
 	}
 
+	a.worktreesSync()
+
 	if c := a.drawerAfterUpdate(); c != nil {
 		a.later = append(a.later, c)
 	}
@@ -560,6 +562,10 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, a.onReviewFull(msg)
 	case reviewFlashMsg:
 		a.onReviewFlash(msg)
+	case wtOpenMsg:
+		return a, a.onWorktreesOpen(msg)
+	case wtStatsMsg:
+		a.onWorktreeStats(msg)
 	case pickerOpenMsg:
 		return a, a.onPickerOpen(msg)
 	case pickerPageMsg:
