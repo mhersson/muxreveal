@@ -10,9 +10,11 @@ import (
 	"time"
 
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/charmbracelet/x/exp/golden"
 
 	"github.com/mhersson/muxreveal/internal/core"
+	"github.com/mhersson/muxreveal/internal/ui/theme"
 )
 
 func TestUntilNextMinute(t *testing.T) {
@@ -160,6 +162,27 @@ func trayApp(t *testing.T, icons bool) *App {
 	return a
 }
 
+// prTrayApp is trayApp with a pull request on the branch of the focused shell pane.
+func prTrayApp(t *testing.T, icons bool, pr core.PRInfo) *App {
+	t.Helper()
+
+	a := trayApp(t, icons)
+	seedPR(t, a, a.store.State().Tab().Focus, "/w/web", "feat/login", pr)
+
+	return a
+}
+
+// findPRModule is the tray's PR module, if it shows.
+func findPRModule(a *App) (trayModule, bool) {
+	for _, m := range a.trayModules() {
+		if m.id == modPR {
+			return m, true
+		}
+	}
+
+	return trayModule{}, false
+}
+
 func TestTrayModuleWidths(t *testing.T) {
 	for _, icons := range []bool{true, false} {
 		a := trayApp(t, icons)
@@ -174,6 +197,182 @@ func TestTrayModuleWidths(t *testing.T) {
 				t.Errorf("icons=%v %s renders %d cells, width says %d", icons, m.id, got, m.width)
 			}
 		}
+	}
+}
+
+func TestTrayModuleWidthsWithAPR(t *testing.T) {
+	for _, icons := range []bool{true, false} {
+		for _, pr := range []core.PRInfo{prInfo("OPEN", checksRunning), prInfo("OPEN", checksPassed), prInfo("OPEN", checksFailing), prInfo("OPEN")} {
+			a := prTrayApp(t, icons, pr)
+			mods := a.trayModules()
+
+			if want := []string{modLayout, modPR, modLoad, modClock}; !slices.Equal(modIDs(mods), want) {
+				t.Fatalf("icons=%v modules = %v, want %v", icons, modIDs(mods), want)
+			}
+
+			for _, m := range mods {
+				if got := lipgloss.Width(m.render()); got != m.width {
+					t.Errorf("icons=%v %s renders %d cells, width says %d", icons, m.id, got, m.width)
+				}
+			}
+		}
+	}
+}
+
+func TestTrayPRModule(t *testing.T) {
+	agentApp := func(t *testing.T, icons bool, pr *core.PRInfo) *App {
+		t.Helper()
+
+		a := newTestApp(t)
+		a.icons = icons
+		sized(t, a, 100, 30)
+		openIn(t, a, core.OpenPane{Kind: core.KindAgent, Cwd: "/w/api", Split: core.SplitVertical})
+		fixtureTray(a)
+
+		if pr != nil {
+			seedPR(t, a, "p1", "/w/api", "feat/login", *pr)
+		} else {
+			seedBranch(a, "p1", "/w/api", "feat/login")
+		}
+
+		return a
+	}
+	shellApp := func(t *testing.T, icons bool, pr *core.PRInfo) *App {
+		t.Helper()
+
+		a := trayApp(t, icons)
+		id := a.store.State().Tab().Focus
+
+		if pr != nil {
+			seedPR(t, a, id, "/w/web", "feat/login", *pr)
+		} else {
+			seedBranch(a, id, "/w/web", "feat/login")
+		}
+
+		return a
+	}
+
+	tests := []struct {
+		name  string
+		icons bool
+		build func(t *testing.T, icons bool, pr *core.PRInfo) *App
+		pr    *core.PRInfo
+		tune  func(a *App)
+		want  string // the module's text; empty when it is hidden
+	}{
+		{"the focused agent's PR with checks running", true, agentApp, ptr(prInfo("OPEN", checksRunning)), nil, " " + iconPR + " #24 " + iconRunning + " 3/5 "},
+		{"checks passed", true, agentApp, ptr(prInfo("OPEN", checksPassed)), nil, " " + iconPR + " #24 " + iconPassed + " 5/5 "},
+		{"checks failed", true, agentApp, ptr(prInfo("OPEN", checksFailing)), nil, " " + iconPR + " #24 " + iconFailed + " 2 failed "},
+		{"no checks", true, agentApp, ptr(prInfo("OPEN")), nil, " " + iconPR + " #24 "},
+		{"a failure outranks a check still running", true, agentApp, ptr(prInfo("OPEN", checksFailing)), nil, " " + iconPR + " #24 " + iconFailed + " 2 failed "},
+		{"the review decision stays on the card", true, agentApp, ptr(prInfo("OPEN", checksRunning, prReview("APPROVED"))), nil, " " + iconPR + " #24 " + iconRunning + " 3/5 "},
+		{"a focused shell pane on a branch with a PR", true, shellApp, ptr(prInfo("OPEN", checksRunning)), nil, " " + iconPR + " #24 " + iconRunning + " 3/5 "},
+		{"icons off", false, agentApp, ptr(prInfo("OPEN", checksRunning)), nil, " #24 ci 3/5 "},
+		{"icons off, passed", false, shellApp, ptr(prInfo("OPEN", checksPassed)), nil, " #24 ci 5/5 "},
+		{"icons off, failed", false, agentApp, ptr(prInfo("OPEN", checksFailing)), nil, " #24 ci 2 failed "},
+		{"icons off, no checks", false, agentApp, ptr(prInfo("OPEN")), nil, " #24 "},
+
+		{"no PR hides the module", true, agentApp, nil, nil, ""},
+		{"no PR hides the module for a shell pane", true, shellApp, nil, nil, ""},
+		{"a draft hides it", true, agentApp, ptr(prInfo("OPEN", prDraft, checksRunning)), nil, ""},
+		{"a merged PR hides it", true, agentApp, ptr(prInfo("MERGED")), nil, ""},
+		{"a closed PR hides it", true, shellApp, ptr(prInfo("CLOSED")), nil, ""},
+		{"a repository not on GitHub hides it", true, agentApp, ptr(prInfo("OPEN")), func(a *App) { a.prs.panes["p1"].ok = false }, ""},
+		{"a branch the repository was not resolved for hides it", true, agentApp, ptr(prInfo("OPEN")), func(a *App) { a.prs.panes["p1"].key.branch = "other" }, ""},
+		{"a failed resolution hides it", true, agentApp, ptr(prInfo("OPEN")), func(a *App) { a.prs.panes["p1"].failed = true }, ""},
+		{"a detached head hides it", true, agentApp, ptr(prInfo("OPEN")), func(a *App) { a.railEntry("p1").probe.detached = true }, ""},
+		{"a pane the head probe has not answered for hides it", true, agentApp, ptr(prInfo("OPEN")), func(a *App) { a.railEntry("p1").probe.known = false }, ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			a := tt.build(t, tt.icons, tt.pr)
+			if tt.tune != nil {
+				tt.tune(a)
+			}
+
+			m, ok := findPRModule(a)
+			if !ok {
+				if tt.want != "" {
+					t.Fatalf("no PR module, want %q (modules %v)", tt.want, modIDs(a.trayModules()))
+				}
+
+				return
+			}
+
+			if tt.want == "" {
+				t.Fatalf("PR module %q shows, want it hidden", ansi.Strip(m.render()))
+			}
+
+			if got := ansi.Strip(m.render()); got != tt.want {
+				t.Errorf("module = %q, want %q", got, tt.want)
+			}
+
+			if got := lipgloss.Width(m.render()); got != m.width {
+				t.Errorf("module renders %d cells, width says %d", got, m.width)
+			}
+		})
+	}
+}
+
+func TestTrayPRModuleSitsBetweenLayoutAndLoad(t *testing.T) {
+	a := prTrayApp(t, true, prInfo("OPEN", checksRunning))
+
+	if want := []string{modLayout, modPR, modLoad, modClock}; !slices.Equal(modIDs(a.trayModules()), want) {
+		t.Errorf("modules = %v, want %v", modIDs(a.trayModules()), want)
+	}
+}
+
+func TestTrayPRModuleFollowsTheFocus(t *testing.T) {
+	a := trayApp(t, true)
+	seedPR(t, a, "p1", "/w/api", "feat/login", prInfo("OPEN", checksPassed))
+
+	// The shell tab has the focus, and its pane is on no branch of a PR.
+	if _, ok := findPRModule(a); ok {
+		t.Fatal("the PR of an agent in another tab shows")
+	}
+
+	openIn(t, a, core.SelectTab{Index: 0})
+
+	m, ok := findPRModule(a)
+	if !ok {
+		t.Fatal("the focused agent's PR does not show")
+	}
+
+	if got, want := ansi.Strip(m.render()), " "+iconPR+" #24 "+iconPassed+" 5/5 "; got != want {
+		t.Errorf("module = %q, want %q", got, want)
+	}
+}
+
+func TestTrayPRModuleColours(t *testing.T) {
+	ui := mochaUI(t)
+
+	tests := []struct {
+		name string
+		pr   core.PRInfo
+		fg   theme.Hex
+		bold bool
+	}{
+		{"running", prInfo("OPEN", checksRunning), ui.Warning, false},
+		{"passed", prInfo("OPEN", checksPassed), ui.Success, false},
+		{"failed", prInfo("OPEN", checksFailing), ui.Error, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m, ok := findPRModule(prTrayApp(t, true, tt.pr))
+			if !ok {
+				t.Fatal("no PR module")
+			}
+
+			vt := lineVT(t, m.render(), m.width)
+
+			assertColours(t, vt, 1, 0, iconPR, ui.Info, ui.Surface, false)
+			assertColours(t, vt, 3, 0, "#", ui.Fg, ui.Surface, true)
+			assertColours(t, vt, 4, 0, "2", ui.Fg, ui.Surface, true)
+			assertColours(t, vt, 7, 0, map[string]string{"running": iconRunning, "passed": iconPassed, "failed": iconFailed}[tt.name], tt.fg, ui.Surface, tt.bold)
+			assertColours(t, vt, 9, 0, map[string]string{"running": "3", "passed": "5", "failed": "2"}[tt.name], tt.fg, ui.Surface, tt.bold)
+		})
 	}
 }
 
@@ -194,11 +393,11 @@ func TestTrayOmitsAbsentModules(t *testing.T) {
 
 func TestBarLinesStayExactWidth(t *testing.T) {
 	for _, icons := range []bool{true, false} {
-		a := trayApp(t, icons)
-
-		for w := 1; w <= 130; w++ {
-			if got := lipgloss.Width(a.workspaceBar(w)); got != w {
-				t.Fatalf("icons=%v width %d: bar is %d cells", icons, w, got)
+		for _, a := range []*App{trayApp(t, icons), prTrayApp(t, icons, prInfo("OPEN", checksFailing))} {
+			for w := 1; w <= 130; w++ {
+				if got := lipgloss.Width(a.workspaceBar(w)); got != w {
+					t.Fatalf("icons=%v width %d: bar is %d cells", icons, w, got)
+				}
 			}
 		}
 	}
@@ -209,23 +408,35 @@ func TestTrayDropOrder(t *testing.T) {
 	rank := map[string]int{modLoad: 0, modPR: 1, modLayout: 2, modClock: 3}
 
 	for _, icons := range []bool{true, false} {
-		a := trayApp(t, icons)
-		tabs := a.tabInfos()
-		full := modIDs(a.trayModules())
+		withPR := prTrayApp(t, icons, prInfo("OPEN", checksRunning))
+		if _, ok := findPRModule(withPR); !ok {
+			t.Fatalf("icons=%v: no PR module to order", icons)
+		}
 
-		for w := 130; w >= 1; w-- {
-			p := planBar(tabs, a.store.State().Active, a.trayModules(), w, icons)
-			kept := modIDs(p.tray)
+		for _, a := range []*App{trayApp(t, icons), withPR} {
+			checkTrayDropOrder(t, a, icons, rank)
+		}
+	}
+}
 
-			for _, id := range full {
-				if slices.Contains(kept, id) {
-					continue
-				}
+func checkTrayDropOrder(t *testing.T, a *App, icons bool, rank map[string]int) {
+	t.Helper()
 
-				for _, other := range kept {
-					if rank[other] < rank[id] {
-						t.Fatalf("icons=%v width %d: %s stayed after %s left (kept %v)", icons, w, other, id, kept)
-					}
+	tabs := a.tabInfos()
+	full := modIDs(a.trayModules())
+
+	for w := 130; w >= 1; w-- {
+		p := planBar(tabs, a.store.State().Active, a.trayModules(), w, icons)
+		kept := modIDs(p.tray)
+
+		for _, id := range full {
+			if slices.Contains(kept, id) {
+				continue
+			}
+
+			for _, other := range kept {
+				if rank[other] < rank[id] {
+					t.Fatalf("icons=%v width %d: %s stayed after %s left (kept %v)", icons, w, other, id, kept)
 				}
 			}
 		}
@@ -237,17 +448,29 @@ func TestBarGoldens(t *testing.T) {
 		name  string
 		icons bool
 		width int
+		pr    *core.PRInfo
 	}{
-		{"icons wide", true, 100},
-		{"icons without load", true, 60},
-		{"icons layout and clock", true, 50},
-		{"plain wide", false, 100},
-		{"plain without load", false, 60},
+		{"icons wide", true, 100, nil},
+		{"icons without load", true, 60, nil},
+		{"icons layout and clock", true, 50, nil},
+		{"plain wide", false, 100, nil},
+		{"plain without load", false, 60, nil},
+		{"icons wide with a PR running", true, 100, ptr(prInfo("OPEN", checksRunning))},
+		{"icons wide with a PR passed", true, 100, ptr(prInfo("OPEN", checksPassed))},
+		{"icons wide with a PR failed", true, 100, ptr(prInfo("OPEN", checksFailing))},
+		{"icons without load with a PR", true, 70, ptr(prInfo("OPEN", checksRunning))},
+		{"plain wide with a PR running", false, 100, ptr(prInfo("OPEN", checksRunning))},
+		{"plain wide with a PR failed", false, 100, ptr(prInfo("OPEN", checksFailing))},
+		{"plain without load with a PR", false, 70, ptr(prInfo("OPEN", checksPassed))},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			a := trayApp(t, tt.icons)
+			if tt.pr != nil {
+				a = prTrayApp(t, tt.icons, *tt.pr)
+			}
+
 			golden.RequireEqual(t, []byte(a.workspaceBar(tt.width)))
 		})
 	}

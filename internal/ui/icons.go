@@ -53,6 +53,16 @@ const (
 	iconFolder     = "\U000F0256" // nf-md-folder_outline
 
 	iconNewWorktree = "\U000F14CA" // nf-md-source_branch_plus
+
+	iconPR       = "\uF407"     // nf-oct-git_pull_request
+	iconPRDraft  = "\uF4DD"     // nf-oct-git_pull_request_draft
+	iconPRClosed = "\uF4DC"     // nf-oct-git_pull_request_closed
+	iconMerge    = "\uF419"     // nf-oct-git_merge
+	iconPassed   = "\uF42E"     // nf-oct-check
+	iconFailed   = "\uF467"     // nf-oct-x
+	iconRunning  = "\U000F051F" // nf-md-timer_sand
+	iconApproved = "\U000F0513" // nf-md-thumb_up
+	iconChanges  = "\U000F03EB" // nf-md-pencil
 )
 
 // Powerline edges and dividers.

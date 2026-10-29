@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/mhersson/muxreveal/internal/core"
+	"github.com/mhersson/muxreveal/internal/github"
 )
 
 // railKey is the rail picture's inputs that are plain fields. The core state
@@ -27,11 +28,14 @@ type railKey struct {
 }
 
 // railAgentKey is what an agent's card takes from outside the core state: the
-// unseen mark, the probe results, the session name and the age as displayed
-// (its unit and count, so an age that renders the same does not rebuild).
+// unseen mark, the probe results, the repository its branch's pull request is
+// read from, the session name and the age as displayed (its unit and count, so
+// an age that renders the same does not rebuild).
 type railAgentKey struct {
 	unseen  bool
 	probe   railProbe
+	prRepo  github.Repo
+	prOK    bool
 	name    railName
 	ageN    int
 	ageUnit byte
@@ -109,6 +113,7 @@ func (a *App) railAgentKeys(dst []railAgentKey, ids []core.PaneID, now time.Time
 			active = p.lastOut
 		}
 
+		k.prRepo, k.prOK = a.prRepoOf(id)
 		k.ageN, k.ageUnit = railAgeOf(active, now)
 		dst = append(dst, k)
 	}

@@ -442,7 +442,7 @@ func (a *App) railCardLine(ui theme.UI, c railCard, hits []railHit, n, cw int) [
 			lead = append(lead, railRun{text: iconGit, fg: ui.Git}, railRun{text: " ", fg: ui.Fg})
 		}
 
-		return railBranchLine(ui, lead, c, hits, cw)
+		return railBranchLine(ui, lead, c, hits, cw, a.icons)
 	case 2:
 		fg, bold := ui.Muted, false
 		if c.state == core.AgentBlocked {
@@ -472,26 +472,33 @@ func (a *App) railCardLine(ui theme.UI, c railCard, hits []railHit, n, cw int) [
 }
 
 // railBranchLine is the branch after lead, with the commits ahead of its upstream
-// at the right end. Short of room the branch is cut first, down to railBranchMin
-// cells (fewer for a shorter branch), then the count goes.
-func railBranchLine(ui theme.UI, lead []railRun, c railCard, hits []railHit, cw int) []railRun {
+// and the pull request at the right end. Short of room the branch is cut first,
+// down to railBranchMin cells (fewer for a shorter branch), then the right end
+// gives up its parts in railRightEnds' order.
+func railBranchLine(ui theme.UI, lead []railRun, c railCard, hits []railHit, cw int, icons bool) []railRun {
 	branch := hiRuns(c.branch, hitsOf(hits, railFieldBranch), ui.Dim, ui.Match, false)
-	if c.ahead <= 0 {
+
+	ends, pinned := railRightEnds(ui, c, icons)
+	if len(ends) == 0 {
 		return slices.Concat(lead, branch)
 	}
 
-	ahead := railRun{text: "\u2191" + strconv.Itoa(c.ahead), fg: ui.Info, bold: true}
+	for i, right := range ends {
+		// One cell separates the branch from the right end.
+		room := cw - runsWidth(lead) - runsWidth(right) - 1
+		stays := pinned && i == len(ends)-1
 
-	// One cell separates the branch from the count.
-	room := cw - runsWidth(lead) - runsWidth([]railRun{ahead}) - 1
-	if room < min(runsWidth(branch), railBranchMin) {
-		return cutRuns(slices.Concat(lead, branch), cw)
+		if room < min(runsWidth(branch), railBranchMin) && !stays {
+			continue
+		}
+
+		left := slices.Concat(lead, cutRuns(branch, room))
+		pad := max(cw-runsWidth(left)-runsWidth(right), 1)
+
+		return slices.Concat(left, []railRun{{text: strings.Repeat(" ", pad), fg: ui.Fg}}, right)
 	}
 
-	left := slices.Concat(lead, cutRuns(branch, room))
-	pad := cw - runsWidth(left) - runsWidth([]railRun{ahead})
-
-	return append(left, railRun{text: strings.Repeat(" ", pad), fg: ui.Fg}, ahead)
+	return cutRuns(slices.Concat(lead, branch), cw)
 }
 
 // railTitleLine is a card's first line: state glyph, the session's name or else

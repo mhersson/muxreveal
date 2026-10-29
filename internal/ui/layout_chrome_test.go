@@ -428,12 +428,27 @@ func TestLayoutTrayGolden(t *testing.T) {
 	widths := []struct {
 		name string
 		w    int
-	}{{"wide", 110}, {"narrow", 58}, {"layout-gone", 42}}
+		pr   *core.PRInfo
+	}{
+		{"wide", 110, nil},
+		{"narrow", 58, nil},
+		{"layout-gone", 42, nil},
+		{"pr-wide", 110, ptr(prInfo("OPEN", checksRunning))},
+		{"pr-failed", 110, ptr(prInfo("OPEN", checksFailing))},
+		{"pr-no-load", 70, ptr(prInfo("OPEN", checksPassed))},
+		{"pr-gone", 48, ptr(prInfo("OPEN", checksRunning))},
+		{"pr-layout-gone", 36, ptr(prInfo("OPEN", checksRunning))},
+	}
 
 	for _, th := range chromeThemes() {
 		for _, icons := range []bool{true, false} {
 			for _, m := range []core.LayoutMode{core.ModeBSP, core.ModeMaster, core.ModeScrolling} {
 				for _, wd := range widths {
+					// The PR module does not depend on the layout mode, so one mode shows it.
+					if wd.pr != nil && m != core.ModeBSP {
+						continue
+					}
+
 					t.Run(fmt.Sprintf("%s/icons=%v/%s/%s", th, icons, m, wd.name), func(t *testing.T) {
 						a := newThemedApp(t, th)
 						a.icons = icons
@@ -444,6 +459,11 @@ func TestLayoutTrayGolden(t *testing.T) {
 							core.SetLayoutMode{Mode: m, Area: a.bodyArea()},
 						)
 						fixtureTray(a)
+
+						if wd.pr != nil {
+							seedPR(t, a, a.store.State().Tab().Focus, "/w/web", "feat/login", *wd.pr)
+						}
+
 						golden.RequireEqual(t, []byte(a.workspaceBar(wd.w)))
 					})
 				}

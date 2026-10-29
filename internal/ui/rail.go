@@ -43,7 +43,9 @@ type railCard struct {
 	model      string // the model the status line reported, cleaned; empty shows none
 	meter      int    // the context percentage as core holds it; the drawing clamps it
 	meterKnown bool
-	ahead      int // commits past the branch's upstream; 0 with none or no upstream
+	ahead      int         // commits past the branch's upstream; 0 with none or no upstream
+	pr         core.PRInfo // the pull request of the card's branch, when hasPR
+	hasPR      bool
 }
 
 // railGroup is the cards of one state, in tab and pane order.
@@ -180,6 +182,8 @@ func (a *App) railCards(st core.State) []railGroup {
 				c.stats, c.statsKnown = rp.probe.stats, true
 			}
 		}
+
+		c.pr, c.hasPR = a.prOfPane(st, id)
 
 		if p, ok := a.panes[id]; ok && p.lastOut.After(c.active) {
 			c.active = p.lastOut

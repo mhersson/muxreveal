@@ -27,10 +27,11 @@ type railAgent struct {
 	stats          *git.Stats
 	unseen         bool
 	noRepo, noHook bool
-	name           string // the session's custom name, read from its transcript
-	model          string // the model its status line reported
-	meter          *int   // the context percentage its status line reported; nil reports none
-	ahead          int    // the commits its branch has past its upstream
+	name           string       // the session's custom name, read from its transcript
+	model          string       // the model its status line reported
+	meter          *int         // the context percentage its status line reported; nil reports none
+	ahead          int          // the commits its branch has past its upstream
+	pr             *core.PRInfo // the pull request of its branch; its head branch is the agent's
 }
 
 func pct(n int) *int { return &n }
@@ -105,6 +106,10 @@ func drawApp(t *testing.T, themeName string, icons bool, w, h int, agents []rail
 		if ag.stats != nil {
 			rp.probe.stats, rp.probe.statsKnown = *ag.stats, true
 		}
+
+		if ag.pr != nil && !ag.noRepo {
+			seedPR(t, a, id, "/w/"+ag.project, ag.branch, *ag.pr)
+		}
 	}
 
 	openIn(t, a, core.SetRail{Open: true})
@@ -146,6 +151,21 @@ func meteredAgents() []railAgent {
 		{newTab: true, project: "muxreveal", branch: "feat/agents-rail", state: core.AgentWorking, action: "Bash go test ./...", age: 95 * time.Second, stats: &git.Stats{Files: 9, Added: 340, Removed: 12}, model: "Opus 5.5", meter: pct(93)},
 		{project: "docs", branch: "main", state: core.AgentIdle, age: 26 * time.Hour, stats: &git.Stats{}, model: "Haiku 5.5", meter: pct(0)},
 		{newTab: true, project: "infra", branch: "a1b2c3d", detached: true, state: core.AgentIdle, age: 12 * time.Minute, stats: &git.Stats{Files: 1, Added: 2, Removed: 0}, model: "Opus 5.5"},
+		{project: "scratch", noRepo: true, noHook: true},
+	}
+}
+
+// prAgents is agents on branches with a pull request in each form, and some
+// with commits ahead, a model and a meter.
+func prAgents() []railAgent {
+	return []railAgent{
+		{newTab: true, project: "api", branch: "feat/api-keys", state: core.AgentBlocked, action: "Allow Bash rm -rf build/?", age: 8 * time.Second, stats: &git.Stats{Files: 2, Added: 12, Removed: 3}, unseen: true, model: "Opus 5.5", meter: pct(62), ahead: 1, pr: ptr(prInfo("OPEN", checksFailing, prNumber(31)))},
+		{project: "web", branch: "feat/login", state: core.AgentWorking, action: "Edit src/login.tsx", age: 4 * time.Minute, stats: &git.Stats{Files: 5, Added: 120, Removed: 14}, model: "Sonnet 5.5", meter: pct(78), ahead: 2, pr: ptr(prInfo("OPEN", checksRunning, prReview("APPROVED"), prNumber(8)))},
+		{newTab: true, project: "muxreveal", branch: "feat/agents-rail-with-a-long-branch-name", state: core.AgentWorking, action: "Bash go test ./...", age: 95 * time.Second, stats: &git.Stats{Files: 9, Added: 340, Removed: 12}, ahead: 14, pr: ptr(prInfo("OPEN", checksPassed, prReview("CHANGES_REQUESTED"), prNumber(1042)))},
+		{project: "docs", branch: "docs/readme", state: core.AgentIdle, age: 26 * time.Hour, stats: &git.Stats{}, pr: ptr(prInfo("OPEN", prDraft, checksRunning, prNumber(7)))},
+		{newTab: true, project: "infra", branch: "fix/infra", state: core.AgentIdle, age: 12 * time.Minute, stats: &git.Stats{Files: 1, Added: 2, Removed: 0}, pr: ptr(prInfo("MERGED", prNumber(19)))},
+		{project: "ops", branch: "fix/ops", state: core.AgentIdle, age: 3 * time.Hour, stats: &git.Stats{}, pr: ptr(prInfo("CLOSED", prNumber(20)))},
+		{project: "tools", branch: "feat/tools", state: core.AgentIdle, age: 5 * time.Minute, stats: &git.Stats{}, pr: ptr(prInfo("OPEN", prNumber(5)))},
 		{project: "scratch", noRepo: true, noHook: true},
 	}
 }
@@ -197,6 +217,15 @@ func railCases() []railCase {
 			if tune != nil {
 				tune(a)
 			}
+
+			return a
+		}
+	}
+
+	withPRs := func(w, h int) func(t *testing.T, th string, icons bool) *App {
+		return func(t *testing.T, th string, icons bool) *App {
+			a := drawApp(t, th, icons, w, h, prAgents())
+			a.rail.sel = "p2"
 
 			return a
 		}
@@ -268,6 +297,9 @@ func railCases() []railCase {
 		{"metered", metered(100, 50)},
 		{"metered-width-70", metered(70, 50)},
 		{"metered-width-64", metered(64, 50)},
+		{"prs", withPRs(100, 50)},
+		{"prs-width-70", withPRs(70, 50)},
+		{"prs-width-64", withPRs(64, 50)},
 		{"ahead", ahead(100, 40)},
 		{"ahead-width-70", ahead(70, 40)},
 		{"ahead-width-64", ahead(64, 40)},
