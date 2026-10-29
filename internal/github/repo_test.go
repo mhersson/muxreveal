@@ -6,7 +6,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
+	"time"
 )
 
 func TestParseRemoteURL(t *testing.T) {
@@ -84,7 +86,15 @@ func fakeSSH(t *testing.T, body string) (script, runs, args string) {
 	args = filepath.Join(dir, "args")
 
 	src := "#!/bin/sh\necho x >> '" + runs + "'\necho \"$@\" >> '" + args + "'\n" + body
-	if err := os.WriteFile(script, []byte(src), 0o755); err != nil {
+
+	// A concurrent fork can inherit the write fd and make exec fail with ETXTBSY (go.dev/issue/22315).
+	syscall.ForkLock.RLock()
+
+	err := os.WriteFile(script, []byte(src), 0o755)
+
+	syscall.ForkLock.RUnlock()
+
+	if err != nil {
 		t.Fatal(err)
 	}
 
@@ -142,6 +152,22 @@ func TestResolveSSHFailureKeepsAlias(t *testing.T) {
 	_, err = r.Resolve(t.Context(), "git@unknown-alias:o/r.git")
 	if !errors.Is(err, ErrNotGitHub) {
 		t.Fatalf("err = %v, want ErrNotGitHub", err)
+	}
+}
+
+func TestResolveSSHContextEndIsAnError(t *testing.T) {
+	t.Parallel()
+
+	ssh, _, _ := fakeSSH(t, "exec sleep 600\n")
+	r := NewResolver(ResolverOptions{SSH: ssh, KnownHosts: stubHosts()})
+
+	// The fake never answers, so the deadline always comes first.
+	ctx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
+	defer cancel()
+
+	_, err := r.Resolve(ctx, "git@work-gh:o/r.git")
+	if !errors.Is(err, context.DeadlineExceeded) || errors.Is(err, ErrNotGitHub) {
+		t.Fatalf("err = %v, want the context's error and not ErrNotGitHub", err)
 	}
 }
 

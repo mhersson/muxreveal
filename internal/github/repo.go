@@ -139,7 +139,8 @@ func NewResolver(o ResolverOptions) *Resolver {
 	return r
 }
 
-// Resolve returns the repository a remote URL points at, or ErrNotGitHub.
+// Resolve returns the repository a remote URL points at, or ErrNotGitHub. A
+// context that ends while ssh runs is an error of its own, never ErrNotGitHub.
 func (r *Resolver) Resolve(ctx context.Context, rawURL string) (Repo, error) {
 	p, err := parseRemote(rawURL)
 	if err != nil {
@@ -147,7 +148,9 @@ func (r *Resolver) Resolve(ctx context.Context, rawURL string) (Repo, error) {
 	}
 
 	if p.viaSSH {
-		p.host = r.hostname(ctx, p.host)
+		if p.host, err = r.hostname(ctx, p.host); err != nil {
+			return Repo{}, err
+		}
 	}
 
 	repo := Repo{Host: auth.NormalizeHostname(p.host), Owner: p.owner, Name: p.name}
@@ -164,29 +167,36 @@ func (r *Resolver) Resolve(ctx context.Context, rawURL string) (Repo, error) {
 	return Repo{}, fmt.Errorf("%w: %s", ErrNotGitHub, repo)
 }
 
-// hostname maps an ssh alias to its real host; on any failure the alias stays.
-func (r *Resolver) hostname(ctx context.Context, alias string) string {
+// hostname maps an ssh alias to its real host; on any other failure than an
+// ended context the alias stays.
+func (r *Resolver) hostname(ctx context.Context, alias string) (string, error) {
 	r.mu.Lock()
 	if h, ok := r.aliases[alias]; ok {
 		r.mu.Unlock()
 
-		return h
+		return h, nil
 	}
 	r.mu.Unlock()
 
-	h := r.sshHostname(ctx, alias)
+	h, err := r.sshHostname(ctx, alias)
+	if err != nil {
+		return "", err
+	}
+
 	if h == "" {
-		return alias
+		return alias, nil
 	}
 
 	r.mu.Lock()
 	r.aliases[alias] = h
 	r.mu.Unlock()
 
-	return h
+	return h, nil
 }
 
-func (r *Resolver) sshHostname(ctx context.Context, alias string) string {
+// sshHostname is the hostname ssh -G gives alias, or "" when ssh fails or
+// gives none; only a context that ended is an error.
+func (r *Resolver) sshHostname(ctx context.Context, alias string) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, sshTimeout)
 	defer cancel()
 
@@ -195,15 +205,19 @@ func (r *Resolver) sshHostname(ctx context.Context, alias string) string {
 
 	out, err := cmd.Output()
 	if err != nil {
-		return ""
+		if ctx.Err() != nil {
+			return "", fmt.Errorf("github: ssh -G %s did not answer: %w", alias, ctx.Err())
+		}
+
+		return "", nil
 	}
 
 	sc := bufio.NewScanner(bytes.NewReader(out))
 	for sc.Scan() {
 		if k, v, ok := strings.Cut(sc.Text(), " "); ok && strings.EqualFold(k, "hostname") {
-			return strings.TrimSpace(v)
+			return strings.TrimSpace(v), nil
 		}
 	}
 
-	return ""
+	return "", nil
 }
