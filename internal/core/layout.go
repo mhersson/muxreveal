@@ -100,6 +100,15 @@ type Pane struct {
 	State      AgentState // not persisted
 	Action     string     // the agent's current action from its hooks; not persisted
 	AgentCwd   string     // the directory the agent last reported in a hook; not persisted
+
+	Model         string    // the model the agent's status line reported; not persisted
+	Context       int       // that status line's context percentage, floored and clamped to 0-100; meaningful with ContextKnown; not persisted
+	ContextKnown  bool      // the status line reported a percentage; not persisted
+	StatusSession SessionID // the session the status above belongs to; not persisted
+}
+
+func (p *Pane) clearStatus() {
+	p.Model, p.Context, p.ContextKnown, p.StatusSession = "", 0, false, ""
 }
 
 // WorkDir is the directory the pane works in: the one its agent last reported,

@@ -462,3 +462,52 @@ func TestBenchAppOpensTheRail(t *testing.T) {
 		t.Errorf("first pane is %d columns with the rail and %d without; want it narrower", colsOn, colsOff)
 	}
 }
+
+func TestBenchAppFillsTheCards(t *testing.T) {
+	build := func(rail bool) *App {
+		app, _, err := newBenchApp(benchConfig{Panes: 6, Width: 240, Height: 64, Agents: true, Rail: rail}, &fakeClock{t: time.Unix(1_000_000, 0)})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		t.Cleanup(func() { _ = app.Close(context.Background()) })
+
+		return app
+	}
+
+	app := build(true)
+
+	var cards []railCard
+
+	for _, g := range app.railCards(app.store.State()) {
+		cards = append(cards, g.cards...)
+	}
+
+	if len(cards) != 6 {
+		t.Fatalf("%d cards, want 6", len(cards))
+	}
+
+	for _, c := range cards {
+		switch {
+		case c.model == "", !c.meterKnown:
+			t.Errorf("card %s has no model or meter: %+v", c.pane, c)
+		case c.branch == "", c.ahead == 0, !c.statsKnown, c.action == "":
+			t.Errorf("card %s lacks its branch, commits ahead, action or stats: %+v", c.pane, c)
+		case !c.hasPR, c.pr.ChecksTotal == 0:
+			t.Errorf("card %s has no pull request with checks: %+v", c.pane, c)
+		}
+	}
+
+	// The drawn rail carries the text, in each form of the checks.
+	out := ansi.Strip(app.View().Content)
+	for _, want := range []string{"Opus 5.5", "40%", "90%", "↑6", iconPR + " #101", iconRunning + " 3/5", iconPassed + " 5/5", iconFailed + " 2 failed", iconApproved, iconChanges} {
+		if !strings.Contains(out, want) {
+			t.Errorf("the rail lacks %q:\n%s", want, out)
+		}
+	}
+
+	// Without the rail no card is drawn, so none is filled.
+	if got := len(build(false).prs.panes); got != 0 {
+		t.Errorf("the bench without the rail resolved %d panes' repositories, want none", got)
+	}
+}

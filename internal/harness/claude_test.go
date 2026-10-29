@@ -1,13 +1,17 @@
 package harness
 
 import (
+	"context"
 	"encoding/json"
+	"maps"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 	"unicode"
 	"unicode/utf8"
 
@@ -251,6 +255,130 @@ func TestParseEventErrors(t *testing.T) {
 	}
 }
 
+func TestParseStatus(t *testing.T) {
+	const (
+		full = `{"hook_event_name":"Status","session_id":"11111111-2222-4333-8444-555555555555",` +
+			`"transcript_path":"/t","cwd":"/work","model":{"id":"claude-opus-4-1","display_name":"Opus 4.1"},` +
+			`"workspace":{"current_dir":"/work","project_dir":"/work"},"version":"2.1.311",` +
+			`"cost":{"total_cost_usd":0.0123,"total_duration_ms":4500},` +
+			`"context_window":{"total_input_tokens":15234,"total_output_tokens":4521,"context_window_size":200000,` +
+			`"used_percentage":8,"remaining_percentage":92,"current_usage":null}}`
+		session = `"session_id":"11111111-2222-4333-8444-555555555555"`
+	)
+
+	status := func(mod func(*Event)) Event {
+		ev := Event{
+			Name: "statusline", Status: true, Session: testSession, Model: "Opus 4.1",
+			Context: 8, ContextKnown: true, Window: 200000, InputTokens: 15234,
+		}
+		mod(&ev)
+
+		return ev
+	}
+
+	tests := []struct {
+		name    string
+		payload string
+		want    Event
+		wantErr bool
+	}{
+		{"full payload", full, status(func(*Event) {}), false},
+		{
+			"null used_percentage",
+			`{` + session + `,"model":{"display_name":"Opus"},"context_window":{"total_input_tokens":0,"context_window_size":200000,"used_percentage":null}}`,
+			Event{Name: "statusline", Status: true, Session: testSession, Model: "Opus", Window: 200000},
+			false,
+		},
+		{
+			"missing used_percentage",
+			`{` + session + `,"model":{"display_name":"Opus"},"context_window":{"context_window_size":200000}}`,
+			Event{Name: "statusline", Status: true, Session: testSession, Model: "Opus", Window: 200000},
+			false,
+		},
+		{
+			"fractional used_percentage",
+			`{` + session + `,"model":{"display_name":"Opus"},"context_window":{"total_input_tokens":47000,"context_window_size":200000,"used_percentage":23.5}}`,
+			Event{
+				Name: "statusline", Status: true, Session: testSession, Model: "Opus",
+				Context: 23.5, ContextKnown: true, Window: 200000, InputTokens: 47000,
+			},
+			false,
+		},
+		{
+			"zero used_percentage is known",
+			`{` + session + `,"model":{"display_name":"Opus"},"context_window":{"used_percentage":0}}`,
+			Event{Name: "statusline", Status: true, Session: testSession, Model: "Opus", ContextKnown: true},
+			false,
+		},
+		{
+			"missing context_window",
+			`{` + session + `,"model":{"display_name":"Opus"}}`,
+			Event{Name: "statusline", Status: true, Session: testSession, Model: "Opus"},
+			false,
+		},
+		{
+			"null context_window",
+			`{` + session + `,"model":{"display_name":"Opus"},"context_window":null}`,
+			Event{Name: "statusline", Status: true, Session: testSession, Model: "Opus"},
+			false,
+		},
+		{
+			"missing model",
+			`{` + session + `,"context_window":{"total_input_tokens":15234,"context_window_size":200000,"used_percentage":8}}`,
+			status(func(ev *Event) { ev.Model = "" }),
+			false,
+		},
+		{
+			"null model",
+			`{` + session + `,"model":null,"context_window":{"total_input_tokens":15234,"context_window_size":200000,"used_percentage":8}}`,
+			status(func(ev *Event) { ev.Model = "" }),
+			false,
+		},
+		{
+			"missing session",
+			`{"model":{"display_name":"Opus"},"context_window":{"used_percentage":8}}`,
+			Event{Name: "statusline", Status: true, Model: "Opus", Context: 8, ContextKnown: true},
+			false,
+		},
+		{
+			"hook_event_name does not name the event",
+			`{"hook_event_name":"PostToolUse",` + session + `,"model":{"display_name":"Opus"}}`,
+			Event{Name: "statusline", Status: true, Session: testSession, Model: "Opus"},
+			false,
+		},
+		{
+			"model display name keeps printable runes",
+			`{` + session + `,"model":{"display_name":"Op\u001b[2Jus\n\u200b 4"}}`,
+			Event{Name: "statusline", Status: true, Session: testSession, Model: "Op[2Jus 4"},
+			false,
+		},
+		{"invalid JSON", `{"model":`, Event{}, true},
+		{"empty payload", ``, Event{}, true},
+		{"not an object", `[1]`, Event{}, true},
+		{"percentage is a string", `{"context_window":{"used_percentage":"8"}}`, Event{}, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ev, err := Claude{}.ParseStatus([]byte(tt.payload))
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("ParseStatus = %+v, want an error", ev)
+				}
+
+				return
+			}
+
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if !reflect.DeepEqual(ev, tt.want) {
+				t.Errorf("event = %+v, want %+v", ev, tt.want)
+			}
+		})
+	}
+}
+
 func TestParseEventIgnoresLargeFields(t *testing.T) {
 	payload := `{"session_id":"s","transcript_path":"/t","hook_event_name":"PostToolUse","tool_name":"Bash",` +
 		`"tool_response":{"stdout":"` + strings.Repeat("x", 5<<20) + `"}}`
@@ -357,6 +485,191 @@ func TestSettings(t *testing.T) {
 		if _, err := (Claude{}).ParseEvent([]byte(payload)); err != nil {
 			t.Errorf("%s: registered but not parsed: %v", name, err)
 		}
+	}
+}
+
+func TestSettingsStatusLine(t *testing.T) {
+	tests := []struct {
+		name    string
+		exe     string
+		command string
+	}{
+		{"plain", "/usr/local/bin/muxreveal", "'/usr/local/bin/muxreveal' statusline"},
+		{"space", "/Users/a b/bin/mr", "'/Users/a b/bin/mr' statusline"},
+		{"non-ASCII", "/Users/jørgen/漢/mr", "'/Users/jørgen/漢/mr' statusline"},
+		{"shell metacharacters", "/opt/$HOME/`x` \"q\" *?~;&|<>(){}/mr", "'/opt/$HOME/`x` \"q\" *?~;&|<>(){}/mr' statusline"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			raw, err := Claude{}.Settings(tt.exe)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			var s struct {
+				StatusLine *struct {
+					Type    string `json:"type"`
+					Command string `json:"command"`
+				} `json:"statusLine"`
+			}
+			if err := json.Unmarshal(raw, &s); err != nil {
+				t.Fatal(err)
+			}
+
+			if s.StatusLine == nil || s.StatusLine.Type != "command" || s.StatusLine.Command != tt.command {
+				t.Errorf("statusLine = %+v, want a command %q", s.StatusLine, tt.command)
+			}
+		})
+	}
+
+	refused := []struct {
+		name string
+		exe  string
+	}{
+		{"single quote", "/opt/it's/mr"},
+		{"backslash", `/opt/a\b/mr`},
+		{"newline", "/opt/a\nb/mr"},
+		{"invalid UTF-8", "/opt/a\xffb/mr"},
+	}
+	for _, tt := range refused {
+		t.Run("refused "+tt.name, func(t *testing.T) {
+			raw, err := Claude{}.Settings(tt.exe)
+			if err != nil {
+				t.Fatalf("Settings: %v, want the hooks without a status line", err)
+			}
+
+			var keys map[string]json.RawMessage
+			if err := json.Unmarshal(raw, &keys); err != nil {
+				t.Fatal(err)
+			}
+
+			if _, ok := keys["statusLine"]; ok || len(keys) != 1 {
+				t.Errorf("settings keys = %v, want only hooks", slices.Collect(maps.Keys(keys)))
+			}
+
+			var s settingsFile
+			if err := json.Unmarshal(raw, &s); err != nil {
+				t.Fatal(err)
+			}
+
+			if len(s.Hooks) != len(claudeEvents()) {
+				t.Errorf("%d events registered, want %d", len(s.Hooks), len(claudeEvents()))
+			}
+
+			for name, groups := range s.Hooks {
+				if len(groups) != 1 || len(groups[0].Hooks) != 1 {
+					t.Errorf("%s: groups = %+v, want one group with one handler", name, groups)
+
+					continue
+				}
+
+				// JSON rewrites invalid UTF-8 in the hook command as well; only the
+				// status line is guarded against that.
+				h := groups[0].Hooks[0]
+				if h.Type != "command" || (utf8.ValidString(tt.exe) && h.Command != tt.exe) ||
+					!slices.Equal(h.Args, []string{"hook", "claude-code"}) || h.Timeout != 5 {
+					t.Errorf("%s: handler = %+v", name, h)
+				}
+			}
+		})
+	}
+}
+
+func TestStatusLineCommandInShells(t *testing.T) {
+	shells := []struct {
+		name string
+		args []string
+	}{
+		{"sh", []string{"-c"}},
+		{"zsh", []string{"-f", "-c"}},
+		{"fish", []string{"--no-config", "-c"}},
+	}
+	dirs := []string{"a b", "jørgen 漢", "$HOME `x` \"q\" *?~;&|<>(){}#!"}
+
+	for _, sh := range shells {
+		path, err := exec.LookPath(sh.name)
+		if err != nil {
+			t.Logf("%s not installed", sh.name)
+
+			continue
+		}
+
+		for _, dir := range dirs {
+			t.Run(sh.name+"/"+dir, func(t *testing.T) {
+				bin := filepath.Join(t.TempDir(), dir)
+				if err := os.MkdirAll(bin, 0o755); err != nil {
+					t.Fatal(err)
+				}
+
+				exe := filepath.Join(bin, "mr")
+				if err := os.WriteFile(exe, []byte("#!/bin/sh\nprintf '%s:%s\\n' \"$#\" \"$1\"\n"), 0o755); err != nil {
+					t.Fatal(err)
+				}
+
+				raw, err := Claude{}.Settings(exe)
+				if err != nil {
+					t.Fatal(err)
+				}
+
+				var s struct {
+					StatusLine struct {
+						Command string `json:"command"`
+					} `json:"statusLine"`
+				}
+				if err := json.Unmarshal(raw, &s); err != nil {
+					t.Fatal(err)
+				}
+
+				ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+				defer cancel()
+
+				out, err := exec.CommandContext(ctx, path, append(sh.args, s.StatusLine.Command)...).Output()
+				if err != nil || string(out) != "1:statusline\n" {
+					t.Errorf("%s -c %q = %q, %v, want one argument, statusline", sh.name, s.StatusLine.Command, out, err)
+				}
+			})
+		}
+	}
+}
+
+func TestQuotePath(t *testing.T) {
+	tests := []struct {
+		name    string
+		path    string
+		want    string
+		wantErr string // a fragment of the error, naming the refused character
+	}{
+		{"plain", "/usr/bin/mr", "'/usr/bin/mr'", ""},
+		{"space", "/a b/mr", "'/a b/mr'", ""},
+		{"non-ASCII", "/jørgen/漢/\U0001F600", "'/jørgen/漢/\U0001F600'", ""},
+		{"double quote and dollar", `/a"b/$c`, `'/a"b/$c'`, ""},
+		{"single quote", "/it's/mr", "", "single quote"},
+		{"backslash", `/a\b`, "", "backslash"},
+		{"newline", "/a\nb", "", "U+000A"},
+		{"carriage return", "/a\rb", "", "U+000D"},
+		{"tab", "/a\tb", "", "U+0009"},
+		{"nul", "/a\x00b", "", "U+0000"},
+		{"escape", "/a\x1bb", "", "U+001B"},
+		{"delete", "/a\x7fb", "", "U+007F"},
+		{"C1 control", "/a\u0085b", "", "U+0085"},
+		{"invalid UTF-8", "/a\xffb", "", "UTF-8"},
+		{"truncated UTF-8", "/a\xe6\xbc", "", "UTF-8"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := QuotePath(tt.path)
+			if tt.wantErr == "" {
+				if err != nil || got != tt.want {
+					t.Errorf("QuotePath(%q) = %q, %v, want %q", tt.path, got, err, tt.want)
+				}
+
+				return
+			}
+
+			if err == nil || got != "" || !strings.Contains(err.Error(), tt.wantErr) {
+				t.Errorf("QuotePath(%q) = %q, %v, want an error naming %q", tt.path, got, err, tt.wantErr)
+			}
+		})
 	}
 }
 

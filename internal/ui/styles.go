@@ -1,6 +1,9 @@
 package ui
 
 import (
+	"strconv"
+	"strings"
+
 	"charm.land/lipgloss/v2"
 
 	"github.com/mhersson/muxreveal/internal/core"
@@ -30,8 +33,12 @@ type styles struct {
 	tagScroll, tagNext, tagHidden lipgloss.Style
 	// tagCopy is the copy tag and the search prompt's mark; searchText is the query.
 	tagCopy, searchText lipgloss.Style
-	// The toast: its Warning border and icon, and its text, all on the panel colour.
-	toastBorder, toastIcon, toastText lipgloss.Style
+	// tagModel is the model tag's model name and tagMeter its context meter, by level.
+	tagModel lipgloss.Style
+	tagMeter [meterLevels]lipgloss.Style
+	// The toast: its border and icon in the level's colour, and its text, all on the panel colour.
+	toastTone [toastLevels]lipgloss.Style
+	toastText lipgloss.Style
 	// tagWorking, tagBlocked and tagIdle draw the state badge.
 	tagWorking, tagBlocked, tagIdle lipgloss.Style
 	// popupBorder draws the popup frame on the panel colour.
@@ -40,6 +47,8 @@ type styles struct {
 	popupMuted, popupSubtle lipgloss.Style
 	// The confirm box: its Error border and title, bold question and bold keys.
 	confirmBorder, confirmTitle, confirmQuestion, confirmKey lipgloss.Style
+	// pushTitle is the push confirm's title, in Info and bold.
+	pushTitle lipgloss.Style
 	// runs memoizes rendered border runs; it is shared by copies of the styles.
 	runs *runCache
 }
@@ -48,6 +57,19 @@ func newStyles(t theme.Theme) styles {
 	ui := t.UI
 	onBg := lipgloss.NewStyle().Background(ui.Bg).Foreground(ui.Fg)
 	onPanel := lipgloss.NewStyle().Background(ui.Panel).Foreground(ui.Fg)
+
+	var meters [meterLevels]lipgloss.Style
+
+	for l := range meterLevels {
+		fg, bold := l.colour(ui)
+		meters[l] = onBg.Foreground(fg).Bold(bold)
+	}
+
+	var toasts [toastLevels]lipgloss.Style
+
+	for l := range toastLevels {
+		toasts[l] = onPanel.Foreground(l.colour(ui))
+	}
 
 	return styles{
 		body:        onBg,
@@ -72,8 +94,9 @@ func newStyles(t theme.Theme) styles {
 		tagHidden:   onBg.Foreground(ui.Accent).Bold(true),
 		tagCopy:     onBg.Foreground(ui.Info).Bold(true),
 		searchText:  onBg,
-		toastBorder: onPanel.Foreground(ui.Warning),
-		toastIcon:   onPanel.Foreground(ui.Warning),
+		tagModel:    onBg.Foreground(ui.Muted),
+		tagMeter:    meters,
+		toastTone:   toasts,
 		toastText:   onPanel,
 		tagWorking:  onBg.Foreground(ui.Working).Bold(true),
 		tagBlocked:  onBg.Foreground(ui.Blocked).Bold(true),
@@ -86,6 +109,7 @@ func newStyles(t theme.Theme) styles {
 		confirmTitle:    onPanel.Foreground(ui.Error).Bold(true),
 		confirmQuestion: onPanel.Bold(true),
 		confirmKey:      onPanel.Foreground(ui.Key).Bold(true),
+		pushTitle:       onPanel.Foreground(ui.Info).Bold(true),
 		runs:            &runCache{},
 	}
 }
@@ -160,4 +184,61 @@ func (s styles) kind(k core.PaneKind) lipgloss.Style {
 	}
 
 	return s.kindShell
+}
+
+// meterLevel is how urgent a context percentage reads, and so its colour.
+type meterLevel uint8
+
+const (
+	meterCalm meterLevel = iota // below 70
+	meterWarm                   // from 70
+	meterHot                    // from 90
+	meterLevels
+)
+
+// meterOf is a context percentage as drawn: clamped to 0-100, as text and level.
+func meterOf(pct int) (text string, level meterLevel) {
+	pct = min(max(pct, 0), 100)
+
+	switch {
+	case pct >= 90:
+		level = meterHot
+	case pct >= 70:
+		level = meterWarm
+	}
+
+	return strconv.Itoa(pct) + "%", level
+}
+
+// colour is the level's foreground; the hottest level is also bold.
+func (l meterLevel) colour(ui theme.UI) (fg theme.Hex, bold bool) {
+	switch l {
+	case meterHot:
+		return ui.Error, true
+	case meterWarm:
+		return ui.Warning, false
+	}
+
+	return ui.Subtle, false
+}
+
+// cleanModel is a model's display name as the status line sent it, without
+// control and invisible characters; empty when nothing is left.
+func cleanModel(name string) string {
+	return strings.TrimSpace(printable(name))
+}
+
+// modelTag is the frame's tag: the model, then the meter when known. text is
+// the tag's plain text, for its width, and rendered the styled text.
+func (s styles) modelTag(model string, pct int, known bool) (text, rendered string) {
+	text = " " + model + " "
+	rendered = s.body.Render(" ") + s.tagModel.Render(model) + s.body.Render(" ")
+
+	if known {
+		meter, level := meterOf(pct)
+		text += meter + " "
+		rendered += s.tagMeter[level].Render(meter) + s.body.Render(" ")
+	}
+
+	return text, rendered
 }

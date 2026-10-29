@@ -254,8 +254,7 @@ func surfaceModule(id string, ui theme.UI, runs ...trayRun) trayModule {
 	}}
 }
 
-// trayModules lists the modules that have data, left to right. The PR and CI
-// slot stays empty until pull requests are tracked.
+// trayModules lists the modules that have data, left to right.
 func (a *App) trayModules() []trayModule {
 	ui := a.current().theme.UI
 	icons := a.icons
@@ -265,6 +264,11 @@ func (a *App) trayModules() []trayModule {
 	st := a.store.State()
 	if m := st.Tab().Mode; m != "" {
 		mods = append(mods, layoutModule(m, icons, ui))
+	}
+
+	// A draft, merged or closed pull request has no module; the card shows it.
+	if pr, ok := a.prOfPane(st, st.Tab().Focus); ok && pr.State == prOpenState && !pr.Draft {
+		mods = append(mods, prModule(pr, icons, ui))
 	}
 
 	if l := a.tray.load; l != nil && len(l.CPU) > 0 {
@@ -299,6 +303,18 @@ func layoutModule(m core.LayoutMode, icons bool, ui theme.UI) trayModule {
 		trayRun{text: icon, fg: ui.Accent},
 		trayRun{text: " " + string(m) + " ", fg: ui.Fg},
 	)
+}
+
+// prModule shows an open pull request: its number and the state of its checks,
+// as the card writes them.
+func prModule(pr core.PRInfo, icons bool, ui theme.UI) trayModule {
+	runs := []trayRun{{text: " ", fg: ui.Fg}}
+
+	for _, r := range prTextOf(pr, icons, ui).runs(prStage{counts: true, glyph: true}) {
+		runs = append(runs, trayRun(r))
+	}
+
+	return surfaceModule(modPR, ui, append(runs, trayRun{text: " ", fg: ui.Fg})...)
 }
 
 func loadModule(l loadInfo, icons bool, ui theme.UI) trayModule {

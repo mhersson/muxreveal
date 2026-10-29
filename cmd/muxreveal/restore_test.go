@@ -333,7 +333,7 @@ func startSession(t *testing.T, env core.Env, cfg string, fresh bool) *session {
 	s := &session{in: inW, out: out, cancel: cancel, done: make(chan error, 1)}
 
 	go func() {
-		s.done <- run(ctx, env, cfg, "", fresh, tea.WithInput(in), tea.WithOutput(out), tea.WithWindowSize(160, 50))
+		s.done <- run(ctx, env, cfg, "", fresh, noClients, tea.WithInput(in), tea.WithOutput(out), tea.WithWindowSize(160, 50))
 	}()
 
 	t.Cleanup(func() {

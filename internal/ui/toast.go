@@ -4,10 +4,55 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/x/ansi"
+
+	"github.com/mhersson/muxreveal/internal/ui/theme"
 )
 
 // toastRows is the height of the toast box: a border, one text row, a border.
 const toastRows = 3
+
+// toastLevel is how a toast reads, and so its colour: a notice, a success or an error.
+type toastLevel uint8
+
+const (
+	levelNotice toastLevel = iota
+	levelSuccess
+	levelError
+	toastLevels
+)
+
+// colour is the level's border and icon colour.
+func (l toastLevel) colour(ui theme.UI) theme.Hex {
+	switch l {
+	case levelSuccess:
+		return ui.Success
+	case levelError:
+		return ui.Error
+	}
+
+	return ui.Warning
+}
+
+// toastMark is the level a notice text was raised at.
+type toastMark struct {
+	text  string
+	level toastLevel
+}
+
+// toast shows text as the toast at level, until the next key press.
+func (a *App) toast(level toastLevel, text string) {
+	a.notice, a.marked = text, toastMark{text: text, level: level}
+}
+
+// noticeLevel is the level of the notice on show. A notice assigned to a.notice
+// directly is a plain notice, whatever level the one before it had.
+func (a *App) noticeLevel() toastLevel {
+	if a.notice != "" && a.notice == a.marked.text {
+		return a.marked.level
+	}
+
+	return levelNotice
+}
 
 // toastLayout is the notice text as it is drawn and the box's left column,
 // top row and width; ok is false when no box is drawn.
@@ -45,7 +90,7 @@ func toastCovers(width, height int, notice string, icons bool, cx, cy int) bool 
 // body, one cell from the right edge, its bottom border on the last row. It is
 // drawn into the frame only, so it takes no keys and no mouse events. Nothing
 // is drawn when the box does not fit the body.
-func overlayToast(base string, width, height int, notice string, icons bool, st styles) string {
+func overlayToast(base string, width, height int, notice string, level toastLevel, icons bool, st styles) string {
 	text, x, y, w, ok := toastLayout(width, height, notice, icons)
 	if !ok {
 		return base
@@ -53,17 +98,19 @@ func overlayToast(base string, width, height int, notice string, icons bool, st 
 
 	inner := w - 2
 
-	mid := st.toastBorder.Render("│") + st.toastText.Render(" ")
+	tone := st.toastTone[level]
+
+	mid := tone.Render("│") + st.toastText.Render(" ")
 	if icons {
-		mid += st.toastIcon.Render(iconAlert) + st.toastText.Render(" ")
+		mid += tone.Render(iconAlert) + st.toastText.Render(" ")
 	}
 
-	mid += st.toastText.Render(text+" ") + st.toastBorder.Render("│")
+	mid += st.toastText.Render(text+" ") + tone.Render("│")
 
 	lines := []string{
-		st.toastBorder.Render("╭" + strings.Repeat("─", inner) + "╮"),
+		tone.Render("╭" + strings.Repeat("─", inner) + "╮"),
 		mid,
-		st.toastBorder.Render("╰" + strings.Repeat("─", inner) + "╯"),
+		tone.Render("╰" + strings.Repeat("─", inner) + "╯"),
 	}
 
 	return overlayAt(base, width, height, x, y, lines)

@@ -14,7 +14,7 @@ import (
 const (
 	// hookBudget bounds the whole hook command so an agent is never held up.
 	hookBudget = 2 * time.Second
-	// maxHookPayload bounds how much of a hook payload is read from stdin.
+	// maxHookPayload bounds how much of a hook or statusline payload is read from stdin.
 	maxHookPayload = 16 << 20
 )
 
@@ -40,33 +40,8 @@ func newHookCmd(getenv func(string) string) *cobra.Command {
 // runHook forwards one hook payload to the MuxReveal socket. It writes nothing
 // to stdout or stderr and drops the event on any failure.
 func runHook(ctx context.Context, id string, stdin io.Reader, getenv func(string) string) {
-	// Read in a goroutine so a stdin that never closes cannot outlast the
-	// budget; the process exits right after, which ends the reader.
-	type result struct {
-		data []byte
-		err  error
-	}
-
-	read := make(chan result, 1)
-
-	go func() {
-		data, err := io.ReadAll(io.LimitReader(stdin, maxHookPayload))
-		// Drain the rest so the agent's write never fails with EPIPE.
-		_, _ = io.Copy(io.Discard, stdin)
-
-		read <- result{data, err}
-	}()
-
-	var payload []byte
-
-	select {
-	case r := <-read:
-		if r.err != nil {
-			return
-		}
-
-		payload = r.data
-	case <-ctx.Done():
+	payload, ok := readPayload(ctx, stdin)
+	if !ok {
 		return
 	}
 
@@ -87,4 +62,32 @@ func runHook(ctx context.Context, id string, stdin io.Reader, getenv func(string
 
 	ev.Pane = core.PaneID(pane)
 	_ = harness.Send(ctx, sock, ev)
+}
+
+// readPayload reads an agent's payload from stdin, at most maxHookPayload
+// bytes, and reports false when the read fails or ctx ends first.
+func readPayload(ctx context.Context, stdin io.Reader) ([]byte, bool) {
+	// Read in a goroutine so a stdin that never closes cannot outlast the
+	// budget; the process exits right after, which ends the reader.
+	type result struct {
+		data []byte
+		err  error
+	}
+
+	read := make(chan result, 1)
+
+	go func() {
+		data, err := io.ReadAll(io.LimitReader(stdin, maxHookPayload))
+		// Drain the rest so the agent's write never fails with EPIPE.
+		_, _ = io.Copy(io.Discard, stdin)
+
+		read <- result{data, err}
+	}()
+
+	select {
+	case r := <-read:
+		return r.data, r.err == nil
+	case <-ctx.Done():
+		return nil, false
+	}
 }

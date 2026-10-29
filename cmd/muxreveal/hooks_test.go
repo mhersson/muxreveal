@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -12,6 +13,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -49,7 +52,7 @@ func TestRunServesHooks(t *testing.T) {
 	done := make(chan error, 1)
 
 	go func() {
-		done <- run(ctx, env, cfg, "", false, tea.WithInput(in), tea.WithOutput(io.Discard))
+		done <- run(ctx, env, cfg, "", false, noClients, tea.WithInput(in), tea.WithOutput(io.Discard))
 	}()
 
 	runDir := filepath.Join(core.StateDir(env), "run")
@@ -124,6 +127,53 @@ func TestStartHooksNamesAnOverlongSocketPath(t *testing.T) {
 
 	if h.Notice != want {
 		t.Errorf("notice = %q, want %q", h.Notice, want)
+	}
+}
+
+func TestWarnStatusLineOff(t *testing.T) {
+	tests := []struct {
+		name string
+		exe  string
+		want string // what the warning names; empty for no warning
+	}{
+		{"quotable path", "/opt/muxreveal/bin/muxreveal", ""},
+		{"single quote", "/opt/mux'reveal/muxreveal", "single quote"},
+		{"backslash", `/opt/mux\reveal/muxreveal`, "backslash"},
+		{"escape character", "/opt/mux\x1b[31mreveal/muxreveal", "U+001B"},
+		{"newline", "/opt/mux\nreveal/muxreveal", "U+000A"},
+		{"invalid UTF-8", "/opt/mux\xffreveal/muxreveal", "UTF-8"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var buf bytes.Buffer
+
+			warnStatusLineOff(slog.New(slog.NewTextHandler(&buf, nil)), tt.exe)
+
+			got := buf.String()
+			if tt.want == "" {
+				if got != "" {
+					t.Fatalf("log = %q, want no warning", got)
+				}
+
+				return
+			}
+
+			if strings.Count(got, "\n") != 1 || !strings.HasSuffix(got, "\n") {
+				t.Fatalf("log = %q, want one record", got)
+			}
+
+			for _, want := range []string{"level=WARN", "status line is off", tt.want} {
+				if !strings.Contains(got, want) {
+					t.Errorf("log = %q, want it to contain %q", got, want)
+				}
+			}
+
+			body := strings.TrimSuffix(got, "\n")
+			if i := strings.IndexFunc(body, unicode.IsControl); i >= 0 || !utf8.ValidString(body) {
+				t.Errorf("log = %q, want no raw control byte and valid UTF-8", got)
+			}
+		})
 	}
 }
 

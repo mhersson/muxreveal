@@ -326,8 +326,8 @@ func (a *App) watchRetry(id core.PaneID) {
 	}
 }
 
-// onWatch re-probes the rail for every agent in the batch's root and hands the
-// batch to the drawers that review it.
+// onWatch re-probes every agent in the batch's root, the head always and the
+// stats while the rail is open, and hands the batch to the drawers that review it.
 func (a *App) onWatch(msg watchMsg) tea.Cmd {
 	if msg.Err != nil {
 		a.log.Debug("watch error", "root", msg.Root, "err", msg.Err)
@@ -352,9 +352,7 @@ func (a *App) onWatch(msg watchMsg) tea.Cmd {
 		// A head change shows at once; its totals follow in onRailHead. Other
 		// changes keep the stats interval.
 		if b.Git || b.Overflow {
-			if a.railIsOpen() {
-				a.railEntry(id).head.force = true
-			}
+			a.railEntry(id).head.force = true
 
 			cmds = append(cmds, a.railFire(st, id, probeHead))
 		}

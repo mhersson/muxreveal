@@ -107,7 +107,7 @@ func frameCases() []struct {
 		return a
 	}
 
-	return []struct {
+	cases := []struct {
 		name  string
 		build func(t *testing.T) *App
 	}{
@@ -173,6 +173,104 @@ func frameCases() []struct {
 			return a
 		}},
 		{"empty", func(t *testing.T) *App { return started(t, func(*App) {}) }},
+	}
+
+	for _, c := range modelFrameCases() {
+		cases = append(cases, struct {
+			name  string
+			build func(t *testing.T) *App
+		}{c.name, func(t *testing.T) *App { return c.build(t, "catppuccin-mocha", true) }})
+	}
+
+	return cases
+}
+
+// modelFrameCases are agent frames whose status lines reported a model, with and
+// without a meter, among tags, and in panes too narrow for the tag beside the
+// title: zoomed-model has room for the title, the zoom tag and the badge but not
+// for the model tag as well.
+func modelFrameCases() []struct {
+	name  string
+	build func(t *testing.T, th string, icons bool) *App
+} {
+	started := func(t *testing.T, th string, icons bool, w int, build func(a *App)) *App {
+		t.Helper()
+
+		a := newThemedApp(t, th)
+		a.icons = icons
+		sized(t, a, w, 12)
+		build(a)
+		attachPanes(t, a, map[core.PaneID]string{"p1": "left", "p2": "right"})
+
+		return a
+	}
+	// agent opens an agent pane in state st whose status line reported model and, unless meter is nil, a percentage.
+	agent := func(t *testing.T, a *App, id core.PaneID, st core.AgentState, model string, meter *int) {
+		t.Helper()
+
+		status := core.SetAgentStatus{ID: id, Session: "s-" + core.SessionID(id), Model: model}
+		if meter != nil {
+			status.Context, status.ContextKnown = float64(*meter), true
+		}
+
+		openIn(t, a,
+			core.OpenPane{Kind: core.KindAgent, Cwd: "/home/u/proj", Split: core.SplitVertical},
+			core.SetAgentState{ID: id, State: st},
+			status,
+		)
+	}
+
+	return []struct {
+		name  string
+		build func(t *testing.T, th string, icons bool) *App
+	}{
+		{"agent-model", func(t *testing.T, th string, icons bool) *App {
+			return started(t, th, icons, 40, func(a *App) { agent(t, a, "p1", core.AgentWorking, "Opus 5.5", pct(62)) })
+		}},
+		{"agent-model-hot", func(t *testing.T, th string, icons bool) *App {
+			return started(t, th, icons, 40, func(a *App) { agent(t, a, "p1", core.AgentBlocked, "Opus 5.5", pct(95)) })
+		}},
+		{"agent-model-only", func(t *testing.T, th string, icons bool) *App {
+			return started(t, th, icons, 40, func(a *App) { agent(t, a, "p1", core.AgentIdle, "Opus 5.5", nil) })
+		}},
+		{"zoomed-model", func(t *testing.T, th string, icons bool) *App {
+			return started(t, th, icons, 40, func(a *App) {
+				openIn(t, a, core.OpenPane{Kind: core.KindShell, Cwd: "/home/u/other", Split: core.SplitVertical})
+				agent(t, a, "p2", core.AgentWorking, "Opus 5.5", pct(78))
+				openIn(t, a, core.ToggleZoom{})
+			})
+		}},
+		{"zoomed-model-wide", func(t *testing.T, th string, icons bool) *App {
+			return started(t, th, icons, 50, func(a *App) {
+				openIn(t, a, core.OpenPane{Kind: core.KindShell, Cwd: "/home/u/other", Split: core.SplitVertical})
+				agent(t, a, "p2", core.AgentWorking, "Opus 5.5", pct(78))
+				openIn(t, a, core.ToggleZoom{})
+			})
+		}},
+		{"split-model-dropped", func(t *testing.T, th string, icons bool) *App {
+			return started(t, th, icons, 40, func(a *App) {
+				openIn(t, a, core.OpenPane{Kind: core.KindShell, Cwd: "/home/u/other", Split: core.SplitVertical})
+				agent(t, a, "p2", core.AgentWorking, "Opus 5.5", pct(62))
+			})
+		}},
+	}
+}
+
+// TestFrameModelGolden draws the model frames in the other theme and with icons
+// off; TestFrameGolden draws them in the default theme with icons.
+func TestFrameModelGolden(t *testing.T) {
+	for _, th := range chromeThemes() {
+		for _, icons := range []bool{true, false} {
+			if th == "catppuccin-mocha" && icons {
+				continue
+			}
+
+			for _, c := range modelFrameCases() {
+				t.Run(fmt.Sprintf("%s/icons=%v/%s", th, icons, c.name), func(t *testing.T) {
+					golden.RequireEqual(t, []byte(c.build(t, th, icons).View().Content))
+				})
+			}
+		}
 	}
 }
 

@@ -46,6 +46,8 @@ func groupIcon(group string) string {
 		return iconLayoutBSP
 	case "Tabs":
 		return iconTabs
+	case "Git":
+		return iconGit
 	case "App":
 		return iconCog
 	}
@@ -165,7 +167,7 @@ func (a *App) hints() []hint {
 
 // groupOrder lists the which-key groups left to right and top to bottom;
 // any other group follows in the order it first appears.
-func groupOrder() []string { return []string{"Panes", "Layout", "Tabs", "App"} }
+func groupOrder() []string { return []string{"Panes", "Layout", "Tabs", "Git", "App"} }
 
 // groupHints splits hints by group, in groupOrder.
 func groupHints(hints []hint) [][]hint {

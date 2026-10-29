@@ -140,6 +140,7 @@ func TestDefaultCommands(t *testing.T) {
 		want{"review.search", "Review: search", iconReview},
 		want{"review.edit", "Review: open in the editor", iconReview},
 		want{"review.back", "Review: back to the panes", iconReview},
+		want{"git.push", "Push branch", iconPush},
 		want{"app.quit", "Quit MuxReveal", iconQuit},
 	)
 	if len(cmds) != len(fixed)+len(theme.All()) {

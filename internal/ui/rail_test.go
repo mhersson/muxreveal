@@ -500,14 +500,8 @@ func TestRailForgetsClosedPanes(t *testing.T) {
 	openIn(t, r.App, core.ClosePane{ID: id})
 	r.settle()
 
-	if len(r.rail.panes) != 0 {
-		t.Errorf("entries after close: %v", slices.Collect(func(y func(core.PaneID) bool) {
-			for k := range r.rail.panes {
-				if !y(k) {
-					return
-				}
-			}
-		}))
+	if _, ok := r.rail.panes[id]; ok {
+		t.Error("the closed pane keeps its entry")
 	}
 }
 

@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"slices"
 	"strconv"
 	"strings"
 
@@ -13,6 +14,10 @@ import (
 )
 
 const iconSearch = "\U000F0349" // nf-md-magnify
+
+// railBranchMin is the fewest cells line 2 cuts a branch to before it gives up
+// the commits-ahead count instead.
+const railBranchMin = 8
 
 // railRun is a piece of rail text in one colour on the panes' ground.
 type railRun struct {
@@ -432,12 +437,12 @@ func (a *App) railCardLine(ui theme.UI, c railCard, hits []railHit, n, cw int) [
 			return nil
 		}
 
-		runs := []railRun{indent}
+		lead := []railRun{indent}
 		if a.icons {
-			runs = append(runs, railRun{text: iconGit, fg: ui.Git}, railRun{text: " ", fg: ui.Fg})
+			lead = append(lead, railRun{text: iconGit, fg: ui.Git}, railRun{text: " ", fg: ui.Fg})
 		}
 
-		return append(runs, hiRuns(c.branch, hitsOf(hits, railFieldBranch), ui.Dim, ui.Match, false)...)
+		return railBranchLine(ui, lead, c, hits, cw, a.icons)
 	case 2:
 		fg, bold := ui.Muted, false
 		if c.state == core.AgentBlocked {
@@ -466,8 +471,40 @@ func (a *App) railCardLine(ui theme.UI, c railCard, hits []railHit, n, cw int) [
 	}
 }
 
+// railBranchLine is the branch after lead, with the commits ahead of its upstream
+// and the pull request at the right end. Short of room the branch is cut first,
+// down to railBranchMin cells (fewer for a shorter branch), then the right end
+// gives up its parts in railRightEnds' order.
+func railBranchLine(ui theme.UI, lead []railRun, c railCard, hits []railHit, cw int, icons bool) []railRun {
+	branch := hiRuns(c.branch, hitsOf(hits, railFieldBranch), ui.Dim, ui.Match, false)
+
+	ends, pinned := railRightEnds(ui, c, icons)
+	if len(ends) == 0 {
+		return slices.Concat(lead, branch)
+	}
+
+	for i, right := range ends {
+		// One cell separates the branch from the right end.
+		room := cw - runsWidth(lead) - runsWidth(right) - 1
+		stays := pinned && i == len(ends)-1
+
+		if room < min(runsWidth(branch), railBranchMin) && !stays {
+			continue
+		}
+
+		left := slices.Concat(lead, cutRuns(branch, room))
+		pad := max(cw-runsWidth(left)-runsWidth(right), 1)
+
+		return slices.Concat(left, []railRun{{text: strings.Repeat(" ", pad), fg: ui.Fg}}, right)
+	}
+
+	return cutRuns(slices.Concat(lead, branch), cw)
+}
+
 // railTitleLine is a card's first line: state glyph, the session's name or else
-// the project, age and the unseen dot.
+// the project and the model, then the context meter, age and the unseen dot. When
+// short of room the meter goes first, then the model, then the name is cut; the
+// age and the dot stay.
 func (a *App) railTitleLine(ui theme.UI, c railCard, hits []railHit, cw int) []railRun {
 	glyph := railRun{text: " ", fg: ui.Fg}
 	spin := spinFrame(a.spin)
@@ -489,24 +526,19 @@ func (a *App) railTitleLine(ui theme.UI, c railCard, hits []railHit, cw int) []r
 		}
 	}
 
-	var right []railRun
+	var tail []railRun
 
 	if age := railAge(c.active, a.clock.Now()); age != "" {
-		right = append(right, railRun{text: age, fg: ui.Subtle})
+		tail = append(tail, railRun{text: age, fg: ui.Subtle})
 	}
 
 	if c.unseen {
 		dot := "●"
-		if len(right) > 0 {
+		if len(tail) > 0 {
 			dot = " " + dot
 		}
 
-		right = append(right, railRun{text: dot, fg: ui.Accent})
-	}
-
-	room := cw
-	if rw := runsWidth(right); rw > 0 {
-		room = cw - rw - 1
+		tail = append(tail, railRun{text: dot, fg: ui.Accent})
 	}
 
 	who, field := c.project, railFieldProject
@@ -514,7 +546,47 @@ func (a *App) railTitleLine(ui theme.UI, c railCard, hits []railHit, cw int) []r
 		who, field = c.name, railFieldName
 	}
 
-	left := cutRuns(append([]railRun{glyph, {text: " ", fg: ui.Fg}}, hiRuns(who, hitsOf(hits, field), ui.Fg, ui.Match, true)...), room)
+	name := append([]railRun{glyph, {text: " ", fg: ui.Fg}}, hiRuns(who, hitsOf(hits, field), ui.Fg, ui.Match, true)...)
+	withModel := name
+
+	if c.model != "" {
+		withModel = append(slices.Clone(name), railRun{text: "  ", fg: ui.Fg}, railRun{text: c.model, fg: ui.Subtle})
+	}
+
+	withMeter := tail
+
+	if c.meterKnown {
+		text, level := meterOf(c.meter)
+		fg, bold := level.colour(ui)
+		withMeter = []railRun{{text: text, fg: fg, bold: bold}}
+
+		if len(tail) > 0 {
+			withMeter = append(withMeter, railRun{text: "  ", fg: ui.Fg})
+		}
+
+		withMeter = append(withMeter, tail...)
+	}
+
+	// A gap of one cell separates the two sides.
+	fits := func(l, r []railRun) bool {
+		return runsWidth(l)+boolInt(len(r) > 0)+runsWidth(r) <= cw
+	}
+
+	left, right := name, tail
+
+	switch {
+	case fits(withModel, withMeter):
+		left, right = withModel, withMeter
+	case fits(withModel, tail):
+		left = withModel
+	}
+
+	room := cw
+	if rw := runsWidth(right); rw > 0 {
+		room = cw - rw - 1
+	}
+
+	left = cutRuns(left, room)
 	pad := cw - runsWidth(left) - runsWidth(right)
 
 	if len(right) == 0 || pad < 1 {

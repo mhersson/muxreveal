@@ -40,6 +40,12 @@ type railCard struct {
 	statsKnown bool
 	active     time.Time // the later of its last output and last hook event
 	unseen     bool
+	model      string // the model the status line reported, cleaned; empty shows none
+	meter      int    // the context percentage as core holds it; the drawing clamps it
+	meterKnown bool
+	ahead      int         // commits past the branch's upstream; 0 with none or no upstream
+	pr         core.PRInfo // the pull request of the card's branch, when hasPR
+	hasPR      bool
 }
 
 // railGroup is the cards of one state, in tab and pane order.
@@ -74,6 +80,7 @@ type railProbe struct {
 	project, branch string
 	oid             string // the full commit id; "" on an unborn branch
 	detached        bool
+	ahead           int  // commits past the branch's upstream; 0 with none or no upstream
 	repo            bool // the cwd is inside a repository
 	known           bool // a head probe has succeeded
 	headCwd         string
@@ -116,7 +123,8 @@ type railState struct {
 	pulsing    bool        // a railPulseMsg is outstanding
 
 	panes  map[core.PaneID]*railPane
-	ctx    context.Context //nolint:containedctx // the rail's lifetime, set while the rail is open; probes derive from it
+	focus  core.PaneID     // the active tab's focused pane at the last update, so a shell that takes focus is probed
+	ctx    context.Context //nolint:containedctx // the rail's lifetime, set while the rail is open; stats and name probes derive from it
 	cancel context.CancelFunc
 	cache  railCache
 	gen    int // bumps on every open, so late messages of an earlier open are dropped
@@ -148,7 +156,10 @@ func (a *App) railCards(st core.State) []railGroup {
 		m := st.Panes[id]
 		ti, _ := st.TabOf(id)
 
-		c := railCard{pane: id, tab: ti, state: m.State, action: cardAction(m)}
+		c := railCard{
+			pane: id, tab: ti, state: m.State, action: cardAction(m),
+			model: cleanModel(m.Model), meter: m.Context, meterKnown: m.ContextKnown,
+		}
 		if ti < len(tabs) {
 			c.tabName = tabs[ti].name
 		}
@@ -159,7 +170,7 @@ func (a *App) railCards(st core.State) []railGroup {
 		if rp != nil {
 			c.unseen, c.active = rp.unseen, rp.hookAt
 			if rp.probe.known {
-				c.project, c.branch, c.detached = rp.probe.project, rp.probe.branch, rp.probe.detached
+				c.project, c.branch, c.detached, c.ahead = rp.probe.project, rp.probe.branch, rp.probe.detached, rp.probe.ahead
 			}
 
 			// A name belongs to the transcript it was read from, not to the pane.
@@ -171,6 +182,8 @@ func (a *App) railCards(st core.State) []railGroup {
 				c.stats, c.statsKnown = rp.probe.stats, true
 			}
 		}
+
+		c.pr, c.hasPR = a.prOfPane(st, id)
 
 		if p, ok := a.panes[id]; ok && p.lastOut.After(c.active) {
 			c.active = p.lastOut
@@ -347,16 +360,13 @@ func (a *App) changeAgentState(id core.PaneID, s core.AgentState) error {
 }
 
 // railAfterUpdate runs after every update: it clears the mark of the focused
-// pane, forgets closed panes, keeps the selection valid and starts the probes
-// that panes new to the rail or with a new working directory need.
+// pane, forgets closed panes, starts the head probes that new agents, a focused
+// shell or a new working directory need and, while the rail is open, keeps the
+// selection valid and starts its other probes.
 func (a *App) railAfterUpdate() {
 	// A rail the width rule hides cannot hold the keyboard.
 	if a.rail.focused && !a.railVisible() {
 		a.railRelease()
-	}
-
-	if len(a.rail.panes) == 0 && !a.railIsOpen() {
-		return
 	}
 
 	st := a.store.State()
@@ -370,6 +380,8 @@ func (a *App) railAfterUpdate() {
 			delete(a.rail.panes, id)
 		}
 	}
+
+	a.railHeadSync(st)
 
 	if !a.railIsOpen() {
 		return

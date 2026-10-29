@@ -13,6 +13,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/mhersson/muxreveal/internal/core"
+	"github.com/mhersson/muxreveal/internal/git"
 	"github.com/mhersson/muxreveal/internal/harness"
 )
 
@@ -27,7 +28,7 @@ func gitIn(t *testing.T, bin, dir string, args ...string) {
 	cmd.Dir = dir
 
 	cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_SYSTEM=/dev/null",
-		"GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t", "GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t")
+		"GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t", "GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t", gitFileOnly)
 
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("git %v: %v\n%s", args, err, out)
@@ -76,12 +77,14 @@ func TestRailProbesOnOpen(t *testing.T) {
 	dir := r.repo(t, "proj")
 	id := r.addAgent(t, false, dir)
 
-	if cmd := r.settle(); cmd != nil || r.gitCalls() != 0 {
-		t.Fatal("a probe ran while the rail was closed")
+	// With the rail closed the head is probed and nothing else.
+	if msgs := r.deliver(r.settle()); countOf[railHeadMsg](msgs) != 1 || len(msgs) != 1 {
+		t.Fatalf("settling with the rail closed ran %v, want one head probe", msgs)
 	}
 
+	// Opening adds the stats; the head is known already.
 	msgs := r.deliver(r.railOpened())
-	if countOf[railHeadMsg](msgs) != 1 || countOf[railStatsMsg](msgs) != 1 {
+	if countOf[railHeadMsg](msgs) != 0 || countOf[railStatsMsg](msgs) != 1 {
 		t.Fatalf("open ran %v", msgs)
 	}
 
@@ -105,7 +108,7 @@ func TestRailDetachedHead(t *testing.T) {
 	dir := r.repo(t, "proj")
 	gitIn(t, r.real, dir, "checkout", "-q", "--detach")
 	id := r.addAgent(t, false, dir)
-	r.deliver(r.railOpened())
+	r.openRail()
 
 	c, _ := r.card(id)
 	if !c.detached || len(c.branch) != 7 {
@@ -116,7 +119,7 @@ func TestRailDetachedHead(t *testing.T) {
 func TestRailProbeIntervals(t *testing.T) {
 	r := newRailApp(t, true)
 	id := r.addAgent(t, false, r.repo(t, "proj"))
-	r.deliver(r.railOpened())
+	r.openRail()
 
 	r.clk.Advance(time.Second)
 
@@ -139,7 +142,7 @@ func TestRailProbeIntervals(t *testing.T) {
 
 	r.clk.Set(t0.Add(5 * time.Second))
 
-	head := railDueMsg{pane: id, kind: probeHead, gen: r.rail.gen}
+	head := railDueMsg{pane: id, kind: probeHead}
 	if msgs := flatten(r.step(head)); countOf[railHeadMsg](msgs) != 1 {
 		t.Errorf("the head due message ran %v", msgs)
 	}
@@ -160,7 +163,7 @@ func TestRailProbeIntervals(t *testing.T) {
 func TestRailTriggerDuringProbeRunsOneAfter(t *testing.T) {
 	r := newRailApp(t, false)
 	id := r.addAgent(t, false, r.repo(t, "proj"))
-	cmd := r.railOpened()
+	cmd := r.settle()
 	r.clk.Advance(6 * time.Second)
 
 	if msgs := flatten(hook(r.App, harness.Event{Pane: id, Name: "SessionStart", Start: true, State: core.AgentIdle})); len(msgs) != 0 {
@@ -177,7 +180,7 @@ func TestRailDropsStaleResults(t *testing.T) {
 	t.Run("pane closed", func(t *testing.T) {
 		r := newRailApp(t, false)
 		id := r.addAgent(t, false, r.repo(t, "proj"))
-		msgs := flatten(r.railOpened())
+		msgs := flatten(r.settle())
 		openIn(t, r.App, core.ClosePane{ID: id})
 		r.settle()
 		r.step(msgs[0])
@@ -191,7 +194,7 @@ func TestRailDropsStaleResults(t *testing.T) {
 		r := newRailApp(t, false)
 		first, second := r.repo(t, "first"), r.repo(t, "second")
 		id := r.addAgent(t, false, first)
-		msgs := flatten(r.railOpened())
+		msgs := flatten(r.settle())
 
 		openIn(t, r.App, core.SetPaneCwd{ID: id, Cwd: second})
 		r.clk.Advance(6 * time.Second)
@@ -219,21 +222,34 @@ func TestRailDropsStaleResults(t *testing.T) {
 	})
 
 	t.Run("rail closed", func(t *testing.T) {
-		r := newRailApp(t, false)
+		r := newRailApp(t, true)
 		id := r.addAgent(t, false, r.repo(t, "proj"))
-		cmd := r.railOpened()
+		heads, stats := r.settle(), r.railOpened()
 		r.railClosed()
 
-		for _, m := range flatten(cmd) {
-			if hm, ok := m.(railHeadMsg); ok && !errors.Is(hm.err, context.Canceled) {
-				t.Errorf("a probe of a closed rail ended with %v, want a cancel", hm.err)
+		// The close cancels the rail's probes, not the head's.
+		for _, m := range flatten(tea.Batch(heads, stats)) {
+			switch m := m.(type) {
+			case railStatsMsg:
+				if !errors.Is(m.err, context.Canceled) {
+					t.Errorf("a stats probe of a closed rail ended with %v, want a cancel", m.err)
+				}
+			case railHeadMsg:
+				if m.err != nil {
+					t.Errorf("a head probe ended with %v when the rail closed, want an answer", m.err)
+				}
 			}
 
 			r.step(m)
 		}
 
-		if rp := r.rail.panes[id]; rp == nil || rp.probe.known {
-			t.Error("an answer after the rail closed was applied")
+		rp := r.rail.panes[id]
+		if rp == nil || rp.probe.statsKnown {
+			t.Error("a stats answer after the rail closed was applied")
+		}
+
+		if !rp.probe.known || rp.probe.branch != "main" {
+			t.Errorf("probe = %+v, want the head answer applied", rp.probe)
 		}
 
 		if r.rail.ctx != nil {
@@ -245,18 +261,21 @@ func TestRailDropsStaleResults(t *testing.T) {
 func TestRailTriggersNeedAnOpenRail(t *testing.T) {
 	r := newRailApp(t, true)
 	id := r.addAgent(t, false, r.repo(t, "proj"))
+	r.deliver(r.settle())
+	r.clk.Advance(time.Minute)
 
-	if msgs := flatten(hook(r.App, idleHook(id))); len(msgs) != 0 || r.gitCalls() != 0 {
-		t.Errorf("a hook probed with the rail closed: %v", msgs)
+	// With the rail closed a hook probes the head and nothing else.
+	if msgs := r.deliver(hook(r.App, idleHook(id))); len(msgs) != 1 || countOf[railHeadMsg](msgs) != 1 {
+		t.Errorf("a hook with the rail closed ran %v, want one head probe", msgs)
 	}
 
-	r.deliver(r.railOpened())
+	r.openRail()
 	r.railClosed()
 	r.clk.Advance(time.Minute)
 	r.ticks.delays = nil
 
-	if msgs := flatten(hook(r.App, idleHook(id))); len(msgs) != 0 || len(r.ticks.delays) != 0 {
-		t.Errorf("a hook probed after the rail closed: %v", msgs)
+	if msgs := r.deliver(hook(r.App, idleHook(id))); len(msgs) != 1 || countOf[railHeadMsg](msgs) != 1 || len(r.ticks.delays) != 0 {
+		t.Errorf("a hook after the rail closed ran %v, want one head probe and nothing delayed", msgs)
 	}
 }
 
@@ -264,7 +283,7 @@ func TestRailSlowGitIsCancelledAndKeepsTheLastResult(t *testing.T) {
 	r := newRailApp(t, false)
 	dir := r.repo(t, "proj")
 	id := r.addAgent(t, false, dir)
-	r.deliver(r.railOpened())
+	r.openRail()
 	write(t, r.slow, "")
 	r.clk.Advance(6 * time.Second)
 
@@ -319,7 +338,7 @@ func TestRailProjectNames(t *testing.T) {
 
 	for _, c := range cases {
 		id := r.addAgent(t, true, c.dir)
-		r.deliver(r.railOpened())
+		r.openRail()
 		r.railClosed()
 
 		got, _ := r.card(id)
@@ -335,6 +354,9 @@ func TestRailIdleShellsCostNothing(t *testing.T) {
 	if cmd := r.railOpened(); cmd != nil {
 		t.Error("opening over shells probed")
 	}
+
+	// The focused shell's head is the one probe.
+	r.deliver(r.settle())
 
 	if msgs := flatten(r.settle()); len(msgs) != 0 || len(r.ticks.delays) != 0 || r.gitCalls() != 0 {
 		t.Errorf("work with nothing to do: %v %v %d", msgs, r.ticks.delays, r.gitCalls())
@@ -353,13 +375,13 @@ func TestRailStatsOffWithoutTempDir(t *testing.T) {
 func TestRailReopenProbesAgain(t *testing.T) {
 	r := newRailApp(t, true)
 	id := r.addAgent(t, false, r.repo(t, "proj"))
-	r.deliver(r.railOpened())
+	r.openRail()
 	r.railClosed()
 
-	// Inside the intervals the reopen schedules one delayed probe of each kind.
+	// Inside the interval the reopen schedules one delayed stats probe; the head is not the rail's.
 	r.ticks.delays = nil
 
-	if msgs := flatten(r.railOpened()); countOf[railDueMsg](msgs) != 2 {
+	if msgs := flatten(r.railOpened()); countOf[railDueMsg](msgs) != 1 || len(msgs) != 1 {
 		t.Fatalf("reopen inside the intervals ran %v", msgs)
 	}
 
@@ -367,7 +389,7 @@ func TestRailReopenProbesAgain(t *testing.T) {
 	r.clk.Advance(time.Minute)
 
 	msgs := r.deliver(r.railOpened())
-	if countOf[railHeadMsg](msgs) != 1 || countOf[railStatsMsg](msgs) != 1 {
+	if countOf[railStatsMsg](msgs) != 1 || countOf[railHeadMsg](msgs) != 0 {
 		t.Fatalf("reopen with the same cwd ran %v", msgs)
 	}
 
@@ -377,7 +399,7 @@ func TestRailReopenProbesAgain(t *testing.T) {
 }
 
 func TestRailAnswerOfAnEarlierOpenIsDropped(t *testing.T) {
-	r := newRailApp(t, false)
+	r := newRailApp(t, true)
 	dir := r.repo(t, "proj")
 	id := r.addAgent(t, false, dir)
 
@@ -387,32 +409,31 @@ func TestRailAnswerOfAnEarlierOpenIsDropped(t *testing.T) {
 	r.clk.Advance(time.Minute)
 
 	newCmd := r.railOpened()
-	if r.rail.gen == oldGen || !r.rail.panes[id].head.busy {
+	if r.rail.gen == oldGen || !r.rail.panes[id].stats.busy {
 		t.Fatal("the reopen did not start a probe")
 	}
 
-	stale := railHeadMsg{pane: id, cwd: dir, gen: oldGen, res: railProbe{project: "stale", known: true, headCwd: dir, repo: true}}
-	r.step(stale)
+	r.step(railStatsMsg{pane: id, cwd: dir, gen: oldGen, stats: git.Stats{Files: 9}})
 
-	if rp := r.rail.panes[id]; rp.probe.known {
+	if rp := r.rail.panes[id]; rp.probe.statsKnown {
 		t.Error("a successful answer of an earlier open was applied")
 	}
 
-	if !r.rail.panes[id].head.busy {
+	if !r.rail.panes[id].stats.busy {
 		t.Error("the stale answer freed the new open's probe")
 	}
 
 	r.deliver(newCmd)
 
-	if c, _ := r.card(id); c.branch != "main" {
+	if c, _ := r.card(id); !c.statsKnown || c.stats.Files != 1 {
 		t.Errorf("card = %+v after the new answer", c)
 	}
 
 	// With the rail closed and no reopen, a successful answer is dropped too.
 	r.railClosed()
-	r.step(railHeadMsg{pane: id, cwd: dir, gen: r.rail.gen, res: railProbe{project: "late", known: true, headCwd: dir}})
+	r.step(railStatsMsg{pane: id, cwd: dir, gen: r.rail.gen, stats: git.Stats{Files: 7}})
 
-	if c, _ := r.card(id); c.project == "late" {
+	if c, _ := r.card(id); c.stats.Files == 7 {
 		t.Error("an answer after the close was applied")
 	}
 }
@@ -421,7 +442,7 @@ func TestRailCardKeepsItsResultUntilTheNewCwdAnswers(t *testing.T) {
 	r := newRailApp(t, true)
 	first, second := r.repo(t, "first"), r.repo(t, "second")
 	id := r.addAgent(t, false, first)
-	r.deliver(r.railOpened())
+	r.openRail()
 
 	openIn(t, r.App, core.SetPaneCwd{ID: id, Cwd: second})
 	r.clk.Advance(time.Minute)
@@ -432,7 +453,7 @@ func TestRailCardKeepsItsResultUntilTheNewCwdAnswers(t *testing.T) {
 	}
 
 	// A failed probe of the new cwd clears it.
-	r.step(railHeadMsg{pane: id, cwd: second, gen: r.rail.gen, err: context.DeadlineExceeded})
+	r.step(railHeadMsg{pane: id, cwd: second, err: context.DeadlineExceeded})
 	r.step(railStatsMsg{pane: id, cwd: second, gen: r.rail.gen, err: context.DeadlineExceeded})
 
 	c, _ := r.card(id)
@@ -444,10 +465,10 @@ func TestRailCardKeepsItsResultUntilTheNewCwdAnswers(t *testing.T) {
 func TestRailFailedProbeOfTheSameCwdKeepsTheResult(t *testing.T) {
 	r := newRailApp(t, true)
 	id := r.addAgent(t, false, r.repo(t, "proj"))
-	r.deliver(r.railOpened())
+	r.openRail()
 
 	cwd := r.store.State().Panes[id].Cwd
-	r.step(railHeadMsg{pane: id, cwd: cwd, gen: r.rail.gen, err: context.DeadlineExceeded})
+	r.step(railHeadMsg{pane: id, cwd: cwd, err: context.DeadlineExceeded})
 	r.step(railStatsMsg{pane: id, cwd: cwd, gen: r.rail.gen, err: context.DeadlineExceeded})
 
 	if c, _ := r.card(id); c.branch != "main" || !c.statsKnown {
@@ -489,20 +510,21 @@ func (g gate) alive() int {
 	return len(ents)
 }
 
-// runAll runs the commands of a batch at once and sends each message on the channel.
-func runAll(cmd tea.Cmd) <-chan tea.Msg {
+// runAll runs the commands of the batches at once and sends each message on the channel.
+func runAll(cmds ...tea.Cmd) <-chan tea.Msg {
 	out := make(chan tea.Msg, 64)
 
-	b, ok := cmd().(tea.BatchMsg)
-	if !ok {
-		close(out)
+	var leaves []tea.Cmd
 
-		return out
+	for _, cmd := range cmds {
+		if b, ok := cmd().(tea.BatchMsg); ok {
+			leaves = append(leaves, b...)
+		}
 	}
 
 	var wg sync.WaitGroup
 
-	for _, c := range b {
+	for _, c := range leaves {
 		wg.Add(1)
 
 		go func() {
@@ -518,6 +540,27 @@ func runAll(cmd tea.Cmd) <-chan tea.Msg {
 	}()
 
 	return out
+}
+
+// drain counts the messages on ch until it closes, failing the test when the
+// next is later than within.
+func drain(t *testing.T, ch <-chan tea.Msg, within time.Duration) int {
+	t.Helper()
+
+	n := 0
+
+	for {
+		select {
+		case _, ok := <-ch:
+			if !ok {
+				return n
+			}
+
+			n++
+		case <-time.After(within):
+			t.Fatalf("%d probes returned, then none within %v", n, within)
+		}
+	}
 }
 
 func agentsInOneRepo(t *testing.T, r *railApp, n int) {
@@ -536,7 +579,8 @@ func TestRailProbesRunFourAtATime(t *testing.T) {
 	agentsInOneRepo(t, r, 10)
 	g := r.gate(t)
 
-	msgs := runAll(r.railOpened())
+	// Ten heads and ten stats probes compete for the four places.
+	msgs := runAll(r.settle(), r.railOpened())
 
 	deadline := time.Now().Add(5 * time.Second)
 	for g.alive() < railProbeMax && time.Now().Before(deadline) {
@@ -561,19 +605,8 @@ func TestRailProbesRunFourAtATime(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got := 0
-
-	for {
-		select {
-		case <-msgs:
-			got++
-		case <-time.After(20 * time.Second):
-			t.Fatalf("only %d of 20 probes finished after the release", got)
-		}
-
-		if got == 20 {
-			break
-		}
+	if got := drain(t, msgs, 20*time.Second); got != 20 {
+		t.Fatalf("%d of 20 probes finished after the release", got)
 	}
 
 	if peak = max(peak, g.alive()); peak > railProbeMax {
@@ -584,6 +617,11 @@ func TestRailProbesRunFourAtATime(t *testing.T) {
 func TestRailClosingFreesWaitingProbes(t *testing.T) {
 	r := newRailApp(t, true)
 	agentsInOneRepo(t, r, 10)
+
+	// The heads are answered first: closing the rail does not cancel them.
+	r.deliver(r.settle())
+	_ = os.Remove(r.log)
+
 	g := r.gate(t)
 
 	msgs := runAll(r.railOpened())
@@ -595,15 +633,8 @@ func TestRailClosingFreesWaitingProbes(t *testing.T) {
 
 	r.railClosed()
 
-	got := 0
-
-	for got < 20 {
-		select {
-		case <-msgs:
-			got++
-		case <-time.After(5 * time.Second):
-			t.Fatalf("%d of 20 probes returned after the rail closed; waiting probes were not cancelled", got)
-		}
+	if got := drain(t, msgs, 5*time.Second); got != 10 {
+		t.Fatalf("%d of 10 probes returned after the rail closed; waiting probes were not cancelled", got)
 	}
 
 	if n := r.gitCalls(); n > railProbeMax {
@@ -615,7 +646,7 @@ func TestRailNonRepoAgentDoesNotRefireItsStatsProbe(t *testing.T) {
 	r := newRailApp(t, true)
 	first, second := t.TempDir(), t.TempDir()
 	id := r.addAgent(t, false, first)
-	r.deliver(r.railOpened())
+	r.openRail()
 
 	if rp := r.rail.panes[id]; !rp.probe.known || rp.probe.repo {
 		t.Fatalf("setup: probe = %+v, want a known non-repo", rp.probe)
@@ -638,7 +669,7 @@ func TestRailStatsProbeRunsWhenAnAgentMovesIntoARepo(t *testing.T) {
 	plain := t.TempDir()
 	repo := r.repo(t, "proj")
 	id := r.addAgent(t, false, plain)
-	r.deliver(r.railOpened())
+	r.openRail()
 	r.clk.Advance(11 * time.Second)
 
 	openIn(t, r.App, core.SetPaneCwd{ID: id, Cwd: repo})

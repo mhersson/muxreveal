@@ -64,7 +64,7 @@ func newRootCmd() *cobra.Command {
 				}
 			}
 
-			return run(cmd.Context(), env, configPath, recordDir, fresh)
+			return run(cmd.Context(), env, configPath, recordDir, fresh, githubClients)
 		},
 	}
 
@@ -78,14 +78,14 @@ func newRootCmd() *cobra.Command {
 	cmd.Flags().StringVar(&recordDir, "record", "", "write each pane's terminal output to a recording in this directory")
 	// Diagnostics for bench inputs and VT fixtures, not a user feature.
 	_ = cmd.Flags().MarkHidden("record")
-	cmd.AddCommand(newHookCmd(os.Getenv))
+	cmd.AddCommand(newHookCmd(os.Getenv), newStatuslineCmd(os.Getenv))
 
 	return cmd
 }
 
 // run loads the config and opens the log before the TUI takes over the
 // terminal, so their errors can still be printed.
-func run(ctx context.Context, env core.Env, configPath, recordDir string, fresh bool, progOpts ...tea.ProgramOption) (err error) {
+func run(ctx context.Context, env core.Env, configPath, recordDir string, fresh bool, clients clientFactory, progOpts ...tea.ProgramOption) (err error) {
 	cfg, err := core.LoadConfig(configPath)
 	if err != nil {
 		return err
@@ -172,6 +172,8 @@ func run(ctx context.Context, env core.Env, configPath, recordDir string, fresh 
 		return fmt.Errorf("launch directory: %w", err)
 	}
 
+	prs := startPRs(clients)
+
 	app, err := ui.New(ui.Options{
 		Logger: logger,
 		Store:  core.NewStore(st),
@@ -195,10 +197,14 @@ func run(ctx context.Context, env core.Env, configPath, recordDir string, fresh 
 		GitTempDir:   hooks.RunDir,
 		IndexCache:   indexCache,
 		Watches:      watches,
+		PRs:          prs.poller,
+		PRLookup:     prs.lookup,
 		Notice:       strings.Join(notices, "; "),
 		Save:         save,
 	})
 	if err != nil {
+		_ = prs.Close()
+
 		return err
 	}
 
@@ -213,9 +219,7 @@ func run(ctx context.Context, env core.Env, configPath, recordDir string, fresh 
 	closeCtx, cancel := context.WithTimeout(context.Background(), closeTimeout)
 	defer cancel()
 
-	if cerr := app.Close(closeCtx); cerr != nil {
-		logger.Error("close panes", "err", cerr)
-	}
+	closeRun(closeCtx, logger, app, prs)
 
 	if err != nil && ctx.Err() == nil {
 		logger.Error("run", "err", err)

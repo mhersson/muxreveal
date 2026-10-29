@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/mhersson/muxreveal/internal/core"
 )
@@ -41,7 +42,9 @@ func (Claude) Launch(settings string, resume core.SessionID) []string {
 	return argv
 }
 
-// Settings uses the exec form so no shell parses exe.
+// Settings registers the hooks in the exec form, so no shell parses exe. The
+// status line has no exec form: it runs through a shell, so exe goes through
+// QuotePath, and a refused path leaves the hooks without a status line.
 func (c Claude) Settings(exe string) ([]byte, error) {
 	if !filepath.IsAbs(exe) {
 		return nil, fmt.Errorf("harness: hook executable %q is not an absolute path", exe)
@@ -58,6 +61,11 @@ func (c Claude) Settings(exe string) ([]byte, error) {
 		Hooks []handler `json:"hooks"`
 	}
 
+	type statusLine struct {
+		Type    string `json:"type"`
+		Command string `json:"command"`
+	}
+
 	h := handler{Type: "command", Command: exe, Args: []string{"hook", c.ID()}, Timeout: hookTimeout}
 	events := claudeEvents()
 
@@ -66,14 +74,51 @@ func (c Claude) Settings(exe string) ([]byte, error) {
 		hooks[name] = []group{{Hooks: []handler{h}}}
 	}
 
-	out, err := json.Marshal(struct {
-		Hooks map[string][]group `json:"hooks"`
-	}{hooks})
+	settings := struct {
+		Hooks      map[string][]group `json:"hooks"`
+		StatusLine *statusLine        `json:"statusLine,omitempty"`
+	}{Hooks: hooks}
+
+	if quoted, err := QuotePath(exe); err == nil {
+		settings.StatusLine = &statusLine{Type: "command", Command: quoted + " statusline"}
+	}
+
+	out, err := json.Marshal(settings)
 	if err != nil {
 		return nil, fmt.Errorf("harness: encode settings: %w", err)
 	}
 
 	return out, nil
+}
+
+// QuotePath returns path in single quotes for a shell command line. Inside
+// single quotes every shell reads characters literally except the closing ',
+// and fish also reads \ as an escape; a control character could end the line.
+// A path with any of them is refused, as is one that is not valid UTF-8, since
+// the JSON settings file would rewrite its bytes.
+func QuotePath(path string) (string, error) {
+	if !utf8.ValidString(path) {
+		return "", fmt.Errorf("harness: cannot quote %q for a shell: it is not valid UTF-8", path)
+	}
+
+	for _, r := range path {
+		var what string
+
+		switch {
+		case r == '\'':
+			what = "a single quote"
+		case r == '\\':
+			what = "a backslash"
+		case unicode.IsControl(r):
+			what = fmt.Sprintf("the control character %U", r)
+		default:
+			continue
+		}
+
+		return "", fmt.Errorf("harness: cannot quote %q for a shell: it holds %s", path, what)
+	}
+
+	return "'" + path + "'", nil
 }
 
 // claudePayload holds the only fields read; decoding skips the rest, so a large
@@ -281,4 +326,41 @@ func (Claude) ParseEvent(payload []byte) (Event, error) {
 // permissionAction is "Allow <tool> <target>?".
 func permissionAction(tool, cwd string, input json.RawMessage) string {
 	return clip("Allow " + toolTarget(printable(tool), cwd, objectFields(input)) + "?")
+}
+
+// statusPayload holds the only fields read from the statusline JSON. The
+// percentage is a pointer because Claude sends null before its first request.
+type statusPayload struct {
+	SessionID string `json:"session_id"`
+	Model     struct {
+		DisplayName string `json:"display_name"`
+	} `json:"model"`
+	ContextWindow struct {
+		Size        int      `json:"context_window_size"`
+		InputTokens int      `json:"total_input_tokens"`
+		Used        *float64 `json:"used_percentage"`
+	} `json:"context_window"`
+}
+
+// ParseStatus reads one statusline payload as received on stdin. The event is
+// named "statusline" whatever hook_event_name the payload carries.
+func (Claude) ParseStatus(payload []byte) (Event, error) {
+	var p statusPayload
+	if err := json.Unmarshal(payload, &p); err != nil {
+		return Event{}, fmt.Errorf("harness: parse claude-code statusline payload: %w", err)
+	}
+
+	ev := Event{
+		Name:        "statusline",
+		Status:      true,
+		Session:     core.SessionID(p.SessionID),
+		Model:       clip(p.Model.DisplayName),
+		Window:      p.ContextWindow.Size,
+		InputTokens: p.ContextWindow.InputTokens,
+	}
+	if p.ContextWindow.Used != nil {
+		ev.Context, ev.ContextKnown = *p.ContextWindow.Used, true
+	}
+
+	return ev, nil
 }

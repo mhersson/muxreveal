@@ -85,9 +85,52 @@ func TestRailCacheKeyCoversEveryInput(t *testing.T) {
 		{name: "pulse phase", change: func(t *testing.T, a *App) { a.rail.pulseDim = true }, visible: true},
 		{name: "state", change: func(t *testing.T, a *App) { openIn(t, a, core.SetAgentState{ID: "p2", State: core.AgentIdle}) }, visible: true},
 		{name: "action", change: func(t *testing.T, a *App) { openIn(t, a, core.SetAgentAction{ID: "p2", Action: "Read go.mod"}) }, visible: true},
+		{
+			name: "model",
+			change: func(t *testing.T, a *App) {
+				openIn(t, a, core.SetAgentStatus{ID: "p2", Session: "s2", Model: "Opus 5.5"})
+			},
+			visible: true,
+		},
+		{
+			name: "context meter",
+			prep: func(t *testing.T, a *App) {
+				openIn(t, a, core.SetAgentStatus{ID: "p2", Session: "s2", Model: "Opus 5.5", Context: 40, ContextKnown: true})
+			},
+			change: func(t *testing.T, a *App) {
+				openIn(t, a, core.SetAgentStatus{ID: "p2", Session: "s2", Model: "Opus 5.5", Context: 41, ContextKnown: true})
+			},
+			visible: true,
+		},
 		{name: "project", change: func(t *testing.T, a *App) { probe(a, "p2").project = "other" }, visible: true},
 		{name: "branch", change: func(t *testing.T, a *App) { probe(a, "p2").branch = "fix/other" }, visible: true},
 		{name: "detached", change: func(t *testing.T, a *App) { probe(a, "p2").detached = true }},
+		{name: "ahead", change: func(t *testing.T, a *App) { probe(a, "p2").ahead = 3 }, visible: true},
+		{
+			name: "pull request",
+			change: func(t *testing.T, a *App) {
+				seedPR(t, a, "p2", "/w/web", "feat/login", prInfo("OPEN", checksRunning))
+			},
+			visible: true,
+		},
+		{
+			name: "pull request repository",
+			prep: func(t *testing.T, a *App) {
+				seedPR(t, a, "p2", "/w/web", "feat/login", prInfo("OPEN", checksRunning))
+				a.prs.panes["p2"].ok = false
+			},
+			change:  func(t *testing.T, a *App) { a.prs.panes["p2"].ok = true },
+			visible: true,
+		},
+		{
+			name: "pull request branch resolved for",
+			prep: func(t *testing.T, a *App) {
+				seedPR(t, a, "p2", "/w/web", "feat/login", prInfo("OPEN", checksRunning))
+				a.prs.panes["p2"].answered.branch = "feat/other"
+			},
+			change:  func(t *testing.T, a *App) { a.prs.panes["p2"].answered.branch = "feat/login" },
+			visible: true,
+		},
 		{name: "stats", change: func(t *testing.T, a *App) { probe(a, "p2").stats.Added = 999 }, visible: true},
 		{name: "stats known", change: func(t *testing.T, a *App) { probe(a, "p1").statsKnown = false }, visible: true},
 		{name: "unseen mark", change: func(t *testing.T, a *App) { a.railEntry("p3").unseen = true }, visible: true},

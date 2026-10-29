@@ -27,10 +27,10 @@ type Harness interface {
 	CustomName(ctx context.Context, transcript string) (string, error)
 }
 
-// Event is one hook payload reduced to what the app needs.
+// Event is one hook or statusline payload reduced to what the app needs.
 type Event struct {
 	Pane       core.PaneID     `json:"pane"`
-	Name       string          `json:"name"` // the harness's hook event name, for logs
+	Name       string          `json:"name"` // the harness's hook event name, or "statusline", for logs
 	Session    core.SessionID  `json:"session,omitempty"`
 	Transcript string          `json:"transcript,omitempty"`
 	State      core.AgentState `json:"state,omitempty"` // AgentUnknown leaves the state as it is
@@ -42,6 +42,21 @@ type Event struct {
 	// replaces the pane's action with it (empty clears it); false leaves it.
 	Action    string `json:"action,omitempty"`
 	ActionSet bool   `json:"action_set,omitempty"`
+
+	// Status marks a status update from the agent's statusline, not a hook. It
+	// carries Session and the fields below, and leaves state, action and cwd alone.
+	Status bool `json:"status,omitempty"`
+	// Model is the model's display name, printable and cut like an action; empty
+	// when the agent did not report one.
+	Model string `json:"model,omitempty"`
+	// Context is the percentage of the context window in use, as the agent
+	// reports it; it means something only when ContextKnown is true.
+	Context      float64 `json:"context,omitempty"`
+	ContextKnown bool    `json:"context_known,omitempty"`
+	// Window is the context window size in tokens and InputTokens the input
+	// tokens used so far; 0 when not reported.
+	Window      int `json:"window,omitempty"`
+	InputTokens int `json:"input_tokens,omitempty"`
 
 	// TurnStart marks a prompt submission: the agent starts working once the
 	// hook is answered, so the server holds the answer until Done.

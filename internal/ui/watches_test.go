@@ -135,8 +135,9 @@ func TestShellDoesNotAcquire(t *testing.T) {
 
 	openIn(t, w.App, core.OpenPane{Kind: core.KindShell, Cwd: dir, Split: core.SplitVertical, Area: w.bodyArea()})
 
-	if cmd := w.settle(); cmd != nil {
-		t.Errorf("a shell raised %d message(s)", len(flatten(cmd)))
+	// A focused shell is probed for its branch; it is not watched.
+	if msgs := flatten(w.settle()); len(msgs) != 1 || countOf[railHeadMsg](msgs) != 1 {
+		t.Errorf("a shell raised %v, want its head probe alone", msgs)
 	}
 
 	if len(w.watches.panes) != 0 || w.watched(root) {
@@ -493,6 +494,59 @@ func TestIdleAppDoesNoProbes(t *testing.T) {
 
 	if got := w.gitCalls(); got != calls {
 		t.Errorf("an idle app ran %d git calls", got-calls)
+	}
+}
+
+// With the rail closed the heads of an agent and of the focused shell are the
+// only probes, and once answered they cost nothing while the app idles.
+func TestIdleAppDoesNoProbesWithTheRailClosed(t *testing.T) {
+	w := newWatchApp(t, true)
+	dir, shellDir := w.repo(t, "proj"), w.repo(t, "shell")
+	root := rootOf(t, dir)
+	id := w.addAgent(t, false, dir)
+
+	openIn(t, w.App, core.OpenPane{Kind: core.KindShell, Cwd: shellDir, Split: core.SplitVertical, Area: w.bodyArea()})
+
+	shell := w.store.State().Tab().Focus
+	if shell == id {
+		t.Fatal("setup: the agent has focus, want the shell")
+	}
+
+	known := func(p core.PaneID) bool {
+		rp := w.rail.panes[p]
+
+		return rp != nil && rp.probe.known && !rp.head.busy
+	}
+
+	w.pm.run(w.settle())
+	w.until(t, "the worktree to be watched", nil, func() bool { return w.held(id) == root })
+	w.until(t, "both heads", nil, func() bool { return known(id) && known(shell) })
+
+	calls, delays := w.gitCalls(), len(w.ticks.delays)
+
+	w.clk.Advance(time.Minute)
+
+	deadline := time.Now().Add(300 * time.Millisecond)
+	for time.Now().Before(deadline) {
+		select {
+		case m := <-w.pm.msgs:
+			switch m.(type) {
+			case railHeadMsg, railStatsMsg, railNameMsg, railDueMsg:
+				t.Errorf("an idle app raised %T", m)
+			}
+
+			_, cmd := w.Update(m)
+			w.pm.run(cmd)
+		case <-time.After(20 * time.Millisecond):
+		}
+	}
+
+	if got := w.gitCalls(); got != calls {
+		t.Errorf("an idle app ran %d git calls", got-calls)
+	}
+
+	if got := len(w.ticks.delays); got != delays {
+		t.Errorf("an idle app scheduled %d delayed probes", got-delays)
 	}
 }
 

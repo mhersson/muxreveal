@@ -50,3 +50,21 @@ func Head(ctx context.Context, r Repo) (HeadInfo, error) {
 
 	return h, nil
 }
+
+// HeadCommit returns the commit HEAD points at, with its subject (the body is
+// left empty). An unborn branch is an error.
+func HeadCommit(ctx context.Context, r Repo) (Commit, error) {
+	// --no-show-signature: log.showSignature would print gpg's lines before the format.
+	out, err := run(ctx, call{
+		dir:  r.Root,
+		args: []string{"log", "-1", "-z", "--no-show-signature", "--format=%H%n%s", "HEAD", "--"},
+		read: true,
+	})
+	if err != nil {
+		return Commit{}, fmt.Errorf("head commit: %w", err)
+	}
+
+	oid, subject, _ := strings.Cut(strings.TrimRight(string(out), "\x00"), "\n")
+
+	return Commit{OID: oid, Subject: subject}, nil
+}

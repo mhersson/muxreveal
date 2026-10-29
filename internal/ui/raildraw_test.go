@@ -27,8 +27,14 @@ type railAgent struct {
 	stats          *git.Stats
 	unseen         bool
 	noRepo, noHook bool
-	name           string // the session's custom name, read from its transcript
+	name           string       // the session's custom name, read from its transcript
+	model          string       // the model its status line reported
+	meter          *int         // the context percentage its status line reported; nil reports none
+	ahead          int          // the commits its branch has past its upstream
+	pr             *core.PRInfo // the pull request of its branch; its head branch is the agent's
 }
+
+func pct(n int) *int { return &n }
 
 // longNotice is wide enough that its toast box reaches into the rail's columns at 64 columns.
 const longNotice = "ctrl+space > x is not bound, press ctrl+space for the keys"
@@ -72,6 +78,7 @@ func drawApp(t *testing.T, themeName string, icons bool, w, h int, agents []rail
 
 		rp := a.railEntry(id)
 		rp.unseen = ag.unseen
+		rp.head.target = "/w/" + ag.project // the probe results below stand for an answered head probe
 
 		if ag.name != "" {
 			transcript := "/w/" + ag.project + "/" + string(id) + ".jsonl"
@@ -79,22 +86,46 @@ func drawApp(t *testing.T, themeName string, icons bool, w, h int, agents []rail
 			rp.name = railName{text: ag.name, transcript: transcript}
 		}
 
+		if ag.model != "" || ag.meter != nil {
+			status := core.SetAgentStatus{ID: id, Session: core.SessionID("s-" + string(id)), Model: ag.model}
+			if ag.meter != nil {
+				status.Context, status.ContextKnown = float64(*ag.meter), true
+			}
+
+			openIn(t, a, status)
+		}
+
 		if !ag.noHook {
 			rp.hookAt = t0.Add(-ag.age)
 		}
 
 		if !ag.noRepo {
-			rp.probe = railProbe{known: true, repo: true, project: ag.project, branch: ag.branch, detached: ag.detached}
+			rp.probe = railProbe{known: true, repo: true, project: ag.project, branch: ag.branch, detached: ag.detached, ahead: ag.ahead}
 		}
 
 		if ag.stats != nil {
 			rp.probe.stats, rp.probe.statsKnown = *ag.stats, true
+		}
+
+		if ag.pr != nil && !ag.noRepo {
+			seedPR(t, a, id, "/w/"+ag.project, ag.branch, *ag.pr)
 		}
 	}
 
 	openIn(t, a, core.SetRail{Open: true})
 
 	return a
+}
+
+// aheadAgents is a mix of branches ahead of their upstream by one, two and three
+// digits, one cut by the rail's width, and some with nothing ahead.
+func aheadAgents() []railAgent {
+	return []railAgent{
+		{newTab: true, project: "api", branch: "main", state: core.AgentIdle, age: 8 * time.Second, stats: &git.Stats{}},
+		{project: "web", branch: "feat/login", state: core.AgentWorking, action: "Edit src/login.tsx", age: 4 * time.Minute, stats: &git.Stats{Files: 5, Added: 120, Removed: 14}, ahead: 2},
+		{newTab: true, project: "muxreveal", branch: "feat/agents-rail-with-a-long-branch-name", state: core.AgentBlocked, action: "Allow Bash go test ./...?", age: 95 * time.Second, stats: &git.Stats{Files: 9, Added: 340, Removed: 12}, ahead: 14},
+		{project: "docs", branch: "main", state: core.AgentIdle, age: 2 * time.Hour, stats: &git.Stats{}, ahead: 123},
+	}
 }
 
 // namedAgents is one project's agents told apart by their session names, an
@@ -108,6 +139,34 @@ func namedAgents() []railAgent {
 		{project: "muxreveal", branch: "main", state: core.AgentIdle, age: 2 * time.Hour, stats: &git.Stats{}},
 		{project: "muxreveal", branch: "main", state: core.AgentIdle, age: 3 * time.Hour, stats: &git.Stats{}, name: "muxreveal"},
 		{project: "docs", branch: "main", state: core.AgentWorking, action: "Read README.md", age: 3 * time.Second, name: "a-session-name-far-too-long-for-a-forty-four-column-rail"},
+	}
+}
+
+// meteredAgents is agents whose status lines reported a model and a context
+// percentage in each colour, one with a model alone, one named, one with no hooks.
+func meteredAgents() []railAgent {
+	return []railAgent{
+		{newTab: true, project: "api", branch: "main", state: core.AgentBlocked, action: "Allow Bash rm -rf build/?", age: 8 * time.Second, stats: &git.Stats{Files: 2, Added: 12, Removed: 3}, unseen: true, model: "Opus 5.5", meter: pct(62)},
+		{project: "web", branch: "feat/login", state: core.AgentWorking, action: "Edit src/login.tsx", age: 4 * time.Minute, stats: &git.Stats{Files: 5, Added: 120, Removed: 14}, model: "Sonnet 5.5", meter: pct(78), name: "t16-implementer"},
+		{newTab: true, project: "muxreveal", branch: "feat/agents-rail", state: core.AgentWorking, action: "Bash go test ./...", age: 95 * time.Second, stats: &git.Stats{Files: 9, Added: 340, Removed: 12}, model: "Opus 5.5", meter: pct(93)},
+		{project: "docs", branch: "main", state: core.AgentIdle, age: 26 * time.Hour, stats: &git.Stats{}, model: "Haiku 5.5", meter: pct(0)},
+		{newTab: true, project: "infra", branch: "a1b2c3d", detached: true, state: core.AgentIdle, age: 12 * time.Minute, stats: &git.Stats{Files: 1, Added: 2, Removed: 0}, model: "Opus 5.5"},
+		{project: "scratch", noRepo: true, noHook: true},
+	}
+}
+
+// prAgents is agents on branches with a pull request in each form, and some
+// with commits ahead, a model and a meter.
+func prAgents() []railAgent {
+	return []railAgent{
+		{newTab: true, project: "api", branch: "feat/api-keys", state: core.AgentBlocked, action: "Allow Bash rm -rf build/?", age: 8 * time.Second, stats: &git.Stats{Files: 2, Added: 12, Removed: 3}, unseen: true, model: "Opus 5.5", meter: pct(62), ahead: 1, pr: ptr(prInfo("OPEN", checksFailing, prNumber(31)))},
+		{project: "web", branch: "feat/login", state: core.AgentWorking, action: "Edit src/login.tsx", age: 4 * time.Minute, stats: &git.Stats{Files: 5, Added: 120, Removed: 14}, model: "Sonnet 5.5", meter: pct(78), ahead: 2, pr: ptr(prInfo("OPEN", checksRunning, prReview("APPROVED"), prNumber(8)))},
+		{newTab: true, project: "muxreveal", branch: "feat/agents-rail-with-a-long-branch-name", state: core.AgentWorking, action: "Bash go test ./...", age: 95 * time.Second, stats: &git.Stats{Files: 9, Added: 340, Removed: 12}, ahead: 14, pr: ptr(prInfo("OPEN", checksPassed, prReview("CHANGES_REQUESTED"), prNumber(1042)))},
+		{project: "docs", branch: "docs/readme", state: core.AgentIdle, age: 26 * time.Hour, stats: &git.Stats{}, pr: ptr(prInfo("OPEN", prDraft, checksRunning, prNumber(7)))},
+		{newTab: true, project: "infra", branch: "fix/infra", state: core.AgentIdle, age: 12 * time.Minute, stats: &git.Stats{Files: 1, Added: 2, Removed: 0}, pr: ptr(prInfo("MERGED", prNumber(19)))},
+		{project: "ops", branch: "fix/ops", state: core.AgentIdle, age: 3 * time.Hour, stats: &git.Stats{}, pr: ptr(prInfo("CLOSED", prNumber(20)))},
+		{project: "tools", branch: "feat/tools", state: core.AgentIdle, age: 5 * time.Minute, stats: &git.Stats{}, pr: ptr(prInfo("OPEN", prNumber(5)))},
+		{project: "scratch", noRepo: true, noHook: true},
 	}
 }
 
@@ -163,6 +222,33 @@ func railCases() []railCase {
 		}
 	}
 
+	withPRs := func(w, h int) func(t *testing.T, th string, icons bool) *App {
+		return func(t *testing.T, th string, icons bool) *App {
+			a := drawApp(t, th, icons, w, h, prAgents())
+			a.rail.sel = "p2"
+
+			return a
+		}
+	}
+
+	ahead := func(w, h int) func(t *testing.T, th string, icons bool) *App {
+		return func(t *testing.T, th string, icons bool) *App {
+			a := drawApp(t, th, icons, w, h, aheadAgents())
+			a.rail.sel = "p2"
+
+			return a
+		}
+	}
+
+	metered := func(w, h int) func(t *testing.T, th string, icons bool) *App {
+		return func(t *testing.T, th string, icons bool) *App {
+			a := drawApp(t, th, icons, w, h, meteredAgents())
+			a.rail.sel = "p2"
+
+			return a
+		}
+	}
+
 	return []railCase{
 		{"cards", fixture(100, 30, nil)},
 		{"focused-blocked-selected", fixture(100, 30, func(a *App) { a.rail.focused, a.rail.sel = true, "p1" })},
@@ -208,6 +294,15 @@ func railCases() []railCase {
 		{"no-agents", func(t *testing.T, th string, icons bool) *App { return drawApp(t, th, icons, 100, 30, nil) }},
 		{"named", named(100, 50, nil)},
 		{"named-width-70", named(70, 50, nil)},
+		{"metered", metered(100, 50)},
+		{"metered-width-70", metered(70, 50)},
+		{"metered-width-64", metered(64, 50)},
+		{"prs", withPRs(100, 50)},
+		{"prs-width-70", withPRs(70, 50)},
+		{"prs-width-64", withPRs(64, 50)},
+		{"ahead", ahead(100, 40)},
+		{"ahead-width-70", ahead(70, 40)},
+		{"ahead-width-64", ahead(64, 40)},
 		{"named-search", named(100, 30, func(a *App) {
 			a.rail.focused, a.rail.query = true, "orch"
 			a.railNormalize(a.store.State())

@@ -18,6 +18,7 @@ import (
 
 	"github.com/mhersson/muxreveal/internal/core"
 	"github.com/mhersson/muxreveal/internal/git"
+	"github.com/mhersson/muxreveal/internal/github"
 	"github.com/mhersson/muxreveal/internal/term"
 	"github.com/mhersson/muxreveal/internal/term/rec"
 )
@@ -130,7 +131,7 @@ type benchConfig struct {
 	Agents bool
 	// Mode is the bench tab's layout mode; "" is bsp.
 	Mode core.LayoutMode
-	// Rail opens the agents rail before the run.
+	// Rail opens the agents rail before the run, and with Agents gives every card all its text (see fillBenchCards).
 	Rail bool
 	// Review opens the review drawer on the first pane over a 40-file result; a new result arrives every benchReviewEvery.
 	Review bool
@@ -363,6 +364,14 @@ func newBenchApp(cfg benchConfig, clk clock) (*App, []core.PaneID, error) {
 		// The probe and relayout cmds are not run: the bench has no wall time.
 		_ = app.railToggle()
 		app.rail.focused = false
+
+		if cfg.Agents {
+			if err := fillBenchCards(app, ids); err != nil {
+				_ = app.Close(context.Background())
+
+				return nil, nil, err
+			}
+		}
 	}
 
 	if cfg.Review {
@@ -374,6 +383,59 @@ func newBenchApp(cfg benchConfig, clk clock) (*App, []core.PaneID, error) {
 	}
 
 	return app, ids, nil
+}
+
+// fillBenchCards gives every agent's card all its text, as probes, hooks and
+// polls leave it in a real run: a model, a meter, a branch ahead of its upstream,
+// a pull request with checks and a review, an action and diff stats.
+func fillBenchCards(app *App, ids []core.PaneID) error {
+	forms := []core.PRInfo{
+		prInfo("OPEN", checksRunning, prReview("APPROVED")),
+		prInfo("OPEN", checksPassed, prReview("CHANGES_REQUESTED")),
+		prInfo("OPEN", checksFailing),
+	}
+	open := map[string][]core.PRInfo{}
+	now := app.clock.Now()
+
+	app.prs.panes = map[core.PaneID]*prPane{}
+
+	for i, id := range ids {
+		n := i + 1
+		project, branch := fmt.Sprintf("bench%d", n), fmt.Sprintf("feat/bench-card-%d", n)
+		cwd := app.store.State().Panes[id].WorkDir()
+
+		for _, act := range []core.Action{
+			core.SetAgentAction{ID: id, Action: "Edit internal/ui/rail.go"},
+			core.SetAgentStatus{ID: id, Session: core.SessionID(fmt.Sprintf("bench-%d", n)), Model: "Opus 5.5", Context: float64(30 + 10*n), ContextKnown: true},
+		} {
+			if err := app.dispatch(act); err != nil {
+				return fmt.Errorf("fill the card of pane %s: %w", id, err)
+			}
+		}
+
+		rp := app.railEntry(id)
+		rp.head.target, rp.hookAt = cwd, now.Add(-time.Duration(n)*time.Minute)
+		rp.probe = railProbe{
+			known: true, repo: true, project: project, branch: branch, ahead: n, headCwd: cwd,
+			stats: git.Stats{Files: 3 * n, Added: 40 * n, Removed: 5 * n}, statsKnown: true, statsCwd: cwd,
+		}
+
+		repo := github.Repo{Host: "github.com", Owner: "acme", Name: project}
+		key := prKey{cwd: cwd, branch: branch}
+		app.prs.panes[id] = &prPane{key: key, answered: key, repo: repo, ok: true}
+
+		pr := forms[i%len(forms)]
+		pr.Number, pr.HeadBranch = 100+n, branch
+		open[repo.String()] = append(open[repo.String()], pr)
+	}
+
+	for repo, prs := range open {
+		if err := app.dispatch(core.SetRepoPRs{Repo: repo, DefaultBranch: "main", Open: prs}); err != nil {
+			return fmt.Errorf("fill the pull requests of %s: %w", repo, err)
+		}
+	}
+
+	return nil
 }
 
 const (

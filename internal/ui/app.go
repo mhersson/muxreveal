@@ -66,6 +66,12 @@ type Options struct {
 	Worktrees core.WorktreesConfig
 	// Save is called with the state after every successful dispatch; nil saves nothing.
 	Save func(core.State)
+	// PRs polls the pull requests of the repositories the agents work in; nil
+	// turns every pull request feature off.
+	PRs prSource
+	// PRLookup finds the merged or closed pull request of a branch whose open one
+	// is gone; nil means no lookups.
+	PRLookup PRLookup
 }
 
 // App is the root Bubble Tea model.
@@ -76,11 +82,15 @@ type App struct {
 
 	reg     *registry
 	keymap  keymap
-	pending bool   // leader pressed, awaiting a key
-	prefix  string // first key of a two-key sequence while pending; "" before it
-	popup   bool   // which-key popup visible; only while pending with no prefix
-	seq     int    // leader press counter; a whichKeyMsg with another seq is stale
-	notice  string // toast message until the next key press
+	pending bool      // leader pressed, awaiting a key
+	prefix  string    // first key of a two-key sequence while pending; "" before it
+	popup   bool      // which-key popup visible; only while pending with no prefix
+	seq     int       // leader press counter; a whichKeyMsg with another seq is stale
+	notice  string    // toast message until the next key press
+	marked  toastMark // the level the toast text was raised at
+	pushSeq int       // push request counter; an answer for another request is stale
+
+	pushing map[string]string // worktree root -> the branch being pushed there
 
 	// theme, styles and sample follow store.State().Theme; only sync updates them.
 	theme  theme.Theme
@@ -111,9 +121,10 @@ type App struct {
 	drawer    drawerState
 	picker    pickerState
 	watches   watchState
+	prs       prState
 	storeVer  uint64        // counts the dispatches the store accepted
 	engine    *git.Engine   // nil when the rail's diff stats and the review drawer's diffs are off
-	probeSem  chan struct{} // its capacity bounds the rail's probes running at once
+	probeSem  chan struct{} // its capacity bounds the head, stats and name probes running at once
 	clip      *clipboard
 	sel       *paneSelection // the one selection; survives tab switches
 	copy      *copyState     // copy mode; owns every key and ignores the mouse while set
@@ -197,6 +208,10 @@ func New(opts Options) (*App, error) {
 		probeSem:     make(chan struct{}, railProbeMax),
 		focusFollows: opts.FocusFollowsMouse, copyOnSelect: opts.CopyOnSelect,
 		clip: newClipboard(clipboardConfig{OSC52: !opts.NoOSC52, Native: !opts.NoNativeClipboard}, getenv, runtime.GOOS, opts.Logger),
+	}
+
+	if opts.PRs != nil {
+		a.prs = newPRState(opts.PRs, opts.PRLookup)
 	}
 
 	a.drawer.cfg = opts.Diff
@@ -338,7 +353,7 @@ func (a *App) Init() tea.Cmd {
 		rail = a.railOpened()
 	}
 
-	return tea.Batch(a.initTray(), a.waitEvent(), a.waitWatch(), rail)
+	return tea.Batch(a.initTray(), a.waitEvent(), a.waitWatch(), a.waitPRs(), rail)
 }
 
 // Update implements tea.Model.
@@ -351,6 +366,10 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	a.railAfterUpdate()
 
 	if c := a.watchSync(); c != nil {
+		a.later = append(a.later, c)
+	}
+
+	if c := a.prSync(); c != nil {
 		a.later = append(a.later, c)
 	}
 
@@ -490,6 +509,16 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, tea.Batch(a.onWatch(msg), a.waitWatch())
 	case paneRepoMsg:
 		return a, a.onPaneRepo(msg)
+	case prSnapshotMsg:
+		return a, tea.Batch(a.onPRSnapshot(msg.Snapshot), a.waitPRs())
+	case prResolvedMsg:
+		return a, a.onPRResolved(msg)
+	case prBranchMsg:
+		a.onPRBranch(msg)
+	case pushResolvedMsg:
+		a.onPushResolved(msg)
+	case pushedMsg:
+		return a, a.onPushed(msg)
 	case watchAcquiredMsg:
 		a.onWatchAcquired(msg)
 	case agentTickMsg:
@@ -651,7 +680,7 @@ func (a *App) View() tea.View {
 		content = a.drawDrawer(content, r, lines, fits)
 	}
 
-	content = overlayToast(content, a.width, a.height, a.notice, a.icons, lk.styles)
+	content = overlayToast(content, a.width, a.height, a.notice, a.noticeLevel(), a.icons, lk.styles)
 	if a.sequenceOpen() {
 		content = overlayCorner(content, a.width, a.height, sequencePopup(a.keymap.leader, a.prefix, a.icons, lk.styles))
 	}

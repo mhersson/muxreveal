@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -261,6 +262,232 @@ func TestTrayBlockedAgentGolden(t *testing.T) {
 			a := trayApp(t, icons)
 			setAgentStates(t, a, map[core.PaneID]core.AgentState{a.store.State().AgentPanes()[0]: core.AgentBlocked})
 			golden.RequireEqual(t, []byte(a.workspaceBar(100)))
+		})
+	}
+}
+
+// modelApp is a w x 12 app with one working agent, p1, whose status line
+// reported model and, unless meter is nil, a context percentage.
+func modelApp(t *testing.T, w int, model string, meter *int, icons bool) *App {
+	t.Helper()
+
+	a := badgeApp(t, w, core.AgentWorking, icons)
+	status := core.SetAgentStatus{ID: "p1", Session: "s1", Model: model}
+
+	if meter != nil {
+		status.Context, status.ContextKnown = float64(*meter), true
+	}
+
+	openIn(t, a, status)
+
+	return a
+}
+
+// zoomedModelApp is modelApp with a shell beside the agent and the agent zoomed
+// and, when scrolled, scrolled back three lines, so its top border holds every
+// tag but the preselection and COPY. Without status the agent's status line has
+// reported nothing, so the border has no model tag.
+func zoomedModelApp(t *testing.T, w int, scrolled, status bool) *App {
+	t.Helper()
+
+	a := newTestApp(t)
+	sized(t, a, w, 12)
+	openIn(t, a,
+		core.OpenPane{Kind: core.KindAgent, Cwd: "/home/u/proj", Split: core.SplitVertical},
+		core.OpenPane{Kind: core.KindShell, Cwd: "/home/u/other", Split: core.SplitVertical},
+		core.FocusPane{ID: "p1"},
+	)
+
+	procs := attachPanes(t, a, nil)
+
+	if scrolled {
+		p := a.panes["p1"]
+		feedAndWait(t, p, procs["p1"], strings.Repeat("line\r\n", 40))
+		p.render()
+
+		if !p.scrollBy(3) {
+			t.Fatal("setup: the pane did not scroll")
+		}
+	}
+
+	openIn(t, a, core.ToggleZoom{}, core.SetAgentState{ID: "p1", State: core.AgentWorking})
+
+	if status {
+		openIn(t, a, core.SetAgentStatus{ID: "p1", Session: "s1", Model: "Opus 5.5", Context: 62, ContextKnown: true})
+	}
+
+	return a
+}
+
+func TestFrameModelTag(t *testing.T) {
+	t.Run("left of the badge", func(t *testing.T) {
+		for _, icons := range []bool{true, false} {
+			a := modelApp(t, 50, "Opus 5.5", pct(62), icons)
+
+			if row, want := topRow(a), " Opus 5.5 62% ─ ⠋ working ─╮"; !strings.HasSuffix(row, want) {
+				t.Errorf("icons=%v: top border = %q, want it to end with %q", icons, row, want)
+			}
+		}
+	})
+
+	t.Run("right of the zoom tag", func(t *testing.T) {
+		row := topRow(zoomedModelApp(t, 60, false, true))
+
+		if want := "zoom ─ Opus 5.5 62% ─ ⠋ working ─╮"; !strings.HasSuffix(row, want) {
+			t.Errorf("top border = %q, want it to end with %q", row, want)
+		}
+	})
+
+	t.Run("right of the zoom and scroll tags", func(t *testing.T) {
+		row := topRow(zoomedModelApp(t, 70, true, true))
+		scroll, zoom, model, badge := strings.Index(row, iconScroll), strings.Index(row, "zoom"), strings.Index(row, "Opus"), strings.Index(row, "working")
+
+		if scroll < 0 || zoom < scroll || model < zoom || badge < model || !strings.HasSuffix(row, "Opus 5.5 62% ─ ⠋ working ─╮") {
+			t.Errorf("top border = %q, want scroll, zoom, model, then the badge rightmost", row)
+		}
+	})
+
+	t.Run("without a badge", func(t *testing.T) {
+		a := modelApp(t, 50, "Opus 5.5", pct(62), true)
+		openIn(t, a, core.SetAgentState{ID: "p1", State: core.AgentUnknown})
+
+		if row, want := topRow(a), " Opus 5.5 62% ─╮"; !strings.HasSuffix(row, want) {
+			t.Errorf("top border = %q, want it to end with %q", row, want)
+		}
+	})
+
+	t.Run("dropped before every other tag, and for the whole title", func(t *testing.T) {
+		badge, zoom, scroll, model := " ⠋ working ", " "+iconZoom+" zoom ", " "+iconScroll+" 3 ", " Opus 5.5 62% "
+		title := " " + iconAgent + " claude "
+		// The title starts after the corner and its dash, the tags end before a dash
+		// and the corner, and one border cell separates two tags.
+		fits := func(w int, tags ...string) bool {
+			need := 4 + ansi.StringWidth(title) + len(tags) - 1
+
+			for _, tg := range tags {
+				need += ansi.StringWidth(tg)
+			}
+
+			return w >= need
+		}
+
+		for w := 20; w <= 70; w++ {
+			row := topRow(zoomedModelApp(t, w, true, true))
+
+			if got := ansi.StringWidth(row); got != w {
+				t.Errorf("width %d: top border is %d cells wide", w, got)
+			}
+
+			shown := map[string]bool{
+				"badge": strings.Contains(row, "working"), "zoom": strings.Contains(row, "zoom"),
+				"scroll": strings.Contains(row, iconScroll), "model": strings.Contains(row, "Opus"),
+				"title": strings.Contains(row, "claude "),
+			}
+
+			if want := fits(w, badge, zoom, scroll, model); shown["model"] != want {
+				t.Errorf("width %d: model shown = %v, want %v (%q)", w, shown["model"], want, row)
+			}
+
+			if shown["model"] && (!shown["badge"] || !shown["zoom"] || !shown["scroll"] || !shown["title"]) {
+				t.Errorf("width %d: model shown but another tag or the whole title is not (%q)", w, row)
+			}
+		}
+
+		// One cell short of the room for the model and the whole title, the other tags and the title are all still there.
+		w := 4 + ansi.StringWidth(title+badge+zoom+scroll+model) + 3 - 1
+		if row := topRow(zoomedModelApp(t, w, true, true)); strings.Contains(row, "Opus") || !strings.Contains(row, "working") || !strings.Contains(row, "zoom") || !strings.Contains(row, iconScroll) || !strings.Contains(row, "claude ") {
+			t.Errorf("width %d: top border = %q, want the model dropped and the other tags and the title kept", w, row)
+		}
+
+		if row := topRow(zoomedModelApp(t, w+1, true, true)); !strings.Contains(row, "Opus 5.5 62%") || !strings.Contains(row, "claude ") {
+			t.Errorf("width %d: top border = %q, want the model and the whole title", w+1, row)
+		}
+	})
+
+	t.Run("never shrinks the title", func(t *testing.T) {
+		for _, scrolled := range []bool{false, true} {
+			for w := 12; w <= 70; w++ {
+				with := topRow(zoomedModelApp(t, w, scrolled, true))
+				without := topRow(zoomedModelApp(t, w, scrolled, false))
+
+				// The model tag may add cells to the border but never changes the title.
+				for _, mark := range []string{"claude ", "…"} {
+					if strings.Contains(with, mark) != strings.Contains(without, mark) {
+						t.Errorf("scrolled=%v width %d: %q differs with a model tag\nwith:    %q\nwithout: %q", scrolled, w, mark, with, without)
+					}
+				}
+
+				if strings.Contains(with, "Opus") && (strings.Contains(with, "…") || !strings.Contains(with, "claude ")) {
+					t.Errorf("scrolled=%v width %d: model tag beside a cut title: %q", scrolled, w, with)
+				}
+			}
+		}
+	})
+
+	t.Run("no meter shows the model alone", func(t *testing.T) {
+		row := topRow(modelApp(t, 50, "Opus 5.5", nil, true))
+
+		if want := " Opus 5.5 ─ ⠋ working ─╮"; !strings.HasSuffix(row, want) || strings.Contains(row, "%") {
+			t.Errorf("top border = %q, want it to end with %q and show no meter", row, want)
+		}
+	})
+
+	t.Run("no model shows nothing", func(t *testing.T) {
+		for name, a := range map[string]*App{
+			"a meter without a model": modelApp(t, 50, "", pct(62), true),
+			"no status":               badgeApp(t, 50, core.AgentWorking, true),
+		} {
+			if row := topRow(a); strings.Contains(row, "%") || strings.Contains(row, "Opus") || !strings.HasSuffix(row, " ⠋ working ─╮") {
+				t.Errorf("%s: top border = %q, want only the badge", name, row)
+			}
+		}
+	})
+
+	t.Run("a shell has none", func(t *testing.T) {
+		a := newTestApp(t)
+		sized(t, a, 50, 12)
+		openIn(t, a, core.OpenPane{Kind: core.KindShell, Cwd: "/home/u/proj", Split: core.SplitVertical})
+		attachPanes(t, a, nil)
+
+		if row := topRow(a); strings.Contains(row, "%") {
+			t.Errorf("shell top border = %q, want no model tag", row)
+		}
+	})
+}
+
+func TestFrameModelTagColours(t *testing.T) {
+	ui := mochaUI(t)
+
+	tests := []struct {
+		pct  int
+		fg   theme.Hex
+		bold bool
+	}{
+		{62, ui.Subtle, false},
+		{75, ui.Warning, false},
+		{95, ui.Error, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(strconv.Itoa(tt.pct), func(t *testing.T) {
+			a := modelApp(t, 50, "Opus 5.5", pct(tt.pct), true)
+			vt := viewVT(t, a)
+			row := topRow(a)
+
+			meter := strconv.Itoa(tt.pct) + "%"
+			model, at := strings.Index(row, "Opus"), strings.Index(row, meter)
+
+			if model < 0 || at < 0 {
+				t.Fatalf("top border = %q, want the model and %q", row, meter)
+			}
+
+			// Everything left of the tag is a single-width rune.
+			x, mx := len([]rune(row[:model])), len([]rune(row[:at]))
+			assertColours(t, vt, x, 2, "O", ui.Muted, ui.Bg, false)
+
+			for i, r := range []rune(meter) {
+				assertColours(t, vt, mx+i, 2, string(r), tt.fg, ui.Bg, tt.bold)
+			}
 		})
 	}
 }
