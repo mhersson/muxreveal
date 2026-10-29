@@ -31,6 +31,7 @@ type reviewView struct {
 	src      git.Source
 	root     string
 	session  string         // the reviewed agent's session; "" for none
+	own      string         // the pane's own directory (WorkDir) the last load ran for
 	turnsFor string         // the session turns counts; another one until a probe for session answers
 	after    func() tea.Cmd // the turn key waiting for the count
 	loaded   bool           // an answer, a result or an error, has been applied
@@ -67,6 +68,7 @@ type reviewView struct {
 	base            string // the base the branch is compared with, resolved
 	turns           int    // how many turns turnsFor has
 	noSnapshot      bool   // the turn shown has no snapshot
+	foreign         bool   // the shown root is not the root of the agent's own directory, so it has no turns
 
 	rowsSplit bool // rows hold side by side pairs
 	rowsRev   int  // bumps whenever rows are replaced; rebuild is the only place that does
@@ -112,6 +114,8 @@ type drawerState struct {
 	slideFrom     time.Time
 	closing       bool
 	views         map[core.TabID]*reviewView
+	list          *wtList // the open worktree list, over the active tab's drawer
+	listGen       int     // names the list wanted; an answer for another is stale
 	hl            diffview.Highlighter
 	dv            *diffview.Theme // the diff view's theme for dvName
 	dvName        string

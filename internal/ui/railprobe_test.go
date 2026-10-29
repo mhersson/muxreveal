@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -403,6 +404,8 @@ func TestRailAnswerOfAnEarlierOpenIsDropped(t *testing.T) {
 	dir := r.repo(t, "proj")
 	id := r.addAgent(t, false, dir)
 
+	// Heads are known when the rail opens; a card shows counts only of the place its head names.
+	r.deliver(r.settle())
 	r.railOpened()
 	oldGen := r.rail.gen
 	r.railClosed()
@@ -453,7 +456,7 @@ func TestRailCardKeepsItsResultUntilTheNewCwdAnswers(t *testing.T) {
 	}
 
 	// A failed probe of the new cwd clears it.
-	r.step(railHeadMsg{pane: id, cwd: second, err: context.DeadlineExceeded})
+	r.step(railHeadMsg{pane: id, cwd: second, own: second, err: context.DeadlineExceeded})
 	r.step(railStatsMsg{pane: id, cwd: second, gen: r.rail.gen, err: context.DeadlineExceeded})
 
 	c, _ := r.card(id)
@@ -468,7 +471,7 @@ func TestRailFailedProbeOfTheSameCwdKeepsTheResult(t *testing.T) {
 	r.openRail()
 
 	cwd := r.store.State().Panes[id].Cwd
-	r.step(railHeadMsg{pane: id, cwd: cwd, err: context.DeadlineExceeded})
+	r.step(railHeadMsg{pane: id, cwd: cwd, own: cwd, err: context.DeadlineExceeded})
 	r.step(railStatsMsg{pane: id, cwd: cwd, gen: r.rail.gen, err: context.DeadlineExceeded})
 
 	if c, _ := r.card(id); c.branch != "main" || !c.statsKnown {
@@ -681,5 +684,129 @@ func TestRailStatsProbeRunsWhenAnAgentMovesIntoARepo(t *testing.T) {
 
 	if c, _ := r.card(id); !c.statsKnown || c.stats.Files != 1 {
 		t.Errorf("card = %+v, want the repo's stats", c)
+	}
+}
+
+func TestProbeHeadPlace(t *testing.T) {
+	r := newRailApp(t, false)
+	tr := newAgentTrees(t, r.real)
+	other := r.repo(t, "other")
+	scratch := t.TempDir()
+	gone := filepath.Join(t.TempDir(), "gone")
+
+	tests := []struct {
+		name     string
+		dir, own string
+		place    string
+	}{
+		{"the same directory", tr.main, tr.main, ""},
+		{"a worktree of the own repository", tr.linked, tr.main, ""},
+		{"the main checkout, own directory in a worktree", tr.main, tr.linked, ""},
+		{"another repository", other, tr.main, "other"},
+		{"another repository, own directory in a worktree", other, tr.linked, "other"},
+		{"own directory in no repository", other, scratch, "other"},
+		{"own directory gone", other, gone, "other"},
+		{"followed directory in no repository", scratch, tr.main, ""},
+		{"followed directory gone", gone, tr.main, ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := probeHeadOf(context.Background(), r.App.log, tt.dir, tt.own)
+			if err != nil {
+				t.Fatalf("probeHeadOf: %v", err)
+			}
+
+			if got.place != tt.place {
+				t.Errorf("probeHeadOf(%q, %q).place = %q, want %q", tt.dir, tt.own, got.place, tt.place)
+			}
+		})
+	}
+}
+
+func TestRailCardNamesTheOtherRepository(t *testing.T) {
+	r := newRailApp(t, false)
+	tr := newAgentTrees(t, r.real)
+	other := r.repo(t, "other")
+	id := r.addAgent(t, false, tr.main)
+	r.openRail()
+
+	steps := []struct {
+		name, edit, branch, place string
+	}{
+		{"an edit in another repository", filepath.Join(other, "a.txt"), "main", "other"},
+		{"an edit in a worktree of the own repository", filepath.Join(tr.linked, "a.txt"), "feat", ""},
+		{"an edit back in the other repository", filepath.Join(other, "a.txt"), "main", "other"},
+		{"an edit in the own directory", filepath.Join(tr.main, "a.txt"), "main", ""},
+	}
+
+	for _, s := range steps {
+		r.clk.Advance(6 * time.Second)
+		r.deliverAll(hook(r.App, harness.Event{Pane: id, Name: "PostToolUse", Edit: s.edit}))
+
+		c, _ := r.card(id)
+		if c.branch != s.branch || c.place != s.place || c.project != filepath.Base(tr.main) {
+			t.Errorf("%s: card = project %q, place %q, branch %q; want project %q, place %q, branch %q",
+				s.name, c.project, c.place, c.branch, filepath.Base(tr.main), s.place, s.branch)
+		}
+	}
+}
+
+// reachedGit puts a git first on PATH that names the common dir of a repository
+// under target through link, a symlink to target, as a git that does not
+// canonicalize the paths it prints would when it was reached through the link.
+func reachedGit(t *testing.T, gitBin, target, link string) {
+	t.Helper()
+
+	bin := t.TempDir()
+	script := "#!/bin/sh\nout=$('" + gitBin + "' \"$@\") || exit $?\n" +
+		"case \"$*\" in *--git-common-dir*) case \"$(pwd -P)\" in '" + target + "'|'" + target + "'/*)\n" +
+		"out=$(printf '%s\\n' \"$out\" | sed 's#^" + target + "/#" + link + "/#') ;; esac ;; esac\n" +
+		"printf '%s\\n' \"$out\"\n"
+
+	if err := os.WriteFile(filepath.Join(bin, "git"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+}
+
+func TestCardPlaceThroughSymlink(t *testing.T) {
+	tests := []struct {
+		name      string
+		asReached bool
+	}{
+		{"git answers with canonical paths", false},
+		{"git answers with the path it was reached by", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := newRailApp(t, false)
+			tr := newAgentTrees(t, r.real)
+
+			link := filepath.Join(t.TempDir(), "link")
+			if err := os.Symlink(tr.main, link); err != nil {
+				t.Fatal(err)
+			}
+
+			if tt.asReached {
+				reachedGit(t, r.real, tr.main, link)
+
+				if repo, err := git.Open(context.Background(), link); err != nil || !strings.HasPrefix(repo.CommonDir, link+"/") {
+					t.Fatalf("Open(%q) = %+v, %v; want a common dir under the link", link, repo, err)
+				}
+			}
+
+			id := r.addAgent(t, false, link)
+			r.openRail()
+			r.clk.Advance(6 * time.Second)
+			r.deliverAll(hook(r.App, harness.Event{Pane: id, Name: "PostToolUse", Edit: filepath.Join(tr.linked, "a.txt")}))
+
+			c, _ := r.card(id)
+			if c.branch != "feat" || c.place != "" {
+				t.Errorf("card = branch %q, place %q; want branch feat and no place: the own directory is the same repository", c.branch, c.place)
+			}
+		})
 	}
 }

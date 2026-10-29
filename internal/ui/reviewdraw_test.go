@@ -81,6 +81,41 @@ func reviewCases() []reviewCase {
 				v.cursor = rowWith(t, v, "review.toggle")
 			}
 		})},
+		{"pinned", with(func(s *reviewScene) { s.pinned = true })},
+		{"pinned-split", with(func(s *reviewScene) {
+			s.pinned = true
+			s.tune = func(t *testing.T, a *App, v *reviewView) {
+				v.split = true
+				v.rebuild(true)
+			}
+		})},
+		{"pinned-narrow", with(func(s *reviewScene) { s.pinned, s.w, s.h = true, 40, 40 })},
+		{"pinned-narrower", with(func(s *reviewScene) { s.pinned, s.w, s.h = true, 28, 40 })},
+		{"worktree-removed", with(func(s *reviewScene) {
+			s.pinned, s.branch, s.res = true, true, git.Result{}
+			s.tune = func(t *testing.T, a *App, v *reviewView) {
+				a.getenv = func(string) string { return "/home/me" }
+				v.err = errWorktreeRemoved{root: "/home/me/code/muxreveal/.worktrees/b"}
+				v.rebuild(false)
+			}
+		})},
+		{"worktree-list", with(func(s *reviewScene) {
+			s.tune = func(t *testing.T, a *App, v *reviewView) { showList(a, wtDemoRows(), "other · main", 0) }
+		})},
+		{"worktree-list-pinned", with(func(s *reviewScene) {
+			s.pinned = true
+			s.tune = func(t *testing.T, a *App, v *reviewView) { showList(a, wtDemoRows(), "other · main", 4) }
+		})},
+		{"worktree-list-narrow", with(func(s *reviewScene) {
+			s.w, s.h = 40, 40
+			s.tune = func(t *testing.T, a *App, v *reviewView) {
+				rows := wtDemoRows()
+				rows[2].branch = "feature/follow-the-agents-edits"
+				rows[3].branch = "feature/worktree-list"
+
+				showList(a, rows, "other · feature/follow-the-agents-edits", 3)
+			}
+		})},
 		{"unfocused", with(func(s *reviewScene) {
 			s.focused = false
 			s.tune = func(t *testing.T, a *App, v *reviewView) { v.cursor = rowWith(t, v, "review.toggle") }
@@ -579,7 +614,7 @@ func TestDrawerModeShowsOnlyInTheTagWithoutTheTree(t *testing.T) {
 
 func TestDrawerKeyHints(t *testing.T) {
 	const (
-		diffHints = "j/k line   ]/[ hunk   }/{ file   tab tree   f full   u split   b/t mode   ,/. turn   e edit   / search"
+		diffHints = "j/k line   ]/[ hunk   }/{ file   tab tree   w worktree   f full   u split   b/t mode   ,/. turn   e edit   / search"
 		treeHints = "j/k file   enter jump   tab hide   esc back"
 	)
 
@@ -609,6 +644,79 @@ func TestDrawerKeyHints(t *testing.T) {
 
 	if got := build(16, false, false); !strings.Contains(got, "j/k line") {
 		t.Errorf("hints missing with an inner height of 12:\n%s", got)
+	}
+}
+
+// The turn hint shows only while the drawer shows a turn, as the mode tag does:
+// a drawer that shows the branch leaves it out so the row holds the hints that
+// work, whatever mode core keeps.
+func TestDrawerTurnHintShowsOnlyForTurns(t *testing.T) {
+	t.Parallel()
+
+	const (
+		head     = "j/k line   ]/[ hunk   }/{ file   tab tree   w worktree   f full   u split   b/t mode"
+		viaTurn  = head + "   ,/. turn"
+		viaEdit  = head + "   e edit"
+		wideTurn = viaTurn + "   e edit   / search"
+		wideEdit = viaEdit + "   / search"
+	)
+
+	// A turn-mode drawer that shows the branch while core keeps turn mode.
+	branchInTurnMode := func(session string, turns int, foreign bool) func(s *reviewScene) {
+		return func(s *reviewScene) {
+			s.tune = func(t *testing.T, a *App, v *reviewView) {
+				v.src, v.base, v.session, v.turns, v.foreign = git.BranchSource{Worktree: "/w/p1"}, "origin/main", session, turns, foreign
+			}
+		}
+	}
+
+	tests := []struct {
+		name  string
+		scene func(s *reviewScene)
+		turn  bool // the row holds the turn hint
+	}{
+		{"branch mode", func(s *reviewScene) { s.branch = true }, false},
+		{"turn mode on the agent's worktree", func(s *reviewScene) {}, true},
+		{"turn mode on another worktree", branchInTurnMode("s", 0, true), false},
+		{"turn mode with no session", branchInTurnMode("", 0, false), false},
+		{"turn mode with no turns yet", branchInTurnMode("s", 0, false), false},
+	}
+
+	widths := []struct {
+		name       string
+		w          int
+		turn, edit string // the end of the row with and without the turn hint
+	}{
+		{"wide", 240, wideTurn, wideEdit},
+		{"usual width", 200, viaTurn, viaEdit},
+	}
+
+	for _, tt := range tests {
+		for _, wd := range widths {
+			t.Run(tt.name+", "+wd.name, func(t *testing.T) {
+				t.Parallel()
+
+				s := reviewScene{theme: "catppuccin-mocha", icons: false, w: wd.w, h: 52, res: turn4Result(), turn: 4, turns: 4, focused: true}
+				tt.scene(&s)
+
+				var row string
+
+				for l := range strings.SplitSeq(ansi.Strip(s.build(t).View().Content), "\n") {
+					if strings.Contains(l, "j/k line") {
+						row = strings.TrimRight(strings.TrimRight(l, " │"), " ")
+					}
+				}
+
+				want := wd.edit
+				if tt.turn {
+					want = wd.turn
+				}
+
+				if !strings.HasSuffix(row, want) {
+					t.Errorf("the hint row is\n%q\nwant it to end with\n%q", row, want)
+				}
+			})
+		}
 	}
 }
 

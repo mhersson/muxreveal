@@ -235,8 +235,8 @@ func (a *App) prSync() tea.Cmd {
 		m, ok := st.Panes[id]
 		rp := a.rail.panes[id]
 
-		// Nothing is known of a pane whose head was not probed for its cwd.
-		if !ok || rp == nil || !rp.probe.known || rp.probe.headCwd != m.WorkDir() {
+		// Nothing is known of a pane whose head was not probed for its followed directory.
+		if !ok || rp == nil || !rp.probe.known || rp.probe.headCwd != m.FollowDir() {
 			continue
 		}
 

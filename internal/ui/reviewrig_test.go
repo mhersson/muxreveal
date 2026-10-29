@@ -192,6 +192,8 @@ type drawerRig struct {
 	pm    *pump
 	set   *git.WatchSet
 	wait  time.Duration // how long until gives up
+
+	reported map[string]bool // the paths, absolute, that watcher batches fed to step named
 }
 
 // turnFirst makes a new drawer open in turn mode when its pane has turns; the
@@ -218,7 +220,7 @@ func newDrawerRigWatching(t *testing.T, wo git.WatchOptions, opts ...func(*Optio
 	set0 := func(o *Options) { o.GitTempDir, o.IndexCache, o.Watches = tmp, cache, set }
 
 	a, _, clk := kindApp(t, append([]func(*Options){set0}, opts...)...)
-	r := &drawerRig{App: a, ticks: &heldTicks{}, clk: clk, pm: newPump(t), set: set, wait: watchWait}
+	r := &drawerRig{App: a, ticks: &heldTicks{}, clk: clk, pm: newPump(t), set: set, wait: watchWait, reported: map[string]bool{}}
 	a.tick = r.ticks.tick
 
 	sized(t, a, 200, 50)
@@ -228,9 +230,24 @@ func newDrawerRigWatching(t *testing.T, wo git.WatchOptions, opts ...func(*Optio
 }
 
 func (r *drawerRig) step(msg tea.Msg) tea.Cmd {
+	if w, ok := msg.(watchMsg); ok {
+		for _, p := range w.Batch.Paths {
+			r.reported[filepath.Join(w.Root, p)] = true
+		}
+	}
+
 	_, cmd := r.Update(msg)
 
 	return cmd
+}
+
+// reportedAll is a condition: watcher batches fed to step have named every one
+// of paths. A watcher reports a write only after its debounce, so a test that
+// must not see that report later waits for it first.
+func (r *drawerRig) reportedAll(paths ...string) func() bool {
+	return func() bool {
+		return !slices.ContainsFunc(paths, func(p string) bool { return !r.reported[p] })
+	}
 }
 
 func (r *drawerRig) run(cmd tea.Cmd) { r.pm.run(cmd) }

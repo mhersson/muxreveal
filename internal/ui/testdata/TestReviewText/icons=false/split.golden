@@ -48,5 +48,5 @@
 │                                                                                                   │                                                 │  7 +     // the title reads left to right: ⟨U+…│
 │                                                                                                   │                                                 │  8 +     if got := reviewTitle(); got != want {│
 │                                                                                                   │                                                 │  9 +         t.Fatalf("title = %q, want %q", g…│
-│                                                                                                   │ j/k line   ]/[ hunk   }/{ file   tab tree   f full   u split   b/t mode   ,/. turn   e edit      │
+│                                                                                                   │ j/k line   ]/[ hunk   }/{ file   tab tree   w worktree   f full   u split   b/t mode   ,/. turn  │
 ╰───────────────────────────────────────────────────────────────────────────────────────────────────╰──────────────────────────────────────────────────────────────────────────────────────────────────╯

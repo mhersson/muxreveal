@@ -91,14 +91,33 @@ type pushedMsg struct {
 	err    error
 }
 
+// pushDir is the directory a push starts from: what the open review drawer
+// shows, a pin included, else the focused pane's followed place, else the
+// directory the app started in.
+func (a *App) pushDir(st core.State) string {
+	tab := st.Tab()
+
+	if tab.Review != nil {
+		if dir := a.drawerDir(st, tab, tab.Review.Pane); dir != "" {
+			return dir
+		}
+	}
+
+	if dir := st.Panes[tab.Focus].FollowDir(); dir != "" {
+		return dir
+	}
+
+	return a.cwd
+}
+
 // push is the git.push command: it reads, off the update loop, what pushing the
-// focused pane's branch would do, then asks before anything is pushed.
+// branch of pushDir would do, then asks before anything is pushed.
 func (a *App) push() tea.Cmd {
 	st := a.store.State()
 	id := st.Tab().Focus
 
-	m, ok := st.Panes[id]
-	if !ok || m.WorkDir() == "" {
+	cwd := a.pushDir(st)
+	if cwd == "" {
 		a.notice = noticePushNotRepo
 
 		return nil
@@ -108,7 +127,6 @@ func (a *App) push() tea.Cmd {
 
 	var (
 		seq    = a.pushSeq
-		cwd    = m.WorkDir()
 		home   = a.getenv("HOME")
 		appCtx = a.ctx
 		log    = a.log
@@ -127,7 +145,7 @@ func (a *App) push() tea.Cmd {
 // resolvePush reads what pushing the branch checked out in cwd would do. err is
 // a failure that is none of the states.
 func resolvePush(ctx context.Context, log *slog.Logger, pane core.PaneID, cwd, home string) (pushTarget, pushState, error) {
-	head, err := probeHeadOf(ctx, log, cwd)
+	head, err := probeHeadOf(ctx, log, cwd, cwd)
 
 	switch {
 	case err != nil:

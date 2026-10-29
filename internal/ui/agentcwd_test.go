@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"testing"
 	"time"
@@ -113,7 +114,7 @@ func TestHookCwdOfAPaneThatIsNotAnAgentChangesNothing(t *testing.T) {
 	}
 
 	for id, m := range before.Panes {
-		if after.Panes[id] != m {
+		if !reflect.DeepEqual(after.Panes[id], m) {
 			t.Errorf("pane %s = %+v, want %+v", id, after.Panes[id], m)
 		}
 	}

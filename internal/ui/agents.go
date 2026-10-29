@@ -61,7 +61,8 @@ func (a *App) onHook(ev harness.Event) tea.Cmd {
 	}
 
 	// A relative cwd would resolve against MuxReveal's directory, so it counts as none.
-	if filepath.IsAbs(ev.Cwd) && ev.Cwd != m.AgentCwd {
+	// A subagent may work in a directory of its own, so its cwd says nothing of the agent's.
+	if !ev.Subagent && filepath.IsAbs(ev.Cwd) && ev.Cwd != m.AgentCwd {
 		// dispatch logs its own failures.
 		_ = a.dispatch(core.SetAgentCwd{ID: ev.Pane, Cwd: ev.Cwd})
 	}
@@ -90,8 +91,17 @@ func (a *App) onHook(ev harness.Event) tea.Cmd {
 		_ = a.dispatch(core.SetAgentAction{ID: ev.Pane, Action: ev.Action})
 	}
 
+	var edit, changed tea.Cmd
+	if ev.Edit != "" {
+		edit = a.noteEdit(m, ev.Pane, ev.Edit)
+	}
+
+	if len(ev.Changed) > 0 {
+		changed = a.noteChanged(m, ev.Pane, ev.Changed)
+	}
+
 	// After the session is recorded: the name probe reads the transcript it reports.
-	probes := tea.Batch(a.railHook(ev.Pane, ev.Start, ev.State == core.AgentIdle), a.reviewHook(ev.Pane, ev.TurnStart, ev.Snapped))
+	probes := tea.Batch(a.railHook(ev.Pane, ev.Start, ev.State == core.AgentIdle), a.reviewHook(ev.Pane, ev.TurnStart, ev.Snapped), edit, changed)
 
 	if ev.State == core.AgentUnknown {
 		return probes

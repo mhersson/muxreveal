@@ -122,6 +122,7 @@ type App struct {
 	picker    pickerState
 	watches   watchState
 	prs       prState
+	edits     editState
 	storeVer  uint64        // counts the dispatches the store accepted
 	engine    *git.Engine   // nil when the rail's diff stats and the review drawer's diffs are off
 	probeSem  chan struct{} // its capacity bounds the head, stats and name probes running at once
@@ -202,10 +203,11 @@ func New(opts Options) (*App, error) {
 		events: opts.Events, notice: opts.Notice, save: opts.Save,
 		log: opts.Logger, store: opts.Store, reg: reg, keymap: km,
 		panes: map[core.PaneID]*pane{}, outerFocused: true,
-		watches: watchState{set: opts.Watches, open: git.Open, panes: map[core.PaneID]*paneWatch{}, failed: map[string]bool{}},
+		watches: watchState{set: opts.Watches, open: git.Open, panes: map[core.PaneID]*paneWatch{}, pins: map[core.TabID]*pinWatch{}, failed: map[string]bool{}},
 		getenv:  getenv, cwd: cwd, recordDir: opts.RecordDir, icons: opts.Icons, clock: realClock{}, start: termStart,
 		load:         newSysLoad(),
 		probeSem:     make(chan struct{}, railProbeMax),
+		edits:        editState{last: map[core.PaneID]lastEdit{}, resolve: git.EditPlace},
 		focusFollows: opts.FocusFollowsMouse, copyOnSelect: opts.CopyOnSelect,
 		clip: newClipboard(clipboardConfig{OSC52: !opts.NoOSC52, Native: !opts.NoNativeClipboard}, getenv, runtime.GOOS, opts.Logger),
 	}
@@ -377,6 +379,8 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.later = append(a.later, c)
 	}
 
+	a.worktreesSync()
+
 	if c := a.drawerAfterUpdate(); c != nil {
 		a.later = append(a.later, c)
 	}
@@ -505,6 +509,10 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, a.onKindDue(msg)
 	case hookMsg:
 		return a, tea.Batch(a.onHook(msg.ev), a.waitEvent())
+	case editPlaceMsg:
+		a.onEditPlace(msg)
+	case editPlacesMsg:
+		a.onEditPlaces(msg)
 	case watchMsg:
 		return a, tea.Batch(a.onWatch(msg), a.waitWatch())
 	case paneRepoMsg:
@@ -521,6 +529,8 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, a.onPushed(msg)
 	case watchAcquiredMsg:
 		a.onWatchAcquired(msg)
+	case pinAcquiredMsg:
+		a.onPinAcquired(msg)
 	case agentTickMsg:
 		return a, a.onAgentTick()
 	case clockMsg:
@@ -554,6 +564,10 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, a.onReviewFull(msg)
 	case reviewFlashMsg:
 		a.onReviewFlash(msg)
+	case wtOpenMsg:
+		return a, a.onWorktreesOpen(msg)
+	case wtStatsMsg:
+		a.onWorktreeStats(msg)
 	case pickerOpenMsg:
 		return a, a.onPickerOpen(msg)
 	case pickerPageMsg:

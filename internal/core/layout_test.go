@@ -447,7 +447,7 @@ func TestSwapDir(t *testing.T) {
 				t.Errorf("root ratio = %v, want %v", got.Tab().Layout.Ratio, tt.wantRatio)
 			}
 
-			if !maps.Equal(got.Panes, before) {
+			if !maps.EqualFunc(got.Panes, before, samePane) {
 				t.Errorf("Panes = %v, want %v", got.Panes, before)
 			}
 		})

@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"context"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -284,8 +286,9 @@ func TestFailedWatchOfANewRepositoryFallsBackToHooks(t *testing.T) {
 		v := r.open(t, id)
 		r.watching(t, id, rootOf(t, dir))
 
-		// The pane moved on and the new root's watch has not answered yet.
+		// The pane moved on, so the drawer is on the new root, whose watch has not answered yet.
 		r.watches.panes[id].want = "/another/root"
+		v.root = "/another/root"
 
 		r.run(r.reviewHook(id, false, nil))
 
@@ -483,5 +486,354 @@ func TestNewSessionDropsAHeldTurnKey(t *testing.T) {
 
 	if r.notice != "" || r.coreMode() != core.ReviewBranch {
 		t.Errorf("notice %q core mode %q, want the dropped key to do nothing", r.notice, r.coreMode())
+	}
+}
+
+// newTurnRig is a follow rig whose agent has one turn of its session, taken in
+// A's main checkout (the agent's own directory) and followed there by a new
+// file, and five uncommitted lines in b that only the branch shows.
+func newTurnRig(t *testing.T, opts ...func(*Options)) *followRig {
+	t.Helper()
+
+	r := newFollowRig(t, testSession, opts...)
+	snapshotTurn(t, r.dirA, testSession)
+	write(t, filepath.Join(r.dirA, "x.txt"), "after the turn\n")
+	r.addLines(t, filepath.Join(r.dirB, "a.txt"))
+
+	return r
+}
+
+// settledOn is a condition: the drawer shows a loaded turn, or the branch, of root.
+func (r *followRig) settledOn(root string, turn bool) func() bool {
+	return r.viewHolds(func(v *reviewView) bool {
+		_, isTurn := v.src.(git.TurnSource)
+
+		return v.root == root && v.loaded && !v.loading && isTurn == turn
+	})
+}
+
+// followB opens the drawer in turn mode on A, then edits in b and waits for the
+// drawer to show b.
+func (r *followRig) followB(t *testing.T) *reviewView {
+	t.Helper()
+
+	if v := r.open(t, r.id); v.root != r.rootA || v.turns != 1 || r.coreMode() != core.ReviewTurn {
+		t.Fatalf("setup: root %q with %d turns in %q mode, want A's turn mode", v.root, v.turns, r.coreMode())
+	}
+
+	r.edit(filepath.Join(r.dirB, "a.txt"))
+	r.until(t, "the drawer to show b", r.settledOn(r.rootB, false))
+
+	return r.view()
+}
+
+func TestTurnModeInAnotherWorktreeShowsBranch(t *testing.T) {
+	r := newTurnRig(t, turnFirst)
+	v := r.followB(t)
+
+	if want := (git.BranchSource{Worktree: r.rootB}); v.src != want {
+		t.Errorf("source = %+v, want %+v", v.src, want)
+	}
+
+	// A turn of A's session would show x.txt, the file A changed after it.
+	if got := viewPaths(v); !slices.Equal(got, []string{"a.txt"}) || v.res.Turn != 0 || v.turns != 0 || !v.foreign {
+		t.Errorf("shows %v as turn %d of %d turns, foreign %v, want a.txt of b's branch with no turns", got, v.res.Turn, v.turns, v.foreign)
+	}
+
+	if r.coreMode() != core.ReviewTurn {
+		t.Errorf("core mode = %q, want turn mode kept", r.coreMode())
+	}
+
+	if got := r.drawn(t); !strings.Contains(got, "branch") || strings.Contains(got, "turn 1/1") {
+		t.Errorf("the tag does not read branch:\n%s", got)
+	}
+}
+
+func TestTurnKeysInAnotherWorktree(t *testing.T) {
+	r := newTurnRig(t, turnFirst)
+	v := r.followB(t)
+	want := "no turns in " + filepath.Base(r.dirA) + " · b yet"
+
+	keys := []struct {
+		name  string
+		press func() tea.Cmd
+	}{
+		{"t", func() tea.Cmd { return r.setReviewMode(core.ReviewTurn) }},
+		{",", func() tea.Cmd { return r.stepReviewTurn(-1) }},
+		{".", func() tea.Cmd { return r.stepReviewTurn(1) }},
+	}
+
+	for _, k := range keys {
+		r.notice = ""
+		epoch, gen := v.epoch, v.gen
+
+		cmd := k.press()
+
+		if r.notice != want {
+			t.Errorf("%s: notice = %q, want %q", k.name, r.notice, want)
+		}
+
+		if cmd != nil || v.loading || v.epoch != epoch || v.gen != gen || r.coreMode() != core.ReviewTurn || !isBranchSource(v) {
+			t.Errorf("%s changed something: command %v, loading %v, epoch %d -> %d, core mode %q, source %T", k.name, cmd != nil, v.loading, epoch, v.epoch, r.coreMode(), v.src)
+		}
+	}
+}
+
+func TestNoTurnsNoticeCleansNames(t *testing.T) {
+	r := newDrawerRig(t)
+	tab := r.store.State().Tab().ID
+	v := &reviewView{loaded: true, foreign: true, project: "my\x07repo", branch: "feat\u200b/x"}
+
+	if ok, cmd := r.turnsGate(tab, v, string(testSession), nil); ok || cmd != nil {
+		t.Fatalf("turnsGate() = %v, %v, want the key stopped", ok, cmd != nil)
+	}
+
+	if want := "no turns in myrepo · feat/x yet"; r.notice != want {
+		t.Errorf("notice = %q, want %q", r.notice, want)
+	}
+
+	// A pane with no session keeps its own notice.
+	r.notice = ""
+	r.turnsGate(tab, v, "", nil)
+
+	if want := "no turns: this pane has no agent session"; r.notice != want {
+		t.Errorf("notice = %q, want %q", r.notice, want)
+	}
+}
+
+func TestTurnModeBackInOwnWorktree(t *testing.T) {
+	r := newTurnRig(t, turnFirst)
+	r.followB(t)
+
+	r.edit(filepath.Join(r.dirA, "x.txt"))
+	r.until(t, "A's turn", r.settledOn(r.rootA, true))
+
+	v := r.view()
+	if got := viewPaths(v); !slices.Equal(got, []string{"x.txt"}) || v.res.Turn != 1 || !v.res.Live || v.turns != 1 || v.foreign {
+		t.Errorf("shows %v as turn %d (live %v) of %d turns, foreign %v, want x.txt in A's latest turn", got, v.res.Turn, v.res.Live, v.turns, v.foreign)
+	}
+
+	// The turn keys work again.
+	r.notice = ""
+	r.run(r.stepReviewTurn(1))
+
+	if want := "turn 1 is the latest turn"; r.notice != want {
+		t.Errorf("notice = %q, want %q", r.notice, want)
+	}
+}
+
+func TestOpenDrawerOnAnotherWorktreeStartsInBranch(t *testing.T) {
+	tests := []struct {
+		name   string
+		edit   bool
+		want   core.ReviewMode
+		source func(r *followRig) git.Source
+	}{
+		{"agent in its own worktree", false, core.ReviewTurn, func(r *followRig) git.Source {
+			return git.TurnSource{Worktree: r.rootA, Session: string(testSession)}
+		}},
+		{"agent following another worktree", true, core.ReviewBranch, func(r *followRig) git.Source {
+			return git.BranchSource{Worktree: r.rootB}
+		}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := newTurnRig(t, turnFirst)
+
+			if tt.edit {
+				r.edit(filepath.Join(r.dirB, "a.txt"))
+			}
+
+			v := r.open(t, r.id)
+
+			if got := r.coreMode(); got != tt.want {
+				t.Errorf("opened in %q mode, want %q", got, tt.want)
+			}
+
+			if want := tt.source(r); v.src != want {
+				t.Errorf("source = %+v, want %+v", v.src, want)
+			}
+		})
+	}
+}
+
+func TestTurnModeAfterOwnDirectoryMoves(t *testing.T) {
+	r := newTurnRig(t, turnFirst)
+	r.open(t, r.id)
+
+	r.hookNow(cwdHook(r.id, r.dirB))
+	r.until(t, "A's turn on b", r.settledOn(r.rootB, true))
+
+	if v := r.view(); v.foreign || v.turns != 1 || r.coreMode() != core.ReviewTurn {
+		t.Errorf("foreign %v with %d turns in %q mode, want turn mode with the session's turn", v.foreign, v.turns, r.coreMode())
+	}
+
+	r.notice = ""
+	r.run(r.setReviewMode(core.ReviewTurn))
+	r.idle(t)
+
+	if _, ok := r.view().src.(git.TurnSource); !ok || r.notice != "" {
+		t.Errorf("source %T notice %q after t, want a turn and no notice", r.view().src, r.notice)
+	}
+}
+
+// The agent's own directory moving into or out of the shown worktree switches a
+// turn drawer between the turn and the branch.
+func TestOwnDirectoryMovingFlipsTurnMode(t *testing.T) {
+	r := newTurnRig(t, turnFirst)
+	r.followB(t)
+
+	r.hookNow(cwdHook(r.id, r.dirB))
+	r.until(t, "the turn on b", r.settledOn(r.rootB, true))
+
+	if v := r.view(); v.foreign || v.turns != 1 || r.pane().FollowDir() != r.dirB {
+		t.Errorf("foreign %v with %d turns following %q, want the turn of b followed", v.foreign, v.turns, r.pane().FollowDir())
+	}
+
+	r.hookNow(cwdHook(r.id, r.dirA))
+	r.until(t, "the branch of b", r.settledOn(r.rootB, false))
+
+	if v := r.view(); !v.foreign || v.turns != 0 || r.coreMode() != core.ReviewTurn {
+		t.Errorf("foreign %v with %d turns in %q mode, want b's branch in turn mode", v.foreign, v.turns, r.coreMode())
+	}
+}
+
+// A move of the own directory inside the shown repository neither reloads the
+// diff nor changes what it shows.
+func TestOwnDirectoryMovingInsideTheRepositoryKeepsTheDiff(t *testing.T) {
+	r := newTurnRig(t, turnFirst)
+	sub := filepath.Join(r.dirA, "pkg")
+	write(t, filepath.Join(sub, "p.txt"), "p\n")
+
+	// The watcher reports these writes and the rig's x.txt after its debounce.
+	// A drawer that opens first, as it does when diffs are fast, would reload
+	// for them after the move and mask what the test checks.
+	r.until(t, "the watcher to report the files written", r.reportedAll(
+		filepath.Join(r.rootA, "x.txt"), filepath.Join(r.rootA, "pkg", "p.txt")))
+
+	v := r.open(t, r.id)
+	epoch, gen := v.epoch, v.gen
+
+	r.hookNow(cwdHook(r.id, sub))
+	r.until(t, "the own directory to be seen", func() bool { return v.own == sub && !v.loading })
+	r.quiet()
+
+	if v != r.view() || v.epoch != epoch || v.gen != gen || v.foreign || !isTurnSource(v) {
+		t.Errorf("the drawer reloaded: epoch %d -> %d, generation %d -> %d, foreign %v, source %T", epoch, v.epoch, gen, v.gen, v.foreign, v.src)
+	}
+}
+
+func isTurnSource(v *reviewView) bool {
+	_, ok := v.src.(git.TurnSource)
+
+	return ok
+}
+
+// A live load that starts after the own directory moved away from the shown
+// root swaps the turn for the branch, and computes the branch afresh rather
+// than updating the turn's result.
+func TestLiveLoadAfterOwnDirectoryMovedComputesTheBranch(t *testing.T) {
+	r := newFollowRig(t, testSession, turnFirst)
+
+	// The turn's snapshot holds m.txt changed. Since then m.txt is back to its
+	// committed text and n.txt is changed, so the turn shows both files and the
+	// branch only n.txt.
+	write(t, filepath.Join(r.dirA, "m.txt"), "m\n")
+	write(t, filepath.Join(r.dirA, "n.txt"), "n\n")
+	commitEverything(t, r.dirA, "more files")
+	write(t, filepath.Join(r.dirA, "m.txt"), "m in the turn\n")
+	snapshotTurn(t, r.dirA, testSession)
+	write(t, filepath.Join(r.dirA, "m.txt"), "m\n")
+	write(t, filepath.Join(r.dirA, "n.txt"), "n changed\n")
+
+	v := r.open(t, r.id)
+	if !isTurnSource(v) || !slices.Equal(viewPaths(v), []string{"m.txt", "n.txt"}) {
+		t.Fatalf("setup: source %T shows %v, want the turn with m.txt and n.txt", v.src, viewPaths(v))
+	}
+
+	// An edit keeps the followed place on A whatever the own directory does.
+	r.edit(filepath.Join(r.dirA, "n.txt"))
+	r.quiet()
+
+	// The own directory moves while a load is in flight and a second batch
+	// waits behind it, so the load that follows starts for the moved directory.
+	r.run(r.batch(r.rootA, git.Batch{Paths: []string{"n.txt"}}))
+
+	if !v.loading {
+		t.Fatal("setup: no load in flight")
+	}
+
+	r.hookNow(cwdHook(r.id, r.dirB))
+	r.run(r.batch(r.rootA, git.Batch{Paths: []string{"n.txt"}}))
+	r.until(t, "the queued load", func() bool {
+		v := r.view()
+
+		return v.own == r.dirB && !v.loading && v.queued == nil
+	})
+
+	fresh, err := r.engine.Diff(context.Background(), git.BranchSource{Worktree: r.rootA})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	v = r.view()
+	if want := (git.BranchSource{Worktree: r.rootA}); v.src != want || !v.foreign {
+		t.Errorf("source %+v foreign %v, want %+v and foreign", v.src, v.foreign, want)
+	}
+
+	if got := viewPaths(v); !slices.Equal(got, []string{"n.txt"}) || v.res.Turn != 0 || v.res.Old != fresh.Old {
+		t.Errorf("shows %v as turn %d against %q, want n.txt of the branch against %q", got, v.res.Turn, v.res.Old, fresh.Old)
+	}
+}
+
+// An own directory that is gone, or in no repository, is not the shown root:
+// turn mode shows the branch and the turn keys say there are no turns.
+func TestTurnModeWithoutAnOwnRepository(t *testing.T) {
+	tests := []struct {
+		name string
+		own  func(t *testing.T) string
+	}{
+		{"own directory in no repository", func(t *testing.T) string { return t.TempDir() }},
+		{"own directory gone", func(t *testing.T) string {
+			dir := filepath.Join(t.TempDir(), "gone")
+			if err := os.Mkdir(dir, 0o750); err != nil {
+				t.Fatal(err)
+			}
+
+			return dir
+		}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := newTurnRig(t)
+			own := tt.own(t)
+
+			r.edit(filepath.Join(r.dirB, "a.txt"))
+			r.hookNow(cwdHook(r.id, own))
+
+			if tt.name == "own directory gone" {
+				if err := os.Remove(own); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			openIn(t, r.App, core.OpenReview{Pane: r.id, Mode: core.ReviewTurn})
+			r.settle()
+			r.until(t, "b's branch", r.settledOn(r.rootB, false))
+
+			v := r.view()
+			if want := (git.BranchSource{Worktree: r.rootB}); v.src != want || !v.foreign || v.turns != 0 || r.coreMode() != core.ReviewTurn {
+				t.Errorf("source %+v foreign %v with %d turns in %q mode, want b's branch in turn mode with no turns", v.src, v.foreign, v.turns, r.coreMode())
+			}
+
+			r.notice = ""
+			r.run(r.setReviewMode(core.ReviewTurn))
+
+			if want := "no turns in " + filepath.Base(r.dirA) + " · b yet"; r.notice != want {
+				t.Errorf("t: notice = %q, want %q", r.notice, want)
+			}
+		})
 	}
 }

@@ -3,6 +3,7 @@ package harness
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"maps"
 	"os"
 	"os/exec"
@@ -225,6 +226,193 @@ func TestParseEventAction(t *testing.T) {
 
 			if !ev.ActionSet && ev.Action != "" {
 				t.Errorf("action %q on an event that leaves it", ev.Action)
+			}
+		})
+	}
+}
+
+func TestParseEventEdit(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		event string
+		rest  string
+		want  string
+	}{
+		{"pre edit", "PreToolUse", `"tool_name":"Edit","tool_input":{"file_path":"/r/a.go"}`, "/r/a.go"},
+		{"post write", "PostToolUse", `"tool_name":"Write","tool_input":{"file_path":"/r/a.go","content":"x"}`, "/r/a.go"},
+		{"pre notebook edit", "PreToolUse", `"tool_name":"NotebookEdit","tool_input":{"notebook_path":"/r/n.ipynb"}`, "/r/n.ipynb"},
+		{"pre multi edit", "PreToolUse", `"tool_name":"MultiEdit","tool_input":{"file_path":"/r/a.go"}`, "/r/a.go"},
+		{"post notebook edit", "PostToolUse", `"tool_name":"NotebookEdit","tool_input":{"notebook_path":"/r/n.ipynb"}`, "/r/n.ipynb"},
+		{"path is cleaned", "PreToolUse", `"tool_name":"Edit","tool_input":{"file_path":"/r/x/../a.go"}`, "/r/a.go"},
+		{"path with spaces and non-ASCII", "PostToolUse", `"tool_name":"Edit","tool_input":{"file_path":"/r/my dir/å.go"}`, "/r/my dir/å.go"},
+		{"notebook edit ignores file_path", "PreToolUse", `"tool_name":"NotebookEdit","tool_input":{"file_path":"/r/a.go"}`, ""},
+		{"edit ignores notebook_path", "PreToolUse", `"tool_name":"Edit","tool_input":{"notebook_path":"/r/n.ipynb"}`, ""},
+		{"failed edit", "PostToolUseFailure", `"tool_name":"Edit","tool_input":{"file_path":"/r/a.go"}`, ""},
+		{"edit permission request", "PermissionRequest", `"tool_name":"Edit","tool_input":{"file_path":"/r/a.go"}`, ""},
+		{"read", "PreToolUse", `"tool_name":"Read","tool_input":{"file_path":"/r/a.go"}`, ""},
+		{"bash", "PreToolUse", `"tool_name":"Bash","tool_input":{"command":"sed -i x /r/a.go"}`, ""},
+		{"relative path", "PreToolUse", `"tool_name":"Edit","tool_input":{"file_path":"src/a.go"}`, ""},
+		{"relative path that climbs", "PostToolUse", `"cwd":"/r","tool_name":"Edit","tool_input":{"file_path":"../a.go"}`, ""},
+		{"empty path", "PreToolUse", `"tool_name":"Edit","tool_input":{"file_path":""}`, ""},
+		{"path is not a string", "PreToolUse", `"tool_name":"Edit","tool_input":{"file_path":5}`, ""},
+		{"tool_input is not an object", "PreToolUse", `"tool_name":"Edit","tool_input":"/r/a.go"`, ""},
+		{"no tool_input", "PreToolUse", `"tool_name":"Edit"`, ""},
+		{"path holds NUL", "PreToolUse", `"tool_name":"Edit","tool_input":{"file_path":"/r/a\u0000.go"}`, ""},
+		{"session event", "SessionStart", `"session_id":"s","source":"startup"`, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			ev, err := Claude{}.ParseEvent(payload(tt.event, tt.rest))
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if ev.Edit != tt.want {
+				t.Errorf("Edit = %q, want %q", ev.Edit, tt.want)
+			}
+		})
+	}
+}
+
+func TestParseEventChanged(t *testing.T) {
+	t.Parallel()
+
+	files := func(paths ...string) string {
+		b, err := json.Marshal(paths)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		return `{"bashEditDiff":{"changedFiles":` + string(b) + `}}`
+	}
+
+	var dirs, firstDirs []string
+
+	for i := range 40 {
+		dirs = append(dirs, fmt.Sprintf("/r/d%02d/a.go", i))
+		if i < maxChanged {
+			firstDirs = append(firstDirs, dirs[i])
+		}
+	}
+
+	long := "/" + strings.Repeat("a", maxChangedPath)
+
+	// Each path of a hostile list is 1024 bytes that JSON writes as 6 bytes each,
+	// so the 16 of them would encode to about 96 KiB.
+	hostile := func(c string) (paths, kept []string) {
+		for i := range maxChanged {
+			dir := fmt.Sprintf("/h%02d/", i)
+
+			paths = append(paths, dir+strings.Repeat(c, maxChangedPath-len(dir)))
+		}
+
+		// Each encodes to 6121 bytes and a comma: 5 fit in the 32 KiB budget, 6 do not.
+		return paths, paths[:5]
+	}
+	ctlPaths, ctlKept := hostile("\x01")
+	htmlPaths, htmlKept := hostile("<")
+
+	tests := []struct {
+		name     string
+		event    string
+		tool     string
+		response string
+		want     []string
+	}{
+		{"two directories", "PostToolUse", "Bash", files("/r/a/x.go", "/r/b/y.go"), []string{"/r/a/x.go", "/r/b/y.go"}},
+		{"one directory twice", "PostToolUse", "Bash", files("/r/a/x.go", "/r/a/y.go"), []string{"/r/a/x.go"}},
+		{"a nested directory is its own", "PostToolUse", "Bash", files("/r/a/x.go", "/r/a/sub/y.go"), []string{"/r/a/x.go", "/r/a/sub/y.go"}},
+		{"the path is cleaned", "PostToolUse", "Bash", files("/r/x/../a.go"), []string{"/r/a.go"}},
+		{"paths that clean to one directory", "PostToolUse", "Bash", files("/r/a/x.go", "/r/b/../a/y.go"), []string{"/r/a/x.go"}},
+		{"path with spaces and non-ASCII", "PostToolUse", "Bash", files("/r/my dir/\u00e5.go"), []string{"/r/my dir/\u00e5.go"}},
+		{"forty directories", "PostToolUse", "Bash", files(dirs...), firstDirs},
+		{"a path of the limit is kept", "PostToolUse", "Bash", files(long[:maxChangedPath]), []string{long[:maxChangedPath]}},
+		{
+			"unusable entries are left out", "PostToolUse", "Bash",
+			`{"bashEditDiff":{"changedFiles":["src/a.go",5,null,{"p":"/r/o.go"},"/r/n\u0000.go","` + long + `","/r/ok/a.go"]}}`,
+			[]string{"/r/ok/a.go"},
+		},
+		{"control characters fill the encoded budget", "PostToolUse", "Bash", files(ctlPaths...), ctlKept},
+		{"escaped HTML characters fill the encoded budget", "PostToolUse", "Bash", files(htmlPaths...), htmlKept},
+		{"a long path does not claim its directory", "PostToolUse", "Bash", files("/r/x/"+long, "/r/x/b.go"), []string{"/r/x/b.go"}},
+		{"the list is not an array", "PostToolUse", "Bash", `{"bashEditDiff":{"changedFiles":"/r/a.go"}}`, nil},
+		{"the list is an object", "PostToolUse", "Bash", `{"bashEditDiff":{"changedFiles":{"0":"/r/a.go"}}}`, nil},
+		{"the list is null", "PostToolUse", "Bash", `{"bashEditDiff":{"changedFiles":null}}`, nil},
+		{"the list is empty", "PostToolUse", "Bash", `{"bashEditDiff":{"changedFiles":[]}}`, nil},
+		{"no list", "PostToolUse", "Bash", `{"bashEditDiff":{}}`, nil},
+		{"no bashEditDiff", "PostToolUse", "Bash", `{"stdout":"x"}`, nil},
+		{"bashEditDiff is a string", "PostToolUse", "Bash", `{"bashEditDiff":"/r/a.go"}`, nil},
+		{"tool_response is a string", "PostToolUse", "Bash", `"/r/a.go"`, nil},
+		{"tool_response is an array", "PostToolUse", "Bash", `[{"bashEditDiff":{"changedFiles":["/r/a.go"]}}]`, nil},
+		{"tool_response is null", "PostToolUse", "Bash", `null`, nil},
+		{"skipped with no list", "PostToolUse", "Bash", `{"bashEditDiff":{"skipped":true}}`, nil},
+		{"a failed Bash", "PostToolUseFailure", "Bash", files("/r/a.go"), nil},
+		{"a Bash before it runs", "PreToolUse", "Bash", files("/r/a.go"), nil},
+		{"an Edit carrying a list", "PostToolUse", "Edit", files("/r/a.go"), nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			rest := `"cwd":"/r","tool_name":"` + tt.tool + `","tool_input":{"file_path":"/r/e.go","command":"x"}`
+
+			ev, err := Claude{}.ParseEvent(payload(tt.event, rest+`,"tool_response":`+tt.response))
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if !slices.Equal(ev.Changed, tt.want) {
+				t.Errorf("Changed = %q, want %q", ev.Changed, tt.want)
+			}
+
+			// The list never changes what the event says otherwise.
+			plain, err := Claude{}.ParseEvent(payload(tt.event, rest))
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			// The compact event travels as one line, as the hook command sends it.
+			if line, err := json.Marshal(ev); err != nil || len(line) > maxLine*3/4 {
+				t.Errorf("encoded event = %d bytes, %v, want at most %d", len(line), err, maxLine*3/4)
+			}
+
+			ev.Changed = nil
+			if !reflect.DeepEqual(ev, plain) {
+				t.Errorf("event = %+v, want %+v as without the list", ev, plain)
+			}
+		})
+	}
+}
+
+func TestParseEventSubagent(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		rest string
+		want bool
+	}{
+		{"agent_id", `"tool_name":"Edit","tool_input":{"file_path":"/r/a.go"},"agent_id":"agent-1","agent_type":"Explore"`, true},
+		{"agent_id on a tool that is not an edit", `"tool_name":"Bash","agent_id":"agent-1"`, true},
+		{"no agent_id", `"tool_name":"Edit","tool_input":{"file_path":"/r/a.go"}`, false},
+		{"agent_type alone", `"tool_name":"Edit","tool_input":{"file_path":"/r/a.go"},"agent_type":"reviewer"`, false},
+		{"empty agent_id", `"tool_name":"Edit","agent_id":""`, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			ev, err := Claude{}.ParseEvent(payload("PreToolUse", tt.rest))
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if ev.Subagent != tt.want {
+				t.Errorf("Subagent = %v, want %v", ev.Subagent, tt.want)
 			}
 		})
 	}

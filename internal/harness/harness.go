@@ -43,6 +43,16 @@ type Event struct {
 	Action    string `json:"action,omitempty"`
 	ActionSet bool   `json:"action_set,omitempty"`
 
+	// Edit is the cleaned absolute path of the file an edit tool is about to
+	// change or has changed; empty for every other event.
+	Edit string `json:"edit,omitempty"`
+	// Subagent marks an event a subagent sent, not the agent's own session.
+	Subagent bool `json:"subagent,omitempty"`
+	// Changed holds the cleaned absolute paths of the files a finished Bash
+	// command changed, as Claude Code lists them: one per directory, at most 16
+	// and 32 KiB once encoded.
+	Changed []string `json:"changed,omitempty"`
+
 	// Status marks a status update from the agent's statusline, not a hook. It
 	// carries Session and the fields below, and leaves state, action and cwd alone.
 	Status bool `json:"status,omitempty"`

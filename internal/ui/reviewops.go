@@ -21,10 +21,27 @@ const (
 	noticeNoDrawer   = "no review drawer is open"
 	noticeNoTurns    = "no turns: this pane has no agent session"
 	noticeNoTurnsYet = "no turns yet"
+	noticeNoTurnsIn  = "no turns in %s · %s yet"
+	noticeRemoved    = "worktree removed: "
 	noticeNotRepo    = "not a git repository"
 	noticeBinaryFull = "a binary file has no full view"
 	noticeFirstTurn  = "turn 1 is the first turn"
 )
+
+// drawerDir is the directory the drawer reviews for a pane of tab: the root it
+// is pinned to, else the pane's followed place.
+func (a *App) drawerDir(st core.State, tab core.Tab, pane core.PaneID) string {
+	if pinnedTo(tab, pane) {
+		return tab.Pin.Root
+	}
+
+	return st.Panes[pane].FollowDir()
+}
+
+// pinnedTo reports whether tab holds its drawer for pane on a pinned root.
+func pinnedTo(tab core.Tab, pane core.PaneID) bool {
+	return tab.Pin != nil && tab.Pin.Pane == pane
+}
 
 // openReview opens the active tab's drawer on a pane of that tab. Whether the
 // pane is in a repository, and whether it has turns, are found off the update
@@ -34,18 +51,18 @@ func (a *App) openReview(pane core.PaneID, focus bool) tea.Cmd {
 	st := a.store.State()
 	tab := st.Tab()
 
-	m, ok := st.Panes[pane]
-	if !ok || !slices.Contains(tab.Panes, pane) {
+	if _, ok := st.Panes[pane]; !ok || !slices.Contains(tab.Panes, pane) {
 		return nil
 	}
 
-	if m.WorkDir() == "" {
+	cwd := a.drawerDir(st, tab, pane)
+	if cwd == "" {
 		a.notice = noticeNotRepo
 
 		return nil
 	}
 
-	cwd, session, tabID := m.WorkDir(), paneSession(st, pane), tab.ID
+	session, own, tabID, pinned := paneSession(st, pane), st.Panes[pane].WorkDir(), tab.ID, pinnedTo(tab, pane)
 
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(a.ctx, reviewOpenTimeout)
@@ -53,10 +70,33 @@ func (a *App) openReview(pane core.PaneID, focus bool) tea.Cmd {
 
 		msg := reviewOpenMsg{tab: tabID, pane: pane, cwd: cwd, focus: focus}
 
-		if msg.repo, msg.err = git.Open(ctx, cwd); msg.err == nil && session != "" {
-			if turns, err := git.Turns(ctx, msg.repo, session); err == nil {
-				msg.turns = len(turns)
+		if msg.repo, msg.err = git.Open(ctx, cwd); msg.err != nil {
+			// A pinned worktree that went still opens a drawer, which says so.
+			if pinned && !usableDir(cwd) {
+				msg.err = errWorktreeRemoved{root: cwd}
 			}
+
+			return msg
+		}
+
+		if session == "" {
+			return msg
+		}
+
+		// Only the own directory has turns.
+		foreign, err := isForeign(ctx, own, msg.repo.Root)
+		if err != nil {
+			msg.err = err
+
+			return msg
+		}
+
+		if foreign {
+			return msg
+		}
+
+		if turns, err := git.Turns(ctx, msg.repo, session); err == nil {
+			msg.turns = len(turns)
 		}
 
 		return msg
@@ -68,14 +108,17 @@ func (a *App) openReview(pane core.PaneID, focus bool) tea.Cmd {
 func (a *App) onReviewOpen(msg reviewOpenMsg) tea.Cmd {
 	st := a.store.State()
 
-	m, ok := st.Panes[msg.pane]
-	if !ok || st.Tab().ID != msg.tab || m.WorkDir() != msg.cwd || !slices.Contains(st.Tab().Panes, msg.pane) {
+	if _, ok := st.Panes[msg.pane]; !ok || st.Tab().ID != msg.tab || a.drawerDir(st, st.Tab(), msg.pane) != msg.cwd || !slices.Contains(st.Tab().Panes, msg.pane) {
 		return nil
 	}
+
+	var gone errWorktreeRemoved
 
 	switch {
 	case errors.Is(msg.err, context.Canceled):
 		return nil
+	case errors.As(msg.err, &gone):
+		// The drawer opens to show it.
 	case errors.Is(msg.err, git.ErrNotRepo):
 		a.notice = noticeNotRepo
 
@@ -101,7 +144,11 @@ func (a *App) onReviewOpen(msg reviewOpenMsg) tea.Cmd {
 	}
 
 	// The check found the pane's repository: hand it to the watch bookkeeping
-	// so the drawer need not resolve it again.
+	// so the drawer need not resolve it again. A pinned root is not the pane's.
+	if pinnedTo(st.Tab(), msg.pane) {
+		return nil
+	}
+
 	w := a.watches.panes[msg.pane]
 	if w == nil {
 		w = &paneWatch{}
@@ -156,14 +203,17 @@ func (a *App) setReviewMode(mode core.ReviewMode) tea.Cmd {
 	return a.reviewRetarget(tab.ID, v, 0)
 }
 
-// turnsGate decides whether a turn key can go on. A pane with no turns gets
-// the notice that says why. While the count is another session's, which a new
-// session leaves behind, the key waits: the answer of the probe for the new
-// session runs retry again.
+// turnsGate decides whether a turn key can go on. A pane with no turns, or a
+// drawer on a worktree that is not the agent's own, gets the notice that says
+// why. While the count is another session's, which a new session leaves
+// behind, the key waits: the answer of the probe for the new session runs retry
+// again.
 func (a *App) turnsGate(tab core.TabID, v *reviewView, session string, retry func() tea.Cmd) (bool, tea.Cmd) {
 	switch {
 	case session == "":
 		a.notice = noticeNoTurns
+	case v.loaded && v.foreign:
+		a.notice = fmt.Sprintf(noticeNoTurnsIn, printable(v.project), printable(v.branch))
 	case v.loaded && v.turnsFor != session:
 		// Hold the key only while a probe can answer it.
 		if probe := a.reviewCount(tab, v); probe != nil || v.loading {

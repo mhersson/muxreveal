@@ -60,7 +60,7 @@ func TestMovePaneLandsPerTargetMode(t *testing.T) {
 			s.Tabs[0].Zoomed = true
 
 			got := dispatch(t, s, MovePane{ID: "p2", Tab: 1, Area: modeInner})
-			if got.Panes["p2"] != want {
+			if !samePane(got.Panes["p2"], want) {
 				t.Errorf("pane = %+v, want %+v", got.Panes["p2"], want)
 			}
 
@@ -299,12 +299,12 @@ func TestMovePaneKeepsMetadata(t *testing.T) {
 		s.Panes["p2"] = p
 
 		got := dispatch(t, s, MovePane{ID: "p2", Tab: 1, Follow: true, Area: modeInner})
-		if got.Panes["p2"] != p {
+		if !samePane(got.Panes["p2"], p) {
 			t.Errorf("state %v: pane = %+v", st, got.Panes["p2"])
 		}
 
 		got = dispatch(t, got, BreakPane{ID: "p2", Area: modeInner})
-		if got.Panes["p2"] != p {
+		if !samePane(got.Panes["p2"], p) {
 			t.Errorf("state %v: after break pane = %+v", st, got.Panes["p2"])
 		}
 	}

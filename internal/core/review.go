@@ -26,19 +26,30 @@ type Review struct {
 	Tree bool
 }
 
+// Pin holds a tab's drawer on one worktree while it reviews Pane; not persisted.
+type Pin struct {
+	Pane PaneID
+	Root string
+}
+
 // errNoReview is returned by SetReviewMode and SetReviewTree when the active
 // tab has no drawer.
 var errNoReview = errors.New("core: no review drawer is open")
 
-// dropReview closes the drawer when it reviews id, which is leaving the tab.
+// dropReview closes the drawer when it reviews id, which is leaving the tab,
+// and releases a pin on id.
 func (t *Tab) dropReview(id PaneID) {
 	if t.Review != nil && t.Review.Pane == id {
 		t.Review = nil
 	}
+
+	if t.Pin != nil && t.Pin.Pane == id {
+		t.Pin = nil
+	}
 }
 
 // OpenReview opens the active tab's drawer on a pane of that tab, replacing
-// any open one.
+// any open one. A pin on another pane ends.
 type OpenReview struct {
 	Pane PaneID
 	Mode ReviewMode
@@ -55,11 +66,15 @@ func (a OpenReview) apply(s *State) error {
 	}
 
 	t.Review = &Review{Pane: a.Pane, Mode: a.Mode}
+	if t.Pin != nil && t.Pin.Pane != a.Pane {
+		t.Pin = nil
+	}
 
 	return nil
 }
 
-// CloseReview closes the active tab's drawer; with none open it does nothing.
+// CloseReview closes the active tab's drawer, keeping its pin; with none open
+// it does nothing.
 type CloseReview struct{}
 
 func (CloseReview) apply(s *State) error {
@@ -100,6 +115,24 @@ func (a SetReviewTree) apply(s *State) error {
 	}
 
 	t.Review.Tree = a.Open
+
+	return nil
+}
+
+// PinReview holds the open drawer on the worktree at Root, or releases it when
+// Root is empty.
+type PinReview struct{ Root string }
+
+func (a PinReview) apply(s *State) error {
+	t := s.cur()
+	if t.Review == nil {
+		return errNoReview
+	}
+
+	t.Pin = nil
+	if a.Root != "" {
+		t.Pin = &Pin{Pane: t.Review.Pane, Root: a.Root}
+	}
 
 	return nil
 }

@@ -18,6 +18,7 @@ import (
 
 	"github.com/mhersson/muxreveal/internal/core"
 	"github.com/mhersson/muxreveal/internal/github"
+	"github.com/mhersson/muxreveal/internal/harness"
 	"github.com/mhersson/muxreveal/internal/ui/palette"
 )
 
@@ -512,6 +513,159 @@ func TestPushConfirmTargetIsFrozen(t *testing.T) {
 			}
 		})
 	}
+}
+
+// worktree adds a linked worktree of the rig's repository beside it, on a new
+// branch cut from its head with one commit of its own. Beside the repository,
+// the relative push URL reaches the bare remote from there too.
+func (r *pushRig) worktree(t *testing.T, name, branch string) string {
+	t.Helper()
+
+	dir := filepath.Join(filepath.Dir(r.dir), name)
+	gitIn(t, r.real, r.dir, "worktree", "add", "-q", "-b", branch, dir)
+	gitIn(t, r.real, dir, "commit", "-q", "--allow-empty", "-m", "work on "+branch)
+
+	return dir
+}
+
+// agentOnMain moves the agent's own directory to a worktree on main, which the
+// remote has up to date, and lets its head probe run.
+func (r *pushRig) agentOnMain(t *testing.T) {
+	t.Helper()
+
+	dir := filepath.Join(filepath.Dir(r.dir), "main")
+	gitIn(t, r.real, r.dir, "worktree", "add", "-q", dir, "main")
+	openIn(t, r.App, core.SetAgentCwd{ID: r.agent, Cwd: dir})
+
+	r.clk.Advance(6 * time.Second)
+	r.churn(t, r.settle())
+}
+
+// editIn has the agent edit a tracked file of the worktree at dir, as its hook
+// reports it, after the head probe's throttle, and answers what that starts.
+func (r *pushRig) editIn(t *testing.T, dir string) {
+	t.Helper()
+
+	r.clk.Advance(6 * time.Second)
+	r.churn(t, hook(r.App, harness.Event{Pane: r.agent, Name: "PostToolUse", Edit: filepath.Join(dir, "a.txt")}))
+}
+
+// pushed presses enter on the open confirm and checks that the remote now holds
+// main and exactly the branches in want.
+func (r *pushRig) pushed(t *testing.T, want ...string) {
+	t.Helper()
+
+	r.churn(t, press(r.App, keyEnter))
+
+	refs := []string{"refs/heads/main"}
+	for _, b := range want {
+		refs = append(refs, "refs/heads/"+b)
+	}
+
+	slices.Sort(refs)
+
+	if got := r.remoteRefs(t); got != strings.Join(refs, "\n") {
+		t.Errorf("the remote holds %q, want %q", got, strings.Join(refs, " "))
+	}
+}
+
+func TestPushTargetsTheDrawer(t *testing.T) {
+	tests := []struct {
+		name  string
+		setup func(t *testing.T, r *pushRig, b string)
+		want  string
+	}{
+		{"pinned to another worktree", func(t *testing.T, r *pushRig, b string) {
+			openIn(t, r.App, core.PinReview{Root: b})
+		}, "feat/b"},
+		{"open and following the agent", func(*testing.T, *pushRig, string) {}, "feat/c"},
+		{"open on an agent that is not focused", func(t *testing.T, r *pushRig, _ string) {
+			r.addAgent(t, false, r.dir)
+
+			if tab := r.store.State().Tab(); tab.Review == nil || tab.Review.Pane != r.agent || tab.Focus == r.agent {
+				t.Fatalf("review %+v, focus %s, want the drawer on the agent and the focus elsewhere", tab.Review, tab.Focus)
+			}
+		}, "feat/c"},
+		{"closed with the pin kept", func(t *testing.T, r *pushRig, b string) {
+			openIn(t, r.App, core.PinReview{Root: b}, core.CloseReview{})
+		}, "feat/c"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := newPushRig(t)
+			b := rootOf(t, r.worktree(t, "b", "feat/b"))
+			r.editIn(t, r.worktree(t, "c", "feat/c"))
+			r.churn(t, r.openReview(r.agent, true))
+
+			if r.store.State().Tab().Review == nil {
+				t.Fatalf("the drawer did not open; notice = %q", r.notice)
+			}
+
+			tt.setup(t, r, b)
+			r.askOpen(t)
+
+			if got := r.confirm.push.branch; got != tt.want {
+				t.Fatalf("the confirm names %q, want %q", got, tt.want)
+			}
+
+			r.pushed(t, tt.want)
+		})
+	}
+}
+
+func TestPushTargetsTheFollowedPlace(t *testing.T) {
+	r := newPushRig(t)
+	r.agentOnMain(t)
+
+	r.ask(t)
+
+	if r.confirm != nil || r.notice != "main is up to date on origin" {
+		t.Fatalf("confirm %v, toast %q before the edit, want main up to date", r.confirm != nil, r.notice)
+	}
+
+	r.editIn(t, r.dir)
+	r.askOpen(t)
+
+	if got, want := r.confirm.push.root, rootOf(t, r.dir); got != want {
+		t.Errorf("the confirm pushes from %q, want %q", got, want)
+	}
+
+	r.pushed(t, "feat/x")
+}
+
+func TestPushTargetFrozenWhileFollowing(t *testing.T) {
+	r := newPushRig(t)
+	r.agentOnMain(t)
+	r.editIn(t, r.dir)
+	r.askOpen(t)
+
+	r.editIn(t, r.worktree(t, "y", "feat/y"))
+
+	if r.confirm == nil || r.confirm.push == nil || r.confirm.push.branch != "feat/x" {
+		t.Fatalf("confirm = %+v after the agent followed feat/y, want the one for feat/x", r.confirm)
+	}
+
+	r.pushed(t, "feat/x")
+}
+
+func TestPushShellPane(t *testing.T) {
+	r := newPushRig(t)
+	r.editIn(t, r.worktree(t, "b", "feat/b"))
+
+	openIn(t, r.App, core.OpenPane{Kind: core.KindShell, Cwd: r.worktree(t, "c", "feat/c"), Split: core.SplitVertical, Area: r.bodyArea()})
+
+	if r.store.State().Tab().Focus == r.agent {
+		t.Fatal("focus did not move to the shell")
+	}
+
+	r.askOpen(t)
+
+	if got := r.confirm.push.branch; got != "feat/c" {
+		t.Fatalf("the confirm names %q, want the shell's feat/c and not the agent's feat/b", got)
+	}
+
+	r.pushed(t, "feat/c")
 }
 
 func TestPushConfirmHeadMoved(t *testing.T) {

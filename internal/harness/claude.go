@@ -121,8 +121,8 @@ func QuotePath(path string) (string, error) {
 	return "'" + path + "'", nil
 }
 
-// claudePayload holds the only fields read; decoding skips the rest, so a large
-// tool_response never reaches the Event.
+// claudePayload holds the only fields read; decoding skips the rest. Only Bash's
+// tool_response is read, for the files it lists, so no large one reaches the Event.
 type claudePayload struct {
 	Name             string `json:"hook_event_name"`
 	SessionID        string `json:"session_id"`
@@ -131,9 +131,11 @@ type claudePayload struct {
 	Source           string `json:"source"`
 	ToolName         string `json:"tool_name"`
 	NotificationType string `json:"notification_type"`
+	AgentID          string `json:"agent_id"`
 	// Lenient: a payload with an odd shape here must not drop the state.
-	ToolInput json.RawMessage `json:"tool_input"`
-	Message   json.RawMessage `json:"message"`
+	ToolInput    json.RawMessage `json:"tool_input"`
+	ToolResponse json.RawMessage `json:"tool_response"`
+	Message      json.RawMessage `json:"message"`
 }
 
 // maxActionRunes bounds the action shown on a card.
@@ -206,7 +208,93 @@ func toolTarget(tool, cwd string, fields map[string]json.RawMessage) string {
 	return tool
 }
 
-// objectFields reads a tool_input leniently; anything but an object gives nil.
+const (
+	// maxChanged bounds the paths one Bash command contributes, so one command
+	// costs few resolutions.
+	maxChanged = 16
+	// maxChangedPath leaves out a path no real file has.
+	maxChangedPath = 1024
+	// maxChangedBytes bounds the JSON-encoded size of the kept paths: JSON writes
+	// a control character or <, > or & as 6 bytes, so the count and length caps
+	// alone could take the event past the socket's line, and the server would
+	// drop the event whole. The budget leaves the rest of the event room.
+	maxChangedBytes = 32 << 10
+)
+
+// editTools maps each tool that changes a file to the tool_input key naming
+// it. MultiEdit is no longer documented and stays for older Claude Code.
+func editTools() map[string]string {
+	return map[string]string{
+		"Edit": "file_path", "Write": "file_path", "MultiEdit": "file_path",
+		"NotebookEdit": "notebook_path",
+	}
+}
+
+// editPath is the cleaned absolute path an edit tool's input names, or "" when
+// the tool is not an edit tool or the path is missing, relative or holds a NUL.
+func editPath(tool string, input json.RawMessage) string {
+	key, ok := editTools()[tool]
+	if !ok {
+		return ""
+	}
+
+	return absPath(jsonString(objectFields(input)[key]))
+}
+
+// absPath is path cleaned, or "" when it is relative or holds a NUL.
+func absPath(path string) string {
+	if !filepath.IsAbs(path) || strings.ContainsRune(path, 0) {
+		return ""
+	}
+
+	return filepath.Clean(path)
+}
+
+// changedPaths is the list of files a finished Bash command changed, read
+// leniently from its tool_response: any other shape, and any other tool, gives
+// none. It keeps the first path of each directory, within the three caps above.
+func changedPaths(tool string, response json.RawMessage) []string {
+	if tool != "Bash" {
+		return nil
+	}
+
+	var files []json.RawMessage
+	if json.Unmarshal(objectFields(objectFields(response)["bashEditDiff"])["changedFiles"], &files) != nil {
+		return nil
+	}
+
+	var out []string
+
+	dirs := map[string]bool{}
+	size := 0
+
+	for _, raw := range files {
+		path := absPath(jsonString(raw))
+		if path == "" || len(path) > maxChangedPath || dirs[filepath.Dir(path)] {
+			continue
+		}
+
+		enc, err := json.Marshal(path)
+		if err != nil {
+			continue
+		}
+
+		// The comma between entries counts too.
+		if size += len(enc) + 1; size > maxChangedBytes {
+			break
+		}
+
+		dirs[filepath.Dir(path)] = true
+
+		if out = append(out, path); len(out) == maxChanged {
+			break
+		}
+	}
+
+	return out
+}
+
+// objectFields reads a tool_input or tool_response leniently; anything but an object gives nil.
 func objectFields(input json.RawMessage) map[string]json.RawMessage {
 	var fields map[string]json.RawMessage
 	if json.Unmarshal(input, &fields) != nil {
@@ -274,6 +362,7 @@ func (Claude) ParseEvent(payload []byte) (Event, error) {
 		Transcript: p.TranscriptPath,
 		Cwd:        p.Cwd,
 		TurnStart:  p.Name == "UserPromptSubmit",
+		Subagent:   p.AgentID != "",
 	}
 	switch p.Name {
 	case "SessionStart":
@@ -291,6 +380,11 @@ func (Claude) ParseEvent(payload []byte) (Event, error) {
 	case "PostToolUse", "PostToolUseFailure":
 		ev.State, ev.ActionSet = core.AgentWorking, true
 		ev.Action = clip(toolTarget(printable(p.ToolName), p.Cwd, objectFields(p.ToolInput)))
+
+		if p.Name == "PostToolUse" {
+			ev.Edit = editPath(p.ToolName, p.ToolInput)
+			ev.Changed = changedPaths(p.ToolName, p.ToolResponse)
+		}
 	case "ElicitationResult":
 		ev.State = core.AgentWorking
 	case "PreToolUse":
@@ -300,6 +394,7 @@ func (Claude) ParseEvent(payload []byte) (Event, error) {
 		}
 
 		ev.Action = toolAction(p.ToolName, p.Cwd, p.ToolInput)
+		ev.Edit = editPath(p.ToolName, p.ToolInput)
 	case "PermissionRequest":
 		ev.State, ev.ActionSet = core.AgentBlocked, true
 		ev.Action = permissionAction(p.ToolName, p.Cwd, p.ToolInput)

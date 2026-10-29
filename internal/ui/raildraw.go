@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/mhersson/muxreveal/internal/core"
+	"github.com/mhersson/muxreveal/internal/git"
 	"github.com/mhersson/muxreveal/internal/ui/theme"
 )
 
@@ -456,27 +457,40 @@ func (a *App) railCardLine(ui theme.UI, c railCard, hits []railHit, n, cw int) [
 		return nil
 	}
 
-	files := strconv.Itoa(c.stats.Files) + " files"
-	if c.stats.Files == 1 {
+	return append([]railRun{indent}, statsRuns(ui, c.stats)...)
+}
+
+// statsRuns is the diff stats line: +added, -removed and the file count.
+func statsRuns(ui theme.UI, s git.Stats) []railRun {
+	files := strconv.Itoa(s.Files) + " files"
+	if s.Files == 1 {
 		files = "1 file"
 	}
 
 	return []railRun{
-		indent,
-		{text: "+" + strconv.Itoa(c.stats.Added), fg: ui.Success},
+		{text: "+" + strconv.Itoa(s.Added), fg: ui.Success},
 		{text: " ", fg: ui.Fg},
-		{text: "-" + strconv.Itoa(c.stats.Removed), fg: ui.Error},
+		{text: "-" + strconv.Itoa(s.Removed), fg: ui.Error},
 		{text: "  ", fg: ui.Fg},
 		{text: files, fg: ui.Subtle},
 	}
 }
 
-// railBranchLine is the branch after lead, with the commits ahead of its upstream
-// and the pull request at the right end. Short of room the branch is cut first,
-// down to railBranchMin cells (fewer for a shorter branch), then the right end
+// railBranchLine is the branch after lead, behind the other repository's name
+// when the card follows one, with the commits ahead of its upstream and the pull
+// request at the right end. Short of room that text is cut from its end first,
+// down to railBranchMin cells (fewer for a shorter text), then the right end
 // gives up its parts in railRightEnds' order.
 func railBranchLine(ui theme.UI, lead []railRun, c railCard, hits []railHit, cw int, icons bool) []railRun {
 	branch := hiRuns(c.branch, hitsOf(hits, railFieldBranch), ui.Dim, ui.Match, false)
+
+	if c.place != "" {
+		branch = slices.Concat(
+			hiRuns(c.place, hitsOf(hits, railFieldPlace), ui.Dim, ui.Match, true),
+			[]railRun{{text: " · ", fg: ui.Muted}},
+			branch,
+		)
+	}
 
 	ends, pinned := railRightEnds(ui, c, icons)
 	if len(ends) == 0 {

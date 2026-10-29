@@ -38,9 +38,11 @@ func (a *App) drawerTake() {
 	a.drawer.focused, a.drawer.tree = true, false
 }
 
-// drawerRelease takes the keyboard from the drawer and closes its search prompt.
+// drawerRelease takes the keyboard from the drawer and closes its search prompt
+// and the worktree list.
 func (a *App) drawerRelease() {
 	a.drawer.focused, a.drawer.tree = false, false
+	a.closeWorktrees()
 
 	for _, v := range a.drawer.views {
 		v.search = nil

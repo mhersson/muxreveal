@@ -2,6 +2,7 @@ package ui
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"image/color"
 	"slices"
@@ -132,6 +133,10 @@ type drawCtx struct {
 	now   time.Time
 	query string
 	top   int
+
+	pinned bool    // the drawer is held on its root
+	home   string  // shortens the paths it names
+	list   *wtList // the open worktree list, drawn over the drawer
 }
 
 // diffKeys reports whether the diff, not the tree, has the keyboard.
@@ -180,6 +185,8 @@ type drawKey struct {
 	turns                int
 	resTurn, resThrough  int
 	noSnapshot           bool
+	pinned               bool
+	list                 wtKey
 	err                  string
 	hasErr               bool
 }
@@ -194,7 +201,8 @@ func (d *drawCtx) key(r core.Rect, name string) drawKey {
 		top: d.top, cursor: v.cursor, treeSel: v.treeSel,
 		query: d.query, searching: v.search != nil,
 		src: v.src, project: v.project, branch: v.branch, base: v.base,
-		turns: v.turns, resTurn: v.res.Turn, resThrough: v.res.Through, noSnapshot: v.noSnapshot,
+		turns: v.turns, resTurn: v.res.Turn, resThrough: v.res.Through, noSnapshot: v.noSnapshot, pinned: d.pinned,
+		list: d.listKey(),
 	}
 
 	if v.err != nil {
@@ -270,7 +278,12 @@ func (a *App) drawCtxFor(st core.State) (d *drawCtx, name string, ok bool) {
 		v = &reviewView{}
 	}
 
-	d = &drawCtx{ui: lk.theme.UI, icons: a.icons, v: v, c: v.derived(), now: a.clock.Now(), keys: a.drawer.focused, tree: a.drawer.focused && a.drawer.tree}
+	tab := st.Tab()
+
+	d = &drawCtx{
+		ui: lk.theme.UI, icons: a.icons, v: v, c: v.derived(), now: a.clock.Now(), keys: a.drawer.focused, tree: a.drawer.focused && a.drawer.tree,
+		pinned: tab.Review != nil && pinnedTo(tab, tab.Review.Pane), home: a.getenv("HOME"), list: a.listFor(tab),
+	}
 	d.lay = a.drawerLayoutOf(box, v, drawerTree(st))
 	d.dv, d.flash = a.diffThemes(lk)
 	d.top = v.viewTop(d.lay.bodyH)
@@ -340,7 +353,10 @@ func (d *drawCtx) render() []string {
 		lines = append(lines, side+railPainter{bg: d.ui.Bg}.line(hints, lay.innerW)+side)
 	}
 
-	return append(lines, d.bottomBorder())
+	lines = append(lines, d.bottomBorder())
+	d.overlayList(lines)
+
+	return lines
 }
 
 // borderLine is a border row: the corner and a dash, the left runs, dashes,
@@ -373,29 +389,26 @@ func (d *drawCtx) topBorder() string {
 		fg, bold = ui.Review, true
 	}
 
-	// Tags sit on the right, the mode tag last; the split tag drops first.
-	var tags []railRun
-
-	tag := func(text string) railRun { return railRun{text: " " + text + " ", fg: ui.Accent, bold: true} }
-	dash := railRun{text: "─", fg: d.edge()}
-
-	if d.lay.split && v.rowsSplit {
-		tags = append(tags, tag(d.withIcon(iconSplit, "split")), dash)
-	}
-
-	tags = append(tags, tag(d.modeTag()))
+	// Tags sit on the right, the mode tag last. When the title would be left no
+	// room, the split tag drops first, then the pinned tag.
+	split, pin := d.lay.split && v.rowsSplit, d.pinned
+	tags := d.tagRuns(split, pin)
 
 	// The corner and dash take two cells on each side, and a dash parts the title from the tags.
-	room := d.lay.box.W - 4 - runsWidth(tags) - 1
-	if room < titleRoomMin+2 {
-		tags = tags[max(len(tags)-1, 0):]
-		room = d.lay.box.W - 4 - runsWidth(tags) - 1
+	room := func() int { return d.lay.box.W - 4 - runsWidth(tags) - 1 }
+
+	if room() < titleRoomMin+2 && split {
+		tags = d.tagRuns(false, pin)
+	}
+
+	if room() < titleRoomMin+2 && pin {
+		tags = d.tagRuns(false, false)
 	}
 
 	var title []railRun
 
-	if text := d.titleText(); text != "" && room >= titleRoomMin+2 {
-		text = ansi.Truncate(text, room-2-ansi.StringWidth(d.glyph(iconReview+" ")), "…")
+	if text := d.titleText(); text != "" && room() >= titleRoomMin+2 {
+		text = ansi.Truncate(text, room()-2-ansi.StringWidth(d.glyph(iconReview+" ")), "…")
 
 		title = append(title, railRun{text: " "})
 
@@ -407,6 +420,26 @@ func (d *drawCtx) topBorder() string {
 	}
 
 	return d.borderLine("╭", "╮", title, tags)
+}
+
+// tagRuns are the tags on the right of the top border, left to right: split,
+// pinned, then the mode tag, each followed by a dash but the last.
+func (d *drawCtx) tagRuns(split, pinned bool) []railRun {
+	ui := d.ui
+	tag := func(text string) railRun { return railRun{text: " " + text + " ", fg: ui.Accent, bold: true} }
+	dash := railRun{text: "─", fg: d.edge()}
+
+	var tags []railRun
+
+	if split {
+		tags = append(tags, tag(d.withIcon(iconSplit, "split")), dash)
+	}
+
+	if pinned {
+		tags = append(tags, tag(d.withIcon(iconPin, "pinned")), dash)
+	}
+
+	return append(tags, tag(d.modeTag()))
 }
 
 func (d *drawCtx) withIcon(icon, text string) string {
@@ -447,9 +480,18 @@ func (v *reviewView) shownTurn() int {
 	return v.turns
 }
 
+// showsTurn reports whether the drawer shows a turn. A turn-mode drawer with no
+// session, no turns yet or a foreign root shows the branch while core keeps
+// turn mode.
+func (v *reviewView) showsTurn() bool {
+	_, ok := v.src.(git.TurnSource)
+
+	return ok
+}
+
 // modeTag is the text of the mode tag.
 func (d *drawCtx) modeTag() string {
-	if _, ok := d.v.src.(git.TurnSource); ok {
+	if d.v.showsTurn() {
 		return d.withIcon(iconTurn, "turn "+strconv.Itoa(d.v.shownTurn())+"/"+strconv.Itoa(d.v.turns))
 	}
 
@@ -493,13 +535,17 @@ func (d *drawCtx) hintRuns(cw int) []railRun {
 		{"]/[", "hunk"},
 		{"}/{", "file"},
 		{"tab", "tree"},
+		{"w", "worktree"},
 		{"f", "full"},
 		{"u", "split"},
 		{"b/t", "mode"},
-		{",/.", "turn"},
-		{"e", "edit"},
-		{"/", "search"},
 	}
+
+	if d.v.showsTurn() {
+		pairs = append(pairs, [2]string{",/.", "turn"})
+	}
+
+	pairs = append(pairs, [2]string{"e", "edit"}, [2]string{"/", "search"})
 
 	if d.tree {
 		pairs = [][2]string{{"j/k", "file"}, {"enter", "jump"}, {"tab", "hide"}, {"esc", "back"}}
@@ -620,8 +666,15 @@ func (d *drawCtx) emptyRuns(y int) []railRun {
 		}
 	}
 
+	fg := d.ui.Subtle
+
 	if v.err != nil {
 		lines = []string{v.err.Error()}
+
+		var gone errWorktreeRemoved
+		if errors.As(v.err, &gone) {
+			lines, fg = []string{noticeRemoved + shortPath(gone.root, "", d.home)}, d.ui.Muted
+		}
 	}
 
 	if y >= len(lines) {
@@ -630,7 +683,7 @@ func (d *drawCtx) emptyRuns(y int) []railRun {
 
 	text, _ := cleanText(lines[y])
 
-	return []railRun{{text: "    "}, {text: text, fg: d.ui.Subtle}}
+	return []railRun{{text: "    "}, {text: text, fg: fg}}
 }
 
 // markRun is the first cell of a row: the cursor mark or a blank.
