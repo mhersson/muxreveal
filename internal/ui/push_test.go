@@ -117,9 +117,7 @@ func newPushRig(t *testing.T) *pushRig {
 
 	allow, protocols, _ := strings.Cut(gitFileOnly, "=")
 
-	// The app's own git reads no user configuration and speaks no network transport.
-	t.Setenv("GIT_CONFIG_GLOBAL", "/dev/null")
-	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
+	// The app's own git speaks no network transport and commits at fixed dates.
 	t.Setenv(allow, protocols)
 	t.Setenv("GIT_AUTHOR_DATE", pushDate)
 	t.Setenv("GIT_COMMITTER_DATE", pushDate)

@@ -19,9 +19,8 @@ var pushTemplate struct {
 	err  error
 }
 
-func TestMain(m *testing.M) {
-	m.Run()
-
+// removePushTemplate removes the template TestMain's run left behind.
+func removePushTemplate() {
 	if pushTemplate.dir != "" {
 		_ = os.RemoveAll(pushTemplate.dir)
 	}

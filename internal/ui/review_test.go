@@ -388,6 +388,8 @@ func TestStaleLoadIsDropped(t *testing.T) {
 }
 
 func TestLiveUpdateKeepsTheHunk(t *testing.T) {
+	t.Parallel()
+
 	r := newDrawerRig(t)
 	dir := editedRepo(t)
 	root := rootOf(t, dir)

@@ -120,9 +120,9 @@ what to do about it. Skim it before your first commit each session.
 
 ## Tests
 
-- In internal/git, `TestMain` sets `GIT_CONFIG_NOSYSTEM`,
+- In internal/git and internal/ui, `TestMain` sets `GIT_CONFIG_NOSYSTEM`,
   `GIT_CONFIG_GLOBAL=/dev/null` and a fixed identity once for the test binary,
-  so its tests need no `t.Setenv` and can call `t.Parallel()`. Packages
+  so their tests need no `t.Setenv` and can call `t.Parallel()`. Packages
   without such a `TestMain`, like `cmd/muxreveal`, isolate git per test with
   `isolateGit`, which uses `t.Setenv`.
 - To see or change git calls in an internal/git test, use `wrapGit`: it

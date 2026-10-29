@@ -26,8 +26,6 @@ func wtRepo(t *testing.T, parent, name string) string {
 		t.Skip("git not installed")
 	}
 
-	isolateGitEnv(t)
-
 	dir := filepath.Join(parent, name)
 	if err := os.Mkdir(dir, 0o755); err != nil {
 		t.Fatal(err)
