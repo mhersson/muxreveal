@@ -349,6 +349,33 @@ func TestTrayPRModuleFollowsTheFocus(t *testing.T) {
 	}
 }
 
+func TestTrayShowsFollowedPR(t *testing.T) {
+	p := newPRApp(t)
+	agent, dirB := p.followRepos(t)
+
+	p.churn(t, p.step(snapshotOfRepo(repoAt("a"), openPRIn(3, "feat-a"))))
+	p.churn(t, p.step(snapshotOfRepo(repoAt("b"), openPRIn(7, "feat-b"))))
+
+	text := func() string {
+		m, ok := findPRModule(p.App)
+		if !ok {
+			return ""
+		}
+
+		return ansi.Strip(m.render())
+	}
+
+	if got := text(); !strings.Contains(got, "#3") {
+		t.Fatalf("module = %q before the edit, want the PR of the agent's own branch, #3", got)
+	}
+
+	p.editRepo(t, agent, dirB)
+
+	if got := text(); !strings.Contains(got, "#7") || strings.Contains(got, "#3") {
+		t.Errorf("module = %q after the agent edited in the other repository, want the PR of feat-b, #7", got)
+	}
+}
+
 func TestTrayPRModuleColours(t *testing.T) {
 	ui := mochaUI(t)
 

@@ -17,6 +17,7 @@ import (
 
 	"github.com/mhersson/muxreveal/internal/core"
 	"github.com/mhersson/muxreveal/internal/github"
+	"github.com/mhersson/muxreveal/internal/harness"
 )
 
 const prRepoKey = "github.com/o/r"
@@ -167,8 +168,10 @@ func (r *railApp) churn(t *testing.T, cmd tea.Cmd) {
 	}
 }
 
-func snapshotOf(prs ...github.PR) prSnapshotMsg {
-	return prSnapshotMsg{Snapshot: github.Snapshot{Repo: prRepo, Info: github.RepoInfo{DefaultBranch: "main"}, PRs: prs}}
+func snapshotOf(prs ...github.PR) prSnapshotMsg { return snapshotOfRepo(prRepo, prs...) }
+
+func snapshotOfRepo(repo github.Repo, prs ...github.PR) prSnapshotMsg {
+	return prSnapshotMsg{Snapshot: github.Snapshot{Repo: repo, Info: github.RepoInfo{DefaultBranch: "main"}, PRs: prs}}
 }
 
 func openPRIn(n int, branch string) github.PR {
@@ -269,6 +272,53 @@ func TestFocusedShellRepositoryIsWatched(t *testing.T) {
 
 	if got := p.src.last(); len(got) != 0 {
 		t.Errorf("watches = %+v after the focus moved off, want none", got)
+	}
+}
+
+// repoAt is a GitHub repository of the owner o.
+func repoAt(name string) github.Repo { return github.Repo{Host: "github.com", Owner: "o", Name: name} }
+
+// followRepos is an agent in repository a, on feat-a with remote o/a, and
+// repository b, on feat-b with remote o/b, where the agent has not been yet.
+func (p *prApp) followRepos(t *testing.T) (agent core.PaneID, dirB string) {
+	t.Helper()
+
+	dirA := p.prRepo(t, "a", "feat-a", "https://github.com/o/a.git")
+	dirB = p.prRepo(t, "b", "feat-b", "https://github.com/o/b.git")
+
+	agent = p.addAgent(t, false, dirA)
+	p.churn(t, p.settle())
+
+	return agent, dirB
+}
+
+// editRepo has the agent edit a file of the repository at dir after the head
+// probe's throttle, and answers what that starts.
+func (p *prApp) editRepo(t *testing.T, agent core.PaneID, dir string) {
+	t.Helper()
+
+	p.clk.Advance(6 * time.Second)
+	p.churn(t, hook(p.App, harness.Event{Pane: agent, Name: "PostToolUse", Edit: filepath.Join(dir, "a.txt")}))
+}
+
+func TestPollerWatchesFollowedRepository(t *testing.T) {
+	p := newPRApp(t)
+	agent, dirB := p.followRepos(t)
+
+	if got, want := p.src.last(), []github.Watch{{Repo: repoAt("a")}}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("watches = %+v before the edit, want %+v", got, want)
+	}
+
+	sets := p.src.setCount()
+
+	p.editRepo(t, agent, dirB)
+
+	if p.src.setCount() == sets {
+		t.Fatal("the poller was given no new watch set after the edit")
+	}
+
+	if got, want := p.src.last(), []github.Watch{{Repo: repoAt("b")}}; !reflect.DeepEqual(got, want) {
+		t.Errorf("watches = %+v after the edit, want only %+v", got, want)
 	}
 }
 
