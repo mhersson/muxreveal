@@ -706,6 +706,12 @@ func TestOwnDirectoryMovingInsideTheRepositoryKeepsTheDiff(t *testing.T) {
 	sub := filepath.Join(r.dirA, "pkg")
 	write(t, filepath.Join(sub, "p.txt"), "p\n")
 
+	// The watcher reports these writes and the rig's x.txt after its debounce.
+	// A drawer that opens first, as it does when diffs are fast, would reload
+	// for them after the move and mask what the test checks.
+	r.until(t, "the watcher to report the files written", r.reportedAll(
+		filepath.Join(r.rootA, "x.txt"), filepath.Join(r.rootA, "pkg", "p.txt")))
+
 	v := r.open(t, r.id)
 	epoch, gen := v.epoch, v.gen
 
