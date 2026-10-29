@@ -9,6 +9,8 @@ Terminal emulation comes from `tuios.dev/vt`; everything above it is ours.
 - `docs/DESIGN.md`: requirements (IDs like AG-3, DF-2), architecture, packages,
   key designs, keymap, milestones. Read the sections your change touches
   before you change it.
+- `docs/gotchas.md`: platform and tooling quirks; skim it before your first
+  commit each session.
 
 If the code and DESIGN.md disagree, stop and ask. Don't silently change the
 design; propose an edit to DESIGN.md instead.
