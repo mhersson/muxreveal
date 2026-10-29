@@ -673,8 +673,8 @@ func TestClickOnARowMovesTheCursor(t *testing.T) {
 	v := r.opened(t)
 	r.keys(keyEsc)
 
-	lay := r.layout(t)
-	x, y := r.drawerCell(t, 1+lay.treeW+1+8, 1+5)
+	// The tree is hidden, so the diff starts at the drawer's first inner column.
+	x, y := r.drawerCell(t, 1+8, 1+5)
 
 	click(r.App, x, y)
 
@@ -697,6 +697,22 @@ func TestClickOnARowMovesTheCursor(t *testing.T) {
 	if fileAtCursor(v) != "z.txt" || v.rows[v.cursor].kind != rowFile || !r.drawer.focused {
 		t.Errorf("a click on z.txt in the tree: cursor on %s (kind %d), drawer has the keyboard = %v, want z.txt's header and the keyboard",
 			fileAtCursor(v), v.rows[v.cursor].kind, r.drawer.focused)
+	}
+
+	// Beside the open tree, a click on a diff row moves the cursor there and keeps the tree.
+	lay := r.layout(t)
+	if lay.treeW == 0 {
+		t.Fatal("setup: the open tree is not drawn")
+	}
+
+	want := v.viewTop(lay.bodyH) + 5
+	x, y = r.drawerCell(t, 1+lay.treeW+1+8, 1+5)
+
+	click(r.App, x, y)
+
+	if v.cursor != want || !r.drawer.focused || r.drawer.tree || !treeIsOpen(r.App) {
+		t.Errorf("a click on row 5 of the diff beside the tree: cursor = %d, drawer has the keyboard = %v, tree has it = %v, tree open = %v, want %d, true, false and true",
+			v.cursor, r.drawer.focused, r.drawer.tree, treeIsOpen(r.App), want)
 	}
 
 	if got := r.sentSoFar(t, "p1"); got != "" {
