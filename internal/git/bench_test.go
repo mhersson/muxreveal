@@ -132,8 +132,6 @@ func TestBenchLargeRepo(t *testing.T) {
 		t.Skip("MUXREVEAL_BENCH_REPO is not set")
 	}
 
-	isolateGit(t)
-
 	ctx := context.Background()
 
 	if top := gitOut(t, dir, "rev-parse", "--show-toplevel"); isMuxRevealSource(top) {

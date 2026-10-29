@@ -915,8 +915,6 @@ func TestBadSession(t *testing.T) {
 }
 
 func TestSnapshotNotInRepo(t *testing.T) {
-	isolateGit(t)
-
 	_, err := Snapshot(context.Background(), t.TempDir(), sessA, SnapshotOptions{TempDir: t.TempDir()})
 	if !errors.Is(err, ErrNotRepo) {
 		t.Errorf("error = %v, want ErrNotRepo", err)

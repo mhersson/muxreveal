@@ -50,8 +50,6 @@ func TestOpen(t *testing.T) {
 }
 
 func TestOpenOutsideRepo(t *testing.T) {
-	isolateGit(t)
-
 	_, err := Open(context.Background(), t.TempDir())
 	if !errors.Is(err, ErrNotRepo) {
 		t.Fatalf("err = %v, want ErrNotRepo", err)
@@ -59,8 +57,6 @@ func TestOpenOutsideRepo(t *testing.T) {
 }
 
 func TestOpenBareIsNotAWorkTree(t *testing.T) {
-	isolateGit(t)
-
 	dir := t.TempDir()
 	gitOut(t, dir, "init", "-q", "--bare")
 

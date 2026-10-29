@@ -305,7 +305,6 @@ func TestDiffSymlinksAndTypeChanges(t *testing.T) {
 }
 
 func TestDiffSubmoduleAndNestedRepo(t *testing.T) {
-	isolateGit(t)
 	t.Setenv("GIT_AUTHOR_DATE", "2026-01-01T00:00:00Z")
 	t.Setenv("GIT_COMMITTER_DATE", "2026-01-01T00:00:00Z")
 
@@ -1263,7 +1262,6 @@ func hostileDiffConfig(t *testing.T, dir string) (mark string) {
 }
 
 func TestDiffIgnoresUserDiffConfig(t *testing.T) {
-	isolateGit(t)
 	t.Setenv("GIT_AUTHOR_DATE", "2026-01-01T00:00:00Z")
 	t.Setenv("GIT_COMMITTER_DATE", "2026-01-01T00:00:00Z")
 

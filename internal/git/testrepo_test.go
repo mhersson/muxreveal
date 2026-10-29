@@ -10,6 +10,26 @@ import (
 	"testing"
 )
 
+// TestMain isolates git from the machine's config once for the binary, so
+// tests that build repositories need no t.Setenv.
+func TestMain(m *testing.M) {
+	env := map[string]string{
+		"GIT_CONFIG_NOSYSTEM": "1",
+		"GIT_CONFIG_GLOBAL":   os.DevNull,
+		"GIT_AUTHOR_NAME":     "Test",
+		"GIT_AUTHOR_EMAIL":    "test@example.com",
+		"GIT_COMMITTER_NAME":  "Test",
+		"GIT_COMMITTER_EMAIL": "test@example.com",
+	}
+	for k, v := range env {
+		if err := os.Setenv(k, v); err != nil {
+			panic(err)
+		}
+	}
+
+	os.Exit(m.Run())
+}
+
 // isolateGit points git at an empty global config in a temp dir with a fixed
 // identity, so no test depends on the machine's git setup.
 func isolateGit(t *testing.T) {
@@ -32,7 +52,6 @@ func isolateGit(t *testing.T) {
 // its symlink-free path.
 func newRepo(t *testing.T) string {
 	t.Helper()
-	isolateGit(t)
 
 	dir, err := filepath.EvalSymlinks(t.TempDir())
 	if err != nil {
