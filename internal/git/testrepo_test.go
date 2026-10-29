@@ -31,24 +31,6 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-// isolateGit points git at an empty global config in a temp dir with a fixed
-// identity, so no test depends on the machine's git setup.
-func isolateGit(t *testing.T) {
-	t.Helper()
-
-	cfg := filepath.Join(t.TempDir(), "gitconfig")
-	if err := os.WriteFile(cfg, nil, 0o600); err != nil {
-		t.Fatal(err)
-	}
-
-	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
-	t.Setenv("GIT_CONFIG_GLOBAL", cfg)
-	t.Setenv("GIT_AUTHOR_NAME", "Test")
-	t.Setenv("GIT_AUTHOR_EMAIL", "test@example.com")
-	t.Setenv("GIT_COMMITTER_NAME", "Test")
-	t.Setenv("GIT_COMMITTER_EMAIL", "test@example.com")
-}
-
 // newRepo creates an empty repository on branch main in a temp dir and returns
 // its symlink-free path.
 func newRepo(t *testing.T) string {
