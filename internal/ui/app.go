@@ -511,6 +511,8 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, tea.Batch(a.onHook(msg.ev), a.waitEvent())
 	case editPlaceMsg:
 		a.onEditPlace(msg)
+	case editPlacesMsg:
+		a.onEditPlaces(msg)
 	case watchMsg:
 		return a, tea.Batch(a.onWatch(msg), a.waitWatch())
 	case paneRepoMsg:

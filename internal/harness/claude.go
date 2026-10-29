@@ -121,8 +121,8 @@ func QuotePath(path string) (string, error) {
 	return "'" + path + "'", nil
 }
 
-// claudePayload holds the only fields read; decoding skips the rest, so a large
-// tool_response never reaches the Event.
+// claudePayload holds the only fields read; decoding skips the rest. Only Bash's
+// tool_response is read, for the files it lists, so no large one reaches the Event.
 type claudePayload struct {
 	Name             string `json:"hook_event_name"`
 	SessionID        string `json:"session_id"`
@@ -133,8 +133,9 @@ type claudePayload struct {
 	NotificationType string `json:"notification_type"`
 	AgentID          string `json:"agent_id"`
 	// Lenient: a payload with an odd shape here must not drop the state.
-	ToolInput json.RawMessage `json:"tool_input"`
-	Message   json.RawMessage `json:"message"`
+	ToolInput    json.RawMessage `json:"tool_input"`
+	ToolResponse json.RawMessage `json:"tool_response"`
+	Message      json.RawMessage `json:"message"`
 }
 
 // maxActionRunes bounds the action shown on a card.
@@ -207,6 +208,14 @@ func toolTarget(tool, cwd string, fields map[string]json.RawMessage) string {
 	return tool
 }
 
+const (
+	// maxChanged bounds the paths one Bash command contributes: the event stays
+	// far inside the socket's line, and one command costs few resolutions.
+	maxChanged = 16
+	// maxChangedPath leaves out a path no real file has.
+	maxChangedPath = 1024
+)
+
 // editTools maps each tool that changes a file to the tool_input key naming
 // it. MultiEdit is no longer documented and stays for older Claude Code.
 func editTools() map[string]string {
@@ -224,7 +233,11 @@ func editPath(tool string, input json.RawMessage) string {
 		return ""
 	}
 
-	path := jsonString(objectFields(input)[key])
+	return absPath(jsonString(objectFields(input)[key]))
+}
+
+// absPath is path cleaned, or "" when it is relative or holds a NUL.
+func absPath(path string) string {
 	if !filepath.IsAbs(path) || strings.ContainsRune(path, 0) {
 		return ""
 	}
@@ -232,7 +245,40 @@ func editPath(tool string, input json.RawMessage) string {
 	return filepath.Clean(path)
 }
 
-// objectFields reads a tool_input leniently; anything but an object gives nil.
+// changedPaths is the list of files a finished Bash command changed, read
+// leniently from its tool_response: any other shape, and any other tool, gives
+// none. It keeps the first path of each directory.
+func changedPaths(tool string, response json.RawMessage) []string {
+	if tool != "Bash" {
+		return nil
+	}
+
+	var files []json.RawMessage
+	if json.Unmarshal(objectFields(objectFields(response)["bashEditDiff"])["changedFiles"], &files) != nil {
+		return nil
+	}
+
+	var out []string
+
+	dirs := map[string]bool{}
+
+	for _, raw := range files {
+		path := absPath(jsonString(raw))
+		if path == "" || len(path) > maxChangedPath || dirs[filepath.Dir(path)] {
+			continue
+		}
+
+		dirs[filepath.Dir(path)] = true
+
+		if out = append(out, path); len(out) == maxChanged {
+			break
+		}
+	}
+
+	return out
+}
+
+// objectFields reads a tool_input or tool_response leniently; anything but an object gives nil.
 func objectFields(input json.RawMessage) map[string]json.RawMessage {
 	var fields map[string]json.RawMessage
 	if json.Unmarshal(input, &fields) != nil {
@@ -321,6 +367,7 @@ func (Claude) ParseEvent(payload []byte) (Event, error) {
 
 		if p.Name == "PostToolUse" {
 			ev.Edit = editPath(p.ToolName, p.ToolInput)
+			ev.Changed = changedPaths(p.ToolName, p.ToolResponse)
 		}
 	case "ElicitationResult":
 		ev.State = core.AgentWorking

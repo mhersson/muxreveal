@@ -3,6 +3,7 @@ package harness
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"maps"
 	"os"
 	"os/exec"
@@ -272,6 +273,94 @@ func TestParseEventEdit(t *testing.T) {
 
 			if ev.Edit != tt.want {
 				t.Errorf("Edit = %q, want %q", ev.Edit, tt.want)
+			}
+		})
+	}
+}
+
+func TestParseEventChanged(t *testing.T) {
+	t.Parallel()
+
+	files := func(paths ...string) string {
+		b, err := json.Marshal(paths)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		return `{"bashEditDiff":{"changedFiles":` + string(b) + `}}`
+	}
+
+	var dirs, firstDirs []string
+
+	for i := range 40 {
+		dirs = append(dirs, fmt.Sprintf("/r/d%02d/a.go", i))
+		if i < maxChanged {
+			firstDirs = append(firstDirs, dirs[i])
+		}
+	}
+
+	long := "/" + strings.Repeat("a", maxChangedPath)
+
+	tests := []struct {
+		name     string
+		event    string
+		tool     string
+		response string
+		want     []string
+	}{
+		{"two directories", "PostToolUse", "Bash", files("/r/a/x.go", "/r/b/y.go"), []string{"/r/a/x.go", "/r/b/y.go"}},
+		{"one directory twice", "PostToolUse", "Bash", files("/r/a/x.go", "/r/a/y.go"), []string{"/r/a/x.go"}},
+		{"a nested directory is its own", "PostToolUse", "Bash", files("/r/a/x.go", "/r/a/sub/y.go"), []string{"/r/a/x.go", "/r/a/sub/y.go"}},
+		{"the path is cleaned", "PostToolUse", "Bash", files("/r/x/../a.go"), []string{"/r/a.go"}},
+		{"paths that clean to one directory", "PostToolUse", "Bash", files("/r/a/x.go", "/r/b/../a/y.go"), []string{"/r/a/x.go"}},
+		{"path with spaces and non-ASCII", "PostToolUse", "Bash", files("/r/my dir/\u00e5.go"), []string{"/r/my dir/\u00e5.go"}},
+		{"forty directories", "PostToolUse", "Bash", files(dirs...), firstDirs},
+		{"a path of the limit is kept", "PostToolUse", "Bash", files(long[:maxChangedPath]), []string{long[:maxChangedPath]}},
+		{
+			"unusable entries are left out", "PostToolUse", "Bash",
+			`{"bashEditDiff":{"changedFiles":["src/a.go",5,null,{"p":"/r/o.go"},"/r/n\u0000.go","` + long + `","/r/ok/a.go"]}}`,
+			[]string{"/r/ok/a.go"},
+		},
+		{"a long path does not claim its directory", "PostToolUse", "Bash", files("/r/x/"+long, "/r/x/b.go"), []string{"/r/x/b.go"}},
+		{"the list is not an array", "PostToolUse", "Bash", `{"bashEditDiff":{"changedFiles":"/r/a.go"}}`, nil},
+		{"the list is an object", "PostToolUse", "Bash", `{"bashEditDiff":{"changedFiles":{"0":"/r/a.go"}}}`, nil},
+		{"the list is null", "PostToolUse", "Bash", `{"bashEditDiff":{"changedFiles":null}}`, nil},
+		{"the list is empty", "PostToolUse", "Bash", `{"bashEditDiff":{"changedFiles":[]}}`, nil},
+		{"no list", "PostToolUse", "Bash", `{"bashEditDiff":{}}`, nil},
+		{"no bashEditDiff", "PostToolUse", "Bash", `{"stdout":"x"}`, nil},
+		{"bashEditDiff is a string", "PostToolUse", "Bash", `{"bashEditDiff":"/r/a.go"}`, nil},
+		{"tool_response is a string", "PostToolUse", "Bash", `"/r/a.go"`, nil},
+		{"tool_response is an array", "PostToolUse", "Bash", `[{"bashEditDiff":{"changedFiles":["/r/a.go"]}}]`, nil},
+		{"tool_response is null", "PostToolUse", "Bash", `null`, nil},
+		{"skipped with no list", "PostToolUse", "Bash", `{"bashEditDiff":{"skipped":true}}`, nil},
+		{"a failed Bash", "PostToolUseFailure", "Bash", files("/r/a.go"), nil},
+		{"a Bash before it runs", "PreToolUse", "Bash", files("/r/a.go"), nil},
+		{"an Edit carrying a list", "PostToolUse", "Edit", files("/r/a.go"), nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			rest := `"cwd":"/r","tool_name":"` + tt.tool + `","tool_input":{"file_path":"/r/e.go","command":"x"}`
+
+			ev, err := Claude{}.ParseEvent(payload(tt.event, rest+`,"tool_response":`+tt.response))
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if !slices.Equal(ev.Changed, tt.want) {
+				t.Errorf("Changed = %q, want %q", ev.Changed, tt.want)
+			}
+
+			// The list never changes what the event says otherwise.
+			plain, err := Claude{}.ParseEvent(payload(tt.event, rest))
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			ev.Changed = nil
+			if !reflect.DeepEqual(ev, plain) {
+				t.Errorf("event = %+v, want %+v as without the list", ev, plain)
 			}
 		})
 	}
