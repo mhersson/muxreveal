@@ -106,6 +106,43 @@ func TestDrawerOpenModeFollowsTurnsAndConfig(t *testing.T) {
 	}
 }
 
+func TestNewDrawerOpensInBranchMode(t *testing.T) {
+	turnFirst := core.DefaultConfig().Diff
+	turnFirst.Mode = "turn"
+
+	tests := []struct {
+		name string
+		cfg  core.DiffConfig
+		want core.ReviewMode
+	}{
+		{"by default", core.DefaultConfig().Diff, core.ReviewBranch},
+		{"with mode turn", turnFirst, core.ReviewTurn},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := newDrawerRig(t, func(o *Options) { o.Diff = tt.cfg })
+			id := r.agent(t, threeTurnRepo(t), testSession)
+
+			v := r.open(t, id)
+
+			if got := r.store.State().Tab().Review.Mode; got != tt.want {
+				t.Fatalf("opened in %q, want %q", got, tt.want)
+			}
+
+			if _, isTurn := v.src.(git.TurnSource); isTurn != (tt.want == core.ReviewTurn) {
+				t.Errorf("source = %+v in %q mode", v.src, tt.want)
+			}
+
+			r.run(r.setReviewMode(core.ReviewTurn))
+
+			if v := r.idle(t); r.store.State().Tab().Review.Mode != core.ReviewTurn || v.res.Turn != 3 {
+				t.Errorf("t gives mode %q turn %d, want turn mode on the latest turn", r.store.State().Tab().Review.Mode, v.res.Turn)
+			}
+		})
+	}
+}
+
 func TestDrawerNeedsARepository(t *testing.T) {
 	r := newDrawerRig(t)
 	id := r.shell(t, t.TempDir())

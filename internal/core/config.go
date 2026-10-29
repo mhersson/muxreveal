@@ -132,8 +132,8 @@ func (c LayoutConfig) columnWidth() float64 {
 }
 
 // DiffConfig is the [diff] section. Validate rejects an unknown name or a
-// non-positive limit from a file; the accessors read a zero field as its
-// default so a hand-built DiffConfig behaves as the defaults.
+// non-positive limit from a file. A hand-built DiffConfig reads a zero Layout
+// as unified and a zero Mode as turn first; DefaultConfig sets branch.
 type DiffConfig struct {
 	Layout   string `toml:"layout"`    // unified | split: the layout a drawer starts in
 	Mode     string `toml:"mode"`      // turn | branch: what a new drawer opens in
@@ -225,7 +225,7 @@ func DefaultConfig() Config {
 			DefaultMode: string(ModeBSP), AutoScheme: "spiral", MasterRatio: 50, MasterPosition: tiling.MasterPositionLeft,
 			MasterCount: 1, MasterGrid: new(true), ColumnWidth: 50,
 		},
-		Diff:      DiffConfig{Layout: "unified", Mode: string(ReviewTurn), MaxFiles: 400, MaxBytes: 2 << 20, MaxLines: 5000},
+		Diff:      DiffConfig{Layout: "unified", Mode: string(ReviewBranch), MaxFiles: 400, MaxBytes: 2 << 20, MaxLines: 5000},
 		Worktrees: WorktreesConfig{Root: "inside"},
 	}
 }
