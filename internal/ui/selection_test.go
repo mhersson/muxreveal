@@ -53,6 +53,8 @@ func (g *fakeGrid) Cell(row, col int) *uv.Cell {
 func (g *fakeGrid) Wrapped(row int) bool { return g.wrapped[row] }
 
 func TestExtract(t *testing.T) {
+	t.Parallel()
+
 	plain := newFakeGrid(10, nil, "alpha one", "beta  two", "gamma   ", "delta")
 	wide := newFakeGrid(10, nil, "a中b文c")
 	wrapped := newFakeGrid(6, []int{0, 1}, "hello ", "world ", "end", "next")
@@ -98,6 +100,8 @@ func TestExtract(t *testing.T) {
 }
 
 func TestRowSpan(t *testing.T) {
+	t.Parallel()
+
 	const cols = 10
 
 	tests := []struct {
@@ -134,6 +138,8 @@ func TestRowSpan(t *testing.T) {
 }
 
 func TestWordAt(t *testing.T) {
+	t.Parallel()
+
 	g := newFakeGrid(20, nil, "see ~/src/a-b.go now", "", "", "", "", "中文 x", "")
 	gw := newFakeGrid(13, []int{2}, "", "", "/home/user/pr", "oject/file.go", "")
 
@@ -187,6 +193,8 @@ func TestWordAt(t *testing.T) {
 }
 
 func TestLineAt(t *testing.T) {
+	t.Parallel()
+
 	g := newFakeGrid(8, []int{1, 2}, "first", "wrapped1", "wrapped2", "end", "other")
 
 	tests := []struct {
@@ -218,6 +226,8 @@ func TestLineAt(t *testing.T) {
 }
 
 func TestClampPoint(t *testing.T) {
+	t.Parallel()
+
 	g := newFakeGrid(5, nil, "a", "b", "c")
 
 	tests := []struct{ in, want point }{
@@ -237,6 +247,8 @@ func TestClampPoint(t *testing.T) {
 }
 
 func TestCharClass(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		content string
 		want    int

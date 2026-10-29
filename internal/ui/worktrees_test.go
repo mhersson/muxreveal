@@ -120,6 +120,7 @@ func describeRows(rows []wtRow) []string {
 }
 
 func TestWorktreeListRows(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name  string
 		setup func(t *testing.T, f *wtFix, in *wtInput)
@@ -237,6 +238,7 @@ func linkWorktree(t *testing.T, f *wtFix) {
 }
 
 func TestWorktreeListRowFields(t *testing.T) {
+	t.Parallel()
 	f := newWtFix(t)
 
 	rows, _, err := listPlaces(context.Background(), f.input())
@@ -269,6 +271,7 @@ func TestWorktreeListRowFields(t *testing.T) {
 }
 
 func TestWorktreeListPinnedElsewhere(t *testing.T) {
+	t.Parallel()
 	f := newWtFix(t)
 	in := wtInput{own: f.a, followed: f.a, pin: f.rootB, agent: "A"}
 
@@ -292,6 +295,7 @@ func TestWorktreeListPinnedElsewhere(t *testing.T) {
 }
 
 func TestWorktreeListOwnDirOutsideRepo(t *testing.T) {
+	t.Parallel()
 	f := newWtFix(t)
 
 	outside, err := filepath.EvalSymlinks(t.TempDir())
@@ -317,6 +321,7 @@ func TestWorktreeListOwnDirOutsideRepo(t *testing.T) {
 }
 
 func TestWorktreeListStopsWithItsContext(t *testing.T) {
+	t.Parallel()
 	f := newWtFix(t)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -328,6 +333,7 @@ func TestWorktreeListStopsWithItsContext(t *testing.T) {
 }
 
 func TestDetachedBranchesShowTheCommit(t *testing.T) {
+	t.Parallel()
 	f := newWtFix(t)
 	gitIn(t, "git", f.featA, "checkout", "-q", "--detach")
 	gitIn(t, "git", f.featB, "checkout", "-q", "--detach")
@@ -399,6 +405,7 @@ func (r *followRig) listShape() []string {
 }
 
 func TestWorktreeListSelectsShown(t *testing.T) {
+	t.Parallel()
 	t.Run("following", func(t *testing.T) {
 		r := newFollowRig(t, "")
 		r.open(t, r.id)
@@ -425,6 +432,7 @@ func TestWorktreeListSelectsShown(t *testing.T) {
 // The pin may name its root through a symlink; the list still opens on that
 // worktree's row.
 func TestWorktreeListSelectsPinnedThroughSymlink(t *testing.T) {
+	t.Parallel()
 	r := newFollowRig(t, "")
 	r.open(t, r.id)
 
@@ -444,6 +452,7 @@ func TestWorktreeListSelectsPinnedThroughSymlink(t *testing.T) {
 // A pinned worktree that is gone has no row, so the list opens on Follow, which
 // does not read "on" while the pin holds.
 func TestWorktreeListPinnedGone(t *testing.T) {
+	t.Parallel()
 	r := newFollowRig(t, "")
 	r.open(t, r.id)
 	r.pinTo(t, r.rootB)
@@ -468,6 +477,7 @@ func TestWorktreeListPinnedGone(t *testing.T) {
 }
 
 func TestWorktreeListPick(t *testing.T) {
+	t.Parallel()
 	r := newFollowRig(t, "")
 	r.open(t, r.id)
 	r.followC(t)
@@ -518,6 +528,7 @@ func TestWorktreeListPick(t *testing.T) {
 }
 
 func TestWorktreeListKeys(t *testing.T) {
+	t.Parallel()
 	r := newFollowRig(t, "")
 	r.open(t, r.id)
 	r.followC(t)
@@ -552,6 +563,7 @@ func TestWorktreeListKeys(t *testing.T) {
 }
 
 func TestWorktreeListEscChangesNothing(t *testing.T) {
+	t.Parallel()
 	r := newFollowRig(t, "")
 	r.open(t, r.id)
 	r.followC(t)
@@ -580,6 +592,7 @@ func TestWorktreeListEscChangesNothing(t *testing.T) {
 }
 
 func TestWorktreeListRefreshKeepsSelection(t *testing.T) {
+	t.Parallel()
 	r := newFollowRig(t, "")
 	r.open(t, r.id)
 	r.followC(t)
@@ -599,6 +612,7 @@ func TestWorktreeListRefreshKeepsSelection(t *testing.T) {
 }
 
 func TestWorktreeListDropsOtherKeys(t *testing.T) {
+	t.Parallel()
 	r := newFollowRig(t, "")
 	r.open(t, r.id)
 	r.followC(t)
@@ -630,6 +644,7 @@ func TestWorktreeListDropsOtherKeys(t *testing.T) {
 }
 
 func TestWorktreeListLeaderStillWorks(t *testing.T) {
+	t.Parallel()
 	r := newFollowRig(t, "")
 	r.open(t, r.id)
 	r.followC(t)
@@ -656,6 +671,7 @@ func TestWorktreeListLeaderStillWorks(t *testing.T) {
 }
 
 func TestWorktreeListFromThePalette(t *testing.T) {
+	t.Parallel()
 	r := newFollowRig(t, "")
 	r.open(t, r.id)
 
@@ -676,6 +692,7 @@ func TestWorktreeListFromThePalette(t *testing.T) {
 }
 
 func TestWorktreeListNeedsADrawer(t *testing.T) {
+	t.Parallel()
 	r := newFollowRig(t, "")
 
 	r.keys(keyLeader, keyRune(':'))
@@ -689,6 +706,7 @@ func TestWorktreeListNeedsADrawer(t *testing.T) {
 }
 
 func TestWorktreeListCloses(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name  string
 		close func(t *testing.T, r *followRig)
@@ -885,6 +903,7 @@ func TestWorktreeListRebuildInFlight(t *testing.T) {
 }
 
 func TestWorktreeListLastOpenWins(t *testing.T) {
+	t.Parallel()
 	r := newFollowRig(t, "")
 	r.open(t, r.id)
 	r.followC(t)

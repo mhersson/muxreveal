@@ -108,6 +108,8 @@ func assertColours(t *testing.T, vt term.VT, x, y int, content string, fg, bg th
 }
 
 func TestWorkspaceBar(t *testing.T) {
+	t.Parallel()
+
 	agent, shellIcon := iconAgent, iconShell
 	layoutTray := trayOpen + " " + iconLayoutBSP + " bsp "
 
@@ -169,6 +171,7 @@ func TestWorkspaceBar(t *testing.T) {
 }
 
 func TestWorkspaceBarColours(t *testing.T) {
+	t.Parallel()
 	ui := mochaUI(t)
 
 	a := tabsApp(t, 80, 12,
@@ -242,6 +245,8 @@ func signature(p barPlan) string {
 
 // The drop order of DESIGN's narrow-terminal rule, stage by stage.
 func TestWorkspaceBarPlan(t *testing.T) {
+	t.Parallel()
+
 	want := []string{
 		"pr,load,clock | 1:0 2:0 3:0",
 		"pr,clock | 1:0 2:0 3:0", // load leaves
@@ -272,6 +277,8 @@ func TestWorkspaceBarPlan(t *testing.T) {
 }
 
 func TestWorkspaceBarPlanActiveStays(t *testing.T) {
+	t.Parallel()
+
 	for _, icons := range []bool{true, false} {
 		for active := range 3 {
 			for w := 1; w <= 160; w++ {
@@ -292,6 +299,7 @@ func TestWorkspaceBarPlanActiveStays(t *testing.T) {
 
 // Whatever the plan, the bar is exactly the width.
 func TestWorkspaceBarExactWidth(t *testing.T) {
+	t.Parallel()
 	ui := mochaUI(t)
 
 	for _, icons := range []bool{true, false} {
@@ -307,6 +315,7 @@ func TestWorkspaceBarExactWidth(t *testing.T) {
 }
 
 func TestWorkspaceBarTraySpacing(t *testing.T) {
+	t.Parallel()
 	ui := mochaUI(t)
 	mods := testModules()
 	tray := trayWidth(mods, true)
@@ -337,6 +346,8 @@ func TestWorkspaceBarTraySpacing(t *testing.T) {
 }
 
 func TestTrayWidth(t *testing.T) {
+	t.Parallel()
+
 	mk := func(ids ...string) []trayModule {
 		var out []trayModule
 
@@ -412,6 +423,7 @@ func openIn(t *testing.T, a *App, acts ...core.Action) {
 // A window resize refits every tab to its own layout, hidden tabs included,
 // and never to 1x1.
 func TestHiddenTabsKeepSize(t *testing.T) {
+	t.Parallel()
 	a := newTestApp(t)
 	sized(t, a, 100, 30)
 
@@ -467,6 +479,7 @@ func TestHiddenTabsKeepSize(t *testing.T) {
 // Output that arrives while a tab is hidden does not render; showing the tab
 // does, before the next View.
 func TestHiddenPaneRendersOnSwitch(t *testing.T) {
+	t.Parallel()
 	a := newTestApp(t)
 	sized(t, a, 60, 12)
 
@@ -506,6 +519,7 @@ func TestHiddenPaneRendersOnSwitch(t *testing.T) {
 
 // Resizing while hidden also leaves the pane stale until its tab is shown.
 func TestHiddenResizeRendersOnSwitch(t *testing.T) {
+	t.Parallel()
 	a := newTestApp(t)
 	sized(t, a, 60, 12)
 
@@ -532,6 +546,8 @@ func TestHiddenResizeRendersOnSwitch(t *testing.T) {
 // Height 1 is the workspace bar only, height 2 adds the rule; every line is the
 // width and a body under 3 rows or columns stays blank.
 func TestScreenRows(t *testing.T) {
+	t.Parallel()
+
 	specs := []tabSpec{
 		{core.KindShell, "/w/a", "one"},
 		{core.KindAgent, "/w/b", "two"},
@@ -575,6 +591,8 @@ func TestScreenRows(t *testing.T) {
 
 // Three tabs with panes at every size keep every line the width.
 func TestFrameSizesTabs(t *testing.T) {
+	t.Parallel()
+
 	specs := []tabSpec{
 		{core.KindShell, "/w/a", "one"},
 		{core.KindAgent, "/w/b", "a very long tab name indeed"},
@@ -609,6 +627,7 @@ func TestFrameSizesTabs(t *testing.T) {
 // backgrounds. The real tray runs at each width; a narrow bar ends on the
 // tray's Surface, a wider one on the clock's own segment.
 func TestBarGroundReachesLastColumn(t *testing.T) {
+	t.Parallel()
 	ui := mochaUI(t)
 
 	tests := []struct {

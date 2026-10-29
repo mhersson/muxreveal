@@ -28,6 +28,7 @@ func fileRows(v *reviewView) []string {
 // brings them back when it returns. The turn it started in the main checkout
 // stays readable once a turn has started in the worktree.
 func TestAgentMovingIntoAWorktreeTakesTheRailAndDrawer(t *testing.T) {
+	t.Parallel()
 	r := newDrawerRig(t)
 
 	mainDir := newRepoDir(t)

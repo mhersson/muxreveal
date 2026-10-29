@@ -124,10 +124,13 @@ func reviewCases() []reviewCase {
 }
 
 func TestReviewGolden(t *testing.T) {
+	t.Parallel()
+
 	for _, th := range chromeThemes() {
 		for _, icons := range []bool{true, false} {
 			for _, c := range reviewCases() {
 				t.Run(fmt.Sprintf("%s/icons=%v/%s", th, icons, c.name), func(t *testing.T) {
+					t.Parallel()
 					a := c.scene(th, icons).build(t)
 					golden.RequireEqual(t, []byte(a.View().Content))
 				})
@@ -138,9 +141,12 @@ func TestReviewGolden(t *testing.T) {
 
 // TestReviewText is the same frames without styling, so the layout reads.
 func TestReviewText(t *testing.T) {
+	t.Parallel()
+
 	for _, icons := range []bool{true, false} {
 		for _, c := range reviewCases() {
 			t.Run(fmt.Sprintf("icons=%v/%s", icons, c.name), func(t *testing.T) {
+				t.Parallel()
 				a := c.scene("catppuccin-mocha", icons).build(t)
 				golden.RequireEqual(t, []byte(ansi.Strip(a.View().Content)))
 			})
@@ -149,6 +155,8 @@ func TestReviewText(t *testing.T) {
 }
 
 func TestDrawerCoversPanes(t *testing.T) {
+	t.Parallel()
+
 	s := reviewScene{theme: "catppuccin-mocha", icons: true, w: 200, h: 52, res: turn4Result(), turn: 4, turns: 4, focused: true}
 	a := s.build(t)
 
@@ -204,6 +212,8 @@ func TestDrawerCoversPanes(t *testing.T) {
 }
 
 func TestDrawerRect(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name string
 		w, h int
@@ -238,6 +248,7 @@ func TestDrawerRect(t *testing.T) {
 }
 
 func TestDrawerRectWithRail(t *testing.T) {
+	t.Parallel()
 	a := drawApp(t, "catppuccin-mocha", true, 200, 40, railFixtureAgents())
 	openIn(t, a, core.FocusPane{ID: "p5"}, core.OpenReview{Pane: "p5", Mode: core.ReviewBranch})
 
@@ -255,6 +266,8 @@ func TestDrawerRectWithRail(t *testing.T) {
 }
 
 func TestDrawerRectSlides(t *testing.T) {
+	t.Parallel()
+
 	s := reviewScene{theme: "catppuccin-mocha", icons: true, w: 200, h: 52, res: turn4Result(), turn: 4, turns: 4}
 	a := s.build(t)
 	clk := a.clock.(*fakeClock)
@@ -441,6 +454,8 @@ func TestDrawerRowsAreExactWidth(t *testing.T) {
 }
 
 func TestHighlightCapPerFrame(t *testing.T) {
+	t.Parallel()
+
 	res, full := bigResult(10000)
 
 	for _, whole := range []bool{false, true} {
@@ -499,6 +514,8 @@ func TestHighlightCapPerFrame(t *testing.T) {
 }
 
 func TestHighlightColoursLines(t *testing.T) {
+	t.Parallel()
+
 	s := reviewScene{theme: "catppuccin-mocha", icons: true, w: 200, h: 52, res: turn4Result(), turn: 4, turns: 4, focused: true}
 	a := s.build(t)
 
@@ -523,6 +540,8 @@ func rgbOf(hex string) (r, g, b int) {
 }
 
 func TestFreshRowsFlash(t *testing.T) {
+	t.Parallel()
+
 	build := func(until time.Duration) string {
 		s := reviewScene{theme: "catppuccin-mocha", icons: true, w: 200, h: 52, res: turn4Result(), turn: 4, turns: 4, focused: true}
 		s.tune = func(t *testing.T, a *App, v *reviewView) {
@@ -540,6 +559,8 @@ func TestFreshRowsFlash(t *testing.T) {
 }
 
 func TestDrawerTitleAndTags(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name  string
 		icons bool
@@ -591,6 +612,8 @@ func TestDrawerTitleAndTags(t *testing.T) {
 
 // Without the tree the mode shows only in the tag, and the diff takes the whole width.
 func TestDrawerModeShowsOnlyInTheTagWithoutTheTree(t *testing.T) {
+	t.Parallel()
+
 	s := reviewScene{theme: "catppuccin-mocha", icons: false, w: 200, h: 52, res: turn4Result(), turn: 4, turns: 4, focused: true}
 	text := ansi.Strip(s.build(t).View().Content)
 
@@ -608,6 +631,8 @@ func TestDrawerModeShowsOnlyInTheTagWithoutTheTree(t *testing.T) {
 }
 
 func TestDrawerKeyHints(t *testing.T) {
+	t.Parallel()
+
 	const (
 		diffHints = "j/k line   ]/[ hunk   }/{ file   tab tree   w worktree   f full   u split   b/t mode   ,/. turn   e edit   / search"
 		treeHints = "j/k file   enter jump   tab hide   esc back"
@@ -716,6 +741,8 @@ func TestDrawerTurnHintShowsOnlyForTurns(t *testing.T) {
 }
 
 func TestDrawerSplitFallsBackWhenNarrow(t *testing.T) {
+	t.Parallel()
+
 	s := reviewScene{theme: "catppuccin-mocha", icons: false, w: 124, h: 40, res: turn4Result(), turn: 4, turns: 4, focused: true}
 	s.tune = func(t *testing.T, a *App, v *reviewView) { v.split = true }
 	a := s.build(t)
@@ -742,6 +769,8 @@ func TestDrawerSplitFallsBackWhenNarrow(t *testing.T) {
 }
 
 func TestDrawerFocusedPaneDrawsUnfocused(t *testing.T) {
+	t.Parallel()
+
 	s := reviewScene{theme: "catppuccin-mocha", icons: true, w: 200, h: 52, res: turn4Result(), turn: 4, turns: 4}
 	s.focused = false
 
@@ -763,6 +792,8 @@ func TestDrawerFocusedPaneDrawsUnfocused(t *testing.T) {
 }
 
 func TestDrawerHidesPaneCursor(t *testing.T) {
+	t.Parallel()
+
 	s := reviewScene{theme: "catppuccin-mocha", icons: true, w: 200, h: 52, res: turn4Result(), turn: 4, turns: 4, focused: true}
 	a := s.build(t)
 
@@ -772,6 +803,8 @@ func TestDrawerHidesPaneCursor(t *testing.T) {
 }
 
 func TestDrawerGhostsAndFolds(t *testing.T) {
+	t.Parallel()
+
 	s := reviewScene{theme: "catppuccin-mocha", icons: true, w: 200, h: 52, res: turn4Result(), turn: 4, turns: 4, focused: true}
 	s.tune = func(t *testing.T, a *App, v *reviewView) {
 		v.full = map[string]fullText{appGoPath: appGoFull()}
@@ -793,6 +826,8 @@ func TestDrawerGhostsAndFolds(t *testing.T) {
 }
 
 func TestDrawerGhostLinesCarryNoNumber(t *testing.T) {
+	t.Parallel()
+
 	s := reviewScene{theme: "catppuccin-mocha", icons: true, w: 200, h: 52, res: turn4Result(), turn: 4, turns: 4, focused: true}
 	s.tune = func(t *testing.T, a *App, v *reviewView) {
 		v.full = map[string]fullText{appGoPath: appGoFull()}
@@ -840,6 +875,8 @@ func TestDrawerGhostLinesCarryNoNumber(t *testing.T) {
 }
 
 func TestDrawerTreeLayout(t *testing.T) {
+	t.Parallel()
+
 	s := reviewScene{theme: "catppuccin-mocha", icons: false, w: 200, h: 52, res: turn4Result(), turn: 4, turns: 4, focused: true, tree: true}
 	text := ansi.Strip(s.build(t).View().Content)
 
@@ -857,6 +894,8 @@ func crResult(specs ...string) git.Result {
 }
 
 func TestLineEndingCR(t *testing.T) {
+	t.Parallel()
+
 	const tag = "\u27e8U+000D\u27e9"
 
 	tests := []struct {

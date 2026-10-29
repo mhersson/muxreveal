@@ -43,6 +43,8 @@ func topRow(a *App) string {
 }
 
 func TestAgentGlyphs(t *testing.T) {
+	t.Parallel()
+
 	for name, g := range map[string]struct{ got, want string }{
 		"agent":   {iconAgent, "\U000F167A"},
 		"blocked": {iconBlocked, "\U000F0026"},
@@ -55,6 +57,8 @@ func TestAgentGlyphs(t *testing.T) {
 }
 
 func TestStateBadge(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name  string
 		st    core.AgentState
@@ -85,6 +89,7 @@ func TestStateBadge(t *testing.T) {
 }
 
 func TestStateBadgeAbsent(t *testing.T) {
+	t.Parallel()
 	a := badgeApp(t, 50, core.AgentUnknown, true)
 
 	row := topRow(a)
@@ -106,6 +111,7 @@ func TestStateBadgeAbsent(t *testing.T) {
 }
 
 func TestStateBadgeBesideTags(t *testing.T) {
+	t.Parallel()
 	a := newTestApp(t)
 	sized(t, a, 70, 12)
 	openIn(t, a,
@@ -135,6 +141,8 @@ func TestStateBadgeBesideTags(t *testing.T) {
 }
 
 func TestStateBadgeDroppedWhenNarrow(t *testing.T) {
+	t.Parallel()
+
 	for w := 8; w <= 40; w++ {
 		a := badgeApp(t, w, core.AgentWorking, true)
 		row := topRow(a)
@@ -156,6 +164,7 @@ func TestStateBadgeDroppedWhenNarrow(t *testing.T) {
 }
 
 func TestStateBadgeColours(t *testing.T) {
+	t.Parallel()
 	ui := mochaUI(t)
 
 	for _, tt := range []struct {
@@ -186,6 +195,8 @@ func TestStateBadgeColours(t *testing.T) {
 }
 
 func TestStateBadgeGolden(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name  string
 		st    core.AgentState
@@ -212,6 +223,7 @@ func TestStateBadgeGolden(t *testing.T) {
 }
 
 func TestInactiveTabIconTakesMostUrgentState(t *testing.T) {
+	t.Parallel()
 	ui := mochaUI(t)
 
 	a := tabsApp(t, 80, 12,
@@ -257,6 +269,8 @@ func TestInactiveTabIconTakesMostUrgentState(t *testing.T) {
 }
 
 func TestTrayBlockedAgentGolden(t *testing.T) {
+	t.Parallel()
+
 	for _, icons := range []bool{true, false} {
 		t.Run(fmt.Sprintf("icons=%v", icons), func(t *testing.T) {
 			a := trayApp(t, icons)
@@ -320,6 +334,7 @@ func zoomedModelApp(t *testing.T, w int, scrolled, status bool) *App {
 }
 
 func TestFrameModelTag(t *testing.T) {
+	t.Parallel()
 	t.Run("left of the badge", func(t *testing.T) {
 		for _, icons := range []bool{true, false} {
 			a := modelApp(t, 50, "Opus 5.5", pct(62), icons)
@@ -456,6 +471,7 @@ func TestFrameModelTag(t *testing.T) {
 }
 
 func TestFrameModelTagColours(t *testing.T) {
+	t.Parallel()
 	ui := mochaUI(t)
 
 	tests := []struct {

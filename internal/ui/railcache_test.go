@@ -37,6 +37,7 @@ func rebuiltBy(a *App, change func()) (rebuilt, differs bool) {
 }
 
 func TestRailCacheReusesLinesWhileNothingChanges(t *testing.T) {
+	t.Parallel()
 	a := cacheApp(t)
 	builds := a.rail.cache.builds
 
@@ -54,6 +55,8 @@ func TestRailCacheReusesLinesWhileNothingChanges(t *testing.T) {
 }
 
 func TestRailCacheKeyCoversEveryInput(t *testing.T) {
+	t.Parallel()
+
 	latte, err := theme.ByName("catppuccin-latte")
 	if err != nil {
 		t.Fatal(err)
@@ -203,6 +206,7 @@ func TestRailCacheKeyCoversEveryInput(t *testing.T) {
 }
 
 func TestRailNameChangeRedrawsTheCard(t *testing.T) {
+	t.Parallel()
 	a := cacheApp(t)
 
 	const transcript = "/w/web/p2.jsonl"
@@ -236,6 +240,7 @@ func TestRailNameChangeRedrawsTheCard(t *testing.T) {
 }
 
 func TestRailCacheHiddenRailDropsLines(t *testing.T) {
+	t.Parallel()
 	a := cacheApp(t)
 
 	sized(t, a, 63, 30)
@@ -257,6 +262,8 @@ func TestRailCacheHiddenRailDropsLines(t *testing.T) {
 }
 
 func TestRailCacheAges(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name     string
 		prep     func(a *App)
@@ -297,6 +304,7 @@ func TestRailCacheAges(t *testing.T) {
 }
 
 func TestRailCacheAgeFollowsPaneOutput(t *testing.T) {
+	t.Parallel()
 	a := cacheApp(t)
 
 	// A pane's output is newer than its hook: the age shown is 0s.
@@ -346,6 +354,7 @@ func TestRailCacheKeepsLinesThroughPaneOutput(t *testing.T) {
 }
 
 func TestRailCacheIgnoresOtherChrome(t *testing.T) {
+	t.Parallel()
 	a := cacheApp(t)
 
 	if rebuilt, _ := rebuiltBy(a, func() { a.notice = "layout: bsp" }); rebuilt {
@@ -354,6 +363,7 @@ func TestRailCacheIgnoresOtherChrome(t *testing.T) {
 }
 
 func TestRailCacheDroppedOnResizeAndTheme(t *testing.T) {
+	t.Parallel()
 	a := cacheApp(t)
 
 	was := railPicture(a)
@@ -376,6 +386,7 @@ func TestRailCacheDroppedOnResizeAndTheme(t *testing.T) {
 }
 
 func TestRailFitRunsOnlyWhenItsInputsChange(t *testing.T) {
+	t.Parallel()
 	a := cacheApp(t)
 	a.railOpened()
 	a.Update(struct{}{})
@@ -432,6 +443,7 @@ func TestRailFitRunsOnlyWhenItsInputsChange(t *testing.T) {
 }
 
 func TestRailFitUnderAKeptFilterSkipsOutputOnlyUpdates(t *testing.T) {
+	t.Parallel()
 	a := cacheApp(t)
 	a.railOpened()
 	a.railSetSearch(false, "api")

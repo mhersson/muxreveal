@@ -100,6 +100,7 @@ func sameColor(p, q color.Color) bool {
 }
 
 func TestDragSelectsAndHighlightsExactlyThoseCells(t *testing.T) {
+	t.Parallel()
 	a, _, f := shellsWith(t, sampleText, "RIGHTSIDE")
 	c := contentRect(a.layoutRects()["p1"])
 
@@ -131,6 +132,8 @@ func TestDragSelectsAndHighlightsExactlyThoseCells(t *testing.T) {
 }
 
 func TestDragThatLeavesItsPaneStaysClamped(t *testing.T) {
+	t.Parallel()
+
 	r := contentRectOf
 	tests := []struct {
 		name string
@@ -229,6 +232,7 @@ func settle(t *testing.T, a *App, fp *fakeProc, c core.Rect) string {
 }
 
 func TestClickInTrackingPaneIsForwardedOnRelease(t *testing.T) {
+	t.Parallel()
 	a, procs, _ := trackingShells(t)
 	c := contentRectOf(a, "p1")
 
@@ -254,6 +258,7 @@ func TestClickInTrackingPaneIsForwardedOnRelease(t *testing.T) {
 }
 
 func TestDragInTrackingPaneSelectsAndSendsNothing(t *testing.T) {
+	t.Parallel()
 	a, procs, f := trackingShells(t)
 	c := contentRectOf(a, "p1")
 
@@ -269,6 +274,7 @@ func TestDragInTrackingPaneSelectsAndSendsNothing(t *testing.T) {
 }
 
 func TestRightButtonIsForwardedAndNeverSelects(t *testing.T) {
+	t.Parallel()
 	a, procs, _ := trackingShells(t)
 	c := contentRectOf(a, "p1")
 
@@ -285,6 +291,7 @@ func TestRightButtonIsForwardedAndNeverSelects(t *testing.T) {
 }
 
 func TestNewPressReleasesAHeldForwardedButton(t *testing.T) {
+	t.Parallel()
 	a, procs, _ := trackingShells(t)
 	c := contentRectOf(a, "p1")
 
@@ -299,6 +306,7 @@ func TestNewPressReleasesAHeldForwardedButton(t *testing.T) {
 }
 
 func TestModalOpeningReleasesAHeldForwardedButton(t *testing.T) {
+	t.Parallel()
 	a, procs, _ := trackingShells(t)
 	c := contentRectOf(a, "p1")
 
@@ -314,6 +322,7 @@ func TestModalOpeningReleasesAHeldForwardedButton(t *testing.T) {
 }
 
 func TestDoubleAndTripleClickSelectWordAndLine(t *testing.T) {
+	t.Parallel()
 	a, _, f := shellsWith(t, sampleText, "")
 	clk := &fakeClock{t: time.Unix(1000, 0)}
 	a.clock = clk
@@ -353,6 +362,7 @@ func TestDoubleAndTripleClickSelectWordAndLine(t *testing.T) {
 }
 
 func TestSlowOrMovedClicksDoNotCount(t *testing.T) {
+	t.Parallel()
 	a, _, _ := shellsWith(t, sampleText, "")
 	clk := &fakeClock{t: time.Unix(1000, 0)}
 	a.clock = clk
@@ -375,6 +385,7 @@ func TestSlowOrMovedClicksDoNotCount(t *testing.T) {
 }
 
 func TestAltDragSelectsABlock(t *testing.T) {
+	t.Parallel()
 	a, _, f := shellsWith(t, "abcdef\r\nghijkl\r\nmnopqr", "")
 	c := contentRectOf(a, "p1")
 
@@ -386,6 +397,7 @@ func TestAltDragSelectsABlock(t *testing.T) {
 }
 
 func TestHeaderClickFocusesOnly(t *testing.T) {
+	t.Parallel()
 	a, procs, _ := trackingShells(t)
 	r := a.layoutRects()["p1"]
 
@@ -405,6 +417,7 @@ func TestHeaderClickFocusesOnly(t *testing.T) {
 }
 
 func TestBorderAndStatusClicksAreIgnored(t *testing.T) {
+	t.Parallel()
 	a, _, _ := shellsWith(t, sampleText, "")
 	r1 := a.layoutRects()["p1"]
 
@@ -422,6 +435,7 @@ func TestBorderAndStatusClicksAreIgnored(t *testing.T) {
 }
 
 func TestTabClickSwitchesTab(t *testing.T) {
+	t.Parallel()
 	a, _, _ := shellsWith(t, sampleText, "")
 
 	if err := a.dispatch(core.NewTab{Kind: core.KindShell, Cwd: "/w/c"}); err != nil {
@@ -451,6 +465,7 @@ func TestTabClickSwitchesTab(t *testing.T) {
 }
 
 func TestCopyWithoutSelectionDoesNothing(t *testing.T) {
+	t.Parallel()
 	a, _, f := shellsWith(t, sampleText, "")
 
 	if got := copyNow(a, f); got != "" {
@@ -459,6 +474,7 @@ func TestCopyWithoutSelectionDoesNothing(t *testing.T) {
 }
 
 func TestCopyKeepsTheSelection(t *testing.T) {
+	t.Parallel()
 	a, _, f := shellsWith(t, sampleText, "")
 	c := contentRectOf(a, "p1")
 
@@ -471,6 +487,7 @@ func TestCopyKeepsTheSelection(t *testing.T) {
 }
 
 func TestGuestOSC52ReachesTheClipboard(t *testing.T) {
+	t.Parallel()
 	a, procs, f := shellsWith(t, sampleText, "")
 	pm := newPump(t)
 
@@ -489,6 +506,7 @@ func TestGuestOSC52ReachesTheClipboard(t *testing.T) {
 }
 
 func TestGuestOSC52FromAHiddenTabReachesTheClipboard(t *testing.T) {
+	t.Parallel()
 	a, procs, f := shellsWith(t, sampleText, "")
 	pm := newPump(t)
 
@@ -528,6 +546,8 @@ func modalCases() []struct {
 }
 
 func TestMouseIsIgnoredUnderModalUI(t *testing.T) {
+	t.Parallel()
+
 	for _, m := range modalCases() {
 		t.Run(m.name, func(t *testing.T) {
 			a, procs, _ := trackingShells(t)
@@ -574,6 +594,7 @@ func TestMouseIsIgnoredUnderModalUI(t *testing.T) {
 }
 
 func TestKeyToTheSelectionPaneClearsIt(t *testing.T) {
+	t.Parallel()
 	a, _, _ := shellsWith(t, sampleText, "")
 	c := contentRectOf(a, "p1")
 
@@ -593,6 +614,7 @@ func TestKeyToTheSelectionPaneClearsIt(t *testing.T) {
 }
 
 func TestKeyToAnotherPaneKeepsTheSelection(t *testing.T) {
+	t.Parallel()
 	a, _, _ := shellsWith(t, sampleText, "")
 	c := contentRectOf(a, "p1")
 
@@ -610,6 +632,7 @@ func TestKeyToAnotherPaneKeepsTheSelection(t *testing.T) {
 }
 
 func TestPasteToTheSelectionPaneClearsIt(t *testing.T) {
+	t.Parallel()
 	a, _, _ := shellsWith(t, sampleText, "")
 	c := contentRectOf(a, "p1")
 
@@ -622,6 +645,7 @@ func TestPasteToTheSelectionPaneClearsIt(t *testing.T) {
 }
 
 func TestClickClearsAndDragReplaces(t *testing.T) {
+	t.Parallel()
 	a, _, f := shellsWith(t, sampleText, "RIGHTSIDE")
 	c := contentRectOf(a, "p1")
 
@@ -641,6 +665,7 @@ func TestClickClearsAndDragReplaces(t *testing.T) {
 }
 
 func TestSelectionSurvivesTabSwitchAndIsHiddenMeanwhile(t *testing.T) {
+	t.Parallel()
 	a, _, _ := shellsWith(t, sampleText, "")
 	c := contentRectOf(a, "p1")
 
@@ -664,6 +689,7 @@ func TestSelectionSurvivesTabSwitchAndIsHiddenMeanwhile(t *testing.T) {
 }
 
 func TestClosingThePaneClearsItsSelection(t *testing.T) {
+	t.Parallel()
 	a, _, _ := shellsWith(t, sampleText, "")
 	c := contentRectOf(a, "p1")
 
@@ -676,6 +702,7 @@ func TestClosingThePaneClearsItsSelection(t *testing.T) {
 }
 
 func TestResizeAndAltScreenClearTheSelection(t *testing.T) {
+	t.Parallel()
 	t.Run("resize", func(t *testing.T) {
 		a, _, _ := shellsWith(t, sampleText, "")
 		c := contentRectOf(a, "p1")
@@ -703,6 +730,7 @@ func TestResizeAndAltScreenClearTheSelection(t *testing.T) {
 }
 
 func TestSelectionStaysOnItsTextWhileOutputScrolls(t *testing.T) {
+	t.Parallel()
 	a, procs, f := shellsWith(t, manyLines(30), "")
 	p := a.panes["p1"]
 	c := contentRectOf(a, "p1")
@@ -724,6 +752,7 @@ func TestSelectionStaysOnItsTextWhileOutputScrolls(t *testing.T) {
 // A click on a pane's top border focuses it, as its header did; its side and
 // bottom borders do nothing of their own, and no click there reaches the guest.
 func TestPaneBorderClicks(t *testing.T) {
+	t.Parallel()
 	a, _, _ := trackingShells(t)
 	r := a.layoutRects()["p1"]
 	c := contentRect(r)
@@ -769,6 +798,7 @@ func TestPaneBorderClicks(t *testing.T) {
 }
 
 func TestWheelUsesTheSharedHitTest(t *testing.T) {
+	t.Parallel()
 	a, _, _ := shellsWith(t, manyLines(30), "")
 	r := a.layoutRects()["p1"]
 
@@ -781,6 +811,7 @@ func TestWheelUsesTheSharedHitTest(t *testing.T) {
 }
 
 func TestHitAreas(t *testing.T) {
+	t.Parallel()
 	a, _, _ := shellsWith(t, sampleText, "")
 	r := a.layoutRects()["p1"]
 	c := contentRect(r)
@@ -820,6 +851,7 @@ func TestHitAreas(t *testing.T) {
 }
 
 func TestModalOpeningMidDragDropsTheHeldButton(t *testing.T) {
+	t.Parallel()
 	a, _, _ := shellsWith(t, sampleText, "")
 	c := contentRectOf(a, "p1")
 
@@ -851,6 +883,7 @@ func drawnRow(a *App, c core.Rect, y int) string {
 }
 
 func TestHighlightFollowsDrawnRowsDuringSyncHold(t *testing.T) {
+	t.Parallel()
 	a, procs, _ := shellsWith(t, sampleText, "")
 	p := a.panes["p1"]
 	c := contentRectOf(a, "p1")
@@ -871,6 +904,7 @@ func TestHighlightFollowsDrawnRowsDuringSyncHold(t *testing.T) {
 }
 
 func TestHighlightStaysOnDrawnTextWhenOutputIsNotRenderedYet(t *testing.T) {
+	t.Parallel()
 	a, procs, _ := shellsWith(t, manyLines(30), "")
 	p := a.panes["p1"]
 	c := contentRectOf(a, "p1")
@@ -897,6 +931,8 @@ func TestHighlightStaysOnDrawnTextWhenOutputIsNotRenderedYet(t *testing.T) {
 }
 
 func TestMultiClickInTrackingPaneSelectsAndForwardsOnlyTheFirstClick(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name   string
 		clicks int

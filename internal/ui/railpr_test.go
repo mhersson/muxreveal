@@ -87,6 +87,8 @@ func prNumber(n int) func(p *core.PRInfo) {
 }
 
 func TestRailLineTwoPR(t *testing.T) {
+	t.Parallel()
+
 	const cw = 40
 
 	a := newTestApp(t)
@@ -173,6 +175,7 @@ func TestRailLineTwoPR(t *testing.T) {
 }
 
 func TestRailLineTwoPRColours(t *testing.T) {
+	t.Parallel()
 	a := newTestApp(t)
 	ui := a.current().theme.UI
 
@@ -234,6 +237,7 @@ func TestRailLineTwoPRColours(t *testing.T) {
 // Short of room, the branch is cut to 8 cells, then the review goes, then the
 // commits ahead, then the check counts; the number always stays.
 func TestRailLineTwoDropOrder(t *testing.T) {
+	t.Parallel()
 	a := newTestApp(t)
 	ui := a.current().theme.UI
 
@@ -307,6 +311,7 @@ func TestRailLineTwoDropOrder(t *testing.T) {
 // A draft, merged or closed pull request gives up its word after the commits
 // ahead, so the branch keeps its 8 cells while the icon and the number fit.
 func TestRailLineTwoDropOrderOtherStates(t *testing.T) {
+	t.Parallel()
 	a := newTestApp(t)
 	ui := a.current().theme.UI
 
@@ -349,6 +354,7 @@ func TestRailLineTwoDropOrderOtherStates(t *testing.T) {
 
 // The branch keeps 8 cells (or all of a shorter name) before anything else goes.
 func TestRailLineTwoKeepsAShortBranch(t *testing.T) {
+	t.Parallel()
 	a := newTestApp(t)
 	ui := a.current().theme.UI
 
@@ -385,6 +391,7 @@ func TestRailLineTwoKeepsAShortBranch(t *testing.T) {
 }
 
 func TestRailLineTwoPRKeepsTheSearchHighlight(t *testing.T) {
+	t.Parallel()
 	a := newTestApp(t)
 	ui := a.current().theme.UI
 
@@ -410,6 +417,8 @@ func TestRailLineTwoPRKeepsTheSearchHighlight(t *testing.T) {
 }
 
 func TestRailCardsTakeTheirPRFromTheStore(t *testing.T) {
+	t.Parallel()
+
 	agents := []railAgent{
 		{newTab: true, project: "api", branch: "feat/login", state: core.AgentIdle, pr: ptr(prInfo("OPEN", checksRunning))},
 		{project: "web", branch: "feat/old", state: core.AgentIdle, pr: ptr(prInfo("MERGED"))},
@@ -459,6 +468,8 @@ func TestRailCardsTakeTheirPRFromTheStore(t *testing.T) {
 }
 
 func TestRailPRShowsInTheFrame(t *testing.T) {
+	t.Parallel()
+
 	agents := []railAgent{
 		{newTab: true, project: "api", branch: "feat/login", state: core.AgentWorking, action: "Edit a.go", age: 4 * time.Minute, stats: &git.Stats{}, ahead: 1, pr: ptr(prInfo("OPEN", checksFailing))},
 	}

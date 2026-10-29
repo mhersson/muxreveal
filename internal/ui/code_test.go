@@ -8,6 +8,7 @@ import (
 )
 
 func TestHighlight(t *testing.T) {
+	t.Parallel()
 	mocha := mustTheme(t, "catppuccin-mocha")
 
 	t.Run("go", func(t *testing.T) {

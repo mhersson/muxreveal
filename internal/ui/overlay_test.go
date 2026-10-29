@@ -63,6 +63,7 @@ func typeText(a *App, s string) {
 }
 
 func TestPaletteListsEveryCommand(t *testing.T) {
+	t.Parallel()
 	a := fastApp(t)
 	sized(t, a, 100, 30)
 	pressRun(a, keyLeader, keyRune(':'))
@@ -99,6 +100,8 @@ func TestPaletteListsEveryCommand(t *testing.T) {
 }
 
 func TestPaletteIcons(t *testing.T) {
+	t.Parallel()
+
 	for _, icons := range []bool{true, false} {
 		t.Run(fmt.Sprintf("icons=%v", icons), func(t *testing.T) {
 			a := fastApp(t)
@@ -130,6 +133,8 @@ func TestPaletteIcons(t *testing.T) {
 }
 
 func TestThemePickerIcons(t *testing.T) {
+	t.Parallel()
+
 	for _, icons := range []bool{true, false} {
 		a := fastApp(t)
 		a.icons = icons
@@ -148,6 +153,7 @@ func TestThemePickerIcons(t *testing.T) {
 }
 
 func TestPaletteRunsCommand(t *testing.T) {
+	t.Parallel()
 	a := fastApp(t)
 	sized(t, a, 100, 30)
 	pressRun(a, keyLeader, keyRune(':'))
@@ -164,6 +170,7 @@ func TestPaletteRunsCommand(t *testing.T) {
 }
 
 func TestPaletteOpensThemePicker(t *testing.T) {
+	t.Parallel()
 	a := fastApp(t)
 	sized(t, a, 100, 30)
 	pressRun(a, keyLeader, keyRune(':'))
@@ -176,6 +183,7 @@ func TestPaletteOpensThemePicker(t *testing.T) {
 }
 
 func TestThemePickerCommits(t *testing.T) {
+	t.Parallel()
 	a := fastApp(t)
 	sized(t, a, 100, 30)
 	pressRun(a, keyLeader, keyRune('t'), keyDown, keyEnter)
@@ -195,6 +203,7 @@ func TestThemePickerCommits(t *testing.T) {
 }
 
 func TestThemePickerEscRestores(t *testing.T) {
+	t.Parallel()
 	a := fastApp(t)
 	sized(t, a, 100, 30)
 	mocha := mustTheme(t, "catppuccin-mocha")
@@ -234,6 +243,7 @@ func TestThemePickerEscRestores(t *testing.T) {
 }
 
 func TestOverlayOwnsKeys(t *testing.T) {
+	t.Parallel()
 	a := fastApp(t)
 	sized(t, a, 100, 30)
 	pressRun(a, keyLeader, keyRune(':'))
@@ -255,6 +265,7 @@ func TestOverlayOwnsKeys(t *testing.T) {
 }
 
 func TestOverlayEndsLeaderPopup(t *testing.T) {
+	t.Parallel()
 	a := fastApp(t)
 	sized(t, a, 100, 30)
 	press(a, keyLeader)
@@ -268,6 +279,8 @@ func TestOverlayEndsLeaderPopup(t *testing.T) {
 }
 
 func TestOverlaySizes(t *testing.T) {
+	t.Parallel()
+
 	for _, key := range []rune{':', 't'} {
 		for _, sz := range [][2]int{{100, 30}, {30, 8}, {5, 3}, {1, 1}, {2, 2}} {
 			w, h := sz[0], sz[1]
@@ -292,6 +305,7 @@ func TestOverlaySizes(t *testing.T) {
 }
 
 func TestPaletteOverlayNoIconsGolden(t *testing.T) {
+	t.Parallel()
 	a := fastApp(t)
 	a.icons = false
 	sized(t, a, 100, 30)
@@ -300,6 +314,7 @@ func TestPaletteOverlayNoIconsGolden(t *testing.T) {
 }
 
 func TestPaletteOverlayGolden(t *testing.T) {
+	t.Parallel()
 	a := fastApp(t)
 	sized(t, a, 100, 30)
 	pressRun(a, keyLeader, keyRune(':'))
@@ -307,6 +322,7 @@ func TestPaletteOverlayGolden(t *testing.T) {
 }
 
 func TestThemePickerGolden(t *testing.T) {
+	t.Parallel()
 	a := fastApp(t)
 	sized(t, a, 100, 30)
 	pressRun(a, keyLeader, keyRune('t'), keyDown)
@@ -314,6 +330,8 @@ func TestThemePickerGolden(t *testing.T) {
 }
 
 func TestLateHighlightIgnored(t *testing.T) {
+	t.Parallel()
+
 	latte := palette.HighlightMsg{ID: "catppuccin-latte"}
 	mocha := mustTheme(t, "catppuccin-mocha")
 	frappe := mustTheme(t, "catppuccin-frappe")
@@ -351,6 +369,7 @@ func TestLateHighlightIgnored(t *testing.T) {
 }
 
 func TestPasteReachesPalette(t *testing.T) {
+	t.Parallel()
 	a := fastApp(t)
 	sized(t, a, 100, 30)
 	pressRun(a, keyLeader, keyRune(':'))
@@ -364,6 +383,7 @@ func TestPasteReachesPalette(t *testing.T) {
 }
 
 func TestLateChosenIgnored(t *testing.T) {
+	t.Parallel()
 	a := fastApp(t)
 	sized(t, a, 100, 30)
 	pressRun(a, keyLeader, keyRune(':'))
@@ -389,6 +409,7 @@ func TestLateChosenIgnored(t *testing.T) {
 }
 
 func TestOverlayBeforeFirstSize(t *testing.T) {
+	t.Parallel()
 	a := fastApp(t)
 	press(a, keyLeader)
 	a.Update(whichKeyMsg{seq: a.seq})
@@ -407,6 +428,8 @@ func TestOverlayBeforeFirstSize(t *testing.T) {
 }
 
 func TestPaletteFooterPlacement(t *testing.T) {
+	t.Parallel()
+
 	items := make([]palette.Item, 12)
 	for i := range items {
 		items[i] = palette.Item{ID: fmt.Sprint(i), Title: fmt.Sprint("item ", i)}
@@ -433,6 +456,8 @@ func TestPaletteFooterPlacement(t *testing.T) {
 }
 
 func TestFooterEnterLabelPerOverlay(t *testing.T) {
+	t.Parallel()
+
 	for _, tc := range []struct {
 		key  rune
 		want string

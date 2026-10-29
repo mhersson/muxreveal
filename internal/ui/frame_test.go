@@ -259,6 +259,8 @@ func modelFrameCases() []struct {
 // TestFrameModelGolden draws the model frames in the other theme and with icons
 // off; TestFrameGolden draws them in the default theme with icons.
 func TestFrameModelGolden(t *testing.T) {
+	t.Parallel()
+
 	for _, th := range chromeThemes() {
 		for _, icons := range []bool{true, false} {
 			if th == "catppuccin-mocha" && icons {
@@ -275,6 +277,8 @@ func TestFrameModelGolden(t *testing.T) {
 }
 
 func TestFrameGolden(t *testing.T) {
+	t.Parallel()
+
 	for _, tt := range frameCases() {
 		t.Run(tt.name, func(t *testing.T) {
 			golden.RequireEqual(t, []byte(tt.build(t).View().Content))
@@ -284,6 +288,8 @@ func TestFrameGolden(t *testing.T) {
 
 // TestFrameText is the same frames without styling, so the line work reads.
 func TestFrameText(t *testing.T) {
+	t.Parallel()
+
 	for _, tt := range frameCases() {
 		t.Run(tt.name, func(t *testing.T) {
 			golden.RequireEqual(t, []byte(ansi.Strip(tt.build(t).View().Content)))
@@ -293,6 +299,8 @@ func TestFrameText(t *testing.T) {
 
 // Every line is exactly the terminal width, whatever the size, layout or zoom.
 func TestFrameSizes(t *testing.T) {
+	t.Parallel()
+
 	for w := 1; w <= 40; w++ {
 		for h := 1; h <= 12; h++ {
 			specs := make([]paneSpec, 6)
@@ -331,6 +339,8 @@ func TestFrameSizes(t *testing.T) {
 
 // A body under 3 rows or columns stays blank.
 func TestFrameMinimumBody(t *testing.T) {
+	t.Parallel()
+
 	for _, sz := range [][2]int{{2, 12}, {40, 3}, {40, 2}, {2, 2}} {
 		a, _ := framedApp(t, sz[0], sz[1], shellSpec("/a", "x"))
 
@@ -345,6 +355,7 @@ func TestFrameMinimumBody(t *testing.T) {
 
 // A 3x3 pane is a box around one content cell; a tile of 2x2 is left out.
 func TestSmallestPanes(t *testing.T) {
+	t.Parallel()
 	t.Run("3x3 draws a box with one content cell", func(t *testing.T) {
 		a, _ := framedApp(t, 3, 5, shellSpec("/a", "x"))
 
@@ -396,6 +407,8 @@ func fill(prefix string, w int) string {
 func dashes(prefix string, w int) string { return fill(prefix, w-1) + "╮" }
 
 func TestTitle(t *testing.T) {
+	t.Parallel()
+
 	zoom := " " + iconZoom + " zoom "
 	tests := []struct {
 		name  string
@@ -443,6 +456,7 @@ func TestTitle(t *testing.T) {
 }
 
 func TestTitleControlCharacters(t *testing.T) {
+	t.Parallel()
 	a, _ := framedApp(t, 40, 6, paneSpec{kind: core.KindShell, cwd: "/home/u/a", split: core.SplitVertical, text: "\x1b]2;a\x01b\x7fc\x07"})
 
 	if got, want := topBorder(a), dashes("╭─ "+iconShell+" abc ", 40); got != want {
@@ -451,6 +465,7 @@ func TestTitleControlCharacters(t *testing.T) {
 }
 
 func TestTitleInvisibleCharacters(t *testing.T) {
+	t.Parallel()
 	// U+202E reorders what follows, U+200B is a zero-width space.
 	a, _ := framedApp(t, 40, 6, paneSpec{kind: core.KindShell, cwd: "/home/u/a", split: core.SplitVertical, text: "\x1b]2;a\u202Eb\u200Bc\x07"})
 
@@ -460,6 +475,8 @@ func TestTitleInvisibleCharacters(t *testing.T) {
 }
 
 func TestPrintable(t *testing.T) {
+	t.Parallel()
+
 	const family = "\U0001F468\u200D\U0001F469\u200D\U0001F467"
 
 	tests := []struct {
@@ -490,6 +507,7 @@ func TestPrintable(t *testing.T) {
 // An unfocused pane's title is Muted; the focused pane's title is bold in its
 // kind colour. The icon is in the kind colour either way.
 func TestTitleColours(t *testing.T) {
+	t.Parallel()
 	ui := mochaUI(t)
 	tests := []struct {
 		name  string
@@ -527,6 +545,7 @@ func TestTitleColours(t *testing.T) {
 // The focused pane's whole box is in its kind colour; every other border cell
 // is Border.
 func TestBorderColours(t *testing.T) {
+	t.Parallel()
 	ui := mochaUI(t)
 
 	for _, tt := range frameCases() {
@@ -571,6 +590,8 @@ func TestBorderColours(t *testing.T) {
 }
 
 func TestIconsAreOneCell(t *testing.T) {
+	t.Parallel()
+
 	for name, g := range map[string]string{"agent": iconAgent, "shell": iconShell, "zoom": iconZoom} {
 		if w := lipgloss.Width(g); w != 1 {
 			t.Errorf("%s icon is %d cells wide, want 1", name, w)
@@ -579,6 +600,8 @@ func TestIconsAreOneCell(t *testing.T) {
 }
 
 func TestNoIconsNoGlyphs(t *testing.T) {
+	t.Parallel()
+
 	for _, tt := range frameCases() {
 		t.Run(tt.name, func(t *testing.T) {
 			a := tt.build(t)
@@ -596,6 +619,8 @@ func TestNoIconsNoGlyphs(t *testing.T) {
 // Every pane is its own rounded box: the corners sit on the rect's corners,
 // neighbours touch, and no junction glyph or shared cell exists.
 func TestFramesAreOneBoxPerPane(t *testing.T) {
+	t.Parallel()
+
 	for w := 8; w <= 40; w++ {
 		a, _ := framedApp(t, w, 12,
 			paneSpec{kind: core.KindShell, cwd: "/w/top", split: core.SplitVertical},
@@ -627,6 +652,7 @@ func TestFramesAreOneBoxPerPane(t *testing.T) {
 }
 
 func TestCursorView(t *testing.T) {
+	t.Parallel()
 	a, procs := framedApp(t, 100, 30, shellSpec("/a", ""), shellSpec("/b", "\x1b[3;5Hx"))
 
 	// p2 is focused and sits right of p1: p1 takes floor(100*0.5) = 50 columns, so p2 starts at x=50 and its content at x=51.
@@ -663,6 +689,8 @@ func TestCursorView(t *testing.T) {
 }
 
 func TestCursorViewNoRect(t *testing.T) {
+	t.Parallel()
+
 	a, _ := framedApp(t, 1, 1, shellSpec("/a", ""))
 	if a.cursorView() != nil {
 		t.Error("cursorView() with no rect for the focused pane, want nil")
@@ -674,6 +702,7 @@ func TestCursorViewNoRect(t *testing.T) {
 }
 
 func TestCursorViewOutsideContent(t *testing.T) {
+	t.Parallel()
 	a, procs := framedApp(t, 100, 30, shellSpec("/a", ""))
 	// The pane is still 100 wide when the layout shrinks to 40: the cursor is clipped.
 	feedAndWait(t, a.panes["p1"], procs["p1"], "\x1b[3;60Hx")
@@ -685,6 +714,7 @@ func TestCursorViewOutsideContent(t *testing.T) {
 }
 
 func TestCursorViewWhichKeyPopup(t *testing.T) {
+	t.Parallel()
 	a, _ := framedApp(t, 100, 30, shellSpec("/a", ""))
 	a.popup = true
 
@@ -694,6 +724,7 @@ func TestCursorViewWhichKeyPopup(t *testing.T) {
 }
 
 func TestViewSetsCursor(t *testing.T) {
+	t.Parallel()
 	a, _ := framedApp(t, 100, 30, shellSpec("/a", "ab"))
 
 	want := a.cursorView()
@@ -705,6 +736,7 @@ func TestViewSetsCursor(t *testing.T) {
 }
 
 func TestNoticeDropsControlCharacters(t *testing.T) {
+	t.Parallel()
 	a, _ := framedApp(t, 40, 6, shellSpec("/home/u/proj", ""))
 	a.notice = "cannot start shell: chdir /a\nb\x1b[31m"
 
@@ -770,6 +802,7 @@ func assertCell(t *testing.T, vt term.VT, x, y int, want theme.Hex, bold bool) {
 
 // A full-width pane's long title is cut with an ellipsis before its right corner.
 func TestTitleCutBeforeCorner(t *testing.T) {
+	t.Parallel()
 	a := newTestApp(t)
 	sized(t, a, 40, 12)
 
@@ -800,6 +833,7 @@ func TestTitleCutBeforeCorner(t *testing.T) {
 // Row 1 is a full-width rule in Border; the body starts under it and runs to
 // the last row. The rule takes no clicks.
 func TestRuleUnderWorkspaceBar(t *testing.T) {
+	t.Parallel()
 	ui := mochaUI(t)
 	a, _ := framedApp(t, 40, 12, shellSpec("/a", "x"), shellSpec("/b", "y"))
 
@@ -834,6 +868,8 @@ func TestRuleUnderWorkspaceBar(t *testing.T) {
 // Small heights: the workspace bar alone, then the rule too; the body is what
 // is left.
 func TestRuleSmallHeights(t *testing.T) {
+	t.Parallel()
+
 	for _, tt := range []struct {
 		h    int
 		rule bool

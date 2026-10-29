@@ -43,6 +43,7 @@ func settleCounting(t *testing.T, a *App) int {
 // A live result tokenises only the chunks whose text changed; the rest keep the
 // spans they had, and what is drawn is what a cold start draws.
 func TestLiveResultKeepsSpansOfUnchangedChunks(t *testing.T) {
+	t.Parallel()
 	a := cacheScene().build(t)
 	v := a.reviewViewOf(a.store.State().Tab().ID)
 
@@ -88,6 +89,7 @@ func TestLiveResultKeepsSpansOfUnchangedChunks(t *testing.T) {
 
 // A new source starts over: nothing is carried to it.
 func TestNewSourceTokenisesAfresh(t *testing.T) {
+	t.Parallel()
 	a := cacheScene().build(t)
 	v := a.reviewViewOf(a.store.State().Tab().ID)
 
@@ -107,6 +109,8 @@ func TestNewSourceTokenisesAfresh(t *testing.T) {
 // Paging through a long diff tokenises each chunk once, paging back tokenises
 // nothing, and a step that brings no new chunk into range tokenises nothing.
 func TestScrollTokenisesEachChunkOnce(t *testing.T) {
+	t.Parallel()
+
 	res, _ := bigResult(5000)
 	s := reviewScene{theme: "catppuccin-mocha", icons: true, w: 200, h: 52, res: res, turn: 1, turns: 1, focused: true}
 	a := s.build(t)
@@ -146,6 +150,7 @@ func TestScrollTokenisesEachChunkOnce(t *testing.T) {
 // Showing a file whole, and back as hunks, tokenises only the chunks whose text
 // is new: the other files' chunks keep the spans they had.
 func TestFullFileToggleKeepsSpansOfUnchangedChunks(t *testing.T) {
+	t.Parallel()
 	a := cacheScene().build(t)
 	tab := a.store.State().Tab().ID
 	v := a.reviewViewOf(tab)

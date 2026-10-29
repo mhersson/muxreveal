@@ -27,6 +27,7 @@ func sideBySide(t *testing.T) (*drawerRig, *reviewView) {
 }
 
 func TestOverlaysWhileTheDrawerHasTheKeyboard(t *testing.T) {
+	t.Parallel()
 	r, v := sideBySide(t)
 
 	cases := []struct {
@@ -72,6 +73,7 @@ func TestOverlaysWhileTheDrawerHasTheKeyboard(t *testing.T) {
 // Copy mode on a pane the drawer covers would have no owner on screen, so the
 // drawer closes without a slide first, as for any action that focuses a covered pane.
 func TestCopyModeOnACoveredPaneClosesTheDrawer(t *testing.T) {
+	t.Parallel()
 	r, _ := sideBySide(t)
 
 	// The agent pane is the focused one when the drawer opens on it.
@@ -102,6 +104,7 @@ func TestCopyModeOnACoveredPaneClosesTheDrawer(t *testing.T) {
 }
 
 func TestKeyboardOwnerWhenPanesClose(t *testing.T) {
+	t.Parallel()
 	t.Run("the drawer's pane closes while the drawer has the keyboard", func(t *testing.T) {
 		r, _ := sideBySide(t)
 
@@ -174,6 +177,7 @@ func TestKeyboardOwnerWhenPanesClose(t *testing.T) {
 // A tab whose focused pane is under its drawer gives that drawer the keyboard
 // when the tab shows again.
 func TestTabSwitchToACoveredFocusGivesTheDrawerTheKeyboard(t *testing.T) {
+	t.Parallel()
 	dir := keysRepo(t)
 	r := newKeysRig(t, dir)
 	r.openShell(t, dir, core.SplitVertical)
@@ -201,6 +205,7 @@ func TestTabSwitchToACoveredFocusGivesTheDrawerTheKeyboard(t *testing.T) {
 // A drawer restored into a hidden tab has no view until its tab shows. A pane
 // moved into that tab and followed still closes the drawer when it lands under it.
 func TestPaneMovedIntoARestoredDrawersTab(t *testing.T) {
+	t.Parallel()
 	dir := keysRepo(t)
 	r := newKeysRig(t, dir)
 
@@ -292,6 +297,7 @@ func closeLandsCovered(t *testing.T) (r *drawerRig, x, y core.PaneID) {
 // closes decides: a process that exits hands the drawer the keyboard, and a close
 // the operator asks for is their action on a covered pane, so the drawer closes.
 func TestFocusedPaneClosesOntoACoveredPane(t *testing.T) {
+	t.Parallel()
 	t.Run("the process exits", func(t *testing.T) {
 		r, x, y := closeLandsCovered(t)
 
@@ -343,6 +349,7 @@ func hiddenDrawerState() core.State {
 // pane moved into that tab and followed still closes the drawer when it lands
 // under it.
 func TestPaneMovedIntoARestoredHiddenDrawersTab(t *testing.T) {
+	t.Parallel()
 	r := restoreApp(t, hiddenDrawerState())
 	r.size(200, 50)
 

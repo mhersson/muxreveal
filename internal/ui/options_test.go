@@ -47,6 +47,8 @@ func hover(a *App, x, y int) {
 func focusOf(a *App) core.PaneID { return a.store.State().Tab().Focus }
 
 func TestMouseModeFollowsTheOption(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name  string
 		focus bool
@@ -69,6 +71,7 @@ func TestMouseModeFollowsTheOption(t *testing.T) {
 }
 
 func TestHoverFocusesThePaneUnderThePointer(t *testing.T) {
+	t.Parallel()
 	a, _, _ := shellsWith(t, "a", "b")
 	a.focusFollows = true
 	c1, c2 := contentRectOf(a, "p1"), contentRectOf(a, "p2")
@@ -97,6 +100,7 @@ func TestHoverFocusesThePaneUnderThePointer(t *testing.T) {
 }
 
 func TestHoverIgnoresBordersBarsAndEmptyCells(t *testing.T) {
+	t.Parallel()
 	a, _, _ := shellsWith(t, "a", "b")
 	a.focusFollows = true
 	c1 := contentRectOf(a, "p1")
@@ -111,6 +115,7 @@ func TestHoverIgnoresBordersBarsAndEmptyCells(t *testing.T) {
 }
 
 func TestHoverDoesNothingWhenTheOptionIsOff(t *testing.T) {
+	t.Parallel()
 	a, _, _ := shellsWith(t, "a", "b")
 	c1 := contentRectOf(a, "p1")
 
@@ -122,6 +127,8 @@ func TestHoverDoesNothingWhenTheOptionIsOff(t *testing.T) {
 }
 
 func TestHoverNeverStealsFocusUnderModalUI(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name string
 		open func(a *App)
@@ -151,6 +158,7 @@ func TestHoverNeverStealsFocusUnderModalUI(t *testing.T) {
 }
 
 func TestHoverDoesNotFocusDuringADrag(t *testing.T) {
+	t.Parallel()
 	a, _, _ := shellsWith(t, sampleText, "RIGHT")
 	a.focusFollows = true
 	c1, c2 := contentRectOf(a, "p1"), contentRectOf(a, "p2")
@@ -170,6 +178,7 @@ func TestHoverDoesNotFocusDuringADrag(t *testing.T) {
 }
 
 func TestHoverReportsFocusToGuests(t *testing.T) {
+	t.Parallel()
 	a, procs, _ := shellsWith(t, "a", "b")
 	a.focusFollows = true
 	feedAndWait(t, a.panes["p1"], procs["p1"], "\x1b[?1004h")
@@ -183,6 +192,8 @@ func TestHoverReportsFocusToGuests(t *testing.T) {
 }
 
 func TestCopyOnSelect(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name    string
 		option  bool
@@ -224,6 +235,7 @@ func TestCopyOnSelect(t *testing.T) {
 }
 
 func TestCopyOnSelectCopiesOnReleaseNotWhileDragging(t *testing.T) {
+	t.Parallel()
 	a, _, f := shellsWith(t, sampleText, "RIGHT")
 	a.copyOnSelect = true
 	c := contentRectOf(a, "p1")
@@ -243,6 +255,7 @@ func TestCopyOnSelectCopiesOnReleaseNotWhileDragging(t *testing.T) {
 }
 
 func TestCopyOnSelectSkipsABlankSelection(t *testing.T) {
+	t.Parallel()
 	a, _, f := shellsWith(t, "", "RIGHT")
 	a.copyOnSelect = true
 	c := contentRectOf(a, "p1")
@@ -255,6 +268,8 @@ func TestCopyOnSelectSkipsABlankSelection(t *testing.T) {
 }
 
 func TestOptionsReachTheApp(t *testing.T) {
+	t.Parallel()
+
 	a, _, _ := shellsWith(t, "a", "b")
 	if a.focusFollows || a.copyOnSelect || !a.clip.cfg.OSC52 || !a.clip.cfg.Native {
 		t.Errorf("zero Options: focusFollows=%v copyOnSelect=%v clip=%+v, want mouse off and clipboard on",
@@ -263,6 +278,8 @@ func TestOptionsReachTheApp(t *testing.T) {
 }
 
 func TestOptionsSetEachFlagOnItsOwnField(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name string
 		opts Options

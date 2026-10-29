@@ -17,6 +17,8 @@ import (
 )
 
 func TestReviewEditor(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name, visual, editor, want string
 	}{
@@ -112,6 +114,8 @@ func (e *editRig) cursorOn(t *testing.T, want func(git.FileDiff, reviewRow) bool
 }
 
 func TestEditOpensAnEditorPane(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name       string
 		editorArgs string // appended to $EDITOR
@@ -307,6 +311,8 @@ func (e *editRig) runPaneCommand(t *testing.T, c term.Command) []string {
 
 // editLine is the line the editor opens at, for every kind of row the cursor can be on.
 func TestEditLine(t *testing.T) {
+	t.Parallel()
+
 	file := git.FileDiff{Path: "f.go", Status: git.Modified, Hunks: []git.Hunk{{
 		OldStart: 10, OldLines: 5, NewStart: 20, NewLines: 5,
 		Lines: []git.Line{
@@ -429,6 +435,7 @@ func TestEditLine(t *testing.T) {
 // The editor pane is placed beside the drawer's pane without focusing that pane
 // first, so it, which the operator never moved the focus to, hears nothing.
 func TestEditSendsNoFocusReportsToTheDrawersPane(t *testing.T) {
+	t.Parallel()
 	r := newKeysRig(t, keysRepo(t))
 	r.run(r.openPane(core.KindShell, core.SplitVertical))
 

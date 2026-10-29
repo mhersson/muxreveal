@@ -16,6 +16,7 @@ func cacheScene() reviewScene {
 // An update that changes nothing the drawer reads must neither lay it out nor
 // search its rows again, and drawing a frame must not either.
 func TestDrawerIdleUpdatesDoNoWork(t *testing.T) {
+	t.Parallel()
 	a := cacheScene().build(t)
 
 	layouts, scans := a.drawer.layouts, a.drawer.scans
@@ -42,6 +43,8 @@ func TestDrawerIdleUpdatesDoNoWork(t *testing.T) {
 // Every input of the layout must make it compute again, and the layout it then
 // uses must be the one a cold cache gives.
 func TestDrawerLayoutFollowsItsInputs(t *testing.T) {
+	t.Parallel()
+
 	longFull := appGoFull()
 	longFull.old = append(longFull.old, make([]string, 20000)...)
 	longFull.new = append(longFull.new, make([]string, 20000)...)
@@ -117,6 +120,8 @@ func TestDrawerLayoutFollowsItsInputs(t *testing.T) {
 // The keyboard moving into the tree draws it differently but lays nothing out
 // again: the layout follows the tree being open, not who has the keyboard.
 func TestDrawerLayoutIgnoresTheTreeKeyboard(t *testing.T) {
+	t.Parallel()
+
 	s := cacheScene()
 	s.tree = true
 	a := s.build(t)
@@ -135,6 +140,8 @@ func TestDrawerLayoutIgnoresTheTreeKeyboard(t *testing.T) {
 // The search for chunks to tokenise follows the rows in range: a view that
 // moves or a new generation makes it run, a cursor that stays in view does not.
 func TestDrawerScanFollowsTheView(t *testing.T) {
+	t.Parallel()
+
 	res, _ := bigResult(3000)
 	s := reviewScene{theme: "catppuccin-mocha", icons: true, w: 200, h: 52, res: res, turn: 1, turns: 1, focused: true}
 	a := s.build(t)

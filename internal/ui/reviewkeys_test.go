@@ -166,6 +166,8 @@ func (r *drawerRig) openShell(t *testing.T, dir string, split core.Split) core.P
 func fileAtCursor(v *reviewView) string { return v.res.Files[v.rows[v.cursor].file].Path }
 
 func TestReviewKeysTable(t *testing.T) {
+	t.Parallel()
+
 	seen := map[string]bool{}
 	reg := newTestApp(t).reg
 
@@ -246,6 +248,7 @@ func TestDrawerKeysNeverReachPanes(t *testing.T) {
 }
 
 func TestSearchFindsAndMisses(t *testing.T) {
+	t.Parallel()
 	r := newKeysRig(t, editedRepo(t))
 	v := r.opened(t)
 
@@ -309,6 +312,8 @@ func TestSearchFindsAndMisses(t *testing.T) {
 }
 
 func TestTreeKeys(t *testing.T) {
+	t.Parallel()
+
 	for _, win := range treeWindows {
 		t.Run(win.name, func(t *testing.T) {
 			r, v := treeRig(t, win.w, win.h, treeStartHidden)
@@ -357,6 +362,7 @@ func TestTreeKeys(t *testing.T) {
 }
 
 func TestMovementKeys(t *testing.T) {
+	t.Parallel()
 	r := newKeysRig(t, keysRepo(t))
 	v := r.opened(t)
 	bodyH := r.layout(t).bodyH
@@ -472,6 +478,7 @@ func changeRow(r reviewRow) bool {
 }
 
 func TestHunkKeysLandOnTheFirstChange(t *testing.T) {
+	t.Parallel()
 	// editedRepo's hunks open with three context lines; line 5 and line 50 are
 	// each hunk's first removed line.
 	for _, split := range []bool{false, true} {
@@ -559,6 +566,7 @@ func TestHunkKeysLandOnTheFirstChange(t *testing.T) {
 }
 
 func TestViewKeys(t *testing.T) {
+	t.Parallel()
 	t.Run("full file and ghost lines", func(t *testing.T) {
 		r := newKeysRig(t, editedRepo(t))
 		v := r.opened(t)
@@ -649,6 +657,7 @@ func TestViewKeys(t *testing.T) {
 }
 
 func TestDrawerCommandsWithoutADrawer(t *testing.T) {
+	t.Parallel()
 	r := newKeysRig(t, keysRepo(t))
 	n := 0
 
@@ -676,6 +685,7 @@ func TestDrawerCommandsWithoutADrawer(t *testing.T) {
 }
 
 func TestSlideOutSurvivesBackgroundActions(t *testing.T) {
+	t.Parallel()
 	r := newKeysRig(t, keysRepo(t))
 	r.opened(t)
 	r.leader('d')

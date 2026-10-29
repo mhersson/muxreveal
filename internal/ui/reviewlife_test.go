@@ -22,6 +22,7 @@ func (r *drawerRig) holdCount() int {
 // A reload that changed nothing, such as a duplicate batch, leaves a running
 // flash alone.
 func TestNoOpReloadKeepsTheFlash(t *testing.T) {
+	t.Parallel()
 	r := newDrawerRig(t)
 	dir := editedRepo(t)
 	root := rootOf(t, dir)
@@ -48,6 +49,7 @@ func TestNoOpReloadKeepsTheFlash(t *testing.T) {
 // The file the tree has selected stays selected when a live update moves the
 // files around, and falls to the nearest index when it leaves the diff.
 func TestTreeSelFollowsItsFile(t *testing.T) {
+	t.Parallel()
 	r := newDrawerRig(t)
 	dir := newRepoDir(t)
 	files := []string{"b.txt", "c.txt", "d.txt"}
@@ -103,6 +105,7 @@ func TestTreeSelFollowsItsFile(t *testing.T) {
 // A full-file read ends with its view: a read of a drawer that was closed does
 // not run on.
 func TestFullFileReadsEndWithTheirView(t *testing.T) {
+	t.Parallel()
 	r := newDrawerRig(t)
 	id := r.shell(t, editedRepo(t))
 
@@ -134,6 +137,7 @@ func TestFullFileReadsEndWithTheirView(t *testing.T) {
 // An answer that arrives after its drawer closed finds no view, and one that
 // arrives after the drawer reopened names an older epoch.
 func TestLateAnswersAfterCloseAreDropped(t *testing.T) {
+	t.Parallel()
 	r := newDrawerRig(t)
 	id := r.shell(t, editedRepo(t))
 
@@ -171,6 +175,7 @@ func TestLateAnswersAfterCloseAreDropped(t *testing.T) {
 // Closing the drawer's pane, or moving it to another tab, releases the watch
 // the drawer held; the root's watcher stops with its last holder.
 func TestClosePaneAndMoveReleaseTheDrawersWatch(t *testing.T) {
+	t.Parallel()
 	setup := func(t *testing.T) (*drawerRig, string, core.PaneID, core.PaneID) {
 		t.Helper()
 
@@ -227,6 +232,7 @@ func TestClosePaneAndMoveReleaseTheDrawersWatch(t *testing.T) {
 // A read that was cancelled is not applied when a newer read of the same blobs
 // has taken its place, and its answer does not end the newer read.
 func TestCancelledFullReadDoesNotShadowTheNewOne(t *testing.T) {
+	t.Parallel()
 	r := newDrawerRig(t)
 	id := r.shell(t, editedRepo(t))
 

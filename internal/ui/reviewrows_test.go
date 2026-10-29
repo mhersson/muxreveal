@@ -38,6 +38,8 @@ func rowKinds(rows []reviewRow) []reviewRowKind {
 }
 
 func TestBuildRowsUnified(t *testing.T) {
+	t.Parallel()
+
 	res := git.Result{Files: []git.FileDiff{
 		{Path: "mod.go", Status: git.Modified, Hunks: []git.Hunk{
 			hunkOf(1, 1, ln(git.Context, 1, 1, "a"), ln(git.Del, 2, 0, "b"), ln(git.Add, 0, 2, "c")),
@@ -103,6 +105,8 @@ func TestBuildRowsUnified(t *testing.T) {
 }
 
 func TestBuildRowsSplit(t *testing.T) {
+	t.Parallel()
+
 	res := git.Result{Files: []git.FileDiff{{Path: "a.go", Status: git.Modified, Hunks: []git.Hunk{
 		hunkOf(1, 1,
 			ln(git.Context, 1, 1, "a"),
@@ -131,6 +135,8 @@ func TestBuildRowsSplit(t *testing.T) {
 }
 
 func TestBuildRowsSplitAddOnly(t *testing.T) {
+	t.Parallel()
+
 	res := git.Result{Files: []git.FileDiff{{Path: "a.go", Status: git.Added, Hunks: []git.Hunk{
 		hunkOf(0, 1, ln(git.Add, 0, 1, "x")),
 	}}}}
@@ -142,6 +148,8 @@ func TestBuildRowsSplitAddOnly(t *testing.T) {
 }
 
 func TestBuildRowsFullFileGhosts(t *testing.T) {
+	t.Parallel()
+
 	res := git.Result{Files: []git.FileDiff{
 		{Path: "a.go", Status: git.Modified, Hunks: []git.Hunk{hunkOf(1, 1, ln(git.Del, 2, 0, "b"))}},
 		{Path: "img.png", Status: git.Modified, Binary: true},
@@ -246,6 +254,8 @@ func TestBuildRowsFullFileGhosts(t *testing.T) {
 }
 
 func TestBuildRowsFullFileLongRewrite(t *testing.T) {
+	t.Parallel()
+
 	old := make([]string, 3000)
 	nw := make([]string, 3000)
 
@@ -275,6 +285,8 @@ func fixtureRes() git.Result {
 }
 
 func TestRestoreAnchor(t *testing.T) {
+	t.Parallel()
+
 	res := fixtureRes()
 	rows := buildRows(res, rowOpts{})
 	// 0 file a, 1 hunk, 2 keep, 3 gone, 4 fresh, 5 hunk, 6 tail, 7 file b, 8 hunk, 9 other
@@ -330,6 +342,8 @@ func TestRestoreAnchor(t *testing.T) {
 }
 
 func TestAnchorAt(t *testing.T) {
+	t.Parallel()
+
 	res := fixtureRes()
 	rows := buildRows(res, rowOpts{})
 
@@ -346,6 +360,8 @@ func TestAnchorAt(t *testing.T) {
 }
 
 func TestSearchRowsWraps(t *testing.T) {
+	t.Parallel()
+
 	res := fixtureRes()
 	res.Files[1].Hunks[0].Section = "func Needle()"
 	rows := buildRows(res, rowOpts{})
@@ -378,6 +394,8 @@ func TestSearchRowsWraps(t *testing.T) {
 }
 
 func TestSearchRowsInfoAndPairs(t *testing.T) {
+	t.Parallel()
+
 	res := git.Result{Files: []git.FileDiff{
 		{Path: "x.bin", Binary: true},
 		{Path: "p.go", Hunks: []git.Hunk{hunkOf(1, 1, ln(git.Del, 1, 0, "left words"), ln(git.Add, 0, 1, "right words"))}},
@@ -394,6 +412,8 @@ func TestSearchRowsInfoAndPairs(t *testing.T) {
 }
 
 func TestFreshRows(t *testing.T) {
+	t.Parallel()
+
 	prev := fixtureRes()
 	next := fixtureRes()
 	next.Files[0].Hunks[0].Lines = append(next.Files[0].Hunks[0].Lines, ln(git.Add, 0, 3, "brand new"))
@@ -456,6 +476,8 @@ func fullFixture() (git.Result, map[string]fullText) {
 }
 
 func TestRestoreAnchorFullFile(t *testing.T) {
+	t.Parallel()
+
 	res, full := fullFixture()
 	rows := buildRows(res, rowOpts{full: full})
 	// 0 file, 1 a, 2 ghost b, 3 c, 4 Added
@@ -493,6 +515,8 @@ func TestRestoreAnchorFullFile(t *testing.T) {
 }
 
 func TestSearchRowsFullFile(t *testing.T) {
+	t.Parallel()
+
 	res, full := fullFixture()
 	rows := buildRows(res, rowOpts{full: full})
 
@@ -506,6 +530,8 @@ func TestSearchRowsFullFile(t *testing.T) {
 }
 
 func TestRestoreAnchorRepeatedLine(t *testing.T) {
+	t.Parallel()
+
 	mk := func() git.Result {
 		return git.Result{Files: []git.FileDiff{{Path: "a.go", Status: git.Modified, Hunks: []git.Hunk{
 			hunkOf(1, 1, ln(git.Add, 0, 1, "}"), ln(git.Add, 0, 2, "x"), ln(git.Add, 0, 3, "}"), ln(git.Add, 0, 4, "}")),
@@ -523,6 +549,8 @@ func TestRestoreAnchorRepeatedLine(t *testing.T) {
 }
 
 func TestRestoreAnchorFold(t *testing.T) {
+	t.Parallel()
+
 	res := git.Result{Files: []git.FileDiff{{Path: "a.go", Status: git.Modified}}}
 	full := map[string]fullText{"a.go": {
 		old: []string{"a", "b", "c", "d", "e"},
@@ -545,6 +573,8 @@ func TestRestoreAnchorFold(t *testing.T) {
 }
 
 func TestHunkHeader(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name string
 		h    git.Hunk

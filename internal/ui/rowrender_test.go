@@ -24,6 +24,8 @@ func newTestVT(t *testing.T, cols, rows int) term.VT {
 }
 
 func TestRenderRow(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name   string
 		input  string

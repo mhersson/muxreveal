@@ -78,6 +78,7 @@ func text(rows []string) []string {
 }
 
 func TestScrollViewShowsHistory(t *testing.T) {
+	t.Parallel()
 	p, _ := scrollPane(t, 5, 20)
 
 	// 20 lines + END on 5 rows: the screen holds L17 L18 L19 END and the
@@ -111,6 +112,7 @@ func TestScrollViewShowsHistory(t *testing.T) {
 }
 
 func TestScrollClampsAndReturnsLive(t *testing.T) {
+	t.Parallel()
 	p, _ := scrollPane(t, 5, 20)
 	hist := p.viewTop()
 
@@ -145,6 +147,7 @@ func TestScrollClampsAndReturnsLive(t *testing.T) {
 
 // Output keeps a scrolled view on the same text while the tag grows.
 func TestScrollViewPinnedOnOutput(t *testing.T) {
+	t.Parallel()
 	p, fp := scrollPane(t, 5, 20)
 	p.scrollBy(6)
 
@@ -164,6 +167,7 @@ func TestScrollViewPinnedOnOutput(t *testing.T) {
 // Past the 10000-line cap the view stays on its text until that text is
 // trimmed, then clamps to the oldest line.
 func TestScrollViewAcrossHistoryCap(t *testing.T) {
+	t.Parallel()
 	p, fp := scrollPane(t, 3, 10100)
 
 	p.scrollBy(100)
@@ -208,6 +212,8 @@ func TestScrollViewAcrossHistoryCap(t *testing.T) {
 }
 
 func TestKeyAndPasteReturnToLive(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name string
 		send func(p *pane)
@@ -231,6 +237,7 @@ func TestKeyAndPasteReturnToLive(t *testing.T) {
 }
 
 func TestScrollReturnsLiveOnResizeAndAltScreen(t *testing.T) {
+	t.Parallel()
 	t.Run("resize", func(t *testing.T) {
 		p, _ := scrollPane(t, 5, 20)
 		p.scrollBy(4)
@@ -269,6 +276,8 @@ func TestScrollReturnsLiveOnResizeAndAltScreen(t *testing.T) {
 }
 
 func TestScrolledViewRowsFitAfterResize(t *testing.T) {
+	t.Parallel()
+
 	for _, cols := range []int{scrollCols + 7, scrollCols - 4} {
 		t.Run(fmt.Sprint(cols), func(t *testing.T) {
 			p, _ := scrollPane(t, 5, 20)
@@ -291,6 +300,7 @@ func TestScrolledViewRowsFitAfterResize(t *testing.T) {
 }
 
 func TestCursorHiddenWhileScrolled(t *testing.T) {
+	t.Parallel()
 	p, _ := scrollPane(t, 5, 20)
 
 	if _, visible := p.cursor(); !visible {
@@ -305,6 +315,7 @@ func TestCursorHiddenWhileScrolled(t *testing.T) {
 }
 
 func TestScrollViewCache(t *testing.T) {
+	t.Parallel()
 	p, fp := scrollPane(t, 5, 20)
 	p.scrollBy(3)
 
@@ -333,6 +344,7 @@ func TestScrollViewCache(t *testing.T) {
 }
 
 func TestScrollLive(t *testing.T) {
+	t.Parallel()
 	p, _ := scrollPane(t, 5, 20)
 
 	if p.scrollLive() {
@@ -347,6 +359,7 @@ func TestScrollLive(t *testing.T) {
 }
 
 func TestSetViewTop(t *testing.T) {
+	t.Parallel()
 	p, _ := scrollPane(t, 5, 20)
 	hist := p.viewTop()
 
@@ -368,6 +381,7 @@ func TestSetViewTop(t *testing.T) {
 }
 
 func TestPaneGrid(t *testing.T) {
+	t.Parallel()
 	p, fp := newTestPane(t, scrollCols, 3, realClock{})
 
 	// Row 0 wraps into row 1 (12 > 10 columns); a wide rune follows.
@@ -421,6 +435,7 @@ func TestPaneGrid(t *testing.T) {
 }
 
 func TestPaneGridAltScreenIsScreenOnly(t *testing.T) {
+	t.Parallel()
 	p, fp := scrollPane(t, 4, 20)
 
 	feedAndWait(t, p, fp, "\x1b[?1049h")
@@ -434,6 +449,7 @@ func TestPaneGridAltScreenIsScreenOnly(t *testing.T) {
 }
 
 func TestWithGridOnClosedPaneRunsNothing(t *testing.T) {
+	t.Parallel()
 	p, _ := scrollPane(t, 4, 5)
 	_ = p.close()
 

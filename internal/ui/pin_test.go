@@ -71,6 +71,7 @@ func TestPinnedDrawerStaysPut(t *testing.T) {
 }
 
 func TestPinSurvivesReopenOnSamePane(t *testing.T) {
+	t.Parallel()
 	r := newFollowRig(t, "")
 	r.addLines(t, filepath.Join(r.dirB, "a.txt"))
 	r.open(t, r.id)
@@ -102,6 +103,7 @@ func TestPinSurvivesReopenOnSamePane(t *testing.T) {
 }
 
 func TestPinEndsOnAnotherPane(t *testing.T) {
+	t.Parallel()
 	r := newFollowRig(t, "")
 
 	// The first pane lies left of the drawer, so the keyboard can stay with the panes.
@@ -175,6 +177,7 @@ func TestPinSurvivesNewSession(t *testing.T) {
 }
 
 func TestPinnedDrawerWatchesItsRoot(t *testing.T) {
+	t.Parallel()
 	r := newFollowRig(t, "")
 	r.open(t, r.id)
 
@@ -295,6 +298,7 @@ func TestPinnedWorktreeRemoved(t *testing.T) {
 // A pinned worktree that went while the drawer was closed still opens a
 // drawer, which says so and from which another worktree can be picked.
 func TestReopenOnRemovedPinnedWorktree(t *testing.T) {
+	t.Parallel()
 	r := newFollowRig(t, "")
 	r.open(t, r.id)
 	r.pinTo(t, r.rootB)
@@ -332,6 +336,7 @@ func TestReopenOnRemovedPinnedWorktree(t *testing.T) {
 // A pin chosen again while the first one's watch is still being taken ends up
 // with one reference, on the root that is pinned.
 func TestPinRetargetWhileAcquiring(t *testing.T) {
+	t.Parallel()
 	r := newFollowRig(t, "")
 	r.open(t, r.id)
 

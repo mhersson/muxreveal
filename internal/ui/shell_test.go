@@ -32,6 +32,8 @@ func sized(t *testing.T, a *App, w, h int) {
 }
 
 func TestNewRejectsUnknownTheme(t *testing.T) {
+	t.Parallel()
+
 	_, err := New(Options{Logger: testLogger(), Store: core.NewStore(core.State{Theme: "nope"})})
 	if !errors.Is(err, theme.ErrUnknownTheme) {
 		t.Errorf("New() error = %v, want one wrapping ErrUnknownTheme", err)
@@ -39,6 +41,8 @@ func TestNewRejectsUnknownTheme(t *testing.T) {
 }
 
 func TestShellGolden(t *testing.T) {
+	t.Parallel()
+
 	for _, name := range theme.Names() {
 		t.Run(name, func(t *testing.T) {
 			a := newThemedApp(t, name)
@@ -49,6 +53,8 @@ func TestShellGolden(t *testing.T) {
 }
 
 func TestViewColours(t *testing.T) {
+	t.Parallel()
+
 	for _, name := range theme.Names() {
 		t.Run(name, func(t *testing.T) {
 			a := newThemedApp(t, name)
@@ -68,6 +74,7 @@ func TestViewColours(t *testing.T) {
 }
 
 func TestThemeFollowsStore(t *testing.T) {
+	t.Parallel()
 	a := newThemedApp(t, "catppuccin-mocha")
 	sized(t, a, 100, 30)
 
@@ -84,6 +91,7 @@ func TestThemeFollowsStore(t *testing.T) {
 }
 
 func TestDispatchUnknownThemeKeepsPrevious(t *testing.T) {
+	t.Parallel()
 	a := newThemedApp(t, "catppuccin-mocha")
 	sized(t, a, 100, 30)
 	before := a.View()
@@ -103,6 +111,8 @@ func TestDispatchUnknownThemeKeepsPrevious(t *testing.T) {
 }
 
 func TestShellSizes(t *testing.T) {
+	t.Parallel()
+
 	for _, name := range theme.Names() {
 		for _, sz := range [][2]int{{100, 30}, {40, 12}, {20, 5}, {1, 1}, {3, 1}, {200, 3}} {
 			t.Run(fmt.Sprintf("%s/%dx%d", name, sz[0], sz[1]), func(t *testing.T) {
@@ -130,6 +140,8 @@ func TestShellSizes(t *testing.T) {
 }
 
 func TestShellContent(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		w, h     int
 		wantCard bool

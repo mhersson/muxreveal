@@ -65,6 +65,7 @@ func tickAt(a *App, clk *fakeClock, d time.Duration) {
 }
 
 func TestHookEvents(t *testing.T) {
+	t.Parallel()
 	a, _, _ := agentApp(t)
 
 	steps := []struct {
@@ -98,6 +99,7 @@ func TestHookEvents(t *testing.T) {
 }
 
 func TestHookEventsCarryTheAction(t *testing.T) {
+	t.Parallel()
 	a, _, _ := agentApp(t)
 
 	steps := []struct {
@@ -133,6 +135,7 @@ func TestHookEventsCarryTheAction(t *testing.T) {
 }
 
 func TestAnsweredPermissionClearsFromTheCard(t *testing.T) {
+	t.Parallel()
 	a, _, _ := agentApp(t)
 
 	for _, step := range []struct {
@@ -158,6 +161,7 @@ func TestAnsweredPermissionClearsFromTheCard(t *testing.T) {
 }
 
 func TestHookEventsThatDoNotFit(t *testing.T) {
+	t.Parallel()
 	a, _, _ := agentApp(t)
 
 	hook(a, harness.Event{Pane: "p2", Name: "SessionStart", Session: "s1", Start: true, State: core.AgentIdle})
@@ -203,6 +207,7 @@ func TestHookEventsThatDoNotFit(t *testing.T) {
 }
 
 func TestQuietRule(t *testing.T) {
+	t.Parallel()
 	t.Run("silence idles a working pane", func(t *testing.T) {
 		a, _, clk := agentApp(t)
 
@@ -268,6 +273,8 @@ func TestQuietRule(t *testing.T) {
 }
 
 func TestDialogKeys(t *testing.T) {
+	t.Parallel()
+
 	enter := tea.KeyPressMsg{Code: tea.KeyEnter}
 
 	for _, k := range []tea.KeyPressMsg{enter, keyEsc, keyRune('1'), keyRune('9')} {
@@ -325,6 +332,7 @@ func TestDialogKeys(t *testing.T) {
 }
 
 func TestAgentTick(t *testing.T) {
+	t.Parallel()
 	t.Run("one tick at a time and none once nothing works", func(t *testing.T) {
 		a, tl, clk := agentApp(t)
 
@@ -369,6 +377,7 @@ func TestAgentTick(t *testing.T) {
 }
 
 func TestWaitEvent(t *testing.T) {
+	t.Parallel()
 	t.Run("nil channel starts no wait", func(t *testing.T) {
 		a, _ := lifeApp(t)
 
@@ -445,6 +454,7 @@ func collectHook(cmd tea.Cmd) (hookMsg, bool) {
 }
 
 func TestStartNotice(t *testing.T) {
+	t.Parallel()
 	a, _, _ := kindApp(t, func(o *Options) { o.Notice = "agent hooks are off: boom" })
 
 	if a.notice != "agent hooks are off: boom" {
@@ -457,6 +467,7 @@ func statusEvent(pane core.PaneID, session core.SessionID, model string, pct flo
 }
 
 func TestStatusEventSkipsHookEffects(t *testing.T) {
+	t.Parallel()
 	// With no watch a hook event refreshes the drawer, so the drawer's silence is the test.
 	r := newDrawerRig(t, func(o *Options) { o.Watches = nil })
 	id := r.agent(t, editedRepo(t), "s1")
@@ -501,6 +512,7 @@ func TestStatusEventSkipsHookEffects(t *testing.T) {
 }
 
 func TestStatusFloodBumpsNoVersion(t *testing.T) {
+	t.Parallel()
 	a, _, _ := agentApp(t)
 	hook(a, harness.Event{Pane: "p2", Name: "SessionStart", Session: "s1", Start: true})
 
@@ -564,6 +576,7 @@ func TestStatusFloodBumpsNoVersion(t *testing.T) {
 }
 
 func TestStatusEventsThatDoNotFit(t *testing.T) {
+	t.Parallel()
 	a, _, _ := agentApp(t)
 
 	hook(a, harness.Event{Pane: "p2", Name: "SessionStart", Session: "s2", Start: true})
@@ -608,6 +621,7 @@ func TestStatusEventsThatDoNotFit(t *testing.T) {
 }
 
 func TestStatusFollowsTheSession(t *testing.T) {
+	t.Parallel()
 	a, _, _ := agentApp(t)
 
 	steps := []struct {

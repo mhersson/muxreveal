@@ -210,6 +210,8 @@ func TestStaleAcquisitionIsReleased(t *testing.T) {
 }
 
 func TestHoldsReleaseOnceAndAfterClose(t *testing.T) {
+	t.Parallel()
+
 	var h holds
 
 	n := 0

@@ -11,6 +11,8 @@ import (
 )
 
 func TestRailWidthRule(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		w, h, want int
 	}{
@@ -34,6 +36,8 @@ func TestRailWidthRule(t *testing.T) {
 }
 
 func TestRailLayout(t *testing.T) {
+	t.Parallel()
+
 	groups := []railGroup{
 		{state: core.AgentBlocked, cards: []railCard{{pane: "p1"}}},
 		{state: core.AgentIdle, cards: []railCard{{pane: "p2"}, {pane: "p3"}}},
@@ -59,6 +63,8 @@ func TestRailLayout(t *testing.T) {
 }
 
 func TestRailClampTop(t *testing.T) {
+	t.Parallel()
+
 	groups := []railGroup{
 		{state: core.AgentWorking, cards: []railCard{{pane: "p1"}, {pane: "p2"}, {pane: "p3"}, {pane: "p4"}}},
 		{state: core.AgentIdle, cards: []railCard{{pane: "p5"}, {pane: "p6"}}},
@@ -98,6 +104,8 @@ func TestRailClampTop(t *testing.T) {
 // The clamp is idempotent, keeps the selected card whole whenever a card and its
 // blank rows fit, and starts the list on a group header or a card's blank row.
 func TestRailClampTopProperties(t *testing.T) {
+	t.Parallel()
+
 	shapes := map[string][]int{
 		"no groups":      nil,
 		"one card":       {1},
@@ -161,6 +169,8 @@ func TestRailClampTopProperties(t *testing.T) {
 }
 
 func TestRailAge(t *testing.T) {
+	t.Parallel()
+
 	now := t0
 
 	tests := []struct {
@@ -192,6 +202,7 @@ func TestRailAge(t *testing.T) {
 }
 
 func TestRailCardAt(t *testing.T) {
+	t.Parallel()
 	a := drawApp(t, "catppuccin-mocha", true, 100, 30, railFixtureAgents())
 	a.rail.sel = "p5"
 
@@ -232,6 +243,7 @@ func TestRailCardAt(t *testing.T) {
 }
 
 func TestRailHidden(t *testing.T) {
+	t.Parallel()
 	// One group of four cards: the header is row 0, card k fills rows 5k+2 to 5k+5.
 	rows := railLayout([]railGroup{{cards: make([]railCard, 4)}})
 

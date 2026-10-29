@@ -28,6 +28,7 @@ func isBranchSource(v *reviewView) bool {
 // drawer's turn mode alone: it shows the branch until the new session has a
 // turn, then that turn.
 func TestSessionEndAndStartKeepTurnMode(t *testing.T) {
+	t.Parallel()
 	r := newDrawerRig(t, turnFirst)
 	dir := threeTurnRepo(t)
 	root := rootOf(t, dir)
@@ -87,6 +88,7 @@ func TestSessionEndAndStartKeepTurnMode(t *testing.T) {
 // A turn drawer whose session has no turns yet shows the branch, and the turn
 // keys say why they do nothing.
 func TestNoTurnsYetNotices(t *testing.T) {
+	t.Parallel()
 	r := newDrawerRig(t)
 	dir := editedRepo(t)
 	id := r.agent(t, dir, testSession)
@@ -163,6 +165,7 @@ func (r *drawerRig) turnStartFirst(t *testing.T, id core.PaneID) (snapshotDone f
 // no files moves the count and the mode row; a past turn only learns the new
 // count.
 func TestTurnStartRefreshesTheDrawer(t *testing.T) {
+	t.Parallel()
 	t.Run("a turn that changes no files", func(t *testing.T) {
 		r := newDrawerRig(t, turnFirst)
 		dir := threeTurnRepo(t)
@@ -248,6 +251,7 @@ func TestTurnStartRefreshesTheDrawer(t *testing.T) {
 // holds nothing for the old repository, and hook events refresh it as they do
 // any drawer without a watch.
 func TestFailedWatchOfANewRepositoryFallsBackToHooks(t *testing.T) {
+	t.Parallel()
 	t.Run("a failed acquire releases the old watch", func(t *testing.T) {
 		r := newDrawerRig(t)
 		first, second := editedRepo(t), editedRepo(t)
@@ -301,6 +305,7 @@ func TestFailedWatchOfANewRepositoryFallsBackToHooks(t *testing.T) {
 // A hook event for a watch-less drawer in a hidden tab marks it stale, as a
 // batch would, so it recomputes when its tab shows.
 func TestHookEventMarksAHiddenDrawerStale(t *testing.T) {
+	t.Parallel()
 	r := newDrawerRig(t, func(o *Options) { o.Watches = nil })
 	dir := editedRepo(t)
 	id := r.agent(t, dir, "")
@@ -331,6 +336,7 @@ func TestHookEventMarksAHiddenDrawerStale(t *testing.T) {
 // for the new session's count instead of trusting it. With no turns they say
 // so, and core stays in branch mode.
 func TestTurnKeysDoNotTrustTheEndedSessionsCount(t *testing.T) {
+	t.Parallel()
 	r := newDrawerRig(t)
 	dir := threeTurnRepo(t)
 	root := rootOf(t, dir)
@@ -363,6 +369,7 @@ func TestTurnKeysDoNotTrustTheEndedSessionsCount(t *testing.T) {
 
 // The same wait ends in the switch when the new session has turns.
 func TestTurnKeysSwitchToANewSessionThatHasTurns(t *testing.T) {
+	t.Parallel()
 	r := newDrawerRig(t)
 	dir := threeTurnRepo(t)
 	root := rootOf(t, dir)
@@ -392,6 +399,7 @@ func TestTurnKeysSwitchToANewSessionThatHasTurns(t *testing.T) {
 
 // An answer whose probe ran for another session does not set the count.
 func TestAnswerForAnotherSessionDoesNotSetTheCount(t *testing.T) {
+	t.Parallel()
 	r := newDrawerRig(t)
 	id := r.agent(t, threeTurnRepo(t), testSession)
 
@@ -410,6 +418,7 @@ func TestAnswerForAnotherSessionDoesNotSetTheCount(t *testing.T) {
 // A turn key held for the turn count gives way to the user's next key: t then
 // b, inside the one probe, ends in branch mode.
 func TestLaterKeyReplacesTheHeldTurnKey(t *testing.T) {
+	t.Parallel()
 	r := newDrawerRig(t)
 	dir := threeTurnRepo(t)
 	root := rootOf(t, dir)
@@ -437,6 +446,7 @@ func TestLaterKeyReplacesTheHeldTurnKey(t *testing.T) {
 // A turn key is held only while a probe can answer it. Outside a repository
 // there is none, so the key gets its notice at once.
 func TestTurnKeyOutsideARepositoryAnswersAtOnce(t *testing.T) {
+	t.Parallel()
 	r := newDrawerRig(t)
 	id := r.agent(t, t.TempDir(), testSession)
 
@@ -455,6 +465,7 @@ func TestTurnKeyOutsideARepositoryAnswersAtOnce(t *testing.T) {
 
 // A new session drops a held turn key: it was pressed for the old one.
 func TestNewSessionDropsAHeldTurnKey(t *testing.T) {
+	t.Parallel()
 	r := newDrawerRig(t)
 	dir := threeTurnRepo(t)
 	root := rootOf(t, dir)
@@ -528,6 +539,7 @@ func (r *followRig) followB(t *testing.T) *reviewView {
 }
 
 func TestTurnModeInAnotherWorktreeShowsBranch(t *testing.T) {
+	t.Parallel()
 	r := newTurnRig(t, turnFirst)
 	v := r.followB(t)
 
@@ -550,6 +562,7 @@ func TestTurnModeInAnotherWorktreeShowsBranch(t *testing.T) {
 }
 
 func TestTurnKeysInAnotherWorktree(t *testing.T) {
+	t.Parallel()
 	r := newTurnRig(t, turnFirst)
 	v := r.followB(t)
 	want := "no turns in " + filepath.Base(r.dirA) + " · b yet"
@@ -580,6 +593,7 @@ func TestTurnKeysInAnotherWorktree(t *testing.T) {
 }
 
 func TestNoTurnsNoticeCleansNames(t *testing.T) {
+	t.Parallel()
 	r := newDrawerRig(t)
 	tab := r.store.State().Tab().ID
 	v := &reviewView{loaded: true, foreign: true, project: "my\x07repo", branch: "feat\u200b/x"}
@@ -602,6 +616,7 @@ func TestNoTurnsNoticeCleansNames(t *testing.T) {
 }
 
 func TestTurnModeBackInOwnWorktree(t *testing.T) {
+	t.Parallel()
 	r := newTurnRig(t, turnFirst)
 	r.followB(t)
 
@@ -623,6 +638,8 @@ func TestTurnModeBackInOwnWorktree(t *testing.T) {
 }
 
 func TestOpenDrawerOnAnotherWorktreeStartsInBranch(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name   string
 		edit   bool
@@ -659,6 +676,7 @@ func TestOpenDrawerOnAnotherWorktreeStartsInBranch(t *testing.T) {
 }
 
 func TestTurnModeAfterOwnDirectoryMoves(t *testing.T) {
+	t.Parallel()
 	r := newTurnRig(t, turnFirst)
 	r.open(t, r.id)
 
@@ -681,6 +699,7 @@ func TestTurnModeAfterOwnDirectoryMoves(t *testing.T) {
 // The agent's own directory moving into or out of the shown worktree switches a
 // turn drawer between the turn and the branch.
 func TestOwnDirectoryMovingFlipsTurnMode(t *testing.T) {
+	t.Parallel()
 	r := newTurnRig(t, turnFirst)
 	r.followB(t)
 
@@ -790,6 +809,7 @@ func TestLiveLoadAfterOwnDirectoryMovedComputesTheBranch(t *testing.T) {
 // An own directory that is gone, or in no repository, is not the shown root:
 // turn mode shows the branch and the turn keys say there are no turns.
 func TestTurnModeWithoutAnOwnRepository(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name string
 		own  func(t *testing.T) string

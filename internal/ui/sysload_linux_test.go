@@ -19,6 +19,8 @@ Buffers:          512000 kB
 `
 
 func TestParseCPUTimes(t *testing.T) {
+	t.Parallel()
+
 	got, err := parseCPUTimes(procStatFixture)
 	if err != nil {
 		t.Fatal(err)
@@ -38,6 +40,8 @@ func TestParseCPUTimes(t *testing.T) {
 }
 
 func TestParseMemUsed(t *testing.T) {
+	t.Parallel()
+
 	got, err := parseMemUsed(meminfoFixture)
 	if err != nil {
 		t.Fatal(err)
@@ -55,6 +59,8 @@ func TestParseMemUsed(t *testing.T) {
 }
 
 func TestCPUShare(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name      string
 		prev, cur cpuTimes
@@ -76,6 +82,7 @@ func TestCPUShare(t *testing.T) {
 
 // The sampler reads two /proc snapshots and reports the share between them.
 func TestSysLoadSample(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	write := func(name, text string) {
 		t.Helper()

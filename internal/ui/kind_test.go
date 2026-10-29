@@ -63,6 +63,7 @@ func probeKind(t *testing.T, a *App, clk *fakeClock, id core.PaneID) {
 func kindOf(a *App, id core.PaneID) core.PaneKind { return a.store.State().Panes[id].Kind }
 
 func TestKindFollowsForeground(t *testing.T) {
+	t.Parallel()
 	t.Run("shell becomes agent and back", func(t *testing.T) {
 		a, st, clk := kindApp(t)
 
@@ -234,6 +235,7 @@ func TestKindFollowsForeground(t *testing.T) {
 }
 
 func TestAgentLaunch(t *testing.T) {
+	t.Parallel()
 	t.Run("hooks and pane environment", func(t *testing.T) {
 		a, st, _ := kindApp(t, func(o *Options) {
 			o.HookSettings = "/run/1-claude.json"

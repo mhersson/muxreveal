@@ -42,6 +42,8 @@ func diffEnd(row string) string {
 // A row ends in the cut marker whenever any of its line was dropped, even when
 // the part kept is narrower than the column, and only then.
 func TestDrawnLongLinesEndInTheCutMarker(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name  string
 		split bool
@@ -106,6 +108,8 @@ func TestDrawnLongLinesEndInTheCutMarker(t *testing.T) {
 
 // What the highlighter is handed is bounded, whatever the length of the line.
 func TestChunkLinesAreBounded(t *testing.T) {
+	t.Parallel()
+
 	f := fileSpec("long.go", git.Modified, hunkSpec(1, 1, "",
 		"+"+longPlain(),
 		"+"+longTags(),

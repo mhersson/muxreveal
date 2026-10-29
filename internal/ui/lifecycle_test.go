@@ -185,6 +185,7 @@ func collect(cmd tea.Cmd) []tea.Msg {
 }
 
 func TestStartupOpensShell(t *testing.T) {
+	t.Parallel()
 	a, st := lifeApp(t)
 
 	sized(t, a, 100, 30)
@@ -225,6 +226,7 @@ func TestStartupOpensShell(t *testing.T) {
 }
 
 func TestStartupSizeBeforeFirstMessage(t *testing.T) {
+	t.Parallel()
 	a, st := lifeApp(t)
 
 	for _, k := range []rune{'v', 's', 'n'} {
@@ -243,6 +245,7 @@ func TestStartupSizeBeforeFirstMessage(t *testing.T) {
 }
 
 func TestStartFailure(t *testing.T) {
+	t.Parallel()
 	a, st := lifeApp(t)
 	st.err = errors.New("no such shell")
 
@@ -266,6 +269,8 @@ func TestStartFailure(t *testing.T) {
 }
 
 func TestSplitCommands(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		key   rune
 		split core.Split
@@ -356,6 +361,7 @@ func assertSizes(t *testing.T, a *App) {
 // 100x30 terminal are 50x28 rects, so 48x26 PTYs; scrolling's hidden column
 // is sized as if shown alone.
 func TestPaneSizesAreRectsMinusFrame(t *testing.T) {
+	t.Parallel()
 	a, _ := lifeAppSized(t, 100, 30)
 
 	chord(a, 'v')
@@ -390,6 +396,7 @@ func TestPaneSizesAreRectsMinusFrame(t *testing.T) {
 }
 
 func TestFocusResizeZoom(t *testing.T) {
+	t.Parallel()
 	// 30 rows give an even body, so p2 and p3 overlap p1 equally.
 	a, st := lifeAppSized(t, 100, 30)
 
@@ -440,6 +447,7 @@ func TestFocusResizeZoom(t *testing.T) {
 }
 
 func TestZoomedPanesKeepTheirSize(t *testing.T) {
+	t.Parallel()
 	a, st := lifeAppSized(t, 100, 30)
 
 	chord(a, 'v')
@@ -461,6 +469,7 @@ func TestZoomedPanesKeepTheirSize(t *testing.T) {
 }
 
 func TestCloseShellAndAgent(t *testing.T) {
+	t.Parallel()
 	t.Run("shell closes at once", func(t *testing.T) {
 		a, st := lifeAppSized(t, 100, 30)
 		chord(a, 'v')
@@ -544,6 +553,7 @@ func isClosed(f *fakeProc) bool {
 }
 
 func TestQuitConfirm(t *testing.T) {
+	t.Parallel()
 	t.Run("shells quit at once", func(t *testing.T) {
 		a, _ := lifeAppSized(t, 100, 30)
 		chord(a, 'v')
@@ -590,6 +600,7 @@ func exitOf(t *testing.T, a *App, id core.PaneID, fp *fakeProc) tea.Msg {
 }
 
 func TestPaneExit(t *testing.T) {
+	t.Parallel()
 	t.Run("during resizes", func(t *testing.T) {
 		a, st := lifeAppSized(t, 100, 30)
 		chord(a, 'v')
@@ -693,6 +704,7 @@ func TestPaneExit(t *testing.T) {
 }
 
 func TestMessagesForUnknownPane(t *testing.T) {
+	t.Parallel()
 	a, _ := lifeAppSized(t, 100, 30)
 
 	for _, m := range []tea.Msg{
@@ -709,6 +721,7 @@ func TestMessagesForUnknownPane(t *testing.T) {
 }
 
 func TestPaneMessagesRearmWait(t *testing.T) {
+	t.Parallel()
 	a, st := lifeAppSized(t, 100, 30)
 
 	if _, err := st.proc(0).feed.Write([]byte("hello")); err != nil {
@@ -731,6 +744,7 @@ func TestPaneMessagesRearmWait(t *testing.T) {
 }
 
 func TestCwdTracking(t *testing.T) {
+	t.Parallel()
 	a, st := lifeAppSized(t, 100, 30)
 	clk := &fakeClock{t: t0}
 	a.clock = clk
@@ -795,6 +809,7 @@ func TestCwdTracking(t *testing.T) {
 }
 
 func TestDirtyMessageSchedulesCwdProbe(t *testing.T) {
+	t.Parallel()
 	a, st := lifeAppSized(t, 100, 30)
 	st.proc(0).cwd = "/moved"
 
@@ -814,6 +829,7 @@ func TestDirtyMessageSchedulesCwdProbe(t *testing.T) {
 }
 
 func TestTinyTerminals(t *testing.T) {
+	t.Parallel()
 	a, st := lifeAppSized(t, 100, 30)
 
 	for _, k := range "vsvsv" {
@@ -990,6 +1006,8 @@ func cancellableTick(ctx context.Context) func(time.Duration, func(time.Time) te
 }
 
 func TestCancellableTick(t *testing.T) {
+	t.Parallel()
+
 	type tickMsg struct{}
 
 	tests := []struct {
@@ -1188,6 +1206,8 @@ func TestOrphanedExitClosesPane(t *testing.T) {
 // Bubble Tea reports shifted leader keys with their shifted character
 // whether or not the terminal sends text.
 func TestLeaderShiftedKeys(t *testing.T) {
+	t.Parallel()
+
 	shapes := []struct {
 		name string
 		key  tea.KeyPressMsg
@@ -1212,6 +1232,7 @@ func TestLeaderShiftedKeys(t *testing.T) {
 }
 
 func TestSplitFallsBackToLaunchDir(t *testing.T) {
+	t.Parallel()
 	a, st := lifeAppSized(t, 100, 30)
 
 	if err := a.dispatch(core.SetPaneCwd{ID: "p1", Cwd: "/gone"}); err != nil {
@@ -1247,6 +1268,7 @@ func TestSplitFallsBackToLaunchDir(t *testing.T) {
 }
 
 func TestSplitOtherStartErrorsAreNotRetried(t *testing.T) {
+	t.Parallel()
 	a, st := lifeAppSized(t, 100, 30)
 
 	if err := a.dispatch(core.SetPaneCwd{ID: "p1", Cwd: "/gone"}); err != nil {
@@ -1263,6 +1285,8 @@ func TestSplitOtherStartErrorsAreNotRetried(t *testing.T) {
 }
 
 func TestSwapCommands(t *testing.T) {
+	t.Parallel()
+
 	ctrl := func(r rune) tea.KeyPressMsg { return tea.KeyPressMsg{Code: r, Mod: tea.ModCtrl} }
 
 	t.Run("key strings", func(t *testing.T) {
@@ -1322,6 +1346,7 @@ func TestSwapCommands(t *testing.T) {
 
 // A pane the tiny body leaves out has no rect, so focus never steps onto it.
 func TestFocusSkipsPanesLeftOutOfATinyBody(t *testing.T) {
+	t.Parallel()
 	a, _ := lifeAppSized(t, 12, 12)
 
 	chord(a, 's')
@@ -1348,6 +1373,7 @@ func TestFocusSkipsPanesLeftOutOfATinyBody(t *testing.T) {
 }
 
 func TestWindowResizeThroughTinyAndBack(t *testing.T) {
+	t.Parallel()
 	a, _ := lifeAppSized(t, 240, 64)
 
 	for _, k := range "svsvs" {

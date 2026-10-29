@@ -66,6 +66,8 @@ func treeRig(t *testing.T, w, h int, from treeStart) (*drawerRig, *reviewView) {
 }
 
 func TestReviewTreeToggle(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name     string
 		from     treeStart
@@ -128,6 +130,8 @@ func TestReviewTreeToggle(t *testing.T) {
 // A newly opened drawer draws no tree at any width, and its diff takes the whole
 // inner width.
 func TestNewDrawerDrawsNoTree(t *testing.T) {
+	t.Parallel()
+
 	for _, win := range []struct {
 		name string
 		w, h int
@@ -149,6 +153,7 @@ func TestNewDrawerDrawsNoTree(t *testing.T) {
 
 // A drawer reopened, on the same pane or on another, starts with the tree closed.
 func TestReopenedDrawerStartsWithTheTreeClosed(t *testing.T) {
+	t.Parallel()
 	t.Run("another pane", func(t *testing.T) {
 		dir := keysRepo(t)
 		r := newKeysRig(t, dir)
@@ -197,6 +202,7 @@ func TestReopenedDrawerStartsWithTheTreeClosed(t *testing.T) {
 // Each tab's drawer keeps its own tree, and the keyboard never stays in a tree
 // that its tab's drawer does not show.
 func TestReviewTreeIsPerTab(t *testing.T) {
+	t.Parallel()
 	dir := keysRepo(t)
 	r := newKeysRig(t, dir)
 	r.opened(t)
@@ -278,6 +284,8 @@ func treesOf(st core.State) []string {
 // A drawer narrowed by a resize keeps its open tree, in the tree's width rule,
 // whether the tree or the diff has the keyboard.
 func TestResizeKeepsTheTreeOpen(t *testing.T) {
+	t.Parallel()
+
 	for _, tt := range []struct {
 		name     string
 		keys     []tea.KeyPressMsg
@@ -323,6 +331,7 @@ func TestResizeKeepsTheTreeOpen(t *testing.T) {
 
 // Where a hidden tree would be, a click lands in the diff.
 func TestClickWhereAHiddenTreeWouldBe(t *testing.T) {
+	t.Parallel()
 	r, v := treeRig(t, 200, 50, treeStartHidden)
 	r.keys(keyEsc)
 
@@ -343,6 +352,8 @@ func TestClickWhereAHiddenTreeWouldBe(t *testing.T) {
 
 // A state saved with the tree open draws it, at any width.
 func TestRestoredTreeIsDrawn(t *testing.T) {
+	t.Parallel()
+
 	st := hiddenDrawerState()
 	st.Active = 0
 	st.Tabs[0].Review.Tree = true

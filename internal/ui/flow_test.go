@@ -17,6 +17,7 @@ import (
 )
 
 func TestQuitFlow(t *testing.T) {
+	t.Parallel()
 	tm := teatest.NewTestModel(t, newTestApp(t), teatest.WithInitialTermSize(100, 30))
 	tm.Send(keyLeader)
 	tm.Send(keyRune('q'))
@@ -48,6 +49,8 @@ func runFlow(t *testing.T, app *App, want string, keys ...tea.KeyPressMsg) *App 
 }
 
 func TestPaletteFlow(t *testing.T) {
+	t.Parallel()
+
 	keys := []tea.KeyPressMsg{keyLeader, keyRune(':')}
 	for _, r := range "macchiato" {
 		keys = append(keys, keyRune(r))
@@ -62,6 +65,8 @@ func TestPaletteFlow(t *testing.T) {
 // TestThemePickerFlow waits for a card row hidden under the open picker, so
 // only the frame drawn after the commit can satisfy it (the preview already sets Latte's OSC 11).
 func TestThemePickerFlow(t *testing.T) {
+	t.Parallel()
+
 	tm := teatest.NewTestModel(t, newTestApp(t), teatest.WithInitialTermSize(100, 30))
 	for _, k := range []tea.KeyPressMsg{keyLeader, keyRune('t'), keyDown} {
 		tm.Send(k)

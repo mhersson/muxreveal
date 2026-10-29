@@ -869,6 +869,7 @@ func TestRailIdleCost(t *testing.T) {
 }
 
 func TestRailPaletteAndWhichKey(t *testing.T) {
+	t.Parallel()
 	a := fastApp(t)
 	sized(t, a, 120, 40)
 
@@ -903,6 +904,7 @@ func TestRailPaletteAndWhichKey(t *testing.T) {
 }
 
 func TestRailWhichKeyPopup(t *testing.T) {
+	t.Parallel()
 	a := newTestApp(t)
 	sized(t, a, 140, 40)
 	press(a, keyLeader)
@@ -997,6 +999,7 @@ func TestRailManyAgentsStayWhole(t *testing.T) {
 
 // TestRailFlow drives the rail through a real Bubble Tea program.
 func TestRailFlow(t *testing.T) {
+	t.Parallel()
 	a := newTestApp(t)
 	tm := teatest.NewTestModel(t, a, teatest.WithInitialTermSize(100, 30))
 

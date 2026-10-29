@@ -171,6 +171,7 @@ func eventually(t *testing.T, what string, cond func() bool) {
 }
 
 func TestPaneRendersWrites(t *testing.T) {
+	t.Parallel()
 	p, fp := newTestPane(t, 20, 3, realClock{})
 
 	feedAndWait(t, p, fp, "hello")
@@ -190,6 +191,7 @@ func TestPaneRendersWrites(t *testing.T) {
 }
 
 func TestCoalescedNotify(t *testing.T) {
+	t.Parallel()
 	p, fp := newTestPane(t, 20, 3, realClock{})
 
 	for range 1000 {
@@ -219,6 +221,7 @@ func TestCoalescedNotify(t *testing.T) {
 }
 
 func TestSyncHold(t *testing.T) {
+	t.Parallel()
 	t.Run("close", func(t *testing.T) {
 		clk := &fakeClock{t: t0}
 		p, fp := newTestPane(t, 20, 3, clk)
@@ -293,6 +296,7 @@ func TestSyncHold(t *testing.T) {
 }
 
 func TestHoldTick(t *testing.T) {
+	t.Parallel()
 	clk := &fakeClock{t: t0}
 	p, _ := newTestPane(t, 20, 3, clk)
 
@@ -303,6 +307,7 @@ func TestHoldTick(t *testing.T) {
 }
 
 func TestResizeSameSizeSkips(t *testing.T) {
+	t.Parallel()
 	p, fp := newTestPane(t, 20, 3, realClock{})
 
 	if p.resize(20, 3) {
@@ -315,6 +320,7 @@ func TestResizeSameSizeSkips(t *testing.T) {
 }
 
 func TestResizeRendersAtOnce(t *testing.T) {
+	t.Parallel()
 	p, fp := newTestPane(t, 20, 3, realClock{})
 
 	feedAndWait(t, p, fp, "hello")
@@ -349,6 +355,7 @@ func TestResizeRendersAtOnce(t *testing.T) {
 }
 
 func TestExitNotifies(t *testing.T) {
+	t.Parallel()
 	p, fp := newTestPane(t, 20, 3, realClock{})
 
 	feedAndWait(t, p, fp, "bye")
@@ -368,6 +375,7 @@ func TestExitNotifies(t *testing.T) {
 }
 
 func TestExitReportsPendingOutputFirst(t *testing.T) {
+	t.Parallel()
 	p, fp := newTestPane(t, 20, 3, realClock{})
 
 	if _, err := fp.feed.Write([]byte("last words")); err != nil {
@@ -395,6 +403,7 @@ func TestExitReportsPendingOutputFirst(t *testing.T) {
 }
 
 func TestSendKeyPasteFocus(t *testing.T) {
+	t.Parallel()
 	p, fp := newTestPane(t, 20, 3, realClock{})
 
 	p.sendKey(uv.KeyPressEvent{Code: 'a', Text: "a"})
@@ -423,6 +432,7 @@ func TestSendKeyPasteFocus(t *testing.T) {
 }
 
 func TestWorkingDirAndTitle(t *testing.T) {
+	t.Parallel()
 	p, fp := newTestPane(t, 20, 3, realClock{})
 
 	if d := p.workingDir(); d != "" {
@@ -477,6 +487,7 @@ func TestCloseStopsLoop(t *testing.T) {
 }
 
 func TestConcurrentFeedRender(t *testing.T) {
+	t.Parallel()
 	p, fp := newTestPane(t, 40, 10, realClock{})
 
 	var chunk strings.Builder

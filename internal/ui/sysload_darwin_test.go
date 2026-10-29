@@ -6,6 +6,7 @@ import (
 )
 
 func TestLoadShare(t *testing.T) {
+	t.Parallel()
 	loadavg := func(one uint32, scale uint64) []byte {
 		b := make([]byte, loadavgSize)
 		binary.NativeEndian.PutUint32(b[0:4], one)

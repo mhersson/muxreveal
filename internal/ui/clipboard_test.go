@@ -20,6 +20,8 @@ func envFrom(m map[string]string) func(string) string {
 }
 
 func TestNativeCommands(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name string
 		env  map[string]string
@@ -108,6 +110,8 @@ func newTestClipboard(cfg clipboardConfig, env map[string]string, goos string, r
 }
 
 func TestClipboardCopy(t *testing.T) {
+	t.Parallel()
+
 	const text = "hello"
 
 	osc := tea.SetClipboard(text)()
@@ -185,6 +189,8 @@ func TestClipboardCopy(t *testing.T) {
 }
 
 func TestClipboardNativeTimeout(t *testing.T) {
+	t.Parallel()
+
 	run := func(ctx context.Context, _ []string, _ string) error {
 		<-ctx.Done()
 
@@ -212,6 +218,8 @@ func TestClipboardNativeTimeout(t *testing.T) {
 }
 
 func TestClipboardMissingToolLoggedOnce(t *testing.T) {
+	t.Parallel()
+
 	fr := &fakeRun{err: func(argv []string) error {
 		if argv[0] == "wl-copy" {
 			return &exec.Error{Name: "wl-copy", Err: exec.ErrNotFound}
@@ -238,6 +246,8 @@ func TestClipboardMissingToolLoggedOnce(t *testing.T) {
 }
 
 func TestClipboardOtherFailuresLoggedEachTime(t *testing.T) {
+	t.Parallel()
+
 	fr := &fakeRun{err: func([]string) error { return errors.New("exit status 1") }}
 
 	c, buf := newTestClipboard(clipboardConfig{Native: true}, nil, "darwin", fr.run)
@@ -252,6 +262,8 @@ func TestClipboardOtherFailuresLoggedEachTime(t *testing.T) {
 
 // Only a binary that cannot exist runs, so no real clipboard tool is touched.
 func TestRunNativeReportsAMissingTool(t *testing.T) {
+	t.Parallel()
+
 	err := runNative(context.Background(), []string{"muxreveal-no-such-clipboard-tool", "-x"}, "text")
 	if !errors.Is(err, exec.ErrNotFound) {
 		t.Errorf("runNative error = %v, want exec.ErrNotFound", err)

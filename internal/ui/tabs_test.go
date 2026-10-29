@@ -62,6 +62,8 @@ func assertTabSizes(t *testing.T, a *App) {
 }
 
 func TestTabKeys(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name       string
 		key        tea.KeyPressMsg
@@ -105,6 +107,7 @@ func TestTabKeys(t *testing.T) {
 }
 
 func TestTabCycleWraps(t *testing.T) {
+	t.Parallel()
 	a, _ := tabsOf(t, 3)
 
 	for _, want := range []int{0, 1, 2} {
@@ -125,6 +128,7 @@ func TestTabCycleWraps(t *testing.T) {
 }
 
 func TestNewTabStartsShell(t *testing.T) {
+	t.Parallel()
 	a, st := lifeAppSized(t, 100, 30)
 
 	if err := a.dispatch(core.SetPaneCwd{ID: "p1", Cwd: "/elsewhere"}); err != nil {
@@ -155,6 +159,7 @@ func TestNewTabStartsShell(t *testing.T) {
 }
 
 func TestNewTabInLaunchDir(t *testing.T) {
+	t.Parallel()
 	a, st := lifeAppSized(t, 100, 30)
 
 	chord(a, 'x')
@@ -170,6 +175,7 @@ func TestNewTabInLaunchDir(t *testing.T) {
 }
 
 func TestNewTabStartFailure(t *testing.T) {
+	t.Parallel()
 	a, st := lifeAppSized(t, 100, 30)
 	st.err = fmt.Errorf("no such shell")
 
@@ -185,6 +191,7 @@ func TestNewTabStartFailure(t *testing.T) {
 }
 
 func TestRenamePrompt(t *testing.T) {
+	t.Parallel()
 	a, st := lifeAppSized(t, 100, 30)
 
 	cursorAtColumn := func(x int) {
@@ -279,6 +286,7 @@ func TestRenamePrompt(t *testing.T) {
 }
 
 func TestRenamePromptWithoutIcons(t *testing.T) {
+	t.Parallel()
 	a, _ := lifeAppSized(t, 100, 30)
 	a.icons = false
 
@@ -295,6 +303,7 @@ func TestRenamePromptWithoutIcons(t *testing.T) {
 }
 
 func TestRenameSegmentColours(t *testing.T) {
+	t.Parallel()
 	ui := mochaUI(t)
 	a, _ := lifeAppSized(t, 60, 8)
 
@@ -312,6 +321,7 @@ func TestRenameSegmentColours(t *testing.T) {
 }
 
 func TestRenameGolden(t *testing.T) {
+	t.Parallel()
 	a, _ := lifeAppSized(t, 60, 8)
 
 	chord(a, 'c')
@@ -323,6 +333,7 @@ func TestRenameGolden(t *testing.T) {
 }
 
 func TestCloseTabConfirmGolden(t *testing.T) {
+	t.Parallel()
 	a, _ := lifeAppSized(t, 60, 14)
 
 	chord(a, 'c')
@@ -337,6 +348,7 @@ func TestCloseTabConfirmGolden(t *testing.T) {
 }
 
 func TestConfirmBoxShape(t *testing.T) {
+	t.Parallel()
 	a, _ := lifeAppSized(t, 100, 30)
 
 	chord(a, 'n')
@@ -371,6 +383,7 @@ func TestConfirmBoxShape(t *testing.T) {
 }
 
 func TestCloseTabConfirm(t *testing.T) {
+	t.Parallel()
 	t.Run("shells close at once", func(t *testing.T) {
 		a, st := lifeAppSized(t, 100, 30)
 
@@ -462,6 +475,7 @@ func TestCloseTabConfirm(t *testing.T) {
 }
 
 func TestHiddenPaneExit(t *testing.T) {
+	t.Parallel()
 	// hiddenTab leaves tab 1 active and tab 2 hidden with p2 and p3.
 	hiddenTab := func(t *testing.T) (*App, *starts) {
 		t.Helper()
@@ -613,6 +627,7 @@ func TestHiddenPaneExit(t *testing.T) {
 }
 
 func TestTabSwitchFocusReports(t *testing.T) {
+	t.Parallel()
 	a, st := lifeAppSized(t, 100, 30)
 
 	feedAndWait(t, a.panes["p1"], st.proc(0), "\x1b[?1004h")
@@ -646,6 +661,8 @@ func TestTabSwitchFocusReports(t *testing.T) {
 }
 
 func TestDrawnWidth(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name, in string
 		want     int

@@ -17,6 +17,7 @@ import (
 )
 
 func TestDrawerOpensInTurnMode(t *testing.T) {
+	t.Parallel()
 	r := newDrawerRig(t, turnFirst)
 	dir := threeTurnRepo(t)
 	id := r.agent(t, dir, testSession)
@@ -46,6 +47,7 @@ func TestDrawerOpensInTurnMode(t *testing.T) {
 }
 
 func TestDrawerOpensInBranchForAShell(t *testing.T) {
+	t.Parallel()
 	r := newDrawerRig(t)
 	dir := newRepoDir(t)
 	write(t, filepath.Join(dir, "a.txt"), "one\n")
@@ -79,6 +81,8 @@ func TestDrawerOpensInBranchForAShell(t *testing.T) {
 }
 
 func TestDrawerOpenModeFollowsTurnsAndConfig(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name    string
 		session core.SessionID
@@ -107,6 +111,8 @@ func TestDrawerOpenModeFollowsTurnsAndConfig(t *testing.T) {
 }
 
 func TestNewDrawerOpensInBranchMode(t *testing.T) {
+	t.Parallel()
+
 	turnCfg := core.DefaultConfig().Diff
 	turnCfg.Mode = "turn"
 
@@ -145,6 +151,7 @@ func TestNewDrawerOpensInBranchMode(t *testing.T) {
 }
 
 func TestDrawerNeedsARepository(t *testing.T) {
+	t.Parallel()
 	r := newDrawerRig(t)
 	id := r.shell(t, t.TempDir())
 
@@ -163,6 +170,7 @@ func TestDrawerNeedsARepository(t *testing.T) {
 // The check at opening is newer than an earlier finding that the cwd is in no
 // repository: a repository made since is found.
 func TestOpenFindsARepositoryMadeAfterTheCwdWasFound(t *testing.T) {
+	t.Parallel()
 	r := newDrawerRig(t)
 
 	dir, err := filepath.EvalSymlinks(t.TempDir())
@@ -187,6 +195,7 @@ func TestOpenFindsARepositoryMadeAfterTheCwdWasFound(t *testing.T) {
 }
 
 func TestDrawerWithoutAnEngineShowsTheError(t *testing.T) {
+	t.Parallel()
 	r := newDrawerRig(t, func(o *Options) { o.GitTempDir = "" })
 	dir := editedRepo(t)
 
@@ -202,6 +211,7 @@ func TestDrawerWithoutAnEngineShowsTheError(t *testing.T) {
 }
 
 func TestTurnStepping(t *testing.T) {
+	t.Parallel()
 	r := newDrawerRig(t, turnFirst)
 	dir := threeTurnRepo(t)
 	missingTurn(t, dir, testSession)
@@ -271,6 +281,7 @@ func TestTurnStepping(t *testing.T) {
 }
 
 func TestStepInBranchModeEntersTurnMode(t *testing.T) {
+	t.Parallel()
 	r := newDrawerRig(t, func(o *Options) { o.Diff = core.DiffConfig{Mode: "branch"} })
 	id := r.agent(t, threeTurnRepo(t), testSession)
 
@@ -295,6 +306,7 @@ func TestStepInBranchModeEntersTurnMode(t *testing.T) {
 }
 
 func TestTurnModeReturnsToTheLatestTurn(t *testing.T) {
+	t.Parallel()
 	r := newDrawerRig(t, turnFirst)
 	id := r.agent(t, threeTurnRepo(t), testSession)
 
@@ -313,6 +325,7 @@ func TestTurnModeReturnsToTheLatestTurn(t *testing.T) {
 }
 
 func TestStaleLoadIsDropped(t *testing.T) {
+	t.Parallel()
 	r := newDrawerRig(t, turnFirst)
 	id := r.agent(t, threeTurnRepo(t), testSession)
 
@@ -430,6 +443,7 @@ func TestLiveUpdateKeepsTheHunk(t *testing.T) {
 }
 
 func TestLiveUpdateFlashes(t *testing.T) {
+	t.Parallel()
 	r := newDrawerRig(t)
 	dir := editedRepo(t)
 	root := rootOf(t, dir)
@@ -487,6 +501,7 @@ func TestLiveUpdateFlashes(t *testing.T) {
 }
 
 func TestHiddenTabDrawerRecomputesWhenShown(t *testing.T) {
+	t.Parallel()
 	r := newDrawerRig(t)
 	dir := editedRepo(t)
 	root := rootOf(t, dir)
@@ -530,6 +545,7 @@ func TestHiddenTabDrawerRecomputesWhenShown(t *testing.T) {
 }
 
 func TestSessionChangeRetargets(t *testing.T) {
+	t.Parallel()
 	r := newDrawerRig(t, turnFirst)
 	dir := threeTurnRepo(t)
 	snapshotTurn(t, dir, otherSession)
@@ -599,6 +615,7 @@ func TestSessionChangeRetargets(t *testing.T) {
 // Batches reach only the drawers that review their root, and a past turn,
 // which does not change with the files, ignores them.
 func TestBatchesRouteToTheirRootAndSkipPastTurns(t *testing.T) {
+	t.Parallel()
 	r := newDrawerRig(t, turnFirst)
 	dir := threeTurnRepo(t)
 	root := rootOf(t, dir)
@@ -624,6 +641,7 @@ func TestBatchesRouteToTheirRootAndSkipPastTurns(t *testing.T) {
 
 // A drawer opened without the keyboard leaves it where it is.
 func TestOpenWithoutTheKeyboard(t *testing.T) {
+	t.Parallel()
 	r := newDrawerRig(t)
 	id := r.shell(t, editedRepo(t))
 
@@ -639,6 +657,7 @@ func TestOpenWithoutTheKeyboard(t *testing.T) {
 
 // With no watch held a hook event stands in for the file changes.
 func TestHookEventRecomputesAnUnwatchedDrawer(t *testing.T) {
+	t.Parallel()
 	r := newDrawerRig(t, func(o *Options) { o.Watches = nil })
 	dir := editedRepo(t)
 	id := r.agent(t, dir, "")
@@ -660,6 +679,7 @@ func TestHookEventRecomputesAnUnwatchedDrawer(t *testing.T) {
 }
 
 func TestBranchSwitchRecomputes(t *testing.T) {
+	t.Parallel()
 	r := newDrawerRig(t)
 	dir := newRepoDir(t)
 	write(t, filepath.Join(dir, "base.txt"), "base\n")
@@ -695,6 +715,7 @@ func TestBranchSwitchRecomputes(t *testing.T) {
 }
 
 func TestPaneCwdChangeRetargetsTheDrawer(t *testing.T) {
+	t.Parallel()
 	r := newDrawerRig(t)
 	a, b := editedRepo(t), newRepoDir(t)
 	write(t, filepath.Join(b, "base.txt"), "base\n")
@@ -729,6 +750,7 @@ func TestPaneCwdChangeRetargetsTheDrawer(t *testing.T) {
 }
 
 func TestWorktreeDeletedShowsTheError(t *testing.T) {
+	t.Parallel()
 	r := newDrawerRig(t)
 	dir := editedRepo(t)
 	root := rootOf(t, dir)
@@ -761,6 +783,7 @@ func TestWorktreeDeletedShowsTheError(t *testing.T) {
 }
 
 func TestFullFileLoadsOnF(t *testing.T) {
+	t.Parallel()
 	r := newDrawerRig(t)
 	dir := editedRepo(t)
 	write(t, filepath.Join(dir, "blob.bin"), "a\x00b\x00")
@@ -823,6 +846,7 @@ func countRows(v *reviewView, kind reviewRowKind) int {
 }
 
 func TestRestoredDrawerLoadsWhenItsTabShows(t *testing.T) {
+	t.Parallel()
 	r := newDrawerRig(t)
 	dir := editedRepo(t)
 	id := r.shell(t, dir)
@@ -856,6 +880,7 @@ func TestRestoredDrawerLoadsWhenItsTabShows(t *testing.T) {
 
 // A restored drawer whose pane is no longer in a repository says so.
 func TestRestoredDrawerOutsideARepositoryShowsTheError(t *testing.T) {
+	t.Parallel()
 	r := newDrawerRig(t)
 	id := r.shell(t, t.TempDir())
 
@@ -873,6 +898,7 @@ func TestRestoredDrawerOutsideARepositoryShowsTheError(t *testing.T) {
 }
 
 func TestDrawerHoldsAWatchForAShell(t *testing.T) {
+	t.Parallel()
 	r := newDrawerRig(t)
 	dir := editedRepo(t)
 	root := rootOf(t, dir)
@@ -891,6 +917,7 @@ func TestDrawerHoldsAWatchForAShell(t *testing.T) {
 }
 
 func TestEngineLimitsAndLayoutFollowTheConfig(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	write(t, filepath.Join(dir, "a.txt"), "a\n")
 	write(t, filepath.Join(dir, "b.txt"), "b\n")
