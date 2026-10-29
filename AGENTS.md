@@ -7,7 +7,8 @@ Terminal emulation comes from `tuios.dev/vt`; everything above it is ours.
 ## Sources of truth
 
 - `docs/DESIGN.md`: requirements (IDs like AG-3, DF-2), architecture, packages,
-  key designs, keymap, milestones. Read it before any change.
+  key designs, keymap, milestones. Read the sections your change touches
+  before you change it.
 
 If the code and DESIGN.md disagree, stop and ask. Don't silently change the
 design; propose an edit to DESIGN.md instead.
@@ -16,10 +17,13 @@ design; propose an edit to DESIGN.md instead.
 
 - Work only on the task you were given; raise anything outside it with the
   maintainer instead of building it.
-- Start each task in plan mode: list the requirement IDs it covers, the packages
-  and files you'll touch, and how you'll test it. Wait for approval.
-- One branch and one PR per milestone plan; every task in it is its own reviewed
-  commit.
+- Plan before code: `superpowers:brainstorming` settles the design with the
+  maintainer, then `superpowers:writing-plans` writes the plan, which the
+  maintainer approves.
+- Run an approved plan as written with
+  `superpowers:subagent-driven-development`.
+- One branch and one PR per plan. Each task is its own reviewed commit; review
+  fixes are separate commits, never squashed into it.
 - Commit messages: Conventional Commits, e.g.
   `feat(git): turn snapshots via temp index`. No requirement, milestone, plan or
   task IDs in commit messages, branch names, or PR titles and descriptions: they
@@ -35,7 +39,9 @@ make test         # go test ./...
 make test-race    # go test -race ./...
 make lint         # golangci-lint run
 make fmt          # golangci-lint fmt
-make check        # the full commit gate
+make scan         # the glyph and em-dash scan
+make check-fast   # the per-commit check
+make check        # the full gate, once per branch head
 make install      # go install into $GOBIN, else $GOPATH/bin
 ```
 
@@ -45,10 +51,10 @@ make install      # go install into $GOBIN, else $GOPATH/bin
 | ------------------ | ----------------------------------------------------------------- |
 | `cmd/muxreveal`    | Binary: CLI, `hook` subcommand, wiring                            |
 | `internal/core`    | Event bus, state store, actions, config, tab layouts (`internal/core/tiling` holds the ported tuios layouts) |
-| `internal/ui`      | Compositor, frames and chrome, widgets, keymap, themes, image placement |
+| `internal/ui`      | Compositor, frames and chrome, widgets, keymap, themes, syntax highlighting, image placement |
 | `internal/term`    | PTY plus the `VT` interface; `tuios.dev/vt` adapter               |
 | `internal/harness` | `Harness` interface; Claude Code adapter                          |
-| `internal/git`     | Worktrees, turn snapshots, watcher, diff engine, highlighting     |
+| `internal/git`     | Worktrees, turn snapshots, watcher, diff engine                   |
 | `internal/github`  | Auth via `go-gh`, GraphQL and REST client, poller, PR actions     |
 | `internal/md`      | Markdown to styled cells plus image references                    |
 | `internal/store`   | `state.json` and SQLite persistence                               |
@@ -100,6 +106,11 @@ Dependency rules:
 ## Testing
 
 - New behavior needs a test. Prefer table-driven tests.
+- Tests check behavior. A test that fails only when someone rewords text no code
+  reads is not a test: don't write it, and delete it when found. Rendering
+  goldens are behavior.
+- New tests call `t.Parallel()` unless they use `t.Setenv`, change the process's
+  working directory, or assert on wall-clock time.
 - Rendering: golden files under `testdata/` (`-update` flag to regenerate);
   `teatest` for Bubble Tea flows.
 - Diff engine: golden-file tests for hunks, word spans and full-file view.
@@ -112,20 +123,18 @@ Dependency rules:
 
 ## Commit discipline
 
-Run before every commit:
+Run `make check-fast` before every commit; it must be clean. It builds and runs
+the format check, vet, lint, the tests and the glyph and em-dash scan. A commit
+that touches goroutines, channels or locks also runs `go test -race` on the
+packages it changes.
 
-```bash
-make test      # clean
-make lint      # clean
-make build     # builds
-make check     # the full gate: the above plus the darwin build, formatting,
-               # vet, race tests, go mod tidy and the glyph and em-dash scans
-```
+Run the full `make check` once at the branch head, before the final review and
+the push. It adds the darwin build, the race tests and `go mod tidy`, and CI
+runs the same gates on every pull request that changes Go code.
 
-Every one must be clean; `make check` covers them all.
-
-- No session links in commits or PRs.
-- **Never commit to `main`.** work on a feature branch; tasks of a plan or scope
+- No session links in commits or PRs, and no trailers: no `Co-Authored-By`,
+  `Claude-Session` or "Generated with" lines.
+- **Never commit to `main`.** Work on a feature branch; tasks of a plan or scope
   the user approved commit there without asking again. Never push without
   explicit user approval.
 - Conventional commits: `type(scope): concise summary`. Always include a scope.

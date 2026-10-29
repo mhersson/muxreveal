@@ -1,4 +1,4 @@
-.PHONY: help build build-darwin run test test-race vet lint fmt fmt-check tidy-check scan check install clean
+.PHONY: help build build-darwin run test test-race vet lint fmt fmt-check tidy-check scan check-fast check install clean
 
 help:
 	@echo "Targets:"
@@ -14,7 +14,8 @@ help:
 	@echo "  fmt-check    fail and show the diff if formatting is needed"
 	@echo "  tidy-check   fail if go mod tidy would change go.mod or go.sum"
 	@echo "  scan         fail on private-use glyphs in Go source and em-dashes in Go and Markdown files"
-	@echo "  check        the full commit gate: all of the checks above, in order"
+	@echo "  check-fast   the per-commit check: build, fmt-check, vet, lint, test, scan"
+	@echo "  check        the full gate: build, build-darwin, fmt-check, vet, lint, test-race, tidy-check, scan"
 	@echo "  install      go install the binary into GOBIN, else GOPATH/bin"
 	@echo "  clean        remove bin/"
 
@@ -82,6 +83,8 @@ scan:
 		fail=1; \
 	fi; \
 	[ -z "$$fail" ]
+
+check-fast: build fmt-check vet lint test scan
 
 check: build build-darwin fmt-check vet lint test-race tidy-check scan
 
