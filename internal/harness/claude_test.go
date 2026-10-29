@@ -529,6 +529,7 @@ func TestSettingsStatusLine(t *testing.T) {
 		{"single quote", "/opt/it's/mr"},
 		{"backslash", `/opt/a\b/mr`},
 		{"newline", "/opt/a\nb/mr"},
+		{"invalid UTF-8", "/opt/a\xffb/mr"},
 	}
 	for _, tt := range refused {
 		t.Run("refused "+tt.name, func(t *testing.T) {
@@ -562,8 +563,11 @@ func TestSettingsStatusLine(t *testing.T) {
 					continue
 				}
 
+				// JSON rewrites invalid UTF-8 in the hook command as well; only the
+				// status line is guarded against that.
 				h := groups[0].Hooks[0]
-				if h.Type != "command" || h.Command != tt.exe || !slices.Equal(h.Args, []string{"hook", "claude-code"}) || h.Timeout != 5 {
+				if h.Type != "command" || (utf8.ValidString(tt.exe) && h.Command != tt.exe) ||
+					!slices.Equal(h.Args, []string{"hook", "claude-code"}) || h.Timeout != 5 {
 					t.Errorf("%s: handler = %+v", name, h)
 				}
 			}
@@ -648,6 +652,8 @@ func TestQuotePath(t *testing.T) {
 		{"escape", "/a\x1bb", "", "U+001B"},
 		{"delete", "/a\x7fb", "", "U+007F"},
 		{"C1 control", "/a\u0085b", "", "U+0085"},
+		{"invalid UTF-8", "/a\xffb", "", "UTF-8"},
+		{"truncated UTF-8", "/a\xe6\xbc", "", "UTF-8"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

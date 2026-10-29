@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/mhersson/muxreveal/internal/core"
 )
@@ -93,8 +94,13 @@ func (c Claude) Settings(exe string) ([]byte, error) {
 // QuotePath returns path in single quotes for a shell command line. Inside
 // single quotes every shell reads characters literally except the closing ',
 // and fish also reads \ as an escape; a control character could end the line.
-// A path with any of them is refused.
+// A path with any of them is refused, as is one that is not valid UTF-8, since
+// the JSON settings file would rewrite its bytes.
 func QuotePath(path string) (string, error) {
+	if !utf8.ValidString(path) {
+		return "", fmt.Errorf("harness: cannot quote %q for a shell: it is not valid UTF-8", path)
+	}
+
 	for _, r := range path {
 		var what string
 
