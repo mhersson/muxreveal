@@ -110,3 +110,54 @@ func RemoteURL(ctx context.Context, r Repo, remote string) (string, error) {
 
 	return strings.TrimSpace(string(out)), nil
 }
+
+// PushURLs returns every URL a push to remote goes to, one per pushurl, with
+// url.<base>.pushInsteadOf and insteadOf applied. Without a pushurl it is the
+// fetch URL. The URLs may carry credentials, so never put them in an error or log.
+func PushURLs(ctx context.Context, r Repo, remote string) ([]string, error) {
+	if remote == "" || strings.HasPrefix(remote, "-") {
+		return nil, errNotConfigured
+	}
+
+	out, err := run(ctx, call{dir: r.Root, args: []string{"remote", "get-url", "--push", "--all", remote}, read: true})
+	if err != nil {
+		if isExitCode(err, 2) {
+			return nil, errNotConfigured
+		}
+
+		return nil, fmt.Errorf("push urls: %w", err)
+	}
+
+	var urls []string
+
+	for line := range strings.SplitSeq(string(out), "\n") {
+		if line != "" {
+			urls = append(urls, line)
+		}
+	}
+
+	return urls, nil
+}
+
+// RemoteHasBranch reports whether the remote-tracking ref of branch on remote
+// exists, which says nothing about the remote itself until a fetch or push.
+func RemoteHasBranch(ctx context.Context, r Repo, remote, branch string) (bool, error) {
+	if remote == "" || strings.HasPrefix(remote, "-") {
+		return false, errNotConfigured
+	}
+
+	if err := checkBranch(ctx, r, branch); err != nil {
+		return false, err
+	}
+
+	_, err := run(ctx, call{dir: r.Root, args: []string{"rev-parse", "--verify", "--quiet", "refs/remotes/" + remote + "/" + branch}, read: true})
+	if err != nil {
+		if isExitCode(err, 1) {
+			return false, nil
+		}
+
+		return false, fmt.Errorf("remote branch: %w", err)
+	}
+
+	return true, nil
+}
