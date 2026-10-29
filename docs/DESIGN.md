@@ -216,6 +216,8 @@ type Event struct {
 	TurnStart    bool            `json:"turn_start,omitempty"` // a prompt was submitted
 	Action       string          `json:"action,omitempty"`     // the agent's current action (see Current action)
 	ActionSet    bool            `json:"action_set,omitempty"` // Action replaces the pane's action, an empty one clears it
+	Edit         string          `json:"edit,omitempty"`       // the cleaned absolute path of the file an edit tool changes (see Edits)
+	Subagent     bool            `json:"subagent,omitempty"`   // a subagent sent the event, not the agent's own session
 	Status       bool            `json:"status,omitempty"`     // a statusline update, not a hook (see Status line)
 	Model        string          `json:"model,omitempty"`      // the model's display name
 	Context      float64         `json:"context,omitempty"`    // percent of the context window in use, when ContextKnown
