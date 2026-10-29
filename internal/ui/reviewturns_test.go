@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"context"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -719,4 +721,112 @@ func isTurnSource(v *reviewView) bool {
 	_, ok := v.src.(git.TurnSource)
 
 	return ok
+}
+
+// A live load that starts after the own directory moved away from the shown
+// root swaps the turn for the branch, and computes the branch afresh rather
+// than updating the turn's result.
+func TestLiveLoadAfterOwnDirectoryMovedComputesTheBranch(t *testing.T) {
+	r := newFollowRig(t, testSession, turnFirst)
+
+	// The turn's snapshot holds m.txt changed. Since then m.txt is back to its
+	// committed text and n.txt is changed, so the turn shows both files and the
+	// branch only n.txt.
+	write(t, filepath.Join(r.dirA, "m.txt"), "m\n")
+	write(t, filepath.Join(r.dirA, "n.txt"), "n\n")
+	commitEverything(t, r.dirA, "more files")
+	write(t, filepath.Join(r.dirA, "m.txt"), "m in the turn\n")
+	snapshotTurn(t, r.dirA, testSession)
+	write(t, filepath.Join(r.dirA, "m.txt"), "m\n")
+	write(t, filepath.Join(r.dirA, "n.txt"), "n changed\n")
+
+	v := r.open(t, r.id)
+	if !isTurnSource(v) || !slices.Equal(viewPaths(v), []string{"m.txt", "n.txt"}) {
+		t.Fatalf("setup: source %T shows %v, want the turn with m.txt and n.txt", v.src, viewPaths(v))
+	}
+
+	// An edit keeps the followed place on A whatever the own directory does.
+	r.edit(filepath.Join(r.dirA, "n.txt"))
+	r.quiet()
+
+	// The own directory moves while a load is in flight and a second batch
+	// waits behind it, so the load that follows starts for the moved directory.
+	r.run(r.batch(r.rootA, git.Batch{Paths: []string{"n.txt"}}))
+
+	if !v.loading {
+		t.Fatal("setup: no load in flight")
+	}
+
+	r.hookNow(cwdHook(r.id, r.dirB))
+	r.run(r.batch(r.rootA, git.Batch{Paths: []string{"n.txt"}}))
+	r.until(t, "the queued load", func() bool {
+		v := r.view()
+
+		return v.own == r.dirB && !v.loading && v.queued == nil
+	})
+
+	fresh, err := r.engine.Diff(context.Background(), git.BranchSource{Worktree: r.rootA})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	v = r.view()
+	if want := (git.BranchSource{Worktree: r.rootA}); v.src != want || !v.foreign {
+		t.Errorf("source %+v foreign %v, want %+v and foreign", v.src, v.foreign, want)
+	}
+
+	if got := viewPaths(v); !slices.Equal(got, []string{"n.txt"}) || v.res.Turn != 0 || v.res.Old != fresh.Old {
+		t.Errorf("shows %v as turn %d against %q, want n.txt of the branch against %q", got, v.res.Turn, v.res.Old, fresh.Old)
+	}
+}
+
+// An own directory that is gone, or in no repository, is not the shown root:
+// turn mode shows the branch and the turn keys say there are no turns.
+func TestTurnModeWithoutAnOwnRepository(t *testing.T) {
+	tests := []struct {
+		name string
+		own  func(t *testing.T) string
+	}{
+		{"own directory in no repository", func(t *testing.T) string { return t.TempDir() }},
+		{"own directory gone", func(t *testing.T) string {
+			dir := filepath.Join(t.TempDir(), "gone")
+			if err := os.Mkdir(dir, 0o750); err != nil {
+				t.Fatal(err)
+			}
+
+			return dir
+		}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := newTurnRig(t)
+			own := tt.own(t)
+
+			r.edit(filepath.Join(r.dirB, "a.txt"))
+			r.hookNow(cwdHook(r.id, own))
+
+			if tt.name == "own directory gone" {
+				if err := os.Remove(own); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			openIn(t, r.App, core.OpenReview{Pane: r.id, Mode: core.ReviewTurn})
+			r.settle()
+			r.until(t, "b's branch", r.settledOn(r.rootB, false))
+
+			v := r.view()
+			if want := (git.BranchSource{Worktree: r.rootB}); v.src != want || !v.foreign || v.turns != 0 || r.coreMode() != core.ReviewTurn {
+				t.Errorf("source %+v foreign %v with %d turns in %q mode, want b's branch in turn mode with no turns", v.src, v.foreign, v.turns, r.coreMode())
+			}
+
+			r.notice = ""
+			r.run(r.setReviewMode(core.ReviewTurn))
+
+			if want := "no turns in " + filepath.Base(r.dirA) + " · b yet"; r.notice != want {
+				t.Errorf("t: notice = %q, want %q", r.notice, want)
+			}
+		})
+	}
 }

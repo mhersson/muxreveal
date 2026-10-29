@@ -327,9 +327,11 @@ func (j reviewJob) run(ctx context.Context) reviewLoadedMsg {
 	}
 
 	// The snapshots are of the agent's own directory, so a turn of it is not a
-	// turn of another worktree.
+	// turn of another worktree. The branch is computed afresh, as the previous
+	// result is the turn's.
 	if _, ok := j.src.(git.TurnSource); ok && msg.info.foreign {
 		j.src = git.BranchSource{Worktree: j.root}
+		j.batch, j.prev = nil, git.Result{}
 		msg.src = j.src
 	}
 
