@@ -30,6 +30,9 @@ type followRig struct {
 	resolved []string // the paths the edit resolver ran for
 
 	epochRoot map[int]string // the root each drawer epoch loads
+
+	holdLoads bool              // feed keeps the drawer's load answers in parked instead of delivering them
+	parked    []reviewLoadedMsg // the load answers feed kept
 }
 
 func newFollowRig(t *testing.T, session core.SessionID) *followRig {
@@ -150,9 +153,16 @@ func (r *followRig) onRoot(root string) func() bool {
 }
 
 // feed delivers one message and checks that the drawer applied a load only for
-// the root that load was started for.
+// the root that load was started for. While holdLoads is set it keeps the
+// drawer's load answers back instead.
 func (r *followRig) feed(t *testing.T, m tea.Msg) {
 	t.Helper()
+
+	if loaded, ok := m.(reviewLoadedMsg); ok && r.holdLoads {
+		r.parked = append(r.parked, loaded)
+
+		return
+	}
 
 	before := r.view()
 	gen := 0
@@ -175,6 +185,37 @@ func (r *followRig) feed(t *testing.T, m tea.Msg) {
 	}
 
 	r.epochRoot[after.epoch] = after.root
+}
+
+// drive feeds what the commands answer, through feed, until cond holds.
+func (r *followRig) drive(t *testing.T, what string, cond func() bool) {
+	t.Helper()
+
+	deadline := time.Now().Add(r.wait)
+
+	for !cond() {
+		select {
+		case m := <-r.pm.msgs:
+			r.feed(t, m)
+		case <-time.After(10 * time.Millisecond):
+			r.feed(t, struct{}{})
+		}
+
+		if time.Now().After(deadline) {
+			t.Fatalf("timed out waiting for %s", what)
+		}
+	}
+}
+
+// editNow delivers an edit hook and every answer of the commands it raised, through feed.
+func (r *followRig) editNow(t *testing.T, path string) {
+	t.Helper()
+
+	for _, m := range flatten(hook(r.App, r.editHook(path))) {
+		if m != nil {
+			r.feed(t, m)
+		}
+	}
 }
 
 func TestFollowWatchesTheFollowedPlace(t *testing.T) {
@@ -439,61 +480,94 @@ func TestRemovedFollowedWorktreeIsForgotten(t *testing.T) {
 }
 
 func TestAlternatingEditsEndOnLatest(t *testing.T) {
-	r := newFollowRig(t, "")
-	r.addLines(t, filepath.Join(r.dirB, "a.txt"))
-	r.addLines(t, filepath.Join(r.dirC, "c.txt"))
-	r.open(t, r.id)
+	// Answers that resolve out of order never reorder the edits.
+	t.Run("answers in reverse order", func(t *testing.T) {
+		r := newFollowRig(t, "")
+		r.addLines(t, filepath.Join(r.dirB, "a.txt"))
+		r.addLines(t, filepath.Join(r.dirC, "c.txt"))
+		r.open(t, r.id)
 
-	// Each edit is a new path, so every one resolves through git.
-	const edits = 20
+		// Each edit is a new path, so every one resolves through git.
+		const edits = 20
 
-	answers := make([][]tea.Msg, edits)
+		answers := make([][]tea.Msg, edits)
 
-	for i := range edits {
-		dir := r.dirB
-		if i%2 == 1 {
-			dir = r.dirC
+		for i := range edits {
+			dir := r.dirB
+			if i%2 == 1 {
+				dir = r.dirC
+			}
+
+			answers[i] = flatten(hook(r.App, r.editHook(filepath.Join(dir, fmt.Sprintf("f%d.go", i)))))
 		}
 
-		answers[i] = flatten(hook(r.App, r.editHook(filepath.Join(dir, fmt.Sprintf("f%d.go", i)))))
-	}
-
-	for i := edits - 1; i >= 0; i-- {
-		for _, m := range answers[i] {
-			if m != nil {
-				r.feed(t, m)
+		for i := edits - 1; i >= 0; i-- {
+			for _, m := range answers[i] {
+				if m != nil {
+					r.feed(t, m)
+				}
 			}
 		}
-	}
 
-	last, ok := r.pane().Followed()
-	if !ok || last.Root != r.dirC || last.Seq != edits || r.pane().FollowDir() != r.dirC {
-		t.Fatalf("Followed() = %+v, %v, want the last edit's root %q with Seq %d", last, ok, r.dirC, edits)
-	}
-
-	// The drawer's loads come back as the rig returns them.
-	deadline := time.Now().Add(r.wait)
-
-	for {
-		if v := r.view(); v != nil && v.root == r.rootC && v.loaded && !v.loading && r.held(r.id) == r.rootC {
-			break
+		last, ok := r.pane().Followed()
+		if !ok || last.Root != r.dirC || last.Seq != edits || r.pane().FollowDir() != r.dirC {
+			t.Fatalf("Followed() = %+v, %v, want the last edit's root %q with Seq %d", last, ok, r.dirC, edits)
 		}
 
-		select {
-		case m := <-r.pm.msgs:
-			r.feed(t, m)
-		case <-time.After(10 * time.Millisecond):
-			r.run(r.step(struct{}{}))
+		r.drive(t, "the drawer to settle on C", func() bool {
+			v := r.view()
+
+			return v != nil && v.root == r.rootC && v.loaded && !v.loading && r.held(r.id) == r.rootC
+		})
+
+		if got := viewPaths(r.view()); !slices.Equal(got, []string{"c.txt"}) {
+			t.Errorf("drawer shows %v, want C's change", got)
+		}
+	})
+
+	// The drawer moves between the worktrees for real, and the loads it started
+	// for the roots it left come back last.
+	t.Run("loads for a root the drawer left", func(t *testing.T) {
+		r := newFollowRig(t, "")
+		r.addLines(t, filepath.Join(r.dirB, "a.txt"))
+		r.addLines(t, filepath.Join(r.dirC, "c.txt"))
+		r.open(t, r.id)
+
+		r.holdLoads = true
+
+		moves := []struct{ dir, root string }{
+			{r.dirB, r.rootB}, {r.dirC, r.rootC}, {r.dirB, r.rootB}, {r.dirC, r.rootC}, {r.dirB, r.rootB}, {r.dirC, r.rootC},
 		}
 
-		if time.Now().After(deadline) {
-			t.Fatal("timed out waiting for the drawer to settle on C")
-		}
-	}
+		for i, mv := range moves {
+			prev := r.view().epoch
 
-	if got := viewPaths(r.view()); !slices.Equal(got, []string{"c.txt"}) {
-		t.Errorf("drawer shows %v, want C's change", got)
-	}
+			r.editNow(t, filepath.Join(mv.dir, fmt.Sprintf("g%d.go", i)))
+			r.drive(t, "the drawer to move to "+mv.root, func() bool {
+				v := r.view()
+
+				return v != nil && v.root == mv.root && v.epoch != prev
+			})
+		}
+
+		r.drive(t, "a load answer for every move", func() bool { return len(r.parked) >= len(moves) })
+
+		r.holdLoads = false
+
+		// Loads of the roots the drawer left are in flight, or the test shows nothing.
+		if stale := slices.IndexFunc(r.parked, func(l reviewLoadedMsg) bool { return l.gen != r.view().epoch }); stale < 0 {
+			t.Fatal("no load for a root the drawer left was in flight")
+		}
+
+		for i := len(r.parked) - 1; i >= 0; i-- {
+			r.feed(t, r.parked[i])
+		}
+
+		v := r.view()
+		if v.root != r.rootC || !v.loaded || v.loading || !slices.Equal(viewPaths(v), []string{"c.txt"}) {
+			t.Errorf("drawer shows %v on %q (loaded %v, loading %v), want C's change", viewPaths(v), v.root, v.loaded, v.loading)
+		}
+	})
 }
 
 func TestNewSessionReturnsToOwnDirectory(t *testing.T) {
