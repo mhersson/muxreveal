@@ -1,0 +1,173 @@
+# Gotchas
+
+Platform and tooling quirks that contributors trip over in this repo, each with
+what to do about it. Skim it before your first commit each session.
+
+## Glyphs, em-dashes and the scan
+
+- AI file tools drop or alter raw private-use characters, so write Nerd Font
+  glyphs in Go source as `\u` or `\U` escapes.
+- `make scan` is the scan of record, and part of `make check-fast` and
+  `make check`. It fails on private-use glyphs in Go files and on em-dashes in
+  Go and Markdown files (`docs/superpowers` aside), untracked files included.
+  It first proves grep can match its patterns, so a pass means something.
+- Never scan with `grep -P`. BSD grep on macOS has no `-P` and exits 2, which a
+  script that only tests grep's status reads as "no match", so the scan passes.
+  Use `LC_ALL=C` byte patterns, as `make scan` does.
+
+## Shell tools and make recipes
+
+- macOS has BSD grep, sed, xargs, mktemp and awk, and GNU make 3.81. Write
+  recipes and scripts that work with both sets of tools: `sed -i` takes a
+  suffix argument on BSD (`sed -i ''`) and fails with one on GNU, so write to
+  a temp file and move it instead; give `mktemp` an explicit `XXXXXX`
+  template; use no make feature newer than 3.81. CI's `macos` job runs
+  `make scan` there.
+- BSD make runs each recipe line under `sh -e`, so a recipe must stay correct
+  there: end a command that is allowed to fail with `|| :`.
+- GNU xargs runs its command once on empty input and BSD xargs does not. Put
+  `/dev/null` among grep's arguments so an empty list never leaves grep
+  reading stdin.
+- Set `LC_ALL=C` for byte patterns in grep and for sort, uniq and awk, so a
+  UTF-8 locale cannot change what matches or the order.
+- macOS's `/bin/bash` is 3.2: no associative arrays, `mapfile` or `${var,,}`.
+  Write POSIX sh, or bash that 3.2 runs.
+
+## macOS filesystems
+
+- APFS refuses file names that are not valid UTF-8 (`EILSEQ`). A test that
+  needs such a name checks with `fsAcceptsName` (internal/git) and skips when
+  the filesystem refuses it.
+- APFS is case-insensitive by default, so two paths that differ only in case
+  are one file on a Mac. CI's `static-checks` job fails on such paths, also
+  when they differ only after dropping their file extensions.
+- `t.TempDir()` on macOS is under `/var/folders`, and `/var` is a symlink to
+  `/private/var`; git reports the resolved path. Run a temp dir through
+  `filepath.EvalSymlinks` before comparing it with git output, as `newRepo`
+  does.
+
+## Unix sockets
+
+- A Unix socket path holds at most 103 bytes on macOS and 107 on Linux.
+  macOS's `$TMPDIR`, and so `t.TempDir()`, is deep enough to push a socket
+  path past that. Tests put sockets in a dir from `os.MkdirTemp("/tmp", ...)`
+  (the `shortDir` helpers in `cmd/muxreveal` and `internal/harness`) and
+  remove it in `t.Cleanup`.
+- The hook socket is `<state dir>/run/<pid>.sock`, and on macOS the state dir
+  is under `$HOME`. A test or rig that starts the hook server on macOS sets
+  `HOME` to a short dir, such as one from `mktemp -d /tmp/mr.XXXX`. Over the
+  limit, agents run without hooks and the notice reads
+  `agent hooks are off: socket path too long (N bytes, at most M)`.
+
+## State, config and cache dirs
+
+- The state dir is `$XDG_STATE_HOME/muxreveal` on Linux but always
+  `$HOME/Library/Application Support/muxreveal` on macOS, which ignores
+  `XDG_STATE_HOME`. Isolate a test or rig on macOS through `HOME`.
+- The index cache is under `os.UserCacheDir()`: `$XDG_CACHE_HOME`, else
+  `~/.cache`, on Linux, but `$HOME/Library/Caches` on macOS whatever
+  `XDG_CACHE_HOME` says.
+- The config file honours `XDG_CONFIG_HOME` on both platforms, else
+  `~/.config/muxreveal/config.toml`; `--config` overrides it.
+
+## File watching
+
+- On macOS `fsnotify` uses kqueue, which holds one file descriptor per watched
+  file, so a large repository can reach the open-file limit. The watch then
+  fails with the notice `watching <project> failed: <reason>`. Ignored
+  directories get no watches, so ignoring build output, or a higher
+  `ulimit -n`, is the way out.
+- kqueue sends events inotify does not: a Write on a watched directory when
+  its entries change, and Chmod-only events. The watcher keeps them from
+  counting as changes (see Watch set in `docs/DESIGN.md`); a change to its
+  event filter needs its tests to pass on macOS as well as Linux.
+
+## Platform-specific code
+
+- Put Linux-only code in a `_linux.go` file and macOS-only code in
+  `_darwin.go`; the file name is the build constraint. A fallback for the rest
+  needs an explicit constraint, such as `//go:build !linux && !darwin` in
+  `internal/term/fg_other.go`.
+- `make check` builds for darwin (`build-darwin`), and CI's `macos` job builds
+  and tests natively. Nothing in the Makefile cross-compiles for Linux, so on a
+  Mac run `GOOS=linux go vet ./...` after touching platform files.
+
+## Running the TUI
+
+- Run the app for a manual check or a screenshot only inside a private tmux
+  server, `tmux -L <name> -f /dev/null`, started from an environment without
+  `CLAUDE*`, `TMUX`, `TMUX_PANE` and `MUXREVEAL_*`, so the run starts as from a
+  fresh terminal. `-L` keeps it off your own tmux server and `-f /dev/null`
+  skips your tmux config.
+- Kill only that server (`tmux -L <name> kill-server`) and processes you
+  started, by PID. Never kill by name: `claude` and `muxreveal` processes may
+  be someone's live sessions.
+- Give the run a short `HOME`, which on macOS holds the state dir and the hook
+  socket. Put a `.zshrc` in it: zsh can start its new-user setup in a `HOME`
+  without one.
+- A pane's kind follows its foreground process's name: its comm on Linux, its
+  `argv[0]` on macOS. On macOS a shebang script's `argv[0]` is its interpreter
+  (`/bin/sh`), so a fake `claude` that must make its pane an agent is a
+  compiled binary named `claude`.
+- Agents start through `$SHELL -l -i -c`, and a login profile may put other
+  dirs ahead of a fake's on `PATH`. Point `SHELL` at a wrapper that puts the
+  fake's dir first, as `fakeClaude` in `cmd/muxreveal/restore_test.go` does.
+
+## Tests
+
+- In internal/git, `TestMain` sets `GIT_CONFIG_NOSYSTEM`,
+  `GIT_CONFIG_GLOBAL=/dev/null` and a fixed identity once for the test binary,
+  so its tests need no `t.Setenv` and can call `t.Parallel()`. Packages
+  without such a `TestMain`, like `cmd/muxreveal`, isolate git per test with
+  `isolateGit`, which uses `t.Setenv`.
+- To see or change git calls in an internal/git test, use `wrapGit`: it
+  returns a context that routes git through a logging wrapper and leaves
+  `PATH` alone, so the test can run in parallel. `fakeGit` puts the wrapper on
+  `PATH` with `t.Setenv`, which rules out `t.Parallel()`. Read the log with
+  `wrappedCalls`, which fails when it is empty, so an assertion that a call
+  never ran cannot pass because nothing was wrapped.
+- `t.Setenv` and `t.Chdir` panic in a parallel test. That is why tests that
+  use them, and tests that assert on wall-clock time, skip `t.Parallel()`.
+- Writing an executable and then running it while parallel tests fork can
+  fail with `ETXTBSY`: a concurrent fork inherits the still-open write
+  descriptor (go.dev/issue/22315). Hold `syscall.ForkLock.RLock()` around the
+  write, as `writeGitWrapper` does.
+- A flaky test, or one that fails only on macOS, has a cause to find. Never
+  give it a longer timeout, skip it or re-run it until it passes.
+- The nightly workflow runs the race suite at `-count=2`, so every test must
+  pass when run twice in one test binary: leave nothing behind in package
+  variables, files or the environment.
+- `-race` needs cgo on Linux (`go: -race requires cgo`), and `CGO_ENABLED` may
+  be off in your environment. `make test-race` sets `CGO_ENABLED=1`; outside
+  it, run `CGO_ENABLED=1 go test -race`. Expect a race run to take longer than
+  a plain one; the Go docs put the slowdown at 2-20x.
+- `go test` caches passing results and prints `(cached)`. Pass `-count=1` when
+  timing a package or proving a change: a cached `ok` is an earlier run's
+  result.
+- Tests behind the `bench` and `live` build tags are vetted by `make vet` but
+  never run by `make test`. Run them with `go test -tags bench` or
+  `-tags live` when you change them.
+- Regenerate golden files under `testdata/` with `-update` only for the change
+  you intend, and read the golden diff before committing it: an unexpected
+  change there is a bug.
+
+## Git and worktrees
+
+- Tests run with their package dir as the working directory, so in a checkout
+  they run inside a repository, and in a `git archive` copy, which has no
+  `.git`, they do not. A test can pass in one and fail in the other. A test
+  that must not see a repository calls `t.Chdir(t.TempDir())`, and
+  repo-dependent behaviour is checked in a real checkout or after `git init`
+  in the copy.
+- All worktrees of a repository share one stash. Never run `git stash` in a
+  worktree you share; commit work in progress instead.
+
+## CI
+
+- A pull request that changes only `README.md`, `AGENTS.md`,
+  `THIRD_PARTY.md`, `LICENSE` or files under `docs/` skips the Go jobs, and
+  `static-checks` still runs the case check and `make scan`. Any other file,
+  or a `.go` file anywhere, brings the Go jobs back. A push to `main` that
+  changes only those files runs no CI at all.
+- CI pins golangci-lint to v2.15.0. Use the same version locally: another one
+  can format or lint differently and fail `fmt-check` or `lint` in CI only.
