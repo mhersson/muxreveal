@@ -58,6 +58,7 @@ type wtOpenMsg struct {
 	gen  int
 	rows []wtRow
 	now  string
+	pin  string // the pinned root with symlinks resolved, as the rows name it; "" when not pinned
 	err  error
 }
 
@@ -270,7 +271,13 @@ func (a *App) openWorktrees() tea.Cmd {
 
 		rows, now, err := listPlaces(ctx, in)
 
-		return wtOpenMsg{tab: id, pane: pane, gen: gen, rows: rows, now: now, err: err}
+		// The rows name worktrees as git does, so the selection compares strings on the loop.
+		pin := ""
+		if in.pin != "" {
+			pin = resolved(in.pin)
+		}
+
+		return wtOpenMsg{tab: id, pane: pane, gen: gen, rows: rows, now: now, pin: pin, err: err}
 	}
 }
 
@@ -296,7 +303,7 @@ func (a *App) onWorktreesOpen(msg wtOpenMsg) tea.Cmd {
 	}
 
 	l := &wtList{tab: msg.tab, pane: msg.pane, gen: msg.gen, rows: msg.rows, now: msg.now}
-	l.sel = a.listSelection(tab, l)
+	l.sel = a.listSelection(tab, l, msg.pin)
 
 	if old := a.drawer.list; old != nil {
 		old.cancel()
@@ -311,19 +318,17 @@ func (a *App) onWorktreesOpen(msg wtOpenMsg) tea.Cmd {
 }
 
 // listSelection is the row a list opens on: the one the shown list had selected
-// when this one replaces it, else the pinned place, else Follow.
-func (a *App) listSelection(tab core.Tab, l *wtList) int {
-	root := ""
-
-	switch old := a.listFor(tab); {
-	case old != nil:
+// when this one replaces it, else the pinned place, else Follow. The rows' roots
+// and pin are in the same resolved form, so it compares strings and reads no
+// file.
+func (a *App) listSelection(tab core.Tab, l *wtList, pin string) int {
+	root := pin
+	if old := a.listFor(tab); old != nil {
 		root = old.selectedRoot()
-	case pinnedTo(tab, l.pane):
-		root = tab.Pin.Root
 	}
 
 	if root != "" {
-		if i := slices.IndexFunc(l.rows, func(r wtRow) bool { return r.kind == wtPlace && sameDir(r.root, root) }); i >= 0 {
+		if i := slices.IndexFunc(l.rows, func(r wtRow) bool { return r.kind == wtPlace && r.root == root }); i >= 0 {
 			return i
 		}
 	}

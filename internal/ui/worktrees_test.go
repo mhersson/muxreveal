@@ -424,6 +424,51 @@ func TestWorktreeListSelectsShown(t *testing.T) {
 	})
 }
 
+// The pin may name its root through a symlink; the list still opens on that
+// worktree's row.
+func TestWorktreeListSelectsPinnedThroughSymlink(t *testing.T) {
+	r := newFollowRig(t, "")
+	r.open(t, r.id)
+
+	link := filepath.Join(t.TempDir(), "b-link")
+	if err := os.Symlink(r.dirB, link); err != nil {
+		t.Fatal(err)
+	}
+
+	r.pinTo(t, link)
+	r.idle(t)
+
+	if l := r.openList(t); l.selectedRoot() != r.rootB {
+		t.Errorf("selected row %d (%q), want b's row %q", l.sel, l.selectedRoot(), r.rootB)
+	}
+}
+
+// A pinned worktree that is gone has no row, so the list opens on Follow, which
+// does not read "on" while the pin holds.
+func TestWorktreeListPinnedGone(t *testing.T) {
+	r := newFollowRig(t, "")
+	r.open(t, r.id)
+	r.pinTo(t, r.rootB)
+	r.until(t, "the drawer to show b", r.showing(r.rootB))
+
+	gitIn(t, "git", r.dirA, "worktree", "remove", "--force", r.dirB)
+
+	l := r.openList(t)
+
+	if l.sel != 0 || l.rowOf(r.rootB) >= 0 {
+		t.Errorf("selected row %d, b has row %d, want Follow selected and no row for the removed worktree", l.sel, l.rowOf(r.rootB))
+	}
+
+	follow := lineHolding(plainLines(listLines(t, r.App)), "Follow the agent")
+	if follow < 0 {
+		t.Fatal("the list lacks its Follow row")
+	}
+
+	if row := plainLines(listLines(t, r.App))[follow]; strings.Contains(row, "Follow the agent  on") {
+		t.Errorf("the Follow row reads %q while the drawer is pinned", row)
+	}
+}
+
 func TestWorktreeListPick(t *testing.T) {
 	r := newFollowRig(t, "")
 	r.open(t, r.id)
@@ -869,6 +914,8 @@ func TestWorktreeListLastOpenWins(t *testing.T) {
 }
 
 func TestReviewHintsWorktree(t *testing.T) {
+	t.Parallel()
+
 	s := reviewScene{theme: "catppuccin-mocha", icons: false, w: 240, h: 52, res: turn4Result(), turn: 4, turns: 4, focused: true}
 	got := ansi.Strip(s.build(t).View().Content)
 
@@ -879,6 +926,8 @@ func TestReviewHintsWorktree(t *testing.T) {
 }
 
 func TestWorktreeKeyIsNotATreeKey(t *testing.T) {
+	t.Parallel()
+
 	if treeCommand("review.worktrees") {
 		t.Error("review.worktrees works while the tree has the keyboard")
 	}
@@ -946,6 +995,8 @@ func lineHolding(lines []string, sub string) int {
 }
 
 func TestWorktreeListCountsArrive(t *testing.T) {
+	t.Parallel()
+
 	s := reviewScene{theme: "catppuccin-mocha", icons: true, w: 200, h: 52, res: turn4Result(), turn: 4, turns: 4, focused: true}
 	a := s.build(t)
 
@@ -992,6 +1043,8 @@ func TestWorktreeListCountsArrive(t *testing.T) {
 }
 
 func TestWorktreeListBlocksMouse(t *testing.T) {
+	t.Parallel()
+
 	s := reviewScene{theme: "catppuccin-mocha", icons: true, w: 200, h: 52, res: turn4Result(), turn: 4, turns: 4, focused: true}
 	a := s.build(t)
 
@@ -1016,6 +1069,8 @@ func TestWorktreeListBlocksMouse(t *testing.T) {
 }
 
 func TestWorktreeListCleansNames(t *testing.T) {
+	t.Parallel()
+
 	s := reviewScene{theme: "catppuccin-mocha", icons: true, w: 200, h: 52, res: turn4Result(), turn: 4, turns: 4, focused: true}
 	a := s.build(t)
 
@@ -1056,6 +1111,8 @@ func wtManyRows(n int) []wtRow {
 }
 
 func TestWorktreeListScrolls(t *testing.T) {
+	t.Parallel()
+
 	// The body is two rows shorter than the screen, so a screen of 32 rows has a drawer of 30.
 	s := reviewScene{theme: "catppuccin-mocha", icons: true, w: 200, h: 32, res: turn4Result(), turn: 4, turns: 4, focused: true}
 	a := s.build(t)
@@ -1129,6 +1186,8 @@ func TestWorktreeListScrolls(t *testing.T) {
 }
 
 func TestWorktreeGeometry(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name         string
 		w, h, rows   int
@@ -1145,6 +1204,8 @@ func TestWorktreeGeometry(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			g, ok := wtGeometry(tt.w, tt.h, tt.rows)
 			if ok != tt.ok || (ok && (g.h != tt.boxH || g.vis != tt.vis || g.y != tt.y || g.x != 2 || g.w != tt.w-4)) {
 				t.Errorf("wtGeometry(%d, %d, %d) = %+v, %v; want box %d tall with %d rows at y %d, ok %v", tt.w, tt.h, tt.rows, g, ok, tt.boxH, tt.vis, tt.y, tt.ok)
@@ -1159,6 +1220,8 @@ func TestWorktreeGeometry(t *testing.T) {
 }
 
 func TestWorktreeTop(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name                string
 		top, sel, vis, n, w int
@@ -1179,6 +1242,8 @@ func TestWorktreeTop(t *testing.T) {
 }
 
 func TestWorktreeListSearchClosesIt(t *testing.T) {
+	t.Parallel()
+
 	s := reviewScene{theme: "catppuccin-mocha", icons: true, w: 200, h: 52, res: turn4Result(), turn: 4, turns: 4, focused: true}
 	a := s.build(t)
 
