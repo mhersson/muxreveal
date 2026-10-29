@@ -163,7 +163,10 @@ jobs:
     if: github.event_name != 'push'
     runs-on: ubuntu-latest
     steps:
+      # The full history, so the commit scan can walk the pull request's commits.
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       # A case-insensitive checkout (macOS) resolves two paths, or two module
       # names (a file name without its extension), that differ only in case
@@ -185,3 +188,11 @@ jobs:
       # is skipped.
       - name: make scan
         run: make scan
+
+      # Empty outside a pull request (workflow_dispatch), where the scan falls
+      # back to origin/main..HEAD.
+      - name: make scan-commits
+        run: make scan-commits BASE="$BASE_SHA" HEAD_REF="$HEAD_SHA"
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}

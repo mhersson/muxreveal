@@ -38,12 +38,14 @@ design; propose an edit to DESIGN.md instead.
 make build        # bin/muxreveal
 make run          # run the app; make run ARGS="..." passes arguments
 make test         # go test ./...
+make test-changed # the tests of the changed packages; TEST_PKGS=... overrides
 make test-race    # go test -race ./...
 make lint         # golangci-lint run
 make fmt          # golangci-lint fmt
 make scan         # the glyph and em-dash scan
+make scan-commits # IDs, trailers, em-dashes and big blobs in the branch's commits
 make check-fast   # the per-commit check
-make check        # the full gate, once per branch head
+make check        # CI's Linux gates, for a local run
 make install      # go install into $GOBIN, else $GOPATH/bin
 ```
 
@@ -61,6 +63,7 @@ make install      # go install into $GOBIN, else $GOPATH/bin
 | `internal/md`      | Markdown to styled cells plus image references                    |
 | `internal/store`   | `state.json` and SQLite persistence                               |
 | `spikes/`          | Throwaway experiments; nothing outside `spikes/` imports them     |
+| `scripts/`         | POSIX shell helpers for the Makefile                              |
 
 Dependency rules:
 
@@ -125,14 +128,18 @@ Dependency rules:
 
 ## Commit discipline
 
-Run `make check-fast` before every commit; it must be clean. It builds and runs
-the format check, vet, lint, the tests and the glyph and em-dash scan. A commit
-that touches goroutines, channels or locks also runs `go test -race` on the
-packages it changes.
+Run `make check-fast` before every commit; it must be clean. It builds and vets
+the whole module, so a change that breaks another package's code or tests fails
+it, and runs the format check, lint, the glyph and em-dash scan and the tests of
+the packages the change touches (`make check-fast TEST_PKGS=./...` runs them
+all). A change to goroutines, channels or locks also runs the race detector on
+the tests it adds or changes: `go test -race -run '<those tests>' ./<package>`.
 
-Run the full `make check` once at the branch head, before the final review and
-the push. It adds the darwin build, the race tests and `go mod tidy`, and CI
-runs the same gates on every pull request that changes Go code.
+The full gates run in CI on every pull request that changes Go code: every test
+under the race detector, the darwin build, `go mod tidy`, the native macOS tests
+and the commit scan. A branch goes up as a draft pull request, so CI checks it
+while the work finishes. Run `make scan-commits` before every push; `make check`
+runs CI's Linux gates locally when you need them without a push.
 
 - No session links in commits or PRs, and no trailers: no `Co-Authored-By`,
   `Claude-Session` or "Generated with" lines.
