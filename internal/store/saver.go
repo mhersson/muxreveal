@@ -19,10 +19,10 @@ func WriteAtomic(path string, data []byte) error { return writeAtomic(path, data
 
 // WriteAtomicNoSync is WriteAtomic without the sync, for a file that need not
 // survive a crash. On macOS a sync is F_FULLFSYNC, which waits for the drive to
-// flush every pending write and can take seconds on a busy machine.
+// flush every process's pending writes.
 func WriteAtomicNoSync(path string, data []byte) error { return writeAtomic(path, data, false) }
 
-func writeAtomic(path string, data []byte, sync bool) (err error) {
+func writeAtomic(path string, data []byte, durable bool) (err error) {
 	f, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".*.tmp") // 0600
 	if err != nil {
 		return fmt.Errorf("creating temp file: %w", err)
@@ -42,7 +42,7 @@ func writeAtomic(path string, data []byte, sync bool) (err error) {
 		return fmt.Errorf("writing %s: %w", tmp, err)
 	}
 
-	if sync {
+	if durable {
 		if err = f.Sync(); err != nil {
 			_ = f.Close()
 
