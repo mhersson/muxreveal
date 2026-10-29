@@ -148,10 +148,41 @@ func (a *App) topBorder(s core.State, id core.PaneID, r core.Rect, focused, brig
 		copyTag = &tag{text: text, style: st.tagCopy}
 	}
 
+	title := "shell"
+	if meta.Kind == core.KindAgent {
+		title = "claude"
+	}
+
+	if p := a.panes[id]; p != nil {
+		if t := printable(p.title()); t != "" {
+			title = t
+		}
+	}
+
+	lead := 2
+	if a.icons {
+		lead = 4
+	}
+
+	titleW := ansi.StringWidth(title)
+
+	// titleFits reports whether the whole title is drawn when the tags take tagsW cells.
+	titleFits := func(tagsW int) bool {
+		end := r.X + r.W - 1
+		if tagsW > 0 {
+			end = r.X + r.W - 2 - tagsW
+		}
+
+		room := end - (r.X + 1) - lead - 1
+
+		return room >= titleRoomMin && titleW <= room
+	}
+
 	// The tags fit between the corners with one border cell between two and one
 	// before the right corner; COPY claims room first, then the badge, zoom,
-	// preselection and scroll tags, and the model tag last, only when every other
-	// tag found room.
+	// preselection and scroll tags. The model tag comes last and only when every
+	// other tag found room and the whole title still fits beside it: it never
+	// costs the title any cells.
 	avail := r.W - 3
 	used := 0
 	dropped := false
@@ -178,8 +209,11 @@ func (a *App) topBorder(s core.State, id core.PaneID, r core.Rect, focused, brig
 
 	copyTag, badgeTag, zoomTag, nextTag, scrollTag = claim(copyTag), claim(badgeTag), claim(zoomTag), claim(nextTag), claim(scrollTag)
 
-	if dropped {
-		modelTag = nil
+	if modelTag != nil {
+		need := lipgloss.Width(modelTag.text) + boolInt(used > 0)
+		if dropped || !titleFits(used+need) {
+			modelTag = nil
+		}
 	}
 
 	modelTag = claim(modelTag)
@@ -207,31 +241,14 @@ func (a *App) topBorder(s core.State, id core.PaneID, r core.Rect, focused, brig
 		tagEnd = x - 1
 	}
 
-	title := "shell"
-	if meta.Kind == core.KindAgent {
-		title = "claude"
-	}
-
-	if p := a.panes[id]; p != nil {
-		if t := printable(p.title()); t != "" {
-			title = t
-		}
-	}
-
-	lead := 2
-	if a.icons {
-		lead = 4
-	}
-
 	room := left - (r.X + 1) - lead - 1
 	if room < titleRoomMin {
 		return segs
 	}
 
-	tw := ansi.StringWidth(title)
-	if tw > room {
+	if titleW > room {
 		title = ansi.Truncate(title, room, "…")
-		tw = ansi.StringWidth(title)
+		titleW = ansi.StringWidth(title)
 	}
 
 	var sb strings.Builder
@@ -244,7 +261,7 @@ func (a *App) topBorder(s core.State, id core.PaneID, r core.Rect, focused, brig
 
 	sb.WriteString(titleStyle.Render(title))
 
-	w := lead - 1 + tw + 1
+	w := lead - 1 + titleW + 1
 
 	sb.WriteString(st.body.Render(" "))
 

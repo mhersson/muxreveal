@@ -285,8 +285,9 @@ func modelApp(t *testing.T, w int, model string, meter *int, icons bool) *App {
 
 // zoomedModelApp is modelApp with a shell beside the agent and the agent zoomed
 // and, when scrolled, scrolled back three lines, so its top border holds every
-// tag but the preselection and COPY.
-func zoomedModelApp(t *testing.T, w int, scrolled bool) *App {
+// tag but the preselection and COPY. Without status the agent's status line has
+// reported nothing, so the border has no model tag.
+func zoomedModelApp(t *testing.T, w int, scrolled, status bool) *App {
 	t.Helper()
 
 	a := newTestApp(t)
@@ -309,11 +310,11 @@ func zoomedModelApp(t *testing.T, w int, scrolled bool) *App {
 		}
 	}
 
-	openIn(t, a,
-		core.ToggleZoom{},
-		core.SetAgentState{ID: "p1", State: core.AgentWorking},
-		core.SetAgentStatus{ID: "p1", Session: "s1", Model: "Opus 5.5", Context: 62, ContextKnown: true},
-	)
+	openIn(t, a, core.ToggleZoom{}, core.SetAgentState{ID: "p1", State: core.AgentWorking})
+
+	if status {
+		openIn(t, a, core.SetAgentStatus{ID: "p1", Session: "s1", Model: "Opus 5.5", Context: 62, ContextKnown: true})
+	}
 
 	return a
 }
@@ -330,7 +331,7 @@ func TestFrameModelTag(t *testing.T) {
 	})
 
 	t.Run("right of the zoom tag", func(t *testing.T) {
-		row := topRow(zoomedModelApp(t, 60, false))
+		row := topRow(zoomedModelApp(t, 60, false, true))
 
 		if want := "zoom ─ Opus 5.5 62% ─ ⠋ working ─╮"; !strings.HasSuffix(row, want) {
 			t.Errorf("top border = %q, want it to end with %q", row, want)
@@ -338,7 +339,7 @@ func TestFrameModelTag(t *testing.T) {
 	})
 
 	t.Run("right of the zoom and scroll tags", func(t *testing.T) {
-		row := topRow(zoomedModelApp(t, 70, true))
+		row := topRow(zoomedModelApp(t, 70, true, true))
 		scroll, zoom, model, badge := strings.Index(row, iconScroll), strings.Index(row, "zoom"), strings.Index(row, "Opus"), strings.Index(row, "working")
 
 		if scroll < 0 || zoom < scroll || model < zoom || badge < model || !strings.HasSuffix(row, "Opus 5.5 62% ─ ⠋ working ─╮") {
@@ -355,21 +356,23 @@ func TestFrameModelTag(t *testing.T) {
 		}
 	})
 
-	t.Run("dropped before every other tag", func(t *testing.T) {
+	t.Run("dropped before every other tag, and for the whole title", func(t *testing.T) {
 		badge, zoom, scroll, model := " ⠋ working ", " "+iconZoom+" zoom ", " "+iconScroll+" 3 ", " Opus 5.5 62% "
-		// Each tag takes one border cell more than its width, and the right corner one.
+		title := " " + iconAgent + " claude "
+		// The title starts after the corner and its dash, the tags end before a dash
+		// and the corner, and one border cell separates two tags.
 		fits := func(w int, tags ...string) bool {
-			need := 0
+			need := 4 + ansi.StringWidth(title) + len(tags) - 1
 
 			for _, tg := range tags {
-				need += ansi.StringWidth(tg) + 1
+				need += ansi.StringWidth(tg)
 			}
 
-			return w-2 >= need
+			return w >= need
 		}
 
 		for w := 20; w <= 70; w++ {
-			row := topRow(zoomedModelApp(t, w, true))
+			row := topRow(zoomedModelApp(t, w, true, true))
 
 			if got := ansi.StringWidth(row); got != w {
 				t.Errorf("width %d: top border is %d cells wide", w, got)
@@ -378,21 +381,46 @@ func TestFrameModelTag(t *testing.T) {
 			shown := map[string]bool{
 				"badge": strings.Contains(row, "working"), "zoom": strings.Contains(row, "zoom"),
 				"scroll": strings.Contains(row, iconScroll), "model": strings.Contains(row, "Opus"),
+				"title": strings.Contains(row, "claude "),
 			}
 
 			if want := fits(w, badge, zoom, scroll, model); shown["model"] != want {
 				t.Errorf("width %d: model shown = %v, want %v (%q)", w, shown["model"], want, row)
 			}
 
-			if shown["model"] && (!shown["badge"] || !shown["zoom"] || !shown["scroll"]) {
-				t.Errorf("width %d: model shown but another tag is not (%q)", w, row)
+			if shown["model"] && (!shown["badge"] || !shown["zoom"] || !shown["scroll"] || !shown["title"]) {
+				t.Errorf("width %d: model shown but another tag or the whole title is not (%q)", w, row)
 			}
 		}
 
-		// One cell short of the model's room, the other tags are all still there.
-		w := ansi.StringWidth(badge+zoom+scroll+model) + 4 + 2 - 1
-		if row := topRow(zoomedModelApp(t, w, true)); strings.Contains(row, "Opus") || !strings.Contains(row, "working") || !strings.Contains(row, "zoom") || !strings.Contains(row, iconScroll) {
-			t.Errorf("width %d: top border = %q, want the model dropped and the other tags kept", w, row)
+		// One cell short of the room for the model and the whole title, the other tags and the title are all still there.
+		w := 4 + ansi.StringWidth(title+badge+zoom+scroll+model) + 3 - 1
+		if row := topRow(zoomedModelApp(t, w, true, true)); strings.Contains(row, "Opus") || !strings.Contains(row, "working") || !strings.Contains(row, "zoom") || !strings.Contains(row, iconScroll) || !strings.Contains(row, "claude ") {
+			t.Errorf("width %d: top border = %q, want the model dropped and the other tags and the title kept", w, row)
+		}
+
+		if row := topRow(zoomedModelApp(t, w+1, true, true)); !strings.Contains(row, "Opus 5.5 62%") || !strings.Contains(row, "claude ") {
+			t.Errorf("width %d: top border = %q, want the model and the whole title", w+1, row)
+		}
+	})
+
+	t.Run("never shrinks the title", func(t *testing.T) {
+		for _, scrolled := range []bool{false, true} {
+			for w := 12; w <= 70; w++ {
+				with := topRow(zoomedModelApp(t, w, scrolled, true))
+				without := topRow(zoomedModelApp(t, w, scrolled, false))
+
+				// The model tag may add cells to the border but never changes the title.
+				for _, mark := range []string{"claude ", "…"} {
+					if strings.Contains(with, mark) != strings.Contains(without, mark) {
+						t.Errorf("scrolled=%v width %d: %q differs with a model tag\nwith:    %q\nwithout: %q", scrolled, w, mark, with, without)
+					}
+				}
+
+				if strings.Contains(with, "Opus") && (strings.Contains(with, "…") || !strings.Contains(with, "claude ")) {
+					t.Errorf("scrolled=%v width %d: model tag beside a cut title: %q", scrolled, w, with)
+				}
+			}
 		}
 	})
 

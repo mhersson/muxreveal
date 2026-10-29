@@ -243,9 +243,9 @@ func railCases() []railCase {
 		{"no-agents", func(t *testing.T, th string, icons bool) *App { return drawApp(t, th, icons, 100, 30, nil) }},
 		{"named", named(100, 50, nil)},
 		{"named-width-70", named(70, 50, nil)},
-		{"metered", metered(100, 30)},
-		{"metered-width-70", metered(70, 30)},
-		{"metered-width-64", metered(64, 30)},
+		{"metered", metered(100, 50)},
+		{"metered-width-70", metered(70, 50)},
+		{"metered-width-64", metered(64, 50)},
 		{"named-search", named(100, 30, func(a *App) {
 			a.rail.focused, a.rail.query = true, "orch"
 			a.railNormalize(a.store.State())

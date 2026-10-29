@@ -186,17 +186,19 @@ func frameCases() []struct {
 }
 
 // modelFrameCases are agent frames whose status lines reported a model, with and
-// without a meter, among tags, and in a pane too narrow for the tag.
+// without a meter, among tags, and in panes too narrow for the tag beside the
+// title: zoomed-model has room for the title, the zoom tag and the badge but not
+// for the model tag as well.
 func modelFrameCases() []struct {
 	name  string
 	build func(t *testing.T, th string, icons bool) *App
 } {
-	started := func(t *testing.T, th string, icons bool, build func(a *App)) *App {
+	started := func(t *testing.T, th string, icons bool, w int, build func(a *App)) *App {
 		t.Helper()
 
 		a := newThemedApp(t, th)
 		a.icons = icons
-		sized(t, a, 40, 12)
+		sized(t, a, w, 12)
 		build(a)
 		attachPanes(t, a, map[core.PaneID]string{"p1": "left", "p2": "right"})
 
@@ -223,23 +225,30 @@ func modelFrameCases() []struct {
 		build func(t *testing.T, th string, icons bool) *App
 	}{
 		{"agent-model", func(t *testing.T, th string, icons bool) *App {
-			return started(t, th, icons, func(a *App) { agent(t, a, "p1", core.AgentWorking, "Opus 5.5", pct(62)) })
+			return started(t, th, icons, 40, func(a *App) { agent(t, a, "p1", core.AgentWorking, "Opus 5.5", pct(62)) })
 		}},
 		{"agent-model-hot", func(t *testing.T, th string, icons bool) *App {
-			return started(t, th, icons, func(a *App) { agent(t, a, "p1", core.AgentBlocked, "Opus 5.5", pct(95)) })
+			return started(t, th, icons, 40, func(a *App) { agent(t, a, "p1", core.AgentBlocked, "Opus 5.5", pct(95)) })
 		}},
 		{"agent-model-only", func(t *testing.T, th string, icons bool) *App {
-			return started(t, th, icons, func(a *App) { agent(t, a, "p1", core.AgentIdle, "Opus 5.5", nil) })
+			return started(t, th, icons, 40, func(a *App) { agent(t, a, "p1", core.AgentIdle, "Opus 5.5", nil) })
 		}},
 		{"zoomed-model", func(t *testing.T, th string, icons bool) *App {
-			return started(t, th, icons, func(a *App) {
+			return started(t, th, icons, 40, func(a *App) {
+				openIn(t, a, core.OpenPane{Kind: core.KindShell, Cwd: "/home/u/other", Split: core.SplitVertical})
+				agent(t, a, "p2", core.AgentWorking, "Opus 5.5", pct(78))
+				openIn(t, a, core.ToggleZoom{})
+			})
+		}},
+		{"zoomed-model-wide", func(t *testing.T, th string, icons bool) *App {
+			return started(t, th, icons, 50, func(a *App) {
 				openIn(t, a, core.OpenPane{Kind: core.KindShell, Cwd: "/home/u/other", Split: core.SplitVertical})
 				agent(t, a, "p2", core.AgentWorking, "Opus 5.5", pct(78))
 				openIn(t, a, core.ToggleZoom{})
 			})
 		}},
 		{"split-model-dropped", func(t *testing.T, th string, icons bool) *App {
-			return started(t, th, icons, func(a *App) {
+			return started(t, th, icons, 40, func(a *App) {
 				openIn(t, a, core.OpenPane{Kind: core.KindShell, Cwd: "/home/u/other", Split: core.SplitVertical})
 				agent(t, a, "p2", core.AgentWorking, "Opus 5.5", pct(62))
 			})
