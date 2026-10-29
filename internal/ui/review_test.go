@@ -108,8 +108,8 @@ func TestDrawerOpenModeFollowsTurnsAndConfig(t *testing.T) {
 }
 
 func TestNewDrawerOpensInBranchMode(t *testing.T) {
-	turnFirst := core.DefaultConfig().Diff
-	turnFirst.Mode = "turn"
+	turnCfg := core.DefaultConfig().Diff
+	turnCfg.Mode = "turn"
 
 	tests := []struct {
 		name string
@@ -118,7 +118,7 @@ func TestNewDrawerOpensInBranchMode(t *testing.T) {
 	}{
 		{"by default", core.DefaultConfig().Diff, core.ReviewBranch},
 		{"with a zero config", core.DiffConfig{}, core.ReviewBranch},
-		{"with mode turn", turnFirst, core.ReviewTurn},
+		{"with mode turn", turnCfg, core.ReviewTurn},
 	}
 
 	for _, tt := range tests {
