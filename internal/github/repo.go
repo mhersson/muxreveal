@@ -18,10 +18,7 @@ import (
 	"github.com/cli/go-gh/v2/pkg/auth"
 )
 
-const (
-	githubHost = "github.com"
-	sshTimeout = 5 * time.Second
-)
+const githubHost = "github.com"
 
 var (
 	ErrNotGitHub = errors.New("github: not a GitHub repository")
@@ -195,11 +192,9 @@ func (r *Resolver) hostname(ctx context.Context, alias string) (string, error) {
 }
 
 // sshHostname is the hostname ssh -G gives alias, or "" when ssh fails or
-// gives none; only a context that ended is an error.
+// gives none; only a context that ended is an error. The caller's context is
+// the only bound, so a slow machine is not taken for a failed ssh.
 func (r *Resolver) sshHostname(ctx context.Context, alias string) (string, error) {
-	ctx, cancel := context.WithTimeout(ctx, sshTimeout)
-	defer cancel()
-
 	cmd := exec.CommandContext(ctx, r.ssh, "-G", "--", alias) //nolint:gosec // "--" ends option parsing, so the alias is never read as a flag
 	cmd.WaitDelay = time.Second
 
