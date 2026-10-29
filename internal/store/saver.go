@@ -15,7 +15,14 @@ import (
 // WriteAtomic replaces path with data: a temp file in the same directory is
 // written, synced and renamed over it, so a reader sees the old or the new
 // content and never a partial file.
-func WriteAtomic(path string, data []byte) (err error) {
+func WriteAtomic(path string, data []byte) error { return writeAtomic(path, data, true) }
+
+// WriteAtomicNoSync is WriteAtomic without the sync, for a file that need not
+// survive a crash. On macOS a sync is F_FULLFSYNC, which waits for the drive to
+// flush every pending write and can take seconds on a busy machine.
+func WriteAtomicNoSync(path string, data []byte) error { return writeAtomic(path, data, false) }
+
+func writeAtomic(path string, data []byte, sync bool) (err error) {
 	f, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".*.tmp") // 0600
 	if err != nil {
 		return fmt.Errorf("creating temp file: %w", err)
@@ -35,10 +42,12 @@ func WriteAtomic(path string, data []byte) (err error) {
 		return fmt.Errorf("writing %s: %w", tmp, err)
 	}
 
-	if err = f.Sync(); err != nil {
-		_ = f.Close()
+	if sync {
+		if err = f.Sync(); err != nil {
+			_ = f.Close()
 
-		return fmt.Errorf("syncing %s: %w", tmp, err)
+			return fmt.Errorf("syncing %s: %w", tmp, err)
+		}
 	}
 
 	if err = f.Close(); err != nil {

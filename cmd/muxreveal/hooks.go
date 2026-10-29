@@ -102,7 +102,8 @@ func setupHooks(logger *slog.Logger, stateDir, indexCache string, watches *git.W
 
 	warnStatusLineOff(logger, exe)
 
-	if err := store.WriteAtomic(settingsPath, settings); err != nil {
+	// A per-instance file needs no sync: a crash leaves it to the next sweep.
+	if err := store.WriteAtomicNoSync(settingsPath, settings); err != nil {
 		return hookRuntime{}, fmt.Errorf("settings file: %w", err)
 	}
 
