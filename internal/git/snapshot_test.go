@@ -50,10 +50,17 @@ func openRepo(t *testing.T, dir string) Repo {
 func snap(t *testing.T, dir, session string, opts SnapshotOptions) Turn {
 	t.Helper()
 
+	return snapContext(context.Background(), t, dir, session, opts)
+}
+
+// snapContext is snap with the context its git calls run under.
+func snapContext(ctx context.Context, t *testing.T, dir, session string, opts SnapshotOptions) Turn {
+	t.Helper()
+
 	tmp := t.TempDir()
 	opts.TempDir = tmp
 
-	turn, err := Snapshot(context.Background(), dir, session, opts)
+	turn, err := Snapshot(ctx, dir, session, opts)
 	if err != nil {
 		t.Fatalf("Snapshot: %v", err)
 	}
@@ -721,6 +728,8 @@ func TestSnapshotLinkedWorktreeOfBareRepo(t *testing.T) {
 }
 
 func TestSnapshotSplitIndex(t *testing.T) {
+	t.Parallel()
+
 	dir := seedRepo(t)
 	gitOut(t, dir, "config", "core.splitIndex", "true")
 	gitOut(t, dir, "update-index", "--split-index")
@@ -735,8 +744,8 @@ func TestSnapshotSplitIndex(t *testing.T) {
 	}
 
 	before := captureState(t, dir)
-	logPath := fakeGit(t, "")
-	turn := snap(t, dir, sessA, SnapshotOptions{})
+	ctx, logPath := wrapGit(t, "")
+	turn := snapContext(ctx, t, dir, sessA, SnapshotOptions{})
 	assertSameState(t, before, captureState(t, dir))
 
 	if want := scratchTree(t, dir); turn.Tree != want {
@@ -820,6 +829,8 @@ func TestSnapshotPathShapeChanges(t *testing.T) {
 }
 
 func TestSnapshotUnchangedReusesPreviousTree(t *testing.T) {
+	t.Parallel()
+
 	dir := seedRepo(t)
 
 	if first := snap(t, dir, sessA, SnapshotOptions{Unchanged: true}); first.N != 1 || first.Tree != scratchTree(t, dir) {
@@ -833,10 +844,10 @@ func TestSnapshotUnchangedReusesPreviousTree(t *testing.T) {
 	}
 
 	second := snap(t, dir, sessA, SnapshotOptions{})
-	logPath := fakeGit(t, "")
+	ctx, logPath := wrapGit(t, "")
 
 	// Marker in between: the reuse skips it and takes the real snapshot's tree.
-	if _, err := MarkMissing(context.Background(), dir, sessA); err != nil {
+	if _, err := MarkMissing(ctx, dir, sessA); err != nil {
 		t.Fatal(err)
 	}
 
@@ -844,7 +855,7 @@ func TestSnapshotUnchangedReusesPreviousTree(t *testing.T) {
 
 	writeFile(t, dir, "ignored-by-reuse.txt", "x\n")
 
-	fourth := snap(t, dir, sessA, SnapshotOptions{Unchanged: true})
+	fourth := snapContext(ctx, t, dir, sessA, SnapshotOptions{Unchanged: true})
 
 	if fourth.N != 4 || fourth.Tree != second.Tree || !slices.Equal(fourth.Skipped, second.Skipped) {
 		t.Errorf("fourth = %+v, want turn 4 with %s and skipped %q", fourth, second.Tree, second.Skipped)
@@ -853,6 +864,10 @@ func TestSnapshotUnchangedReusesPreviousTree(t *testing.T) {
 	logAfter, _ := os.ReadFile(logPath)
 
 	calls := string(logAfter[len(logBefore):])
+	if calls == "" {
+		t.Fatal("the git wrapper saw no call of the unchanged snapshot")
+	}
+
 	for _, sub := range []string{"update-index", "write-tree", "ls-files"} {
 		if strings.Contains(calls, sub) {
 			t.Errorf("Unchanged ran %s:\n%s", sub, calls)
@@ -938,6 +953,8 @@ func TestSnapshotNotInRepo(t *testing.T) {
 }
 
 func TestSnapshotRetriesWhenTheRefExists(t *testing.T) {
+	t.Parallel()
+
 	dir := seedRepo(t)
 
 	realGit, err := exec.LookPath("git")
@@ -946,7 +963,7 @@ func TestSnapshotRetriesWhenTheRefExists(t *testing.T) {
 	}
 
 	// A racing writer takes number 1 right before our update-ref, once.
-	fakeGit(t, `case "$*" in
+	ctx, _ := wrapGit(t, `case "$*" in
 *update-ref*--no-deref*)
 	if [ ! -e "$LOG.raced" ]; then
 		: > "$LOG.raced"
@@ -954,7 +971,7 @@ func TestSnapshotRetriesWhenTheRefExists(t *testing.T) {
 	fi;;
 esac`)
 
-	turn := snap(t, dir, sessA, SnapshotOptions{})
+	turn := snapContext(ctx, t, dir, sessA, SnapshotOptions{})
 	if turn.N != 2 {
 		t.Errorf("turn = %d, want 2 after the retry", turn.N)
 	}
@@ -1063,15 +1080,17 @@ func TestTempIndexNameAndLockCleanup(t *testing.T) {
 }
 
 func TestSnapshotRefWriteSurvivesTheContextEnding(t *testing.T) {
+	t.Parallel()
+
 	dir := seedRepo(t)
 	r := openRepo(t, dir)
 
 	// update-ref outlasts the deadline; the ref write must not be killed.
-	fakeGit(t, `case "$*" in
+	ctx, logPath := wrapGit(t, `case "$*" in
 *update-ref*) sleep 1.5;;
 esac`)
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(ctx, time.Second)
 	defer cancel()
 
 	turn, err := Snapshot(ctx, dir, sessA, SnapshotOptions{TempDir: t.TempDir()})
@@ -1081,6 +1100,10 @@ esac`)
 
 	if turn.N != 1 {
 		t.Errorf("turn = %d, want 1", turn.N)
+	}
+
+	if calls := wrappedCalls(t, logPath); !strings.Contains(calls, "update-ref") {
+		t.Errorf("the ref write never ran through the wrapper:\n%s", calls)
 	}
 
 	locks, err := filepath.Glob(filepath.Join(r.CommonDir, "refs", "muxreveal", "*", "*.lock"))

@@ -152,7 +152,14 @@ func testEngine(t *testing.T) *Engine {
 func diffOK(t *testing.T, e *Engine, src Source) Result {
 	t.Helper()
 
-	res, err := e.Diff(context.Background(), src)
+	return diffOKContext(context.Background(), t, e, src)
+}
+
+// diffOKContext is diffOK with the context its git calls run under.
+func diffOKContext(ctx context.Context, t *testing.T, e *Engine, src Source) Result {
+	t.Helper()
+
+	res, err := e.Diff(ctx, src)
 	if err != nil {
 		t.Fatalf("Diff: %v", err)
 	}
@@ -216,7 +223,14 @@ func branchRepo(t *testing.T, base, work func(dir string)) string {
 func branchDiff(t *testing.T, dir string) Result {
 	t.Helper()
 
-	return diffOK(t, testEngine(t), BranchSource{Worktree: dir, Base: "main"})
+	return branchDiffContext(context.Background(), t, dir)
+}
+
+// branchDiffContext is branchDiff with the context its git calls run under.
+func branchDiffContext(ctx context.Context, t *testing.T, dir string) Result {
+	t.Helper()
+
+	return diffOKContext(ctx, t, testEngine(t), BranchSource{Worktree: dir, Base: "main"})
 }
 
 func TestDiffStatuses(t *testing.T) {
@@ -859,15 +873,15 @@ func hunkPasses(t *testing.T, logPath string) int {
 	return strings.Count(string(data), " -U3 ")
 }
 
-// recordPid makes the fake git write its pid for hunk passes. The wrapper execs
-// git, so the pid is git's.
-func recordPid(t *testing.T) (logPath, pidFile string) {
+// recordPid makes the wrapped git write its pid for hunk passes. The wrapper
+// execs git, so the pid is git's.
+func recordPid(t *testing.T) (ctx context.Context, logPath, pidFile string) {
 	t.Helper()
 
 	pidFile = filepath.Join(t.TempDir(), "pid")
-	logPath = fakeGit(t, "case \"$*\" in *-U3*) echo $$ > '"+pidFile+"';; esac")
+	ctx, logPath = wrapGit(t, "case \"$*\" in *-U3*) echo $$ > '"+pidFile+"';; esac")
 
-	return logPath, pidFile
+	return ctx, logPath, pidFile
 }
 
 func assertProcessGone(t *testing.T, pidFile string) {
@@ -889,17 +903,21 @@ func assertProcessGone(t *testing.T, pidFile string) {
 }
 
 func TestDiffFileCap(t *testing.T) {
+	t.Parallel()
+
 	// The cap is lowered to keep the fixture small; TestNewEngineDefaults pins the default.
 	for _, n := range []int{25, 250} {
 		t.Run(strconv.Itoa(n)+" files", func(t *testing.T) {
+			t.Parallel()
+
 			dir := branchRepo(t, func(dir string) { writeFile(t, dir, "base.txt", "b\n") }, func(dir string) {
 				for i := range n {
 					writeFile(t, dir, fmt.Sprintf("d%02d/f%05d.txt", i%50, i), fmt.Sprintf("file %d\nsecond\nthird\n", i))
 				}
 			})
 
-			logPath := fakeGit(t, "")
-			res := diffOK(t, NewEngine(EngineOptions{Limits: Limits{Files: 20}, TempDir: t.TempDir()}), BranchSource{Worktree: dir, Base: "main"})
+			ctx, logPath := wrapGit(t, "")
+			res := diffOKContext(ctx, t, NewEngine(EngineOptions{Limits: Limits{Files: 20}, TempDir: t.TempDir()}), BranchSource{Worktree: dir, Base: "main"})
 
 			if len(res.Files) != n || !res.Truncated {
 				t.Fatalf("files = %d, Truncated = %v, want %d and true", len(res.Files), res.Truncated, n)
@@ -920,7 +938,11 @@ func TestDiffFileCap(t *testing.T) {
 }
 
 func TestDiffLineCap(t *testing.T) {
+	t.Parallel()
+
 	t.Run("6000 changed lines", func(t *testing.T) {
+		t.Parallel()
+
 		dir := branchRepo(t, func(dir string) {
 			writeFile(t, dir, "big.txt", numbered("base", 10))
 			writeFile(t, dir, "small.txt", "s\n")
@@ -945,17 +967,21 @@ func TestDiffLineCap(t *testing.T) {
 	})
 
 	t.Run("100000-line file", func(t *testing.T) {
+		t.Parallel()
+
 		dir := branchRepo(t, func(dir string) { writeFile(t, dir, "a.txt", "a\n") }, func(dir string) {
 			writeFile(t, dir, "huge.txt", numbered("l", 100000))
 		})
 
-		logPath := fakeGit(t, "")
-		res := branchDiff(t, dir)
+		ctx, logPath := wrapGit(t, "")
+		res := branchDiffContext(ctx, t, dir)
 
 		f := fileByPath(t, res, "huge.txt")
 		if !f.Truncated || f.Added != 100000 || len(f.Hunks) != 0 || !res.Truncated {
 			t.Errorf("huge.txt = Truncated:%v +%d hunks:%d", f.Truncated, f.Added, len(f.Hunks))
 		}
+
+		wrappedCalls(t, logPath)
 
 		if got := hunkPasses(t, logPath); got != 0 {
 			t.Errorf("hunk passes = %d, want none for a file over the line cap", got)
@@ -970,6 +996,8 @@ func withoutHunks(f FileDiff) FileDiff {
 }
 
 func TestDiffByteCapStopsGit(t *testing.T) {
+	t.Parallel()
+
 	const files = 20
 
 	line := strings.Repeat("x", 40) + "\n"
@@ -981,8 +1009,8 @@ func TestDiffByteCapStopsGit(t *testing.T) {
 		}
 	})
 
-	logPath, pidFile := recordPid(t)
-	res := branchDiff(t, dir)
+	ctx, logPath, pidFile := recordPid(t)
+	res := branchDiffContext(ctx, t, dir)
 
 	assertProcessGone(t, pidFile)
 
@@ -1016,13 +1044,15 @@ func TestDiffByteCapStopsGit(t *testing.T) {
 }
 
 func TestDiffHugeSingleLine(t *testing.T) {
+	t.Parallel()
+
 	dir := branchRepo(t, func(dir string) { writeFile(t, dir, "base.txt", "b\n") }, func(dir string) {
 		writeFile(t, dir, "small.txt", "small\n")
 		writeFile(t, dir, "z-one-line.txt", strings.Repeat("y", 50<<20))
 	})
 
-	_, pidFile := recordPid(t)
-	res := branchDiff(t, dir)
+	ctx, _, pidFile := recordPid(t)
+	res := branchDiffContext(ctx, t, dir)
 
 	assertProcessGone(t, pidFile)
 
@@ -1037,6 +1067,8 @@ func TestDiffHugeSingleLine(t *testing.T) {
 }
 
 func TestDiffBinaryFiles(t *testing.T) {
+	t.Parallel()
+
 	dir := branchRepo(t, func(dir string) {
 		writeFile(t, dir, "old.bin", "\x00old")
 		writeFile(t, dir, "gone.bin", "\x00gone")
@@ -1046,8 +1078,8 @@ func TestDiffBinaryFiles(t *testing.T) {
 		writeFile(t, dir, "added.bin", "\x00"+strings.Repeat("z", 1<<20))
 	})
 
-	logPath := fakeGit(t, "")
-	res := branchDiff(t, dir)
+	ctx, logPath := wrapGit(t, "")
+	res := branchDiffContext(ctx, t, dir)
 	golden(t, "diff_binary", res)
 
 	for _, f := range res.Files {
@@ -1060,6 +1092,8 @@ func TestDiffBinaryFiles(t *testing.T) {
 		t.Error("binary files do not truncate a result")
 	}
 
+	wrappedCalls(t, logPath)
+
 	if got := hunkPasses(t, logPath); got != 0 {
 		t.Errorf("hunk passes = %d, want none", got)
 	}
@@ -1068,17 +1102,19 @@ func TestDiffBinaryFiles(t *testing.T) {
 // Cache.
 
 func TestDiffCacheSkipsTheHunkPass(t *testing.T) {
+	t.Parallel()
+
 	dir := branchRepo(t, func(dir string) { writeFile(t, dir, "a.txt", numbered("a", 10)) }, func(dir string) {
 		writeFile(t, dir, "a.txt", numbered("a", 10)+"more\n")
 		writeFile(t, dir, "b.txt", "new\n")
 	})
 
-	logPath := fakeGit(t, "")
+	ctx, logPath := wrapGit(t, "")
 	e := testEngine(t)
 	src := BranchSource{Worktree: dir, Base: "main"}
 
-	first := diffOK(t, e, src)
-	second := diffOK(t, e, src)
+	first := diffOKContext(ctx, t, e, src)
+	second := diffOKContext(ctx, t, e, src)
 
 	if got := hunkPasses(t, logPath); got != 1 {
 		t.Errorf("hunk passes after two diffs = %d, want 1", got)
@@ -1089,7 +1125,7 @@ func TestDiffCacheSkipsTheHunkPass(t *testing.T) {
 	}
 
 	writeFile(t, dir, "b.txt", "changed\n")
-	diffOK(t, e, src)
+	diffOKContext(ctx, t, e, src)
 
 	if got := hunkPasses(t, logPath); got != 2 {
 		t.Errorf("hunk passes after a changed file = %d, want 2", got)

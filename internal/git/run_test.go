@@ -50,11 +50,13 @@ func TestRunIgnoresInheritedRepoVariables(t *testing.T) {
 }
 
 func TestRunEnvAndLocks(t *testing.T) {
+	t.Parallel()
+
 	root := newRepo(t)
-	envLog := fakeGit(t, `env > "$LOG.env"`)
+	ctx, envLog := wrapGit(t, `env > "$LOG.env"`)
 	idx := filepath.Join(t.TempDir(), "index")
 
-	if _, err := run(context.Background(), call{dir: root, args: []string{"status", "-z"}, env: []string{"GIT_INDEX_FILE=" + idx}}); err != nil {
+	if _, err := run(ctx, call{dir: root, args: []string{"status", "-z"}, env: []string{"GIT_INDEX_FILE=" + idx}}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -73,10 +75,12 @@ func TestRunEnvAndLocks(t *testing.T) {
 }
 
 func TestRunConfigArguments(t *testing.T) {
-	root := newRepo(t)
-	logPath := fakeGit(t, "")
+	t.Parallel()
 
-	if _, err := run(context.Background(), call{dir: root, args: []string{"status", "-z"}}); err != nil {
+	root := newRepo(t)
+	ctx, logPath := wrapGit(t, "")
+
+	if _, err := run(ctx, call{dir: root, args: []string{"status", "-z"}}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -215,10 +219,12 @@ wait`)
 }
 
 func TestRunLimit(t *testing.T) {
-	root := newRepo(t)
-	fakeGit(t, "exec yes")
+	t.Parallel()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	root := newRepo(t)
+	ctx, _ := wrapGit(t, "exec yes")
+
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
 	_, err := run(ctx, call{dir: root, args: []string{"status"}, limit: 1000})

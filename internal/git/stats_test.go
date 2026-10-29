@@ -11,7 +11,14 @@ import (
 func statsOf(t *testing.T, e *Engine, src Source) Stats {
 	t.Helper()
 
-	got, err := e.Stats(context.Background(), src)
+	return statsOfContext(context.Background(), t, e, src)
+}
+
+// statsOfContext is statsOf with the context its git calls run under.
+func statsOfContext(ctx context.Context, t *testing.T, e *Engine, src Source) Stats {
+	t.Helper()
+
+	got, err := e.Stats(ctx, src)
 	if err != nil {
 		t.Fatalf("Stats: %v", err)
 	}
@@ -92,12 +99,14 @@ func TestStatsDefaultBaseAndClean(t *testing.T) {
 }
 
 func TestStatsRunsNoHunkPass(t *testing.T) {
+	t.Parallel()
+
 	dir := branchRepo(t, func(dir string) { writeFile(t, dir, "a.txt", numbered("a", 10)) }, func(dir string) {
 		writeFile(t, dir, "a.txt", numbered("a", 10)+"more\n")
 	})
 
-	logPath := fakeGit(t, "")
-	statsOf(t, testEngine(t), BranchSource{Worktree: dir, Base: "main"})
+	ctx, logPath := wrapGit(t, "")
+	statsOfContext(ctx, t, testEngine(t), BranchSource{Worktree: dir, Base: "main"})
 
 	data, err := os.ReadFile(logPath)
 	if err != nil || len(data) == 0 {

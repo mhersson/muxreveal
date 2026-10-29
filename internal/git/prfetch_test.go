@@ -138,9 +138,11 @@ func TestFetchPRMissing(t *testing.T) {
 }
 
 func TestFetchPRRefusesBadInput(t *testing.T) {
+	t.Parallel()
+
 	f := newPRFixture(t)
 	before := refs(t, f.work)
-	calls := fakeGit(t, "")
+	ctx, calls := wrapGit(t, "")
 	credURL := "https://user:secret@example.invalid/o/r.git" //nolint:gosec // G101: fixture URL, no real credential
 
 	tests := []struct {
@@ -162,7 +164,7 @@ func TestFetchPRRefusesBadInput(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := FetchPR(context.Background(), f.repo, tt.remote, tt.number, tt.base)
+			_, err := FetchPR(ctx, f.repo, tt.remote, tt.number, tt.base)
 			if err == nil {
 				t.Fatal("err = nil")
 			}

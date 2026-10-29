@@ -146,6 +146,19 @@ func wrapGit(t *testing.T, extraShell string) (ctx context.Context, logPath stri
 	return context.WithValue(context.Background(), gitPathKey{}, script), logPath
 }
 
+// wrappedCalls returns the wrapper's log and fails when it is missing or empty,
+// so a test that asserts a call never ran cannot pass because nothing was wrapped.
+func wrappedCalls(t *testing.T, logPath string) string {
+	t.Helper()
+
+	data, err := os.ReadFile(logPath)
+	if err != nil || len(data) == 0 {
+		t.Fatalf("the git wrapper saw no calls: %v", err)
+	}
+
+	return string(data)
+}
+
 // writeGitWrapper writes a git wrapper script and returns its path and its log.
 // The script appends its arguments, one call per line, to the log, runs
 // extraShell (which may use $LOG), then execs the real git.

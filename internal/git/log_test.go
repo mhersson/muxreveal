@@ -92,14 +92,16 @@ func TestLogCaps(t *testing.T) {
 }
 
 func TestLogRefusesOptionBase(t *testing.T) {
+	t.Parallel()
+
 	dir := newRepo(t)
 	writeFile(t, dir, "a.txt", "a\n")
 	commitAll(t, dir, "init")
 
-	logPath := fakeGit(t, "")
+	ctx, logPath := wrapGit(t, "")
 
 	for _, base := range []string{"--all", "-n1"} {
-		if _, err := Log(context.Background(), openRepo(t, dir), base); err == nil {
+		if _, err := Log(ctx, openRepo(t, dir), base); err == nil {
 			t.Errorf("Log(%q) succeeded", base)
 		}
 	}

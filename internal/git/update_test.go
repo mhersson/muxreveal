@@ -28,7 +28,14 @@ func updateRepo(t *testing.T) string {
 func updateOK(t *testing.T, e *Engine, prev Result, src Source, b Batch) Result {
 	t.Helper()
 
-	res, err := e.Update(context.Background(), prev, src, b)
+	return updateOKContext(context.Background(), t, e, prev, src, b)
+}
+
+// updateOKContext is updateOK with the context its git calls run under.
+func updateOKContext(ctx context.Context, t *testing.T, e *Engine, prev Result, src Source, b Batch) Result {
+	t.Helper()
+
+	res, err := e.Update(ctx, prev, src, b)
 	if err != nil {
 		t.Fatalf("Update: %v", err)
 	}
@@ -75,17 +82,19 @@ func listingCalls(t *testing.T, logPath string) (restricted, full int) {
 }
 
 func TestUpdateTouchedFileEqualsFullDiff(t *testing.T) {
+	t.Parallel()
+
 	dir := updateRepo(t)
 	src := BranchSource{Worktree: dir, Base: "main"}
 	e := testEngine(t)
 	prev := diffOK(t, e, src)
 
-	logPath := fakeGit(t, "")
+	ctx, logPath := wrapGit(t, "")
 
 	writeFile(t, dir, "b.txt", numbered("b.txt", 30)+"new tail\n")
 
 	before := hunkPasses(t, logPath)
-	res := updateOK(t, e, prev, src, Batch{Paths: []string{"b.txt"}})
+	res := updateOKContext(ctx, t, e, prev, src, Batch{Paths: []string{"b.txt"}})
 
 	got := hunkPasses(t, logPath) - before
 	data, _ := os.ReadFile(logPath)
@@ -157,6 +166,8 @@ func TestUpdateShapesEqualFullDiff(t *testing.T) {
 // path, because a full listing would give the right answer for another reason
 // (a retained added file next to a touched change makes Update recompute whole).
 func TestUpdateJudgesAFileTheOldSideHoldsByTheComparison(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name string
 		// prepare returns the worktree, the source and the path of a file that
@@ -192,6 +203,8 @@ func TestUpdateJudgesAFileTheOldSideHoldsByTheComparison(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			dir, src, path := tt.prepare(t)
 			writeFile(t, dir, path, tt.first)
 
@@ -205,8 +218,8 @@ func TestUpdateJudgesAFileTheOldSideHoldsByTheComparison(t *testing.T) {
 
 			writeFile(t, dir, path, tt.second)
 
-			logPath := fakeGit(t, "")
-			upd := updateOK(t, e, prev, src, Batch{Paths: []string{path}})
+			ctx, logPath := wrapGit(t, "")
+			upd := updateOKContext(ctx, t, e, prev, src, Batch{Paths: []string{path}})
 
 			if restricted, full := listingCalls(t, logPath); restricted == 0 || full != 0 {
 				t.Fatalf("listings: restricted=%d full=%d, want the incremental path (touched paths only)", restricted, full)
@@ -222,6 +235,8 @@ func TestUpdateJudgesAFileTheOldSideHoldsByTheComparison(t *testing.T) {
 }
 
 func TestUpdateFallsBackToFullDiff(t *testing.T) {
+	t.Parallel()
+
 	many := make([]string, 201)
 	for i := range many {
 		many[i] = fmt.Sprintf("many/f%03d.txt", i)
@@ -229,31 +244,33 @@ func TestUpdateFallsBackToFullDiff(t *testing.T) {
 
 	tests := []struct {
 		name   string
-		change func(dir string)
+		change func(t *testing.T, dir string)
 		batch  Batch
 		// listed: the rename is only found by listing the touched paths first.
 		listed bool
 	}{
-		{"rename", func(dir string) {
+		{"rename", func(t *testing.T, dir string) {
 			must(t, os.Rename(filepath.Join(dir, "b.txt"), filepath.Join(dir, "b2.txt")))
 		}, Batch{Paths: []string{"b.txt", "b2.txt"}}, true},
-		{"git metadata", func(dir string) { writeFile(t, dir, "b.txt", "x\n") }, Batch{Paths: []string{"b.txt"}, Git: true}, false},
-		{"overflow", func(dir string) { writeFile(t, dir, "b.txt", "x\n") }, Batch{Overflow: true}, false},
-		{"ignore file", func(dir string) { writeFile(t, dir, "dir/.gitignore", "*.log\n") }, Batch{Paths: []string{"dir/.gitignore"}}, false},
-		{"too many paths", func(dir string) { writeFile(t, dir, "b.txt", "x\n") }, Batch{Paths: many}, false},
+		{"git metadata", func(t *testing.T, dir string) { writeFile(t, dir, "b.txt", "x\n") }, Batch{Paths: []string{"b.txt"}, Git: true}, false},
+		{"overflow", func(t *testing.T, dir string) { writeFile(t, dir, "b.txt", "x\n") }, Batch{Overflow: true}, false},
+		{"ignore file", func(t *testing.T, dir string) { writeFile(t, dir, "dir/.gitignore", "*.log\n") }, Batch{Paths: []string{"dir/.gitignore"}}, false},
+		{"too many paths", func(t *testing.T, dir string) { writeFile(t, dir, "b.txt", "x\n") }, Batch{Paths: many}, false},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			dir := updateRepo(t)
 			src := BranchSource{Worktree: dir, Base: "main"}
 			e := testEngine(t)
 			prev := diffOK(t, e, src)
 
-			tt.change(dir)
+			tt.change(t, dir)
 
-			logPath := fakeGit(t, "")
-			res := updateOK(t, e, prev, src, tt.batch)
+			ctx, logPath := wrapGit(t, "")
+			res := updateOKContext(ctx, t, e, prev, src, tt.batch)
 			restricted, full := listingCalls(t, logPath)
 
 			sameAsFull(t, res, src)
@@ -266,6 +283,8 @@ func TestUpdateFallsBackToFullDiff(t *testing.T) {
 }
 
 func TestUpdateFallsBackWhenPrevHasRenames(t *testing.T) {
+	t.Parallel()
+
 	dir := updateRepo(t)
 	must(t, os.Rename(filepath.Join(dir, "b.txt"), filepath.Join(dir, "b2.txt")))
 
@@ -279,17 +298,23 @@ func TestUpdateFallsBackWhenPrevHasRenames(t *testing.T) {
 
 	writeFile(t, dir, "c.txt", "x\n")
 
-	logPath := fakeGit(t, "")
-	res := updateOK(t, e, prev, src, Batch{Paths: []string{"c.txt"}})
+	ctx, logPath := wrapGit(t, "")
+	res := updateOKContext(ctx, t, e, prev, src, Batch{Paths: []string{"c.txt"}})
+
+	wrappedCalls(t, logPath)
+
+	restricted, _ := listingCalls(t, logPath)
 
 	sameAsFull(t, res, src)
 
-	if restricted, _ := listingCalls(t, logPath); restricted != 0 {
+	if restricted != 0 {
 		t.Error("a restricted listing ran next to a rename")
 	}
 }
 
 func TestUpdatePastTurnFallsBack(t *testing.T) {
+	t.Parallel()
+
 	dir := turnRepo(t)
 	writeFile(t, dir, "a.txt", "turn two\n")
 	snap(t, dir, sessA, SnapshotOptions{})
@@ -302,8 +327,8 @@ func TestUpdatePastTurnFallsBack(t *testing.T) {
 		t.Fatal("setup: turn 1 is live")
 	}
 
-	logPath := fakeGit(t, "")
-	res := updateOK(t, e, prev, src, Batch{Paths: []string{"a.txt"}})
+	ctx, logPath := wrapGit(t, "")
+	res := updateOKContext(ctx, t, e, prev, src, Batch{Paths: []string{"a.txt"}})
 	restricted, full := listingCalls(t, logPath)
 
 	sameAsFull(t, res, src)
@@ -314,6 +339,8 @@ func TestUpdatePastTurnFallsBack(t *testing.T) {
 }
 
 func TestUpdateLiveTurn(t *testing.T) {
+	t.Parallel()
+
 	dir := turnRepo(t)
 	e := testEngine(t)
 	src := TurnSource{Worktree: dir, Session: sessA}
@@ -321,12 +348,13 @@ func TestUpdateLiveTurn(t *testing.T) {
 
 	writeFile(t, dir, "b.txt", "edited after the prompt\n")
 
-	logPath := fakeGit(t, "")
-	res := updateOK(t, e, prev, src, Batch{Paths: []string{"b.txt"}})
+	ctx, logPath := wrapGit(t, "")
+	res := updateOKContext(ctx, t, e, prev, src, Batch{Paths: []string{"b.txt"}})
+	restricted, _ := listingCalls(t, logPath)
 
 	sameAsFull(t, res, src)
 
-	if restricted, _ := listingCalls(t, logPath); restricted != 1 {
+	if restricted != 1 {
 		t.Errorf("restricted listings = %d, want 1", restricted)
 	}
 
@@ -334,12 +362,16 @@ func TestUpdateLiveTurn(t *testing.T) {
 	snap(t, dir, sessA, SnapshotOptions{})
 	writeFile(t, dir, "c.txt", "later\n")
 
-	logPath = fakeGit(t, "")
-	res = updateOK(t, e, res, src, Batch{Paths: []string{"c.txt"}})
+	ctx, logPath = wrapGit(t, "")
+	res = updateOKContext(ctx, t, e, res, src, Batch{Paths: []string{"c.txt"}})
+
+	wrappedCalls(t, logPath)
+
+	restricted, _ = listingCalls(t, logPath)
 
 	sameAsFull(t, res, src)
 
-	if restricted, _ := listingCalls(t, logPath); restricted != 0 {
+	if restricted != 0 {
 		t.Error("a restricted listing ran after a new turn")
 	}
 }
@@ -383,6 +415,8 @@ func TestUpdateKeepsCaps(t *testing.T) {
 }
 
 func TestUpdateFallsBackPastTheByteCap(t *testing.T) {
+	t.Parallel()
+
 	dir := branchRepo(t, func(dir string) {
 		for i := range 4 {
 			writeFile(t, dir, fmt.Sprintf("f%d.txt", i), numbered("x", 100))
@@ -398,8 +432,8 @@ func TestUpdateFallsBackPastTheByteCap(t *testing.T) {
 
 	writeFile(t, dir, "f3.txt", numbered("y", 100))
 
-	logPath := fakeGit(t, "")
-	res := updateOK(t, e, prev, src, Batch{Paths: []string{"f3.txt"}})
+	ctx, logPath := wrapGit(t, "")
+	res := updateOKContext(ctx, t, e, prev, src, Batch{Paths: []string{"f3.txt"}})
 
 	_, full := listingCalls(t, logPath)
 
@@ -414,6 +448,8 @@ func TestUpdateFallsBackPastTheByteCap(t *testing.T) {
 }
 
 func TestUpdateNewFileBesideChangesRunsAFullListing(t *testing.T) {
+	t.Parallel()
+
 	dir := updateRepo(t) // a.txt is modified on the branch
 	src := BranchSource{Worktree: dir, Base: "main"}
 	e := testEngine(t)
@@ -421,8 +457,8 @@ func TestUpdateNewFileBesideChangesRunsAFullListing(t *testing.T) {
 
 	writeFile(t, dir, "fresh.txt", "a new file\n")
 
-	logPath := fakeGit(t, "")
-	res := updateOK(t, e, prev, src, Batch{Paths: []string{"fresh.txt"}})
+	ctx, logPath := wrapGit(t, "")
+	res := updateOKContext(ctx, t, e, prev, src, Batch{Paths: []string{"fresh.txt"}})
 	restricted, full := listingCalls(t, logPath)
 
 	sameAsFull(t, res, src)
@@ -446,23 +482,25 @@ func openCalls(t *testing.T, logPath string) int {
 }
 
 func TestUpdateReusesTheRepoItOpened(t *testing.T) {
+	t.Parallel()
+
 	dir := updateRepo(t)
 	src := BranchSource{Worktree: dir, Base: "main"}
 	e := testEngine(t)
 	prev := diffOK(t, e, src)
 
-	logPath := fakeGit(t, "")
+	ctx, logPath := wrapGit(t, "")
 
 	writeFile(t, dir, "b.txt", numbered("b.txt", 30)+"first\n")
 
-	res := updateOK(t, e, prev, src, Batch{Paths: []string{"b.txt"}})
+	res := updateOKContext(ctx, t, e, prev, src, Batch{Paths: []string{"b.txt"}})
 	if n := openCalls(t, logPath); n != 1 {
 		t.Fatalf("the first update opened the repo %d times, want 1", n)
 	}
 
 	writeFile(t, dir, "c.txt", numbered("c.txt", 30)+"second\n")
 
-	res = updateOK(t, e, res, src, Batch{Paths: []string{"c.txt"}})
+	res = updateOKContext(ctx, t, e, res, src, Batch{Paths: []string{"c.txt"}})
 	if n := openCalls(t, logPath); n != 1 {
 		t.Errorf("the second update opened the repo again: %d opens in all, want 1", n)
 	}
@@ -471,23 +509,25 @@ func TestUpdateReusesTheRepoItOpened(t *testing.T) {
 }
 
 func TestUpdateKeepsOneRepoPerWorktree(t *testing.T) {
+	t.Parallel()
+
 	dirA, dirB := updateRepo(t), updateRepo(t)
 	srcA, srcB := BranchSource{Worktree: dirA, Base: "main"}, BranchSource{Worktree: dirB, Base: "main"}
 	e := testEngine(t)
 	prevA, prevB := diffOK(t, e, srcA), diffOK(t, e, srcB)
 
-	logPath := fakeGit(t, "")
+	ctx, logPath := wrapGit(t, "")
 
 	// Each repo has its own edit, so a repo taken for the other's would show.
 	writeFile(t, dirA, "b.txt", numbered("b.txt", 30)+"in a\n")
 	writeFile(t, dirB, "c.txt", numbered("c.txt", 30)+"in b\n")
 
-	resA := updateOK(t, e, prevA, srcA, Batch{Paths: []string{"b.txt"}})
-	resB := updateOK(t, e, prevB, srcB, Batch{Paths: []string{"c.txt"}})
+	resA := updateOKContext(ctx, t, e, prevA, srcA, Batch{Paths: []string{"b.txt"}})
+	resB := updateOKContext(ctx, t, e, prevB, srcB, Batch{Paths: []string{"c.txt"}})
 
 	writeFile(t, dirA, "dir/d.txt", numbered("dir/d.txt", 30)+"again in a\n")
 
-	resA = updateOK(t, e, resA, srcA, Batch{Paths: []string{"dir/d.txt"}})
+	resA = updateOKContext(ctx, t, e, resA, srcA, Batch{Paths: []string{"dir/d.txt"}})
 	if n := openCalls(t, logPath); n != 2 {
 		t.Errorf("opens = %d, want 2: one per worktree", n)
 	}
@@ -497,6 +537,8 @@ func TestUpdateKeepsOneRepoPerWorktree(t *testing.T) {
 }
 
 func TestUpdateReopensAWorktreeWhoseGitDirMoved(t *testing.T) {
+	t.Parallel()
+
 	dir := updateRepo(t)
 	wt := filepath.Join(t.TempDir(), "wt")
 	gitOut(t, dir, "worktree", "add", "-q", "-b", "other", wt, "main")
@@ -505,11 +547,11 @@ func TestUpdateReopensAWorktreeWhoseGitDirMoved(t *testing.T) {
 	e := testEngine(t)
 	prev := diffOK(t, e, src)
 
-	logPath := fakeGit(t, "")
+	ctx, logPath := wrapGit(t, "")
 
 	writeFile(t, wt, "b.txt", numbered("b.txt", 30)+"first\n")
 
-	res := updateOK(t, e, prev, src, Batch{Paths: []string{"b.txt"}})
+	res := updateOKContext(ctx, t, e, prev, src, Batch{Paths: []string{"b.txt"}})
 	if n := openCalls(t, logPath); n != 1 {
 		t.Fatalf("opens = %d, want 1", n)
 	}
@@ -523,7 +565,7 @@ func TestUpdateReopensAWorktreeWhoseGitDirMoved(t *testing.T) {
 
 	writeFile(t, wt, "c.txt", numbered("c.txt", 30)+"second\n")
 
-	res = updateOK(t, e, res, src, Batch{Paths: []string{"c.txt"}})
+	res = updateOKContext(ctx, t, e, res, src, Batch{Paths: []string{"c.txt"}})
 	if n := openCalls(t, logPath); n != 2 {
 		t.Errorf("opens = %d, want 2: the moved git dir needs the repo opened again", n)
 	}
@@ -593,22 +635,24 @@ func TestUpdateOfAGoneLinkedWorktreeIsAnError(t *testing.T) {
 // A failed update drops its repo, which may be what failed. The fake git fails
 // the next listing call once, when the test creates "$LOG.fail".
 func TestUpdateOpensAgainAfterAFailedUpdate(t *testing.T) {
+	t.Parallel()
+
 	dir := updateRepo(t)
 	src := BranchSource{Worktree: dir, Base: "main"}
 	e := testEngine(t)
 	prev := diffOK(t, e, src)
 
-	logPath := fakeGit(t, `case "$*" in *--raw*)
+	ctx, logPath := wrapGit(t, `case "$*" in *--raw*)
 	if [ -e "$LOG.fail" ]; then rm "$LOG.fail"; echo "fatal: injected" >&2; exit 1; fi;;
 esac`)
 
 	writeFile(t, dir, "b.txt", numbered("b.txt", 30)+"first\n")
 
-	res := updateOK(t, e, prev, src, Batch{Paths: []string{"b.txt"}})
+	res := updateOKContext(ctx, t, e, prev, src, Batch{Paths: []string{"b.txt"}})
 
 	must(t, os.WriteFile(logPath+".fail", nil, 0o644))
 
-	if _, err := e.Update(context.Background(), res, src, Batch{Paths: []string{"b.txt"}}); err == nil {
+	if _, err := e.Update(ctx, res, src, Batch{Paths: []string{"b.txt"}}); err == nil {
 		t.Fatal("Update with a failing git succeeded")
 	}
 
@@ -616,7 +660,7 @@ esac`)
 		t.Error("the failed update kept its repo")
 	}
 
-	res = updateOK(t, e, res, src, Batch{Paths: []string{"b.txt"}})
+	res = updateOKContext(ctx, t, e, res, src, Batch{Paths: []string{"b.txt"}})
 	if n := openCalls(t, logPath); n != 2 {
 		t.Errorf("opens = %d, want 2: a failed update does not keep its repo", n)
 	}
@@ -627,35 +671,39 @@ esac`)
 // An update whose context ended says nothing about the repo: the drawer
 // cancels its load whenever a newer one starts, and the next update reuses it.
 func TestUpdateKeepsItsRepoWhenItsContextEnds(t *testing.T) {
-	ends := map[string]func() (context.Context, context.CancelFunc){
-		"cancelled": func() (context.Context, context.CancelFunc) {
-			ctx, cancel := context.WithCancel(context.Background())
+	t.Parallel()
+
+	ends := map[string]func(parent context.Context) (context.Context, context.CancelFunc){
+		"cancelled": func(parent context.Context) (context.Context, context.CancelFunc) {
+			ctx, cancel := context.WithCancel(parent)
 			cancel()
 
 			return ctx, cancel
 		},
-		"past its deadline": func() (context.Context, context.CancelFunc) {
-			return context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
+		"past its deadline": func(parent context.Context) (context.Context, context.CancelFunc) {
+			return context.WithDeadline(parent, time.Now().Add(-time.Second))
 		},
 	}
 
 	for name, end := range ends {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
 			dir := updateRepo(t)
 			src := BranchSource{Worktree: dir, Base: "main"}
 			e := testEngine(t)
 			prev := diffOK(t, e, src)
 
-			logPath := fakeGit(t, "")
+			ctx, logPath := wrapGit(t, "")
 
 			writeFile(t, dir, "b.txt", numbered("b.txt", 30)+"first\n")
 
-			res := updateOK(t, e, prev, src, Batch{Paths: []string{"b.txt"}})
+			res := updateOKContext(ctx, t, e, prev, src, Batch{Paths: []string{"b.txt"}})
 
-			ctx, cancel := end()
+			ended, cancel := end(ctx)
 			defer cancel()
 
-			if _, err := e.Update(ctx, res, src, Batch{Paths: []string{"b.txt"}}); err == nil {
+			if _, err := e.Update(ended, res, src, Batch{Paths: []string{"b.txt"}}); err == nil {
 				t.Fatal("Update with an ended context succeeded")
 			}
 
@@ -663,7 +711,7 @@ func TestUpdateKeepsItsRepoWhenItsContextEnds(t *testing.T) {
 				t.Error("the update whose context ended dropped its repo")
 			}
 
-			res = updateOK(t, e, res, src, Batch{Paths: []string{"b.txt"}})
+			res = updateOKContext(ctx, t, e, res, src, Batch{Paths: []string{"b.txt"}})
 			if n := openCalls(t, logPath); n != 1 {
 				t.Errorf("opens = %d, want 1: the repo is reused after the context ended", n)
 			}
