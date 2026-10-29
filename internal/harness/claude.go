@@ -209,11 +209,16 @@ func toolTarget(tool, cwd string, fields map[string]json.RawMessage) string {
 }
 
 const (
-	// maxChanged bounds the paths one Bash command contributes: the event stays
-	// far inside the socket's line, and one command costs few resolutions.
+	// maxChanged bounds the paths one Bash command contributes, so one command
+	// costs few resolutions.
 	maxChanged = 16
 	// maxChangedPath leaves out a path no real file has.
 	maxChangedPath = 1024
+	// maxChangedBytes bounds the JSON-encoded size of the kept paths: JSON writes
+	// a control character or <, > or & as 6 bytes, so the count and length caps
+	// alone could take the event past the socket's line, and the server would
+	// drop the event whole. The budget leaves the rest of the event room.
+	maxChangedBytes = 32 << 10
 )
 
 // editTools maps each tool that changes a file to the tool_input key naming
@@ -247,7 +252,7 @@ func absPath(path string) string {
 
 // changedPaths is the list of files a finished Bash command changed, read
 // leniently from its tool_response: any other shape, and any other tool, gives
-// none. It keeps the first path of each directory.
+// none. It keeps the first path of each directory, within the three caps above.
 func changedPaths(tool string, response json.RawMessage) []string {
 	if tool != "Bash" {
 		return nil
@@ -261,11 +266,22 @@ func changedPaths(tool string, response json.RawMessage) []string {
 	var out []string
 
 	dirs := map[string]bool{}
+	size := 0
 
 	for _, raw := range files {
 		path := absPath(jsonString(raw))
 		if path == "" || len(path) > maxChangedPath || dirs[filepath.Dir(path)] {
 			continue
+		}
+
+		enc, err := json.Marshal(path)
+		if err != nil {
+			continue
+		}
+
+		// The comma between entries counts too.
+		if size += len(enc) + 1; size > maxChangedBytes {
+			break
 		}
 
 		dirs[filepath.Dir(path)] = true

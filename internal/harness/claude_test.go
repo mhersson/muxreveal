@@ -301,6 +301,21 @@ func TestParseEventChanged(t *testing.T) {
 
 	long := "/" + strings.Repeat("a", maxChangedPath)
 
+	// Each path of a hostile list is 1024 bytes that JSON writes as 6 bytes each,
+	// so the 16 of them would encode to about 96 KiB.
+	hostile := func(c string) (paths, kept []string) {
+		for i := range maxChanged {
+			dir := fmt.Sprintf("/h%02d/", i)
+
+			paths = append(paths, dir+strings.Repeat(c, maxChangedPath-len(dir)))
+		}
+
+		// Each encodes to 6121 bytes and a comma: 5 fit in the 32 KiB budget, 6 do not.
+		return paths, paths[:5]
+	}
+	ctlPaths, ctlKept := hostile("\x01")
+	htmlPaths, htmlKept := hostile("<")
+
 	tests := []struct {
 		name     string
 		event    string
@@ -321,6 +336,8 @@ func TestParseEventChanged(t *testing.T) {
 			`{"bashEditDiff":{"changedFiles":["src/a.go",5,null,{"p":"/r/o.go"},"/r/n\u0000.go","` + long + `","/r/ok/a.go"]}}`,
 			[]string{"/r/ok/a.go"},
 		},
+		{"control characters fill the encoded budget", "PostToolUse", "Bash", files(ctlPaths...), ctlKept},
+		{"escaped HTML characters fill the encoded budget", "PostToolUse", "Bash", files(htmlPaths...), htmlKept},
 		{"a long path does not claim its directory", "PostToolUse", "Bash", files("/r/x/"+long, "/r/x/b.go"), []string{"/r/x/b.go"}},
 		{"the list is not an array", "PostToolUse", "Bash", `{"bashEditDiff":{"changedFiles":"/r/a.go"}}`, nil},
 		{"the list is an object", "PostToolUse", "Bash", `{"bashEditDiff":{"changedFiles":{"0":"/r/a.go"}}}`, nil},
@@ -356,6 +373,11 @@ func TestParseEventChanged(t *testing.T) {
 			plain, err := Claude{}.ParseEvent(payload(tt.event, rest))
 			if err != nil {
 				t.Fatal(err)
+			}
+
+			// The compact event travels as one line, as the hook command sends it.
+			if line, err := json.Marshal(ev); err != nil || len(line) > maxLine*3/4 {
+				t.Errorf("encoded event = %d bytes, %v, want at most %d", len(line), err, maxLine*3/4)
 			}
 
 			ev.Changed = nil

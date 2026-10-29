@@ -3,6 +3,7 @@ package harness
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
@@ -145,6 +146,51 @@ func TestServerDeliversChanged(t *testing.T) {
 	got := recv(t, s.out)
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("event = %+v, want %+v", got, want)
+	}
+}
+
+func TestServerDeliversHostileChanged(t *testing.T) {
+	t.Parallel()
+
+	// Sixteen paths of control characters: JSON writes each as 6 bytes, which
+	// would take the line past maxLine, and the whole event would be dropped.
+	var files []string
+
+	for i := range maxChanged {
+		dir := fmt.Sprintf("/h%02d/", i)
+		files = append(files, dir+strings.Repeat("\x01", maxChangedPath-len(dir)))
+	}
+
+	list, err := json.Marshal(files)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ev, err := Claude{}.ParseEvent(payload("PostToolUse",
+		`"session_id":"s","cwd":"/r","tool_name":"Bash","tool_input":{"command":"x"},`+
+			`"tool_response":{"bashEditDiff":{"changedFiles":`+string(list)+`}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(ev.Changed) == 0 {
+		t.Fatal("ParseEvent kept no path")
+	}
+
+	ev.Pane = "p1"
+
+	s := startServer(t, 1, nil)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	if err := Send(ctx, s.path, ev); err != nil {
+		t.Fatalf("Send() error = %v", err)
+	}
+
+	got := recv(t, s.out)
+	if !reflect.DeepEqual(got, ev) || got.State != core.AgentWorking || got.Action == "" || got.Cwd != "/r" {
+		t.Fatalf("event = %+v, want %+v with its state, action and cwd", got, ev)
 	}
 }
 
