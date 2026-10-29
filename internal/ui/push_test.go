@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -93,9 +94,12 @@ func (r *railApp) churnMsgs(t *testing.T, cmd tea.Cmd) []tea.Msg {
 	return all
 }
 
+// pushRemoteURL is how the rig's repository reaches its bare remote, which sits
+// next to it. A relative URL shows the same in every run.
+const pushRemoteURL = "../remote.git"
+
 // pushRig is a rail app with an agent in a repository named proj, on feat/x two
-// commits past main. The remote has main. origin reads as github.com/o/r but
-// pushes to a local bare repository.
+// commits past main. origin is a bare repository that has main.
 type pushRig struct {
 	*prApp
 	rec   *refreshRec
@@ -117,13 +121,10 @@ func newPushRig(t *testing.T) *pushRig {
 	rec := &refreshRec{fakePRs: p.src}
 	p.prs.src = rec
 
-	const url = "https://github.com/o/r.git"
-
-	dir := p.prRepo(t, "proj", "feat/x", url)
-	bare := filepath.Join(t.TempDir(), "remote.git")
+	dir := p.prRepo(t, "proj", "feat/x", pushRemoteURL)
+	bare := filepath.Join(filepath.Dir(dir), "remote.git")
 
 	gitIn(t, p.real, filepath.Dir(bare), "init", "-q", "--bare", "-b", "main", bare)
-	gitIn(t, p.real, dir, "config", "url."+bare+".pushInsteadOf", url)
 	gitIn(t, p.real, dir, "push", "-q", "origin", "main")
 
 	for _, msg := range []string{"add the lexer", "fix the parser"} {
@@ -137,6 +138,18 @@ func newPushRig(t *testing.T) *pushRig {
 	r.churn(t, r.settle())
 
 	return r
+}
+
+// githubURL is a fetch URL the rig's pushes never reach: a rig that has it also has a push URL.
+const githubURL = "https://github.com/o/r.git"
+
+// splitURLs gives origin a fetch URL of its own while pushes still go to the
+// bare repository, through a push URL.
+func (r *pushRig) splitURLs(t *testing.T, fetch string) {
+	t.Helper()
+
+	gitIn(t, r.real, r.dir, "remote", "set-url", "origin", fetch)
+	gitIn(t, r.real, r.dir, "config", "remote.origin.pushurl", pushRemoteURL)
 }
 
 // leaderP presses leader p and returns the command it raised.
@@ -198,16 +211,12 @@ func TestPushConfirmNamesTheTarget(t *testing.T) {
 	text := r.overlayText()
 
 	for _, want := range []string{
-		"Push feat/x", "proj", "feat/x", "origin", "github.com/o/r", "2 commits", "sets the upstream",
+		"Push feat/x", "proj", "feat/x", "origin  ../remote.git", "2 commits", "sets the upstream",
 		oid[:7] + " fix the parser", "enter push", "esc cancel",
 	} {
 		if !strings.Contains(text, want) {
 			t.Errorf("the overlay lacks %q:\n%s", want, text)
 		}
-	}
-
-	if strings.Contains(text, "https://") || strings.Contains(text, ".git") {
-		t.Errorf("the overlay shows a raw URL:\n%s", text)
 	}
 
 	if got := r.remoteRefs(t); got != "refs/heads/main" {
@@ -250,16 +259,6 @@ func TestPushConfirmNamesAnUpstreamAlreadySet(t *testing.T) {
 	}
 }
 
-func TestPushConfirmShowsALocalRemote(t *testing.T) {
-	r := newPushRig(t)
-	gitIn(t, r.real, r.dir, "remote", "set-url", "origin", "../remote.git")
-	r.askOpen(t)
-
-	if text := r.overlayText(); !strings.Contains(text, "origin  ../remote.git") {
-		t.Errorf("the overlay lacks the remote's path:\n%s", text)
-	}
-}
-
 func TestPushFirstPush(t *testing.T) {
 	r := newPushRig(t)
 	r.askOpen(t)
@@ -286,8 +285,154 @@ func TestPushFirstPush(t *testing.T) {
 		t.Error("the pane's head was not probed again")
 	}
 
+	if got := r.rec.refreshed(); len(got) != 0 {
+		t.Errorf("refreshed %v for a remote that is not on GitHub, want nothing", got)
+	}
+}
+
+func TestPushRefreshesTheGitHubRepository(t *testing.T) {
+	r := newPushRig(t)
+	r.splitURLs(t, githubURL)
+	r.askOpen(t)
+
+	r.churn(t, press(r.App, keyEnter))
+
+	if want := "pushed feat/x to origin: 2 commits"; r.notice != want {
+		t.Errorf("toast = %q, want %q", r.notice, want)
+	}
+
 	if got := r.rec.refreshed(); !slices.Equal(got, []github.Repo{prRepo}) {
 		t.Errorf("refreshed %v, want %v", got, []github.Repo{prRepo})
+	}
+}
+
+func TestPushConfirmNamesThePushURLs(t *testing.T) {
+	tests := []struct {
+		name  string
+		setup func(t *testing.T, r *pushRig)
+		urls  []string
+	}{
+		{"the fetch url when there is no push url", func(*testing.T, *pushRig) {}, []string{"../remote.git"}},
+		{"a push url", func(t *testing.T, r *pushRig) { r.splitURLs(t, githubURL) }, []string{"../remote.git"}},
+		{"a push url rewrite", func(t *testing.T, r *pushRig) {
+			gitIn(t, r.real, r.dir, "remote", "set-url", "origin", githubURL)
+			gitIn(t, r.real, r.dir, "config", "url."+pushRemoteURL+".pushInsteadOf", githubURL)
+		}, []string{"../remote.git"}},
+		{"two push urls", func(t *testing.T, r *pushRig) {
+			r.splitURLs(t, githubURL)
+			gitIn(t, r.real, r.dir, "config", "--add", "remote.origin.pushurl", "../mirror.git")
+		}, []string{"../remote.git", "../mirror.git"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := newPushRig(t)
+			tt.setup(t, r)
+			r.askOpen(t)
+
+			if got := r.confirm.push.urls; !slices.Equal(got, tt.urls) {
+				t.Errorf("target urls = %q, want %q", got, tt.urls)
+			}
+
+			text := r.overlayText()
+			if want := "origin  " + tt.urls[0]; !strings.Contains(text, want) {
+				t.Errorf("the overlay lacks %q:\n%s", want, text)
+			}
+
+			// Each further url is a row of its own, under the first.
+			lines := strings.Split(text, "\n")
+
+			i := slices.IndexFunc(lines, func(l string) bool { return strings.Contains(l, "origin  "+tt.urls[0]) })
+			if i < 0 {
+				t.Fatalf("no remote row:\n%s", text)
+			}
+
+			col := strings.Index(lines[i], tt.urls[0])
+
+			for k, u := range tt.urls[1:] {
+				if row := lines[i+1+k]; strings.Index(row, u) != col {
+					t.Errorf("row %q does not hold %q at column %d", row, u, col)
+				}
+			}
+
+			if strings.Contains(text, "github.com") {
+				t.Errorf("the overlay names the fetch url, not where the push goes:\n%s", text)
+			}
+		})
+	}
+}
+
+func TestPushConfirmCapsThePushURLs(t *testing.T) {
+	a := newTestApp(t)
+
+	tests := []struct {
+		n    int
+		more string
+	}{
+		{1, ""},
+		{3, ""},
+		{4, "and 1 more"},
+		{6, "and 3 more"},
+	}
+
+	for _, tt := range tests {
+		t.Run(commitCount(tt.n), func(t *testing.T) {
+			tgt := pushTarget{branch: "feat/x", remote: "origin", commits: 1}
+			for i := range tt.n {
+				tgt.urls = append(tgt.urls, fmt.Sprintf("host/o/r%d", i))
+			}
+
+			text := ansi.Strip(strings.Join(pushBox(tgt, 60, true, a.styles), "\n"))
+
+			shown := strings.Count(text, "host/o/r")
+			if want := min(tt.n, 3); shown != want {
+				t.Errorf("%d urls shown, want %d:\n%s", shown, want, text)
+			}
+
+			if got := strings.Contains(text, "and "); got != (tt.more != "") || tt.more != "" && !strings.Contains(text, tt.more) {
+				t.Errorf("the box lacks %q (or has an extra line):\n%s", tt.more, text)
+			}
+		})
+	}
+}
+
+func TestPushRefusesAChangedPushURL(t *testing.T) {
+	tests := []struct {
+		name    string
+		changed func(t *testing.T, r *pushRig)
+	}{
+		{"the push url is replaced", func(t *testing.T, r *pushRig) {
+			gitIn(t, r.real, r.dir, "config", "remote.origin.pushurl", "../elsewhere.git")
+		}},
+		{"a push url is added", func(t *testing.T, r *pushRig) {
+			gitIn(t, r.real, r.dir, "config", "--add", "remote.origin.pushurl", "../mirror.git")
+		}},
+		{"the push url is removed", func(t *testing.T, r *pushRig) {
+			gitIn(t, r.real, r.dir, "config", "--unset", "remote.origin.pushurl")
+		}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := newPushRig(t)
+			r.splitURLs(t, "../fetch-only.git")
+			r.askOpen(t)
+
+			tt.changed(t, r)
+			r.churn(t, press(r.App, keyEnter))
+
+			if want := "push: feat/x's push URL changed since you asked; nothing pushed"; r.notice != want || r.noticeLevel() != levelNotice {
+				t.Errorf("toast = %q at level %v, want %q at the notice level", r.notice, r.noticeLevel(), want)
+			}
+
+			if got := r.remoteRefs(t); got != "refs/heads/main" {
+				t.Errorf("the remote holds %q, want only main", got)
+			}
+
+			if n := r.pushCalls(); n != 0 {
+				t.Errorf("git pushed %d times", n)
+			}
+		})
 	}
 }
 
@@ -716,7 +861,7 @@ func TestRemoteDisplay(t *testing.T) {
 func TestPushConfirmDrawsRepositoryTextCleaned(t *testing.T) {
 	a := newTestApp(t)
 	tgt := pushTarget{
-		project: "pro\x1b[31mj", branch: "feat/\u200bx", remote: "ori\x07gin", url: "github.com/o/r",
+		project: "pro\x1b[31mj", branch: "feat/\u200bx", remote: "ori\x07gin", urls: []string{"github.com/o/r", "host/\x1b[31mo/r"},
 		commits: 1, short: "abc1234", subject: "fix\x1b[2Jthe\u200b parser",
 	}
 
@@ -728,7 +873,7 @@ func TestPushConfirmDrawsRepositoryTextCleaned(t *testing.T) {
 		}
 	}
 
-	for _, want := range []string{"pro[31mj", "feat/x", "origin", "abc1234 fix[2Jthe parser", "1 commit,"} {
+	for _, want := range []string{"pro[31mj", "feat/x", "origin", "host/[31mo/r", "abc1234 fix[2Jthe parser", "1 commit,"} {
 		if !strings.Contains(ansi.Strip(text), want) {
 			t.Errorf("the box lacks %q:\n%s", want, ansi.Strip(text))
 		}

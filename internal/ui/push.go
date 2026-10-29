@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"log/slog"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/mhersson/muxreveal/internal/core"
 	"github.com/mhersson/muxreveal/internal/git"
@@ -23,6 +25,8 @@ const (
 	pushTimeout = 60 * time.Second
 	// maxPushWidth caps the push confirm's width.
 	maxPushWidth = 60
+	// maxPushURLs is how many push URLs the confirm lists before it sums up the rest.
+	maxPushURLs = 3
 
 	noticePushNotRepo  = "push: not a git repository"
 	noticePushDetached = "push: HEAD is detached"
@@ -30,8 +34,11 @@ const (
 )
 
 // errPushChanged means the branch, its head or its push remote moved since the
-// confirm opened.
-var errPushChanged = errors.New("ui: push target changed")
+// confirm opened; errPushURLChanged, that the remote's push URLs did.
+var (
+	errPushChanged    = errors.New("ui: push target changed")
+	errPushURLChanged = errors.New("ui: push URLs changed")
+)
 
 // pushTarget is what the push confirm names and what enter pushes. It is fixed
 // when the confirm opens, whatever the focus or the agent does next.
@@ -42,8 +49,9 @@ type pushTarget struct {
 	branch       string
 	oid          string // HEAD when asked
 	remote       string
-	url          string // the remote as shown, see remoteDisplay
-	commits      int    // commits the remote lacks
+	urls         []string // where the push goes, each as remoteDisplay shows it
+	rawURLs      []string // the same as git has them, to tell a changed destination; never shown
+	commits      int      // commits the remote lacks
 	setsUpstream bool
 	short        string // the newest commit's abbreviated id
 	subject      string // and its subject, as git has it
@@ -149,12 +157,13 @@ func resolvePush(ctx context.Context, log *slog.Logger, pane core.PaneID, cwd, h
 		return pushTarget{}, pushFailed, err
 	}
 
-	raw, err := git.RemoteURL(ctx, r, t.remote)
-	if err != nil {
+	if t.rawURLs, err = git.PushURLs(ctx, r, t.remote); err != nil {
 		return pushTarget{}, pushFailed, err
 	}
 
-	t.url = remoteDisplay(raw, home)
+	for _, raw := range t.rawURLs {
+		t.urls = append(t.urls, remoteDisplay(raw, home))
+	}
 
 	if t.commits, err = git.Unpushed(ctx, r, t.remote); err != nil {
 		return pushTarget{}, pushFailed, err
@@ -214,9 +223,9 @@ func (a *App) onPushResolved(msg pushResolvedMsg) {
 }
 
 // pushRun pushes exactly t, off the update loop, under a timeout derived from the
-// app's context. It checks the worktree's branch, head and push remote in the
-// same command, so the window between the check and the push is as short as it
-// can be.
+// app's context. It checks the worktree's branch, head, push remote and push URLs
+// in the same command, so the window between the check and the push is as short
+// as it can be.
 func (a *App) pushRun(t pushTarget) tea.Cmd {
 	appCtx, resolve := a.ctx, a.prs.resolve
 
@@ -243,8 +252,8 @@ func (a *App) pushRun(t pushTarget) tea.Cmd {
 	}
 }
 
-// runPush pushes t's branch from its worktree unless the branch, its head or its
-// push remote is not what the confirm named.
+// runPush pushes t's branch from its worktree unless the branch, its head, its
+// push remote or the remote's push URLs are not what the confirm named.
 func runPush(ctx context.Context, t pushTarget) (git.PushResult, error) {
 	r, err := git.Open(ctx, t.root)
 	if err != nil {
@@ -269,6 +278,15 @@ func runPush(ctx context.Context, t pushTarget) (git.PushResult, error) {
 		return git.PushResult{}, errPushChanged
 	}
 
+	urls, err := git.PushURLs(ctx, r, remote)
+	if err != nil {
+		return git.PushResult{}, err
+	}
+
+	if !slices.Equal(urls, t.rawURLs) {
+		return git.PushResult{}, errPushURLChanged
+	}
+
 	return git.Push(ctx, r, t.branch)
 }
 
@@ -282,6 +300,10 @@ func (a *App) onPushed(msg pushedMsg) tea.Cmd {
 		return nil
 	case errors.Is(msg.err, errPushChanged):
 		a.notice = fmt.Sprintf("push: %s changed since you asked; nothing pushed", t.branch)
+
+		return nil
+	case errors.Is(msg.err, errPushURLChanged):
+		a.notice = fmt.Sprintf("push: %s's push URL changed since you asked; nothing pushed", t.branch)
 
 		return nil
 	case errors.Is(msg.err, context.DeadlineExceeded):
@@ -377,16 +399,47 @@ func pushBox(t pushTarget, w int, icons bool, st styles) []string {
 		upstream = "sets the upstream"
 	}
 
-	return []string{
+	remote := printable(t.remote)
+
+	rows := []string{
 		top,
 		row(""),
 		row(field("project", st.popup.Render(printable(t.project)))),
 		row(field("branch", st.popup.Render(printable(t.branch)))),
-		row(field("remote", st.popup.Render(printable(t.remote))+st.popupMuted.Render("  "+printable(t.url)))),
+	}
+
+	// Each push URL is a row of its own, under the first, which follows the remote's name.
+	urls, more := t.urls, 0
+	if len(urls) > maxPushURLs {
+		urls, more = urls[:maxPushURLs], len(urls)-maxPushURLs
+	}
+
+	lines := make([]string, 0, len(urls)+1)
+	for _, u := range urls {
+		lines = append(lines, printable(u))
+	}
+
+	if more > 0 {
+		lines = append(lines, fmt.Sprintf("and %d more", more))
+	}
+
+	first, pad := "", strings.Repeat(" ", ansi.StringWidth(remote)+2)
+
+	if len(lines) > 0 {
+		first, lines = "  "+lines[0], lines[1:]
+	}
+
+	rows = append(rows, row(field("remote", st.popup.Render(remote)+st.popupMuted.Render(first))))
+
+	for _, l := range lines {
+		rows = append(rows, row(field("", st.popupMuted.Render(pad+l))))
+	}
+
+	return append(rows,
 		row(field("commits", st.popup.Render(commitCount(t.commits))+st.popupMuted.Render(", "+upstream))),
 		row(field("newest", st.popupSubtle.Render(printable(t.short+" "+t.subject)))),
 		row(""),
-		row(hint("enter", "push") + st.popup.Render("    ") + hint("esc", "cancel")),
+		row(hint("enter", "push")+st.popup.Render("    ")+hint("esc", "cancel")),
 		bottom,
-	}
+	)
 }
