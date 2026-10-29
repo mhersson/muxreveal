@@ -31,7 +31,7 @@ func pathologicalInputs() []pathological {
 		{"list items", strings.Repeat("- a\n", 100_000), 100_000, ""},
 		{"one 4 MiB paragraph", words, 40_000, ""},
 		{"3000 nested details", nested.String(), 3000, ""},
-		{"one cluster across 32000 styled segments", "e" + strings.Repeat("**́**~~̂~~", 16_000), 1, ""},
+		{"one cluster across 32000 styled segments", "e" + strings.Repeat("**\u0301**~~\u0302~~", 16_000), 1, ""},
 	}
 }
 
