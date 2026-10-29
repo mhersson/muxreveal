@@ -250,7 +250,7 @@ Go 1.27 (`tuios.dev/vt` needs 1.26 or later). The reason for Rust was a proven V
 | Config and state | `pelletier/go-toml/v2`; `encoding/json`; `modernc.org/sqlite` | TOML config, JSON layout state, pure Go SQLite (no cgo) for turns, reviewed hunks and caches |
 | Clipboard | OSC 52 plus direct exec of `wl-copy`, `xclip` or `pbcopy` with explicit arguments | No cgo and no shell; `atotto/clipboard` is not used because its primary-selection switch is global state and it drops the clipboard arguments |
 | Notifications | Terminal escapes (OSC 99 for Kitty, OSC 9 or 777 for Ghostty); fallback `gen2brain/beeep` | No extra daemon; native to both terminals |
-| CLI | `spf13/cobra` | `muxreveal`, `muxreveal hook claude-code`, future subcommands |
+| CLI | `spf13/cobra` | `muxreveal`, `muxreveal hook claude-code`, `muxreveal statusline`, future subcommands |
 | Diagnostics | `log/slog` to a file | Structured logs, never to the screen |
 
 ## Key technical designs
