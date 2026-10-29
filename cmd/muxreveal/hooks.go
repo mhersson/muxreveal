@@ -100,6 +100,12 @@ func setupHooks(logger *slog.Logger, stateDir, indexCache string, watches *git.W
 		return hookRuntime{}, err
 	}
 
+	// Settings drops the status line for a path it cannot quote; say why. The
+	// error holds the path only %q-escaped, so it is safe to log.
+	if _, err := harness.QuotePath(exe); err != nil {
+		logger.Warn("status line is off", "err", err)
+	}
+
 	if err := store.WriteAtomic(settingsPath, settings); err != nil {
 		return hookRuntime{}, fmt.Errorf("settings file: %w", err)
 	}
