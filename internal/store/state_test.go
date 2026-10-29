@@ -615,6 +615,32 @@ func TestAgentStatusIsNotPersisted(t *testing.T) {
 	eq(t, got, roundTripped())
 }
 
+func TestEditsNotSaved(t *testing.T) {
+	t.Parallel()
+
+	st := fixedState()
+	p := st.Panes["p1"]
+	p.Edits = []core.Edit{{Root: "/home/me/code/other", Common: "/home/me/code/other/.git", Repo: "other", Seq: 3}}
+	st.Panes["p1"] = p
+
+	data, err := Encode(st)
+	noErr(t, err)
+
+	if strings.Contains(string(data), "/home/me/code/other") {
+		t.Errorf("the places an agent edited are written:\n%s", data)
+	}
+
+	want, err := Encode(fixedState())
+	noErr(t, err)
+	eq(t, string(data), string(want))
+
+	got, rep, err := decodeDefault(data)
+	noErr(t, err)
+	eq(t, rep, Report{})
+	eq(t, len(got.Panes["p1"].Edits), 0)
+	eq(t, got, roundTripped())
+}
+
 func TestRailPersistence(t *testing.T) {
 	open := fixedState()
 	open.Rail = true

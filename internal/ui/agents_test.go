@@ -181,7 +181,7 @@ func TestHookEventsThatDoNotFit(t *testing.T) {
 				t.Errorf("command = %v, want none", cmd)
 			}
 
-			if got := a.store.State(); got.Panes["p1"] != before.Panes["p1"] || got.Panes["p2"] != before.Panes["p2"] {
+			if got := a.store.State(); !reflect.DeepEqual(got.Panes["p1"], before.Panes["p1"]) || !reflect.DeepEqual(got.Panes["p2"], before.Panes["p2"]) {
 				t.Errorf("panes changed: %+v", got.Panes)
 			}
 		})
@@ -590,7 +590,7 @@ func TestStatusEventsThatDoNotFit(t *testing.T) {
 				t.Errorf("command = %v, want none", cmd)
 			}
 
-			if got := a.store.State(); got.Panes["p1"] != before.Panes["p1"] || got.Panes["p2"] != before.Panes["p2"] || a.storeVer != ver {
+			if got := a.store.State(); !reflect.DeepEqual(got.Panes["p1"], before.Panes["p1"]) || !reflect.DeepEqual(got.Panes["p2"], before.Panes["p2"]) || a.storeVer != ver {
 				t.Errorf("panes changed: %+v", got.Panes)
 			}
 		})

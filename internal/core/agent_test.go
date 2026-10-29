@@ -1,8 +1,14 @@
 package core
 
 import (
+	"cmp"
+	"fmt"
 	"math"
+	"path"
+	"reflect"
+	"slices"
 	"testing"
+	"time"
 )
 
 func agentState(panes map[PaneID]Pane, layout *Node, focus PaneID) State {
@@ -12,6 +18,39 @@ func agentState(panes map[PaneID]Pane, layout *Node, focus PaneID) State {
 	}
 
 	return s
+}
+
+// samePane compares panes, with Edits in Root order: their order is not part of
+// what a pane promises.
+func samePane(a, b Pane) bool {
+	byRoot := func(p Pane) Pane {
+		p.Edits = slices.SortedFunc(slices.Values(p.Edits), func(x, y Edit) int { return cmp.Compare(x.Root, y.Root) })
+
+		return p
+	}
+
+	return reflect.DeepEqual(byRoot(a), byRoot(b))
+}
+
+// editAt is an edit of root's worktree whose time follows its sequence number.
+func editAt(root string, seq uint64) Edit {
+	return Edit{Root: root, Common: root + "/.git", Repo: path.Base(root), Seq: seq, At: time.Unix(1_000+int64(seq), 0)}
+}
+
+func withAt(e Edit, at time.Time) Edit {
+	e.At = at
+
+	return e
+}
+
+// editsOf lists n edits of distinct roots, the first with the highest Seq.
+func editsOf(n int) []Edit {
+	out := make([]Edit, n)
+	for i := range out {
+		out[i] = editAt(fmt.Sprintf("/r%02d", i), uint64(10+n-1-i))
+	}
+
+	return out
 }
 
 func TestAgentStateString(t *testing.T) {
@@ -51,7 +90,7 @@ func TestSetPaneKind(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := dispatch(t, agentState(map[PaneID]Pane{"p1": tt.from}, leaf("p1"), "p1"), tt.act)
-			if got.Panes["p1"] != tt.want {
+			if !samePane(got.Panes["p1"], tt.want) {
 				t.Errorf("pane = %+v, want %+v", got.Panes["p1"], tt.want)
 			}
 		})
@@ -95,7 +134,7 @@ func TestAgentActionErrors(t *testing.T) {
 
 			want := base()
 			for id, p := range want.Panes {
-				if st.State().Panes[id] != p {
+				if !samePane(st.State().Panes[id], p) {
 					t.Errorf("pane %s changed: %+v", id, st.State().Panes[id])
 				}
 			}
@@ -338,7 +377,7 @@ func TestSetAgentStatus(t *testing.T) {
 				t.Fatalf("Dispatch() error = %v, wantErr %v", err, tt.wantErr)
 			}
 
-			if got := st.State().Panes["p1"]; got != tt.want {
+			if got := st.State().Panes["p1"]; !samePane(got, tt.want) {
 				t.Errorf("pane = %+v, want %+v", got, tt.want)
 			}
 		})
@@ -398,7 +437,7 @@ func TestSessionChangeClearsStatus(t *testing.T) {
 			tt.act.ID = "p1"
 
 			got := dispatch(t, agentState(map[PaneID]Pane{"p1": tt.from}, leaf("p1"), "p1"), tt.act)
-			if got.Panes["p1"] != tt.want {
+			if !samePane(got.Panes["p1"], tt.want) {
 				t.Errorf("pane = %+v, want %+v", got.Panes["p1"], tt.want)
 			}
 		})
@@ -429,6 +468,315 @@ func TestSetAgentStatusMatches(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := tt.act.Matches(tt.pane); got != tt.want {
 				t.Errorf("Matches() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestNoteEdit(t *testing.T) {
+	t.Parallel()
+
+	agent := func(edits ...Edit) Pane {
+		return Pane{Kind: KindAgent, Harness: "claude-code", Cwd: "/w", Session: "s1", Edits: edits}
+	}
+
+	late := editAt("/a", 99).At
+	full := editsOf(MaxEdits)
+
+	swapped := slices.Clone(full)
+	swapped[3] = editAt(full[3].Root, 100)
+
+	tests := []struct {
+		name string
+		from Pane
+		act  NoteEdit
+		want Pane
+	}{
+		{
+			name: "first edit",
+			from: agent(),
+			act:  NoteEdit{Session: "s1", Edit: editAt("/a", 3)},
+			want: agent(editAt("/a", 3)),
+		},
+		{
+			name: "a second root joins the first",
+			from: agent(editAt("/a", 3)),
+			act:  NoteEdit{Session: "s1", Edit: editAt("/b", 4)},
+			want: agent(editAt("/a", 3), editAt("/b", 4)),
+		},
+		{
+			name: "same root, higher Seq",
+			from: agent(editAt("/a", 2)),
+			act:  NoteEdit{Session: "s1", Edit: editAt("/a", 7)},
+			want: agent(editAt("/a", 7)),
+		},
+		{
+			name: "same root, lower Seq keeps the higher",
+			from: agent(editAt("/a", 7)),
+			act:  NoteEdit{Session: "s1", Edit: editAt("/a", 2)},
+			want: agent(editAt("/a", 7)),
+		},
+		{
+			name: "same root, lower Seq but later At keeps the Seq and takes the At",
+			from: agent(editAt("/a", 7)),
+			act:  NoteEdit{Session: "s1", Edit: withAt(editAt("/a", 2), late)},
+			want: agent(withAt(editAt("/a", 7), late)),
+		},
+		{
+			name: "same root, higher Seq but earlier At takes the Seq and keeps the At",
+			from: agent(withAt(editAt("/a", 2), late)),
+			act:  NoteEdit{Session: "s1", Edit: editAt("/a", 7)},
+			want: agent(withAt(editAt("/a", 7), late)),
+		},
+		{
+			name: "another session is ignored",
+			from: agent(editAt("/a", 3)),
+			act:  NoteEdit{Session: "s2", Edit: editAt("/b", 4)},
+			want: agent(editAt("/a", 3)),
+		},
+		{
+			name: "a shell pane is ignored",
+			from: Pane{Kind: KindShell, Cwd: "/w"},
+			act:  NoteEdit{Session: "s1", Edit: editAt("/b", 4)},
+			want: Pane{Kind: KindShell, Cwd: "/w"},
+		},
+		{
+			name: "the 32nd root fits",
+			from: agent(full[:MaxEdits-1]...),
+			act:  NoteEdit{Session: "s1", Edit: full[MaxEdits-1]},
+			want: agent(full...),
+		},
+		{
+			name: "the 33rd root drops the lowest Seq",
+			from: agent(full...),
+			act:  NoteEdit{Session: "s1", Edit: editAt("/new", 100)},
+			want: agent(append(slices.Clone(full[:MaxEdits-1]), editAt("/new", 100))...),
+		},
+		{
+			name: "the 33rd root drops itself when it has the lowest Seq",
+			from: agent(full...),
+			act:  NoteEdit{Session: "s1", Edit: editAt("/new", 1)},
+			want: agent(full...),
+		},
+		{
+			name: "a kept root at the limit drops nothing",
+			from: agent(full...),
+			act:  NoteEdit{Session: "s1", Edit: editAt(full[3].Root, 100)},
+			want: agent(swapped...),
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			tt.act.ID = "p1"
+
+			got := dispatch(t, agentState(map[PaneID]Pane{"p1": tt.from}, leaf("p1"), "p1"), tt.act)
+			if !samePane(got.Panes["p1"], tt.want) {
+				t.Errorf("pane = %+v, want %+v", got.Panes["p1"], tt.want)
+			}
+		})
+	}
+}
+
+func TestNoteEditUnknownPaneChangesNothing(t *testing.T) {
+	t.Parallel()
+
+	s := agentState(map[PaneID]Pane{"p1": {Kind: KindAgent, Harness: "claude-code", Session: "s1"}}, leaf("p1"), "p1")
+
+	got := dispatch(t, s, NoteEdit{ID: "p9", Session: "s1", Edit: editAt("/a", 1)})
+	if len(got.Panes) != 1 || len(got.Panes["p1"].Edits) != 0 {
+		t.Errorf("panes = %+v", got.Panes)
+	}
+}
+
+func TestFollowDir(t *testing.T) {
+	t.Parallel()
+
+	agent := Pane{Kind: KindAgent, Harness: "claude-code", Cwd: "/w", Session: "s1"}
+	note := func(root string, seq uint64) Action {
+		return NoteEdit{ID: "p1", Session: "s1", Edit: editAt(root, seq)}
+	}
+
+	tests := []struct {
+		name  string
+		from  Pane
+		steps []Action
+		want  string
+	}{
+		{"no edits gives Cwd", agent, nil, "/w"},
+		{"no edits gives AgentCwd over Cwd", agent, []Action{SetAgentCwd{ID: "p1", Cwd: "/w/sub"}}, "/w/sub"},
+		{"an edit gives its root", agent, []Action{note("/a", 1)}, "/a"},
+		{"two edits give the higher Seq's root", agent, []Action{note("/a", 1), note("/b", 2)}, "/b"},
+		{"two edits arriving out of order give the higher Seq's root", agent, []Action{note("/b", 2), note("/a", 1)}, "/b"},
+		{"an edit in the own directory's root after another moves back", agent, []Action{note("/a", 1), note("/w", 2)}, "/w"},
+		{"an AgentCwd change after an edit leaves it alone", agent, []Action{note("/a", 1), SetAgentCwd{ID: "p1", Cwd: "/w/sub"}}, "/a"},
+		{"AgentCwd changes before any edit move it", agent, []Action{SetAgentCwd{ID: "p1", Cwd: "/x"}, SetAgentCwd{ID: "p1", Cwd: "/y"}}, "/y"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			s := agentState(map[PaneID]Pane{"p1": tt.from}, leaf("p1"), "p1")
+			for _, a := range tt.steps {
+				s = dispatch(t, s, a)
+			}
+
+			if got := s.Panes["p1"].FollowDir(); got != tt.want {
+				t.Errorf("FollowDir() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestPaneFollowed(t *testing.T) {
+	t.Parallel()
+
+	if _, ok := (Pane{}).Followed(); ok {
+		t.Error("a pane with no edits followed one")
+	}
+
+	p := Pane{Edits: []Edit{editAt("/a", 5), editAt("/b", 9), editAt("/c", 7)}}
+
+	got, ok := p.Followed()
+	if !ok || got.Root != "/b" || got.Seq != 9 {
+		t.Errorf("Followed() = %+v, %v; want the edit with Seq 9", got, ok)
+	}
+}
+
+func TestForgetEdit(t *testing.T) {
+	t.Parallel()
+
+	from := Pane{Kind: KindAgent, Harness: "claude-code", Cwd: "/w", AgentCwd: "/w/sub", Session: "s1", Edits: slices.Grow([]Edit{editAt("/a", 1), editAt("/b", 2)}, 4)}
+	forget := func(root string) Action { return ForgetEdit{ID: "p1", Root: root} }
+
+	t.Run("forgetting the latest falls back to the next, then to the working directory", func(t *testing.T) {
+		t.Parallel()
+
+		s := agentState(map[PaneID]Pane{"p1": from}, leaf("p1"), "p1")
+
+		for _, step := range []struct{ root, want string }{{"/b", "/a"}, {"/a", "/w/sub"}} {
+			s = dispatch(t, s, forget(step.root))
+			if got := s.Panes["p1"].FollowDir(); got != step.want {
+				t.Fatalf("after forgetting %s: FollowDir() = %q, want %q", step.root, got, step.want)
+			}
+		}
+
+		if len(s.Panes["p1"].Edits) != 0 {
+			t.Errorf("Edits = %+v", s.Panes["p1"].Edits)
+		}
+	})
+
+	t.Run("a root that was never edited changes nothing", func(t *testing.T) {
+		t.Parallel()
+
+		s := dispatch(t, agentState(map[PaneID]Pane{"p1": from}, leaf("p1"), "p1"), forget("/zzz"))
+		if !samePane(s.Panes["p1"], from) {
+			t.Errorf("pane = %+v, want %+v", s.Panes["p1"], from)
+		}
+	})
+
+	t.Run("a pane that is gone or a shell changes nothing", func(t *testing.T) {
+		t.Parallel()
+
+		s := agentState(map[PaneID]Pane{"p1": {Kind: KindShell, Cwd: "/w"}}, leaf("p1"), "p1")
+		s = dispatch(t, s, ForgetEdit{ID: "p9", Root: "/a"})
+		s = dispatch(t, s, ForgetEdit{ID: "p1", Root: "/a"})
+
+		if !samePane(s.Panes["p1"], Pane{Kind: KindShell, Cwd: "/w"}) {
+			t.Errorf("pane = %+v", s.Panes["p1"])
+		}
+	})
+
+	t.Run("a state taken before keeps its edits", func(t *testing.T) {
+		t.Parallel()
+
+		st := NewStore(agentState(map[PaneID]Pane{"p1": from}, leaf("p1"), "p1"))
+		before := st.State()
+		want := slices.Clone(before.Panes["p1"].Edits)
+
+		if err := st.Dispatch(forget("/a")); err != nil {
+			t.Fatal(err)
+		}
+
+		if got := before.Panes["p1"].Edits; !slices.Equal(got, want) {
+			t.Errorf("Edits = %+v, want %+v", got, want)
+		}
+	})
+}
+
+func TestSessionChangeClearsEdits(t *testing.T) {
+	t.Parallel()
+
+	edited := func(session SessionID) Pane {
+		return Pane{Kind: KindAgent, Harness: "claude-code", Cwd: "/w", Session: session, Transcript: "/t", Edits: []Edit{editAt("/a", 1), editAt("/b", 2)}}
+	}
+
+	tests := []struct {
+		name string
+		act  SetAgentSession
+		want Pane
+	}{
+		{
+			name: "a new session clears them",
+			act:  SetAgentSession{Session: "s2", Transcript: "/t2"},
+			want: Pane{Kind: KindAgent, Harness: "claude-code", Cwd: "/w", Session: "s2", Transcript: "/t2"},
+		},
+		{
+			name: "the same session keeps them",
+			act:  SetAgentSession{Session: "s1", Transcript: "/t"},
+			want: edited("s1"),
+		},
+		{
+			name: "an end clears them",
+			act:  SetAgentSession{},
+			want: Pane{Kind: KindAgent, Harness: "claude-code", Cwd: "/w"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			tt.act.ID = "p1"
+
+			got := dispatch(t, agentState(map[PaneID]Pane{"p1": edited("s1")}, leaf("p1"), "p1"), tt.act)
+			if !samePane(got.Panes["p1"], tt.want) {
+				t.Errorf("pane = %+v, want %+v", got.Panes["p1"], tt.want)
+			}
+		})
+	}
+}
+
+func TestNoteEditCopiesOnWrite(t *testing.T) {
+	t.Parallel()
+
+	from := Pane{Kind: KindAgent, Harness: "claude-code", Session: "s1", Edits: slices.Grow([]Edit{editAt("/a", 1), editAt("/b", 2)}, 4)}
+
+	full := Pane{Kind: KindAgent, Harness: "claude-code", Session: "s1", Edits: slices.Grow(editsOf(MaxEdits), 4)}
+
+	tests := []struct {
+		name string
+		from Pane
+		edit Edit
+	}{
+		{"a new root", from, editAt("/c", 3)},
+		{"a higher Seq for a known root", from, editAt("/a", 3)},
+		{"a new root past the limit", full, editAt("/new", 100)},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			st := NewStore(agentState(map[PaneID]Pane{"p1": tt.from}, leaf("p1"), "p1"))
+			before := st.State()
+			want := slices.Clone(before.Panes["p1"].Edits)
+
+			if err := st.Dispatch(NoteEdit{ID: "p1", Session: "s1", Edit: tt.edit}); err != nil {
+				t.Fatal(err)
+			}
+
+			if got := before.Panes["p1"].Edits; !slices.Equal(got, want) {
+				t.Errorf("Edits = %+v, want %+v", got, want)
 			}
 		})
 	}

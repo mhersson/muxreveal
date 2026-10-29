@@ -6,6 +6,7 @@ import (
 	"math"
 	"slices"
 	"strconv"
+	"time"
 )
 
 // PaneID names a pane for the session: "p1", "p2", ... and never reused.
@@ -105,7 +106,19 @@ type Pane struct {
 	Context       int       // that status line's context percentage, floored and clamped to 0-100; meaningful with ContextKnown; not persisted
 	ContextKnown  bool      // the status line reported a percentage; not persisted
 	StatusSession SessionID // the session the status above belongs to; not persisted
+
+	Edits []Edit // the places of this session's counted edits; not persisted
 }
+
+// Edit is a worktree an agent made a counted edit in.
+type Edit struct {
+	Root, Common, Repo string    // as git.Place
+	Seq                uint64    // the order the edit hooks arrived in; the highest is the latest
+	At                 time.Time // when the latest edit's hook arrived
+}
+
+// MaxEdits is the most places a pane keeps; past it the lowest Seq goes.
+const MaxEdits = 32
 
 func (p *Pane) clearStatus() {
 	p.Model, p.Context, p.ContextKnown, p.StatusSession = "", 0, false, ""
@@ -119,6 +132,28 @@ func (p Pane) WorkDir() string {
 	}
 
 	return p.Cwd
+}
+
+// Followed is the edit with the highest Seq, if the pane has any.
+func (p Pane) Followed() (Edit, bool) {
+	var latest Edit
+
+	for i, e := range p.Edits {
+		if i == 0 || e.Seq > latest.Seq {
+			latest = e
+		}
+	}
+
+	return latest, len(p.Edits) > 0
+}
+
+// FollowDir is the worktree of the latest edit, else WorkDir.
+func (p Pane) FollowDir() string {
+	if e, ok := p.Followed(); ok {
+		return e.Root
+	}
+
+	return p.WorkDir()
 }
 
 // Dir is a direction for focus, resize and preselection. The zero value is

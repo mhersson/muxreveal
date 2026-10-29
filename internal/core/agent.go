@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"slices"
+	"time"
 )
 
 // SessionID names a harness session, e.g. a Claude Code session UUID.
@@ -34,8 +35,8 @@ func (s AgentState) String() string {
 }
 
 // SetPaneKind changes what a pane is. An agent names its harness; becoming a
-// shell clears Harness, Session, Transcript, State, Action, AgentCwd and the
-// reported status.
+// shell clears Harness, Session, Transcript, State, Action, AgentCwd, the
+// reported status and the edited places.
 type SetPaneKind struct {
 	ID      PaneID
 	Kind    PaneKind
@@ -82,8 +83,8 @@ func (s *State) agentPane(id PaneID) (Pane, error) {
 
 // SetAgentSession records the session an agent reported and its transcript
 // file. An empty Session clears both. An end or a change of session also clears
-// the reported status, unless that status already belongs to the new session:
-// a status line can report before its SessionStart hook.
+// the edited places, and the reported status unless that status already belongs
+// to the new session: a status line can report before its SessionStart hook.
 type SetAgentSession struct {
 	ID         PaneID
 	Session    SessionID
@@ -98,6 +99,10 @@ func (a SetAgentSession) apply(s *State) error {
 
 	if a.Session == "" || (a.Session != p.Session && a.Session != p.StatusSession) {
 		p.clearStatus()
+	}
+
+	if a.Session == "" || a.Session != p.Session {
+		p.Edits = nil
 	}
 
 	p.Session, p.Transcript = a.Session, a.Transcript
@@ -206,6 +211,87 @@ func (a SetAgentCwd) apply(s *State) error {
 	s.Panes[a.ID] = p
 
 	return nil
+}
+
+// NoteEdit records a worktree Session's agent edited. It changes nothing, and
+// is no error, for a pane that is closed, a shell, or in another session. An
+// entry for the same Root keeps the higher Seq and the later At; past MaxEdits
+// the entry with the lowest Seq goes.
+type NoteEdit struct {
+	ID      PaneID
+	Session SessionID
+	Edit    Edit
+}
+
+func (a NoteEdit) apply(s *State) error {
+	p, ok := s.Panes[a.ID]
+	if !ok || p.Kind != KindAgent || p.Session != a.Session {
+		return nil
+	}
+
+	// A fresh slice: State.clone shares the old one with earlier states.
+	edits := slices.Clone(p.Edits)
+
+	if i := slices.IndexFunc(edits, func(e Edit) bool { return e.Root == a.Edit.Root }); i >= 0 {
+		kept := edits[i]
+		if a.Edit.Seq > kept.Seq {
+			kept = a.Edit
+		}
+
+		kept.At = laterOf(edits[i].At, a.Edit.At)
+		edits[i] = kept
+	} else {
+		edits = append(edits, a.Edit)
+	}
+
+	if len(edits) > MaxEdits {
+		lowest := 0
+
+		for i, e := range edits {
+			if e.Seq < edits[lowest].Seq {
+				lowest = i
+			}
+		}
+
+		edits = slices.Delete(edits, lowest, lowest+1)
+	}
+
+	p.Edits = edits
+	s.Panes[a.ID] = p
+
+	return nil
+}
+
+// ForgetEdit drops the entry for Root from an agent's edited places; it
+// changes nothing when the pane has none.
+type ForgetEdit struct {
+	ID   PaneID
+	Root string
+}
+
+func (a ForgetEdit) apply(s *State) error {
+	p, ok := s.Panes[a.ID]
+	if !ok {
+		return nil
+	}
+
+	i := slices.IndexFunc(p.Edits, func(e Edit) bool { return e.Root == a.Root })
+	if i < 0 {
+		return nil
+	}
+
+	p.Edits = slices.Delete(slices.Clone(p.Edits), i, i+1)
+	s.Panes[a.ID] = p
+
+	return nil
+}
+
+func laterOf(a, b time.Time) time.Time {
+	if b.After(a) {
+		return b
+	}
+
+	return a
 }
 
 // TabAgentState is the most urgent state among tab i's agent panes: blocked,
