@@ -135,8 +135,10 @@ func (r *railApp) setState(t *testing.T, id core.PaneID, s core.AgentState) {
 	openIn(t, r.App, core.SetAgentState{ID: id, State: s})
 }
 
-func (r *railApp) card(id core.PaneID) (railCard, bool) {
-	for _, c := range r.railShown(r.store.State()) {
+func (r *railApp) card(id core.PaneID) (railCard, bool) { return railCardOf(r.App, id) }
+
+func railCardOf(a *App, id core.PaneID) (railCard, bool) {
+	for _, c := range a.railShown(a.store.State()) {
 		if c.pane == id {
 			return c, true
 		}
