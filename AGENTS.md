@@ -43,7 +43,7 @@ make install      # go install into $GOBIN, else $GOPATH/bin
 
 | Package            | Responsibility                                                    |
 | ------------------ | ----------------------------------------------------------------- |
-| `cmd/muxreveal`    | Binary: CLI, `hook` subcommand, wiring                            |
+| `cmd/muxreveal`    | Binary: CLI, `hook` and `statusline` subcommands, wiring          |
 | `internal/core`    | Event bus, state store, actions, config, tab layouts (`internal/core/tiling` holds the ported tuios layouts) |
 | `internal/ui`      | Compositor, frames and chrome, widgets, keymap, themes, image placement |
 | `internal/term`    | PTY plus the `VT` interface; `tuios.dev/vt` adapter               |

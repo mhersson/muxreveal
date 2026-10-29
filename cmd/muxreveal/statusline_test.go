@@ -4,10 +4,8 @@ import (
 	"bytes"
 	"context"
 	"io"
-	"net"
 	"path/filepath"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -44,55 +42,6 @@ func statusServer(t *testing.T) (string, <-chan harness.Event) {
 	})
 
 	return path, out
-}
-
-// silentSock returns a socket whose listener accepts and never answers.
-func silentSock(t *testing.T) string {
-	t.Helper()
-
-	path := shortSock(t)
-
-	ln, err := net.Listen("unix", path)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	var (
-		mu       sync.Mutex
-		conns    []net.Conn
-		accepted = make(chan struct{})
-	)
-
-	go func() {
-		defer close(accepted)
-
-		for {
-			c, err := ln.Accept()
-			if err != nil {
-				return
-			}
-
-			mu.Lock()
-
-			conns = append(conns, c)
-			mu.Unlock()
-		}
-	}()
-
-	t.Cleanup(func() {
-		_ = ln.Close()
-
-		<-accepted
-
-		mu.Lock()
-		defer mu.Unlock()
-
-		for _, c := range conns {
-			_ = c.Close()
-		}
-	})
-
-	return path
 }
 
 func TestRunStatuslineDelivers(t *testing.T) {

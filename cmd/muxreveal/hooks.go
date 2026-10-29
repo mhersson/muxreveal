@@ -100,11 +100,7 @@ func setupHooks(logger *slog.Logger, stateDir, indexCache string, watches *git.W
 		return hookRuntime{}, err
 	}
 
-	// Settings drops the status line for a path it cannot quote; say why. The
-	// error holds the path only %q-escaped, so it is safe to log.
-	if _, err := harness.QuotePath(exe); err != nil {
-		logger.Warn("status line is off", "err", err)
-	}
+	warnStatusLineOff(logger, exe)
 
 	if err := store.WriteAtomic(settingsPath, settings); err != nil {
 		return hookRuntime{}, fmt.Errorf("settings file: %w", err)
@@ -152,6 +148,14 @@ func setupHooks(logger *slog.Logger, stateDir, indexCache string, watches *git.W
 	})
 
 	return hookRuntime{Settings: settingsPath, Sock: sockPath, RunDir: runDir, Events: events, stop: stop}, nil
+}
+
+// warnStatusLineOff logs why Settings leaves out the status line for exe. The
+// error holds the path only %q-escaped, so it is safe to log.
+func warnStatusLineOff(logger *slog.Logger, exe string) {
+	if _, err := harness.QuotePath(exe); err != nil {
+		logger.Warn("status line is off", "err", err)
+	}
 }
 
 // gitSnapshot snapshots the working tree with its temporary index in tempDir

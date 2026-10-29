@@ -43,6 +43,55 @@ func shortSock(t *testing.T) string {
 	return filepath.Join(shortDir(t), "s.sock")
 }
 
+// silentSock returns a socket whose listener accepts and never answers.
+func silentSock(t *testing.T) string {
+	t.Helper()
+
+	path := shortSock(t)
+
+	ln, err := net.Listen("unix", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var (
+		mu       sync.Mutex
+		conns    []net.Conn
+		accepted = make(chan struct{})
+	)
+
+	go func() {
+		defer close(accepted)
+
+		for {
+			c, err := ln.Accept()
+			if err != nil {
+				return
+			}
+
+			mu.Lock()
+
+			conns = append(conns, c)
+			mu.Unlock()
+		}
+	}()
+
+	t.Cleanup(func() {
+		_ = ln.Close()
+
+		<-accepted
+
+		mu.Lock()
+		defer mu.Unlock()
+
+		for _, c := range conns {
+			_ = c.Close()
+		}
+	})
+
+	return path
+}
+
 // captureStdio fails the test if f writes to the process stdout or stderr.
 func captureStdio(t *testing.T, f func()) {
 	t.Helper()
@@ -106,48 +155,7 @@ func TestRunHookDelivers(t *testing.T) {
 func TestRunHookIsSilentAndQuick(t *testing.T) {
 	missing := filepath.Join(shortDir(t), "none.sock")
 
-	// A listener that accepts and never answers.
-	silent := shortSock(t)
-
-	ln, err := net.Listen("unix", silent)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	var (
-		mu       sync.Mutex
-		conns    []net.Conn
-		accepted = make(chan struct{})
-	)
-
-	go func() {
-		defer close(accepted)
-
-		for {
-			c, err := ln.Accept()
-			if err != nil {
-				return
-			}
-
-			mu.Lock()
-
-			conns = append(conns, c)
-			mu.Unlock()
-		}
-	}()
-
-	t.Cleanup(func() {
-		_ = ln.Close()
-
-		<-accepted
-
-		mu.Lock()
-		defer mu.Unlock()
-
-		for _, c := range conns {
-			_ = c.Close()
-		}
-	})
+	silent := silentSock(t)
 
 	big := `{"hook_event_name":"PostToolUse","pad":"` + strings.Repeat("x", 10<<20) + `"}`
 

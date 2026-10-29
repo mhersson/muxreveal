@@ -37,33 +37,8 @@ func newStatuslineCmd(getenv func(string) string) *cobra.Command {
 // runStatusline forwards one statusline payload to the MuxReveal socket. It
 // writes nothing to stdout or stderr and drops the update on any failure.
 func runStatusline(ctx context.Context, stdin io.Reader, getenv func(string) string) {
-	// Read in a goroutine so a stdin that never closes cannot outlast the
-	// budget; the process exits right after, which ends the reader.
-	type result struct {
-		data []byte
-		err  error
-	}
-
-	read := make(chan result, 1)
-
-	go func() {
-		data, err := io.ReadAll(io.LimitReader(stdin, maxHookPayload))
-		// Drain the rest so Claude's write never fails with EPIPE.
-		_, _ = io.Copy(io.Discard, stdin)
-
-		read <- result{data, err}
-	}()
-
-	var payload []byte
-
-	select {
-	case r := <-read:
-		if r.err != nil {
-			return
-		}
-
-		payload = r.data
-	case <-ctx.Done():
+	payload, ok := readPayload(ctx, stdin)
+	if !ok {
 		return
 	}
 
