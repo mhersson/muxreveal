@@ -11,6 +11,7 @@ import (
 	"github.com/charmbracelet/x/exp/teatest/v2"
 
 	"github.com/mhersson/muxreveal/internal/core"
+	"github.com/mhersson/muxreveal/internal/ui/theme"
 )
 
 // screenRows is the plain text of every row of the drawn frame.
@@ -566,5 +567,60 @@ func TestPromptCursorUnderToast(t *testing.T) {
 
 	if _, _, ok := cursorOf(a); ok {
 		t.Error("prompt cursor shows over the toast")
+	}
+}
+
+func TestToastLevels(t *testing.T) {
+	ui := mochaUI(t)
+
+	tests := []struct {
+		name   string
+		level  toastLevel
+		colour theme.Hex
+	}{
+		{"notice", levelNotice, ui.Warning},
+		{"success", levelSuccess, ui.Success},
+		{"error", levelError, ui.Error},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			a, _ := toastApp(t, 100, 30)
+			a.toast(tt.level, "boom")
+
+			vt := lineVT(t, strings.Split(a.View().Content, "\n")[28], 100)
+			assertColours(t, vt, 89, 0, "│", tt.colour, ui.Panel, false)
+			assertColours(t, vt, 91, 0, iconAlert, tt.colour, ui.Panel, false)
+			assertColours(t, vt, 93, 0, "b", ui.Fg, ui.Panel, false)
+			assertColours(t, vt, 98, 0, "│", tt.colour, ui.Panel, false)
+
+			vt = lineVT(t, strings.Split(a.View().Content, "\n")[29], 100)
+			assertColours(t, vt, 89, 0, "╰", tt.colour, ui.Panel, false)
+			assertColours(t, vt, 94, 0, "─", tt.colour, ui.Panel, false)
+		})
+	}
+}
+
+func TestToastLevelBelongsToItsText(t *testing.T) {
+	a, _ := toastApp(t, 100, 30)
+
+	a.toast(levelError, "boom")
+
+	if got := a.noticeLevel(); got != levelError {
+		t.Fatalf("level = %v right after an error toast, want error", got)
+	}
+
+	// A notice set the plain way, by any other code path, reads as a notice.
+	a.notice = "later"
+
+	if got := a.noticeLevel(); got != levelNotice {
+		t.Errorf("level = %v for a notice assigned directly, want notice", got)
+	}
+
+	a.toast(levelSuccess, "done")
+	press(a, keyRune('x'))
+
+	if a.notice != "" || a.noticeLevel() != levelNotice {
+		t.Errorf("notice = %q at level %v after a key, want none at the notice level", a.notice, a.noticeLevel())
 	}
 }

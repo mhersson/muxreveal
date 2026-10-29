@@ -21,6 +21,9 @@ type confirm struct {
 	pane                   core.PaneID
 	tab                    core.TabID
 	yes                    func(a *App) tea.Cmd
+	// push, when set, makes this the push confirm: it draws pushBox and takes only
+	// enter and esc.
+	push *pushTarget
 }
 
 // openConfirm shows c and ends a pending leader sequence.
@@ -33,7 +36,12 @@ func (a *App) openConfirm(c confirm) {
 func (a *App) handleConfirmKey(msg tea.KeyPressMsg) tea.Cmd {
 	c := a.confirm
 
-	switch msg.String() {
+	key := msg.String()
+	if c.push != nil && key != "enter" && key != "esc" {
+		return nil
+	}
+
+	switch key {
 	case "y", "enter":
 		a.confirm = nil
 
@@ -87,6 +95,15 @@ func confirmBox(c confirm, w int, icons bool, st styles) []string {
 // overlayConfirm draws the confirm box over base, centred with its top at a
 // third of the height, clipped to the terminal.
 func overlayConfirm(base string, width, height int, c confirm, icons bool, st styles) string {
+	if c.push != nil {
+		w := min(maxPushWidth, width-2)
+		if w < 4 {
+			return base
+		}
+
+		return overlayLines(base, width, height, max(1, height/3), pushBox(*c.push, w, icons, st), w)
+	}
+
 	w := min(maxConfirmWidth, width-2)
 	if w < 4 {
 		return base

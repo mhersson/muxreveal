@@ -25,8 +25,8 @@ func TestEveryBindingResolves(t *testing.T) {
 		}
 
 		seen[b.key] = true
-		if !slices.Contains([]string{"Panes", "Layout", "Tabs", "App"}, b.group) {
-			t.Errorf("binding %q has group %q, want Panes, Layout, Tabs or App", b.key, b.group)
+		if !slices.Contains([]string{"Panes", "Layout", "Tabs", "Git", "App"}, b.group) {
+			t.Errorf("binding %q has group %q, want Panes, Layout, Tabs, Git or App", b.key, b.group)
 		}
 	}
 }

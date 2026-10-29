@@ -36,8 +36,9 @@ type styles struct {
 	// tagModel is the model tag's model name and tagMeter its context meter, by level.
 	tagModel lipgloss.Style
 	tagMeter [meterLevels]lipgloss.Style
-	// The toast: its Warning border and icon, and its text, all on the panel colour.
-	toastBorder, toastIcon, toastText lipgloss.Style
+	// The toast: its border and icon in the level's colour, and its text, all on the panel colour.
+	toastTone [toastLevels]lipgloss.Style
+	toastText lipgloss.Style
 	// tagWorking, tagBlocked and tagIdle draw the state badge.
 	tagWorking, tagBlocked, tagIdle lipgloss.Style
 	// popupBorder draws the popup frame on the panel colour.
@@ -46,6 +47,8 @@ type styles struct {
 	popupMuted, popupSubtle lipgloss.Style
 	// The confirm box: its Error border and title, bold question and bold keys.
 	confirmBorder, confirmTitle, confirmQuestion, confirmKey lipgloss.Style
+	// pushTitle is the push confirm's title, in Info and bold.
+	pushTitle lipgloss.Style
 	// runs memoizes rendered border runs; it is shared by copies of the styles.
 	runs *runCache
 }
@@ -60,6 +63,12 @@ func newStyles(t theme.Theme) styles {
 	for l := range meterLevels {
 		fg, bold := l.colour(ui)
 		meters[l] = onBg.Foreground(fg).Bold(bold)
+	}
+
+	var toasts [toastLevels]lipgloss.Style
+
+	for l := range toastLevels {
+		toasts[l] = onPanel.Foreground(l.colour(ui))
 	}
 
 	return styles{
@@ -87,8 +96,7 @@ func newStyles(t theme.Theme) styles {
 		searchText:  onBg,
 		tagModel:    onBg.Foreground(ui.Muted),
 		tagMeter:    meters,
-		toastBorder: onPanel.Foreground(ui.Warning),
-		toastIcon:   onPanel.Foreground(ui.Warning),
+		toastTone:   toasts,
 		toastText:   onPanel,
 		tagWorking:  onBg.Foreground(ui.Working).Bold(true),
 		tagBlocked:  onBg.Foreground(ui.Blocked).Bold(true),
@@ -101,6 +109,7 @@ func newStyles(t theme.Theme) styles {
 		confirmTitle:    onPanel.Foreground(ui.Error).Bold(true),
 		confirmQuestion: onPanel.Bold(true),
 		confirmKey:      onPanel.Foreground(ui.Key).Bold(true),
+		pushTitle:       onPanel.Foreground(ui.Info).Bold(true),
 		runs:            &runCache{},
 	}
 }

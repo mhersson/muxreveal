@@ -190,6 +190,11 @@ func defaultCommands() []command {
 	cmds = append(cmds, reviewCommands()...)
 
 	cmds = append(cmds, command{
+		id:    "git.push",
+		icon:  iconPush,
+		title: "Push branch",
+		run:   (*App).push,
+	}, command{
 		id:    "app.quit",
 		icon:  iconQuit,
 		title: "Quit MuxReveal",

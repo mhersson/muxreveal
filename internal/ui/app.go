@@ -82,11 +82,13 @@ type App struct {
 
 	reg     *registry
 	keymap  keymap
-	pending bool   // leader pressed, awaiting a key
-	prefix  string // first key of a two-key sequence while pending; "" before it
-	popup   bool   // which-key popup visible; only while pending with no prefix
-	seq     int    // leader press counter; a whichKeyMsg with another seq is stale
-	notice  string // toast message until the next key press
+	pending bool      // leader pressed, awaiting a key
+	prefix  string    // first key of a two-key sequence while pending; "" before it
+	popup   bool      // which-key popup visible; only while pending with no prefix
+	seq     int       // leader press counter; a whichKeyMsg with another seq is stale
+	notice  string    // toast message until the next key press
+	marked  toastMark // the level the toast text was raised at
+	pushSeq int       // push request counter; an answer for another request is stale
 
 	// theme, styles and sample follow store.State().Theme; only sync updates them.
 	theme  theme.Theme
@@ -511,6 +513,10 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, a.onPRResolved(msg)
 	case prBranchMsg:
 		a.onPRBranch(msg)
+	case pushResolvedMsg:
+		a.onPushResolved(msg)
+	case pushedMsg:
+		return a, a.onPushed(msg)
 	case watchAcquiredMsg:
 		a.onWatchAcquired(msg)
 	case agentTickMsg:
@@ -672,7 +678,7 @@ func (a *App) View() tea.View {
 		content = a.drawDrawer(content, r, lines, fits)
 	}
 
-	content = overlayToast(content, a.width, a.height, a.notice, a.icons, lk.styles)
+	content = overlayToast(content, a.width, a.height, a.notice, a.noticeLevel(), a.icons, lk.styles)
 	if a.sequenceOpen() {
 		content = overlayCorner(content, a.width, a.height, sequencePopup(a.keymap.leader, a.prefix, a.icons, lk.styles))
 	}
