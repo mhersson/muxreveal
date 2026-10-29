@@ -40,6 +40,9 @@ type railCard struct {
 	statsKnown bool
 	active     time.Time // the later of its last output and last hook event
 	unseen     bool
+	model      string // the model the status line reported, cleaned; empty shows none
+	meter      int    // the context percentage as core holds it; the drawing clamps it
+	meterKnown bool
 }
 
 // railGroup is the cards of one state, in tab and pane order.
@@ -148,7 +151,10 @@ func (a *App) railCards(st core.State) []railGroup {
 		m := st.Panes[id]
 		ti, _ := st.TabOf(id)
 
-		c := railCard{pane: id, tab: ti, state: m.State, action: cardAction(m)}
+		c := railCard{
+			pane: id, tab: ti, state: m.State, action: cardAction(m),
+			model: cleanModel(m.Model), meter: m.Context, meterKnown: m.ContextKnown,
+		}
 		if ti < len(tabs) {
 			c.tabName = tabs[ti].name
 		}

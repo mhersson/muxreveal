@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"slices"
 	"strconv"
 	"strings"
 
@@ -467,7 +468,9 @@ func (a *App) railCardLine(ui theme.UI, c railCard, hits []railHit, n, cw int) [
 }
 
 // railTitleLine is a card's first line: state glyph, the session's name or else
-// the project, age and the unseen dot.
+// the project and the model, then the context meter, age and the unseen dot. When
+// short of room the meter goes first, then the model, then the name is cut; the
+// age and the dot stay.
 func (a *App) railTitleLine(ui theme.UI, c railCard, hits []railHit, cw int) []railRun {
 	glyph := railRun{text: " ", fg: ui.Fg}
 	spin := spinFrame(a.spin)
@@ -489,24 +492,19 @@ func (a *App) railTitleLine(ui theme.UI, c railCard, hits []railHit, cw int) []r
 		}
 	}
 
-	var right []railRun
+	var tail []railRun
 
 	if age := railAge(c.active, a.clock.Now()); age != "" {
-		right = append(right, railRun{text: age, fg: ui.Subtle})
+		tail = append(tail, railRun{text: age, fg: ui.Subtle})
 	}
 
 	if c.unseen {
 		dot := "●"
-		if len(right) > 0 {
+		if len(tail) > 0 {
 			dot = " " + dot
 		}
 
-		right = append(right, railRun{text: dot, fg: ui.Accent})
-	}
-
-	room := cw
-	if rw := runsWidth(right); rw > 0 {
-		room = cw - rw - 1
+		tail = append(tail, railRun{text: dot, fg: ui.Accent})
 	}
 
 	who, field := c.project, railFieldProject
@@ -514,7 +512,47 @@ func (a *App) railTitleLine(ui theme.UI, c railCard, hits []railHit, cw int) []r
 		who, field = c.name, railFieldName
 	}
 
-	left := cutRuns(append([]railRun{glyph, {text: " ", fg: ui.Fg}}, hiRuns(who, hitsOf(hits, field), ui.Fg, ui.Match, true)...), room)
+	name := append([]railRun{glyph, {text: " ", fg: ui.Fg}}, hiRuns(who, hitsOf(hits, field), ui.Fg, ui.Match, true)...)
+	withModel := name
+
+	if c.model != "" {
+		withModel = append(slices.Clone(name), railRun{text: "  ", fg: ui.Fg}, railRun{text: c.model, fg: ui.Subtle})
+	}
+
+	withMeter := tail
+
+	if c.meterKnown {
+		text, level := meterOf(c.meter)
+		fg, bold := level.colour(ui)
+		withMeter = []railRun{{text: text, fg: fg, bold: bold}}
+
+		if len(tail) > 0 {
+			withMeter = append(withMeter, railRun{text: "  ", fg: ui.Fg})
+		}
+
+		withMeter = append(withMeter, tail...)
+	}
+
+	// A gap of one cell separates the two sides.
+	fits := func(l, r []railRun) bool {
+		return runsWidth(l)+boolInt(len(r) > 0)+runsWidth(r) <= cw
+	}
+
+	left, right := name, tail
+
+	switch {
+	case fits(withModel, withMeter):
+		left, right = withModel, withMeter
+	case fits(withModel, tail):
+		left = withModel
+	}
+
+	room := cw
+	if rw := runsWidth(right); rw > 0 {
+		room = cw - rw - 1
+	}
+
+	left = cutRuns(left, room)
 	pad := cw - runsWidth(left) - runsWidth(right)
 
 	if len(right) == 0 || pad < 1 {

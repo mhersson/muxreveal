@@ -85,6 +85,23 @@ func TestRailCacheKeyCoversEveryInput(t *testing.T) {
 		{name: "pulse phase", change: func(t *testing.T, a *App) { a.rail.pulseDim = true }, visible: true},
 		{name: "state", change: func(t *testing.T, a *App) { openIn(t, a, core.SetAgentState{ID: "p2", State: core.AgentIdle}) }, visible: true},
 		{name: "action", change: func(t *testing.T, a *App) { openIn(t, a, core.SetAgentAction{ID: "p2", Action: "Read go.mod"}) }, visible: true},
+		{
+			name: "model",
+			change: func(t *testing.T, a *App) {
+				openIn(t, a, core.SetAgentStatus{ID: "p2", Session: "s2", Model: "Opus 5.5"})
+			},
+			visible: true,
+		},
+		{
+			name: "context meter",
+			prep: func(t *testing.T, a *App) {
+				openIn(t, a, core.SetAgentStatus{ID: "p2", Session: "s2", Model: "Opus 5.5", Context: 40, ContextKnown: true})
+			},
+			change: func(t *testing.T, a *App) {
+				openIn(t, a, core.SetAgentStatus{ID: "p2", Session: "s2", Model: "Opus 5.5", Context: 41, ContextKnown: true})
+			},
+			visible: true,
+		},
 		{name: "project", change: func(t *testing.T, a *App) { probe(a, "p2").project = "other" }, visible: true},
 		{name: "branch", change: func(t *testing.T, a *App) { probe(a, "p2").branch = "fix/other" }, visible: true},
 		{name: "detached", change: func(t *testing.T, a *App) { probe(a, "p2").detached = true }},

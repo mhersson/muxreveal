@@ -94,16 +94,23 @@ func (a *App) topBorder(s core.State, id core.PaneID, r core.Rect, focused, brig
 	// left is where the title must end.
 	left := r.X + r.W - 1
 
+	// rendered is the styled text of a tag drawn in several styles; otherwise style draws text.
 	type tag struct {
-		text  string
-		style lipgloss.Style
+		text     string
+		style    lipgloss.Style
+		rendered string
 	}
 
-	var copyTag, nextTag, scrollTag, zoomTag, badgeTag *tag
+	var copyTag, nextTag, scrollTag, zoomTag, badgeTag, modelTag *tag
 
 	if meta.Kind == core.KindAgent {
 		if text, style, ok := st.badge(meta.State, a.spin, a.icons); ok {
-			badgeTag = &tag{text, style}
+			badgeTag = &tag{text: text, style: style}
+		}
+
+		if model := cleanModel(meta.Model); model != "" {
+			text, rendered := st.modelTag(model, meta.Context, meta.ContextKnown)
+			modelTag = &tag{text: text, rendered: rendered}
 		}
 	}
 
@@ -114,7 +121,7 @@ func (a *App) topBorder(s core.State, id core.PaneID, r core.Rect, focused, brig
 			text = " " + iconZoom + " zoom "
 		}
 
-		zoomTag = &tag{text, st.tagZoom}
+		zoomTag = &tag{text: text, style: st.tagZoom}
 	}
 
 	if p := a.panes[id]; p != nil {
@@ -124,12 +131,12 @@ func (a *App) topBorder(s core.State, id core.PaneID, r core.Rect, focused, brig
 				arrow = iconScroll
 			}
 
-			scrollTag = &tag{fmt.Sprintf(" %s %d ", arrow, n), st.tagScroll}
+			scrollTag = &tag{text: fmt.Sprintf(" %s %d ", arrow, n), style: st.tagScroll}
 		}
 	}
 
 	if dir := s.Tab().Preselect; focused && dir != core.NoDir {
-		nextTag = &tag{" " + a.preselectArrow(dir) + " next ", st.tagNext}
+		nextTag = &tag{text: " " + a.preselectArrow(dir) + " next ", style: st.tagNext}
 	}
 
 	if a.copy != nil && a.copy.pane == id {
@@ -138,14 +145,16 @@ func (a *App) topBorder(s core.State, id core.PaneID, r core.Rect, focused, brig
 			text = " " + iconCopy + " COPY "
 		}
 
-		copyTag = &tag{text, st.tagCopy}
+		copyTag = &tag{text: text, style: st.tagCopy}
 	}
 
 	// The tags fit between the corners with one border cell between two and one
 	// before the right corner; COPY claims room first, then the badge, zoom,
-	// preselection and scroll tags.
+	// preselection and scroll tags, and the model tag last, only when every other
+	// tag found room.
 	avail := r.W - 3
 	used := 0
+	dropped := false
 	claim := func(t *tag) *tag {
 		if t == nil {
 			return nil
@@ -157,6 +166,8 @@ func (a *App) topBorder(s core.State, id core.PaneID, r core.Rect, focused, brig
 		}
 
 		if used+need > avail {
+			dropped = true
+
 			return nil
 		}
 
@@ -167,19 +178,31 @@ func (a *App) topBorder(s core.State, id core.PaneID, r core.Rect, focused, brig
 
 	copyTag, badgeTag, zoomTag, nextTag, scrollTag = claim(copyTag), claim(badgeTag), claim(zoomTag), claim(nextTag), claim(scrollTag)
 
+	if dropped {
+		modelTag = nil
+	}
+
+	modelTag = claim(modelTag)
+
 	var segs []segment
 
 	// Tags sit right to left with one border cell between them and before the corner.
 	tagEnd := r.X + r.W - 2
 
-	for _, t := range []*tag{badgeTag, zoomTag, scrollTag, nextTag, copyTag} {
+	for _, t := range []*tag{badgeTag, modelTag, zoomTag, scrollTag, nextTag, copyTag} {
 		if t == nil {
 			continue
 		}
 
 		tw := lipgloss.Width(t.text)
 		x := tagEnd - tw
-		segs = append(segs, segment{x, tw, t.style.Render(t.text)})
+
+		text := t.rendered
+		if text == "" {
+			text = t.style.Render(t.text)
+		}
+
+		segs = append(segs, segment{x, tw, text})
 		left = x
 		tagEnd = x - 1
 	}
