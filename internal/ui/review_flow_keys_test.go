@@ -261,17 +261,20 @@ func TestEscReturnsTheKeyboard(t *testing.T) {
 
 	t.Run("tree then drawer", func(t *testing.T) {
 		r := newKeysRig(t, keysRepo(t))
-		r.opened(t)
-		r.keys(tea.KeyPressMsg{Code: tea.KeyTab})
+		v := r.opened(t)
+		r.keys(keyTab, keyRune('j'))
 
 		if !r.drawer.tree {
 			t.Fatal("tab did not give the tree the keyboard")
 		}
 
+		cursor := v.cursor
+
 		r.keys(keyEsc)
 
-		if r.drawer.tree || !r.drawer.focused {
-			t.Errorf("esc in the tree: tree has the keyboard = %v, drawer = %v, want false and true", r.drawer.tree, r.drawer.focused)
+		if r.drawer.tree || !r.drawer.focused || !treeIsOpen(r.App) || v.cursor != cursor {
+			t.Errorf("esc in the tree: tree has the keyboard = %v, drawer = %v, tree open = %v, cursor %d -> %d, want false, true, true and the cursor kept",
+				r.drawer.tree, r.drawer.focused, treeIsOpen(r.App), cursor, v.cursor)
 		}
 
 		r.keys(keyEsc)
@@ -670,7 +673,7 @@ func TestClickOnARowMovesTheCursor(t *testing.T) {
 	v := r.opened(t)
 	r.keys(keyEsc)
 
-	lay := r.drawerLayoutOf(mustRect(t, r), v)
+	lay := r.layout(t)
 	x, y := r.drawerCell(t, 1+lay.treeW+1+8, 1+5)
 
 	click(r.App, x, y)
@@ -679,8 +682,12 @@ func TestClickOnARowMovesTheCursor(t *testing.T) {
 		t.Errorf("a click on row 5: cursor = %d, drawer has the keyboard = %v, tree = %v, want 5, true and false", v.cursor, r.drawer.focused, r.drawer.tree)
 	}
 
-	// A click on a tree file jumps the diff to it.
-	r.keys(keyEsc)
+	// With the tree open, a click on one of its files jumps the diff to it.
+	r.keys(keyTab, keyEsc, keyEsc)
+
+	if !treeIsOpen(r.App) || r.drawer.focused {
+		t.Fatalf("setup: tree open = %v, drawer has the keyboard = %v, want the tree open and the keyboard with the panes", treeIsOpen(r.App), r.drawer.focused)
+	}
 
 	z := slices.IndexFunc(v.derived().tree, func(it treeItem) bool { return !it.dir && v.res.Files[it.file].Path == "z.txt" })
 	x, y = r.drawerCell(t, 2, 1+3+z)
@@ -697,18 +704,16 @@ func TestClickOnARowMovesTheCursor(t *testing.T) {
 	}
 }
 
-// In a narrow drawer the tree shows only while it has the keyboard; a click on
-// one of its files jumps to that file's header and hides it again.
-func TestClickOnATreeFileInANarrowDrawer(t *testing.T) {
+// A click on a tree file jumps to that file's header and gives the diff the
+// keyboard; the tree stays open, in a narrow drawer as in a wide one.
+func TestClickOnATreeFileKeepsTheTreeOpen(t *testing.T) {
 	r := newKeysRig(t, keysRepo(t))
 	sized(t, r.App, 100, 30)
 
 	v := r.opened(t)
-	box := mustRect(t, r)
+	r.keys(keyTab)
 
-	r.keys(tea.KeyPressMsg{Code: tea.KeyTab})
-
-	lay := r.drawerLayoutOf(box, v)
+	lay := r.layout(t)
 	if lay.treeW == 0 || !r.drawer.tree {
 		t.Fatalf("setup: tree width %d, tree has the keyboard = %v, want the tree shown", lay.treeW, r.drawer.tree)
 	}
@@ -722,16 +727,16 @@ func TestClickOnATreeFileInANarrowDrawer(t *testing.T) {
 		t.Errorf("a click on z.txt in the tree: cursor on %s (kind %d), want z.txt's header", fileAtCursor(v), v.rows[v.cursor].kind)
 	}
 
-	if r.drawer.tree || !r.drawer.focused || r.drawerLayoutOf(box, v).treeW != 0 {
-		t.Errorf("after the click: tree has the keyboard = %v, drawer has it = %v, tree shown = %v, want the diff to have it and the tree hidden",
-			r.drawer.tree, r.drawer.focused, r.drawerLayoutOf(box, v).treeW != 0)
+	if r.drawer.tree || !r.drawer.focused || !treeIsOpen(r.App) || r.layout(t).treeW == 0 {
+		t.Errorf("after the click: tree has the keyboard = %v, drawer has it = %v, tree open = %v, tree drawn = %v, want the diff to have it and the tree still shown",
+			r.drawer.tree, r.drawer.focused, treeIsOpen(r.App), r.layout(t).treeW != 0)
 	}
 }
 
 func TestWheelScrolls(t *testing.T) {
 	r := newKeysRig(t, keysRepo(t))
 	v := r.opened(t)
-	lay := r.drawerLayoutOf(mustRect(t, r), v)
+	lay := r.layout(t)
 	x, y := r.drawerCell(t, 1+lay.treeW+1+8, 1+5)
 
 	wheelAt(r.App, x, y, tea.MouseWheelDown)

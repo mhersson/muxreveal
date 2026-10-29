@@ -56,15 +56,20 @@ func TestDrawerLayoutFollowsItsInputs(t *testing.T) {
 			v.rebuild(v.split)
 		}},
 		{"a narrower window", nil, func(t *testing.T, a *App, v *reviewView) { sized(t, a, 160, 48) }},
-		{"a window too narrow for the tree", nil, func(t *testing.T, a *App, v *reviewView) { sized(t, a, 100, 30) }},
+		{"a window under 80 inner columns", nil, func(t *testing.T, a *App, v *reviewView) { sized(t, a, 100, 30) }},
 		{"a taller window", nil, func(t *testing.T, a *App, v *reviewView) { sized(t, a, 200, 60) }},
 		{"the rail opens", nil, func(t *testing.T, a *App, v *reviewView) { openIn(t, a, core.SetRail{Open: true}) }},
 		{"a wider mode row", nil, func(t *testing.T, a *App, v *reviewView) {
 			v.src, v.base = git.BranchSource{Worktree: "/w/p1"}, "origin/a-base-branch-with-a-very-long-name"
 		}},
 		{"more turns", nil, func(t *testing.T, a *App, v *reviewView) { v.turns = 12345 }},
-		{"the tree opens in a narrow drawer", func(s *reviewScene) { s.w = 100 }, func(t *testing.T, a *App, v *reviewView) { v.treeOpen = true }},
-		{"the tree takes the keyboard", func(s *reviewScene) { s.w = 100 }, func(t *testing.T, a *App, v *reviewView) { a.drawer.tree = true }},
+		{"the tree opens", nil, func(t *testing.T, a *App, v *reviewView) { openIn(t, a, core.SetReviewTree{Open: true}) }},
+		{"the tree opens in a narrow drawer", func(s *reviewScene) { s.w = 100 }, func(t *testing.T, a *App, v *reviewView) {
+			openIn(t, a, core.SetReviewTree{Open: true})
+		}},
+		{"the tree closes", func(s *reviewScene) { s.tree = true }, func(t *testing.T, a *App, v *reviewView) {
+			openIn(t, a, core.SetReviewTree{Open: false})
+		}},
 		{"side by side is wanted", nil, func(t *testing.T, a *App, v *reviewView) { v.split = true }},
 		{"a longer file shown whole", nil, func(t *testing.T, a *App, v *reviewView) {
 			v.full = map[string]fullText{appGoPath: longFull}
@@ -91,19 +96,39 @@ func TestDrawerLayoutFollowsItsInputs(t *testing.T) {
 				t.Fatal("the layout was not computed again")
 			}
 
-			box, ok := a.drawerFull(a.store.State())
+			st := a.store.State()
+
+			box, ok := a.drawerFull(st)
 			if !ok {
 				t.Fatal("no drawer")
 			}
 
-			got := a.drawerLayoutOf(box, v)
+			got := a.drawerLayoutOf(box, v, drawerTree(st))
 
 			v.cache = reviewCache{}
 
-			if want := a.drawerLayoutOf(box, v); got != want {
+			if want := a.drawerLayoutOf(box, v, drawerTree(st)); got != want {
 				t.Errorf("the cached layout is %+v, a cold cache gives %+v", got, want)
 			}
 		})
+	}
+}
+
+// The keyboard moving into the tree draws it differently but lays nothing out
+// again: the layout follows the tree being open, not who has the keyboard.
+func TestDrawerLayoutIgnoresTheTreeKeyboard(t *testing.T) {
+	s := cacheScene()
+	s.tree = true
+	a := s.build(t)
+
+	layouts := a.drawer.layouts
+
+	a.drawer.tree = true
+
+	settleDrawer(t, a)
+
+	if got := a.drawer.layouts - layouts; got != 0 {
+		t.Errorf("%d layouts computed after the keyboard moved into the tree, want 0", got)
 	}
 }
 

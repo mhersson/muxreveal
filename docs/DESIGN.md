@@ -381,12 +381,12 @@ An overlay that slides in from the right over half the body and shows the focuse
 - **Frame.** A rounded box like a pane, on `Bg`, the theme's background, which is also the ground the diff lines are tinted against. The title is `  <project> · <branch> `: the icon in `Review`, bold; the text `Review` and bold while the drawer has the keyboard, else `Muted`. Project and branch are found as the rail finds them (`Repo.MainRoot` base name, and `git.Head`; a detached HEAD shows 7 characters).
 - **Tags** sit at the right end of the top border, rightmost first: the mode tag, ` 󰘬 branch ` or ` 󰋚 turn N/M `, in `Accent`, bold; then ` 󰣟 split ` (same style) while side by side is drawn. With `icons = false` they read ` branch `, ` turn 4/4 ` and ` split `.
 - **Mode and totals.** The top of the file tree holds two rows, then a blank row. The mode row is one of: `󰘬 branch vs <base>`; `󰋚 turn N of M, live` for the latest turn; `turn N of M` for a past turn; `turns N-K of M` when the diff covers later turns without a snapshot (`Result.Through > Result.Turn`); `turn N of M, no snapshot`. The icon is `Accent`, the first word bold `Fg`, the rest `Muted`. The totals row is `N files` (`1 file` for one; `Muted`), two spaces, then `+A` (`Success`) and `-R` (`Error`). When the tree is hidden the mode shows only in the tag.
-- **Key hints.** On the last inner row while the inner height is at least 12, drawn as the rail draws them: keys `Key` and bold, labels `Muted`, three cells apart, pairs that do not fit dropped from the end. With the diff focused: `j/k line`, `]/[ hunk`, `}/{ file`, `tab tree`, `f full`, `u split`, `b/t mode`, `,/. turn`, `e edit`, `/ search`. With the tree focused: `j/k file`, `enter open`, `tab diff`.
-- **File tree.** On the left of the drawer, then a `│` rule in `Border`, then the diff column. Its width fits the widest row, at least 20 and at most 35 % of the inner width.
+- **Key hints.** On the last inner row while the inner height is at least 12, drawn as the rail draws them: keys `Key` and bold, labels `Muted`, three cells apart, pairs that do not fit dropped from the end. With the diff focused: `j/k line`, `]/[ hunk`, `}/{ file`, `tab tree`, `f full`, `u split`, `b/t mode`, `,/. turn`, `e edit`, `/ search`. With the tree focused: `j/k file`, `enter jump`, `tab hide`, `esc back`.
+- **File tree.** Open, it is on the left of the drawer, then a `│` rule in `Border`, then the diff column. Its width fits the widest row, at least 20 and at most 35 % of the inner width.
   - Folders read `󰉖 name/` (`Muted`; `name/` with icons off), single-child chains are joined (`git/testdata/`), and folders come before files, both by name.
   - A file row is `<status> <name>` with `+A -R` right-aligned. Status letters: `M` `Info`, `A` `Success`, `D` `Error`, `R` and `C` `Warning`; a file git does not track and the old side lacks counts as `A`, and a mode change as `M`. A binary file shows `bin` (`Subtle`) in place of the counts. A file with hidden characters gets 󰀦 (`Warning`, bold) before its counts (`!` with icons off).
   - The file under the cursor sits on `Surface` while the diff has the keyboard. While the tree has the keyboard, the selected file sits on `Selection` with a `▎` in `Accent` in its first cell.
-  - With an inner width under 80 the tree is hidden: `tab` shows it and gives it the keyboard, and leaving the tree hides it again.
+  - The tree is hidden when a drawer opens, at every width, and the diff column then takes the whole inner width. `tab` in the diff shows a hidden tree and gives it the keyboard, or gives a shown tree the keyboard; `tab` in the tree hides it. `enter` in the tree jumps the diff to the selected file and `esc` leaves the cursor where it is; both give the diff the keyboard and leave the tree open. Like the rail, whether it is open belongs to the tab's drawer and is saved with it; a resize never changes it.
 - **Diff column.** All files in one scroll. Each file starts with a header row on `Surface`: the status letter; the path in `Fg`, bold (a rename reads `old → new`); at the right the hidden-characters flag `󰀦 hidden characters` (just the icon when the column is under 90), `󰧮 full` (`Accent`) while the file is shown whole, and `+A -R`. When the top visible row belongs to a file whose header has scrolled off, that header is drawn on the first row instead, but not when the next row is itself a file header, nor when the cursor is on the first row.
   - A hunk header is git's `@@ -43,9 +43,9 @@` in `Info`, then the section in `Muted`, on a ground of `Info` mixed 10 % into the line ground.
   - Lines are drawn by `diffview`. Tints: line 16 %, changed words 36 %, gutter 26 %; the cursor tint mixes `Accent` 24 %. Unified shows two number columns (old, new), the sign, then the code. Side by side uses `diffview.Pairs` with a `│` in `Border` between the sides; it falls back to unified when either side's code would be under 24 columns, and `u` then shows the notice `side by side needs a wider drawer`. The changed part of a paired line is `diffview.Changed`'s range on the stronger tint.
@@ -1038,19 +1038,19 @@ The leader works as everywhere; every other key is dropped.
 | `}` / `{` | Next / previous file |
 | `ctrl+d` / `ctrl+u` | Half a page down / up |
 | `g` / `G` | Top / bottom |
-| `tab` | Focus file tree (in the tree: back to the diff) |
+| `tab` | Show the file tree and focus it, or focus a shown tree (in the tree: hide it) |
 | `f` | Toggle diff and full file for the file |
 | `u` | Toggle unified and side-by-side |
-| `enter` | Fold or show a block of ghost lines; in the tree, jump to the selected file |
+| `enter` | Fold or show a block of ghost lines; in the tree, jump to the selected file and focus the diff (the tree stays open) |
 | `b` / `t` | Branch mode / turn mode (`t` returns to the latest turn) |
 | `,` / `.` | Previous / next turn (in branch mode, enter turn mode on the latest turn; past the ends the notice `turn 1 is the first turn` or `turn N is the latest turn`; with no turns yet the notice `no turns yet`) |
 | `/` | Search paths and diff text (`enter` jumps, an empty query repeats, `esc` closes) |
 | `e` | Open the file at the cursor line in `$VISUAL`, else `$EDITOR`, else `vi`, in a new shell pane |
-| `esc` | Close the search; in the tree, jump to the selected file; else return the keyboard to the panes |
+| `esc` | Close the search; in the tree, focus the diff and keep the cursor (the tree stays open); else return the keyboard to the panes |
 | `space` (M4) | Mark hunk reviewed |
 | `R` (M4) | Show reviewed hunks too |
 
-In the tree, `j` / `k` select files and `enter`, `tab` or `esc` jump the diff to the selected file and give the diff the keyboard. The leader works as everywhere; every other key is dropped, and a paste goes to the search while it is open. Each key is a named command (`review.line.next`, `review.hunk.next`, `review.file.next`, `review.page.down`, `review.top`, `review.tree`, `review.full`, `review.split`, `review.fold`, `review.mode.branch`, `review.mode.turn`, `review.turn.prev`, `review.search` and the rest) in the palette.
+In the tree, `j` / `k` select files; `enter` jumps the diff to the selected file and `esc` leaves its cursor where it is, and both give the diff the keyboard and leave the tree open; `tab` hides the tree. The leader works as everywhere; every other key is dropped, and a paste goes to the search while it is open. Each key is a named command (`review.line.next`, `review.hunk.next`, `review.file.next`, `review.page.down`, `review.top`, `review.tree`, `review.full`, `review.split`, `review.fold`, `review.mode.branch`, `review.mode.turn`, `review.turn.prev`, `review.search` and the rest) in the palette.
 
 ### PR view
 

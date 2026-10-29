@@ -198,8 +198,8 @@ func (a *App) reviewSearch() tea.Cmd {
 	return nil
 }
 
-// reviewBack closes the search prompt, leaves the tree for the diff, or else
-// returns the keyboard to the panes.
+// reviewBack closes the search prompt, gives the diff the keyboard back from the
+// tree, or else returns the keyboard to the panes.
 func (a *App) reviewBack() tea.Cmd {
 	_, v, ok := a.reviewActive()
 	if !ok {
@@ -210,7 +210,7 @@ func (a *App) reviewBack() tea.Cmd {
 	case v.search != nil:
 		v.search = nil
 	case a.drawer.tree:
-		a.reviewLeaveTree(v)
+		a.reviewLeaveTree(v, false)
 	default:
 		return a.drawerLeave()
 	}
@@ -222,12 +222,14 @@ func (a *App) reviewBack() tea.Cmd {
 
 // reviewBodyH is the rows of the drawer's diff column.
 func (a *App) reviewBodyH(v *reviewView) int {
-	box, ok := a.drawerFull(a.store.State())
+	st := a.store.State()
+
+	box, ok := a.drawerFull(st)
 	if !ok {
 		return 0
 	}
 
-	return a.drawerLayoutOf(box, v).bodyH
+	return a.drawerLayoutOf(box, v, drawerTree(st)).bodyH
 }
 
 // reviewGo puts the cursor on a row and scrolls only as far as it needs.
@@ -372,7 +374,7 @@ func (a *App) reviewFold() tea.Cmd {
 	}
 
 	if a.drawer.tree {
-		a.reviewLeaveTree(v)
+		a.reviewLeaveTree(v, true)
 
 		return nil
 	}
@@ -415,7 +417,9 @@ func (a *App) reviewSplit() tea.Cmd {
 
 	v.split = !v.split
 
-	if box, shown := a.drawerFull(a.store.State()); v.split && shown && !a.drawerLayoutOf(box, v).split {
+	st := a.store.State()
+
+	if box, shown := a.drawerFull(st); v.split && shown && !a.drawerLayoutOf(box, v, drawerTree(st)).split {
 		a.notice = noticeNarrow
 	}
 
@@ -437,18 +441,26 @@ func (v *reviewView) treeFiles() []int {
 	return out
 }
 
-// reviewTree gives the tree the keyboard, or from the tree jumps to the
-// selected file and gives the diff the keyboard back.
+// reviewTree is tab: it opens a hidden tree and gives it the keyboard, gives a
+// shown tree the keyboard, and hides a tree that has it.
 func (a *App) reviewTree() tea.Cmd {
-	_, v, ok := a.reviewActive()
+	tab, v, ok := a.reviewActive()
 	if !ok {
 		return nil
 	}
 
 	if a.drawer.tree {
-		a.reviewLeaveTree(v)
+		// dispatch logs its own failures.
+		_ = a.dispatch(core.SetReviewTree{Open: false})
+		a.drawer.tree = false
 
 		return nil
+	}
+
+	if !tab.Review.Tree {
+		if err := a.dispatch(core.SetReviewTree{Open: true}); err != nil {
+			return nil
+		}
 	}
 
 	a.drawerTake()
@@ -461,8 +473,13 @@ func (a *App) reviewTree() tea.Cmd {
 	return nil
 }
 
-func (a *App) reviewLeaveTree(v *reviewView) {
-	a.reviewJumpFile(v, v.treeSel)
+// reviewLeaveTree gives the diff the keyboard back; the tree stays open. With
+// jump the cursor first goes to the selected file's header.
+func (a *App) reviewLeaveTree(v *reviewView, jump bool) {
+	if jump {
+		a.reviewJumpFile(v, v.treeSel)
+	}
+
 	a.drawer.tree = false
 }
 

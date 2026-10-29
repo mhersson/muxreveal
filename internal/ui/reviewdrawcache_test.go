@@ -85,8 +85,10 @@ func edited() git.Result {
 func TestDrawerLinesFollowTheirInputs(t *testing.T) {
 	big, _ := bigResult(3000)
 
-	small := func(s *reviewScene) {}
+	small := func(s *reviewScene) { s.tree = true }
+	noTree := func(s *reviewScene) {}
 	treeFocus := func(s *reviewScene) {
+		s.tree = true
 		s.tune = func(t *testing.T, a *App, v *reviewView) { a.drawer.tree = true }
 	}
 	whole := func(t *testing.T, a *App, v *reviewView) {
@@ -111,11 +113,17 @@ func TestDrawerLinesFollowTheirInputs(t *testing.T) {
 			s.tune = func(t *testing.T, a *App, v *reviewView) { v.cursor, v.top = 50, 40 }
 		}, change: func(t *testing.T, a *App, v *reviewView) { v.top = 45 }, differs: true},
 		{name: "the window narrows", scene: small, change: func(t *testing.T, a *App, v *reviewView) { sized(t, a, 160, 48) }, settle: true, differs: true},
-		{name: "the window is too narrow for the tree", scene: small, change: func(t *testing.T, a *App, v *reviewView) { sized(t, a, 100, 30) }, settle: true, differs: true},
+		{name: "the window is under 80 inner columns", scene: small, change: func(t *testing.T, a *App, v *reviewView) { sized(t, a, 100, 30) }, settle: true, differs: true},
 		{name: "the window grows taller", scene: small, change: func(t *testing.T, a *App, v *reviewView) { sized(t, a, 200, 60) }, settle: true, differs: true},
 		{name: "the rail opens", scene: small, change: func(t *testing.T, a *App, v *reviewView) { openIn(t, a, core.SetRail{Open: true}) }, settle: true, differs: true},
 		{name: "the drawer slides", scene: small, change: func(t *testing.T, a *App, v *reviewView) {}, shrink: 9, differs: true},
 		{name: "the keyboard leaves the drawer", scene: small, change: func(t *testing.T, a *App, v *reviewView) { a.drawer.focused = false }, differs: true},
+		{name: "the tree opens", scene: noTree, change: func(t *testing.T, a *App, v *reviewView) {
+			openIn(t, a, core.SetReviewTree{Open: true})
+		}, settle: true, differs: true},
+		{name: "the tree closes", scene: small, change: func(t *testing.T, a *App, v *reviewView) {
+			openIn(t, a, core.SetReviewTree{Open: false})
+		}, settle: true, differs: true},
 		{name: "the tree takes the keyboard", scene: small, change: func(t *testing.T, a *App, v *reviewView) { a.drawer.tree = true }, differs: true},
 		{name: "the tree's selection moves", scene: treeFocus, change: func(t *testing.T, a *App, v *reviewView) { v.treeSel = 2 }, differs: true},
 		{name: "a flash starts", scene: small, change: func(t *testing.T, a *App, v *reviewView) { flashRow(t, v, "review.toggle") }, differs: true},
@@ -160,13 +168,13 @@ func TestDrawerLinesFollowTheirInputs(t *testing.T) {
 		}, differs: true},
 		{name: "the icons go off", scene: small, change: func(t *testing.T, a *App, v *reviewView) { a.icons = false }, differs: true},
 		{name: "the turn count changes", scene: small, change: func(t *testing.T, a *App, v *reviewView) { v.turns = 9 }, differs: true},
-		{name: "the turns the diff covers change", scene: func(s *reviewScene) { s.turn = 3 }, change: func(t *testing.T, a *App, v *reviewView) { v.res.Through = 4 }, differs: true},
+		{name: "the turns the diff covers change", scene: func(s *reviewScene) { s.turn, s.tree = 3, true }, change: func(t *testing.T, a *App, v *reviewView) { v.res.Through = 4 }, differs: true},
 		{name: "the source changes", scene: small, change: func(t *testing.T, a *App, v *reviewView) {
 			v.src, v.base = git.BranchSource{Worktree: "/w/p1"}, "origin/dev"
 		}, differs: true},
 		{name: "the project and branch change", scene: small, change: func(t *testing.T, a *App, v *reviewView) { v.project, v.branch = "other", "fix/it" }, differs: true},
-		{name: "the base changes", scene: func(s *reviewScene) { s.branch = true }, change: func(t *testing.T, a *App, v *reviewView) { v.base = "origin/dev" }, differs: true},
-		{name: "the turn has no snapshot", scene: func(s *reviewScene) { s.res, s.turn = git.Result{Turn: 3}, 3 }, change: func(t *testing.T, a *App, v *reviewView) { v.noSnapshot = true }, differs: true},
+		{name: "the base changes", scene: func(s *reviewScene) { s.branch, s.tree = true, true }, change: func(t *testing.T, a *App, v *reviewView) { v.base = "origin/dev" }, differs: true},
+		{name: "the turn has no snapshot", scene: func(s *reviewScene) { s.res, s.turn, s.tree = git.Result{Turn: 3}, 3, true }, change: func(t *testing.T, a *App, v *reviewView) { v.noSnapshot = true }, differs: true},
 		{name: "the load fails", scene: func(s *reviewScene) { s.res, s.branch = git.Result{}, true }, change: func(t *testing.T, a *App, v *reviewView) { v.err = errors.New("git: boom") }, differs: true},
 	}
 
@@ -241,7 +249,14 @@ func TestDrawerLinesStayTrueToAColdDraw(t *testing.T) {
 		{"resize", func() { sz := sizes[rng.IntN(len(sizes))]; sized(t, a, sz[0], sz[1]) }},
 		{"rail", func() { openIn(t, a, core.SetRail{Open: !a.store.State().Rail}) }},
 		{"keyboard", func() { a.drawer.focused = !a.drawer.focused }},
-		{"tree", func() { a.drawer.tree = !a.drawer.tree }},
+		{"tree open", func() {
+			openIn(t, a, core.SetReviewTree{Open: !treeIsOpen(a)})
+
+			if !treeIsOpen(a) {
+				a.drawer.tree = false
+			}
+		}},
+		{"tree keyboard", func() { a.drawer.tree = treeIsOpen(a) && !a.drawer.tree }},
 		{"tree selection", func() { v.treeSel = rng.IntN(max(len(v.res.Files), 1)) }},
 		{"split", func() { v.split = !v.split }},
 		{"whole file", func() {

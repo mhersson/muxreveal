@@ -44,7 +44,7 @@ type drawerLayout struct {
 // layoutKey is what the layout depends on besides the result's generation.
 type layoutKey struct {
 	box        core.Rect
-	tree       bool // the tree is asked to show
+	tree       bool // the tree is open
 	split      bool
 	modeW      int // the mode row's width
 	fullDigits int // digits of the longest file shown whole
@@ -61,13 +61,14 @@ func fullDigits(v *reviewView) int {
 	return n
 }
 
-// drawerLayoutOf divides the box for the view. Side by side is used only when
-// the view wants it and 24 code columns fit on each side. The layout is kept
-// until one of its inputs changes, as it is asked for on every update.
-func (a *App) drawerLayoutOf(box core.Rect, v *reviewView) drawerLayout {
+// drawerLayoutOf divides the box for the view; tree says the drawer's tree is
+// open. Side by side is used only when the view wants it and 24 code columns
+// fit on each side. The layout is kept until one of its inputs changes, as it
+// is asked for on every update.
+func (a *App) drawerLayoutOf(box core.Rect, v *reviewView, tree bool) drawerLayout {
 	c := v.derived()
 	mw := modeWidth(v, a.icons)
-	key := layoutKey{box: box, tree: v.treeOpen || a.drawer.tree, split: v.split, modeW: mw, fullDigits: fullDigits(v)}
+	key := layoutKey{box: box, tree: tree, split: v.split, modeW: mw, fullDigits: fullDigits(v)}
 
 	if c.layOK && c.layKey == key {
 		return c.lay
@@ -85,7 +86,7 @@ func (a *App) drawerLayoutOf(box core.Rect, v *reviewView) drawerLayout {
 
 	l.diffW = l.innerW
 
-	if l.innerW >= treeMinInner || key.tree {
+	if tree {
 		tw := c.treeWidthAt(v.res.Files, l.innerW)
 		// The mode row is a row of the tree too, up to the same share of the width.
 		tw = max(tw, min(mw, l.innerW*treeMaxShare/100))
@@ -270,7 +271,7 @@ func (a *App) drawCtxFor(st core.State) (d *drawCtx, name string, ok bool) {
 	}
 
 	d = &drawCtx{ui: lk.theme.UI, icons: a.icons, v: v, c: v.derived(), now: a.clock.Now(), keys: a.drawer.focused, tree: a.drawer.focused && a.drawer.tree}
-	d.lay = a.drawerLayoutOf(box, v)
+	d.lay = a.drawerLayoutOf(box, v, drawerTree(st))
 	d.dv, d.flash = a.diffThemes(lk)
 	d.top = v.viewTop(d.lay.bodyH)
 
@@ -501,7 +502,7 @@ func (d *drawCtx) hintRuns(cw int) []railRun {
 	}
 
 	if d.tree {
-		pairs = [][2]string{{"j/k", "file"}, {"enter", "open"}, {"tab", "diff"}}
+		pairs = [][2]string{{"j/k", "file"}, {"enter", "jump"}, {"tab", "hide"}, {"esc", "back"}}
 	}
 
 	var out []railRun

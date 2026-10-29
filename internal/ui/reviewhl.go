@@ -85,7 +85,7 @@ func (a *App) drawerAfterUpdate() tea.Cmd {
 		return nil
 	}
 
-	lay := a.drawerLayoutOf(box, v)
+	lay := a.drawerLayoutOf(box, v, drawerTree(st))
 	if v.rowsSplit != lay.split {
 		v.rebuild(lay.split)
 	}

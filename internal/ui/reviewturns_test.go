@@ -34,6 +34,9 @@ func TestSessionEndAndStartKeepTurnMode(t *testing.T) {
 	v := r.open(t, id)
 	r.watching(t, id, root)
 
+	// The mode row is the tree's first row.
+	r.showTree(t)
+
 	if _, ok := v.src.(git.TurnSource); !ok {
 		t.Fatalf("setup: source = %T, want the turn source", v.src)
 	}
@@ -166,6 +169,9 @@ func TestTurnStartRefreshesTheDrawer(t *testing.T) {
 		r.open(t, id)
 		r.watching(t, id, rootOf(t, dir))
 
+		// The mode row is the tree's first row.
+		r.showTree(t)
+
 		snapshotDone := r.turnStartFirst(t, id)
 
 		snapshotTurn(t, dir, testSession)
@@ -187,6 +193,7 @@ func TestTurnStartRefreshesTheDrawer(t *testing.T) {
 
 		r.open(t, id)
 		r.watching(t, id, rootOf(t, dir))
+		r.showTree(t)
 		r.run(r.stepReviewTurn(-1))
 
 		v := r.idle(t)

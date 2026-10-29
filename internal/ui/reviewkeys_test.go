@@ -212,6 +212,10 @@ func TestDrawerKeysNeverReachPanes(t *testing.T) {
 		r.keys(k)
 
 		// Put the drawer back as it was for the next key.
+		if treeIsOpen(r.App) {
+			openIn(t, r.App, core.SetReviewTree{Open: false})
+		}
+
 		r.drawer.focused, r.drawer.tree = true, false
 		r.view().search = nil
 	}
@@ -305,84 +309,57 @@ func TestSearchFindsAndMisses(t *testing.T) {
 }
 
 func TestTreeKeys(t *testing.T) {
-	tab := tea.KeyPressMsg{Code: tea.KeyTab}
+	for _, win := range treeWindows {
+		t.Run(win.name, func(t *testing.T) {
+			r, v := treeRig(t, win.w, win.h, treeStartHidden)
 
-	t.Run("wide", func(t *testing.T) {
-		r := newKeysRig(t, keysRepo(t))
-		v := r.opened(t)
-		box := mustRect(t, r)
+			r.keys(keyTab)
 
-		if r.drawerLayoutOf(box, v).treeW == 0 {
-			t.Fatal("a wide drawer hides its tree")
-		}
-
-		r.keys(tab)
-
-		if !r.drawer.tree || v.treeSel != 0 {
-			t.Fatalf("tab: tree has the keyboard = %v, selected file = %d, want true and 0", r.drawer.tree, v.treeSel)
-		}
-
-		// Tree order puts folders first: dir/sub/c.txt, dir/b.txt, a.txt, z.txt.
-		for _, step := range []struct {
-			key  rune
-			want string
-		}{{'j', "z.txt"}, {'j', "z.txt"}, {'k', "a.txt"}, {'k', "dir/b.txt"}, {'k', "dir/sub/c.txt"}, {'k', "dir/sub/c.txt"}} {
-			r.keys(keyRune(step.key))
-
-			if got := v.res.Files[v.treeSel].Path; got != step.want {
-				t.Fatalf("after %c the tree selects %s, want %s", step.key, got, step.want)
+			if !r.drawer.tree || !treeIsOpen(r.App) || v.treeSel != 0 {
+				t.Fatalf("tab: tree has the keyboard = %v, tree open = %v, selected file = %d, want true, true and 0", r.drawer.tree, treeIsOpen(r.App), v.treeSel)
 			}
-		}
 
-		r.keys(keyRune('f'))
+			// Tree order puts folders first: dir/sub/c.txt, dir/b.txt, a.txt, z.txt.
+			for _, step := range []struct {
+				key  rune
+				want string
+			}{{'j', "z.txt"}, {'j', "z.txt"}, {'k', "a.txt"}, {'k', "dir/b.txt"}, {'k', "dir/sub/c.txt"}, {'k', "dir/sub/c.txt"}} {
+				r.keys(keyRune(step.key))
 
-		if r.notice != "" || len(v.fullOn) != 0 {
-			t.Error("a drawer key other than the tree's did something in the tree")
-		}
+				if got := v.res.Files[v.treeSel].Path; got != step.want {
+					t.Fatalf("after %c the tree selects %s, want %s", step.key, got, step.want)
+				}
+			}
 
-		r.keys(keyEnter)
+			r.keys(keyRune('f'))
 
-		if r.drawer.tree || !r.drawer.focused || fileAtCursor(v) != "dir/sub/c.txt" || v.rows[v.cursor].kind != rowFile {
-			t.Errorf("enter: tree = %v, drawer = %v, cursor on %s (kind %d), want the diff on dir/sub/c.txt's header",
-				r.drawer.tree, r.drawer.focused, fileAtCursor(v), v.rows[v.cursor].kind)
-		}
+			if r.notice != "" || len(v.fullOn) != 0 {
+				t.Error("a drawer key other than the tree's did something in the tree")
+			}
 
-		r.keys(tab, keyRune('j'), tab)
+			r.keys(keyEnter)
 
-		if r.drawer.tree || v.rows[v.cursor].file != v.treeSel {
-			t.Errorf("tab in the tree: tree = %v, cursor file %d, selected %d, want the diff on the selected file", r.drawer.tree, v.rows[v.cursor].file, v.treeSel)
-		}
-	})
+			if r.drawer.tree || !r.drawer.focused || !treeIsOpen(r.App) || fileAtCursor(v) != "dir/sub/c.txt" || v.rows[v.cursor].kind != rowFile {
+				t.Errorf("enter: tree has the keyboard = %v, drawer = %v, tree open = %v, cursor on %s (kind %d), want the diff on dir/sub/c.txt's header and the tree open",
+					r.drawer.tree, r.drawer.focused, treeIsOpen(r.App), fileAtCursor(v), v.rows[v.cursor].kind)
+			}
 
-	t.Run("narrow", func(t *testing.T) {
-		r := newKeysRig(t, keysRepo(t))
-		sized(t, r.App, 100, 30)
+			cursor := v.cursor
 
-		v := r.opened(t)
-		box := mustRect(t, r)
+			r.keys(keyTab, keyRune('j'), keyTab)
 
-		if r.drawerLayoutOf(box, v).treeW != 0 {
-			t.Fatal("a narrow drawer shows its tree")
-		}
-
-		r.keys(tab)
-
-		if !r.drawer.tree || r.drawerLayoutOf(box, v).treeW == 0 {
-			t.Errorf("tab: tree has the keyboard = %v, tree shown = %v, want both", r.drawer.tree, r.drawerLayoutOf(box, v).treeW != 0)
-		}
-
-		r.keys(tab)
-
-		if r.drawer.tree || r.drawerLayoutOf(box, v).treeW != 0 {
-			t.Errorf("tab again: tree has the keyboard = %v, tree shown = %v, want the tree hidden again", r.drawer.tree, r.drawerLayoutOf(box, v).treeW != 0)
-		}
-	})
+			if r.drawer.tree || treeIsOpen(r.App) || v.cursor != cursor {
+				t.Errorf("tab, j, tab: tree has the keyboard = %v, tree open = %v, cursor %d -> %d, want the tree hidden and the cursor kept",
+					r.drawer.tree, treeIsOpen(r.App), cursor, v.cursor)
+			}
+		})
+	}
 }
 
 func TestMovementKeys(t *testing.T) {
 	r := newKeysRig(t, keysRepo(t))
 	v := r.opened(t)
-	bodyH := r.drawerLayoutOf(mustRect(t, r), v).bodyH
+	bodyH := r.layout(t).bodyH
 
 	kindAt := func() reviewRowKind { return v.rows[v.cursor].kind }
 	at := func(file int, kind reviewRowKind) bool { return v.rows[v.cursor].file == file && kindAt() == kind }

@@ -171,6 +171,9 @@ func TestTurnStepping(t *testing.T) {
 	id := r.agent(t, dir, testSession)
 	v := r.open(t, id)
 
+	// The mode row is the tree's first row.
+	r.showTree(t)
+
 	// The latest turn took no snapshot: it reads as such, with its two info rows.
 	if !v.noSnapshot || v.turns != 4 || v.err != nil || len(v.res.Files) != 0 {
 		t.Fatalf("latest: noSnapshot=%v turns=%d err=%v files=%d, want a turn 4 of 4 without a snapshot",
