@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -65,13 +66,22 @@ func startSeqGate(t *testing.T, snap, mark snapshotFunc, seq seqFunc) *gateRig {
 func startWriterGate(t *testing.T, w turnWriter, seq seqFunc) *gateRig {
 	t.Helper()
 
+	return startPlacesGate(t, w, noPlaces, seq)
+}
+
+// noPlaces finds no edit worth a before-picture.
+func noPlaces(context.Context, string) (git.Place, error) { return git.Place{}, git.ErrNotCounted }
+
+func startPlacesGate(t *testing.T, w turnWriter, places placeFunc, seq seqFunc) *gateRig {
+	t.Helper()
+
 	r := &gateRig{in: make(chan harness.Event, 16), out: make(chan harness.Event, 16), done: make(chan struct{})}
 	ctx, cancel := context.WithCancel(context.Background())
 
 	go func() {
 		defer close(r.done)
 
-		runTurnGate(ctx, r.in, r.out, w, seq, discardLogger())
+		runTurnGate(ctx, r.in, r.out, w, places, seq, discardLogger())
 	}()
 
 	t.Cleanup(func() {
@@ -251,7 +261,7 @@ func startUnreadGate(t *testing.T, snap snapshotFunc) chan<- harness.Event {
 	go func() {
 		defer close(done)
 
-		runTurnGate(ctx, in, make(chan harness.Event), funcWriter{snap, func(context.Context, string, string, bool) error { return nil }}, noSeq, discardLogger())
+		runTurnGate(ctx, in, make(chan harness.Event), funcWriter{snap, func(context.Context, string, string, bool) error { return nil }}, noPlaces, noSeq, discardLogger())
 	}()
 
 	t.Cleanup(func() {
@@ -640,7 +650,7 @@ func TestGateCancelWaitsForSnapshotsAndWritesNoMarker(t *testing.T) {
 	go func() {
 		defer close(returned)
 
-		runTurnGate(ctx, in, out, funcWriter{snap, mark}, noSeq, discardLogger())
+		runTurnGate(ctx, in, out, funcWriter{snap, mark}, noPlaces, noSeq, discardLogger())
 	}()
 
 	turn, _ := turnEvent("UserPromptSubmit", gateSession, "/repo")
@@ -796,7 +806,7 @@ func TestHookAnswersAfterTheSnapshotExists(t *testing.T) {
 	repo := seededRepo(t)
 	base := runtime.NumGoroutine()
 
-	h, err := setupHooks(discardLogger(), shortDir(t), "", testWatches(t))
+	h, err := setupHooks(discardLogger(), shortDir(t), "", testWatches(t), testPlaces())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -827,7 +837,7 @@ func TestHookBudgetSlowSnapshot(t *testing.T) {
 
 	base := runtime.NumGoroutine()
 
-	h, err := setupHooks(discardLogger(), shortDir(t), "", testWatches(t))
+	h, err := setupHooks(discardLogger(), shortDir(t), "", testWatches(t), testPlaces())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -867,7 +877,7 @@ func TestHookBudgetServerClosingMidSnapshot(t *testing.T) {
 
 	base := runtime.NumGoroutine()
 
-	h, err := setupHooks(discardLogger(), shortDir(t), "", testWatches(t))
+	h, err := setupHooks(discardLogger(), shortDir(t), "", testWatches(t), testPlaces())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -925,7 +935,7 @@ func TestHookBudgetHeldIndexLockDoesNotBlockTheSnapshot(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	h, err := setupHooks(discardLogger(), shortDir(t), "", testWatches(t))
+	h, err := setupHooks(discardLogger(), shortDir(t), "", testWatches(t), testPlaces())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -951,7 +961,7 @@ func TestHookBudgetUnsnapshottableTurnsAnswerAtOnce(t *testing.T) {
 	notRepo := t.TempDir()
 	base := runtime.NumGoroutine()
 
-	h, err := setupHooks(discardLogger(), shortDir(t), "", testWatches(t))
+	h, err := setupHooks(discardLogger(), shortDir(t), "", testWatches(t), testPlaces())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1196,6 +1206,8 @@ type recordingWriter struct {
 	mu    sync.Mutex
 	calls []recordedStart
 	fail  func(dir string) bool
+	// onStart runs inside Start, after it is recorded; its error fails the start.
+	onStart func(ctx context.Context, dir string) error
 	// failEnd makes the End of the root fail with the error.
 	failEnd func(root string) error
 	// open is what OpenTurns reports.
@@ -1212,8 +1224,14 @@ func (w *recordingWriter) record(c recordedStart) {
 	w.calls = append(w.calls, c)
 }
 
-func (w *recordingWriter) Start(_ context.Context, dir, session string, turn, ends int, unchanged bool) error {
+func (w *recordingWriter) Start(ctx context.Context, dir, session string, turn, ends int, unchanged bool) error {
 	w.record(recordedStart{dir: dir, session: session, turn: turn, ends: ends, unchanged: unchanged})
+
+	if w.onStart != nil {
+		if err := w.onStart(ctx, dir); err != nil {
+			return err
+		}
+	}
 
 	if w.fail != nil && w.fail(dir) {
 		return errors.New("boom")
@@ -1296,7 +1314,7 @@ func sendTurns(t *testing.T, w turnWriter, seq seqFunc, sends ...recordedStart) 
 	go func() {
 		defer close(done)
 
-		runTurnGate(ctx, in, out, w, seq, discardLogger())
+		runTurnGate(ctx, in, out, w, noPlaces, seq, discardLogger())
 	}()
 
 	t.Cleanup(func() {
@@ -1366,38 +1384,6 @@ func TestGateEndsNothingAcrossWorktrees(t *testing.T) {
 				t.Errorf("ends = %d, %d, want 0 and 0", got[0].ends, got[1].ends)
 			}
 		})
-	}
-}
-
-// An edit's before-event is answered when the gate reads it, with no snapshot.
-func TestGateReleasesAnEditAtOnce(t *testing.T) {
-	t.Parallel()
-
-	snapped := make(chan struct{}, 1)
-	snap := func(context.Context, string, string, bool) error {
-		snapped <- struct{}{}
-
-		return nil
-	}
-
-	r := startGate(t, snap, func(context.Context, string, string, bool) error { return nil })
-	released := make(chan struct{})
-
-	r.in <- harness.Event{
-		Name: "PreToolUse", Pane: "p", Session: gateSession, Cwd: "/repo", Edit: "/repo/a.go", Before: true,
-		Done: sync.OnceFunc(func() { close(released) }),
-	}
-
-	within(t, released, time.Second, "Done of the edit")
-
-	if ev := forwarded(t, r); ev.Snapped != nil {
-		t.Error("edit has Snapped, want no snapshot")
-	}
-
-	select {
-	case <-snapped:
-		t.Error("the gate snapshotted for an edit")
-	default:
 	}
 }
 
@@ -1610,5 +1596,547 @@ func TestGateUnchangedEndReusesTheStart(t *testing.T) {
 				t.Errorf("End calls = %+v, want one with unchanged %v", ends, tt.want)
 			}
 		})
+	}
+}
+
+// --- before-pictures ---
+
+// rootOf puts a path under the worktree root named like its first directory,
+// the way dirSeq names the root of a directory.
+func rootOf(path string) string {
+	first, _, _ := strings.Cut(strings.TrimPrefix(path, "/"), "/")
+
+	return "root/" + first
+}
+
+// countingPlaces resolves every path to its rootOf and counts the lookups.
+type countingPlaces struct {
+	calls atomic.Int32
+	// fail returns an error for the paths it names.
+	fail func(path string) error
+}
+
+func (c *countingPlaces) place(_ context.Context, path string) (git.Place, error) {
+	c.calls.Add(1)
+
+	if c.fail != nil {
+		if err := c.fail(path); err != nil {
+			return git.Place{}, err
+		}
+	}
+
+	return git.Place{Root: rootOf(path)}, nil
+}
+
+// blockedStart holds the Start of one directory: it announces itself on entered
+// and returns once unblock closes or its context ends. returned is true from
+// when the start has returned.
+type blockedStart struct {
+	dir      string
+	entered  chan struct{}
+	unblock  chan struct{}
+	returned atomic.Bool
+}
+
+func newBlockedStart(dir string) *blockedStart {
+	return &blockedStart{dir: dir, entered: make(chan struct{}, 8), unblock: make(chan struct{})}
+}
+
+func (b *blockedStart) onStart(ctx context.Context, dir string) error {
+	if dir != b.dir {
+		return nil
+	}
+
+	b.entered <- struct{}{}
+
+	defer b.returned.Store(true)
+
+	select {
+	case <-b.unblock:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+// editEvent is an edit tool's before-event; its Done closes the returned
+// channel, and records in answeredAfter whether flag was set by then.
+func editEvent(session, path string, flag *atomic.Bool, answeredAfter *atomic.Bool) (harness.Event, <-chan struct{}) {
+	released := make(chan struct{})
+	ev := harness.Event{
+		Name: "PreToolUse", Session: core.SessionID(session), Cwd: "/a", Edit: path, Before: true,
+		Done: sync.OnceFunc(func() {
+			if flag != nil {
+				answeredAfter.Store(flag.Load())
+			}
+
+			close(released)
+		}),
+	}
+
+	return ev, released
+}
+
+// startedTurn runs a gate with the places over the writer and sends the turn
+// start for /a, whose own root is root/a.
+func startedTurn(t *testing.T, w turnWriter, places placeFunc) *gateRig {
+	t.Helper()
+
+	r := startPlacesGate(t, w, places, dirSeq)
+	ev, released := turnEvent("UserPromptSubmit", gateSession, "/a")
+
+	r.in <- ev
+
+	within(t, released, time.Second, "turn release")
+
+	return r
+}
+
+func drain(t *testing.T, r *gateRig) {
+	t.Helper()
+
+	close(r.in)
+	within(t, r.done, 5*time.Second, "gate drain")
+}
+
+func callsIn(calls []recordedStart, dir string) []recordedStart {
+	var out []recordedStart
+
+	for _, c := range calls {
+		if c.dir == dir {
+			out = append(out, c)
+		}
+	}
+
+	return out
+}
+
+func TestGateFirstEditTakesTheStartBeforeAnswering(t *testing.T) {
+	t.Parallel()
+
+	blocked := newBlockedStart("root/b")
+	w := &recordingWriter{onStart: blocked.onStart}
+	places := &countingPlaces{}
+	r := startedTurn(t, w, places.place)
+
+	var answeredAfter atomic.Bool
+
+	ev, released := editEvent(gateSession, "/b/f.go", &blocked.returned, &answeredAfter)
+	r.in <- ev
+
+	within(t, blocked.entered, time.Second, "the edit's start")
+	close(blocked.unblock)
+	within(t, released, time.Second, "Done of the edit")
+
+	if !answeredAfter.Load() {
+		t.Error("the edit was answered before its start returned")
+	}
+
+	starts := callsIn(w.starts(), "root/b")
+	if len(starts) != 1 || starts[0].ends != 0 || starts[0].turn != w.starts()[0].turn {
+		t.Errorf("starts in root/b = %+v, want one with the turn's number and ends 0", starts)
+	}
+}
+
+func TestGateLaterEditsInAStartedWorktreeAnswerAtOnce(t *testing.T) {
+	t.Parallel()
+
+	blocked := newBlockedStart("root/b")
+	w := &recordingWriter{onStart: blocked.onStart}
+	places := &countingPlaces{}
+	r := startedTurn(t, w, places.place)
+
+	t.Cleanup(func() { close(blocked.unblock) })
+
+	first, _ := editEvent(gateSession, "/b/f.go", nil, nil)
+	r.in <- first
+
+	within(t, blocked.entered, time.Second, "the first edit's start")
+
+	own, released := editEvent(gateSession, "/a/g.go", nil, nil)
+	r.in <- own
+
+	within(t, released, time.Second, "Done of the edit in the own root")
+
+	if got := w.starts(); len(got) != 2 {
+		t.Errorf("starts = %+v, want only the turn's and root/b's", got)
+	}
+}
+
+func TestGateParallelFirstEditsShareOneStart(t *testing.T) {
+	t.Parallel()
+
+	blocked := newBlockedStart("root/b")
+	w := &recordingWriter{onStart: blocked.onStart}
+	places := &countingPlaces{}
+	r := startedTurn(t, w, places.place)
+
+	var early, late atomic.Bool
+
+	one, released1 := editEvent(gateSession, "/b/one.go", &blocked.returned, &early)
+	two, released2 := editEvent(gateSession, "/b/two.go", &blocked.returned, &late)
+
+	r.in <- one
+
+	r.in <- two
+
+	within(t, blocked.entered, time.Second, "the shared start")
+
+	// Both holds are open before the start returns: wait for the second lookup.
+	waitUntil(t, "both lookups did not finish", func() bool { return places.calls.Load() == 2 })
+	close(blocked.unblock)
+	within(t, released1, time.Second, "Done of the first edit")
+	within(t, released2, time.Second, "Done of the second edit")
+
+	if !early.Load() || !late.Load() {
+		t.Errorf("answered after the start returned: first %v, second %v, want both", early.Load(), late.Load())
+	}
+
+	drain(t, r)
+
+	if got := callsIn(w.starts(), "root/b"); len(got) != 1 {
+		t.Errorf("starts in root/b = %+v, want one", got)
+	}
+}
+
+func TestGateEditOutsideATurnAnswersAtOnce(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		turnFirst bool
+		session   string
+	}{
+		{"before any turn start", false, gateSession},
+		{"a main-session edit of another session", true, "aaaaaaaa-2222-4333-8444-555555555555"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			w := &recordingWriter{}
+			places := &countingPlaces{}
+
+			var r *gateRig
+			if tt.turnFirst {
+				r = startedTurn(t, w, places.place)
+			} else {
+				r = startPlacesGate(t, w, places.place, dirSeq)
+			}
+
+			ev, released := editEvent(tt.session, "/b/f.go", nil, nil)
+			r.in <- ev
+
+			within(t, released, time.Second, "Done of the edit")
+
+			if got := forwardedAfter(t, r, "PreToolUse"); got.Snapped != nil {
+				t.Error("the edit has Snapped, want no snapshot")
+			}
+
+			drain(t, r)
+
+			if n := places.calls.Load(); n != 0 {
+				t.Errorf("place lookups = %d, want none", n)
+			}
+
+			if got := callsIn(w.all(), "root/b"); len(got) != 0 {
+				t.Errorf("calls in root/b = %+v, want none", got)
+			}
+		})
+	}
+}
+
+// forwardedAfter reads events from the gate's output until one named name.
+func forwardedAfter(t *testing.T, r *gateRig, name string) harness.Event {
+	t.Helper()
+
+	for {
+		select {
+		case ev := <-r.out:
+			if ev.Name == name {
+				return ev
+			}
+		case <-time.After(time.Second):
+			t.Fatalf("no %s event forwarded", name)
+		}
+	}
+}
+
+func TestGateEditAfterStopBelongsToTheTurn(t *testing.T) {
+	t.Parallel()
+
+	w := &recordingWriter{}
+	places := &countingPlaces{}
+	r := startedTurn(t, w, places.place)
+
+	r.in <- harness.Event{Name: "Stop", Session: gateSession, Cwd: "/a"}
+
+	ev, released := editEvent(gateSession, "/b/f.go", nil, nil)
+	r.in <- ev
+
+	within(t, released, time.Second, "Done of the edit")
+
+	turn := w.starts()[0].turn
+	if got := callsIn(w.starts(), "root/b"); len(got) != 1 || got[0].turn != turn {
+		t.Fatalf("starts in root/b = %+v, want one at the turn %d", got, turn)
+	}
+
+	next, released := turnEvent("UserPromptSubmit", gateSession, "/a")
+	r.in <- next
+
+	within(t, released, time.Second, "next turn release")
+
+	if got := callsIn(w.endings(), "root/b"); len(got) != 1 || got[0].turn != turn {
+		t.Errorf("ends in root/b = %+v, want one of turn %d", got, turn)
+	}
+}
+
+func TestGateIgnoredEditsResolveOnce(t *testing.T) {
+	t.Parallel()
+
+	var lookups atomic.Int32
+
+	cache := git.NewPlaceCache(func(context.Context, string) (git.Place, error) {
+		lookups.Add(1)
+
+		return git.Place{}, git.ErrNotCounted
+	}, time.Now)
+
+	w := &recordingWriter{}
+	r := startedTurn(t, w, cache.Place)
+
+	var released []<-chan struct{}
+
+	for range 10 {
+		ev, done := editEvent(gateSession, "/ignored/ledger.md", nil, nil)
+		r.in <- ev
+
+		released = append(released, done)
+	}
+
+	for _, done := range released {
+		within(t, done, time.Second, "Done of an ignored edit")
+	}
+
+	drain(t, r)
+
+	if n := lookups.Load(); n != 1 {
+		t.Errorf("lookups = %d, want 1", n)
+	}
+
+	if got := w.starts(); len(got) != 1 {
+		t.Errorf("starts = %+v, want only the turn's", got)
+	}
+}
+
+func TestGateFailedStartMarksTheTurn(t *testing.T) {
+	t.Parallel()
+
+	w := &recordingWriter{onStart: func(ctx context.Context, dir string) error {
+		if dir != "root/b" {
+			return nil
+		}
+
+		<-ctx.Done()
+
+		return ctx.Err()
+	}}
+	places := &countingPlaces{}
+	r := startedTurn(t, w, places.place)
+
+	first, released := editEvent(gateSession, "/b/f.go", nil, nil)
+	first.Deadline = time.Now().Add(500 * time.Millisecond)
+
+	r.in <- first
+
+	within(t, released, 5*time.Second, "Done of the first edit")
+
+	second, released := editEvent(gateSession, "/b/g.go", nil, nil)
+	r.in <- second
+
+	within(t, released, time.Second, "Done of the second edit")
+	drain(t, r)
+
+	if got := callsIn(w.starts(), "root/b"); len(got) != 1 {
+		t.Errorf("starts in root/b = %+v, want one", got)
+	}
+
+	turn := w.starts()[0].turn
+
+	marks := callsIn(w.filter(func(c recordedStart) bool { return c.mark }), "root/b")
+	if len(marks) != 1 || marks[0].end || marks[0].turn != turn {
+		t.Errorf("markers in root/b = %+v, want one start marker of turn %d", marks, turn)
+	}
+}
+
+func TestGateUnsureTurnMarksLaterStarts(t *testing.T) {
+	t.Parallel()
+
+	w := &recordingWriter{}
+	places := &countingPlaces{fail: func(path string) error {
+		if strings.HasPrefix(path, "/broken/") {
+			return errors.New("git hiccup")
+		}
+
+		return nil
+	}}
+	r := startedTurn(t, w, places.place)
+
+	lost, released := editEvent(gateSession, "/broken/f.go", nil, nil)
+	r.in <- lost
+
+	within(t, released, time.Second, "Done of the edit with no place")
+
+	ev, released := editEvent(gateSession, "/b/f.go", nil, nil)
+	r.in <- ev
+
+	within(t, released, time.Second, "Done of the edit in the new root")
+	drain(t, r)
+
+	if got := callsIn(w.starts(), "root/b"); len(got) != 0 {
+		t.Errorf("starts in root/b = %+v, want none", got)
+	}
+
+	if got := callsIn(w.filter(func(c recordedStart) bool { return c.mark }), "root/b"); len(got) != 1 {
+		t.Errorf("markers in root/b = %+v, want one", got)
+	}
+}
+
+func TestGateBashChangesMarkANewWorktree(t *testing.T) {
+	t.Parallel()
+
+	w := &recordingWriter{}
+	places := &countingPlaces{}
+	r := startedTurn(t, w, places.place)
+
+	r.in <- harness.Event{
+		Name: "PostToolUse", Session: gateSession, Cwd: "/a",
+		Changed: []string{"/b/out.txt", "/a/out.txt"},
+	}
+
+	drain(t, r)
+
+	marks := w.filter(func(c recordedStart) bool { return c.mark })
+	if len(marks) != 1 || marks[0].dir != "root/b" || marks[0].end || marks[0].turn != w.starts()[0].turn {
+		t.Errorf("markers = %+v, want one start marker in root/b", marks)
+	}
+
+	if got := callsIn(w.starts(), "root/b"); len(got) != 0 {
+		t.Errorf("starts in root/b = %+v, want none", got)
+	}
+}
+
+func TestGateSubagentEditUsesThePanesTurn(t *testing.T) {
+	t.Parallel()
+
+	w := &recordingWriter{}
+	places := &countingPlaces{}
+	r := startedTurn(t, w, places.place)
+
+	ev, released := editEvent("bbbbbbbb-2222-4333-8444-555555555555", "/b/f.go", nil, nil)
+	ev.Subagent = true
+
+	r.in <- ev
+
+	within(t, released, time.Second, "Done of the subagent's edit")
+
+	got := callsIn(w.starts(), "root/b")
+	if len(got) != 1 || got[0].turn != w.starts()[0].turn || got[0].session != gateSession {
+		t.Errorf("starts in root/b = %+v, want one in the pane's turn and session", got)
+	}
+}
+
+func TestGateNextPromptEndsEveryStartedWorktree(t *testing.T) {
+	t.Parallel()
+
+	w := &recordingWriter{}
+	places := &countingPlaces{}
+	r := startedTurn(t, w, places.place)
+
+	for _, path := range []string{"/b/f.go", "/c/f.go"} {
+		ev, released := editEvent(gateSession, path, nil, nil)
+		r.in <- ev
+
+		within(t, released, time.Second, "Done of an edit")
+	}
+
+	r.in <- harness.Event{Name: "PostToolUse", Session: gateSession, Cwd: "/a", Changed: []string{"/d/out.txt"}}
+
+	waitUntil(t, "the marker in root/d was not written", func() bool {
+		return len(callsIn(w.all(), "root/d")) == 1
+	})
+
+	turn := w.starts()[0].turn
+
+	next, released := turnEvent("UserPromptSubmit", gateSession, "/a")
+	r.in <- next
+
+	within(t, released, time.Second, "next turn release")
+
+	var ended []string
+
+	for _, e := range w.endings() {
+		if e.turn != turn {
+			t.Errorf("end %+v is not of turn %d", e, turn)
+		}
+
+		ended = append(ended, e.dir)
+	}
+
+	slices.Sort(ended)
+
+	if !slices.Equal(ended, []string{"root/b", "root/c"}) {
+		t.Errorf("ended = %v, want root/b and root/c (the own root ends through the start, root/d has a marker)", ended)
+	}
+
+	if got := w.starts(); got[len(got)-1].ends != turn {
+		t.Errorf("the next start = %+v, want it to end the own root's turn %d", got[len(got)-1], turn)
+	}
+}
+
+// --- before-pictures with real hooks and git ---
+
+// linkedWorktree adds a worktree to repo and returns its path.
+func linkedWorktree(t *testing.T, repo string) string {
+	t.Helper()
+
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	wt := filepath.Join(dir, "wt")
+	gitOut(t, repo, "worktree", "add", "-q", "-b", "other", wt)
+
+	return wt
+}
+
+func sendEdit(ctx context.Context, sock, repo, path string) error {
+	return harness.Send(ctx, sock, harness.Event{
+		Name: "PreToolUse", Session: gateSession, Cwd: repo, Pane: "p", Edit: path, Before: true,
+	})
+}
+
+func TestHookHoldsAFirstEditUntilItsStartExists(t *testing.T) {
+	repo := seededRepo(t)
+	wt := linkedWorktree(t, repo)
+
+	h, err := setupHooks(discardLogger(), shortDir(t), "", testWatches(t), testPlaces())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	t.Cleanup(h.Stop)
+
+	sendTurn(t, h.Sock, repo, gateSession)
+
+	if err := sendEdit(t.Context(), h.Sock, repo, filepath.Join(wt, "new.go")); err != nil {
+		t.Fatalf("Send(edit) error = %v", err)
+	}
+
+	turns, own := gitTurns(t, wt), gitTurns(t, repo)
+	if len(turns) != 1 || turns[0].Missing || len(own) != 1 || turns[0].N != own[0].N {
+		t.Fatalf("turns = %+v, own = %+v, want the worktree's start at the turn's number", turns, own)
 	}
 }

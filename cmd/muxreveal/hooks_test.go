@@ -114,7 +114,7 @@ func TestStartHooksFailureTurnsHooksOff(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	h := startHooks(discardLogger(), stateDir, "", testWatches(t))
+	h := startHooks(discardLogger(), stateDir, "", testWatches(t), testPlaces())
 	defer h.Stop()
 
 	if h.Settings != "" || h.Sock != "" || h.Events != nil {
@@ -129,7 +129,7 @@ func TestStartHooksFailureTurnsHooksOff(t *testing.T) {
 func TestStartHooksNamesAnOverlongSocketPath(t *testing.T) {
 	stateDir := filepath.Join(t.TempDir(), strings.Repeat("d", maxSockPath))
 
-	h := startHooks(discardLogger(), stateDir, "", testWatches(t))
+	h := startHooks(discardLogger(), stateDir, "", testWatches(t), testPlaces())
 	defer h.Stop()
 
 	if h.Settings != "" || h.Sock != "" || h.Events != nil {
@@ -226,7 +226,7 @@ func TestStartHooksSweepsDeadInstances(t *testing.T) {
 		}
 	}
 
-	h := startHooks(discardLogger(), stateDir, "", testWatches(t))
+	h := startHooks(discardLogger(), stateDir, "", testWatches(t), testPlaces())
 	defer h.Stop()
 
 	if h.Notice != "" {
@@ -299,6 +299,8 @@ func waitUntil(t *testing.T, failure string, cond func() bool) {
 	}
 }
 
+func testPlaces() *git.PlaceCache { return git.NewPlaceCache(git.EditPlace, time.Now) }
+
 func testWatches(t *testing.T) *git.WatchSet {
 	t.Helper()
 
@@ -350,7 +352,7 @@ func TestWatchSeqResolvesTheRootFromASubdirectory(t *testing.T) {
 func TestHookNextPromptWritesTheEnd(t *testing.T) {
 	repo := seededRepo(t)
 
-	h, err := setupHooks(discardLogger(), shortDir(t), "", testWatches(t))
+	h, err := setupHooks(discardLogger(), shortDir(t), "", testWatches(t), testPlaces())
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -59,8 +59,8 @@ func indexCacheDir(logger *slog.Logger) string {
 // startHooks prepares <stateDir>/run: it sweeps files of dead instances, writes
 // this instance's settings file and serves its socket. A failure leaves nothing
 // behind and yields a runtime with a notice, so agents start without hooks.
-func startHooks(logger *slog.Logger, stateDir, indexCache string, watches *git.WatchSet) hookRuntime {
-	h, err := setupHooks(logger, stateDir, indexCache, watches)
+func startHooks(logger *slog.Logger, stateDir, indexCache string, watches *git.WatchSet, places *git.PlaceCache) hookRuntime {
+	h, err := setupHooks(logger, stateDir, indexCache, watches, places)
 	if err != nil {
 		logger.Warn("agent hooks are off", "err", err)
 
@@ -70,7 +70,7 @@ func startHooks(logger *slog.Logger, stateDir, indexCache string, watches *git.W
 	return h
 }
 
-func setupHooks(logger *slog.Logger, stateDir, indexCache string, watches *git.WatchSet) (hookRuntime, error) {
+func setupHooks(logger *slog.Logger, stateDir, indexCache string, watches *git.WatchSet, places *git.PlaceCache) (hookRuntime, error) {
 	runDir := filepath.Join(stateDir, "run")
 	if err := os.MkdirAll(runDir, 0o700); err != nil {
 		return hookRuntime{}, fmt.Errorf("run dir: %w", err)
@@ -131,7 +131,7 @@ func setupHooks(logger *slog.Logger, stateDir, indexCache string, watches *git.W
 	})
 
 	wg.Go(func() {
-		runTurnGate(ctx, raw, events, gitTurnWriter{tempDir: runDir, indexCache: indexCache}, watchSeq(watches), logger)
+		runTurnGate(ctx, raw, events, gitTurnWriter{tempDir: runDir, indexCache: indexCache}, places.Place, watchSeq(watches), logger)
 	})
 
 	stop := sync.OnceFunc(func() {
