@@ -1050,7 +1050,7 @@ func TestTurnModeWithoutAnOwnRepository(t *testing.T) {
 }
 
 // A live load after the own directory moved off the shown root keeps updating
-// the turn.
+// the turn. It waits for the watcher to go quiet (quiet), so it stays serial.
 func TestLiveLoadAfterOwnDirectoryMovedKeepsTheTurn(t *testing.T) {
 	r := newFollowRig(t, testSession, turnFirst)
 

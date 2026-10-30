@@ -598,7 +598,7 @@ func TestDrawerTitleAndTags(t *testing.T) {
 		{"turn tag", false, func(s *reviewScene) {}, []string{"╭─ muxreveal · feat/review-pane ", " turn 4/4 ─╮"}, []string{" split ─"}},
 		{"icons", true, func(s *reviewScene) {}, []string{"\U000F02DA turn 4/4 ", "\uF4D2 muxreveal"}, nil},
 		{"past turn", false, func(s *reviewScene) { s.turn = 2 }, []string{" turn 2/4 ─╮", "turn 2 of 4 in this worktree"}, []string{", live"}},
-		{"latest turn is live", false, func(s *reviewScene) {}, []string{"turn 4 of 4 in this worktree"}, nil},
+		{"latest turn", false, func(s *reviewScene) {}, []string{"turn 4 of 4 in this worktree"}, nil},
 		{"branch", false, func(s *reviewScene) { s.branch = true }, []string{" branch ─╮", "branch vs origin/main"}, []string{"turn 4/4"}},
 		{"branch icon", true, func(s *reviewScene) { s.branch = true }, []string{"\U000F062C branch ", "\U000F062C branch vs origin/main"}, nil},
 		{"split tag", false, func(s *reviewScene) {
@@ -723,7 +723,7 @@ func TestDrawerTurnHintShowsOnlyForTurns(t *testing.T) {
 	}{
 		{"branch mode", func(s *reviewScene) { s.branch = true }, false},
 		{"turn mode on the agent's worktree", func(s *reviewScene) {}, true},
-		{"turn mode on another worktree", branchInTurnMode("s", 0, true), false},
+		{"turn mode on another worktree with no turns", branchInTurnMode("s", 0, true), false},
 		{"turn mode with no session", branchInTurnMode("", 0, false), false},
 		{"turn mode with no turns yet", branchInTurnMode("s", 0, false), false},
 	}
