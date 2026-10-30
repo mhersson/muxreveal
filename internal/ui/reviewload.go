@@ -784,7 +784,7 @@ func (a *App) reviewBatch(root string, b git.Batch) tea.Cmd {
 		}
 
 		// A page is a file of the root, whatever the drawer shows, pull request mode included.
-		if c := a.pageBatch(id, v, b); c != nil {
+		if c := a.pageBatch(id, v); c != nil {
 			cmds = append(cmds, c)
 		}
 

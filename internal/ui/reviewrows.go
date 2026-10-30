@@ -37,8 +37,9 @@ const (
 //     the line.
 //   - rowFold: line is the block's first old line, other the number of lines.
 //   - rowMD: line indexes the layout; edit and other are the first and last
-//     source line that made it (edit 1 and other 0 for none); text is its plain
-//     text; mark is its change mark.
+//     source line that made it; with none, edit is the editor's line (the next
+//     block's first, else the previous block's last, else 1) and other is -1;
+//     text is its plain text; mark is its change mark.
 //
 // A ghost or fold row also holds edit, the line of the new file an editor
 // opens at for it: the first new line after its block, or the last line when
@@ -139,10 +140,10 @@ func appendMD(rows []reviewRow, file int, mr *mdRows) []reviewRow {
 
 	for i := range mr.lay.Lines {
 		r := newRow(rowMD, file)
-		r.line, r.text, r.edit = i, plain[i], 1
+		r.line, r.text, r.edit = i, plain[i], blockEditLine(mr.lay.Source, i)
 
 		if i < len(mr.lay.Source) && mr.lay.Source[i].First != 0 {
-			r.edit, r.other = mr.lay.Source[i].First, mr.lay.Source[i].Last
+			r.other = mr.lay.Source[i].Last
 		}
 
 		if i < len(mr.marks) {
@@ -448,7 +449,7 @@ func (m *mdAnchorMatch) consider(r reviewRow, i int, a rowAnchor) {
 		if m.exact < 0 || abs(i-a.index) < abs(m.exact-a.index) {
 			m.exact = i
 		}
-	case r.other == 0 || a.last == 0:
+	case r.other <= 0 || a.last <= 0:
 	case r.edit <= a.first && a.first <= r.other:
 		if w := r.other - r.edit; m.holds < 0 || w < m.holdsW {
 			m.holds, m.holdsW = i, w

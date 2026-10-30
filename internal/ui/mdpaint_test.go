@@ -333,6 +333,26 @@ func TestMDPainterWidth(t *testing.T) {
 		}
 	})
 
+	t.Run("a link with a non-ASCII URL", func(t *testing.T) {
+		t.Parallel()
+
+		p := newMDPainter(th, th.UI.Bg)
+		line := md.Line{{Text: "caf\u00e9 ", Link: -1}, {Text: "see the caf\u00e9 page", Role: md.RoleLink, Link: 0}, {Text: " tail"}}
+		links := []md.Link{{URL: "https://example.com/caf\u00e9"}}
+
+		for w := 1; w <= 40; w++ {
+			got := p.line(line, links, w)
+
+			if sw := ansi.StringWidth(got); sw != w {
+				t.Errorf("width %d: painted %d cells: %q", w, sw, got)
+			}
+
+			if !endsClean(got) {
+				t.Errorf("width %d does not end clean: %q", w, got)
+			}
+		}
+	})
+
 	t.Run("cut at a wide character", func(t *testing.T) {
 		t.Parallel()
 

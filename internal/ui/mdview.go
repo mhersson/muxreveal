@@ -213,15 +213,34 @@ func lineTargets(lay md.Layout, i int) []mdTarget {
 	return out
 }
 
-// sourceLine is the first source line of the cursor's line, 1 when no source
-// made it.
-func (v *mdView) sourceLine() int {
-	src := v.layout().Source
-	if v.cursor < 0 || v.cursor >= len(src) || src[v.cursor].First == 0 {
+// sourceLine is the source line an editor opens at for the cursor's line.
+func (v *mdView) sourceLine() int { return blockEditLine(v.layout().Source, v.cursor) }
+
+// blockEditLine is the first source line of layout line i, or for a line no source
+// made the first line of the next block, else the last line of the previous
+// one, else 1.
+func blockEditLine(src []md.SourceRange, i int) int {
+	if i < 0 || i >= len(src) {
 		return 1
 	}
 
-	return src[v.cursor].First
+	if src[i].First != 0 {
+		return src[i].First
+	}
+
+	for _, r := range src[i+1:] {
+		if r.First != 0 {
+			return r.First
+		}
+	}
+
+	for j := i - 1; j >= 0; j-- {
+		if src[j].First != 0 {
+			return src[j].Last
+		}
+	}
+
+	return 1
 }
 
 // goSource puts the cursor on the first line of the narrowest block holding

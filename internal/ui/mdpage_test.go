@@ -470,6 +470,7 @@ func TestMarkdownOpenLate(t *testing.T) {
 		{"a retarget", func(m *pageRig) { m.flow(m.reviewRetarget(m.tabID(), m.v, 0), nil) }, nil},
 		{"the compose box opened", func(m *pageRig) { m.compose = &composeView{} }, func(m *pageRig) { m.compose = nil }},
 		{"a palette opened", func(m *pageRig) { m.openCommandPalette() }, func(m *pageRig) { m.closeOverlay() }},
+		{"the keyboard went back to the panes", func(m *pageRig) { m.drawerRelease() }, nil},
 	}
 
 	for _, tt := range tests {
@@ -495,6 +496,58 @@ func TestMarkdownOpenLate(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("md.open takes the keyboard", func(t *testing.T) {
+		t.Parallel()
+
+		m := newPageRig(t, nil)
+		m.drawerRelease()
+
+		held := m.mdOpen()
+		if !m.drawer.focused {
+			t.Error("md.open left the keyboard with the panes")
+		}
+
+		m.flow(m.step(held[0]), nil)
+
+		if m.overlay == nil || m.overlay.kind != overlayMarkdown {
+			t.Error("the list did not open")
+		}
+	})
+
+	t.Run("a drawer outside a repository", func(t *testing.T) {
+		t.Parallel()
+
+		m := newPageRig(t, nil)
+		pane := m.store.State().Tab().Review.Pane
+
+		openIn(t, m.App, core.SetPaneCwd{ID: pane, Cwd: t.TempDir()})
+		m.settle()
+		m.until(t, "the drawer to notice", m.viewHolds(func(v *reviewView) bool { return v.root == "" && v.loaded && v.err != nil }))
+
+		m.notice = ""
+
+		if held := m.mdOpen(); len(held) != 0 || m.overlay != nil || m.notice != noticeNotRepo || m.drawer.mdWant != nil {
+			t.Fatalf("md.open outside a repository: %d lists, palette %v, notice %q, waiting %v", len(held), m.overlay != nil, m.notice, m.drawer.mdWant)
+		}
+
+		// A request made while the view was still loading goes once it has loaded with no root.
+		m.drawer.mdWant = &mdWant{tab: m.tabID(), open: true}
+		m.settle()
+
+		if m.drawer.mdWant != nil {
+			t.Error("the request outlived the load that found no root")
+		}
+
+		openIn(t, m.App, core.SetPaneCwd{ID: pane, Cwd: m.dir})
+		m.settle()
+		m.until(t, "the drawer to follow the pane", m.viewHolds(func(v *reviewView) bool { return v.root == m.root && v.loaded && !v.loading }))
+		m.settle()
+
+		if m.overlay != nil {
+			t.Errorf("the palette opened on its own: %v", overlayIDs(m.App))
+		}
+	})
 
 	t.Run("a second md.open", func(t *testing.T) {
 		t.Parallel()
@@ -895,12 +948,12 @@ func TestMarkdownPageReload(t *testing.T) {
 		reads bool
 	}{
 		{"the page's path", git.Batch{Paths: []string{"docs/a.md"}}, false, true},
-		{"another path", git.Batch{Paths: []string{"main.go", "docs/other.md"}}, false, false},
+		{"another path", git.Batch{Paths: []string{"main.go", "docs/other.md"}}, false, true},
 		{"an overflow", git.Batch{Overflow: true}, false, true},
 		{"a removed parent", git.Batch{Paths: []string{"docs"}}, false, true},
 		{"the page's path in pull request mode", git.Batch{Paths: []string{"docs/a.md"}}, true, true},
 		{"an overflow in pull request mode", git.Batch{Overflow: true}, true, true},
-		{"a head change only", git.Batch{Git: true}, false, false},
+		{"a head change only", git.Batch{Git: true}, false, true},
 	}
 
 	for _, tt := range tests {
@@ -961,6 +1014,45 @@ func TestMarkdownPageReload(t *testing.T) {
 		})
 	}
 
+	t.Run("a batch that finds the file as it was keeps the doc", func(t *testing.T) {
+		t.Parallel()
+
+		m := newPageRig(t, nil)
+		p := m.openPage(t, "docs/a.md", false)
+		old := p.view.doc
+
+		m.flow(m.batch(m.root, git.Batch{Paths: []string{"main.go"}}), nil)
+
+		if p.view.doc != old {
+			t.Error("the page was parsed again though its file did not change")
+		}
+	})
+
+	t.Run("a page of an ignored file follows its file", func(t *testing.T) {
+		t.Parallel()
+
+		m := newPageRig(t, nil)
+		p := m.openPage(t, "notes/b.md", false)
+
+		write(t, filepath.Join(m.dir, "notes/b.md"), "# Ignored\n\nfirst\n\nsecond\n")
+		p.view.goSource(5)
+
+		// The watcher never names an ignored file; a batch for another path comes.
+		m.flow(m.batch(m.root, git.Batch{Paths: []string{"main.go"}}), nil)
+
+		if text := strings.Join(p.view.doc.text(), "\n"); !strings.Contains(text, "second") {
+			t.Fatalf("the page lacks the new text:\n%s", text)
+		}
+
+		write(t, filepath.Join(m.dir, "notes/b.md"), "# Ignored\n\nadded\n\nfirst\n\nsecond\n")
+		p.view.goSource(5)
+		m.flow(m.batch(m.root, git.Batch{Paths: []string{"main.go"}}), nil)
+
+		if got := p.view.sourceLine(); got != 5 {
+			t.Errorf("the cursor is on source line %d, want 5", got)
+		}
+	})
+
 	t.Run("a page under another reads again when it shows", func(t *testing.T) {
 		t.Parallel()
 
@@ -972,8 +1064,10 @@ func TestMarkdownPageReload(t *testing.T) {
 
 		write(t, filepath.Join(m.dir, "docs/a.md"), newDoc)
 
-		if reads := m.flow(m.batch(m.root, git.Batch{Paths: []string{"docs/a.md"}}), holdPages); len(reads) != 0 {
-			t.Fatalf("a covered page was read again at once: %v", reads)
+		for _, read := range m.flow(m.batch(m.root, git.Batch{Paths: []string{"docs/a.md"}}), holdPages) {
+			if pm := read.(mdPageMsg); pm.path == low.path {
+				t.Fatalf("a covered page was read again at once: %v", pm)
+			}
 		}
 
 		m.press(keyEsc)

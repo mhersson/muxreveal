@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -188,7 +189,7 @@ type linkEditMsg struct {
 }
 
 // insideResolved follows the symlinks of root and path and reports errOutsideWorktree
-// when the path leaves the root.
+// when the path leaves the root and errIsFolder when it is a folder.
 func insideResolved(ctx context.Context, root, path string) error {
 	if err := ctx.Err(); err != nil {
 		return fmt.Errorf("resolve %s: %w", path, err)
@@ -208,19 +209,28 @@ func insideResolved(ctx context.Context, root, path string) error {
 		return errOutsideWorktree
 	}
 
+	info, err := os.Stat(p)
+	if err != nil {
+		return err //nolint:wrapcheck // the *PathError names the reason markdownNotice shows
+	}
+
+	if info.IsDir() {
+		return errIsFolder
+	}
+
 	return nil
 }
 
 // onLinkEdit opens the editor on a followed file that resolved inside the root,
-// or says why not. An answer for a drawer that closed, retargeted or has a new
-// source since, or one that a modal opened over, is dropped.
+// or says why not. An answer for a drawer that closed, retargeted, lost the
+// keyboard or has a new source since, or one that a modal opened over, is dropped.
 func (a *App) onLinkEdit(msg linkEditMsg) tea.Cmd {
 	tab := a.store.State().Tab()
 	if tab.ID != msg.tab || (tab.Review == nil) != (msg.pane == "") || (tab.Review != nil && tab.Review.Pane != msg.pane) {
 		return nil
 	}
 
-	if msg.view != nil && (a.drawer.views[tab.ID] != msg.view || msg.view.epoch != msg.epoch) {
+	if msg.view != nil && (a.drawer.views[tab.ID] != msg.view || msg.view.epoch != msg.epoch || !a.drawer.focused) {
 		return nil
 	}
 

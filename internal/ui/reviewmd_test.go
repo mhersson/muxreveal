@@ -596,6 +596,39 @@ func TestReviewMarkdownFoldSearchEdit(t *testing.T) {
 	}
 }
 
+// e on a rendered row with no source opens the editor at the next block, else the previous one.
+func TestReviewMarkdownEditBlankRow(t *testing.T) {
+	t.Parallel()
+
+	m := newMDRig(t)
+	v := m.v
+
+	m.onFile(t, planPath)
+	m.press(keyRune('m'))
+
+	blank := slices.IndexFunc(v.rows, func(r reviewRow) bool { return r.kind == rowMD && r.text == "" && r.other < 0 })
+	if blank < 0 {
+		t.Fatal("no blank rendered row")
+	}
+
+	if got := v.rows[blank].edit; got != 3 {
+		t.Errorf("the blank row after the heading edits line %d, want 3 (the intro)", got)
+	}
+
+	v.cursor = blank
+
+	m.step(keyRune('e'))
+
+	if m.st.count() != 1 {
+		t.Fatalf("e started %d processes, want 1", m.st.count())
+	}
+
+	argv := m.st.cmds[0].Argv
+	if got, want := argv[len(argv)-2:], []string{"+3", filepath.Join(m.dir, planPath)}; !slices.Equal(got, want) {
+		t.Errorf("the editor got %q, want %q", got, want)
+	}
+}
+
 // hintText is the key hints at the cursor as one string.
 func hintText(t *testing.T, r *drawerRig) string {
 	t.Helper()

@@ -2,13 +2,13 @@ package ui
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
-	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -41,7 +41,8 @@ type mdPage struct {
 	path, rel string
 	view      mdView
 	rev       int  // bumps whenever what the page draws changes, for the drawing's cache key
-	stale     bool // the file changed while another page covered it
+	stale     bool // the file may have changed while another page covered it
+	sum       [sha256.Size]byte
 }
 
 // mdPageMsg answers the read and parse of a page. gen is the view's epoch and
@@ -54,6 +55,8 @@ type mdPageMsg struct {
 	doc    *mdDoc
 	err    error
 	reload bool
+	sum    [sha256.Size]byte
+	same   bool // a check found the file as the page has it, and parsed nothing
 }
 
 // mdListMsg answers the listing of a worktree's markdown files.
@@ -229,11 +232,12 @@ func (a *App) openMarkdownPage(tab core.TabID, path string, push bool) tea.Cmd {
 	v.pageSeq++
 	v.pagePush = push
 
-	return a.readPageCmd(tab, v, path, v.pageSeq, false)
+	return a.readPageCmd(tab, v, path, v.pageSeq, false, nil)
 }
 
-// readPageCmd reads path (absolute) under the view's root and parses it.
-func (a *App) readPageCmd(tab core.TabID, v *reviewView, path string, seq int, reload bool) tea.Cmd {
+// readPageCmd reads path (absolute) under the view's root and parses it. With
+// known set, a file whose bytes hash to it is not parsed.
+func (a *App) readPageCmd(tab core.TabID, v *reviewView, path string, seq int, reload bool, known *[sha256.Size]byte) tea.Cmd {
 	root, epoch, parent, tok := v.root, v.epoch, a.ctx, a.drawer.hl.HighlightLang
 
 	return func() tea.Msg {
@@ -245,6 +249,13 @@ func (a *App) readPageCmd(tab core.TabID, v *reviewView, path string, seq int, r
 		src, err := readLocalMarkdown(ctx, root, path)
 		if err != nil {
 			msg.err = err
+
+			return msg
+		}
+
+		msg.sum = sha256.Sum256(src)
+		if known != nil && *known == msg.sum {
+			msg.same = true
 
 			return msg
 		}
@@ -289,7 +300,7 @@ func (a *App) onMDPage(msg mdPageMsg) {
 		return
 	}
 
-	p := &mdPage{path: msg.path, rel: relSlash(v.root, msg.path), view: mdView{doc: msg.doc}}
+	p := &mdPage{path: msg.path, rel: relSlash(v.root, msg.path), view: mdView{doc: msg.doc}, sum: msg.sum}
 	if v.pagePush {
 		v.pages = append(v.pages, p)
 	} else {
@@ -322,10 +333,16 @@ func (a *App) onPageReload(v *reviewView, msg mdPageMsg, active bool) {
 		return
 	}
 
+	p.stale = false
+
+	if msg.same {
+		return
+	}
+
 	line, old := p.anchorLine(), p.view
 	p.view = mdView{doc: msg.doc, w: old.w, h: old.h, icons: old.icons, top: old.top}
 	p.view.goSource(line)
-	p.stale = false
+	p.sum = msg.sum
 	p.rev++
 }
 
@@ -339,28 +356,37 @@ func (a *App) reloadPage(tab core.TabID, v *reviewView, notice bool) tea.Cmd {
 	v.reloadSeq++
 	v.reloadNotice = notice
 
-	return a.readPageCmd(tab, v, p.path, v.reloadSeq, true)
+	return a.readPageCmd(tab, v, p.path, v.reloadSeq, true, nil)
 }
 
-// pageBatch reads again the pages a watcher batch changed: the shown one now,
-// the ones under it when they are shown again.
-func (a *App) pageBatch(tab core.TabID, v *reviewView, b git.Batch) tea.Cmd {
-	var cmd tea.Cmd
-
-	for i, p := range v.pages {
-		named := b.Overflow || slices.ContainsFunc(b.Paths, func(q string) bool { return p.rel == q || strings.HasPrefix(p.rel, q+"/") })
-		if !named {
-			continue
-		}
-
-		if i == len(v.pages)-1 {
-			cmd = a.reloadPage(tab, v, false)
-		} else {
-			p.stale = true
-		}
+// checkPage reads the shown page's file and parses it again only when its
+// bytes changed.
+func (a *App) checkPage(tab core.TabID, v *reviewView) tea.Cmd {
+	p := v.page()
+	if p == nil {
+		return nil
 	}
 
-	return cmd
+	v.reloadSeq++
+	v.reloadNotice = false
+	sum := p.sum
+
+	return a.readPageCmd(tab, v, p.path, v.reloadSeq, true, &sum)
+}
+
+// pageBatch checks the pages of a watcher batch's worktree: the shown one now,
+// the ones under it when they are shown again. The watcher never names an
+// ignored file, so every batch counts, not only one that names the page.
+func (a *App) pageBatch(tab core.TabID, v *reviewView) tea.Cmd {
+	if len(v.pages) == 0 {
+		return nil
+	}
+
+	for _, p := range v.pages[:len(v.pages)-1] {
+		p.stale = true
+	}
+
+	return a.checkPage(tab, v)
 }
 
 // dropPages ends the page stack and any read for it.
@@ -380,7 +406,7 @@ func (a *App) popPage(tab core.TabID, v *reviewView) tea.Cmd {
 	v.pageSeq++
 
 	if p := v.page(); p != nil && p.stale {
-		return a.reloadPage(tab, v, false)
+		return a.checkPage(tab, v)
 	}
 
 	return nil
@@ -481,8 +507,15 @@ func (a *App) mdOpenCommand() tea.Cmd {
 
 	tab := a.store.State().Tab()
 	if tab.Review != nil {
+		if v := a.drawer.views[tab.ID]; v != nil && v.loaded && v.root == "" {
+			a.notice = noticeNotRepo
+
+			return nil
+		}
+
 		a.closeWorktrees()
 		a.closeLinks()
+		a.drawerTake()
 		a.drawer.mdWant = &mdWant{tab: tab.ID, open: true}
 
 		return nil
@@ -532,7 +565,16 @@ func (a *App) mdListAfterSync() tea.Cmd {
 	}
 
 	v := a.drawer.views[tab.ID]
-	if v == nil || v.root == "" {
+	if v == nil {
+		return nil
+	}
+
+	if v.root == "" {
+		// A view that finished loading without a root has none to list.
+		if v.loaded {
+			a.drawer.mdWant = nil
+		}
+
 		return nil
 	}
 
@@ -553,13 +595,14 @@ func (a *App) mdListAfterSync() tea.Cmd {
 }
 
 // onMDList opens the palette on the files listed. An answer after the drawer
-// closed or retargeted, another modal opened or a newer md.open is dropped.
+// closed or retargeted, another modal opened, the drawer lost the keyboard or a
+// newer md.open is dropped.
 func (a *App) onMDList(msg mdListMsg) {
 	st := a.store.State()
 	tab := st.Tab()
 	v := a.drawer.views[msg.tab]
 
-	if v == nil || msg.seq != a.drawer.mdSeq || tab.ID != msg.tab || tab.Review == nil || a.drawer.closing || msg.gen != v.epoch || a.modalOpen() {
+	if v == nil || msg.seq != a.drawer.mdSeq || tab.ID != msg.tab || tab.Review == nil || a.drawer.closing || !a.drawer.focused || msg.gen != v.epoch || a.modalOpen() {
 		return
 	}
 

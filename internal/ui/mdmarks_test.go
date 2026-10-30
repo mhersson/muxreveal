@@ -48,6 +48,16 @@ func TestChangeMarks(t *testing.T) {
 			map[string]changeMark{"alpha beta": add, "gamma delta": add, "newline here": add},
 		},
 		{"a blank line added between paragraphs", "A\nB\n", "A\n\nB\n", nil},
+		{"a blank line removed between paragraphs", "A\n\n\nB\n", "A\n\nB\n", nil},
+		{"a blank line removed after a heading", "# T\n\n\npara\n", "# T\n\npara\n", nil},
+		{
+			"a blank line and a line removed", "A\n\n\nB\n\nC\n", "A\n\nC\n",
+			map[string]changeMark{"C": rem},
+		},
+		{
+			"a blank line removed inside a code block", "```\nx\n\ny\n```\n\nafter\n", "```\nx\ny\n```\n\nafter\n",
+			map[string]changeMark{"╭": rem},
+		},
 		{"nothing changed", "A\n\nB\n", "A\n\nB\n", nil},
 	}
 

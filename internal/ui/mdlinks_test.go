@@ -170,6 +170,18 @@ func TestFollowTarget(t *testing.T) {
 		{"a file that is missing", nil, func(root string) (mdTarget, want) {
 			return mdTarget{Path: filepath.Join(root, "docs", "nope.go")}, want{notice: "not opening docs/nope.go: no such file"}
 		}},
+		{"a folder", nil, func(root string) (mdTarget, want) {
+			return mdTarget{Path: filepath.Join(root, "docs")}, want{notice: "not opening docs: it is a folder"}
+		}},
+		{"a symlink to a folder", func(t *testing.T, root string) {
+			t.Helper()
+
+			if err := os.Symlink(filepath.Join(root, "docs"), filepath.Join(root, "alias")); err != nil {
+				t.Skipf("no symlinks: %v", err)
+			}
+		}, func(root string) (mdTarget, want) {
+			return mdTarget{Path: filepath.Join(root, "alias")}, want{notice: "not opening alias: it is a folder"}
+		}},
 		{"an https URL", nil, func(string) (mdTarget, want) {
 			return mdTarget{URL: "https://example.com/x"}, want{url: "https://example.com/x"}
 		}},
@@ -556,6 +568,7 @@ func TestFollowTargetLate(t *testing.T) {
 	}{
 		{"the drawer closed", func(m *linkRig) { openIn(t, m.App, core.CloseReview{}) }},
 		{"a palette opened", func(m *linkRig) { m.openCommandPalette() }},
+		{"the keyboard went back to the panes", func(m *linkRig) { m.drawerRelease() }},
 	}
 
 	for _, tt := range tests {

@@ -462,8 +462,39 @@ func TestMDViewGoSource(t *testing.T) {
 
 	v.move(blank - v.cursor)
 
-	if got := v.sourceLine(); got != 1 {
-		t.Errorf("sourceLine of a blank line = %d, want 1", got)
+	if got := v.sourceLine(); got != 3 {
+		t.Errorf("sourceLine of a blank line = %d, want 3 (the next block)", got)
+	}
+}
+
+func TestBlockEditLine(t *testing.T) {
+	t.Parallel()
+
+	none := md.SourceRange{}
+	src := []md.SourceRange{none, {First: 3, Last: 4}, none, {First: 6, Last: 9}, none, none}
+
+	tests := []struct {
+		name string
+		src  []md.SourceRange
+		line int
+		want int
+	}{
+		{"a block row", src, 1, 3},
+		{"a blank before the first block", src, 0, 3},
+		{"a blank between blocks", src, 2, 6},
+		{"a blank after the last block", src, 5, 9},
+		{"no block at all", []md.SourceRange{none, none}, 1, 1},
+		{"past the layout", src, 99, 1},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			if got := blockEditLine(tt.src, tt.line); got != tt.want {
+				t.Errorf("blockEditLine = %d, want %d", got, tt.want)
+			}
+		})
 	}
 }
 

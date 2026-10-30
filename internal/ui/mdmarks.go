@@ -3,6 +3,7 @@ package ui
 import (
 	"slices"
 	"sort"
+	"strings"
 
 	"github.com/mhersson/muxreveal/internal/md"
 )
@@ -37,7 +38,7 @@ type mdFile struct {
 // non-zero range. A block holding an added line is marked on every line; else a
 // block that removed lines sit before, after the previous block's last line up
 // to its own, is marked on its first line. Lines removed after the last block
-// and changes to blank lines mark nothing.
+// and removed blank lines between blocks mark nothing.
 func changeMarks(src []md.SourceRange, old, nw []string) []changeMark {
 	out := make([]changeMark, len(src))
 
@@ -49,6 +50,10 @@ func changeMarks(src []md.SourceRange, old, nw []string) []changeMark {
 	// before holds, for each removal, the new line it sits before.
 	var before []int
 
+	// blankBefore is the same for removals of blank lines only. Between two
+	// blocks they change nothing drawn; inside one they can.
+	var blankBefore []int
+
 	ni := pre
 
 	for i := 0; i < len(ops); {
@@ -58,10 +63,17 @@ func changeMarks(src []md.SourceRange, old, nw []string) []changeMark {
 			added[ni] = added[ni-1] + 1
 			i++
 		case '-':
-			before = append(before, ni+1)
+			blank := true
 
 			for i < len(ops) && ops[i].Op == '-' {
+				blank = blank && strings.TrimSpace(ops[i].Line) == ""
 				i++
+			}
+
+			if blank {
+				blankBefore = append(blankBefore, ni+1)
+			} else {
+				before = append(before, ni+1)
 			}
 		default:
 			ni++
@@ -75,6 +87,7 @@ func changeMarks(src []md.SourceRange, old, nw []string) []changeMark {
 	}
 
 	slices.Sort(before)
+	slices.Sort(blankBefore)
 
 	prevLast := 0
 
@@ -96,7 +109,7 @@ func changeMarks(src []md.SourceRange, old, nw []string) []changeMark {
 				}
 			default:
 				// The first removal sitting before a line after prevLast.
-				if at := sort.SearchInts(before, prevLast+1); at < len(before) && before[at] <= r.Last {
+				if removedBefore(before, prevLast+1, r.Last) || removedBefore(blankBefore, max(prevLast, r.First)+1, r.Last) {
 					out[i] = markRemoved
 				}
 			}
@@ -108,4 +121,11 @@ func changeMarks(src []md.SourceRange, old, nw []string) []changeMark {
 	}
 
 	return out
+}
+
+// removedBefore reports whether the sorted positions hold one in [from, to].
+func removedBefore(at []int, from, to int) bool {
+	k := sort.SearchInts(at, from)
+
+	return k < len(at) && at[k] <= to
 }
