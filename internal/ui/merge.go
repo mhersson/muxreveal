@@ -369,9 +369,31 @@ func (a *App) onMerged(msg mergedMsg) {
 	}
 
 	a.toast(levelSuccess, text)
+	a.recordMerged(msg)
 
 	if a.prs.src != nil {
 		a.prs.src.Refresh(msg.key.repo)
+	}
+}
+
+// recordMerged puts the merged pull request in the state at once, so the drawer
+// and the guards stop treating it as open before the next poll.
+func (a *App) recordMerged(msg mergedMsg) {
+	repo := msg.key.repo.String()
+
+	info, ok := prInfoByNumber(a.store.State(), repo, msg.key.number)
+	if !ok {
+		info = core.PRInfo{Number: msg.key.number, HeadBranch: msg.branch}
+	}
+
+	if info.HeadBranch == "" {
+		info.HeadBranch = msg.branch
+	}
+
+	info.State = prMergedState
+
+	if info.HeadBranch != "" {
+		_ = a.dispatch(core.SetBranchPR{Repo: repo, Branch: info.HeadBranch, PR: info, Found: true})
 	}
 }
 

@@ -654,3 +654,54 @@ func TestMergeBoxFitsAShortTerminal(t *testing.T) {
 		}
 	}
 }
+
+func TestMergedPRShowsMergedInTheDrawer(t *testing.T) {
+	t.Parallel()
+
+	r, f := inMergeDrawer(t, everyMethod, func(pr *github.PR) {
+		pr.Checks = github.Checks{Total: 5, Done: 5}
+		pr.ReviewDecision = "APPROVED"
+	})
+
+	header := func() string { return strings.Join(prHeaderLines(t, r.App)[:3], "\n") }
+
+	if h := header(); !strings.Contains(h, "5/5") {
+		t.Fatalf("header before the merge has no checks:\n%s", h)
+	}
+
+	r.typed("M")
+	r.keys(keyEnter)
+	r.until(t, "the merge", func() bool { return len(f.merged()) == 1 })
+	r.until(t, "the merged state", func() bool {
+		info, _ := prInfoByNumber(r.store.State(), prRepoKey, 7)
+
+		return info.State == prMergedState
+	})
+
+	check := func(when string) {
+		t.Helper()
+
+		h := header()
+		if !strings.Contains(h, "merged") || strings.Contains(h, "5/5") || strings.Contains(h, "approved") {
+			t.Errorf("%s: header\n%s\nwant merged and no checks or review words", when, h)
+		}
+
+		for _, key := range []string{"a", "M"} {
+			r.notice = ""
+			r.typed(key)
+
+			if r.merge != nil || r.notice != "#7 is merged" {
+				t.Errorf("%s: %s gave box %v, notice %q, want no box and %q", when, key, r.merge, r.notice, "#7 is merged")
+			}
+		}
+
+		if rows := r.prListRows(r.store.State()); len(rows) != 0 {
+			t.Errorf("%s: the PR list still holds %d rows", when, len(rows))
+		}
+	}
+
+	check("before a poll")
+
+	r.run(r.step(snapshotOf()))
+	check("after a poll that drops it")
+}

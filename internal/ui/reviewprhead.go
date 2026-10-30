@@ -121,11 +121,16 @@ func (d *drawCtx) prMetaRuns(sp func(int) railRun) []railRun {
 		railRun{text: printable(base), fg: ui.Dim},
 	)
 
-	if glyph, counts := prChecksOf(pr, d.icons, ui); glyph.text != "" {
-		runs = append(runs, sp(3), glyph, sp(1), counts)
-	}
+	if pr.State == prMergedState || pr.State == prClosedState {
+		runs = append(runs, sp(3))
+		runs = append(runs, prTextOf(pr, d.icons, ui).runs(prStage{counts: true})...)
+	} else {
+		if glyph, counts := prChecksOf(pr, d.icons, ui); glyph.text != "" {
+			runs = append(runs, sp(3), glyph, sp(1), counts)
+		}
 
-	runs = append(runs, sp(3), prReviewWords(pr, ui))
+		runs = append(runs, sp(3), prReviewWords(pr, ui))
+	}
 
 	if pr.Author != "" {
 		runs = append(runs, railRun{text: "   @" + printable(pr.Author), fg: ui.Subtle})

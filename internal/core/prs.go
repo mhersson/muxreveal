@@ -166,6 +166,12 @@ func (s State) OpenPRFor(repo, branch string) (PRInfo, bool) {
 // one a lookup found.
 func (s State) PRFor(repo, branch string) (PRInfo, bool) {
 	if p, ok := s.OpenPRFor(repo, branch); ok {
+		// A merge never reverts: the lookup's merged record outranks a poll
+		// that still lists the pull request.
+		if b, ok := s.PRs[repo].Branch[branch]; ok && b.Number == p.Number && b.State == "MERGED" && !b.CrossRepo {
+			return b, true
+		}
+
 		return p, true
 	}
 

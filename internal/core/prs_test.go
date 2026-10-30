@@ -153,6 +153,14 @@ func TestPRFor(t *testing.T) {
 			repoKey, "feat", 4,
 		},
 		{
+			"a merged lookup of the same PR beats a poll that still lists it open",
+			[]Action{
+				SetRepoPRs{Repo: repoKey, Open: []PRInfo{{Number: 3, HeadBranch: "feat", State: "OPEN"}}},
+				SetBranchPR{Repo: repoKey, Branch: "feat", PR: lookup, Found: true},
+			},
+			repoKey, "feat", 3,
+		},
+		{
 			"the lookup when no open PR matches",
 			[]Action{
 				SetRepoPRs{Repo: repoKey, Open: []PRInfo{{Number: 1, HeadBranch: "other"}}},

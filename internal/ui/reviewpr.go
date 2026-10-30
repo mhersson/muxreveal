@@ -180,9 +180,17 @@ func repoOfKey(key string) (github.Repo, bool) {
 	return github.Repo{Host: parts[0], Owner: parts[1], Name: parts[2]}, true
 }
 
-// prInfoByNumber finds a pull request the poll lists or a lookup found.
+// prInfoByNumber finds a pull request the poll lists or a lookup found. A
+// merged one a lookup holds outranks the poll's open entry, since a merge never
+// reverts and the poll may still list it for a moment.
 func prInfoByNumber(st core.State, repo string, number int) (core.PRInfo, bool) {
 	r := st.PRs[repo]
+
+	for _, p := range r.Branch {
+		if p.Number == number && p.State == prMergedState {
+			return p, true
+		}
+	}
 
 	for _, p := range r.Open {
 		if p.Number == number {
