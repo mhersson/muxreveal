@@ -86,7 +86,13 @@ func (a *App) drawerAfterUpdate() tea.Cmd {
 	}
 
 	lay := a.drawerLayoutOf(box, v, drawerTree(st))
-	if v.rowsSplit != lay.split {
+
+	// Rendered rows are laid out four cells narrower than the column.
+	mdW := max(lay.diffW-4, 1)
+	moved := v.mdW != mdW || v.mdIcons != a.icons
+	v.mdW, v.mdIcons = mdW, a.icons
+
+	if v.rowsSplit != lay.split || (moved && len(v.mdFiles) > 0) {
 		v.rebuild(lay.split)
 	}
 

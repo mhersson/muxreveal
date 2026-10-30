@@ -623,6 +623,8 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, a.reviewRefresh(msg.pane)
 	case reviewFullMsg:
 		return a, a.onReviewFull(msg)
+	case reviewMDMsg:
+		return a, a.onReviewMD(msg)
 	case reviewFlashMsg:
 		a.onReviewFlash(msg)
 	case wtOpenMsg:

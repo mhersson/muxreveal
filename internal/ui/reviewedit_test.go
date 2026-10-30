@@ -339,8 +339,8 @@ func TestEditLine(t *testing.T) {
 
 	unified := buildRows(res, rowOpts{})
 	split := buildRows(res, rowOpts{split: true})
-	shown := buildRows(res, rowOpts{full: map[string]fullText{"f.go": whole}})
-	folded := buildRows(res, rowOpts{full: map[string]fullText{"f.go": whole}, ghostsStartFolded: true})
+	shown := buildRows(res, rowOpts{full: map[string]fullText{"f.go": whole}, whole: map[string]bool{"f.go": true}})
+	folded := buildRows(res, rowOpts{full: map[string]fullText{"f.go": whole}, whole: map[string]bool{"f.go": true}, ghostsStartFolded: true})
 	info := buildRows(git.Result{Files: []git.FileDiff{{Path: "b.bin", Binary: true}}}, rowOpts{})
 
 	// nth is the n-th row of a kind, counting from 0, that has the given text ("" for any).
@@ -378,8 +378,8 @@ func TestEditLine(t *testing.T) {
 		"start.go": {old: []string{"g1", "g2", "k1"}, new: []string{"k1"}},
 		"none.go":  {old: []string{"g1", "g2"}, new: nil},
 	}
-	ghostShown := buildRows(ghosts, rowOpts{full: ghostText})
-	ghostFolded := buildRows(ghosts, rowOpts{full: ghostText, ghostsStartFolded: true})
+	ghostShown := buildRows(ghosts, rowOpts{full: ghostText, whole: allWhole(ghostText)})
+	ghostFolded := buildRows(ghosts, rowOpts{full: ghostText, whole: allWhole(ghostText), ghostsStartFolded: true})
 
 	// inFile is the n-th row of a kind, counting from 0, in the file at index file.
 	inFile := func(rows []reviewRow, file int, kind reviewRowKind, text string, n int) reviewRow {

@@ -96,6 +96,7 @@ func TestDrawerLinesFollowTheirInputs(t *testing.T) {
 	}
 	whole := func(t *testing.T, a *App, v *reviewView) {
 		v.full = map[string]fullText{appGoPath: appGoFull()}
+		v.fullOn = allWhole(v.full)
 		v.gen++
 		v.rebuild(v.split)
 	}
@@ -269,6 +270,8 @@ func TestDrawerLinesStayTrueToAColdDraw(t *testing.T) {
 		{"split", func() { v.split = !v.split }},
 		{"whole file", func() {
 			v.full = map[string]fullText{appGoPath: appGoFull()}
+			v.fullOn = allWhole(v.full)
+
 			if rng.IntN(2) == 0 {
 				v.full = nil
 			}

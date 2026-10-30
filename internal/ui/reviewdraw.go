@@ -14,6 +14,7 @@ import (
 
 	"github.com/mhersson/muxreveal/internal/core"
 	"github.com/mhersson/muxreveal/internal/git"
+	"github.com/mhersson/muxreveal/internal/md"
 	"github.com/mhersson/muxreveal/internal/ui/diffview"
 	"github.com/mhersson/muxreveal/internal/ui/theme"
 )
@@ -60,8 +61,10 @@ type layoutKey struct {
 func fullDigits(v *reviewView) int {
 	n := 0
 
-	for _, ft := range v.full {
-		n = max(n, numDigits(max(len(ft.old), len(ft.new))))
+	for path, ft := range v.full {
+		if v.fullOn[path] && !v.mdOn[path] {
+			n = max(n, numDigits(max(len(ft.old), len(ft.new))))
+		}
 	}
 
 	return n
@@ -138,6 +141,7 @@ func (l drawerLayout) splitCode() int {
 // drawCtx is what drawing one frame of the drawer needs.
 type drawCtx struct {
 	ui    theme.UI
+	th    theme.Theme
 	icons bool
 	v     *reviewView
 	c     *reviewCache
@@ -149,6 +153,8 @@ type drawCtx struct {
 	now   time.Time
 	query string
 	top   int
+
+	mdp *mdPainter // paints rendered rows; made on first use
 
 	pr     core.PRInfo // the pull request the header shows; zero when headH is 0
 	pinned bool        // the drawer is held on its root
@@ -308,7 +314,7 @@ func (a *App) drawCtxFor(st core.State) (d *drawCtx, name string, ok bool) {
 	tab := st.Tab()
 
 	d = &drawCtx{
-		ui: lk.theme.UI, icons: a.icons, v: v, c: v.derived(), now: a.clock.Now(), keys: a.drawer.focused, tree: a.drawer.focused && a.drawer.tree,
+		ui: lk.theme.UI, th: lk.theme, icons: a.icons, v: v, c: v.derived(), now: a.clock.Now(), keys: a.drawer.focused, tree: a.drawer.focused && a.drawer.tree,
 		pinned: tab.Review != nil && pinnedTo(tab, tab.Review.Pane), home: a.getenv("HOME"), list: a.listFor(tab),
 	}
 	d.lay = a.drawerLayoutOf(box, v, drawerTree(st))
@@ -565,16 +571,26 @@ func (d *drawCtx) bottomBorder() string {
 // hintRuns are the key hints that fit cw cells; pairs that do not are dropped
 // from the end.
 func (d *drawCtx) hintRuns(cw int) []railRun {
+	cur := d.cursorFile()
+	render := cur != nil && md.IsMarkdown(cur.Path) && !cur.Binary && cur.Status != git.Deleted
+
 	pairs := [][2]string{
 		{"j/k", "line"},
 		{"]/[", "hunk"},
 		{"}/{", "file"},
 		{"tab", "tree"},
 		{"w", "worktree"},
-		{"f", "full"},
-		{"u", "split"},
-		{"b/t", "mode"},
 	}
+
+	if render {
+		pairs = append(pairs, [2]string{"m", "render"})
+	}
+
+	pairs = append(pairs,
+		[2]string{"f", "full"},
+		[2]string{"u", "split"},
+		[2]string{"b/t", "mode"},
+	)
 
 	if d.v.showsTurn() {
 		pairs = append(pairs, [2]string{",/.", "turn"})
@@ -584,6 +600,10 @@ func (d *drawCtx) hintRuns(cw int) []railRun {
 
 	if _, ok := d.v.src.(git.PRSource); ok {
 		pairs = [][2]string{{"j/k", "line"}, {"]/[", "hunk"}, {"c", "checks"}, {"a", "approve"}, {"M", "merge"}, {"O", "browser"}, {"b/t", "mode"}}
+	}
+
+	if cur != nil && d.v.mdOn[cur.Path] {
+		pairs = [][2]string{{"j/k", "line"}, {"]/[", "change"}, {"enter", "open"}, {"m", "source"}, {"f", "full"}, {"/", "search"}}
 	}
 
 	if d.tree {
@@ -613,6 +633,16 @@ func (d *drawCtx) hintRuns(cw int) []railRun {
 	}
 
 	return out
+}
+
+// cursorFile is the file the cursor is in, nil with no rows.
+func (d *drawCtx) cursorFile() *git.FileDiff {
+	v := d.v
+	if v.cursor < 0 || v.cursor >= len(v.rows) {
+		return nil
+	}
+
+	return &v.res.Files[v.rows[v.cursor].file]
 }
 
 // ---- diff column ----
@@ -773,6 +803,8 @@ func (d *drawCtx) rowCells(i int, cursor bool) string {
 		return d.ghostRow(r, cursor, fresh)
 	case rowFold:
 		return d.foldRow(r, cursor, fresh)
+	case rowMD:
+		return d.mdRow(r, f, cursor)
 	}
 
 	return ""
@@ -805,7 +837,12 @@ func (d *drawCtx) fileRow(fi int, cursor bool) string {
 		right = append(right, railRun{text: text, fg: ui.Warning, bold: true}, railRun{text: "  "})
 	}
 
-	if _, whole := d.v.full[f.Path]; whole {
+	_, have := d.v.full[f.Path]
+
+	switch {
+	case d.v.mdOn[f.Path]:
+		right = append(right, railRun{text: d.withIcon(iconMarkdown, "rendered"), fg: ui.Accent, bold: true}, railRun{text: "  "})
+	case have && d.v.fullOn[f.Path]:
 		right = append(right, railRun{text: d.withIcon(iconFull, "full"), fg: ui.Accent, bold: true}, railRun{text: "  "})
 	}
 
@@ -878,4 +915,44 @@ func matchRanges(text, q string) []diffview.Range {
 		out = append(out, diffview.Range{Start: at + i, End: at + i + len(lq)})
 		at += i + len(lq)
 	}
+}
+
+// mdRow draws a line of a rendered file: the change mark or the cursor in cell
+// 0, a blank, the text at the column's width less four, two blanks. A row whose
+// doc is gone draws blank.
+func (d *drawCtx) mdRow(r reviewRow, f git.FileDiff, cursor bool) string {
+	w, ui := d.lay.diffW, d.ui
+	bg := d.cursorGround(ui.Bg, cursor)
+	lead, tw := min(2, w), max(w-4, 0)
+
+	mark := railRun{text: " "}
+
+	switch {
+	case cursor:
+		mark = d.markRun(true)
+	case r.mark == markAdded:
+		mark = railRun{text: markGlyph, fg: ui.Success}
+	case r.mark == markRemoved:
+		mark = railRun{text: markGlyph, fg: ui.Error}
+	}
+
+	text := railPainter{bg: bg}.line(nil, tw)
+
+	if mf := d.v.mdFiles[f.Path]; mf != nil {
+		lay := mf.doc.layout(max(d.v.mdW, 1), d.v.mdIcons)
+		if r.line < len(lay.Lines) {
+			text = d.mdPainter().withGround(bg).line(lay.Lines[r.line], lay.Links, tw)
+		}
+	}
+
+	return railPainter{bg: bg}.line([]railRun{mark}, lead) + text + railPainter{bg: bg}.line(nil, max(w-lead-tw, 0))
+}
+
+func (d *drawCtx) mdPainter() mdPainter {
+	if d.mdp == nil {
+		p := newMDPainter(d.th, d.ui.Bg)
+		d.mdp = &p
+	}
+
+	return *d.mdp
 }

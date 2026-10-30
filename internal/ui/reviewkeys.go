@@ -38,6 +38,7 @@ var reviewKeys = []reviewKey{
 	{"G", "review.bottom"},
 	{"tab", "review.tree"},
 	{"f", "review.full"},
+	{"m", "review.markdown"},
 	{"u", "review.split"},
 	{"enter", "review.fold"},
 	{"b", "review.mode.branch"},
@@ -96,6 +97,7 @@ func reviewCommands() []command {
 		cmd("review.bottom", "Review: bottom", func(a *App) tea.Cmd { return a.reviewEnd(true) }),
 		cmd("review.tree", "Review: file tree", (*App).reviewTree),
 		cmd("review.full", "Review: full file", (*App).toggleReviewFull),
+		cmd("review.markdown", "Review: rendered or source", (*App).toggleReviewMarkdown),
 		cmd("review.split", "Review: unified or side by side", (*App).reviewSplit),
 		cmd("review.fold", "Review: fold or show removed lines", (*App).reviewFold),
 		cmd("review.mode.branch", "Review: branch mode", mode(core.ReviewBranch)),
@@ -338,12 +340,12 @@ func (v *reviewView) blockStarts() []int {
 	inBlock := false
 
 	for i, r := range v.rows {
-		change := (r.kind == rowFull && r.other < 0) || r.kind == rowGhost || r.kind == rowFold
+		change := (r.kind == rowFull && r.other < 0) || r.kind == rowGhost || r.kind == rowFold || (r.kind == rowMD && r.mark != markNone)
 
 		switch {
 		case r.kind == rowHunk:
 			out = append(out, v.firstChange(i))
-		case change && !inBlock:
+		case change && (!inBlock || (r.kind == rowMD && !v.sameMDBlock(i))):
 			out = append(out, i)
 		}
 
@@ -351,6 +353,18 @@ func (v *reviewView) blockStarts() []int {
 	}
 
 	return out
+}
+
+// sameMDBlock reports whether rendered row i goes on the block the row before
+// it is in: the same file and source range.
+func (v *reviewView) sameMDBlock(i int) bool {
+	if i == 0 {
+		return false
+	}
+
+	prev, r := v.rows[i-1], v.rows[i]
+
+	return prev.kind == rowMD && prev.file == r.file && prev.edit == r.edit && prev.other == r.other
 }
 
 // firstChange is the row of the first added or removed line of the hunk whose
@@ -403,6 +417,12 @@ func (a *App) reviewFold() tea.Cmd {
 	}
 
 	r := v.rows[v.cursor]
+	if r.kind == rowMD {
+		a.foldRendered(v, r)
+
+		return nil
+	}
+
 	if r.kind != rowGhost && r.kind != rowFold {
 		return nil
 	}
@@ -424,6 +444,24 @@ func (a *App) reviewFold() tea.Cmd {
 	}
 
 	return nil
+}
+
+// foldRendered opens or closes the fold whose head is rendered row r; any other
+// rendered row does nothing.
+func (a *App) foldRendered(v *reviewView, r reviewRow) {
+	f := v.mdFiles[v.res.Files[r.file].Path]
+	if f == nil {
+		return
+	}
+
+	for _, fold := range f.doc.layout(max(v.mdW, 1), v.mdIcons).Folds {
+		if fold.Line == r.line {
+			f.doc.toggleFold(fold.ID)
+			v.rebuild(v.rowsSplit)
+
+			return
+		}
+	}
 }
 
 // reviewSplit switches between unified and side by side; a drawer too narrow
@@ -529,7 +567,8 @@ func reviewEditor(getenv func(string) string) string {
 // editLine is the line of f the row stands for: the cursor line's new number,
 // its old number on a removed line of a hunk, the hunk's new start on a hunk
 // header, the first new line after the block on a ghost line of the full view
-// (the last line when the block ends the file) and 1 on a file header.
+// (the last line when the block ends the file), the first source line of a
+// rendered row and 1 on a file header.
 func editLine(f git.FileDiff, r reviewRow) int {
 	line := 1
 
@@ -551,7 +590,7 @@ func editLine(f git.FileDiff, r reviewRow) int {
 		}
 	case rowFull:
 		line = r.line + 1
-	case rowGhost, rowFold:
+	case rowGhost, rowFold, rowMD:
 		line = r.edit
 	}
 

@@ -135,6 +135,7 @@ func TestDefaultCommands(t *testing.T) {
 		want{"review.bottom", "Review: bottom", iconReview},
 		want{"review.tree", "Review: file tree", iconReview},
 		want{"review.full", "Review: full file", iconReview},
+		want{"review.markdown", "Review: rendered or source", iconReview},
 		want{"review.split", "Review: unified or side by side", iconReview},
 		want{"review.fold", "Review: fold or show removed lines", iconReview},
 		want{"review.mode.branch", "Review: branch mode", iconReview},

@@ -53,6 +53,15 @@ type reviewView struct {
 	fullAsk  map[string]fullRead
 	fullStop map[string]context.CancelFunc // ends the read of a file's text
 
+	// The files shown rendered, by path: the parsed file once its parse has
+	// answered, the parses being made and the width and icons the rows were
+	// laid out at.
+	mdOn    map[string]bool
+	mdFiles map[string]*mdFile
+	mdAsk   map[string]blobIDs
+	mdW     int
+	mdIcons bool
+
 	res         git.Result
 	gen         int // bumps whenever res is replaced; the caches follow it
 	rows        []reviewRow
@@ -219,8 +228,29 @@ func (v *reviewView) rebuildFor(res git.Result, split bool) {
 	v.res = res
 	v.rowsSplit = split
 	v.rowsRev++
-	v.rows = buildRows(res, rowOpts{split: split, full: v.full, folded: v.folded})
+	v.rows = buildRows(res, rowOpts{split: split, full: v.full, whole: v.fullOn, folded: v.folded, md: v.mdRowsOf()})
 	v.cursor = restoreAnchor(res, v.rows, anchor)
+}
+
+// mdRowsOf lays out every rendered file whose parse has answered, with its
+// change marks; a file still parsing has a nil entry.
+func (v *reviewView) mdRowsOf() map[string]*mdRows {
+	if len(v.mdOn) == 0 {
+		return nil
+	}
+
+	out := make(map[string]*mdRows, len(v.mdOn))
+
+	for path := range v.mdOn {
+		out[path] = nil
+
+		if f := v.mdFiles[path]; f != nil {
+			lay := f.doc.layout(max(v.mdW, 1), v.mdIcons)
+			out[path] = &mdRows{lay: lay, marks: changeMarks(lay.Source, f.text.old, f.text.new)}
+		}
+	}
+
+	return out
 }
 
 // stop ends the work running for the view: its load and its full-file reads.

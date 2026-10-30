@@ -22,6 +22,7 @@ const (
 	rowFull                       // a new-side line of the full file view
 	rowGhost                      // a removed line in the full file view
 	rowFold                       // a folded block of ghost lines
+	rowMD                         // a line of a rendered markdown file
 )
 
 // reviewRow is one row of the diff column. It holds indexes into the result,
@@ -35,6 +36,9 @@ const (
 //   - rowGhost: line indexes the old text; block is the ghost block. text is
 //     the line.
 //   - rowFold: line is the block's first old line, other the number of lines.
+//   - rowMD: line indexes the layout; edit and other are the first and last
+//     source line that made it (edit 1 and other 0 for none); text is its plain
+//     text; mark is its change mark.
 //
 // A ghost or fold row also holds edit, the line of the new file an editor
 // opens at for it: the first new line after its block, or the last line when
@@ -45,13 +49,18 @@ type reviewRow struct {
 	text                    string
 	block                   int
 	edit                    int
+	mark                    changeMark
 }
 
 // rowOpts selects how buildRows lays the result out.
 type rowOpts struct {
 	split bool
-	// full holds the text of the files shown whole, by path.
-	full map[string]fullText
+	// full holds the text of the files read whole, by path; whole says which of
+	// them are shown so.
+	full  map[string]fullText
+	whole map[string]bool
+	// md holds the rendered files, by path; a nil entry is a file still parsing.
+	md map[string]*mdRows
 	// folded says whether a ghost block is folded, by foldKey; a block without
 	// an entry takes ghostsStartFolded.
 	folded            map[string]bool
@@ -73,6 +82,7 @@ const lcsCells = 4 << 20
 const (
 	infoBinary    = "binary file, not shown"
 	infoTruncated = "too large, press f for the full file"
+	infoRendering = "rendering…"
 )
 
 func newRow(kind reviewRowKind, file int) reviewRow {
@@ -94,11 +104,19 @@ func buildRows(res git.Result, o rowOpts) []reviewRow {
 	for i, f := range res.Files {
 		rows = append(rows, newRow(rowFile, i))
 
-		ft, whole := o.full[f.Path]
+		ft, have := o.full[f.Path]
+		whole := have && o.whole[f.Path]
+		mr, rendered := o.md[f.Path]
 
 		switch {
 		case f.Binary:
 			rows = append(rows, infoRow(i, infoBinary))
+		case rendered && have && ft.err != nil:
+			rows = append(rows, infoRow(i, ft.err.Error()))
+		case rendered && mr == nil:
+			rows = append(rows, infoRow(i, infoRendering))
+		case rendered:
+			rows = appendMD(rows, i, mr)
 		case whole && ft.err != nil:
 			rows = append(rows, infoRow(i, ft.err.Error()))
 		case whole:
@@ -110,6 +128,28 @@ func buildRows(res git.Result, o rowOpts) []reviewRow {
 		default:
 			rows = appendHunks(rows, i, f, o.split)
 		}
+	}
+
+	return rows
+}
+
+// appendMD adds a rendered file's lines.
+func appendMD(rows []reviewRow, file int, mr *mdRows) []reviewRow {
+	plain := mr.lay.Plain()
+
+	for i := range mr.lay.Lines {
+		r := newRow(rowMD, file)
+		r.line, r.text, r.edit = i, plain[i], 1
+
+		if i < len(mr.lay.Source) && mr.lay.Source[i].First != 0 {
+			r.edit, r.other = mr.lay.Source[i].First, mr.lay.Source[i].Last
+		}
+
+		if i < len(mr.marks) {
+			r.mark = mr.marks[i]
+		}
+
+		rows = append(rows, r)
 	}
 
 	return rows
@@ -156,27 +196,29 @@ func appendHunks(rows []reviewRow, file int, f git.FileDiff, split bool) []revie
 	return rows
 }
 
-func appendFull(rows []reviewRow, file int, path string, ft fullText, o rowOpts) []reviewRow {
-	old, nw := ft.old, ft.new
-
-	pre := 0
+// lineOps diffs two texts line by line: the lines both start with, the lines
+// both end with and the operations on what lies between.
+func lineOps(old, nw []string) (pre, suf int, ops []linediff.Op) {
 	for pre < len(old) && pre < len(nw) && old[pre] == nw[pre] {
 		pre++
 	}
 
-	suf := 0
 	for suf < len(old)-pre && suf < len(nw)-pre && old[len(old)-1-suf] == nw[len(nw)-1-suf] {
 		suf++
 	}
 
 	midOld, midNew := old[pre:len(old)-suf], nw[pre:len(nw)-suf]
 
-	var ops []linediff.Op
 	if len(midOld)*len(midNew) <= lcsCells {
-		ops = linediff.LCS(midOld, midNew)
-	} else {
-		ops = linediff.Replace(midOld, midNew)
+		return pre, suf, linediff.LCS(midOld, midNew)
 	}
+
+	return pre, suf, linediff.Replace(midOld, midNew)
+}
+
+func appendFull(rows []reviewRow, file int, path string, ft fullText, o rowOpts) []reviewRow {
+	old, nw := ft.old, ft.new
+	pre, suf, ops := lineOps(old, nw)
 
 	kept := func(oi, ni int) reviewRow {
 		r := newRow(rowFull, file)
@@ -268,6 +310,7 @@ type rowAnchor struct {
 	row                        reviewRowKind
 	index                      int
 	block                      int // a fold row's ghost block
+	first, last                int // a rendered row's source range
 }
 
 // anchorAt describes row i. Rows that hold no hunk keep only the file.
@@ -284,6 +327,8 @@ func anchorAt(res git.Result, rows []reviewRow, i int) rowAnchor {
 	switch r.kind {
 	case rowFold:
 		a.block = r.block
+	case rowMD:
+		a.first, a.last, a.text = r.edit, r.other, r.text
 	case rowFull:
 		a.kind, a.text = git.Context, r.text
 		if r.other < 0 {
@@ -318,6 +363,7 @@ func restoreAnchor(res git.Result, rows []reviewRow, a rowAnchor) int {
 	line, lineDist := -1, 0
 	whole := -1
 	fold := -1
+	md := mdAnchorMatch{exact: -1, holds: -1, next: -1, last: -1}
 
 	for i, r := range rows {
 		f := res.Files[r.file]
@@ -331,6 +377,10 @@ func restoreAnchor(res git.Result, rows []reviewRow, a rowAnchor) int {
 		case rowHunk:
 			if hunkRow < 0 && overlaps(f.Hunks[r.hunk], a) {
 				hunkRow = i
+			}
+		case rowMD:
+			if a.row == rowMD {
+				md.consider(r, i, a)
 			}
 		case rowFold:
 			if a.row == rowFold && r.block == a.block && (fold < 0 || abs(i-a.index) < abs(fold-a.index)) {
@@ -365,6 +415,8 @@ func restoreAnchor(res git.Result, rows []reviewRow, a rowAnchor) int {
 	switch {
 	case a.row == rowFile && header >= 0:
 		return header
+	case a.row == rowMD && md.pick() >= 0:
+		return md.pick()
 	case a.row == rowFold && fold >= 0:
 		return fold
 	case (a.row == rowFull || a.row == rowGhost) && whole >= 0:
@@ -378,6 +430,42 @@ func restoreAnchor(res git.Result, rows []reviewRow, a rowAnchor) int {
 	}
 
 	return min(max(a.index, 0), len(rows)-1)
+}
+
+// mdAnchorMatch finds a rendered row again by its source range: the row with
+// the same range nearest the old index, else the narrowest range holding the
+// first source line, else the next block, else the file's last row.
+type mdAnchorMatch struct {
+	exact, holds, next, last int // row indexes, -1 for none
+	holdsW, nextFirst        int
+}
+
+func (m *mdAnchorMatch) consider(r reviewRow, i int, a rowAnchor) {
+	m.last = i
+
+	switch {
+	case r.edit == a.first && r.other == a.last:
+		if m.exact < 0 || abs(i-a.index) < abs(m.exact-a.index) {
+			m.exact = i
+		}
+	case r.other == 0 || a.last == 0:
+	case r.edit <= a.first && a.first <= r.other:
+		if w := r.other - r.edit; m.holds < 0 || w < m.holdsW {
+			m.holds, m.holdsW = i, w
+		}
+	case r.edit > a.first && (m.next < 0 || r.edit < m.nextFirst):
+		m.next, m.nextFirst = i, r.edit
+	}
+}
+
+func (m *mdAnchorMatch) pick() int {
+	for _, i := range [...]int{m.exact, m.holds, m.next, m.last} {
+		if i >= 0 {
+			return i
+		}
+	}
+
+	return -1
 }
 
 func overlaps(h git.Hunk, a rowAnchor) bool {
@@ -426,7 +514,7 @@ func rowTexts(res git.Result, r reviewRow) []string {
 	switch r.kind {
 	case rowFile:
 		return []string{f.Path, f.OldPath}
-	case rowInfo, rowFull, rowGhost:
+	case rowInfo, rowFull, rowGhost, rowMD:
 		return []string{r.text}
 	case rowHunk:
 		h := f.Hunks[r.hunk]

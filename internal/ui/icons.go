@@ -51,6 +51,7 @@ const (
 	iconFull       = "\U000F09EE" // nf-md-file_document_outline
 	iconGhost      = "\U000F165D" // nf-md-ghost_outline
 	iconFolder     = "\U000F0256" // nf-md-folder_outline
+	iconMarkdown   = "\uF48A"     // nf-oct-markdown
 
 	iconNewWorktree = "\U000F14CA" // nf-md-source_branch_plus
 	iconPin         = "\U000F0403" // nf-md-pin

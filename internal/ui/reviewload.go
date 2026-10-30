@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"maps"
 	"slices"
 	"time"
 
@@ -76,6 +77,16 @@ type reviewFullMsg struct {
 	ids  blobIDs
 	read int // the serial of the read that made this answer
 	text fullText
+}
+
+// reviewMDMsg answers the parse of one rendered file. gen is the view's epoch
+// when it was asked and ids the blobs the file was parsed from.
+type reviewMDMsg struct {
+	tab  core.TabID
+	gen  int
+	path string
+	ids  blobIDs
+	file *mdFile
 }
 
 // reviewFlashMsg ends the flash of rows a live update added.
@@ -632,6 +643,7 @@ func (a *App) reviewReplace(v *reviewView, msg reviewLoadedMsg) tea.Cmd {
 		v.keepSpans()
 	} else {
 		v.full, v.fullOn, v.fullHave, v.fullAsk, v.folded = nil, nil, nil, nil, nil
+		v.mdOn, v.mdFiles, v.mdAsk = nil, nil, nil
 		v.carry = nil
 	}
 
@@ -686,11 +698,27 @@ func followFile(prev, next git.Result, i int) int {
 	return min(max(i, 0), max(len(next.Files)-1, 0))
 }
 
-// forgetGone drops the full-file state of files res no longer holds, or holds
-// as binary.
+// forgetGone drops the full-file and rendered state of files res no longer
+// holds, or holds as binary, and the rendered state of files it holds as deleted.
 func (v *reviewView) forgetGone(res git.Result) {
-	for path := range v.fullOn {
-		if i := slices.IndexFunc(res.Files, func(f git.FileDiff) bool { return f.Path == path }); i >= 0 && !res.Files[i].Binary {
+	paths := slices.Collect(maps.Keys(v.fullOn))
+	paths = slices.AppendSeq(paths, maps.Keys(v.mdOn))
+
+	for _, path := range paths {
+		i := slices.IndexFunc(res.Files, func(f git.FileDiff) bool { return f.Path == path })
+		kept := i >= 0 && !res.Files[i].Binary
+
+		if !kept {
+			delete(v.fullOn, path)
+		}
+
+		if !kept || res.Files[i].Status == git.Deleted {
+			delete(v.mdOn, path)
+			delete(v.mdFiles, path)
+			delete(v.mdAsk, path)
+		}
+
+		if v.fullOn[path] || v.mdOn[path] {
 			continue
 		}
 
@@ -698,7 +726,6 @@ func (v *reviewView) forgetGone(res git.Result) {
 			stop()
 		}
 
-		delete(v.fullOn, path)
 		delete(v.full, path)
 		delete(v.fullHave, path)
 		delete(v.fullAsk, path)
