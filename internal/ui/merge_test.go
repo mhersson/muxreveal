@@ -384,7 +384,7 @@ func TestMergeWithoutAFocusedPane(t *testing.T) {
 	openIn(t, r.App, core.ClosePane{ID: st.Tab().Focus})
 
 	if st = r.store.State(); len(st.Tab().Panes) != 0 {
-		t.Skipf("the tab still has panes: %v", st.Tab().Panes)
+		t.Fatalf("the tab still has panes: %v", st.Tab().Panes)
 	}
 
 	r.leader('g')

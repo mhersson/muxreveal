@@ -524,10 +524,11 @@ func TestPRListCleansText(t *testing.T) {
 		t.Errorf("the branch was lost:\n%s", text)
 	}
 
-	for _, line := range strings.Split(text, "\n") {
-		if strings.Contains(line, "second line") && !strings.Contains(line, "#4") {
-			t.Errorf("the title's second line is a row of its own: %q", line)
-		}
+	// The title's second line stays on the row of its number.
+	if !slices.ContainsFunc(strings.Split(text, "\n"), func(l string) bool {
+		return strings.Contains(l, "#4 Fix") && strings.Contains(l, "second line")
+	}) {
+		t.Errorf("no row holds the whole title:\n%s", text)
 	}
 }
 
