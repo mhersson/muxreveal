@@ -101,6 +101,21 @@ func (r *composeRig) oneCommit(t *testing.T, subject, body string) {
 
 func (r *composeRig) text() string { return ansi.Strip(r.View().Content) }
 
+// The box starts from the worktree the drawer shows, which PR mode holds
+// while the pane follows another.
+func TestComposeTargetsThePRModeWorktree(t *testing.T) {
+	r := newComposeRig(t)
+	b := rootOf(t, r.worktree(t, "b", "feat/b"))
+	r.editIn(t, r.worktree(t, "c", "feat/c"))
+	r.churn(t, r.openReview(r.agent, true))
+
+	openIn(t, r.App, core.ShowReviewPR{Repo: "github.com/o/r", Number: 7, Root: b})
+
+	if got := r.mustOpen(t).t.branch; got != "feat/b" {
+		t.Errorf("the box opened for %q, want feat/b", got)
+	}
+}
+
 func TestComposePrefill(t *testing.T) {
 	tests := []struct {
 		name       string

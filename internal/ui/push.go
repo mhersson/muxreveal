@@ -92,12 +92,17 @@ type pushedMsg struct {
 }
 
 // pushDir is the directory a push starts from: what the open review drawer
-// shows, a pin included, else the focused pane's followed place, else the
+// shows, a pin or a held pull request included, else the focused pane's followed place, else the
 // directory the app started in.
 func (a *App) pushDir(st core.State) string {
 	tab := st.Tab()
 
 	if tab.Review != nil {
+		// PR mode holds its worktree like a pin, wherever the pane has gone since.
+		if tab.Review.PR != nil && tab.Review.PR.Root != "" {
+			return tab.Review.PR.Root
+		}
+
 		if dir := a.drawerDir(st, tab, tab.Review.Pane); dir != "" {
 			return dir
 		}

@@ -579,6 +579,9 @@ func TestPushTargetsTheDrawer(t *testing.T) {
 		{"pinned to another worktree", func(t *testing.T, r *pushRig, b string) {
 			openIn(t, r.App, core.PinReview{Root: b})
 		}, "feat/b"},
+		{"pull request mode held on another worktree", func(t *testing.T, r *pushRig, b string) {
+			openIn(t, r.App, core.ShowReviewPR{Repo: "github.com/o/r", Number: 7, Root: b})
+		}, "feat/b"},
 		{"open and following the agent", func(*testing.T, *pushRig, string) {}, "feat/c"},
 		{"open on an agent that is not focused", func(t *testing.T, r *pushRig, _ string) {
 			r.addAgent(t, false, r.dir)
