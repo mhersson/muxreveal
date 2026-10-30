@@ -531,6 +531,9 @@ func (g *gate) forget(ctx context.Context, ev harness.Event, session string, tur
 
 	if root, _, _ := g.seq(lookup, ev.Cwd); root != "" {
 		next.roots[root] = &startedRoot{done: closedChan(), marker: true}
+
+		// No snapshot was taken, so no counter says what a later start may skip.
+		g.memory.set(seqKey{pane: ev.Pane, session: strings.ToLower(session), root: root}, 0, false)
 	}
 
 	g.panes.set(ev.Pane, next)
@@ -540,6 +543,8 @@ func (g *gate) forget(ctx context.Context, ev harness.Event, session string, tur
 
 	for _, root := range roots {
 		pending = append(pending, pendingEnd{root: root, session: last.session, turn: last.turn, failed: true})
+
+		g.memory.set(seqKey{pane: ev.Pane, session: strings.ToLower(last.session), root: root}, 0, false)
 	}
 
 	return append(pending, latePending(last, late)...)

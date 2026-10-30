@@ -1808,6 +1808,48 @@ func TestGateParallelFirstEditsShareOneStart(t *testing.T) {
 	}
 }
 
+func TestGateForgottenTurnClearsTheUnchangedSkip(t *testing.T) {
+	t.Parallel()
+
+	w := &recordingWriter{}
+	r := startPlacesGate(t, w, noPlaces, dirSeq)
+
+	send := func(deadline time.Time) {
+		t.Helper()
+
+		ev, released := turnEvent("UserPromptSubmit", gateSession, "/a")
+		ev.Deadline = deadline
+
+		r.in <- ev
+
+		within(t, released, 5*time.Second, "turn release")
+		within(t, forwardedAfter(t, r, "UserPromptSubmit").Snapped, 5*time.Second, "the turn's snapshot")
+	}
+
+	send(time.Time{})
+
+	// The budget is already spent when this turn start runs: nothing is
+	// snapshotted, the first turn's end and the new start are markers.
+	send(time.Now().Add(-time.Millisecond))
+
+	waitUntil(t, "the end marker was not written", func() bool {
+		return len(w.filter(func(c recordedStart) bool { return c.mark && c.end })) == 1
+	})
+
+	send(time.Time{})
+	drain(t, r)
+
+	starts := w.starts()
+
+	if len(starts) != 2 {
+		t.Fatalf("starts = %+v, want the first and the third turn's", starts)
+	}
+
+	if starts[1].unchanged {
+		t.Error("the third start skipped as unchanged, want a fresh snapshot: the forgotten turn took none")
+	}
+}
+
 func TestGateWaiterCancelsTheStartItWouldOutrun(t *testing.T) {
 	t.Parallel()
 
