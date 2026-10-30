@@ -488,17 +488,26 @@ func TestPRListKeepsSelection(t *testing.T) {
 func TestPRListCleansText(t *testing.T) {
 	t.Parallel()
 
+	const branch = "feat/\x1b[31mred\x07\u200bx"
+
+	// The agent's branch is the pull request's head branch, which is what the row draws.
+	tune := func(p *core.PRInfo) { p.HeadBranch = branch }
 	agents := []railAgent{{
-		newTab: true, project: "api", branch: "feat/\x1b[31mred\x07\u200bx", state: core.AgentIdle,
-		pr: ptr(prInfo("OPEN", prNumber(4), prTitled("Fix \x1b]0;pwned\x07the \u202eevil\u200b title\r\nsecond line"), prAged(time.Minute))),
+		newTab: true, project: "api", branch: branch, state: core.AgentIdle,
+		pr: ptr(prInfo("OPEN", prNumber(4), tune, prTitled("Fix \x1b]0;pwned\x07the \u202eevil\u200b title\r\nsecond line"), prAged(time.Minute))),
 	}}
 	a := listApp(t, true, 120, 40, agents)
+
+	if rows := a.prListRows(a.store.State()); len(rows) != 1 || rows[0].pr.HeadBranch != branch {
+		t.Fatalf("rows = %+v, want one with the hostile head branch", rows)
+	}
+
 	press(a, keyLeader, keyRune('g'))
 
 	view := a.View().Content
 	text := ansi.Strip(view)
 
-	for _, bad := range []string{"\x07", "\u200b", "\u202e", "pwned\x07", "\r"} {
+	for _, bad := range []string{"\x07", "\u200b", "\u202e", "pwned\x07", "\r", "\x1b[31mred"} {
 		if strings.Contains(view, bad) {
 			t.Errorf("the screen holds %q", bad)
 		}
@@ -508,8 +517,8 @@ func TestPRListCleansText(t *testing.T) {
 		t.Errorf("the title was lost:\n%s", text)
 	}
 
-	if strings.Contains(text, "second line") && !strings.Contains(text, "titlesecond line") {
-		t.Errorf("a line break in a title started a new row:\n%s", text)
+	if !strings.Contains(text, "feat/[31mredx") {
+		t.Errorf("the branch was lost:\n%s", text)
 	}
 
 	for _, line := range strings.Split(text, "\n") {

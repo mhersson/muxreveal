@@ -447,7 +447,7 @@ Rounded boxes (`╭ ╮ ╰ ╯`, matching the pane frames; the which-key rule k
 - **Which-key.** Placed bottom-right, one cell from the right edge, with its bottom border on the last row. Border `BorderFocus`; title ` 󰌌 ctrl+space ` in `Accent`, bold.
   - Two columns, split by a `Border` rule that joins the top and bottom borders (`┬`, `┴`). Panes, then Layout, are on the left. Tabs, a blank row, Git, a blank row, then App are on the right.
   - The Panes group includes the rows `a  Agents rail` and `d  Review drawer`.
-  - The Git group has the rows `p  Push branch` and `m  Merge pull request`.
+  - The Git group has the rows `g  Pull requests`, `p  Push branch` and `m  Merge pull request`.
   - Group heads `󰯌 Panes`, `󰕴 Layout`, `󰓩 Tabs`, ` Git` and `󰒓 App` are `Accent` and bold, followed by a `Border` rule to the column's end.
   - Rows: the key in `Key`, bold, padded to the column's widest key; two cells; the title in `Fg`.
   - Directional commands collapse into one row each, their keys padded like any other row's: `h j k l` (Focus pane), `H J K L` (Resize pane), `^h^j^k^l` (Swap pane), `s v` (Split below/right), `1-9` (Jump to tab), `> 1-9` (Move pane to tab), `. 1-9` (Send pane to tab) and `; hjkl` (Preselect). A key that starts a two-key sequence closes the popup and opens the sequence popup. The keys come from the bindings: a family collapses only when all its keys are bound (`1-9` only when they are consecutive); otherwise each bound key gets its own row.
@@ -469,6 +469,13 @@ Rounded boxes (`╭ ╮ ╰ ╯`, matching the pane frames; the which-key rule k
   - `enter` on a worktree opens an agent pane in its path, placed as `leader n` places one. On a prunable worktree it shows the notice `that worktree is gone; git worktree prune removes it`.
   - The new-worktree page, from the last row: title ` 󱓊 New worktree `. Fields: `branch` (focused first, `❯` in `Accent` and the terminal cursor on the focused field), `base` (prefilled with `git.DefaultBranch`) and `path`, computed from `[worktrees] root` and `git.WorktreeDir`; it reads `(from the branch name)` in `Subtle` while the branch is empty, and an invalid name shows its reason in `Error`. Then a status row (blank until it has a message), the ignore warnings from `git.DetectTools` on the main checkout (`root = inside` only) as `󰀪 <Name>: <Hint>` in `Warning`, a divider, and the hints `tab next field`, `enter create`, `esc back`. `tab` switches between `branch` and `base`; `esc` goes back to the list and the page keeps what was typed.
   - `enter` on the page runs `git.CreateWorktree` off the update loop. On success an agent pane opens there with the notice `created <path>`. An error (`ErrExists`, `ErrBadBranch`, `ErrNoBase` or git's message) shows in `Error` in the status row (git's message is cut to the reason it gave, and to the row with `…`), and the page stays open until the next edit clears it; an empty branch name shows `enter a branch name` there, and while git runs the row reads `creating the worktree…`. The path in the notice is shortened as in the rows.
+- **PR list** (`leader g`, the command `pr.list`, "Pull requests"; `pull requests are off` with no GitHub source). Centred, border `BorderFocus` on `Panel`, width the screen's less 40 (at least min(60, width-4)), top at a quarter of the height, as tall as its rows need and at most to two rows above the bottom. Title ` <PR icon> Pull requests ` in `Info`, bold.
+  - A tab row: ` Agents N ` (`OnAccent` on `Accent`, bold; N is the rows), then `  Review requested  ` and `All open` in `Subtle`; neither of those two is built yet. A blank row follows.
+  - The rows are the open pull requests (drafts included, merged and closed left out) of the branches the agents' cards show, one row per pull request however many agents share its branch; the agent a row acts through is the first of them in the rail's order. They are read from the store at every draw, so a poll updates them. Repositories come by name (`owner/name`, `host/owner/name` off github.com), each with a header (`Muted`, bold, then a `Border` rule and the count at the right) and its rows newest update first, a blank row between groups.
+  - A row: `#N ` (`Fg`, bold), the title, `  <branch>` (`Dim`); at the right the checks as the rail's card writes them, the review (`approved` `Success`, `changes` `Warning`, `no review yet` `Subtle`, `draft` `Muted` for a draft) and the age as the rail writes it (`Subtle`), two cells apart. The branch gives way first, then the age, review and checks, so the number and title stay. The selected row is on `Selection` with `▎` in `Accent`. Titles and branches are drawn through `printable` and cut with `…`. With no rows the list says `no open pull requests on agent branches` (`Subtle`).
+  - The selection is kept by repository and number, so a poll that reorders the rows keeps it; when the selected pull request leaves the list it moves to the row now at its place.
+  - Hints `enter diff`, `c checks`, `a approve`, `M merge`, `O browser`, `r refresh`, `esc close`, dropped from the end when the box is narrow; with too few rows of room the blank rows go first, then the hint row whole, then the list scrolls around the selection.
+  - Keys: `j/k` (or the arrows) move and stop at the ends; `enter` closes the list, switches to the agent's tab, focuses the agent and shows the pull request in that tab's drawer, as `p` does; `a` and `M` do the same and then open the approve confirm or the merge box on the head the diff loaded (`pull requests are off` without GitHub writes, and `you can't approve your own pull request`, both leaving the list open); `c` opens the checks over the list, which stays under them and returns on `esc`; `O` opens the page in the browser and keeps the list; `r` asks the poller for each listed repository; `esc` closes. Every other key and the pointer are dropped.
 - **Confirm.** Centred, width min(46, width-2), seven rows tall, top at a third of the height, border `Error`.
   - Title: ` 󰀪 <action> ` in `Error`, bold.
   - Inside, two cells from the left border: a blank row, the question in `Fg` and bold, the detail in `Muted`, a blank row, then the answers.
@@ -1089,7 +1096,7 @@ Terminal panes pass every key through to the agent, so global actions sit behind
 | `x` | Close pane (confirms for agents) |
 | `y` | Copy the selection |
 | `d` | Review drawer for the focused pane: open it, give it the keyboard, or close it (see Review drawer) |
-| `g` | PR list |
+| `g` | PR list: the open pull requests of the agents' branches, by repository (see Overlays, PR list) |
 | `p` | Push what the review drawer shows, else the focused agent's followed place (a shell pushes its working directory's branch); always confirms, naming the target (see Overlays, Confirm) |
 | `o` | Open PR (compose overlay) |
 | `m` | Merge the pull request the review drawer shows, else the focused pane's: a closed drawer opens on the focused pane in PR mode first; the merge box then opens on the head the diff loaded (see Overlays, Merge) |
@@ -1148,17 +1155,21 @@ The leader works as everywhere; every other key is dropped.
 
 In the tree, `j` / `k` select files; `enter` jumps the diff to the selected file and `esc` leaves its cursor where it is, and both give the diff the keyboard and leave the tree open; `tab` hides the tree. The leader works as everywhere; every other key is dropped, and a paste goes to the search while it is open. Each key is a named command (`review.line.next`, `review.hunk.next`, `review.file.next`, `review.page.down`, `review.top`, `review.tree`, `review.full`, `review.split`, `review.fold`, `review.mode.branch`, `review.mode.turn`, `review.turn.prev`, `review.search`, `review.worktrees` and the rest) in the palette.
 
-### PR view
+### PR list
+
+The keys of the list (`leader g`); the drawer's own keys for a pull request are under Review drawer.
 
 | Key | Action |
 | --- | --- |
-| `enter` | Open PR diff |
-| `i` | Rendered description and conversation |
-| `c` | CI checks; `enter` on a failed check tails its log |
-| `a` | Approve (confirm) |
-| `M` | Merge: choose method, delete branch, confirm |
-| `O` | Open in browser (escape hatch) |
-| `r` | Refresh now |
+| `j` / `k` | Select the next / previous pull request |
+| `enter` | Show the pull request's diff in its agent's drawer |
+| `c` | The pull request's checks, over the list |
+| `a` | Approve at the head the diff loaded (confirm) |
+| `M` | Merge at the head the diff loaded: method, delete branch, confirm |
+| `O` | Open in browser |
+| `r` | Refresh every listed repository now |
+| `esc` | Close |
+| `i` (M4) | Rendered description and conversation |
 
 ## Milestones and v2 backlog
 
