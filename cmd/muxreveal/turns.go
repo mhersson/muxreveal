@@ -232,6 +232,7 @@ func snapshotTurn(gate context.Context, deadline time.Time, prev <-chan struct{}
 	if err == nil {
 		err = startTurn(snapCtx, ev, session, turn, w, seq, memory, panes)
 	} else {
+		// No snapshot is taken, so the pane's next start must end nothing.
 		panes.set(ev.Pane, paneTurn{turn: turn})
 	}
 

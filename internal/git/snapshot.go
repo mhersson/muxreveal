@@ -94,7 +94,8 @@ func turnRef(session, key string, n int, end bool) string {
 
 // Snapshot records the working tree of the worktree containing dir as the start
 // of turn opts.Turn of the session. The user's index, refs, stash and files are
-// only read.
+// only read. The returned Turn is the start alone: only Turns fills Current and
+// the end fields.
 func Snapshot(ctx context.Context, dir, session string, opts SnapshotOptions) (Turn, error) {
 	session, err := normalizeSession(session)
 	if err != nil {
@@ -137,11 +138,14 @@ func Snapshot(ctx context.Context, dir, session string, opts SnapshotOptions) (T
 }
 
 // latestTree is the tree a turn left the worktree in: its end, else its start.
+// A turn with a marker for its start or end says nothing reliable, since the
+// start of an ended turn is stale by then.
 func latestTree(t Turn) (string, bool) {
 	switch {
-	case t.EndCommit != "" && !t.EndMissing:
+	case t.Missing, t.EndMissing:
+	case t.EndCommit != "":
 		return t.EndTree, true
-	case !t.Missing:
+	default:
 		return t.Tree, true
 	}
 

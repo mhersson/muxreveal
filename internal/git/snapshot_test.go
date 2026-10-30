@@ -889,6 +889,25 @@ func TestSnapshotUnchangedReusesPreviousTree(t *testing.T) {
 	}
 }
 
+// A turn ended by a marker leaves no known tree, so Unchanged takes a full
+// snapshot instead of reusing the turn's stale start.
+func TestSnapshotUnchangedSkipsAnEndMarker(t *testing.T) {
+	t.Parallel()
+
+	dir := seedRepo(t)
+	snap(t, dir, sessA, SnapshotOptions{Turn: 1})
+	writeFile(t, dir, "a.txt", "changed after the start\n")
+
+	if _, err := MarkMissing(context.Background(), dir, sessA, 1, true); err != nil {
+		t.Fatal(err)
+	}
+
+	got := snap(t, dir, sessA, SnapshotOptions{Unchanged: true})
+	if want := scratchTree(t, dir); got.Tree != want {
+		t.Errorf("tree = %s, want a full snapshot %s", got.Tree, want)
+	}
+}
+
 func TestMarkMissing(t *testing.T) {
 	t.Parallel()
 	dir := seedRepo(t)
@@ -1263,6 +1282,8 @@ func TestTurnRefsLayout(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			r := openRepo(t, tt.dir)
 			sum := sha256.Sum256([]byte(r.Root))
 			key := hex.EncodeToString(sum[:8])
@@ -1292,6 +1313,8 @@ func TestSnapshotEndsTheOpenTurn(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("ends the open turn with its own tree", func(t *testing.T) {
+		t.Parallel()
+
 		dir := seedRepo(t)
 		writeFile(t, dir, "a.txt", "one\n")
 		first := snap(t, dir, sessA, SnapshotOptions{Turn: 1})
@@ -1314,6 +1337,8 @@ func TestSnapshotEndsTheOpenTurn(t *testing.T) {
 	})
 
 	t.Run("changes nothing otherwise", func(t *testing.T) {
+		t.Parallel()
+
 		dir := seedRepo(t)
 		other := linkedWorktree(t, dir, "b")
 
@@ -1402,6 +1427,8 @@ func TestEndTurn(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			dir := seedRepo(t)
 			tt.setup(t, dir)
 
