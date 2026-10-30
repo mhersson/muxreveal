@@ -136,6 +136,17 @@ func reviewCases() []reviewCase {
 		{"rendered-narrow", mdScene(true)},
 		{"md-page", mdPageScene},
 		{"links", linksScene},
+		{"reviewed", with(func(s *reviewScene) {
+			s.res, s.tree = markedResult(), true
+			s.tune = withMarked(hunksUpTo(3), func(t *testing.T, a *App, v *reviewView) {
+				v.showRead = true
+				v.readOpen = map[string]bool{git.HunkID("b.go", v.res.Files[1].Hunks[0]): true}
+			})
+		})},
+		{"reviewed-all", with(func(s *reviewScene) {
+			s.res, s.tree = markedResult(), true
+			s.tune = withMarked(hunksUpTo(6), nil)
+		})},
 		{"unfocused", with(func(s *reviewScene) {
 			s.focused = false
 			s.tune = func(t *testing.T, a *App, v *reviewView) { v.cursor = rowWith(t, v, "review.toggle") }
@@ -672,10 +683,10 @@ func TestDrawerTitleAndTags(t *testing.T) {
 		{"branch icon", true, func(s *reviewScene) { s.branch = true }, []string{"\U000F062C branch ", "\U000F062C branch vs origin/main"}, nil},
 		{"split tag", false, func(s *reviewScene) {
 			s.tune = func(t *testing.T, a *App, v *reviewView) { v.split = true }
-		}, []string{" split ─ turn 4/4 ─╮"}, nil},
+		}, []string{" split ─ ✓ 0/4 ─ turn 4/4 ─╮"}, nil},
 		{"split tag icon", true, func(s *reviewScene) {
 			s.tune = func(t *testing.T, a *App, v *reviewView) { v.split = true }
-		}, []string{"\U000F08DF split ─ \U000F02DA turn 4/4"}, nil},
+		}, []string{"\U000F08DF split ─ ✓ 0/4 ─ \U000F02DA turn 4/4"}, nil},
 		{"no snapshot", false, func(s *reviewScene) { s.res, s.turn, s.noSnap = git.Result{}, 1, true }, []string{"turn 1 of 4, no snapshot", "turn 1 has no snapshot", ", and . step through the turns; b shows the branch"}, nil},
 		{"empty branch", false, func(s *reviewScene) { s.res, s.branch = git.Result{}, true }, []string{"no changes against origin/main", "0 files"}, nil},
 		{"empty turn", false, func(s *reviewScene) { s.res, s.turn = git.Result{Turn: 3}, 3 }, []string{"turn 3 changed nothing"}, nil},
@@ -729,12 +740,12 @@ func TestDrawerKeyHints(t *testing.T) {
 	t.Parallel()
 
 	const (
-		diffHints = "j/k line   ]/[ hunk   }/{ file   tab tree   w worktree   f full   u split   b/t mode   ,/. turn   e edit   / search"
+		diffHints = "j/k line   ]/[ hunk   }/{ file   tab tree   w worktree   f full   u split   e edit   / search   space reviewed   R show reviewed   b/t mode   ,/. turn"
 		treeHints = "j/k file   enter jump   tab hide   esc back"
 	)
 
 	build := func(h int, tree, keys bool) string {
-		s := reviewScene{theme: "catppuccin-mocha", icons: false, w: 240, h: h, res: turn4Result(), turn: 4, turns: 4, focused: true, tree: tree}
+		s := reviewScene{theme: "catppuccin-mocha", icons: false, w: 312, h: h, res: turn4Result(), turn: 4, turns: 4, focused: true, tree: tree}
 		s.tune = func(t *testing.T, a *App, v *reviewView) { a.drawer.tree = keys }
 
 		return ansi.Strip(s.build(t).View().Content)
@@ -769,11 +780,11 @@ func TestDrawerTurnHintShowsOnlyForTurns(t *testing.T) {
 	t.Parallel()
 
 	const (
-		head     = "j/k line   ]/[ hunk   }/{ file   tab tree   w worktree   f full   u split   b/t mode"
-		viaTurn  = head + "   ,/. turn"
-		viaEdit  = head + "   e edit"
-		wideTurn = viaTurn + "   e edit   / search"
-		wideEdit = viaEdit + "   / search"
+		head     = "j/k line   ]/[ hunk   }/{ file   tab tree   w worktree   f full   u split   e edit   / search   space reviewed   R show reviewed   b/t mode"
+		wideTurn = head + "   ,/. turn"
+		wideEdit = head
+		viaTurn  = "w worktree   f full   u split   e edit   / search   space reviewed   R show reviewed"
+		viaEdit  = viaTurn
 	)
 
 	// A turn-mode drawer that shows the branch while core keeps turn mode.
@@ -802,8 +813,8 @@ func TestDrawerTurnHintShowsOnlyForTurns(t *testing.T) {
 		w          int
 		turn, edit string // the end of the row with and without the turn hint
 	}{
-		{"wide", 240, wideTurn, wideEdit},
-		{"usual width", 200, viaTurn, viaEdit},
+		{"wide", 312, wideTurn, wideEdit},
+		{"usual width", 270, viaTurn, viaEdit},
 	}
 
 	for _, tt := range tests {

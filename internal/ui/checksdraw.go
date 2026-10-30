@@ -92,7 +92,13 @@ func (a *App) checksBox(lk look, w, room int) []string {
 	}
 
 	hint := func(key, label string) string { return st.popupKey.Render(key) + st.popupMuted.Render(" "+label) }
-	pairs := [][2]string{{"j/k", "check"}, {"enter", "open in browser"}, {"r", "refresh"}, {"esc", "close"}}
+	kt := a.keys.checks
+	pairs := hintPairs([][2]string{
+		{kt.hint("checks.next", "checks.prev"), "check"},
+		{kt.hint("checks.browser"), "open in browser"},
+		{kt.hint("checks.refresh"), "refresh"},
+		{kt.hint("checks.close"), "close"},
+	})
 	hints, used := "", 0
 
 	for i, kv := range pairs {

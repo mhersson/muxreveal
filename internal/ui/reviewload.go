@@ -66,6 +66,9 @@ type reviewLoadedMsg struct {
 	src      git.Source // the source shown when it is not the one asked for
 	session  string     // the session info.turns counts the turns of
 	info     reviewInfo
+	common   string       // the repository's marks key, "" when it was not found
+	ids      [][]string   // the id of every hunk of res, per file and hunk
+	marks    *loadedMarks // set when the job read the marks file
 }
 
 // reviewFullMsg answers the read of one file's two sides. gen is the view's
@@ -263,7 +266,7 @@ func (a *App) reviewReset(tab core.TabID, pane core.PaneID) *reviewView {
 	v.pane, v.split = pane, a.drawer.cfg.Split()
 
 	if old != nil {
-		v.prBase, v.unpushed = old.prBase, old.unpushed
+		v.prBase, v.unpushed, v.showRead = old.prBase, old.unpushed, old.showRead
 	}
 
 	return v
@@ -310,6 +313,13 @@ type reviewJob struct {
 	keep     reviewInfo // what a load that skips a probe keeps
 	eng      *git.Engine
 	log      *slog.Logger
+
+	// The reviewed hunks: the common dir already found for root, the
+	// repositories core holds marks of, and the file to read the others from.
+	common, commonRoot string
+	known              map[string]core.RepoMarks
+	files              markFiles
+	now                time.Time
 }
 
 // reviewStart loads the view's source off the update loop, ending a load still
@@ -333,6 +343,7 @@ func (a *App) reviewStart(tab core.TabID, v *reviewView, b *git.Batch, infoOnly 
 	job := reviewJob{
 		tab: tab, epoch: v.epoch, src: v.src, root: v.root, session: v.session, own: v.own, batch: b, infoOnly: infoOnly, prev: v.res, prBase: v.prBase,
 		keep: keep, eng: a.engine, log: a.log,
+		common: v.common, commonRoot: v.commonRoot, known: a.store.State().Marks, files: a.marks, now: a.clock.Now(),
 	}
 
 	return func() tea.Msg {
@@ -398,6 +409,7 @@ func (j reviewJob) run(ctx context.Context) reviewLoadedMsg {
 	default:
 		msg.res = res
 		msg.info.hidden = hiddenFlags(res.Files)
+		j.marked(ctx, &msg)
 
 		switch {
 		case j.countsFromDiff() && msg.src == nil:
@@ -581,6 +593,8 @@ func (a *App) onReviewLoaded(msg reviewLoadedMsg) tea.Cmd {
 
 		return tea.Batch(a.reviewResume(active, v), a.reviewFlush(active, msg.tab, v))
 	}
+
+	a.adoptMarks(v, msg)
 
 	flash := a.reviewApply(v, msg)
 

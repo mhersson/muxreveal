@@ -76,13 +76,29 @@ func (a *App) closeOverlay() {
 func (a *App) openCommandPalette() {
 	cmds := a.reg.all()
 
-	items := make([]palette.Item, len(cmds))
-	for i, c := range cmds {
-		hint, _ := a.keymap.keyFor(c.id)
-		items[i] = palette.Item{ID: c.id, Title: c.title, Hint: hint, Icon: a.glyph(c.icon)}
+	items := make([]palette.Item, 0, len(cmds))
+
+	for _, c := range cmds {
+		if c.scope == "" {
+			items = append(items, palette.Item{ID: c.id, Title: c.title, Hint: a.paletteHint(c.id), Icon: a.glyph(c.icon)})
+		}
 	}
 
 	a.openOverlay(overlayCommands, a.titled(iconPalette, "Commands"), items)
+}
+
+// paletteHint is a command's leader sequence, else its first drawer key as
+// "drawer: <key>", else "".
+func (a *App) paletteHint(id string) string {
+	if key, ok := a.keymap.keyFor(id); ok {
+		return key
+	}
+
+	if key, ok := a.keys.drawer.first(id); ok {
+		return "drawer: " + key
+	}
+
+	return ""
 }
 
 func (a *App) openThemePicker() {

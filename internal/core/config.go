@@ -28,6 +28,7 @@ type Config struct {
 	Diff      DiffConfig      `toml:"diff"`
 	Worktrees WorktreesConfig `toml:"worktrees"`
 	Plans     PlansConfig     `toml:"plans"`
+	Keys      KeysConfig      `toml:"keys"`
 }
 
 // LayoutConfig is the [layout] section. Validate rejects an out-of-range value
@@ -274,6 +275,8 @@ func LoadConfig(path string) (Config, error) {
 	)
 	switch {
 	case err == nil:
+		cfg.Keys.Order = keyOrder(data)
+
 		return cfg, nil
 	case errors.As(err, &strictErr):
 		keys := make([]string, len(strictErr.Errors))

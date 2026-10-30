@@ -139,32 +139,5 @@ func (a *App) checksOf(st core.State, v *checksView) *core.PRChecks {
 
 // handleChecksKey answers the open checks overlay; any other key is swallowed.
 func (a *App) handleChecksKey(msg tea.KeyPressMsg) tea.Cmd {
-	v := a.checks
-	rows := checkRows(a.checksOf(a.store.State(), v), a.clock.Now())
-	v.sel = min(max(v.sel, 0), max(len(rows)-1, 0))
-
-	switch msg.String() {
-	case "esc":
-		a.closeChecks()
-	case "j", "down":
-		v.sel = min(v.sel+1, max(len(rows)-1, 0))
-	case "k", "up":
-		v.sel = max(v.sel-1, 0)
-	case "enter":
-		if v.sel < len(rows) {
-			if rows[v.sel].url == "" {
-				a.notice = noticeCheckNoPage
-
-				return nil
-			}
-
-			return a.openURL(rows[v.sel].url)
-		}
-	case "r":
-		if repo, ok := repoOfKey(v.repo); ok && a.prs.src != nil {
-			a.prs.src.Refresh(repo)
-		}
-	}
-
-	return nil
+	return a.runKey(a.keys.checks, bindingKey(msg))
 }

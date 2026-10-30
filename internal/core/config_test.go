@@ -102,6 +102,8 @@ func TestLoadConfig(t *testing.T) {
 		},
 		{name: "unknown worktrees key", content: "[worktrees]\nroots = \"inside\"\n", wantErr: true, errHas: []string{"unknown key worktrees.roots"}},
 		{name: "worktrees wrong type", content: "[worktrees]\nroot = 3\n", wantErr: true, errHas: []string{"worktrees.root"}},
+		{name: "unknown keys key", content: "[keys]\nleaderkey = \"ctrl+a\"\n", wantErr: true, errHas: []string{"unknown key keys.leaderkey"}},
+		{name: "unknown keys context", content: "[keys.drawr]\no = \"x\"\n", wantErr: true, errHas: []string{"unknown key keys.drawr"}},
 		{name: "diff wrong type", content: "[diff]\nmax_lines = \"many\"\n", wantErr: true, errHas: []string{"max_lines"}},
 		{name: "layout wrong type", content: "[layout]\nmaster_ratio = \"half\"\n", wantErr: true, errHas: []string{"master_ratio"}},
 		{name: "invalid toml", content: "theme = \"x", wantErr: true, errHas: []string{"line 1"}},

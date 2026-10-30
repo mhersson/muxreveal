@@ -27,7 +27,14 @@ func testLogger() *slog.Logger {
 func newThemedApp(t *testing.T, name string) *App {
 	t.Helper()
 
-	app, err := New(Options{Logger: testLogger(), Icons: true, Store: core.NewStore(core.State{Theme: name})})
+	return newKeyedApp(t, name, core.KeysConfig{})
+}
+
+// newKeyedApp is a test app with the [keys] config keys.
+func newKeyedApp(t *testing.T, name string, keys core.KeysConfig) *App {
+	t.Helper()
+
+	app, err := New(Options{Logger: testLogger(), Icons: true, Keys: keys, Store: core.NewStore(core.State{Theme: name})})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}

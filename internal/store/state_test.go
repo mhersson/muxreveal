@@ -1001,3 +1001,28 @@ func planRoundTripped(plan core.Plan) core.State {
 
 	return st
 }
+
+func TestEncodeWritesNoMarks(t *testing.T) {
+	t.Parallel()
+
+	st := core.InitialState(core.DefaultConfig())
+
+	plain, err := Encode(st)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	stm := core.NewStore(st)
+	if err := stm.Dispatch(core.SetMarks{Repo: "/r/.git", Days: map[string]string{"abc": "2026-10-30"}}); err != nil {
+		t.Fatal(err)
+	}
+
+	marked, err := Encode(stm.State())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if string(plain) != string(marked) {
+		t.Errorf("marks reached state.json:\n%s", marked)
+	}
+}

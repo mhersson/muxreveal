@@ -297,7 +297,11 @@ func (d *drawCtx) foldRow(r reviewRow, cursor, fresh bool) string {
 		runs = append(runs, railRun{text: iconGhost + " ", fg: ui.Muted})
 	}
 
-	runs = append(runs, railRun{text: strconv.Itoa(r.other) + noun, fg: ui.Muted}, railRun{text: "   enter shows them", fg: ui.Subtle})
+	runs = append(runs, railRun{text: strconv.Itoa(r.other) + noun, fg: ui.Muted})
+
+	if key, ok := d.bind.first("review.fold"); ok {
+		runs = append(runs, railRun{text: "   " + key + " shows them", fg: ui.Subtle})
+	}
 
 	return railPainter{bg: g}.line(runs, lay.diffW)
 }

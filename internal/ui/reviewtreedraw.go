@@ -118,9 +118,15 @@ func (d *drawCtx) treeRow(y int) string {
 		right = append(right, railRun{text: d.hiddenFlag() + " ", fg: ui.Warning, bold: true})
 	}
 
-	if f.Binary {
+	nameFg := ui.Fg
+
+	switch {
+	case d.v.fileRead(it.file):
+		letterFg, nameFg = ui.Muted, ui.Muted
+		right = append(right, railRun{text: "✓", fg: ui.Success})
+	case f.Binary:
 		right = append(right, railRun{text: "bin", fg: ui.Subtle})
-	} else {
+	default:
 		right = append(right, railRun{text: "+" + strconv.Itoa(f.Added), fg: ui.Success}, railRun{text: " "}, railRun{text: "-" + strconv.Itoa(f.Removed), fg: ui.Error})
 	}
 
@@ -135,7 +141,7 @@ func (d *drawCtx) treeRow(y int) string {
 		{text: indent},
 		{text: letter, fg: letterFg, bold: true},
 		{text: " "},
-		{text: name, fg: ui.Fg, bold: picked},
+		{text: name, fg: nameFg, bold: picked},
 		{text: strings.Repeat(" ", gap)},
 	}
 

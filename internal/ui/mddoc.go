@@ -26,6 +26,7 @@ type mdDoc struct {
 	doc   *md.Doc
 	spans map[string][][]md.Span // by codeKey; a block past the cap has none
 	open  map[int]bool           // by fold ID; a present key overrides the default
+	fold  *string                // the key a closed fold names; nil is md's default
 
 	lay     md.Layout
 	plain   []string // lay's text, made on first use
@@ -91,6 +92,14 @@ func parseMarkdown(src []byte, base string, tok codeTokeniser) *mdDoc {
 	return d
 }
 
+// withFoldKey sets the key closed folds name, "" for none, and returns d; the
+// key is part of what the cached layout depends on.
+func (d *mdDoc) withFoldKey(key *string) *mdDoc {
+	d.fold, d.have = key, false
+
+	return d
+}
+
 // parseCmd parses off the update loop and answers with done's message.
 func parseCmd(src []byte, base string, tok codeTokeniser, done func(*mdDoc) tea.Msg) tea.Cmd {
 	return func() tea.Msg { return done(parseMarkdown(src, base, tok)) }
@@ -108,7 +117,7 @@ func (d *mdDoc) layout(width int, icons bool) md.Layout {
 		return d.lay
 	}
 
-	d.lay = d.doc.Layout(md.LayoutOptions{Width: width, Open: d.open, Icons: icons, Highlight: d.cached})
+	d.lay = d.doc.Layout(md.LayoutOptions{Width: width, Open: d.open, FoldKey: d.fold, Icons: icons, Highlight: d.cached})
 	d.plain = nil
 	d.have, d.width, d.icons = true, width, icons
 	d.layouts++

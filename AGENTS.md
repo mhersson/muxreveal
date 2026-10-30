@@ -64,7 +64,7 @@ make install      # go install into $GOBIN, else $GOPATH/bin
 | `internal/git`     | Worktrees, turn snapshots, watcher, diff engine                   |
 | `internal/github`  | Auth via `go-gh`, GraphQL and REST client, poller, PR actions     |
 | `internal/md`      | Markdown to styled cells plus image references                    |
-| `internal/store`   | `state.json` and SQLite persistence                               |
+| `internal/store`   | `state.json` and reviewed-hunk persistence                        |
 | `spikes/`          | Throwaway experiments; nothing outside `spikes/` imports them     |
 | `scripts/`         | POSIX shell helpers for the Makefile                              |
 
@@ -164,9 +164,12 @@ need them without a push.
 - Never modify the user's `~/.claude` settings. Agents get hooks only through a
   generated `--settings` file (see DESIGN.md).
 - Never touch the user's git index, stash or branches as a side effect. Turn
-  snapshots use a temporary `GIT_INDEX_FILE` and `refs/muxreveal/*` only.
-- Write only to the platform state and cache dirs, worktrees MuxReveal created,
-  and `.git/info/exclude`.
+  snapshots use a temporary `GIT_INDEX_FILE` and `refs/muxreveal/*` only. A
+  local branch is deleted only from the worktree cleanup confirm, with its box
+  checked, when it holds nothing the merged pull request did not.
+- Write only to the platform state and cache dirs, worktrees under MuxReveal's
+  worktree root, and `.git/info/exclude`; only the cleanup confirm removes such
+  a worktree.
 - Merges always pass the reviewed head `sha`, and every approve or merge needs a
   confirm step in the UI.
 - Code ported from TUIOS (MIT) keeps its license header and is listed in

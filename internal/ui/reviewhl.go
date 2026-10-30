@@ -99,7 +99,12 @@ func (a *App) drawerAfterUpdate() tea.Cmd {
 	moved := v.mdW != mdW || v.mdIcons != a.icons
 	v.mdW, v.mdIcons = mdW, a.icons
 
-	if v.rowsSplit != lay.split || (moved && len(v.mdFiles) > 0) {
+	stale := v.marksStale(st)
+	if stale {
+		v.syncMarks(st)
+	}
+
+	if v.rowsSplit != lay.split || (moved && len(v.mdFiles) > 0) || stale {
 		v.rebuild(lay.split)
 	}
 

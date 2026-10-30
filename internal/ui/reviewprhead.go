@@ -87,12 +87,22 @@ func (d *drawCtx) headerRow(y int) string {
 	case y == d.lay.headH-1:
 		return p.line([]railRun{{text: strings.Repeat("─", w), fg: ui.Border}}, w)
 	case prMoved(v, pr):
-		return p.line([]railRun{sp(markW), {text: "the PR moved to " + pr.HeadOID[:min(len(pr.HeadOID), 7)] + " since this diff; r fetches it", fg: ui.Warning}}, w)
+		text := "the PR moved to " + pr.HeadOID[:min(len(pr.HeadOID), 7)] + " since this diff"
+		if key, ok := d.bind.first("review.refresh"); ok {
+			text += "; " + key + " fetches it"
+		}
+
+		return p.line([]railRun{sp(markW), {text: text, fg: ui.Warning}}, w)
 	case v.unpushed > 0:
+		text := ": the PR shows the pushed head"
+		if d.pushKey != "" {
+			text += "; " + d.pushKey + " pushes"
+		}
+
 		return p.line([]railRun{
 			sp(markW),
 			{text: "↑" + strconv.Itoa(v.unpushed) + " not pushed", fg: ui.Warning, bold: true},
-			{text: ": the PR shows the pushed head; leader g p pushes", fg: ui.Muted},
+			{text: text, fg: ui.Muted},
 		}, w)
 	}
 
