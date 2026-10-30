@@ -1304,3 +1304,33 @@ func TestGateEndsNothingAcrossWorktrees(t *testing.T) {
 		})
 	}
 }
+
+// An edit's before-event is answered when the gate reads it, with no snapshot.
+func TestGateReleasesAnEditAtOnce(t *testing.T) {
+	snapped := make(chan struct{}, 1)
+	snap := func(context.Context, string, string, bool) error {
+		snapped <- struct{}{}
+
+		return nil
+	}
+
+	r := startGate(t, snap, func(context.Context, string, string, bool) error { return nil })
+	released := make(chan struct{})
+
+	r.in <- harness.Event{
+		Name: "PreToolUse", Pane: "p", Session: gateSession, Cwd: "/repo", Edit: "/repo/a.go", Before: true,
+		Done: sync.OnceFunc(func() { close(released) }),
+	}
+
+	within(t, released, time.Second, "Done of the edit")
+
+	if ev := forwarded(t, r); ev.Snapped != nil {
+		t.Error("edit has Snapped, want no snapshot")
+	}
+
+	select {
+	case <-snapped:
+		t.Error("the gate snapshotted for an edit")
+	default:
+	}
+}

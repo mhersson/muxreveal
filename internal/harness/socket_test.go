@@ -638,3 +638,37 @@ func TestServerStampsTheTurnDeadline(t *testing.T) {
 
 	<-res
 }
+
+func TestServerHoldsAnEditBeforeItsTool(t *testing.T) {
+	const budget = 1400 * time.Millisecond
+
+	s := startBudgetServer(t, 300*time.Millisecond, budget)
+
+	res := sendAsync(s.path, Event{Pane: "p", Name: "PreToolUse", Edit: "/r/a.go", Before: true})
+	ev := recv(t, s.out)
+
+	if ev.Done == nil || ev.Deadline.IsZero() {
+		t.Fatalf("held edit has Done %v and Deadline %v", ev.Done != nil, ev.Deadline)
+	}
+
+	select {
+	case r := <-res:
+		t.Fatalf("answered before Done: %+v", r)
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	ev.Done()
+
+	if r := <-res; r.err != nil || r.took > 250*time.Millisecond {
+		t.Errorf("Send() = %v after %v, want ok well under the hold", r.err, r.took)
+	}
+
+	res = sendAsync(s.path, Event{Pane: "p", Name: "PostToolUse", Edit: "/r/a.go"})
+	if post := recv(t, s.out); post.Done != nil {
+		t.Error("PostToolUse edit has Done")
+	}
+
+	if r := <-res; r.err != nil || r.took > 200*time.Millisecond {
+		t.Errorf("Send() = %v after %v, want ok at once", r.err, r.took)
+	}
+}

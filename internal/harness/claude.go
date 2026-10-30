@@ -395,6 +395,7 @@ func (Claude) ParseEvent(payload []byte) (Event, error) {
 
 		ev.Action = toolAction(p.ToolName, p.Cwd, p.ToolInput)
 		ev.Edit = editPath(p.ToolName, p.ToolInput)
+		ev.Before = ev.Edit != ""
 	case "PermissionRequest":
 		ev.State, ev.ActionSet = core.AgentBlocked, true
 		ev.Action = permissionAction(p.ToolName, p.Cwd, p.ToolInput)

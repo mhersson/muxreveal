@@ -28,15 +28,15 @@ const (
 
 // Server receives hook events on a Unix socket and forwards them to a channel.
 // Each connection carries one JSON line and is answered with "ok" once the
-// event is on the channel; a turn start is answered after its Done is called
-// or Hold passes.
+// event is on the channel; a turn start or an edit's before-event is answered
+// after its Done is called or Hold passes.
 type Server struct {
 	// Log receives dropped events; nil discards them.
 	Log *slog.Logger
-	// Hold is how long a turn-start event's answer waits for its Done; 0 never
-	// holds. Set before Serve.
+	// Hold is how long a turn start's or an edit's before-event answer waits for
+	// its Done; 0 never holds. Set before Serve.
 	Hold time.Duration
-	// Budget is how long a held turn start has for its snapshot, counted from
+	// Budget is how long a held event has for its snapshot, counted from
 	// when the server reads it; 0 sets no Deadline. Set before Serve.
 	Budget time.Duration
 
@@ -168,7 +168,7 @@ func (s *Server) handle(ctx context.Context, conn net.Conn, out chan<- Event) {
 
 	var held chan struct{}
 
-	if ev.TurnStart && s.Hold > 0 {
+	if (ev.TurnStart || ev.Before) && s.Hold > 0 {
 		held = make(chan struct{})
 		ev.Done = sync.OnceFunc(func() { close(held) })
 

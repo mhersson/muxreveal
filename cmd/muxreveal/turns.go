@@ -167,6 +167,10 @@ func runTurnGate(ctx context.Context, in <-chan harness.Event, out chan<- harnes
 
 		arrived := time.Now()
 
+		if ev.Before {
+			release(ev)
+		}
+
 		if ev.TurnStart {
 			if ev.Cwd == "" || !sessionIDRE.MatchString(string(ev.Session)) {
 				release(ev)
