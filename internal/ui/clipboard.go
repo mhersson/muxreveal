@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	nativeWriteTimeout = 2 * time.Second
+	nativeTimeout = 2 * time.Second
 	// nativeWaitDelay bounds how long Wait lingers on I/O after the context
 	// ends; wl-copy and xclip fork a child that keeps serving the selection.
 	nativeWaitDelay = 100 * time.Millisecond
@@ -26,7 +26,7 @@ type clipboardConfig struct{ OSC52, Native bool }
 
 // clipboard writes copied text to the system clipboard through OSC 52 and,
 // on a local session, through native tools. It also reads the primary
-// selection back for a middle-click paste.
+// selection (the clipboard on macOS) back for a middle-click paste.
 type clipboard struct {
 	cfg     clipboardConfig
 	getenv  func(string) string
@@ -49,7 +49,7 @@ func newClipboard(cfg clipboardConfig, getenv func(string) string, goos string, 
 		getenv:  getenv,
 		goos:    goos,
 		log:     log,
-		timeout: nativeWriteTimeout,
+		timeout: nativeTimeout,
 		run:     runNative,
 		missing: map[string]bool{},
 	}
@@ -99,7 +99,8 @@ func (c *clipboard) writeNative(argvs [][]string, text string) {
 }
 
 // paste returns a Cmd that delivers the text to paste: the primary selection
-// when a native tool can read it, else the last copy.
+// (the clipboard on macOS) when a native tool reads it; the last copy when none
+// can be used or it is missing; nothing when a read fails.
 func (c *clipboard) paste(deliver func(text string) tea.Msg) tea.Cmd {
 	last := c.last
 
@@ -177,8 +178,9 @@ func nativeCommands(getenv func(string) string, goos string) [][]string {
 	return nil
 }
 
-// pasteCommand returns the tool to read the primary selection with; nil on an
-// SSH session or when no display is known.
+// pasteCommand returns the tool to read the primary selection (the clipboard on
+// macOS) with; nil on an SSH
+// session or when no display is known.
 func pasteCommand(getenv func(string) string, goos string) []string {
 	if getenv("SSH_CONNECTION") != "" || getenv("SSH_TTY") != "" {
 		return nil
