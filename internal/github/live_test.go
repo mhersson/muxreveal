@@ -159,7 +159,7 @@ func readBranch(ctx context.Context, t *testing.T, c *Client, counter *statusCou
 		head = head[:7]
 	}
 
-	t.Logf("PR #%d on %q: state %s, head %s", pr.Number, branch, pr.State, head)
+	t.Logf("PR #%d on %q: state %s, head %s, viewer authored %t", pr.Number, branch, pr.State, head, pr.ViewerAuthored)
 
 	if wantNumber != 0 && pr.Number != wantNumber {
 		t.Errorf("PRForBranch returned #%d, want #%d", pr.Number, wantNumber)
