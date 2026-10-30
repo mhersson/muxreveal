@@ -267,6 +267,10 @@ func (a *App) contentPress(h hitResult, m tea.Mouse) tea.Cmd {
 		case 3:
 			a.sel = newPaneSelection(h.pane, lineAt(g, at), trimmed)
 		}
+
+		if a.sel != nil {
+			a.sel.watch(g, trimmed)
+		}
 	})
 
 	a.mouse.press = pr
@@ -331,7 +335,10 @@ func (a *App) handleRelease(msg tea.MouseReleaseMsg) tea.Cmd {
 
 	if pr.dragging || pr.multi {
 		if a.copyOnSelect {
-			return a.copySelection()
+			cmd := a.copySelection()
+			a.sel = nil
+
+			return cmd
 		}
 
 		return nil
@@ -390,6 +397,7 @@ func (a *App) dragTo(pr *heldPress, x, y int) {
 	p.withView(func(g grid, top int, trimmed uint64) {
 		head := clampPoint(g, point{top + row, col})
 		a.sel = &paneSelection{pane: pr.pane, mode: mode, anchor: pr.anchor, head: stable(head, trimmed)}
+		a.sel.watch(g, trimmed)
 	})
 }
 

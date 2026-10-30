@@ -234,6 +234,72 @@ func TestCopyOnSelect(t *testing.T) {
 	}
 }
 
+func TestCopyOnSelectClearsOnRelease(t *testing.T) {
+	t.Parallel()
+
+	drag := func(a *App, c core.Rect) { dragRun(a, c.X, c.Y, c.X+4, c.Y, 0) }
+	double := func(a *App, c core.Rect) {
+		clickRun(a, c.X+1, c.Y)
+		clickRun(a, c.X+1, c.Y)
+	}
+	triple := func(a *App, c core.Rect) {
+		double(a, c)
+		clickRun(a, c.X+1, c.Y)
+	}
+
+	tests := []struct {
+		name       string
+		option     bool
+		gesture    func(a *App, c core.Rect)
+		wantSel    bool
+		wantCopied string
+	}{
+		{"drag on", true, drag, false, "hello"},
+		{"double click on", true, double, false, "hello"},
+		{"triple click on", true, triple, false, "hello world"},
+		{"drag off", false, drag, true, ""},
+		{"double click off", false, double, true, ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			a, _, f := shellsWith(t, sampleText, "RIGHT")
+			a.copyOnSelect = tt.option
+
+			tt.gesture(a, contentRectOf(a, "p1"))
+
+			if got := a.sel != nil; got != tt.wantSel {
+				t.Errorf("selection present = %v, want %v", got, tt.wantSel)
+			}
+
+			if got := lastCopied(f); got != tt.wantCopied {
+				t.Errorf("copied %q, want %q", got, tt.wantCopied)
+			}
+		})
+	}
+}
+
+func TestCopyOnSelectShowsTheSelectionUntilRelease(t *testing.T) {
+	t.Parallel()
+	a, _, _ := shellsWith(t, sampleText, "RIGHT")
+	a.copyOnSelect = true
+	c := contentRectOf(a, "p1")
+
+	mdown(a, c.X, c.Y, tea.MouseLeft, 0)
+	mmove(a, c.X+4, c.Y, tea.MouseLeft)
+
+	if !selBgAt(a, c.X, c.Y) {
+		t.Error("selection not drawn while dragging")
+	}
+
+	release(a, c.X+4, c.Y)
+
+	if selBgAt(a, c.X, c.Y) {
+		t.Error("selection still drawn after release")
+	}
+}
+
 func TestCopyOnSelectCopiesOnReleaseNotWhileDragging(t *testing.T) {
 	t.Parallel()
 	a, _, f := shellsWith(t, sampleText, "RIGHT")

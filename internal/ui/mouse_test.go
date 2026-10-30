@@ -966,3 +966,77 @@ func TestMultiClickInTrackingPaneSelectsAndForwardsOnlyTheFirstClick(t *testing.
 		})
 	}
 }
+
+func TestSelectionClearsWhenItsTextIsRedrawn(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		pane core.PaneID
+		out  string
+		kept bool
+	}{
+		{"rewrite inside", "p1", "\x1b[1;1Hjello", false},
+		{"same text in bold", "p1", "\x1b[1;1H\x1b[1mhello\x1b[0m", true},
+		{"rest of the row", "p1", "\x1b[1;7HWORLD", true},
+		{"another row", "p1", "\x1b[3;1HTHIRD", true},
+		{"another pane", "p2", "\x1b[1;1Hjello", true},
+		{"output scrolls", "p1", "\r\n" + manyLines(20), true},
+		{"clear and reprint", "p1", "\x1b[2J\x1b[3J\x1b[H" + manyLines(30), false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			a, procs, f := shellsWith(t, sampleText, "RIGHT")
+			c := contentRectOf(a, "p1")
+
+			drag(a, c.X, c.Y, c.X+4, c.Y, 0)
+			feedAndWait(t, a.panes[tt.pane], procs[tt.pane], tt.out)
+			a.Update(paneDirtyMsg{id: tt.pane, p: a.panes[tt.pane]})
+
+			if !tt.kept {
+				if a.sel != nil {
+					t.Error("selection kept, want cleared")
+				}
+
+				return
+			}
+
+			if a.sel == nil {
+				t.Fatal("selection cleared, want kept")
+			}
+
+			if got := copyNow(a, f); got != "hello" {
+				t.Errorf("copied %q, want hello", got)
+			}
+		})
+	}
+}
+
+func TestSelectionInHistorySurvivesOutput(t *testing.T) {
+	t.Parallel()
+	a, fp, f := copyApp(t)
+	c := contentRectOf(a, "p1")
+
+	wheelAt(a, c.X, c.Y, tea.MouseWheelUp)
+	wheelAt(a, c.X, c.Y, tea.MouseWheelUp)
+	drag(a, c.X, c.Y, c.X+4, c.Y, 0)
+
+	want := copyNow(a, f)
+
+	feedAndWait(t, a.panes["p1"], fp, "\x1b[2J\x1b[Hnew screen")
+	a.Update(paneDirtyMsg{id: "p1", p: a.panes["p1"]})
+
+	if a.sel == nil {
+		t.Fatal("selection cleared, want kept")
+	}
+
+	f.mu.Lock()
+	f.calls = nil
+	f.mu.Unlock()
+
+	if got := copyNow(a, f); got != want {
+		t.Errorf("after output copied %q, want %q", got, want)
+	}
+}

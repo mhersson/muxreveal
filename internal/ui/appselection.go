@@ -22,6 +22,12 @@ type paneSelection struct {
 	pane         core.PaneID
 	mode         selMode
 	anchor, head stablePoint
+
+	// watched is set when some part was on the live screen at watch time; the
+	// live rows from watchFrom (a stable row) then read shown.
+	watched   bool
+	watchFrom uint64
+	shown     string
 }
 
 func stable(p point, trimmed uint64) stablePoint {
@@ -56,6 +62,58 @@ func (s paneSelection) resolve(g grid, trimmed uint64) (selection, bool) {
 	return selection{mode: s.mode, anchor: anchor, head: head}, aok || hok
 }
 
+// liveTop is the absolute row of g's first live screen row.
+func liveTop(g grid) int {
+	if ts, ok := g.(textScanner); ok {
+		return ts.historyRows()
+	}
+
+	return 0
+}
+
+// watch records the text the selection covers on the live rows, for redrawn.
+// A selection wholly in history never changes and is not watched.
+func (s *paneSelection) watch(g grid, trimmed uint64) {
+	s.watched, s.shown = false, ""
+
+	sel, ok := s.resolve(g, trimmed)
+	if !ok {
+		return
+	}
+
+	top := liveTop(g)
+
+	below, ok := sel.below(top)
+	if !ok {
+		return
+	}
+
+	s.watched = true
+	s.watchFrom = uint64(top) + trimmed
+	s.shown = extract(g, below)
+}
+
+// redrawn reports whether the text under a watched selection's live rows
+// differs from what watch saw. A fallen selection is dropFallenSelection's.
+func (s *paneSelection) redrawn(g grid, trimmed uint64) bool {
+	if !s.watched {
+		return false
+	}
+
+	sel, ok := s.resolve(g, trimmed)
+	if !ok {
+		return false
+	}
+
+	var text string
+
+	if below, ok := sel.below(int(max(int64(s.watchFrom)-int64(trimmed), 0))); ok {
+		text = extract(g, below)
+	}
+
+	return text != s.shown
+}
+
 // clearSelectionOf drops the selection and any press in progress that belong to pane id.
 func (a *App) clearSelectionOf(id core.PaneID) {
 	if a.sel != nil && a.sel.pane == id {
@@ -82,6 +140,22 @@ func (a *App) dropFallenSelection(p *pane) {
 	p.withView(func(g grid, _ int, trimmed uint64) { _, alive = a.sel.resolve(g, trimmed) })
 
 	if !alive {
+		a.sel = nil
+	}
+}
+
+// dropRedrawnSelection clears the selection of p once a render changed the
+// text it covers.
+func (a *App) dropRedrawnSelection(p *pane) {
+	if a.sel == nil || a.sel.pane != p.id || !a.sel.watched {
+		return
+	}
+
+	redrawn := false
+
+	p.withView(func(g grid, _ int, trimmed uint64) { redrawn = a.sel.redrawn(g, trimmed) })
+
+	if redrawn {
 		a.sel = nil
 	}
 }
