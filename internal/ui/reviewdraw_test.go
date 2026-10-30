@@ -48,6 +48,7 @@ func reviewCases() []reviewCase {
 		{"full-file", with(func(s *reviewScene) {
 			s.tune = func(t *testing.T, a *App, v *reviewView) {
 				v.full = map[string]fullText{appGoPath: appGoFull()}
+				v.fullOn = allWhole(v.full)
 				v.folded = map[string]bool{foldKey(appGoPath, 1): true}
 				v.rebuild(false)
 				v.cursor = rowWith(t, v, "notice  string")
@@ -131,6 +132,10 @@ func reviewCases() []reviewCase {
 		{"pr-tree", with(func(s *reviewScene) {
 			s.branch, s.tree, s.tune = true, true, prScene
 		})},
+		{"rendered", mdScene(false)},
+		{"rendered-narrow", mdScene(true)},
+		{"md-page", mdPageScene},
+		{"links", linksScene},
 		{"unfocused", with(func(s *reviewScene) {
 			s.focused = false
 			s.tune = func(t *testing.T, a *App, v *reviewView) { v.cursor = rowWith(t, v, "review.toggle") }
@@ -362,6 +367,8 @@ func rowWidthVariants() []rowWidthVariant {
 				v.full[f.Path] = hostileFullOf(long)
 			}
 
+			v.fullOn = allWhole(v.full)
+
 			v.rebuild(v.split)
 		}},
 		{"tree open", func(t *testing.T, a *App, v *reviewView, long longLines) {
@@ -475,6 +482,7 @@ func TestHighlightCapPerFrame(t *testing.T) {
 			s.tune = func(t *testing.T, a *App, v *reviewView) {
 				if whole {
 					v.full = map[string]fullText{"big.go": full}
+					v.fullOn = allWhole(v.full)
 					v.rebuild(false)
 				}
 			}
@@ -895,6 +903,7 @@ func TestDrawerGhostsAndFolds(t *testing.T) {
 	s := reviewScene{theme: "catppuccin-mocha", icons: true, w: 200, h: 52, res: turn4Result(), turn: 4, turns: 4, focused: true}
 	s.tune = func(t *testing.T, a *App, v *reviewView) {
 		v.full = map[string]fullText{appGoPath: appGoFull()}
+		v.fullOn = allWhole(v.full)
 		v.folded = map[string]bool{foldKey(appGoPath, 1): true}
 		v.rebuild(false)
 	}
@@ -918,6 +927,7 @@ func TestDrawerGhostLinesCarryNoNumber(t *testing.T) {
 	s := reviewScene{theme: "catppuccin-mocha", icons: true, w: 200, h: 52, res: turn4Result(), turn: 4, turns: 4, focused: true}
 	s.tune = func(t *testing.T, a *App, v *reviewView) {
 		v.full = map[string]fullText{appGoPath: appGoFull()}
+		v.fullOn = allWhole(v.full)
 		v.rebuild(false)
 	}
 

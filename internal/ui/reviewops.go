@@ -4,13 +4,17 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
+	"path/filepath"
 	"slices"
+	"strings"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/mhersson/muxreveal/internal/core"
 	"github.com/mhersson/muxreveal/internal/git"
+	"github.com/mhersson/muxreveal/internal/md"
 )
 
 // reviewOpenTimeout bounds the repository check of a drawer that is opening.
@@ -26,6 +30,7 @@ const (
 	noticeNotRepo    = "not a git repository"
 	noticeBinaryFull = "a binary file has no full view"
 	noticeFirstTurn  = "turn 1 is the first turn"
+	noticeNotMD      = "not a markdown file"
 )
 
 // drawerDir is the directory the drawer reviews for a pane of tab: the root it
@@ -101,6 +106,7 @@ func (a *App) openReview(pane core.PaneID, focus bool) tea.Cmd {
 // for another tab, or a pane that moved or went, is dropped.
 func (a *App) onReviewOpen(msg reviewOpenMsg) tea.Cmd {
 	st := a.store.State()
+	want := a.takeMDWant(msg.tab)
 
 	next := a.drawer.prNext
 	if next != nil && next.tab == msg.tab && next.pane == msg.pane {
@@ -142,6 +148,11 @@ func (a *App) onReviewOpen(msg reviewOpenMsg) tea.Cmd {
 
 	if msg.focus {
 		a.drawerTake()
+	}
+
+	if want != nil {
+		want.open = true
+		a.drawer.mdWant = want
 	}
 
 	if next != nil {
@@ -193,6 +204,7 @@ func (a *App) setReviewMode(mode core.ReviewMode) tea.Cmd {
 
 	session := paneSession(a.store.State(), tab.Review.Pane)
 	v.after = nil
+	a.dropPages(v)
 
 	if mode == core.ReviewTurn {
 		if ok, wait := a.turnsGate(tab.ID, v, session, func() tea.Cmd { return a.setReviewMode(mode) }); !ok {
@@ -307,11 +319,17 @@ func (a *App) toggleReviewFull() tea.Cmd {
 	}
 
 	if v.fullOn[f.Path] {
+		delete(v.fullOn, f.Path)
+
+		// A rendered file keeps its text and the read being made of it.
+		if v.mdOn[f.Path] {
+			return nil
+		}
+
 		if stop := v.fullStop[f.Path]; stop != nil {
 			stop()
 		}
 
-		delete(v.fullOn, f.Path)
 		delete(v.fullHave, f.Path)
 		delete(v.fullAsk, f.Path)
 		delete(v.fullStop, f.Path)
@@ -332,19 +350,91 @@ func (a *App) toggleReviewFull() tea.Cmd {
 
 	v.fullOn[f.Path] = true
 
+	// The text of a rendered file is already here; show it whole when m goes.
+	if _, have := v.full[f.Path]; have {
+		v.rebuild(v.rowsSplit)
+	}
+
 	return a.reviewFullSync(tab.ID, v)
 }
 
+// toggleReviewMarkdown shows the markdown file under the cursor rendered, or
+// back as its diff, or its full text while f is on.
+func (a *App) toggleReviewMarkdown() tea.Cmd {
+	tab, v, ok := a.reviewActive()
+	if !ok || v.cursor < 0 || v.cursor >= len(v.rows) {
+		return nil
+	}
+
+	f := v.res.Files[v.rows[v.cursor].file]
+
+	switch {
+	case v.mdOn[f.Path]:
+		a.dropRendered(v, f.Path)
+		v.rebuild(v.rowsSplit)
+
+		return nil
+	case !md.IsMarkdown(f.Path) || f.Binary:
+		a.notice = noticeNotMD
+
+		return nil
+	case f.Status == git.Deleted:
+		a.notice = noticeFileDeleted
+
+		return nil
+	}
+
+	if v.mdOn == nil {
+		v.mdOn = map[string]bool{}
+	}
+
+	v.mdOn[f.Path] = true
+	v.rebuild(v.rowsSplit)
+
+	return a.reviewFullSync(tab.ID, v)
+}
+
+// dropRendered shows path as source again: its doc goes, and its text with it
+// unless the full view wants that.
+func (a *App) dropRendered(v *reviewView, path string) {
+	delete(v.mdOn, path)
+	delete(v.mdFiles, path)
+	delete(v.mdAsk, path)
+
+	if v.fullOn[path] {
+		return
+	}
+
+	if stop := v.fullStop[path]; stop != nil {
+		stop()
+	}
+
+	delete(v.full, path)
+	delete(v.fullHave, path)
+	delete(v.fullAsk, path)
+	delete(v.fullStop, path)
+	v.keepSpans()
+	v.gen++
+}
+
 // reviewFullSync reads the two sides of every file the operator wants shown
-// whole whose blobs differ from the ones the view holds or is reading.
+// whole or rendered whose blobs differ from the ones the view holds or is
+// reading, and parses the rendered files whose text is here.
 func (a *App) reviewFullSync(tab core.TabID, v *reviewView) tea.Cmd {
-	if len(v.fullOn) == 0 || a.engine == nil {
+	if len(v.fullOn)+len(v.mdOn) == 0 || a.engine == nil {
 		return nil
 	}
 
 	var cmds []tea.Cmd
 
-	for path := range v.fullOn {
+	paths := slices.Collect(maps.Keys(v.fullOn))
+	for path := range v.mdOn {
+		if !v.fullOn[path] {
+			paths = append(paths, path)
+		}
+	}
+
+	for _, path := range paths {
 		i := slices.IndexFunc(v.res.Files, func(f git.FileDiff) bool { return f.Path == path })
 		if i < 0 {
 			continue
@@ -370,7 +460,7 @@ func (a *App) reviewFullSync(tab core.TabID, v *reviewView) tea.Cmd {
 		cmds = append(cmds, a.reviewFullCmd(tab, v, f, ids, read))
 	}
 
-	return tea.Batch(cmds...)
+	return tea.Batch(append(cmds, a.reviewMDParse(tab, v))...)
 }
 
 // reviewFullCmd reads both sides of f. The view ends the read when it is
@@ -415,7 +505,7 @@ func (a *App) onReviewFull(msg reviewFullMsg) tea.Cmd {
 	delete(v.fullAsk, msg.path)
 	delete(v.fullStop, msg.path)
 
-	if !v.fullOn[msg.path] {
+	if !v.fullOn[msg.path] && !v.mdOn[msg.path] {
 		return nil
 	}
 
@@ -435,6 +525,81 @@ func (a *App) onReviewFull(msg reviewFullMsg) tea.Cmd {
 	v.full[msg.path], v.fullHave[msg.path] = msg.text, msg.ids
 	v.keepSpans()
 	v.gen++
+	v.rebuild(v.rowsSplit)
+
+	return a.reviewMDParse(msg.tab, v)
+}
+
+// reviewMDParse parses, off the update loop, each rendered file whose text is
+// here and whose blobs no doc or parse in flight holds.
+func (a *App) reviewMDParse(tab core.TabID, v *reviewView) tea.Cmd {
+	var cmds []tea.Cmd
+
+	for path := range v.mdOn {
+		i := slices.IndexFunc(v.res.Files, func(f git.FileDiff) bool { return f.Path == path })
+		if i < 0 {
+			continue
+		}
+
+		ids := blobIDs{v.res.Files[i].OldOID, v.res.Files[i].NewOID}
+		text, have := v.full[path]
+
+		if !have || v.fullHave[path] != ids || text.err != nil {
+			continue
+		}
+
+		if f := v.mdFiles[path]; f != nil && f.ids == ids {
+			continue
+		}
+
+		if ask, ok := v.mdAsk[path]; ok && ask == ids {
+			continue
+		}
+
+		if v.mdAsk == nil {
+			v.mdAsk = map[string]blobIDs{}
+		}
+
+		v.mdAsk[path] = ids
+		epoch := v.epoch
+		src := []byte(strings.Join(text.new, "\n") + "\n")
+		base := filepath.Join(v.root, filepath.Dir(path))
+
+		cmds = append(cmds, parseCmd(src, base, a.drawer.hl.HighlightLang, func(d *mdDoc) tea.Msg {
+			return reviewMDMsg{tab: tab, gen: epoch, path: path, ids: ids, file: &mdFile{doc: d, text: text, ids: ids}}
+		}))
+	}
+
+	return tea.Batch(cmds...)
+}
+
+// onReviewMD shows a rendered file once its parse answered. The answer is
+// dropped when the source changed since, or the operator turned the file back
+// to source; when the file changed under the parse, it is read again.
+func (a *App) onReviewMD(msg reviewMDMsg) tea.Cmd {
+	v := a.drawer.views[msg.tab]
+	if v == nil || msg.gen != v.epoch {
+		return nil
+	}
+
+	if ask, ok := v.mdAsk[msg.path]; ok && ask == msg.ids {
+		delete(v.mdAsk, msg.path)
+	}
+
+	if !v.mdOn[msg.path] {
+		return nil
+	}
+
+	i := slices.IndexFunc(v.res.Files, func(f git.FileDiff) bool { return f.Path == msg.path })
+	if i < 0 || (blobIDs{v.res.Files[i].OldOID, v.res.Files[i].NewOID}) != msg.ids {
+		return a.reviewFullSync(msg.tab, v)
+	}
+
+	if v.mdFiles == nil {
+		v.mdFiles = map[string]*mdFile{}
+	}
+
+	v.mdFiles[msg.path] = msg.file
 	v.rebuild(v.rowsSplit)
 
 	return nil

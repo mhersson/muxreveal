@@ -39,6 +39,7 @@ func (l *layouter) list(out *frag, n *ast.List, width int, c blockCtx) {
 			ic.lead = leadFor(pad, width)
 			l.blocks(out, item, width, ic, true)
 			attachMarker(out, start, marker, width)
+			out.stamp(start, l.d.ranges[item])
 
 			continue
 		}
@@ -50,6 +51,7 @@ func (l *layouter) list(out *frag, n *ast.List, width int, c blockCtx) {
 		}
 
 		hang(out, start, concat(l.spaces(indent), marker), l.spaces(pad), width, false)
+		out.stamp(start, l.d.ranges[item])
 	}
 }
 

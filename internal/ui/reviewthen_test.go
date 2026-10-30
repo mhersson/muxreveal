@@ -113,7 +113,56 @@ func TestAfterLoadActionNeedsTheKeyboard(t *testing.T) {
 func TestAfterLoadActionDroppedByANewerAsk(t *testing.T) {
 	t.Parallel()
 
-	t.Run("r before the first load lands", func(t *testing.T) {
+	// a's place and fetch answers are fed by hand, so r lands between them where
+	// the case says.
+	for _, tt := range []struct {
+		name       string
+		placeFirst bool // the place answer arrives before r
+	}{
+		{"r before the place answer", false},
+		{"r before the fetch answer", true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			r := newPRDrawer(t)
+			r.actions = &fakeActions{}
+
+			r.poll()
+			r.opened(t)
+
+			place := r.step(keyRune('a'))
+			if place == nil {
+				t.Fatalf("a asked for nothing; notice = %q", r.notice)
+			}
+
+			var fetch tea.Cmd
+
+			if tt.placeFirst {
+				if fetch = r.step(place()); fetch == nil {
+					t.Fatalf("the place answer started no fetch; notice = %q", r.notice)
+				}
+
+				r.typed("r")
+			} else {
+				r.typed("r")
+
+				fetch = r.step(place())
+			}
+
+			if fetch != nil {
+				r.run(r.step(fetch()))
+			}
+
+			r.quiet(t, 0)
+
+			if r.confirm != nil {
+				t.Errorf("a's answers after r opened a confirm: %+v", *r.confirm)
+			}
+		})
+	}
+
+	t.Run("r while the drawer opens on another pane for it", func(t *testing.T) {
 		t.Parallel()
 
 		r := newPRDrawer(t)
@@ -121,13 +170,17 @@ func TestAfterLoadActionDroppedByANewerAsk(t *testing.T) {
 
 		r.poll()
 		r.opened(t)
-		r.typed("a")
+
+		// The drawer stays on the first pane, with the keyboard, until the open answers.
+		open := r.openWithPR(r.shell(t, r.dir), &prWant{repo: prRepoKey, number: 7, root: r.root}, thenApprove)
+
 		r.typed("r")
-		r.settle()
+		r.run(open)
+		r.until(t, "PR mode", r.inPRMode(7))
 		r.quiet(t, 0)
 
 		if r.confirm != nil {
-			t.Errorf("a r before the load left a confirm open: %+v", *r.confirm)
+			t.Errorf("an r while the drawer opened left a confirm open: %+v", *r.confirm)
 		}
 	})
 

@@ -76,6 +76,7 @@ func TestDrawerLayoutFollowsItsInputs(t *testing.T) {
 		{"side by side is wanted", nil, func(t *testing.T, a *App, v *reviewView) { v.split = true }},
 		{"a longer file shown whole", nil, func(t *testing.T, a *App, v *reviewView) {
 			v.full = map[string]fullText{appGoPath: longFull}
+			v.fullOn = allWhole(v.full)
 			v.rebuild(v.split)
 		}},
 	}

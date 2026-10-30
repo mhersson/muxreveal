@@ -164,6 +164,42 @@ func layoutAllOpen(d *Doc, o LayoutOptions) Layout {
 	}
 }
 
+// assertSource checks the source ranges of l against a source of srcLines
+// lines: one per layout line, in bounds, and consecutive lines for one range.
+// Lines between may have no source or an overlapping range: an inline
+// <details> starts several blocks on one source line.
+func assertSource(t testing.TB, l Layout, srcLines int) {
+	t.Helper()
+
+	if len(l.Source) != len(l.Lines) {
+		t.Fatalf("%d source ranges for %d lines", len(l.Source), len(l.Lines))
+	}
+
+	last := map[SourceRange]int{}
+
+	for i, r := range l.Source {
+		if r == (SourceRange{}) {
+			continue
+		}
+
+		if r.First < 1 || r.First > r.Last || r.Last > srcLines {
+			t.Errorf("line %d has source range %v outside 1..%d", i, r, srcLines)
+		}
+
+		if prev, ok := last[r]; ok {
+			for j := prev + 1; j < i; j++ {
+				if b := l.Source[j]; b != (SourceRange{}) && (b.First > r.Last || b.Last < r.First) {
+					t.Errorf("source range %v is on lines %d and %d but not between them", r, prev, i)
+
+					break
+				}
+			}
+		}
+
+		last[r] = i
+	}
+}
+
 // assertReferences checks the image and fold lines and the link indexes of l.
 func assertReferences(t testing.TB, l Layout, icons bool, limit int) {
 	t.Helper()
@@ -330,6 +366,7 @@ func TestCorpusWidths(t *testing.T) {
 						t.Run(label, func(t *testing.T) {
 							assertSafe(t, l, limit)
 							assertReferences(t, l, icons, limit)
+							assertSource(t, l, len(d.starts))
 						})
 					}
 				}

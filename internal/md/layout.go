@@ -80,7 +80,10 @@ type LayoutOptions struct {
 
 // Layout is a document laid out for one width.
 type Layout struct {
-	Lines  []Line
+	Lines []Line
+	// Source holds, for each line, the source lines that made it; the zero value
+	// for a line no source made.
+	Source []SourceRange
 	Links  []Link
 	Images []Image
 	Folds  []Fold
@@ -161,6 +164,9 @@ type frag struct {
 	lines  []Line
 	images []Image
 	folds  []Fold
+	// src is the source range of each line; it may be shorter than lines, and
+	// the lines past it have none yet (see sync).
+	src []SourceRange
 }
 
 // Layout wraps the document to o.Width cells (at most 100, at least 1).
@@ -172,7 +178,9 @@ func (d *Doc) Layout(o LayoutOptions) Layout {
 	l.blocks(&f, d.root, l.width, blockCtx{}, false)
 	l.footnotes(&f, l.width)
 
-	l.out.Lines, l.out.Images, l.out.Folds = f.lines, f.images, f.folds
+	f.stamp(0, SourceRange{})
+
+	l.out.Lines, l.out.Source, l.out.Images, l.out.Folds = f.lines, f.src, f.images, f.folds
 	l.dropUnusedLinks()
 
 	return l.out
@@ -189,6 +197,7 @@ func (l *layouter) blocks(out *frag, parent ast.Node, width int, c blockCtx, com
 
 		if sep {
 			out.lines = append(out.lines, nil)
+			out.markNone(before)
 		}
 
 		l.block(out, ch, width, c)
@@ -208,11 +217,20 @@ func (l *layouter) blocks(out *frag, parent ast.Node, width int, c blockCtx, com
 func dropBlank(out *frag, at int) {
 	if len(out.lines) == at+1 && out.lines[at] == nil {
 		out.lines = out.lines[:at]
+		out.src = out.src[:min(at, len(out.src))]
 	}
 }
 
-// block appends one block.
+// block appends one block; its lines that nothing inside it claimed carry its
+// source range.
 func (l *layouter) block(out *frag, n ast.Node, width int, c blockCtx) {
+	from := len(out.lines)
+
+	l.blockLines(out, n, width, c)
+	out.stamp(from, l.d.ranges[n])
+}
+
+func (l *layouter) blockLines(out *frag, n ast.Node, width int, c blockCtx) {
 	text := c.text
 	if c.done {
 		text = RoleTaskDoneText

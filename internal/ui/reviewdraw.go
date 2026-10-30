@@ -14,6 +14,7 @@ import (
 
 	"github.com/mhersson/muxreveal/internal/core"
 	"github.com/mhersson/muxreveal/internal/git"
+	"github.com/mhersson/muxreveal/internal/md"
 	"github.com/mhersson/muxreveal/internal/ui/diffview"
 	"github.com/mhersson/muxreveal/internal/ui/theme"
 )
@@ -54,14 +55,17 @@ type layoutKey struct {
 	modeShortW int // and its width without " in this worktree"
 	headH      int // rows of the pull request header the diff column starts with
 	fullDigits int // digits of the longest file shown whole
+	page       bool
 }
 
 // fullDigits is the digits of the highest line number among the files shown whole.
 func fullDigits(v *reviewView) int {
 	n := 0
 
-	for _, ft := range v.full {
-		n = max(n, numDigits(max(len(ft.old), len(ft.new))))
+	for path, ft := range v.full {
+		if v.fullOn[path] && !v.mdOn[path] {
+			n = max(n, numDigits(max(len(ft.old), len(ft.new))))
+		}
 	}
 
 	return n
@@ -74,8 +78,17 @@ func fullDigits(v *reviewView) int {
 func (a *App) drawerLayoutOf(box core.Rect, v *reviewView, tree bool) drawerLayout {
 	c := v.derived()
 	full, short := modeWidth(v, a.icons, false), modeWidth(v, a.icons, true)
-	headH := a.prHeaderH(v, max(box.H-2, 0))
-	key := layoutKey{box: box, tree: tree, split: v.split, modeW: full, modeShortW: short, headH: headH, fullDigits: fullDigits(v)}
+	page := v.page() != nil
+	headH := 0
+
+	// A page takes the whole column: no tree, no pull request header.
+	if page {
+		tree = false
+	} else {
+		headH = a.prHeaderH(v, max(box.H-2, 0))
+	}
+
+	key := layoutKey{box: box, tree: tree, split: v.split, modeW: full, modeShortW: short, headH: headH, fullDigits: fullDigits(v), page: page}
 
 	if c.layOK && c.layKey == key {
 		return c.lay
@@ -138,6 +151,7 @@ func (l drawerLayout) splitCode() int {
 // drawCtx is what drawing one frame of the drawer needs.
 type drawCtx struct {
 	ui    theme.UI
+	th    theme.Theme
 	icons bool
 	v     *reviewView
 	c     *reviewCache
@@ -150,11 +164,15 @@ type drawCtx struct {
 	query string
 	top   int
 
-	pr     core.PRInfo // the pull request the header shows; zero when headH is 0
-	pinned bool        // the drawer is held on its root
-	home   string      // shortens the paths it names
-	list   *wtList     // the open worktree list, drawn over the drawer
-	bind   keyTable    // the drawer's keys, as the hint row shows them
+	mdp      *mdPainter // paints rendered rows; made on first use
+	pageRows []string   // the shown page's rows, drawn on first use
+
+	pr     core.PRInfo  // the pull request the header shows; zero when headH is 0
+	pinned bool         // the drawer is held on its root
+	home   string       // shortens the paths it names
+	list   *wtList      // the open worktree list, drawn over the drawer
+	links  *linkChooser // the open link chooser, drawn over the drawer
+	bind   keyTable     // the drawer's keys, as the hint row shows them
 }
 
 // diffKeys reports whether the diff, not the tree, has the keyboard.
@@ -205,8 +223,11 @@ type drawKey struct {
 	noSnapshot           bool
 	pinned               bool
 	list                 wtKey
+	links                linksKey
 	err                  string
 	hasErr               bool
+	page                 *mdPage
+	pageRev              int
 
 	pr       core.PRInfo
 	unpushed int
@@ -225,8 +246,8 @@ func (d *drawCtx) key(r core.Rect, name string) drawKey {
 		query: d.query, searching: v.search != nil,
 		src: v.src, project: v.project, branch: v.branch, base: v.base,
 		turns: v.turns, resTurn: v.res.Turn, noSnapshot: v.noSnapshot, pinned: d.pinned,
-		list: d.listKey(),
-		pr:   d.pr, unpushed: v.unpushed, head: v.res.Head,
+		list: d.listKey(), links: d.linksKey(),
+		pr: d.pr, unpushed: v.unpushed, head: v.res.Head,
 	}
 
 	if d.lay.headH > 0 {
@@ -235,6 +256,10 @@ func (d *drawCtx) key(r core.Rect, name string) drawKey {
 
 	if v.err != nil {
 		k.err, k.hasErr = v.err.Error(), true
+	}
+
+	if p := v.page(); p != nil {
+		k.page, k.pageRev = p, p.rev
 	}
 
 	if len(v.fresh) > 0 && d.now.Before(v.flashUntil) {
@@ -309,8 +334,8 @@ func (a *App) drawCtxFor(st core.State) (d *drawCtx, name string, ok bool) {
 	tab := st.Tab()
 
 	d = &drawCtx{
-		ui: lk.theme.UI, icons: a.icons, v: v, c: v.derived(), now: a.clock.Now(), keys: a.drawer.focused, tree: a.drawer.focused && a.drawer.tree,
-		pinned: tab.Review != nil && pinnedTo(tab, tab.Review.Pane), home: a.getenv("HOME"), list: a.listFor(tab), bind: a.keys.drawer,
+		ui: lk.theme.UI, th: lk.theme, icons: a.icons, v: v, c: v.derived(), now: a.clock.Now(), keys: a.drawer.focused, tree: a.drawer.focused && a.drawer.tree,
+		pinned: tab.Review != nil && pinnedTo(tab, tab.Review.Pane), home: a.getenv("HOME"), list: a.listFor(tab), links: a.linksFor(tab), bind: a.keys.drawer,
 	}
 	d.lay = a.drawerLayoutOf(box, v, drawerTree(st))
 
@@ -388,6 +413,7 @@ func (d *drawCtx) render() []string {
 
 	lines = append(lines, d.bottomBorder())
 	d.overlayList(lines)
+	d.overlayLinks(lines)
 
 	return lines
 }
@@ -523,6 +549,10 @@ func (v *reviewView) showsTurn() bool {
 
 // modeTag is the text of the mode tag.
 func (d *drawCtx) modeTag() string {
+	if p := d.v.page(); p != nil {
+		return d.withIcon(iconMarkdown, printable(p.rel))
+	}
+
 	if src, ok := d.v.src.(git.PRSource); ok {
 		return d.withIcon(iconPR, prNumberText(src.Number))
 	}
@@ -569,16 +599,33 @@ func (d *drawCtx) hintRuns(cw int) []railRun {
 	pair := func(label string, ids ...string) [2]string { return [2]string{d.bind.hint(ids...), label} }
 	next, prev := "review.line.next", "review.line.prev"
 
+	if d.v.page() != nil {
+		return d.fitHints([][2]string{
+			pair("line", next, prev), pair("heading", "review.hunk.next", "review.hunk.prev"),
+			pair("open", "review.fold"), pair("search", "review.search"), pair("back", "review.back"),
+		}, cw)
+	}
+
+	cur := d.cursorFile()
+	render := cur != nil && md.IsMarkdown(cur.Path) && !cur.Binary && cur.Status != git.Deleted
+
 	pairs := [][2]string{
 		pair("line", next, prev),
 		pair("hunk", "review.hunk.next", "review.hunk.prev"),
 		pair("file", "review.file.next", "review.file.prev"),
 		pair("tree", "review.tree"),
 		pair("worktree", "review.worktrees"),
+	}
+
+	if render {
+		pairs = append(pairs, pair("render", "review.markdown"))
+	}
+
+	pairs = append(pairs,
 		pair("full", "review.full"),
 		pair("split", "review.split"),
 		pair("mode", "review.mode.branch", "review.mode.turn"),
-	}
+	)
 
 	if d.v.showsTurn() {
 		pairs = append(pairs, pair("turn", "review.turn.prev", "review.turn.next"))
@@ -594,10 +641,23 @@ func (d *drawCtx) hintRuns(cw int) []railRun {
 		}
 	}
 
+	if cur != nil && d.v.mdOn[cur.Path] {
+		pairs = [][2]string{
+			pair("line", next, prev), pair("change", "review.hunk.next", "review.hunk.prev"), pair("open", "review.fold"),
+			pair("source", "review.markdown"), pair("full", "review.full"), pair("search", "review.search"),
+		}
+	}
+
 	if d.tree {
 		pairs = [][2]string{pair("file", next, prev), pair("jump", "review.fold"), pair("hide", "review.tree"), pair("back", "review.back")}
 	}
 
+	return d.fitHints(pairs, cw)
+}
+
+// fitHints draws the key and label pairs that fit cw cells; a pair with no
+// key, its command unbound, is left out.
+func (d *drawCtx) fitHints(pairs [][2]string, cw int) []railRun {
 	pairs = slices.DeleteFunc(pairs, func(kv [2]string) bool { return kv[0] == "" })
 
 	var out []railRun
@@ -623,6 +683,16 @@ func (d *drawCtx) hintRuns(cw int) []railRun {
 	}
 
 	return out
+}
+
+// cursorFile is the file the cursor is in, nil with no rows.
+func (d *drawCtx) cursorFile() *git.FileDiff {
+	v := d.v
+	if v.cursor < 0 || v.cursor >= len(v.rows) {
+		return nil
+	}
+
+	return &v.res.Files[v.rows[v.cursor].file]
 }
 
 // ---- diff column ----
@@ -819,6 +889,8 @@ func (d *drawCtx) rowCells(i int, cursor bool) string {
 		return d.ghostRow(r, cursor, fresh)
 	case rowFold:
 		return d.foldRow(r, cursor, fresh)
+	case rowMD:
+		return d.mdRow(r, f, cursor)
 	}
 
 	return ""
@@ -851,7 +923,12 @@ func (d *drawCtx) fileRow(fi int, cursor bool) string {
 		right = append(right, railRun{text: text, fg: ui.Warning, bold: true}, railRun{text: "  "})
 	}
 
-	if _, whole := d.v.full[f.Path]; whole {
+	_, have := d.v.full[f.Path]
+
+	switch {
+	case d.v.mdOn[f.Path]:
+		right = append(right, railRun{text: d.withIcon(iconMarkdown, "rendered"), fg: ui.Accent, bold: true}, railRun{text: "  "})
+	case have && d.v.fullOn[f.Path]:
 		right = append(right, railRun{text: d.withIcon(iconFull, "full"), fg: ui.Accent, bold: true}, railRun{text: "  "})
 	}
 
@@ -924,4 +1001,57 @@ func matchRanges(text, q string) []diffview.Range {
 		out = append(out, diffview.Range{Start: at + i, End: at + i + len(lq)})
 		at += i + len(lq)
 	}
+}
+
+// mdRow draws a line of a rendered file: the change mark or the cursor in cell
+// 0, a blank, the text at the column's width less four, two blanks. A row whose
+// doc is gone draws blank.
+func (d *drawCtx) mdRow(r reviewRow, f git.FileDiff, cursor bool) string {
+	w, ui := d.lay.diffW, d.ui
+	bg := d.cursorGround(ui.Bg, cursor)
+	lead, tw := min(2, w), max(w-4, 0)
+
+	mark := railRun{text: " "}
+
+	switch {
+	case cursor:
+		mark = d.markRun(true)
+	case r.mark == markAdded:
+		mark = railRun{text: markGlyph, fg: ui.Success}
+	case r.mark == markRemoved:
+		mark = railRun{text: markGlyph, fg: ui.Error}
+	}
+
+	text := railPainter{bg: bg}.line(nil, tw)
+
+	if mf := d.v.mdFiles[f.Path]; mf != nil {
+		lay := mf.doc.layout(max(d.v.mdW, 1), d.v.mdIcons)
+		if r.line < len(lay.Lines) {
+			text = d.mdPainter().withGround(bg).line(lay.Lines[r.line], lay.Links, tw)
+		}
+	}
+
+	return railPainter{bg: bg}.line([]railRun{mark}, lead) + text + railPainter{bg: bg}.line(nil, max(w-lead-tw, 0))
+}
+
+func (d *drawCtx) mdPainter() mdPainter {
+	if d.mdp == nil {
+		p := newMDPainter(d.th, d.ui.Bg)
+		d.mdp = &p
+	}
+
+	return *d.mdp
+}
+
+// pageRow is row y of the shown markdown page, which fills the diff column.
+func (d *drawCtx) pageRow(p *mdPage, y int) string {
+	if d.pageRows == nil {
+		d.pageRows = p.view.draw(d.mdPainter(), d.diffKeys())
+	}
+
+	if y >= len(d.pageRows) {
+		return railPainter{bg: d.ui.Bg}.line(nil, d.lay.diffW)
+	}
+
+	return d.exact(d.pageRows[y], d.lay.diffW)
 }

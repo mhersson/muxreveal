@@ -191,7 +191,7 @@ func TestBuildRowsFullFileGhosts(t *testing.T) {
 		}
 	}
 
-	rows := buildRows(res, rowOpts{full: full})
+	rows := buildRows(res, rowOpts{full: full, whole: allWhole(full)})
 	if rows[0].kind != rowFile {
 		t.Fatalf("row 0 = %d, want a file header", rows[0].kind)
 	}
@@ -207,7 +207,7 @@ func TestBuildRowsFullFileGhosts(t *testing.T) {
 	}
 
 	t.Run("a folded block is one row", func(t *testing.T) {
-		rows := buildRows(res, rowOpts{full: full, folded: map[string]bool{foldKey("a.go", 1): true}})
+		rows := buildRows(res, rowOpts{full: full, whole: allWhole(full), folded: map[string]bool{foldKey("a.go", 1): true}})
 		check(t, rows[1:7], []want{
 			{rowFull, 0, 0},
 			{rowGhost, 1, -1},
@@ -225,6 +225,7 @@ func TestBuildRowsFullFileGhosts(t *testing.T) {
 	t.Run("ghosts start folded", func(t *testing.T) {
 		rows := buildRows(res, rowOpts{
 			full:              full,
+			whole:             allWhole(full),
 			ghostsStartFolded: true,
 			folded:            map[string]bool{foldKey("a.go", 0): false},
 		})
@@ -239,14 +240,14 @@ func TestBuildRowsFullFileGhosts(t *testing.T) {
 	})
 
 	t.Run("a failed read is an info row", func(t *testing.T) {
-		rows := buildRows(res, rowOpts{full: map[string]fullText{"a.go": {err: fmt.Errorf("boom")}}})
+		rows := buildRows(res, rowOpts{full: map[string]fullText{"a.go": {err: fmt.Errorf("boom")}}, whole: map[string]bool{"a.go": true}})
 		if rows[1].kind != rowInfo || rows[1].text != "boom" {
 			t.Errorf("row 1 = %+v, want an info row holding the error", rows[1])
 		}
 	})
 
 	t.Run("a binary file keeps its info row", func(t *testing.T) {
-		rows := buildRows(res, rowOpts{full: map[string]fullText{"img.png": {}}})
+		rows := buildRows(res, rowOpts{full: map[string]fullText{"img.png": {}}, whole: map[string]bool{"img.png": true}})
 		if got := rows[len(rows)-1]; got.kind != rowInfo || got.text != "binary file, not shown" {
 			t.Errorf("last row = %+v", got)
 		}
@@ -265,7 +266,7 @@ func TestBuildRowsFullFileLongRewrite(t *testing.T) {
 	}
 
 	res := git.Result{Files: []git.FileDiff{{Path: "a", Status: git.Modified}}}
-	rows := buildRows(res, rowOpts{full: map[string]fullText{"a": {old: old, new: nw}}})
+	rows := buildRows(res, rowOpts{full: map[string]fullText{"a": {old: old, new: nw}}, whole: map[string]bool{"a": true}})
 
 	if got, want := len(rows), 1+3000+3000; got != want {
 		t.Fatalf("got %d rows, want %d", got, want)
@@ -479,7 +480,7 @@ func TestRestoreAnchorFullFile(t *testing.T) {
 	t.Parallel()
 
 	res, full := fullFixture()
-	rows := buildRows(res, rowOpts{full: full})
+	rows := buildRows(res, rowOpts{full: full, whole: allWhole(full)})
 	// 0 file, 1 a, 2 ghost b, 3 c, 4 Added
 
 	tests := []struct {
@@ -505,7 +506,7 @@ func TestRestoreAnchorFullFile(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			a := anchorAt(res, rows, tt.at)
-			nrows := buildRows(res, rowOpts{full: tt.next(maps.Clone(full))})
+			nrows := buildRows(res, rowOpts{full: tt.next(maps.Clone(full)), whole: map[string]bool{"a.go": true}})
 
 			if got := restoreAnchor(res, nrows, a); got != tt.want {
 				t.Errorf("restoreAnchor = %d, want %d", got, tt.want)
@@ -518,7 +519,7 @@ func TestSearchRowsFullFile(t *testing.T) {
 	t.Parallel()
 
 	res, full := fullFixture()
-	rows := buildRows(res, rowOpts{full: full})
+	rows := buildRows(res, rowOpts{full: full, whole: allWhole(full)})
 
 	if got, ok := searchRows(res, rows, 0, "ADDED"); !ok || got != 4 {
 		t.Errorf("full row search = %d, %v; want 4", got, ok)
@@ -557,7 +558,7 @@ func TestRestoreAnchorFold(t *testing.T) {
 		new: []string{"a", "c", "e"},
 	}}
 	folded := map[string]bool{foldKey("a.go", 0): true, foldKey("a.go", 1): true}
-	rows := buildRows(res, rowOpts{full: full, folded: folded})
+	rows := buildRows(res, rowOpts{full: full, whole: allWhole(full), folded: folded})
 	// 0 file, 1 a, 2 fold(b), 3 c, 4 fold(d), 5 e
 	a := anchorAt(res, rows, 4)
 	if a.row != rowFold {
@@ -565,7 +566,7 @@ func TestRestoreAnchorFold(t *testing.T) {
 	}
 
 	moved := map[string]fullText{"a.go": {old: full["a.go"].old, new: []string{"top", "a", "c", "e"}}}
-	nrows := buildRows(res, rowOpts{full: moved, folded: folded})
+	nrows := buildRows(res, rowOpts{full: moved, whole: allWhole(moved), folded: folded})
 
 	if got := restoreAnchor(res, nrows, a); got != 5 {
 		t.Errorf("restoreAnchor = %d, want 5", got)
@@ -592,4 +593,14 @@ func TestHunkHeader(t *testing.T) {
 			}
 		})
 	}
+}
+
+// allWhole says every file of full is shown whole.
+func allWhole(full map[string]fullText) map[string]bool {
+	out := make(map[string]bool, len(full))
+	for path := range full {
+		out[path] = true
+	}
+
+	return out
 }

@@ -3,7 +3,6 @@ package ui
 import (
 	"path/filepath"
 	"slices"
-	"strconv"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -38,6 +37,7 @@ var reviewKeys = []reviewKey{
 	{"G", "review.bottom"},
 	{"tab", "review.tree"},
 	{"f", "review.full"},
+	{"m", "review.markdown"},
 	{"u", "review.split"},
 	{"enter", "review.fold"},
 	{"b", "review.mode.branch"},
@@ -73,7 +73,13 @@ func reviewCommands() []command {
 	}
 	line := func(d int) func(*App) tea.Cmd { return func(a *App) tea.Cmd { return a.reviewLine(d) } }
 	hunk := func(d int) func(*App) tea.Cmd {
-		return func(a *App) tea.Cmd { return a.reviewJump((*reviewView).blockStarts, d) }
+		return func(a *App) tea.Cmd {
+			if a.onPage(func(_ *reviewView, p *mdPage) { p.view.heading(d) }) {
+				return nil
+			}
+
+			return a.reviewJump((*reviewView).blockStarts, d)
+		}
 	}
 	file := func(d int) func(*App) tea.Cmd {
 		return func(a *App) tea.Cmd { return a.reviewJump((*reviewView).fileStarts, d) }
@@ -82,7 +88,7 @@ func reviewCommands() []command {
 	mode := func(m core.ReviewMode) func(*App) tea.Cmd { return func(a *App) tea.Cmd { return a.setReviewMode(m) } }
 	turn := func(d int) func(*App) tea.Cmd { return func(a *App) tea.Cmd { return a.stepReviewTurn(d) } }
 
-	return []command{
+	cmds := []command{
 		cmd("review.toggle", "Review drawer", (*App).reviewToggle),
 		cmd("review.line.next", "Review: next line", line(1)),
 		cmd("review.line.prev", "Review: previous line", line(-1)),
@@ -96,6 +102,7 @@ func reviewCommands() []command {
 		cmd("review.bottom", "Review: bottom", func(a *App) tea.Cmd { return a.reviewEnd(true) }),
 		cmd("review.tree", "Review: file tree", (*App).reviewTree),
 		cmd("review.full", "Review: full file", (*App).toggleReviewFull),
+		cmd("review.markdown", "Review: rendered or source", (*App).toggleReviewMarkdown),
 		cmd("review.split", "Review: unified or side by side", (*App).reviewSplit),
 		cmd("review.fold", "Review: fold or show removed lines", (*App).reviewFold),
 		cmd("review.mode.branch", "Review: branch mode", mode(core.ReviewBranch)),
@@ -113,6 +120,24 @@ func reviewCommands() []command {
 		cmd("review.refresh", "Review: refresh", (*App).reviewReload),
 		cmd("review.back", "Review: back to the panes", (*App).reviewBack),
 	}
+
+	// A markdown page answers only its own keys; the others are dropped.
+	for i, c := range cmds {
+		if c.id == "review.toggle" || pageCommand(c.id) {
+			continue
+		}
+
+		run := c.run
+		cmds[i].run = func(a *App) tea.Cmd {
+			if a.pageShown() {
+				return nil
+			}
+
+			return run(a)
+		}
+	}
+
+	return cmds
 }
 
 // ---- keyboard ----
@@ -126,6 +151,10 @@ func (a *App) handleDrawerKey(msg tea.KeyPressMsg) tea.Cmd {
 
 	if a.listFor(tab) != nil {
 		return a.handleWorktreesKey(msg)
+	}
+
+	if c := a.linksFor(tab); c != nil {
+		return a.handleLinksKey(c, msg)
 	}
 
 	if v.search != nil {
@@ -191,6 +220,16 @@ func (a *App) reviewFind(v *reviewView) {
 
 	v.last = q
 
+	if _, p := a.activePage(); p != nil {
+		if !p.view.find(q) {
+			a.notice = noticeNotFound + q
+		}
+
+		p.rev++
+
+		return
+	}
+
 	i, ok := searchRows(v.res, v.rows, v.cursor, q)
 	if !ok {
 		a.notice = noticeNotFound + q
@@ -210,6 +249,7 @@ func (a *App) reviewSearch() tea.Cmd {
 
 	a.drawerTake()
 	a.closeWorktrees()
+	a.closeLinks()
 
 	q := ""
 	v.search = &q
@@ -228,6 +268,8 @@ func (a *App) reviewBack() tea.Cmd {
 	switch {
 	case v.search != nil:
 		v.search = nil
+	case v.page() != nil:
+		return a.popPage(a.store.State().Tab().ID, v)
 	case a.drawer.tree:
 		a.reviewLeaveTree(v, false)
 	default:
@@ -263,6 +305,10 @@ func (a *App) reviewGo(v *reviewView, row int) {
 
 // reviewLine moves the cursor a row; in the tree it moves the selected file.
 func (a *App) reviewLine(delta int) tea.Cmd {
+	if a.onPage(func(_ *reviewView, p *mdPage) { p.view.move(delta) }) {
+		return nil
+	}
+
 	_, v, ok := a.reviewActive()
 	if !ok {
 		return nil
@@ -285,6 +331,10 @@ func (a *App) reviewLine(delta int) tea.Cmd {
 }
 
 func (a *App) reviewPage(dir int) tea.Cmd {
+	if a.onPage(func(_ *reviewView, p *mdPage) { p.view.page(dir) }) {
+		return nil
+	}
+
 	_, v, ok := a.reviewActive()
 	if !ok {
 		return nil
@@ -296,6 +346,10 @@ func (a *App) reviewPage(dir int) tea.Cmd {
 }
 
 func (a *App) reviewEnd(bottom bool) tea.Cmd {
+	if a.onPage(func(_ *reviewView, p *mdPage) { p.view.end(bottom) }) {
+		return nil
+	}
+
 	_, v, ok := a.reviewActive()
 	if !ok {
 		return nil
@@ -338,12 +392,12 @@ func (v *reviewView) blockStarts() []int {
 	inBlock := false
 
 	for i, r := range v.rows {
-		change := (r.kind == rowFull && r.other < 0) || r.kind == rowGhost || r.kind == rowFold
+		change := (r.kind == rowFull && r.other < 0) || r.kind == rowGhost || r.kind == rowFold || (r.kind == rowMD && r.mark != markNone)
 
 		switch {
 		case r.kind == rowHunk:
 			out = append(out, v.firstChange(i))
-		case change && !inBlock:
+		case change && (!inBlock || (r.kind == rowMD && !v.sameMDBlock(i))):
 			out = append(out, i)
 		}
 
@@ -351,6 +405,18 @@ func (v *reviewView) blockStarts() []int {
 	}
 
 	return out
+}
+
+// sameMDBlock reports whether rendered row i goes on the block the row before
+// it is in: the same file and source range.
+func (v *reviewView) sameMDBlock(i int) bool {
+	if i == 0 {
+		return false
+	}
+
+	prev, r := v.rows[i-1], v.rows[i]
+
+	return prev.kind == rowMD && prev.file == r.file && prev.edit == r.edit && prev.other == r.other
 }
 
 // firstChange is the row of the first added or removed line of the hunk whose
@@ -385,8 +451,19 @@ func (v *reviewView) fileStarts() []int {
 }
 
 // reviewFold folds the ghost block under the cursor into one row, or shows it
-// again from that row; in the tree it jumps to the selected file.
+// again from that row; on a rendered line it toggles a fold, else follows the
+// line's links; in the tree it jumps to the selected file.
 func (a *App) reviewFold() tea.Cmd {
+	if v, p := a.activePage(); p != nil {
+		if p.view.fold() {
+			p.rev++
+
+			return nil
+		}
+
+		return a.followLine(a.store.State().Tab().ID, v, p.view.targets())
+	}
+
 	_, v, ok := a.reviewActive()
 	if !ok {
 		return nil
@@ -403,6 +480,14 @@ func (a *App) reviewFold() tea.Cmd {
 	}
 
 	r := v.rows[v.cursor]
+	if r.kind == rowMD {
+		if a.foldRendered(v, r) {
+			return nil
+		}
+
+		return a.followLine(a.store.State().Tab().ID, v, a.renderedTargets(v, r))
+	}
+
 	if r.kind != rowGhost && r.kind != rowFold {
 		return nil
 	}
@@ -424,6 +509,36 @@ func (a *App) reviewFold() tea.Cmd {
 	}
 
 	return nil
+}
+
+// foldRendered opens or closes the fold whose head is rendered row r and
+// reports whether there was one.
+func (a *App) foldRendered(v *reviewView, r reviewRow) bool {
+	f := v.mdFiles[v.res.Files[r.file].Path]
+	if f == nil {
+		return false
+	}
+
+	for _, fold := range f.doc.layout(max(v.mdW, 1), v.mdIcons).Folds {
+		if fold.Line == r.line {
+			f.doc.toggleFold(fold.ID)
+			v.rebuild(v.rowsSplit)
+
+			return true
+		}
+	}
+
+	return false
+}
+
+// renderedTargets are the links and paths of rendered row r.
+func (a *App) renderedTargets(v *reviewView, r reviewRow) []mdTarget {
+	f := v.mdFiles[v.res.Files[r.file].Path]
+	if f == nil {
+		return nil
+	}
+
+	return lineTargets(f.doc.layout(max(v.mdW, 1), v.mdIcons), r.line)
 }
 
 // reviewSplit switches between unified and side by side; a drawer too narrow
@@ -529,7 +644,8 @@ func reviewEditor(getenv func(string) string) string {
 // editLine is the line of f the row stands for: the cursor line's new number,
 // its old number on a removed line of a hunk, the hunk's new start on a hunk
 // header, the first new line after the block on a ghost line of the full view
-// (the last line when the block ends the file) and 1 on a file header.
+// (the last line when the block ends the file), the first source line of a
+// rendered row and 1 on a file header.
 func editLine(f git.FileDiff, r reviewRow) int {
 	line := 1
 
@@ -551,7 +667,7 @@ func editLine(f git.FileDiff, r reviewRow) int {
 		}
 	case rowFull:
 		line = r.line + 1
-	case rowGhost, rowFold:
+	case rowGhost, rowFold, rowMD:
 		line = r.edit
 	}
 
@@ -561,6 +677,10 @@ func editLine(f git.FileDiff, r reviewRow) int {
 // reviewEdit opens the file at the cursor line in the editor, in a new shell
 // pane beside the drawer's pane, and closes the drawer so the pane shows.
 func (a *App) reviewEdit() tea.Cmd {
+	if v, p := a.activePage(); p != nil {
+		return a.openEditor(a.store.State().Tab(), v, p.path, p.view.sourceLine())
+	}
+
 	tab, v, ok := a.reviewActive()
 	if !ok || v.cursor < 0 || v.cursor >= len(v.rows) {
 		return nil
@@ -577,14 +697,5 @@ func (a *App) reviewEdit() tea.Cmd {
 
 	// An editor reads +{command} and a leading dash as options, and the pane
 	// starts elsewhere when the root is gone; the absolute path is neither.
-	path := filepath.Join(v.root, f.Path)
-
-	run := &paneRun{program: reviewEditor(a.getenv), args: []string{"+" + strconv.Itoa(editLine(f, r)), path}}
-
-	cmd, opened := a.openPaneAt(core.KindShell, core.SplitVertical, tab.Review.Pane, v.root, run)
-	if opened {
-		a.closeDrawer(false)
-	}
-
-	return cmd
+	return a.openEditor(tab, v, filepath.Join(v.root, f.Path), editLine(f, r))
 }

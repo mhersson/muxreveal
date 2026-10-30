@@ -64,6 +64,7 @@ func TestDrawnLongLinesEndInTheCutMarker(t *testing.T) {
 
 				if tt.full {
 					v.full = map[string]fullText{"long.txt": longLinesFull()}
+					v.fullOn = allWhole(v.full)
 					v.rebuild(false)
 				}
 			}

@@ -30,7 +30,8 @@ type flatFrame struct {
 	start   int      // the first line of the container's content
 	pending int      // the separator line before the child being laid out, or -1
 	list    *flatList
-	marker  Line // an item's marker
+	marker  Line     // an item's marker
+	item    ast.Node // the item being laid out
 }
 
 type flatList struct {
@@ -46,7 +47,9 @@ type flatList struct {
 // one width serves the whole walk. An item's marker narrows its first line and
 // goes on it when the line has room.
 func (l *layouter) flat(out *frag, n ast.Node, width int, c blockCtx) {
+	heads := len(out.lines)
 	stack := l.openFlat(nil, out, n, width, c)
+	out.stamp(heads, l.d.ranges[n])
 
 	for len(stack) > 0 {
 		f := &stack[len(stack)-1]
@@ -68,7 +71,7 @@ func (l *layouter) flat(out *frag, n ast.Node, width int, c blockCtx) {
 
 			stack = append(stack, flatFrame{
 				kind: kindItem, next: item.FirstChild(), c: ic, pending: -1,
-				width: width, start: len(out.lines), marker: marker,
+				width: width, start: len(out.lines), marker: marker, item: item,
 			})
 
 			continue
@@ -87,6 +90,7 @@ func (l *layouter) flat(out *frag, n ast.Node, width int, c blockCtx) {
 		if ch == nil {
 			if f.kind == kindItem {
 				attachMarker(out, f.start, f.marker, width)
+				out.stamp(f.start, l.d.ranges[f.item])
 			}
 
 			stack = stack[:len(stack)-1]
@@ -101,6 +105,7 @@ func (l *layouter) flat(out *frag, n ast.Node, width int, c blockCtx) {
 
 		if sep {
 			out.lines = append(out.lines, nil)
+			out.markNone(before)
 		}
 
 		if !nests(ch) {
@@ -122,9 +127,10 @@ func (l *layouter) flat(out *frag, n ast.Node, width int, c blockCtx) {
 			stack = stack[:len(stack)-1]
 		}
 
-		top := len(stack)
+		top, heads := len(stack), len(out.lines)
 
 		stack = l.openFlat(stack, out, ch, cw, cc)
+		out.stamp(heads, l.d.ranges[ch])
 
 		switch {
 		case len(stack) == top && sep:

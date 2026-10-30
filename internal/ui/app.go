@@ -427,7 +427,12 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.later = append(a.later, c)
 	}
 
+	if c := a.mdListAfterSync(); c != nil {
+		a.later = append(a.later, c)
+	}
+
 	a.worktreesSync()
+	a.linksSync()
 
 	if c := a.drawerAfterUpdate(); c != nil {
 		a.later = append(a.later, c)
@@ -509,6 +514,11 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.endSlide()
 
 		a.width, a.height = msg.Width, msg.Height
+
+		if a.compose != nil {
+			a.composePreviewSettle(a.compose)
+		}
+
 		a.log.Debug("window size", "width", msg.Width, "height", msg.Height)
 
 		var cmds []tea.Cmd
@@ -586,7 +596,11 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case bodyWrittenMsg:
 		return a, a.onBodyWritten(msg)
 	case bodyReadMsg:
-		a.onBodyRead(msg)
+		return a, a.onBodyRead(msg)
+	case composeRenderDueMsg:
+		return a, a.onComposeRenderDue(msg)
+	case composeRenderedMsg:
+		a.onComposeRendered(msg)
 	case watchAcquiredMsg:
 		a.onWatchAcquired(msg)
 	case pinAcquiredMsg:
@@ -638,6 +652,14 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, a.reviewRefresh(msg.pane)
 	case reviewFullMsg:
 		return a, a.onReviewFull(msg)
+	case reviewMDMsg:
+		return a, a.onReviewMD(msg)
+	case linkEditMsg:
+		return a, a.onLinkEdit(msg)
+	case mdPageMsg:
+		a.onMDPage(msg)
+	case mdListMsg:
+		a.onMDList(msg)
 	case reviewFlashMsg:
 		a.onReviewFlash(msg)
 	case wtOpenMsg:

@@ -353,3 +353,35 @@ func TestWalkTreeSubtree(t *testing.T) {
 		t.Errorf("texts under the second item = %q, want %q", got, "b |c")
 	}
 }
+
+// The range pass finds which blocks sit in a quote with work linear in the
+// tree: a walk up the ancestors of every node would cost the square of the depth.
+func TestSourceRangesLinearInDepth(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		src  string
+	}{
+		{"details", strings.Repeat("<details>\n", 2_000) + "deep"},
+		{"list items", strings.Repeat("- ", 2_000) + "deep"},
+		{"quotes", strings.Repeat(">", 2_000) + " deep"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			d := Parse([]byte(tt.src), ParseOptions{})
+
+			nodes := len(d.ranges)
+			if nodes < 1_000 {
+				t.Fatalf("only %d blocks, the input did not nest", nodes)
+			}
+
+			if d.quoteSteps > 4*nodes {
+				t.Errorf("%d steps for %d blocks, want linear", d.quoteSteps, nodes)
+			}
+		})
+	}
+}

@@ -192,6 +192,11 @@ func defaultCommands() []command {
 	cmds = append(cmds, reviewCommands()...)
 
 	cmds = append(cmds, command{
+		id:    "md.open",
+		icon:  iconMarkdown,
+		title: "Open a markdown file",
+		run:   (*App).mdOpenCommand,
+	}, command{
 		id:    "pr.list",
 		icon:  iconPR,
 		title: "Pull requests",

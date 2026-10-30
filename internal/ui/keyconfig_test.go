@@ -788,6 +788,7 @@ func TestDrawerTextFollowsBindings(t *testing.T) {
 func ghostScene(s *reviewScene) {
 	s.tune = func(t *testing.T, a *App, v *reviewView) {
 		v.full = map[string]fullText{appGoPath: appGoFull()}
+		v.fullOn = allWhole(v.full)
 		v.folded = map[string]bool{foldKey(appGoPath, 1): true}
 		v.rebuild(false)
 	}

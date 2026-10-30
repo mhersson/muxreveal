@@ -39,6 +39,18 @@ func (a *App) drawerClick(x, y int) {
 		return
 	}
 
+	if p := v.page(); p != nil {
+		p.resize(lay.diffW, lay.diffH, a.icons)
+
+		if line := p.view.top + iy; line < len(p.view.layout().Lines) {
+			p.view.cursor = line
+			p.view.clamp()
+			p.rev++
+		}
+
+		return
+	}
+
 	top := v.viewTop(lay.diffH)
 	d := &drawCtx{v: v, c: v.derived(), lay: lay, top: top, tree: treeWas}
 
@@ -66,6 +78,14 @@ func (a *App) drawerClick(x, y int) {
 // cursor follows when it would leave the view.
 func (a *App) drawerWheel(dir int) {
 	v := a.drawer.views[a.store.State().Tab().ID]
+	if v != nil && v.page() != nil {
+		if _, p := a.activePage(); p != nil {
+			p.scroll(dir * wheelRows)
+		}
+
+		return
+	}
+
 	if v == nil || len(v.rows) == 0 {
 		return
 	}
