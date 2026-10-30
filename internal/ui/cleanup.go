@@ -571,6 +571,8 @@ type cleanupPlaceMsg struct {
 // focused pane's followed place and its pull request, and cleans up after the
 // pull request when the state reads it merged.
 func (a *App) cleanupCommand() tea.Cmd {
+	a.cleanupSeq++
+
 	if a.prs.src == nil || a.prs.resolve == nil {
 		a.notice = noticePRsOff
 
@@ -586,8 +588,6 @@ func (a *App) cleanupCommand() tea.Cmd {
 
 		return nil
 	}
-
-	a.cleanupSeq++
 
 	var (
 		seq                     = a.cleanupSeq

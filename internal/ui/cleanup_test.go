@@ -921,6 +921,7 @@ func TestCleanupCommandNotices(t *testing.T) {
 		{
 			name: "pull request from another repository",
 			setup: func(t *testing.T, r *cleanupRig) {
+				// The poll's record is the fork's branch; the lookup of the local branch finds the merged pull request.
 				openIn(t, r.App, core.SetRepoPRs{Repo: prRepoKey, DefaultBranch: "main"})
 				r.merged(t, "fork-branch", 7, func(p *core.PRInfo) { p.CrossRepo = true; p.HeadBranch = "feat/x" })
 				r.know("feat/x", github.PR{Number: 7, HeadBranch: "feat/x", BaseBranch: "main", State: prMergedState})
@@ -1045,6 +1046,51 @@ func TestCleanupCommandLate(t *testing.T) {
 			}
 
 			r.assertEnd(t, false, true, 2)
+		})
+	}
+}
+
+// An early notice supersedes a check still in flight, so its answer opens no box.
+func TestCleanupCommandEarlyNoticeLate(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		// held runs the first command as far as the stage whose answer arrives late.
+		held func(t *testing.T, r *cleanupRig) tea.Msg
+	}{
+		{"place answer", func(t *testing.T, r *cleanupRig) tea.Msg { return r.held(t) }},
+		{"check answer", func(t *testing.T, r *cleanupRig) tea.Msg {
+			check := r.step(r.held(t))
+			if check == nil {
+				t.Fatal("the place answer started no check")
+			}
+
+			return check()
+		}},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			r := newCleanupRig(t)
+			r.merged(t, "feat/x", 7, nil)
+
+			held := tc.held(t, r)
+
+			r.prs.src = nil
+			r.notice = ""
+
+			if cmd := r.command(t); cmd != nil || r.notice != noticePRsOff {
+				t.Fatalf("early command = %v, notice %q, want a notice only", cmd != nil, r.notice)
+			}
+
+			r.run(r.step(held))
+
+			if r.confirm != nil {
+				t.Errorf("a box opened:\n%s", r.text())
+			}
 		})
 	}
 }
