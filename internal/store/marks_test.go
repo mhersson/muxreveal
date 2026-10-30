@@ -289,6 +289,71 @@ func TestMarkFiles(t *testing.T) {
 		}
 	})
 
+	t.Run("save does no filesystem work", func(t *testing.T) {
+		t.Parallel()
+
+		dir := t.TempDir()
+		resolved := filepath.Join(dir, "real", ".git")
+		common := filepath.Join(dir, "later", ".git")
+		release := make(chan struct{})
+		m := NewMarkFiles(dir, nil)
+		// The writer waits here, so a Save that resolved the dir itself would never return.
+		m.resolve = func(string) string {
+			<-release
+
+			return resolved
+		}
+
+		m.Save(common, map[string]string{"a": "2026-10-30"})
+		close(release)
+
+		if err := m.Close(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+
+		if got := read(t, dir, resolved); got["a"] != "2026-10-30" {
+			t.Errorf("marks under the resolved dir = %v, want a", got)
+		}
+
+		if _, err := os.Stat(MarksPath(dir, common)); err == nil {
+			t.Error("marks written under the dir as given")
+		}
+	})
+
+	t.Run("spellings of one repository, the later Save wins", func(t *testing.T) {
+		t.Parallel()
+
+		dir := t.TempDir()
+		resolved := filepath.Join(dir, "real", ".git")
+		spell1, spell2, busy := filepath.Join(dir, "s1", ".git"), filepath.Join(dir, "s2", ".git"), filepath.Join(dir, "busy", ".git")
+
+		for _, order := range [][2]string{{spell1, spell2}, {spell2, spell1}} {
+			m := NewMarkFiles(dir, nil)
+			release := make(chan struct{})
+			// Holding the writer on busy puts both Saves in one batch.
+			m.resolve = func(d string) string {
+				if d == busy {
+					<-release
+				}
+
+				return resolved
+			}
+
+			m.Save(busy, map[string]string{"x": "2026-10-30"})
+			m.Save(order[0], map[string]string{"first": "2026-10-30"})
+			m.Save(order[1], map[string]string{"second": "2026-10-30"})
+			close(release)
+
+			if err := m.Close(context.Background()); err != nil {
+				t.Fatal(err)
+			}
+
+			if got := read(t, dir, resolved); len(got) != 1 || got["second"] == "" {
+				t.Errorf("order %v: marks = %v, want only second", order, got)
+			}
+		}
+	})
+
 	t.Run("symlinked common dir", func(t *testing.T) {
 		t.Parallel()
 

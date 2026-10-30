@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io/fs"
 	"log/slog"
+	"maps"
 	"os"
 	"path/filepath"
 	"sync"
@@ -42,7 +43,12 @@ func resolveCommonDir(commonDir string) string {
 
 // MarksPath is the marks file of the repository with the given common dir.
 func MarksPath(stateDir, commonDir string) string {
-	sum := sha256.Sum256([]byte(resolveCommonDir(commonDir)))
+	return marksPathOf(stateDir, resolveCommonDir(commonDir))
+}
+
+// marksPathOf is the marks file of an already resolved common dir.
+func marksPathOf(stateDir, resolved string) string {
+	sum := sha256.Sum256([]byte(resolved))
 
 	return filepath.Join(stateDir, "reviews", hex.EncodeToString(sum[:16])+".json")
 }
@@ -119,14 +125,25 @@ func EncodeMarks(commonDir string, days map[string]string) ([]byte, error) {
 	return append(data, '\n'), nil
 }
 
+// queuedMarks is a Save waiting for the writer; seq orders the Saves.
+type queuedMarks struct {
+	days map[string]string
+	seq  uint64
+}
+
 // MarkFiles reads and writes the per-repository marks files under
 // <state dir>/reviews. Writes come from one goroutine, which ends in Close.
 type MarkFiles struct {
 	dir string
 	log *slog.Logger
 
+	// resolve names a repository one way for every spelling of its common dir; it
+	// runs only on the writer goroutine.
+	resolve func(string) string
+
 	mu      sync.Mutex
-	pending map[string][]byte // newest encoding per path not yet written
+	pending map[string]queuedMarks // newest marks per common dir as given, not yet written
+	seq     uint64
 	closed  bool
 
 	wake chan struct{}
@@ -143,7 +160,8 @@ func NewMarkFiles(stateDir string, log *slog.Logger) *MarkFiles {
 	m := &MarkFiles{
 		dir:     stateDir,
 		log:     log,
-		pending: map[string][]byte{},
+		resolve: resolveCommonDir,
+		pending: map[string]queuedMarks{},
 		wake:    make(chan struct{}, 1),
 		stop:    make(chan struct{}),
 		done:    make(chan struct{}),
@@ -159,16 +177,11 @@ func (m *MarkFiles) Load(commonDir string, now time.Time) (map[string]string, er
 	return LoadMarks(MarksPath(m.dir, commonDir), commonDir, now)
 }
 
-// Save queues the marks for writing and returns at once; newer marks for the
-// same repository replace ones still waiting, and days is not kept. Saves after
-// Close are dropped.
+// Save queues the marks for writing and returns at once, doing no file IO or
+// hashing; the writer resolves the dir. Newer marks for the same repository
+// replace ones still waiting, and days is copied. Saves after Close are dropped.
 func (m *MarkFiles) Save(commonDir string, days map[string]string) {
-	data, err := EncodeMarks(commonDir, days)
-	if err != nil {
-		m.log.Error("encoding marks", "err", err)
-
-		return
-	}
+	days = maps.Clone(days)
 
 	m.mu.Lock()
 	if m.closed {
@@ -177,7 +190,8 @@ func (m *MarkFiles) Save(commonDir string, days map[string]string) {
 		return
 	}
 
-	m.pending[MarksPath(m.dir, commonDir)] = data
+	m.seq++
+	m.pending[commonDir] = queuedMarks{days: days, seq: m.seq}
 	m.mu.Unlock()
 
 	select {
@@ -212,10 +226,10 @@ func (m *MarkFiles) run() {
 	flush := func() {
 		m.mu.Lock()
 		batch := m.pending
-		m.pending = map[string][]byte{}
+		m.pending = map[string]queuedMarks{}
 		m.mu.Unlock()
 
-		for path, data := range batch {
+		for path, data := range m.encode(batch) {
 			if bytes.Equal(data, last[path]) {
 				continue
 			}
@@ -248,4 +262,39 @@ func (m *MarkFiles) run() {
 			return
 		}
 	}
+}
+
+// encode resolves each queued common dir and encodes its marks. Spellings of
+// one repository share a file, and the newest Save of them wins.
+func (m *MarkFiles) encode(batch map[string]queuedMarks) map[string][]byte {
+	type pick struct {
+		resolved string
+		q        queuedMarks
+	}
+
+	newest := map[string]pick{}
+
+	for commonDir, q := range batch {
+		resolved := m.resolve(commonDir)
+		path := marksPathOf(m.dir, resolved)
+
+		if cur, ok := newest[path]; !ok || q.seq > cur.q.seq {
+			newest[path] = pick{resolved: resolved, q: q}
+		}
+	}
+
+	out := make(map[string][]byte, len(newest))
+
+	for path, p := range newest {
+		data, err := EncodeMarks(p.resolved, p.q.days)
+		if err != nil {
+			m.log.Error("encoding marks", "err", err)
+
+			continue
+		}
+
+		out[path] = data
+	}
+
+	return out
 }
