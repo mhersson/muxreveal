@@ -945,3 +945,27 @@ func TestCappedListKeepsMarkers(t *testing.T) {
 		t.Errorf("task line = %q", got)
 	}
 }
+
+func TestFoldHintKey(t *testing.T) {
+	t.Parallel()
+
+	const src = "<details>\n<summary>Why</summary>\n\nbody\n\n</details>\n"
+
+	tests := []struct {
+		name string
+		key  *string
+		want string
+	}{
+		{"default", nil, "▸ Why   enter opens"},
+		{"another key", new("o"), "▸ Why   o opens"},
+		{"no key", new(""), "▸ Why"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			wantLines(t, layoutWith(src, LayoutOptions{Width: 40, FoldKey: tt.key}, ""), tt.want)
+		})
+	}
+}

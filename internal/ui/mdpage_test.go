@@ -159,7 +159,7 @@ type pageRig struct {
 }
 
 // newPageRig opens a drawer on a repository; extra adds files to the worktree.
-func newPageRig(t *testing.T, extra map[string]string) *pageRig {
+func newPageRig(t *testing.T, extra map[string]string, opts ...func(*Options)) *pageRig {
 	t.Helper()
 
 	dir := newRepoDir(t)
@@ -175,17 +175,17 @@ func newPageRig(t *testing.T, extra map[string]string) *pageRig {
 		write(t, filepath.Join(dir, name), text)
 	}
 
-	return openPageRig(t, dir)
+	return openPageRig(t, dir, opts...)
 }
 
-func openPageRig(t *testing.T, dir string) *pageRig {
+func openPageRig(t *testing.T, dir string, opts ...func(*Options)) *pageRig {
 	t.Helper()
 
-	r := newKeysRig(t, dir, func(o *Options) {
+	r := newKeysRig(t, dir, append([]func(*Options){func(o *Options) {
 		o.Getenv = func(k string) string {
 			return map[string]string{"SHELL": "/bin/testsh", "EDITOR": "ed", "HOME": "/home/test"}[k]
 		}
-	})
+	}}, opts...)...)
 	st := &starts{}
 	r.start = st.start
 	r.icons = true
