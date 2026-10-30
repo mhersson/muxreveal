@@ -35,6 +35,7 @@ func newWatchApp(t *testing.T, stats bool) *watchApp {
 
 	r.watches.set = set
 	w := &watchApp{railApp: r, pm: newPump(t), set: set}
+	w.pm.stopWith(t, r.App)
 	w.pm.run(r.waitWatch())
 	w.pm.run(r.settle())
 
@@ -284,6 +285,22 @@ func TestRailSeesABranchSwitch(t *testing.T) {
 	if d := time.Since(start); d > 2*time.Second {
 		t.Errorf("the card took %v to follow the switch", d)
 	}
+}
+
+// A test that ends as the rail opens leaves its first probes running; the
+// app's cleanup ends them before its temporary dirs go.
+func TestWatchAppEndsItsProbesBeforeItsDirsGo(t *testing.T) {
+	watch := probesEndFirst(t)
+	w := newWatchApp(t, true)
+	watch(w.App)
+
+	dir := w.repo(t, "proj")
+	root := rootOf(t, dir)
+	id := w.addAgent(t, false, dir)
+
+	w.pm.run(w.settle())
+	w.until(t, "the worktree to be watched", nil, func() bool { return w.held(id) == root })
+	w.pm.run(w.railOpened())
 }
 
 func TestIndexOnlyChangeCostsNoStatsProbe(t *testing.T) {
