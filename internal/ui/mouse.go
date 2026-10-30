@@ -130,9 +130,24 @@ func (a *App) mouseBlocked() bool {
 	}
 
 	a.releaseForwarded()
-	a.mouse.press = nil
+	a.endPress()
 
 	return true
+}
+
+// endPress ends a held press without a release and runs the redraw check the
+// press was deferring.
+func (a *App) endPress() {
+	pr := a.mouse.press
+	a.mouse.press = nil
+
+	if pr == nil {
+		return
+	}
+
+	if p := a.panes[pr.pane]; p != nil {
+		a.dropRedrawnSelection(p)
+	}
 }
 
 // focusPane focuses id unless it already is.
@@ -168,7 +183,7 @@ func (a *App) handleClick(msg tea.MouseClickMsg) tea.Cmd {
 	h := a.hit(m.X, m.Y)
 
 	a.releaseForwarded()
-	a.mouse.press = nil
+	a.endPress()
 
 	if a.inRail(m.X, m.Y) {
 		if m.Button != tea.MouseLeft {

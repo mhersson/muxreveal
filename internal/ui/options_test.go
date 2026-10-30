@@ -291,6 +291,49 @@ func TestRedrawDuringAGestureWaitsForRelease(t *testing.T) {
 	}
 }
 
+func TestRedrawDuringAGestureIsCheckedWhenItIsCutShort(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		cut  func(a *App)
+	}{
+		{"leader opens", func(a *App) {
+			press(a, keyLeader)
+			mmove(a, 0, 0, tea.MouseLeft)
+		}},
+		{"middle press elsewhere", func(a *App) {
+			c := contentRectOf(a, "p2")
+			middleRun(a, c.X, c.Y, 0)
+		}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			a, procs, _ := shellsWith(t, sampleText, "RIGHT")
+			a.copyOnSelect = false
+			c := contentRectOf(a, "p1")
+
+			mdown(a, c.X, c.Y, tea.MouseLeft, 0)
+			mmove(a, c.X+4, c.Y, tea.MouseLeft)
+
+			feedAndWait(t, a.panes["p1"], procs["p1"], "\x1b[1;1Hjello")
+			a.Update(paneDirtyMsg{id: "p1", p: a.panes["p1"]})
+
+			if a.sel == nil {
+				t.Fatal("selection cleared while the button is down, want kept")
+			}
+
+			tt.cut(a)
+
+			if a.sel != nil {
+				t.Error("selection kept after the gesture was cut short, want cleared")
+			}
+		})
+	}
+}
+
 func TestCopyOnSelectClearsOnRelease(t *testing.T) {
 	t.Parallel()
 
