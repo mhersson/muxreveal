@@ -405,6 +405,44 @@ func TestCleanupGuards(t *testing.T) {
 			removed: true, branch: true,
 		},
 		{
+			name:  "worktree switched to another branch after the box opened",
+			toast: func(*cleanupRig) string { return mergedToast },
+			box:   []string{"at "},
+			after: func(t *testing.T, r *cleanupRig) {
+				gitIn(t, "git", r.wt, "switch", "-q", "-c", "other")
+				commit(t, r, 1)
+			},
+			final: func(*cleanupRig) string { return "kept .worktrees/feat-x: it is no longer on feat/x" },
+			level: levelError,
+			// The panes were closed before the check; they stay closed.
+			branch: true, panes: 0,
+		},
+		{
+			name:  "worktree detached with a new commit after the box opened",
+			toast: func(*cleanupRig) string { return mergedToast },
+			box:   []string{"at "},
+			after: func(t *testing.T, r *cleanupRig) {
+				moveOut(t, r)
+				commit(t, r, 1)
+			},
+			final:  func(*cleanupRig) string { return "kept .worktrees/feat-x: it is no longer on feat/x" },
+			level:  levelError,
+			branch: true, panes: 0,
+		},
+		{
+			name:  "listed agent moved out and started working after the box opened",
+			toast: func(*cleanupRig) string { return mergedToast },
+			box:   []string{"at "},
+			after: func(t *testing.T, r *cleanupRig) {
+				openIn(t, r.App,
+					core.SetPaneCwd{ID: r.agentID, Cwd: r.main},
+					core.SetAgentCwd{ID: r.agentID, Cwd: r.main},
+					core.SetAgentState{ID: r.agentID, State: core.AgentWorking})
+			},
+			final:  func(r *cleanupRig) string { return r.name() + " is still working in .worktrees/feat-x" },
+			branch: true, panes: 2,
+		},
+		{
 			name:  "file modified after the box opened",
 			toast: func(*cleanupRig) string { return mergedToast },
 			box:   []string{"at "},

@@ -127,8 +127,8 @@ type cleanupFoundMsg struct {
 	err   error
 }
 
-// cleanedMsg answers a cleanup run. kept says why a branch the box offered was
-// not deleted.
+// cleanedMsg answers a cleanup run. kept is only the reason found while running
+// (the branch moved); the reasons the box already showed come from keptReason.
 type cleanedMsg struct {
 	target           cleanupTarget
 	closed           int
@@ -337,7 +337,14 @@ func (a *App) cleanupRun(t cleanupTarget) tea.Cmd {
 
 	st := a.store.State()
 
-	if busy, ok := workingAgent(a.panesIn(st, t.found.path)); ok {
+	// The listed panes are what gets closed, so an agent among them that has since
+	// left the worktree and started working stops the run as well.
+	busy, ok := workingAgent(a.panesIn(st, t.found.path))
+	if !ok {
+		busy, ok = workingAgent(a.listedPanes(st, t))
+	}
+
+	if ok {
 		a.notice = fmt.Sprintf("%s is still working in %s", busy.name, t.path())
 
 		return nil
@@ -370,6 +377,46 @@ func (a *App) cleanupRun(t cleanupTarget) tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
+// listedPanes is the box's panes that are still open, as the state has them now.
+func (a *App) listedPanes(st core.State, t cleanupTarget) []cleanupPane {
+	var out []cleanupPane
+
+	for _, p := range t.panes {
+		cur, ok := st.Panes[p.id]
+		if !ok {
+			continue
+		}
+
+		p.agent, p.state = cur.Kind == core.KindAgent, cur.State
+		if p.agent {
+			p.name = a.cardName(st, p.id)
+		}
+
+		out = append(out, p)
+	}
+
+	return out
+}
+
+// errLeftBranch means the worktree is no longer on the branch the box named.
+var errLeftBranch = errors.New("ui: worktree left the branch")
+
+// stillOnBranch checks, before anything is removed, that the worktree is still
+// on the branch the box named: commits made after a switch or a detach would be
+// lost with it.
+func stillOnBranch(ctx context.Context, repo git.Repo, f cleanupFound) error {
+	list, err := git.ListWorktrees(ctx, repo)
+	if err != nil {
+		return err
+	}
+
+	if !slices.ContainsFunc(list, func(w git.Worktree) bool { return w.Path == f.path && w.Branch == f.branch }) {
+		return errLeftBranch
+	}
+
+	return nil
+}
+
 // cleanupExec removes the worktree and deletes the branch, never forced. The
 // branch goes only when its tip is still the one the box showed and is not past
 // the merged head.
@@ -387,6 +434,10 @@ func cleanupExec(ctx context.Context, t cleanupTarget, waits []<-chan struct{}) 
 	}
 
 	repo, err := openMain(ctx, t.found.main)
+	if err == nil {
+		err = stillOnBranch(ctx, repo, t.found)
+	}
+
 	if err == nil {
 		err = git.RemoveWorktree(ctx, repo, t.found.path)
 	}
@@ -459,6 +510,10 @@ func (a *App) onCleaned(msg cleanedMsg) {
 		return
 	case errors.Is(msg.err, context.DeadlineExceeded):
 		a.toast(levelError, fmt.Sprintf("clean up %s: timed out", path))
+
+		return
+	case errors.Is(msg.err, errLeftBranch):
+		a.toast(levelError, fmt.Sprintf("kept %s: it is no longer on %s", path, branch))
 
 		return
 	case errors.Is(msg.err, git.ErrWorktreeDirty):
