@@ -1,6 +1,7 @@
 package core
 
 import (
+	"errors"
 	"fmt"
 	"slices"
 	"sort"
@@ -154,12 +155,20 @@ func validateBind(ctx string, b KeyBind) error {
 		return fmt.Errorf("keys.%s: %q: only keys.leader takes two-key sequences", ctx, b.Key)
 	}
 
+	if slices.Contains(parts, "") {
+		return fmt.Errorf("keys.%s: %q is not a key name", ctx, b.Key)
+	}
+
 	if len(parts) > 2 {
 		return fmt.Errorf("keys.%s: %q: a sequence has at most two keys", ctx, b.Key)
 	}
 
 	for _, p := range parts {
 		if _, _, err := parseKeyName(p); err != nil {
+			if len(parts) > 1 && errors.Is(err, errNotKeyName) {
+				return fmt.Errorf("keys.%s: %q is not a key name", ctx, b.Key)
+			}
+
 			return fmt.Errorf("keys.%s: %w", ctx, err)
 		}
 	}
@@ -170,6 +179,9 @@ func validateBind(ctx string, b KeyBind) error {
 
 	return nil
 }
+
+// errNotKeyName marks a key part that names no key.
+var errNotKeyName = errors.New("is not a key name")
 
 // keyModifiers are Bubble Tea's modifier prefixes, in the order it writes them.
 var keyModifiers = []string{"ctrl", "alt", "shift", "meta", "hyper", "super"}
@@ -198,10 +210,14 @@ func parseKeyName(s string) (mods []string, name string, err error) {
 	case slices.Contains(keyNames, rest), isFunctionKey(rest):
 	case utf8.RuneCountInString(rest) == 1 && unicode.IsPrint([]rune(rest)[0]) && rest != " ":
 		if slices.Contains(mods, "shift") {
-			return nil, "", fmt.Errorf("%q: write the shifted character, such as %q", s, strings.ToUpper(rest))
+			if up := strings.ToUpper(rest); up != rest {
+				return nil, "", fmt.Errorf("%q: write the shifted character, such as %q", s, up)
+			}
+
+			return nil, "", fmt.Errorf("%q: write the shifted character", s)
 		}
 	default:
-		return nil, "", fmt.Errorf("%q is not a key name", s)
+		return nil, "", fmt.Errorf("%q %w", s, errNotKeyName)
 	}
 
 	return mods, rest, nil
