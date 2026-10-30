@@ -108,20 +108,28 @@ func (e *Engine) Update(ctx context.Context, prev Result, src Source, b Batch) (
 
 // update is Update on the opened repo r.
 func (e *Engine) update(ctx context.Context, r Repo, prev Result, src Source, b Batch) (Result, error) {
+	var (
+		wt    WorkTree
+		count int
+	)
+
 	if ts, ok := src.(TurnSource); ok {
-		turns, err := Turns(ctx, r, ts.Session)
+		list, w, err := e.turnList(ctx, r, ts.Session)
 		if err != nil {
 			return Result{}, err
 		}
 
-		if last := len(turns); last == 0 || prev.Turn != last || !stillLive(turns[last-1], prev.Old) {
+		last := len(list.Turns)
+		if !list.Live || prev.Turn != last || !stillLive(list.Turns[last-1], prev.Old) {
 			return e.Diff(ctx, src)
 		}
-	}
 
-	wt, err := e.workingTree(ctx, r)
-	if err != nil {
-		return Result{}, fmt.Errorf("update: %w", err)
+		wt, count = *w, last
+	} else {
+		var err error
+		if wt, err = e.workingTree(ctx, r); err != nil {
+			return Result{}, fmt.Errorf("update: %w", err)
+		}
 	}
 
 	touched, err := listFiles(ctx, r, prev.Old, wt.Tree, b.Paths...)
@@ -155,7 +163,7 @@ func (e *Engine) update(ctx context.Context, r Repo, prev Result, src Source, b 
 		}
 	}
 
-	res := Result{Old: prev.Old, New: wt.Tree, Live: true, Turn: prev.Turn, Files: files}
+	res := Result{Old: prev.Old, New: wt.Tree, Live: true, Turn: prev.Turn, Turns: count, Files: files}
 	for _, f := range files {
 		res.Truncated = res.Truncated || f.Truncated
 	}

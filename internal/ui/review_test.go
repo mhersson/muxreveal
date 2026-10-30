@@ -614,30 +614,17 @@ func TestSessionChangeRetargets(t *testing.T) {
 	}
 }
 
-// Batches reach only the drawers that review their root, and a past turn,
-// which does not change with the files, ignores them.
-func TestBatchesRouteToTheirRootAndSkipPastTurns(t *testing.T) {
+// Batches reach only the drawers that review their root.
+func TestBatchesRouteToTheirRoot(t *testing.T) {
 	t.Parallel()
 	r := newDrawerRig(t, turnFirst)
 	dir := threeTurnRepo(t)
-	root := rootOf(t, dir)
 	id := r.agent(t, dir, testSession)
 
 	v := r.open(t, id)
 
-	if cmd := r.batch(filepath.Join(root, "elsewhere"), git.Batch{Overflow: true}); cmd != nil || v.queued != nil || v.loading {
+	if cmd := r.batch(filepath.Join(rootOf(t, dir), "elsewhere"), git.Batch{Overflow: true}); cmd != nil || v.queued != nil || v.loading {
 		t.Fatalf("a batch for another root reached the drawer: queued=%v loading=%v", v.queued, v.loading)
-	}
-
-	r.run(r.stepReviewTurn(-1))
-	r.idle(t)
-
-	if v.res.Live {
-		t.Fatal("setup: a past turn is live")
-	}
-
-	if cmd := r.batch(root, git.Batch{Paths: []string{"a.txt"}}); cmd != nil || v.loading || v.queued != nil {
-		t.Errorf("a batch recomputed a past turn: loading=%v queued=%v", v.loading, v.queued)
 	}
 }
 

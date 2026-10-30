@@ -376,14 +376,46 @@ func (j reviewJob) run(ctx context.Context) reviewLoadedMsg {
 	switch {
 	case errors.Is(err, git.ErrNoSnapshot):
 		msg.info.noSnapshot = true
+		j.countTurns(ctx, &msg.info)
 	case err != nil:
 		msg.err = err
 	default:
 		msg.res = res
 		msg.info.hidden = hiddenFlags(res.Files)
+
+		if j.countsFromDiff() && msg.src == nil {
+			msg.info.turns = res.Turns
+		}
 	}
 
 	return msg
+}
+
+// countsFromDiff reports whether a load of j.src learns the turn count from the
+// diff itself, so describe leaves it alone.
+func (j reviewJob) countsFromDiff() bool {
+	_, ok := j.src.(git.TurnSource)
+
+	return ok && !j.infoOnly
+}
+
+// countTurns sets info.turns to the length of the root's list of turns, unless
+// the root has none or the count is not available.
+func (j reviewJob) countTurns(ctx context.Context, info *reviewInfo) {
+	if j.session == "" || info.foreign {
+		info.turns = 0
+
+		return
+	}
+
+	list, err := j.eng.TurnList(ctx, j.root, j.session)
+	if err != nil {
+		j.log.Debug("review: turns", "root", j.root, "err", err)
+
+		return
+	}
+
+	info.turns = len(list.Turns)
 }
 
 // diff computes src, updating the previous result when a batch asks for it.
@@ -439,7 +471,7 @@ func (j reviewJob) describe(ctx context.Context, info *reviewInfo) {
 	}
 
 	probe := j.batch == nil || j.batch.Git || j.batch.Overflow || info.project == ""
-	if !probe && (j.session == "" || info.foreign) {
+	if !probe && (j.session == "" || info.foreign || j.countsFromDiff()) {
 		return
 	}
 
@@ -474,20 +506,9 @@ func (j reviewJob) describe(ctx context.Context, info *reviewInfo) {
 		info.base = base
 	}
 
-	if j.session == "" || info.foreign {
-		info.turns = 0
-
-		return
+	if !j.countsFromDiff() {
+		j.countTurns(ctx, info)
 	}
-
-	turns, err := git.Turns(ctx, r, j.session)
-	if err != nil {
-		j.log.Debug("review: turns", "root", j.root, "err", err)
-
-		return
-	}
-
-	info.turns = len(turns)
 }
 
 // onReviewLoaded applies a load's answer unless its source was replaced since.
@@ -503,7 +524,16 @@ func (a *App) onReviewLoaded(msg reviewLoadedMsg) tea.Cmd {
 	if msg.infoOnly {
 		in := msg.info
 		v.project, v.branch, v.base, v.foreign = in.project, in.branch, in.base, in.foreign
+
+		before := v.turns
 		v.adoptTurns(msg.session, in.turns)
+
+		// The latest turn is whichever the list ends with, so a new count moves it.
+		if ts, ok := v.src.(git.TurnSource); ok && ts.Turn == 0 && v.turns != before {
+			v.queued = nil
+
+			return tea.Batch(a.reviewResume(active, v), a.reviewStart(msg.tab, v, nil, false))
+		}
 
 		return tea.Batch(a.reviewResume(active, v), a.reviewFlush(active, msg.tab, v))
 	}
@@ -751,8 +781,9 @@ func (a *App) refreshViews(pane core.PaneID, pick func(v *reviewView) bool) tea.
 
 // reviewFlush starts the load the changes in v.queued call for. A load already
 // running keeps them for its answer; a hidden tab keeps them until it shows. A
-// past turn does not change with the files: only a git change, an overflow or a
-// hook, which a new turn may have caused, refreshes its turn count.
+// turn that is not live does not change with the files, but the count of turns
+// may: it is recounted on every batch, since the open turn may have started to
+// differ from the working tree.
 func (a *App) reviewFlush(active bool, tab core.TabID, v *reviewView) tea.Cmd {
 	if !active || v.queued == nil || v.loading || !v.loaded {
 		return nil
@@ -761,12 +792,15 @@ func (a *App) reviewFlush(active bool, tab core.TabID, v *reviewView) tea.Cmd {
 	b := *v.queued
 	v.queued = nil
 
-	if v.err == nil && !v.res.Live && !v.noSnapshot {
-		if b.Git || b.Overflow {
-			return a.reviewStart(tab, v, &b, true)
-		}
+	if v.err == nil && !v.res.Live {
+		_, isTurn := v.src.(git.TurnSource)
 
-		return nil
+		switch {
+		case isTurn || (!v.noSnapshot && (b.Git || b.Overflow)):
+			return a.reviewStart(tab, v, &b, true)
+		case !v.noSnapshot:
+			return nil
+		}
 	}
 
 	return a.reviewStart(tab, v, &b, false)

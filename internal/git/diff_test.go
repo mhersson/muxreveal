@@ -1439,6 +1439,7 @@ func TestPastTurnStaysInItsWorktree(t *testing.T) {
 	writeFile(t, dir, "a.txt", "a\nonly in main\n")
 	snap(t, dir, sessA, SnapshotOptions{})
 	snap(t, b, sessA, SnapshotOptions{})
+	writeFile(t, b, "b-only.txt", "b\n")
 
 	e := testEngine(t)
 

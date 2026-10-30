@@ -161,12 +161,12 @@ func (r *drawerRig) turnStartFirst(t *testing.T, id core.PaneID) (snapshotDone f
 }
 
 // A turn's snapshot ref never wakes the watcher, so the turn's start event
-// recomputes the drawer, once the turn's snapshot exists. A turn that changes
-// no files moves the count and the mode row; a past turn only learns the new
-// count.
+// recomputes the drawer, once the turn's snapshot exists. A turn that has
+// changed files moves the count and the mode row; a past turn only learns the
+// new count.
 func TestTurnStartRefreshesTheDrawer(t *testing.T) {
 	t.Parallel()
-	t.Run("a turn that changes no files", func(t *testing.T) {
+	t.Run("a turn that changes files", func(t *testing.T) {
 		r := newDrawerRig(t, turnFirst)
 		dir := threeTurnRepo(t)
 		id := r.agent(t, dir, testSession)
@@ -180,15 +180,31 @@ func TestTurnStartRefreshesTheDrawer(t *testing.T) {
 		snapshotDone := r.turnStartFirst(t, id)
 
 		snapshotTurn(t, dir, testSession)
+		write(t, filepath.Join(dir, "four.txt"), "turn four\n")
 		snapshotDone()
 		r.until(t, "turn 4", r.viewHolds(func(v *reviewView) bool { return v.turns == 4 && v.res.Turn == 4 && !v.loading }))
 
 		got := r.drawn(t)
-		for _, want := range []string{"turn 4 of 4, live", "turn 4 changed nothing"} {
+		for _, want := range []string{"turn 4 of 4, live", "four.txt"} {
 			if !strings.Contains(got, want) {
 				t.Errorf("the drawer lacks %q:\n%s", want, got)
 			}
 		}
+	})
+
+	t.Run("a turn that changes nothing yet", func(t *testing.T) {
+		r := newDrawerRig(t, turnFirst)
+		dir := threeTurnRepo(t)
+		id := r.agent(t, dir, testSession)
+
+		r.open(t, id)
+		r.watching(t, id, rootOf(t, dir))
+
+		snapshotDone := r.turnStartFirst(t, id)
+
+		snapshotTurn(t, dir, testSession)
+		snapshotDone()
+		r.until(t, "turn 3 closed", r.viewHolds(func(v *reviewView) bool { return v.turns == 3 && v.res.Turn == 3 && !v.res.Live && !v.loading }))
 	})
 
 	t.Run("a past turn", func(t *testing.T) {
@@ -207,6 +223,7 @@ func TestTurnStartRefreshesTheDrawer(t *testing.T) {
 		snapshotDone := r.turnStartFirst(t, id)
 
 		snapshotTurn(t, dir, testSession)
+		write(t, filepath.Join(dir, "four.txt"), "turn four\n")
 		snapshotDone()
 		r.until(t, "the new count", func() bool { return v.turns == 4 && !v.loading })
 
@@ -374,6 +391,7 @@ func TestTurnKeysSwitchToANewSessionThatHasTurns(t *testing.T) {
 	dir := threeTurnRepo(t)
 	root := rootOf(t, dir)
 	snapshotTurn(t, dir, otherSession)
+	write(t, filepath.Join(dir, "other.txt"), "the other session's change\n")
 	id := r.agent(t, dir, testSession)
 
 	r.open(t, id)
@@ -868,8 +886,8 @@ func TestPastTurnOfAMovedSessionStaysInItsWorktree(t *testing.T) {
 
 	const lineOfA = "only in worktree A"
 
-	write(t, filepath.Join(r.dirA, "a.txt"), "one\n"+lineOfA+"\n")
 	snapshotTurn(t, r.dirA, testSession)
+	write(t, filepath.Join(r.dirA, "a.txt"), "one\n"+lineOfA+"\n")
 	r.open(t, r.id)
 
 	r.hookNow(cwdHook(r.id, r.dirB))
@@ -900,5 +918,71 @@ func TestPastTurnOfAMovedSessionStaysInItsWorktree(t *testing.T) {
 
 	if got := r.drawn(t); strings.Contains(got, lineOfA) {
 		t.Errorf("a row holds A's line:\n%s", got)
+	}
+}
+
+// A turn that changed nothing is not one of the worktree's turns: the drawer
+// shows the one before it until a file changes.
+func TestQuestionTurnIsNotListed(t *testing.T) {
+	t.Parallel()
+	r := newDrawerRig(t, turnFirst)
+	dir := newRepoDir(t)
+	write(t, filepath.Join(dir, "a.txt"), "a\n")
+	commitEverything(t, dir, "init")
+
+	snapshotTurn(t, dir, testSession)
+	write(t, filepath.Join(dir, "a.txt"), "turn one\n")
+	snapshotTurn(t, dir, testSession)
+
+	root := rootOf(t, dir)
+	id := r.agent(t, dir, testSession)
+
+	v := r.open(t, id)
+	r.watching(t, id, root)
+
+	if v.turns != 1 || v.res.Turn != 1 || v.res.Live {
+		t.Fatalf("turns %d shown %d live %v, want turn 1 of 1, not live", v.turns, v.res.Turn, v.res.Live)
+	}
+
+	if got := r.drawn(t); !strings.Contains(got, "turn 1/1") {
+		t.Errorf("the tag does not read turn 1/1:\n%s", got)
+	}
+
+	write(t, filepath.Join(dir, "b.txt"), "turn two\n")
+	r.run(r.batch(root, git.Batch{Paths: []string{"b.txt"}}))
+	r.until(t, "turn 2", r.viewHolds(func(v *reviewView) bool { return v.turns == 2 && v.res.Turn == 2 && v.res.Live && !v.loading }))
+
+	if got := r.drawn(t); !strings.Contains(got, "turn 2/2") {
+		t.Errorf("the tag does not read turn 2/2:\n%s", got)
+	}
+}
+
+// A drawer on a past turn recounts on a batch of plain paths: the open turn may
+// have started to differ from the working tree. The turn shown stays.
+func TestPastTurnViewRecountsOnPathBatches(t *testing.T) {
+	t.Parallel()
+	r := newDrawerRig(t, turnFirst)
+	dir := threeTurnRepo(t)
+	root := rootOf(t, dir)
+	id := r.agent(t, dir, testSession)
+
+	r.open(t, id)
+	r.watching(t, id, root)
+	r.run(r.stepReviewTurn(-1))
+
+	v := r.idle(t)
+	gen := v.gen
+
+	snapshotTurn(t, dir, testSession)
+	write(t, filepath.Join(dir, "four.txt"), "turn four\n")
+	r.run(r.batch(root, git.Batch{Paths: []string{"four.txt"}}))
+	r.until(t, "the new count", func() bool { return v.turns == 4 && !v.loading })
+
+	if v.res.Turn != 2 || v.gen != gen {
+		t.Errorf("the shown turn moved: turn %d, generation %d -> %d", v.res.Turn, gen, v.gen)
+	}
+
+	if got := r.drawn(t); !strings.Contains(got, "turn 2/4") {
+		t.Errorf("the tag does not read turn 2/4:\n%s", got)
 	}
 }

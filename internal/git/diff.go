@@ -31,8 +31,7 @@ type Source interface{ source() }
 type BranchSource struct{ Worktree, Base string }
 
 // TurnSource compares one turn of a worktree with what followed it. Turn is a
-// position in the worktree's list of the session's turns: 1 the oldest, 0 the
-// latest.
+// position in the worktree's TurnList: 1 the oldest, 0 the latest.
 type TurnSource struct {
 	Worktree, Session string
 	Turn              int
@@ -107,6 +106,7 @@ type Result struct {
 	Old, New  string // tree ids
 	Live      bool   // New is the working tree
 	Turn      int    // turn sources: the position shown in the worktree's list
+	Turns     int    // turn sources: how many turns the worktree's list held
 	Head      string // PR sources: the head commit shown; a merge passes it
 	Files     []FileDiff
 	Truncated bool
@@ -250,10 +250,12 @@ func (e *Engine) diffTurn(ctx context.Context, s TurnSource) (Result, error) {
 		return Result{}, err
 	}
 
-	turns, err := Turns(ctx, r, s.Session)
+	list, wt, err := e.turnList(ctx, r, s.Session)
 	if err != nil {
 		return Result{}, err
 	}
+
+	turns := list.Turns
 
 	if len(turns) == 0 {
 		return Result{}, fmt.Errorf("diff session %s: %w", s.Session, ErrNoTurns)
@@ -281,12 +283,7 @@ func (e *Engine) diffTurn(ctx context.Context, s TurnSource) (Result, error) {
 			return Result{}, err
 		}
 	default:
-		wt, err := e.workingTree(ctx, r)
-		if err != nil {
-			return Result{}, fmt.Errorf("diff: %w", err)
-		}
-
-		res, err = e.compare(ctx, r, t.Tree, wt)
+		res, err = e.compare(ctx, r, t.Tree, *wt)
 		if err != nil {
 			return Result{}, err
 		}
@@ -294,7 +291,7 @@ func (e *Engine) diffTurn(ctx context.Context, s TurnSource) (Result, error) {
 		res.Live = true
 	}
 
-	res.Turn = pos
+	res.Turn, res.Turns = pos, len(turns)
 
 	return res, nil
 }

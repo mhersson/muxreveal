@@ -62,7 +62,7 @@ func (a *App) openReview(pane core.PaneID, focus bool) tea.Cmd {
 		return nil
 	}
 
-	session, own, tabID, pinned := paneSession(st, pane), st.Panes[pane].WorkDir(), tab.ID, pinnedTo(tab, pane)
+	session, own, tabID, pinned, eng := paneSession(st, pane), st.Panes[pane].WorkDir(), tab.ID, pinnedTo(tab, pane), a.engine
 
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(a.ctx, reviewOpenTimeout)
@@ -95,8 +95,12 @@ func (a *App) openReview(pane core.PaneID, focus bool) tea.Cmd {
 			return msg
 		}
 
-		if turns, err := git.Turns(ctx, msg.repo, session); err == nil {
-			msg.turns = len(turns)
+		if eng == nil {
+			return msg
+		}
+
+		if list, err := eng.TurnList(ctx, msg.repo.Root, session); err == nil {
+			msg.turns = len(list.Turns)
 		}
 
 		return msg
