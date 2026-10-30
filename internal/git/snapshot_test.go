@@ -1526,3 +1526,93 @@ func TestOpenTurnBehindALaterTurnHasNoSnapshot(t *testing.T) {
 		t.Errorf("Diff error = %v, want ErrNoSnapshot", err)
 	}
 }
+
+func TestOpenTurns(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	tests := []struct {
+		name  string
+		setup func(t *testing.T, a, b, c string)
+		want  func(a, b, c string) []string
+	}{
+		{
+			name: "open turns at the highest number in two worktrees",
+			setup: func(t *testing.T, a, b, _ string) {
+				snap(t, a, sessA, SnapshotOptions{Turn: 5})
+				snap(t, b, sessA, SnapshotOptions{Turn: 5})
+			},
+			want: func(a, b, _ string) []string { return []string{a, b} },
+		},
+		{
+			name: "a closed turn is left out",
+			setup: func(t *testing.T, a, b, _ string) {
+				snap(t, a, sessA, SnapshotOptions{Turn: 5})
+				snap(t, b, sessA, SnapshotOptions{Turn: 5})
+
+				if _, err := EndTurn(ctx, b, sessA, 5, SnapshotOptions{}); err != nil {
+					t.Fatal(err)
+				}
+			},
+			want: func(a, _, _ string) []string { return []string{a} },
+		},
+		{
+			name: "an open turn behind a later one is left out",
+			setup: func(t *testing.T, a, b, _ string) {
+				snap(t, a, sessA, SnapshotOptions{Turn: 4})
+				snap(t, b, sessA, SnapshotOptions{Turn: 5})
+			},
+			want: func(_, b, _ string) []string { return []string{b} },
+		},
+		{
+			name: "a start marker is left out",
+			setup: func(t *testing.T, a, _, c string) {
+				snap(t, a, sessA, SnapshotOptions{Turn: 5})
+
+				if _, err := MarkMissing(ctx, c, sessA, 5, false); err != nil {
+					t.Fatal(err)
+				}
+			},
+			want: func(a, _, _ string) []string { return []string{a} },
+		},
+		{
+			name: "another session's turn is left out",
+			setup: func(t *testing.T, a, b, _ string) {
+				snap(t, a, sessA, SnapshotOptions{Turn: 5})
+				snap(t, b, sessB, SnapshotOptions{Turn: 9})
+			},
+			want: func(a, _, _ string) []string { return []string{a} },
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			a := seedRepo(t)
+			b := linkedWorktree(t, a, "b")
+			c := linkedWorktree(t, a, "c")
+			a = openRepo(t, a).Root
+
+			tt.setup(t, a, b, c)
+
+			got, err := OpenTurns(ctx, openRepo(t, a), sessA)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			var roots []string
+			for _, o := range got {
+				roots = append(roots, o.Root)
+			}
+
+			want := tt.want(a, b, c)
+			slices.Sort(want)
+
+			if !slices.Equal(roots, want) {
+				t.Errorf("OpenTurns roots = %v, want %v", roots, want)
+			}
+		})
+	}
+}

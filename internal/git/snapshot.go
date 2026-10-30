@@ -571,6 +571,51 @@ func Turns(ctx context.Context, r Repo, session string) ([]Turn, error) {
 	return turns, err
 }
 
+// OpenTurn is a worktree whose turn has no end yet.
+type OpenTurn struct {
+	Root string // from the start's Worktree trailer
+	N    int
+}
+
+// OpenTurns lists, in every worktree of r's repository, the session's open
+// turns at its highest number there; start markers are left out.
+func OpenTurns(ctx context.Context, r Repo, session string) ([]OpenTurn, error) {
+	session, err := normalizeSession(session)
+	if err != nil {
+		return nil, err
+	}
+
+	recs, err := listRefs(ctx, r, turnsPrefix+session+"/")
+	if err != nil {
+		return nil, err
+	}
+
+	highest := 0
+	for _, rec := range recs {
+		highest = max(highest, rec.N)
+	}
+
+	ended := map[string]bool{}
+
+	for _, rec := range recs {
+		if rec.end && rec.N == highest {
+			ended[rec.key] = true
+		}
+	}
+
+	var open []OpenTurn
+
+	for _, rec := range recs {
+		if rec.N == highest && !rec.end && !rec.Missing && !ended[rec.key] && rec.worktree != "" {
+			open = append(open, OpenTurn{Root: rec.worktree, N: rec.N})
+		}
+	}
+
+	slices.SortFunc(open, func(a, b OpenTurn) int { return strings.Compare(a.Root, b.Root) })
+
+	return open, nil
+}
+
 // PruneWorktree deletes every turn ref of worktree, in both layouts, and
 // returns how many it removed. worktree is a worktree root as Repo.Root gives
 // it, the form the commits record; a symlinked spelling does not match.
