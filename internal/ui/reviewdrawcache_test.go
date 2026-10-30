@@ -233,7 +233,6 @@ func TestDrawerLinesFollowTheirInputs(t *testing.T) {
 // Whatever order the inputs change in, the lines a frame shows are the ones a
 // cold draw gives, on the frame that draws them and on the next.
 func TestDrawerLinesStayTrueToAColdDraw(t *testing.T) {
-	t.Parallel()
 	a := cacheScene().build(t)
 	v := a.reviewViewOf(a.store.State().Tab().ID)
 	rng := rand.New(rand.NewPCG(7, 11))
