@@ -354,6 +354,45 @@ func TestMarkFiles(t *testing.T) {
 		}
 	})
 
+	t.Run("unreadable file is never overwritten", func(t *testing.T) {
+		t.Parallel()
+
+		if os.Geteuid() == 0 {
+			t.Skip("root reads a mode 0000 file")
+		}
+
+		dir := t.TempDir()
+		common := filepath.Join(dir, "r", ".git")
+		path := MarksPath(dir, common)
+		body := `{"version":1,"repo":"` + common + `","marks":{"a":"2026-10-01"}}`
+		writeMarks(t, path, body)
+
+		if err := os.Chmod(path, 0o000); err != nil {
+			t.Fatal(err)
+		}
+
+		m := NewMarkFiles(dir, nil)
+
+		if _, err := m.Load(common, marksNow); err == nil {
+			t.Fatal("Load of an unreadable file gave no error")
+		}
+
+		m.Save(common, map[string]string{"b": "2026-10-30"})
+
+		if err := m.Close(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := os.Chmod(path, 0o600); err != nil {
+			t.Fatal(err)
+		}
+
+		got, err := os.ReadFile(path)
+		if err != nil || string(got) != body {
+			t.Errorf("file = %q, %v; want it unchanged", got, err)
+		}
+	})
+
 	t.Run("symlinked common dir", func(t *testing.T) {
 		t.Parallel()
 

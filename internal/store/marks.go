@@ -53,6 +53,15 @@ func marksPathOf(stateDir, resolved string) string {
 	return filepath.Join(stateDir, "reviews", hex.EncodeToString(sum[:16])+".json")
 }
 
+// marksReadError is a marks file that exists but could not be read.
+type marksReadError struct {
+	path string
+	err  error
+}
+
+func (e *marksReadError) Error() string { return fmt.Sprintf("reading marks %s: %v", e.path, e.err) }
+func (e *marksReadError) Unwrap() error { return e.err }
+
 // LoadMarks reads the marks at path for the repository with the given common
 // dir (resolved like MarksPath's), dropping those whose day is over MarkTTL
 // before now. A missing file gives no marks. A file that does not decode, has
@@ -67,7 +76,7 @@ func LoadMarks(path, commonDir string, now time.Time) (map[string]string, error)
 	}
 
 	if err != nil {
-		return map[string]string{}, fmt.Errorf("reading marks %s: %w", path, err)
+		return map[string]string{}, &marksReadError{path: path, err: err}
 	}
 
 	var f marksJSON
@@ -142,6 +151,8 @@ type MarkFiles struct {
 	resolve func(string) string
 
 	mu      sync.Mutex
+	kept    map[string]bool        // marks files that could not be read; never written
+	warned  map[string]bool        // the kept files the writer logged; the writer only
 	pending map[string]queuedMarks // newest marks per common dir as given, not yet written
 	seq     uint64
 	closed  bool
@@ -161,6 +172,8 @@ func NewMarkFiles(stateDir string, log *slog.Logger) *MarkFiles {
 		dir:     stateDir,
 		log:     log,
 		resolve: resolveCommonDir,
+		kept:    map[string]bool{},
+		warned:  map[string]bool{},
 		pending: map[string]queuedMarks{},
 		wake:    make(chan struct{}, 1),
 		stop:    make(chan struct{}),
@@ -172,9 +185,22 @@ func NewMarkFiles(stateDir string, log *slog.Logger) *MarkFiles {
 }
 
 // Load reads the marks of the repository with the given common dir. A bad file
-// is kept as .bad and the error says so; the marks are empty then.
+// is kept as .bad and the error says so; the marks are empty then. A file that
+// exists but cannot be read is left alone, and Saves for its repository are
+// dropped, so its marks are not lost to the next write.
 func (m *MarkFiles) Load(commonDir string, now time.Time) (map[string]string, error) {
-	return LoadMarks(MarksPath(m.dir, commonDir), commonDir, now)
+	path := MarksPath(m.dir, commonDir)
+
+	marks, err := LoadMarks(path, commonDir, now)
+
+	var rerr *marksReadError
+	if errors.As(err, &rerr) {
+		m.mu.Lock()
+		m.kept[path] = true
+		m.mu.Unlock()
+	}
+
+	return marks, err
 }
 
 // Save queues the marks for writing and returns at once, doing no file IO or
@@ -285,7 +311,20 @@ func (m *MarkFiles) encode(batch map[string]queuedMarks) map[string][]byte {
 
 	out := make(map[string][]byte, len(newest))
 
+	m.mu.Lock()
+	kept := maps.Clone(m.kept)
+	m.mu.Unlock()
+
 	for path, p := range newest {
+		if kept[path] {
+			if !m.warned[path] {
+				m.warned[path] = true
+				m.log.Warn("not saving marks: the file could not be read", "path", path)
+			}
+
+			continue
+		}
+
 		data, err := EncodeMarks(p.resolved, p.q.days)
 		if err != nil {
 			m.log.Error("encoding marks", "err", err)
