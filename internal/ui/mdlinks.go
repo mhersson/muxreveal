@@ -1,6 +1,9 @@
 package ui
 
 import (
+	"context"
+	"errors"
+	"fmt"
 	"path/filepath"
 	"strings"
 
@@ -152,15 +155,93 @@ func (a *App) followTarget(root string, t mdTarget, openMD func(path string) tea
 	}
 
 	tab := a.store.State().Tab()
-	anchor := tab.Focus
+	msg := linkEditMsg{tab: tab.ID, root: root, path: path}
 
+	if tab.Review != nil {
+		msg.pane = tab.Review.Pane
+		if v := a.drawer.views[tab.ID]; v != nil {
+			msg.view, msg.epoch = v, v.epoch
+		}
+	}
+
+	parent := a.ctx
+
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(parent, mdReadTimeout)
+		defer cancel()
+
+		msg.err = insideResolved(ctx, root, path)
+
+		return msg
+	}
+}
+
+// linkEditMsg answers the resolution of a followed file that is not markdown.
+// pane, view and epoch name the drawer it was followed from, if any.
+type linkEditMsg struct {
+	tab        core.TabID
+	pane       core.PaneID
+	view       *reviewView
+	epoch      int
+	root, path string
+	err        error
+}
+
+// insideResolved follows the symlinks of root and path and reports errOutsideWorktree
+// when the path leaves the root.
+func insideResolved(ctx context.Context, root, path string) error {
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("resolve %s: %w", path, err)
+	}
+
+	r, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		return fmt.Errorf("resolve the worktree: %w", err)
+	}
+
+	p, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		return err //nolint:wrapcheck // the *PathError names the reason markdownNotice shows
+	}
+
+	if rel, err := filepath.Rel(r, p); err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return errOutsideWorktree
+	}
+
+	return nil
+}
+
+// onLinkEdit opens the editor on a followed file that resolved inside the root,
+// or says why not. An answer for a drawer that closed, retargeted or has a new
+// source since is dropped.
+func (a *App) onLinkEdit(msg linkEditMsg) tea.Cmd {
+	tab := a.store.State().Tab()
+	if tab.ID != msg.tab || (tab.Review == nil) != (msg.pane == "") || (tab.Review != nil && tab.Review.Pane != msg.pane) {
+		return nil
+	}
+
+	if msg.view != nil && (a.drawer.views[tab.ID] != msg.view || msg.view.epoch != msg.epoch) {
+		return nil
+	}
+
+	if errors.Is(msg.err, context.Canceled) {
+		return nil
+	}
+
+	if msg.err != nil {
+		a.notice = markdownNotice(msg.root, msg.path, a.getenv("HOME"), msg.err)
+
+		return nil
+	}
+
+	anchor := tab.Focus
 	if tab.Review != nil {
 		anchor = tab.Review.Pane
 	}
 
-	run := &paneRun{program: reviewEditor(a.getenv), args: []string{"+1", path}}
+	run := &paneRun{program: reviewEditor(a.getenv), args: []string{"+1", msg.path}}
 
-	cmd, opened := a.openPaneAt(core.KindShell, core.SplitVertical, anchor, root, run)
+	cmd, opened := a.openPaneAt(core.KindShell, core.SplitVertical, anchor, msg.root, run)
 	if opened && tab.Review != nil {
 		a.closeDrawer(false)
 	}
@@ -178,7 +259,12 @@ func (a *App) followLine(tab core.TabID, v *reviewView, targets []mdTarget) tea.
 		return a.followTarget(v.root, targets[0], a.openLinkedPage(tab))
 	}
 
-	pane := a.store.State().Tab().Review.Pane
+	rv := a.store.State().Tab().Review
+	if rv == nil {
+		return nil
+	}
+
+	pane := rv.Pane
 	a.drawer.links = &linkChooser{targets: targets, root: v.root}
 	a.drawer.linksOf = linksOwner{tab: tab, pane: pane, view: v}
 

@@ -630,6 +630,8 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, a.onReviewFull(msg)
 	case reviewMDMsg:
 		return a, a.onReviewMD(msg)
+	case linkEditMsg:
+		return a, a.onLinkEdit(msg)
 	case mdPageMsg:
 		a.onMDPage(msg)
 	case mdListMsg:

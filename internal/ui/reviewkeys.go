@@ -455,9 +455,9 @@ func (v *reviewView) fileStarts() []int {
 // line's links; in the tree it jumps to the selected file.
 func (a *App) reviewFold() tea.Cmd {
 	if v, p := a.activePage(); p != nil {
-		p.rev++
-
 		if p.view.fold() {
+			p.rev++
+
 			return nil
 		}
 

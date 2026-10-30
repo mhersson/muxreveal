@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -127,41 +128,79 @@ func TestFollowTarget(t *testing.T) {
 		notice string
 	}
 
+	// link makes a symlink named name in the worktree's docs folder.
+	link := func(name, to string) func(t *testing.T, root string) {
+		return func(t *testing.T, root string) {
+			t.Helper()
+
+			if to == "" {
+				to = filepath.Join(t.TempDir(), "outside"+filepath.Ext(name))
+				write(t, to, "outside\n")
+			} else if !filepath.IsAbs(to) {
+				to = filepath.Join(root, "docs", to)
+			}
+
+			if err := os.Symlink(to, filepath.Join(root, "docs", name)); err != nil {
+				t.Skipf("no symlinks: %v", err)
+			}
+		}
+	}
+
 	tests := []struct {
-		name string
-		do   func(root string) (mdTarget, want)
+		name  string
+		setup func(t *testing.T, root string)
+		do    func(root string) (mdTarget, want)
 	}{
-		{"an https URL", func(string) (mdTarget, want) {
+		{"a markdown symlink to a file outside", link("out.md", ""), func(root string) (mdTarget, want) {
+			// openMD is reached; the read through os.Root refuses the link (TestReadLocalMarkdown).
+			p := filepath.Join(root, "docs", "out.md")
+
+			return mdTarget{Path: p}, want{page: p}
+		}},
+		{"a symlink to a file outside", link("out.go", ""), func(root string) (mdTarget, want) {
+			p := filepath.Join(root, "docs", "out.go")
+
+			return mdTarget{Path: p}, want{notice: "not opening " + p + ": outside the worktree"}
+		}},
+		{"a symlink to a file inside", link("in.go", "code.go"), func(root string) (mdTarget, want) {
+			p := filepath.Join(root, "docs", "in.go")
+
+			return mdTarget{Path: p}, want{editor: p}
+		}},
+		{"a file that is missing", nil, func(root string) (mdTarget, want) {
+			return mdTarget{Path: filepath.Join(root, "docs", "nope.go")}, want{notice: "not opening docs/nope.go: no such file"}
+		}},
+		{"an https URL", nil, func(string) (mdTarget, want) {
 			return mdTarget{URL: "https://example.com/x"}, want{url: "https://example.com/x"}
 		}},
-		{"an http URL", func(string) (mdTarget, want) {
+		{"an http URL", nil, func(string) (mdTarget, want) {
 			return mdTarget{URL: "http://example.com/y"}, want{url: "http://example.com/y"}
 		}},
-		{"a URL that is not a web page", func(string) (mdTarget, want) {
+		{"a URL that is not a web page", nil, func(string) (mdTarget, want) {
 			return mdTarget{URL: "javascript:alert(1)"}, want{notice: noticeLinkRefused}
 		}},
-		{"a markdown file inside", func(root string) (mdTarget, want) {
+		{"a markdown file inside", nil, func(root string) (mdTarget, want) {
 			return mdTarget{Path: filepath.Join(root, "docs", "..", "docs", "b.md")}, want{page: filepath.Join(root, "docs", "b.md")}
 		}},
-		{"a file with another extension inside", func(root string) (mdTarget, want) {
+		{"a file with another extension inside", nil, func(root string) (mdTarget, want) {
 			p := filepath.Join(root, "docs", "code.go")
 
 			return mdTarget{Path: p}, want{editor: p}
 		}},
-		{"a markdown file above the root", func(root string) (mdTarget, want) {
+		{"a markdown file above the root", nil, func(root string) (mdTarget, want) {
 			p := filepath.Join(filepath.Dir(root), "x.md")
 
 			return mdTarget{Path: p}, want{notice: "not opening " + p + ": outside the worktree"}
 		}},
-		{"a file elsewhere", func(string) (mdTarget, want) {
+		{"a file elsewhere", nil, func(string) (mdTarget, want) {
 			return mdTarget{Path: "/etc/hosts"}, want{notice: "not opening /etc/hosts: outside the worktree"}
 		}},
-		{"a file of a sibling worktree", func(root string) (mdTarget, want) {
+		{"a file of a sibling worktree", nil, func(root string) (mdTarget, want) {
 			p := filepath.Join(filepath.Dir(root), "sibling-worktree", "a.md")
 
 			return mdTarget{Path: p}, want{notice: "not opening " + p + ": outside the worktree"}
 		}},
-		{"a folder that only starts like the root", func(root string) (mdTarget, want) {
+		{"a folder that only starts like the root", nil, func(root string) (mdTarget, want) {
 			p := root + "-more/a.md"
 
 			return mdTarget{Path: p}, want{notice: "not opening " + p + ": outside the worktree"}
@@ -173,6 +212,10 @@ func TestFollowTarget(t *testing.T) {
 			t.Parallel()
 
 			m := newLinkRig(t)
+			if tt.setup != nil {
+				tt.setup(t, m.root)
+			}
+
 			target, w := tt.do(m.root)
 
 			var pages []string
@@ -183,11 +226,12 @@ func TestFollowTarget(t *testing.T) {
 				return nil
 			})
 
-			// A browser open is one command; the editor's pane is run by the rig's pump.
-			if w.url != "" && cmd != nil {
-				cmd()
-			} else {
-				m.run(cmd)
+			// A browser open answers nothing; a file's resolution answers a message
+			// that opens the editor's pane, which the rig's pump runs.
+			if cmd != nil {
+				if msg, ok := cmd().(linkEditMsg); ok {
+					m.run(m.step(msg))
+				}
 			}
 
 			var wantURLs, wantPages []string
@@ -443,25 +487,63 @@ func TestLinkChooserCloses(t *testing.T) {
 		}},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
+	opens := []struct {
+		name string
+		open func(t *testing.T, m *linkRig)
+	}{
+		{"from a page", func(t *testing.T, m *linkRig) { m.chooser(t) }},
+		{"from a rendered row", func(t *testing.T, m *linkRig) {
+			m.render(t, "first then second")
+			m.press(keyEnter)
 
-			m := newLinkRig(t)
-			m.chooser(t)
-
-			tt.close(t, m)
-
-			if m.drawer.links != nil {
-				t.Fatalf("the chooser is still open after %s", tt.name)
+			if m.drawer.links == nil {
+				t.Fatalf("enter on three targets opened no chooser (notice %q)", m.notice)
 			}
+		}},
+	}
 
-			m.settle()
+	for _, o := range opens {
+		for _, tt := range tests {
+			t.Run(o.name+"/"+tt.name, func(t *testing.T) {
+				t.Parallel()
 
-			if m.drawer.links != nil {
-				t.Errorf("the chooser came back after %s", tt.name)
-			}
-		})
+				m := newLinkRig(t)
+				o.open(t, m)
+
+				tt.close(t, m)
+
+				if m.drawer.links != nil {
+					t.Fatalf("the chooser is still open after %s", tt.name)
+				}
+
+				m.settle()
+
+				if m.drawer.links != nil {
+					t.Errorf("the chooser came back after %s", tt.name)
+				}
+			})
+		}
+	}
+}
+
+// A file that resolves after the drawer closed opens nothing.
+func TestFollowTargetLate(t *testing.T) {
+	t.Parallel()
+
+	m := newLinkRig(t)
+	cmd := m.followTarget(m.root, mdTarget{Path: filepath.Join(m.root, "docs", "code.go")}, nil)
+
+	msg, ok := cmd().(linkEditMsg)
+	if !ok {
+		t.Fatal("following a file asked no resolution")
+	}
+
+	openIn(t, m.App, core.CloseReview{})
+	m.settle()
+	m.run(m.step(msg))
+
+	if m.st.count() != 0 {
+		t.Errorf("%d editors started after the drawer closed, want none", m.st.count())
 	}
 }
 
