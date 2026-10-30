@@ -2141,13 +2141,14 @@ func TestHookHoldsAFirstEditUntilItsStartExists(t *testing.T) {
 	}
 }
 
-func TestGateNextPromptSkipsAStartStillBeingTaken(t *testing.T) {
+func TestGateNextPromptMarksAStartThatLandsLate(t *testing.T) {
 	t.Parallel()
 
 	blocked := newBlockedStart("root/b")
 	w := &recordingWriter{onStart: blocked.onStart}
 	places := &countingPlaces{}
 	r := startedTurn(t, w, places.place)
+	turn := w.starts()[0].turn
 
 	ev, _ := editEvent(gateSession, "/b/f.go", nil, nil)
 	r.in <- ev
@@ -2162,12 +2163,86 @@ func TestGateNextPromptSkipsAStartStillBeingTaken(t *testing.T) {
 	within(t, released, 5*time.Second, "next turn release")
 
 	// The start is still blocked when the prompt's ends and start are done.
-	forwardedAfter(t, r, "UserPromptSubmit")
 	within(t, forwardedAfter(t, r, "UserPromptSubmit").Snapped, 5*time.Second, "the next turn's snapshot")
 	close(blocked.unblock)
+
+	waitUntil(t, "the end marker in root/b was not written", func() bool {
+		return len(callsIn(w.all(), "root/b")) == 2
+	})
 	drain(t, r)
 
-	if got := callsIn(w.endings(), "root/b"); len(got) != 0 {
-		t.Errorf("ends in root/b = %+v, want none while its start was not written", got)
+	want := []recordedStart{
+		{dir: "root/b", session: gateSession, turn: turn},
+		{dir: "root/b", session: gateSession, turn: turn, mark: true, end: true},
+	}
+
+	if got := callsIn(w.all(), "root/b"); !slices.Equal(got, want) {
+		t.Errorf("calls in root/b = %+v, want the start, then an end marker, no real end", got)
+	}
+}
+
+func TestGateLateEditOfThePreviousTurnWritesAMarker(t *testing.T) {
+	t.Parallel()
+
+	entered, unblock := make(chan struct{}, 1), make(chan struct{})
+
+	var starts atomic.Int32
+
+	w := &recordingWriter{onStart: func(ctx context.Context, dir string) error {
+		if dir != "/a" {
+			return nil
+		}
+
+		if starts.Add(1) < 2 {
+			return nil
+		}
+
+		entered <- struct{}{}
+
+		select {
+		case <-unblock:
+			return nil
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}}
+
+	lookup := make(chan struct{})
+	place := func(ctx context.Context, path string) (git.Place, error) {
+		if strings.HasSuffix(path, "late.go") {
+			select {
+			case <-lookup:
+			case <-ctx.Done():
+				return git.Place{}, ctx.Err()
+			}
+		}
+
+		return git.Place{Root: rootOf(path)}, nil
+	}
+
+	r := startedTurn(t, w, place)
+	turn := w.starts()[0].turn
+
+	ev, _ := editEvent(gateSession, "/b/late.go", nil, nil)
+	r.in <- ev
+
+	next, _ := turnEvent("UserPromptSubmit", gateSession, "/a")
+	r.in <- next
+
+	within(t, entered, 5*time.Second, "the next turn's own start")
+
+	// The edit's lookup answers while the next turn is taking its start.
+	close(lookup)
+
+	waitUntil(t, "the start marker in root/b was not written", func() bool {
+		return len(callsIn(w.all(), "root/b")) == 1
+	})
+	close(unblock)
+	drain(t, r)
+
+	want := []recordedStart{{dir: "root/b", session: gateSession, turn: turn, mark: true}}
+
+	if got := callsIn(w.all(), "root/b"); !slices.Equal(got, want) {
+		t.Errorf("calls in root/b = %+v, want one start marker and no start or end", got)
 	}
 }

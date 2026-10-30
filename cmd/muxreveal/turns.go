@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"maps"
 	"regexp"
 	"slices"
 	"strings"
@@ -141,22 +142,32 @@ type paneTurn struct {
 	turn    int
 	roots   map[string]*startedRoot
 	unsure  bool
+	// sealed is set when the pane's next prompt takes over: a worktree not yet
+	// in roots is no longer started.
+	sealed bool
 }
 
-// snapshotted lists, in order, the worktrees the turn started with a snapshot
-// that is written: the ones the pane's next prompt ends.
-func (t paneTurn) snapshotted() []string {
-	var out []string
-
+// split lists, in order, the worktrees the turn started with a snapshot that is
+// written, which the pane's next prompt ends, and those whose start is still
+// being taken, which it cannot end.
+func (t paneTurn) split() (written []string, pending map[string]<-chan struct{}) {
 	for root, e := range t.roots {
-		if !e.marker && closed(e.done) {
-			out = append(out, root)
+		switch {
+		case e.marker:
+		case closed(e.done):
+			written = append(written, root)
+		default:
+			if pending == nil {
+				pending = map[string]<-chan struct{}{}
+			}
+
+			pending[root] = e.done
 		}
 	}
 
-	slices.Sort(out)
+	slices.Sort(written)
 
-	return out
+	return written, pending
 }
 
 func closed(c <-chan struct{}) bool {
@@ -228,10 +239,30 @@ func (p *paneTurns) settled(ctx context.Context, pane core.PaneID) (paneTurn, bo
 	return p.get(pane)
 }
 
+// seal stops the pane's turn from starting more worktrees and returns it once
+// every worktree it started has its start or marker written, or ctx ends.
+func (p *paneTurns) seal(ctx context.Context, pane core.PaneID) (paneTurn, bool) {
+	p.mu.Lock()
+
+	cur, ok := p.last[pane]
+	if ok {
+		cur.sealed = true
+		p.last[pane] = cur
+	}
+
+	p.mu.Unlock()
+
+	if !ok {
+		return cur, false
+	}
+
+	return p.settled(ctx, pane)
+}
+
 // claim records root as started by the pane's turn, unless it already is. mine
 // says the caller started it and must close done; marker says it gets no
 // snapshot, because the turn is unsure or marker asks for it. ok is false when
-// the pane has moved on to another turn.
+// the pane has moved on to another turn or sealed this one without root.
 func (p *paneTurns) claim(pane core.PaneID, turn int, root string, marker bool) (done chan struct{}, mine, noSnapshot, ok bool) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -243,6 +274,10 @@ func (p *paneTurns) claim(pane core.PaneID, turn int, root string, marker bool) 
 
 	if e, has := cur.roots[root]; has {
 		return e.done, false, e.marker, true
+	}
+
+	if cur.sealed {
+		return nil, false, false, false
 	}
 
 	e := &startedRoot{done: make(chan struct{}), marker: marker || cur.unsure}
@@ -312,7 +347,7 @@ func runTurnGate(ctx context.Context, in <-chan harness.Event, out chan<- harnes
 	// at a time in arrival order.
 	tails := make(map[core.PaneID]chan struct{})
 	g := &gate{
-		w: w, places: places, seq: seq, log: log,
+		w: w, places: places, seq: seq, log: log, wg: &wg,
 		memory: &seqMemory{last: map[seqKey]uint64{}},
 		panes:  &paneTurns{last: map[core.PaneID]paneTurn{}},
 	}
@@ -397,6 +432,7 @@ type gate struct {
 	log    *slog.Logger
 	memory *seqMemory
 	panes  *paneTurns
+	wg     *sync.WaitGroup // owned by runTurnGate; a late end marker runs on it
 }
 
 // pendingEnd is an open turn of an earlier prompt that a turn start ends.
@@ -404,6 +440,9 @@ type pendingEnd struct {
 	root, session string
 	turn          int
 	failed        bool // the end was not written; it gets a marker
+	// wait is set for a start still being taken: its end is a marker, written
+	// once the start is.
+	wait <-chan struct{}
 }
 
 // startTurn ends the pane's previous turn and snapshots the new one after prev
@@ -426,6 +465,9 @@ func (g *gate) startTurn(parent context.Context, deadline time.Time, prev <-chan
 		<-prev
 	}
 
+	// From here on a late edit of the previous turn can start nothing.
+	last, known := g.panes.seal(snapCtx, ev.Pane)
+
 	var (
 		pending []pendingEnd
 		err     error
@@ -433,11 +475,11 @@ func (g *gate) startTurn(parent context.Context, deadline time.Time, prev <-chan
 
 	// A snapshot taken after the budget could already hold the agent's edits.
 	if err = snapCtx.Err(); err == nil {
-		pending, err = g.endAndStart(snapCtx, ev, session, turn)
+		pending, err = g.endAndStart(snapCtx, ev, session, turn, last, known)
 	} else {
 		release(ev)
 
-		pending = g.forget(parent, ev, session, turn)
+		pending = g.forget(parent, ev, session, turn, last)
 	}
 
 	release(ev)
@@ -447,9 +489,7 @@ func (g *gate) startTurn(parent context.Context, deadline time.Time, prev <-chan
 
 // forget replaces the pane's turn with one whose own worktree has no snapshot
 // and returns the previous turn's worktrees, all still open.
-func (g *gate) forget(ctx context.Context, ev harness.Event, session string, turn int) []pendingEnd {
-	last, _ := g.panes.settled(ctx, ev.Pane)
-
+func (g *gate) forget(ctx context.Context, ev harness.Event, session string, turn int, last paneTurn) []pendingEnd {
 	next := paneTurn{session: session, turn: turn, roots: map[string]*startedRoot{}}
 
 	lookup, cancel := context.WithTimeout(ctx, placeBudget)
@@ -461,29 +501,40 @@ func (g *gate) forget(ctx context.Context, ev harness.Event, session string, tur
 
 	g.panes.set(ev.Pane, next)
 
-	roots := last.snapshotted()
-	pending := make([]pendingEnd, 0, len(roots))
+	roots, late := last.split()
+	pending := make([]pendingEnd, 0, len(roots)+len(late))
 
 	for _, root := range roots {
 		pending = append(pending, pendingEnd{root: root, session: last.session, turn: last.turn, failed: true})
 	}
 
-	return pending
+	return append(pending, latePending(last, late)...)
+}
+
+// latePending is the ends owed for starts still being taken: each waits for its
+// start and then gets an end marker, whatever the start turns out to be.
+func latePending(last paneTurn, late map[string]<-chan struct{}) []pendingEnd {
+	out := make([]pendingEnd, 0, len(late))
+
+	for _, root := range slices.Sorted(maps.Keys(late)) {
+		out = append(out, pendingEnd{root: root, session: last.session, turn: last.turn, wait: late[root]})
+	}
+
+	return out
 }
 
 // endAndStart ends what the pane's previous turn started, then takes the new
 // turn's start. It returns the ends that failed and the start's error.
-func (g *gate) endAndStart(ctx context.Context, ev harness.Event, session string, turn int) ([]pendingEnd, error) {
+func (g *gate) endAndStart(ctx context.Context, ev harness.Event, session string, turn int, last paneTurn, known bool) ([]pendingEnd, error) {
 	root, n, watched := g.seq(ctx, ev.Cwd)
 
-	last, known := g.panes.settled(ctx, ev.Pane)
 	if !known {
 		last = g.openTurns(ctx, ev.Cwd, session)
 	}
 
 	// The own worktree ends through the new start when it is the same session.
 	ends := 0
-	lastRoots := last.snapshotted()
+	lastRoots, late := last.split()
 	pending := make([]pendingEnd, 0, len(lastRoots))
 
 	for _, r := range lastRoots {
@@ -515,7 +566,9 @@ func (g *gate) endAndStart(ctx context.Context, ev harness.Event, session string
 		pending = append(pending, pendingEnd{root: root, session: session, turn: ends, failed: true})
 	}
 
-	return slices.DeleteFunc(pending, func(p pendingEnd) bool { return !p.failed }), err
+	pending = slices.DeleteFunc(pending, func(p pendingEnd) bool { return !p.failed })
+
+	return append(pending, latePending(last, late)...), err
 }
 
 // openTurns finds the session's open turns in dir's repository for a pane with
@@ -582,6 +635,12 @@ func (g *gate) mark(parent context.Context, ev harness.Event, session string, tu
 	defer cancel()
 
 	for _, p := range failed {
+		if p.wait != nil {
+			g.wg.Go(func() { g.markLate(parent, p) })
+
+			continue
+		}
+
 		if err := g.w.Mark(markCtx, p.root, p.session, p.turn, true); err != nil {
 			g.log.Debug("end marker not written", "session", p.session, "root", p.root, "err", err)
 		}
@@ -595,6 +654,23 @@ func (g *gate) mark(parent context.Context, ev harness.Event, session string, tu
 
 	if err := g.w.Mark(markCtx, ev.Cwd, session, turn, false); err != nil {
 		g.log.Warn("turn marker failed", "session", session, "err", err)
+	}
+}
+
+// markLate writes the end marker of a turn whose start landed after the pane's
+// next prompt took over, so that turn never stays open.
+func (g *gate) markLate(parent context.Context, p pendingEnd) {
+	ctx, cancel := context.WithTimeout(parent, markerBudget)
+	defer cancel()
+
+	select {
+	case <-p.wait:
+	case <-ctx.Done():
+		return
+	}
+
+	if err := g.w.Mark(ctx, p.root, p.session, p.turn, true); err != nil {
+		g.log.Debug("late end marker not written", "session", p.session, "root", p.root, "err", err)
 	}
 }
 
@@ -667,6 +743,10 @@ func (g *gate) edit(parent context.Context, deadline time.Time, cur paneCurrent,
 
 	done, mine, noSnapshot, ok := g.panes.claim(ev.Pane, cur.turn, root, ctx.Err() != nil)
 	if !ok {
+		// The next prompt took over: the turn still lists the worktree.
+		release(ev)
+		g.markStart(parent, root, cur)
+
 		return
 	}
 
@@ -739,7 +819,9 @@ func (g *gate) changed(parent context.Context, cur paneCurrent, ev harness.Event
 
 		done, mine, _, ok := g.panes.claim(ev.Pane, cur.turn, a.place.Root, true)
 		if !ok {
-			return
+			g.markStart(parent, a.place.Root, cur)
+
+			continue
 		}
 
 		if mine {
