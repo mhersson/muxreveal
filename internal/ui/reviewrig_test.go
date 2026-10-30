@@ -216,12 +216,33 @@ func newDrawerRigWatching(t *testing.T, wo git.WatchOptions, opts ...func(*Optio
 
 	a, _, clk := kindApp(t, append([]func(*Options){set0}, opts...)...)
 	r := &drawerRig{App: a, ticks: &heldTicks{}, clk: clk, pm: newPump(t), set: set, wait: watchWait, reported: map[string]bool{}}
+	r.pm.stopWith(t, a)
 	a.tick = r.ticks.tick
 
 	sized(t, a, 200, 50)
 	r.pm.run(a.waitWatch())
 
 	return r
+}
+
+// probesEndFirst checks, after the cleanups registered later and before
+// t.TempDir removes its dirs, that no probe of the app handed to watch still
+// runs: one that does writes its temporary index into a dir being removed.
+func probesEndFirst(t *testing.T) (watch func(*App)) {
+	t.Helper()
+
+	// The first TempDir registers the removal of every one, so this cleanup runs ahead of it.
+	t.TempDir()
+
+	var a *App
+
+	t.Cleanup(func() {
+		if a != nil && len(a.probeSem) > 0 {
+			t.Errorf("%d probes still ran as the temporary dirs were removed", len(a.probeSem))
+		}
+	})
+
+	return func(app *App) { a = app }
 }
 
 func (r *drawerRig) step(msg tea.Msg) tea.Cmd {

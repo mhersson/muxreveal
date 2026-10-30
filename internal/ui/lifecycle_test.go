@@ -1052,6 +1052,8 @@ func TestCancellableTick(t *testing.T) {
 type pump struct {
 	msgs chan tea.Msg
 	done chan struct{}
+	stop sync.Once
+	cmds sync.WaitGroup
 }
 
 func newPump(t *testing.T) *pump {
@@ -1059,9 +1061,37 @@ func newPump(t *testing.T) *pump {
 
 	p := &pump{msgs: make(chan tea.Msg, 64), done: make(chan struct{})}
 
-	t.Cleanup(func() { close(p.done) })
+	t.Cleanup(p.halt)
 
 	return p
+}
+
+// halt stops delivery, so no command waits on a full queue.
+func (p *pump) halt() { p.stop.Do(func() { close(p.done) }) }
+
+// stopWith registers the cleanup that closes a, which ends the commands the
+// pump ran, and waits for them, so none still writes into a dir t.TempDir is
+// removing. a's own cleanup then closes an app with nothing left to close.
+func (p *pump) stopWith(t *testing.T, a *App) {
+	t.Helper()
+
+	t.Cleanup(func() {
+		p.halt()
+		closeApp(t, a)
+
+		ended := make(chan struct{})
+
+		go func() {
+			p.cmds.Wait()
+			close(ended)
+		}()
+
+		select {
+		case <-ended:
+		case <-time.After(5 * time.Second):
+			t.Error("the pump's commands still ran 5s after the app closed")
+		}
+	})
 }
 
 func (p *pump) run(cmd tea.Cmd) {
@@ -1069,7 +1099,7 @@ func (p *pump) run(cmd tea.Cmd) {
 		return
 	}
 
-	go func() {
+	p.cmds.Go(func() {
 		m := cmd()
 		if b, ok := m.(tea.BatchMsg); ok {
 			for _, c := range b {
@@ -1087,7 +1117,7 @@ func (p *pump) run(cmd tea.Cmd) {
 		case p.msgs <- m:
 		case <-p.done:
 		}
-	}()
+	})
 }
 
 // step feeds the next queued message to Update, or reports false at the deadline.
