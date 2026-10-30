@@ -203,7 +203,6 @@ func TestThemePickerCommits(t *testing.T) {
 }
 
 func TestThemePickerEscRestores(t *testing.T) {
-	t.Parallel()
 	a := fastApp(t)
 	sized(t, a, 100, 30)
 	mocha := mustTheme(t, "catppuccin-mocha")
@@ -305,7 +304,6 @@ func TestOverlaySizes(t *testing.T) {
 }
 
 func TestPaletteOverlayNoIconsGolden(t *testing.T) {
-	t.Parallel()
 	a := fastApp(t)
 	a.icons = false
 	sized(t, a, 100, 30)
@@ -314,7 +312,6 @@ func TestPaletteOverlayNoIconsGolden(t *testing.T) {
 }
 
 func TestPaletteOverlayGolden(t *testing.T) {
-	t.Parallel()
 	a := fastApp(t)
 	sized(t, a, 100, 30)
 	pressRun(a, keyLeader, keyRune(':'))
@@ -322,7 +319,6 @@ func TestPaletteOverlayGolden(t *testing.T) {
 }
 
 func TestThemePickerGolden(t *testing.T) {
-	t.Parallel()
 	a := fastApp(t)
 	sized(t, a, 100, 30)
 	pressRun(a, keyLeader, keyRune('t'), keyDown)

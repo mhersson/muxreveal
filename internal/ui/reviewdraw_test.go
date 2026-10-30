@@ -509,8 +509,6 @@ func TestHighlightCapPerFrame(t *testing.T) {
 }
 
 func TestHighlightColoursLines(t *testing.T) {
-	t.Parallel()
-
 	s := reviewScene{theme: "catppuccin-mocha", icons: true, w: 200, h: 52, res: turn4Result(), turn: 4, turns: 4, focused: true}
 	a := s.build(t)
 

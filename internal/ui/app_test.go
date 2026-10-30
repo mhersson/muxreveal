@@ -488,7 +488,6 @@ func TestWhichKeySizes(t *testing.T) {
 }
 
 func TestWhichKeyGolden(t *testing.T) {
-	t.Parallel()
 	a := newTestApp(t)
 	sized(t, a, 100, 30)
 	press(a, keyLeader)
@@ -497,7 +496,6 @@ func TestWhichKeyGolden(t *testing.T) {
 }
 
 func TestWhichKeyNoIconsGolden(t *testing.T) {
-	t.Parallel()
 	a := newTestApp(t)
 	a.icons = false
 	sized(t, a, 100, 30)
@@ -507,7 +505,6 @@ func TestWhichKeyNoIconsGolden(t *testing.T) {
 }
 
 func TestLeaderPendingGolden(t *testing.T) {
-	t.Parallel()
 	a := newTestApp(t)
 	sized(t, a, 100, 30)
 	press(a, keyLeader)

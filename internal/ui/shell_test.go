@@ -41,11 +41,7 @@ func TestNewRejectsUnknownTheme(t *testing.T) {
 }
 
 func TestShellGolden(t *testing.T) {
-	t.Parallel()
-
 	t.Run("catppuccin-mocha", func(t *testing.T) {
-		t.Parallel()
-
 		a := newThemedApp(t, "catppuccin-mocha")
 		sized(t, a, 100, 30)
 		golden.RequireEqual(t, []byte(a.View().Content))
