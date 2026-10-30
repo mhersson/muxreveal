@@ -82,6 +82,7 @@ func TestTextAreaKeys(t *testing.T) {
 				if k == "text:end" {
 					msg = tea.KeyPressMsg{Code: 'e', Text: "end"}
 				}
+
 				if k == "ctrl" {
 					msg = tea.KeyPressMsg{Code: 'a', Mod: tea.ModCtrl}
 				}
