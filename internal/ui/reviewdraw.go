@@ -660,9 +660,14 @@ func (d *drawCtx) hintRuns(cw int) []railRun {
 		pair("full", "review.full"),
 		pair("split", "review.split"),
 		pair("edit", "review.edit"), pair("search", "review.search"),
-		pair("reviewed", "review.mark"), d.showReadPair(pair),
-		pair("mode", "review.mode.branch", "review.mode.turn"),
 	)
+
+	// space marks hunks, so it does nothing in a file that does not show them.
+	if cur != nil && d.v.hunksShown(*cur) {
+		pairs = append(pairs, pair("reviewed", "review.mark"), d.showReadPair(pair))
+	}
+
+	pairs = append(pairs, pair("mode", "review.mode.branch", "review.mode.turn"))
 
 	if d.v.showsTurn() {
 		pairs = append(pairs, pair("turn", "review.turn.prev", "review.turn.next"))

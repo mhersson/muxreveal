@@ -308,6 +308,19 @@ func TestReviewHintsReviewed(t *testing.T) {
 
 			return s
 		}, pr},
+		{"file shown whole", func() reviewScene {
+			s := markedScene(hunksUpTo(1))
+			s.w, s.h = 312, 52
+			s.tune = withMarked(hunksUpTo(1), func(t *testing.T, a *App, v *reviewView) {
+				v.full, v.fullOn = map[string]fullText{}, map[string]bool{}
+
+				for _, f := range v.res.Files {
+					v.full[f.Path], v.fullOn[f.Path] = fullText{}, true
+				}
+			})
+
+			return s
+		}, "j/k line   ]/[ hunk   }/{ file   tab tree   w worktree   f full   u split   e edit   / search   b/t mode"},
 		{"remapped", func() reviewScene {
 			s := markedScene(hunksUpTo(1))
 			s.w, s.h = 312, 52
