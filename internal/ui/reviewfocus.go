@@ -108,6 +108,7 @@ func (a *App) onSlideOpen(msg slideOpenMsg) tea.Cmd {
 // closeDrawer closes the active tab's drawer and returns the keyboard to the
 // panes, sliding out when slide is set.
 func (a *App) closeDrawer(slide bool) tea.Cmd {
+	a.drawer.prNext = nil
 	a.drawerRelease()
 
 	if _, shown := a.drawerFull(a.store.State()); slide && shown {

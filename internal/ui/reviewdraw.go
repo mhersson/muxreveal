@@ -501,6 +501,10 @@ func (v *reviewView) showsTurn() bool {
 
 // modeTag is the text of the mode tag.
 func (d *drawCtx) modeTag() string {
+	if src, ok := d.v.src.(git.PRSource); ok {
+		return d.withIcon(iconPR, prNumberText(src.Number))
+	}
+
 	if d.v.showsTurn() {
 		return d.withIcon(iconTurn, "turn "+strconv.Itoa(d.v.shownTurn())+"/"+strconv.Itoa(d.v.turns))
 	}
@@ -556,6 +560,10 @@ func (d *drawCtx) hintRuns(cw int) []railRun {
 	}
 
 	pairs = append(pairs, [2]string{"e", "edit"}, [2]string{"/", "search"})
+
+	if _, ok := d.v.src.(git.PRSource); ok {
+		pairs = [][2]string{{"j/k", "line"}, {"]/[", "hunk"}, {"b/t", "mode"}}
+	}
 
 	if d.tree {
 		pairs = [][2]string{{"j/k", "file"}, {"enter", "jump"}, {"tab", "hide"}, {"esc", "back"}}
@@ -667,6 +675,8 @@ func (d *drawCtx) emptyRuns(y int) []railRun {
 		}
 
 		lines = []string{"no changes against " + base}
+	case git.PRSource:
+		lines = []string{"no changes against " + prBaseText(v)}
 	case git.TurnSource:
 		n := strconv.Itoa(v.shownTurn())
 		if v.noSnapshot {

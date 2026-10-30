@@ -28,6 +28,9 @@ const (
 type reviewView struct {
 	pane     core.PaneID     // the pane reviewed
 	mode     core.ReviewMode // the mode the view follows, as core holds it
+	pr       core.ReviewPR   // the pull request the view shows, as core holds it; zero for none
+	prBase   string          // the shown pull request's base branch
+	then     prThen          // run once the pull request's diff has loaded
 	src      git.Source
 	root     string
 	session  string         // the reviewed agent's session; "" for none
@@ -123,6 +126,8 @@ type drawerState struct {
 	cfg           core.DiffConfig // [diff]: the layout and mode a new drawer starts in
 	epochs        int             // the last epoch handed out; unique across views
 	reads         int             // the last full-file read serial handed out
+	prSeq         int             // the last pull request request; its answers carry it
+	prNext        *prNext         // a drawer being opened for a pull request
 	tokenised     int             // lines tokenised by the last highlighting pass
 	layouts       int             // layouts computed rather than reused; tests read it
 	scans         int             // searches of the visible rows for chunks to tokenise; tests read it

@@ -387,6 +387,10 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.later = append(a.later, c)
 	}
 
+	if c := a.prNextAfterSync(); c != nil {
+		a.later = append(a.later, c)
+	}
+
 	a.worktreesSync()
 
 	if c := a.drawerAfterUpdate(); c != nil {
@@ -566,6 +570,10 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, a.onDrawerSlide()
 	case reviewLoadedMsg:
 		return a, a.onReviewLoaded(msg)
+	case prPlaceMsg:
+		return a, a.onPRPlace(msg)
+	case prFetchedMsg:
+		return a, a.onPRFetched(msg)
 	case reviewSnappedMsg:
 		return a, a.reviewRefresh(msg.pane)
 	case reviewFullMsg:

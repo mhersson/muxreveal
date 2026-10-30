@@ -1,0 +1,574 @@
+package ui
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"slices"
+	"strconv"
+	"strings"
+	"time"
+
+	tea "charm.land/bubbletea/v2"
+
+	"github.com/mhersson/muxreveal/internal/core"
+	"github.com/mhersson/muxreveal/internal/git"
+	"github.com/mhersson/muxreveal/internal/github"
+)
+
+const (
+	// prShowTimeout bounds finding a pull request's place and number.
+	prShowTimeout = 15 * time.Second
+	// prFetchTimeout bounds fetching its refs, which talks to the remote.
+	prFetchTimeout = 60 * time.Second
+)
+
+// The PR mode's notices.
+const (
+	noticePRsOff        = "pull requests are off"
+	noticePRNone        = "no pull request for %s"
+	noticePRNotGitHub   = "%s's remote is not on GitHub"
+	noticePRDetached    = "pull request: HEAD is detached"
+	noticePRNoRemote    = "pull request: %s has no remote"
+	noticePRNoBase      = "#%d: its base branch is unknown"
+	noticePRFetching    = "fetching #%d…"
+	noticePRNotOnRemote = "#%d is not on %s"
+)
+
+// prThen is what the drawer does once the shown pull request's diff has loaded.
+type prThen uint8
+
+// What a key asks for besides showing the pull request.
+const (
+	thenNothing prThen = iota
+	thenChecks
+	thenBrowser
+	thenApprove
+	thenMerge
+)
+
+// prWant is a pull request already known, as the list knows it: its repository
+// keyed "host/owner/name", its number and the worktree it is shown from.
+type prWant struct {
+	repo   string
+	number int
+	root   string
+}
+
+// prPlace is the worktree a pull request is read from: its root, branch, the
+// remote the branch pushes to and the GitHub repository that remote is.
+type prPlace struct {
+	root, branch, remote string
+	repo                 github.Repo
+}
+
+// The ways a place has no pull request; each has its own notice.
+var (
+	errPRNoRepo    = errors.New("pull request: not a git repository")
+	errPRDetached  = errors.New("pull request: HEAD is detached")
+	errPRNoRemote  = errors.New("pull request: the branch has no remote")
+	errPRNotGitHub = errors.New("pull request: the remote is not on GitHub")
+	errPRNone      = errors.New("pull request: the branch has none")
+)
+
+// prNext is a drawer being opened for a pull request: showPR runs once the
+// drawer is open and has its source.
+type prNext struct {
+	tab  core.TabID
+	pane core.PaneID
+	want *prWant
+	then prThen
+	open bool // the drawer opened; the source is awaited
+}
+
+// prAsk is what every answer of one request carries, so a request that was
+// overtaken is told from the one in force.
+type prAsk struct {
+	tab   core.TabID
+	pane  core.PaneID
+	seq   int // drawerState.prSeq when asked
+	epoch int // the view's epoch when asked
+	then  prThen
+	want  *prWant
+	base  string
+}
+
+// prPlaceMsg answers finding the place, number and base of a pull request.
+type prPlaceMsg struct {
+	prAsk
+	place  prPlace
+	number int
+	base   string // the pull request's base branch, when the lookup found it
+	err    error
+}
+
+// prFetchedMsg answers the fetch of a pull request's refs.
+type prFetchedMsg struct {
+	prAsk
+	place  prPlace
+	number int
+	err    error
+}
+
+// localPRPlace reads the root, branch and push remote of the worktree at dir.
+// The repository is left empty.
+func localPRPlace(ctx context.Context, dir string) (prPlace, error) {
+	r, err := git.Open(ctx, dir)
+	if err != nil {
+		if errors.Is(err, git.ErrNotRepo) {
+			return prPlace{}, errPRNoRepo
+		}
+
+		return prPlace{}, fmt.Errorf("pull request: %w", err)
+	}
+
+	h, err := git.Head(ctx, r)
+	if err != nil {
+		return prPlace{}, fmt.Errorf("pull request: %w", err)
+	}
+
+	place := prPlace{root: r.Root, branch: h.Branch}
+	if h.Detached {
+		return place, errPRDetached
+	}
+
+	place.remote, err = git.PushRemote(ctx, r, h.Branch)
+
+	switch {
+	case errors.Is(err, git.ErrNoRemote):
+		return place, errPRNoRemote
+	case err != nil:
+		return place, fmt.Errorf("pull request: %w", err)
+	}
+
+	return place, nil
+}
+
+// resolvePRPlace finds the worktree at dir, its branch, push remote and the
+// GitHub repository the remote is.
+func resolvePRPlace(ctx context.Context, resolve func(ctx context.Context, cwd, branch string) (github.Repo, error), dir string) (prPlace, error) {
+	place, err := localPRPlace(ctx, dir)
+	if err != nil {
+		return place, err
+	}
+
+	place.repo, err = resolve(ctx, place.root, place.branch)
+
+	switch {
+	case errors.Is(err, github.ErrNotGitHub):
+		return place, errPRNotGitHub
+	case errors.Is(err, git.ErrNoRemote):
+		return place, errPRNoRemote
+	case err != nil:
+		return place, fmt.Errorf("pull request: %w", err)
+	}
+
+	return place, nil
+}
+
+// repoOfKey reads a repository keyed "host/owner/name".
+func repoOfKey(key string) (github.Repo, bool) {
+	parts := strings.Split(key, "/")
+	if len(parts) != 3 || slices.Contains(parts, "") {
+		return github.Repo{}, false
+	}
+
+	return github.Repo{Host: parts[0], Owner: parts[1], Name: parts[2]}, true
+}
+
+// prInfoByNumber finds a pull request the poll lists or a lookup found.
+func prInfoByNumber(st core.State, repo string, number int) (core.PRInfo, bool) {
+	r := st.PRs[repo]
+
+	for _, p := range r.Open {
+		if p.Number == number {
+			return p, true
+		}
+	}
+
+	for _, p := range r.Branch {
+		if p.Number == number {
+			return p, true
+		}
+	}
+
+	return core.PRInfo{}, false
+}
+
+// reviewPR is `p`: it shows the pull request of the drawer's place.
+func (a *App) reviewPR() tea.Cmd {
+	tab, _, ok := a.reviewActive()
+	if !ok {
+		return nil
+	}
+
+	return a.showPR(tab.ID, nil, thenNothing)
+}
+
+// reviewReload is `r`: in PR mode it fetches the pull request again and asks
+// the poller for its repository; otherwise it loads the diff again.
+func (a *App) reviewReload() tea.Cmd {
+	tab, v, ok := a.reviewActive()
+	if !ok {
+		return nil
+	}
+
+	if v.pr == (core.ReviewPR{}) {
+		return a.refreshViews(tab.Review.Pane, nil)
+	}
+
+	if repo, ok := repoOfKey(v.pr.Repo); ok && a.prs.src != nil {
+		a.prs.src.Refresh(repo)
+	}
+
+	return a.askPR(tab.ID, &prWant{repo: v.pr.Repo, number: v.pr.Number, root: v.pr.Root}, v.prBase, thenNothing)
+}
+
+// showPR shows a pull request in the active tab's drawer and runs then once its
+// diff has loaded. With want nil it is the pull request of the drawer's place;
+// with want it is that one, read from want.root.
+func (a *App) showPR(tab core.TabID, want *prWant, then prThen) tea.Cmd {
+	return a.askPR(tab, want, "", then)
+}
+
+// askPR is showPR with the base branch given when the caller knows it.
+func (a *App) askPR(tab core.TabID, want *prWant, base string, then prThen) tea.Cmd {
+	st := a.store.State()
+
+	t := st.Tab()
+	if t.ID != tab || t.Review == nil {
+		a.notice = noticeNoDrawer
+
+		return nil
+	}
+
+	if a.prs.src == nil || a.prs.resolve == nil {
+		a.notice = noticePRsOff
+
+		return nil
+	}
+
+	dir := a.drawerDir(st, t, t.Review.Pane)
+
+	switch {
+	case want != nil:
+		dir = want.root
+
+		if base == "" {
+			if info, ok := prInfoByNumber(st, want.repo, want.number); ok {
+				base = info.BaseBranch
+			}
+		}
+
+		if base == "" {
+			a.notice = fmt.Sprintf(noticePRNoBase, want.number)
+
+			return nil
+		}
+	case t.Review.PR != nil:
+		dir = t.Review.PR.Root
+	}
+
+	if dir == "" {
+		a.notice = noticeNotRepo
+
+		return nil
+	}
+
+	v := a.reviewViewOf(tab)
+
+	a.drawer.prSeq++
+	ask := prAsk{tab: tab, pane: t.Review.Pane, seq: a.drawer.prSeq, epoch: v.epoch, then: then, want: want, base: base}
+
+	var (
+		resolve, lookup, appCtx = a.prs.resolve, a.prs.lookup, a.ctx
+		number                  int
+	)
+
+	if want != nil {
+		number = want.number
+	}
+
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(appCtx, prShowTimeout)
+		defer cancel()
+
+		msg := prPlaceMsg{prAsk: ask, number: number}
+
+		if want != nil {
+			msg.place, msg.err = localPRPlace(ctx, dir)
+			if repo, ok := repoOfKey(want.repo); ok && msg.err == nil {
+				msg.place.repo = repo
+			}
+
+			return msg
+		}
+
+		if msg.place, msg.err = resolvePRPlace(ctx, resolve, dir); msg.err != nil {
+			return msg
+		}
+
+		msg.number, msg.base, msg.err = prOfPlace(ctx, st, lookup, msg.place)
+
+		return msg
+	}
+}
+
+// prOfPlace is the number and base of the pull request of place's branch: the
+// poll's, else one lookup's.
+func prOfPlace(ctx context.Context, st core.State, lookup PRLookup, place prPlace) (int, string, error) {
+	if info, ok := st.PRFor(place.repo.String(), place.branch); ok {
+		return info.Number, info.BaseBranch, nil
+	}
+
+	if lookup == nil {
+		return 0, "", errPRNone
+	}
+
+	pr, err := lookup(ctx, place.repo, place.branch)
+
+	switch {
+	case errors.Is(err, github.ErrNoPR):
+		return 0, "", errPRNone
+	case err != nil:
+		return 0, "", fmt.Errorf("pull request: %w", err)
+	}
+
+	return pr.Number, pr.BaseBranch, nil
+}
+
+// prLive reports whether an answer still belongs to the request in force: the
+// drawer it was asked for is still the active tab's, on the same source, and no
+// newer request was made.
+func (a *App) prLive(ask prAsk) bool {
+	v := a.drawer.views[ask.tab]
+	if v == nil || ask.seq != a.drawer.prSeq || ask.epoch != v.epoch {
+		return false
+	}
+
+	t := a.store.State().Tab()
+
+	return t.ID == ask.tab && t.Review != nil && t.Review.Pane == ask.pane
+}
+
+// onPRPlace starts the fetch once the pull request's place and number are
+// known, or says why there is none.
+func (a *App) onPRPlace(msg prPlaceMsg) tea.Cmd {
+	if !a.prLive(msg.prAsk) {
+		return nil
+	}
+
+	branch := printable(msg.place.branch)
+
+	switch err := msg.err; {
+	case err == nil:
+	case errors.Is(err, context.Canceled):
+		return nil
+	case errors.Is(err, errPRNoRepo):
+		a.notice = noticeNotRepo
+
+		return nil
+	case errors.Is(err, errPRDetached):
+		a.notice = noticePRDetached
+
+		return nil
+	case errors.Is(err, errPRNoRemote):
+		a.notice = fmt.Sprintf(noticePRNoRemote, branch)
+
+		return nil
+	case errors.Is(err, errPRNotGitHub):
+		a.notice = fmt.Sprintf(noticePRNotGitHub, branch)
+
+		return nil
+	case errors.Is(err, errPRNone):
+		a.notice = fmt.Sprintf(noticePRNone, branch)
+
+		return nil
+	case errors.Is(err, context.DeadlineExceeded):
+		a.toast(levelError, "pull request: timed out")
+
+		return nil
+	default:
+		a.toast(levelError, gitReason(err))
+
+		return nil
+	}
+
+	base := msg.base
+	if base == "" {
+		base = msg.prAsk.base
+	}
+
+	if base == "" {
+		a.notice = fmt.Sprintf(noticePRNoBase, msg.number)
+
+		return nil
+	}
+
+	a.notice = fmt.Sprintf(noticePRFetching, msg.number)
+
+	var (
+		ask    = msg.prAsk
+		place  = msg.place
+		number = msg.number
+		appCtx = a.ctx
+	)
+
+	ask.base = base
+
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(appCtx, prFetchTimeout)
+		defer cancel()
+
+		out := prFetchedMsg{prAsk: ask, place: place, number: number}
+
+		r, err := git.Open(ctx, place.root)
+		if err == nil {
+			_, err = git.FetchPR(ctx, r, place.remote, number, base)
+		}
+
+		out.err = err
+
+		return out
+	}
+}
+
+// onPRFetched puts the drawer in PR mode on the fetched pull request, or says
+// why it cannot.
+func (a *App) onPRFetched(msg prFetchedMsg) tea.Cmd {
+	if !a.prLive(msg.prAsk) {
+		return nil
+	}
+
+	switch err := msg.err; {
+	case err == nil:
+	case errors.Is(err, context.Canceled):
+		return nil
+	case errors.Is(err, git.ErrNoPR):
+		a.notice = fmt.Sprintf(noticePRNotOnRemote, msg.number, printable(msg.place.remote))
+
+		return nil
+	case errors.Is(err, context.DeadlineExceeded):
+		a.toast(levelError, fmt.Sprintf("fetch #%d: timed out", msg.number))
+
+		return nil
+	default:
+		a.toast(levelError, fmt.Sprintf("fetch #%d: %s", msg.number, gitReason(err)))
+
+		return nil
+	}
+
+	if a.notice == fmt.Sprintf(noticePRFetching, msg.number) {
+		a.notice = ""
+	}
+
+	v := a.drawer.views[msg.tab]
+	epoch := v.epoch
+	v.prBase = msg.base
+
+	show := core.ShowReviewPR{Repo: msg.place.repo.String(), Number: msg.number, Root: msg.place.root}
+	if err := a.dispatch(show); err != nil {
+		return nil
+	}
+
+	// The sync loads a new source at once, so the view's `then` is set after it.
+	// The same pull request shown again is not a new source: it is loaded here.
+	cmd := a.reviewSync()
+
+	nv := a.drawer.views[msg.tab]
+	if nv == nil {
+		return cmd
+	}
+
+	if nv == v && nv.epoch == epoch {
+		cmd = tea.Batch(cmd, a.reviewRetarget(msg.tab, nv, 0))
+	}
+
+	nv.then = msg.then
+
+	return cmd
+}
+
+// reviewThen runs what was asked of the pull request when its diff has landed.
+// A load that failed runs nothing.
+func (a *App) reviewThen(v *reviewView, msg reviewLoadedMsg) tea.Cmd {
+	then := v.then
+	if then == thenNothing || v.pr == (core.ReviewPR{}) || msg.live {
+		return nil
+	}
+
+	v.then = thenNothing
+
+	if msg.err != nil {
+		return nil
+	}
+
+	return a.prThenRun(then)
+}
+
+// prThenRun is what a key asked of the pull request once its diff has loaded.
+func (a *App) prThenRun(then prThen) tea.Cmd {
+	switch then {
+	case thenNothing, thenChecks, thenBrowser, thenApprove, thenMerge:
+	}
+
+	return nil
+}
+
+// openWithPR opens or retargets the active tab's drawer on pane, as leader d
+// does, and shows a pull request in it once it is open and has its source.
+func (a *App) openWithPR(pane core.PaneID, want *prWant, then prThen) tea.Cmd {
+	tab := a.store.State().Tab()
+
+	if tab.Review != nil && tab.Review.Pane == pane {
+		a.drawerTake()
+
+		return a.askPR(tab.ID, want, "", then)
+	}
+
+	cmd := a.openSliding(pane)
+	if cmd == nil {
+		return nil
+	}
+
+	a.drawer.prNext = &prNext{tab: tab.ID, pane: pane, want: want, then: then}
+
+	return cmd
+}
+
+// prNextAfterSync shows the pull request a drawer was opened for, once the
+// drawer has its source: the epoch of its first load is the one answers carry.
+func (a *App) prNextAfterSync() tea.Cmd {
+	n := a.drawer.prNext
+	if n == nil || !n.open {
+		return nil
+	}
+
+	t := a.store.State().Tab()
+	if t.ID != n.tab || t.Review == nil || t.Review.Pane != n.pane {
+		a.drawer.prNext = nil
+
+		return nil
+	}
+
+	v := a.drawer.views[t.ID]
+	if v == nil || v.src == nil {
+		return nil
+	}
+
+	a.drawer.prNext = nil
+
+	return a.askPR(n.tab, n.want, "", n.then)
+}
+
+// prNumberText is the pull request's number as the tag and the mode row write it.
+func prNumberText(n int) string { return "#" + strconv.Itoa(n) }
+
+// prBaseText is the branch the shown pull request is compared with.
+func prBaseText(v *reviewView) string {
+	if v.base != "" {
+		return v.base
+	}
+
+	return "the base branch"
+}

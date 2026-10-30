@@ -268,9 +268,12 @@ func (a *App) prSync() tea.Cmd {
 }
 
 // prWatches is every watched agent's repository and the focused pane's, with
-// the open pull request of each pane's branch visible.
+// the open pull request of each pane's branch visible, and the repository of the
+// pull request the active tab's drawer shows, with that pull request visible and
+// focused.
 func (a *App) prWatches(st core.State) []github.Watch {
 	visible := map[github.Repo][]int{}
+	focused := map[github.Repo]int{}
 
 	for _, pp := range a.prs.panes {
 		if !pp.ok {
@@ -285,11 +288,18 @@ func (a *App) prWatches(st core.State) []github.Watch {
 		visible[pp.repo] = nums
 	}
 
+	if rv := st.Tab().Review; rv != nil && rv.PR != nil {
+		if repo, ok := repoOfKey(rv.PR.Repo); ok {
+			visible[repo] = append(visible[repo], rv.PR.Number)
+			focused[repo] = rv.PR.Number
+		}
+	}
+
 	ws := make([]github.Watch, 0, len(visible))
 
 	for repo, nums := range visible {
 		slices.Sort(nums)
-		ws = append(ws, github.Watch{Repo: repo, Visible: slices.Compact(nums)})
+		ws = append(ws, github.Watch{Repo: repo, Visible: slices.Compact(nums), Focused: focused[repo]})
 	}
 
 	slices.SortFunc(ws, func(x, y github.Watch) int { return strings.Compare(x.Repo.String(), y.Repo.String()) })

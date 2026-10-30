@@ -1,0 +1,633 @@
+package ui
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"path/filepath"
+	"slices"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"testing"
+
+	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
+
+	"github.com/mhersson/muxreveal/internal/core"
+	"github.com/mhersson/muxreveal/internal/git"
+	"github.com/mhersson/muxreveal/internal/github"
+)
+
+// prDrawer is a drawer rig on a worktree of feat/x whose origin is a local bare
+// repository that holds main and refs/pull/7/head. The worktree has a commit of
+// its own that the pull request lacks.
+type prDrawer struct {
+	*drawerRig
+	rec     *refreshRec
+	dir     string
+	root    string
+	bare    string
+	prHead  string // the commit refs/pull/7/head holds on the remote
+	localOK string // the worktree's HEAD
+
+	notGitHub atomic.Bool
+
+	mu      sync.Mutex
+	lookups []string
+	found   map[string]github.PR
+}
+
+// prWorktree makes the repository dir (on feat/x, two commits past main) with a
+// bare origin that has main and refs/pull/7/head, and a commit past the pull
+// request in dir. It returns the bare repository, the pull request's head and
+// the worktree's.
+func prWorktree(t *testing.T, dir string) (bare, prHead, local string) {
+	t.Helper()
+
+	bare, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	gitIn(t, "git", bare, "init", "-q", "--bare", "-b", "main")
+	gitIn(t, "git", dir, "remote", "add", "origin", bare)
+
+	base := gitRead(t, "git", dir, "rev-list", "--max-parents=0", "HEAD")
+	gitIn(t, "git", dir, "push", "-q", "origin", base+":refs/heads/main")
+	gitIn(t, "git", dir, "switch", "-q", "-c", "feat/x")
+	gitIn(t, "git", dir, "push", "-q", "origin", "HEAD:refs/pull/7/head")
+
+	prHead = gitRead(t, "git", dir, "rev-parse", "HEAD")
+
+	write(t, filepath.Join(dir, "local.txt"), "not pushed\n")
+	commitEverything(t, dir, "local only")
+
+	return bare, prHead, gitRead(t, "git", dir, "rev-parse", "HEAD")
+}
+
+// prFeatureRepo is a repository whose first commit holds a.txt and b.txt and
+// whose second changes a.txt and adds new.txt.
+func prFeatureRepo(t *testing.T) string {
+	t.Helper()
+
+	dir := newRepoDir(t)
+	write(t, filepath.Join(dir, "a.txt"), "a\n")
+	write(t, filepath.Join(dir, "b.txt"), "b\n")
+	commitEverything(t, dir, "init")
+	write(t, filepath.Join(dir, "a.txt"), "a changed\n")
+	write(t, filepath.Join(dir, "new.txt"), "new\n")
+	commitEverything(t, dir, "feature work")
+
+	return dir
+}
+
+func newPRDrawerOn(t *testing.T, dir string, opts ...func(*Options)) *prDrawer {
+	t.Helper()
+
+	bare, prHead, local := prWorktree(t, dir)
+	p := &prDrawer{
+		rec: &refreshRec{fakePRs: newFakePRs()}, dir: dir, root: rootOf(t, dir),
+		bare: bare, prHead: prHead, localOK: local, found: map[string]github.PR{},
+	}
+
+	opts = append([]func(*Options){func(o *Options) { o.PRs, o.PRLookup = p.rec, p.lookup }}, opts...)
+	p.drawerRig = newKeysRig(t, dir, opts...)
+	p.prs.resolve = p.resolve
+
+	return p
+}
+
+func newPRDrawer(t *testing.T, opts ...func(*Options)) *prDrawer {
+	t.Helper()
+
+	return newPRDrawerOn(t, prFeatureRepo(t), opts...)
+}
+
+func (p *prDrawer) resolve(_ context.Context, _, _ string) (github.Repo, error) {
+	if p.notGitHub.Load() {
+		return github.Repo{}, fmt.Errorf("%w: elsewhere", github.ErrNotGitHub)
+	}
+
+	return prRepo, nil
+}
+
+func (p *prDrawer) lookup(_ context.Context, r github.Repo, branch string) (github.PR, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	p.lookups = append(p.lookups, r.String()+" "+branch)
+
+	if pr, ok := p.found[branch]; ok {
+		return pr, nil
+	}
+
+	return github.PR{}, fmt.Errorf("lookup %s: %w", branch, github.ErrNoPR)
+}
+
+func (p *prDrawer) lookedUp() []string {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	return slices.Clone(p.lookups)
+}
+
+// poll hands the app a poll that lists pull request 7 of feat/x.
+func (p *prDrawer) poll() {
+	p.run(p.step(snapshotOf(prSeven())))
+}
+
+func prSeven() github.PR {
+	return github.PR{Number: 7, Title: "Add x", HeadBranch: "feat/x", BaseBranch: "main", State: prOpenState}
+}
+
+func (p *prDrawer) review() *core.Review { return p.store.State().Tab().Review }
+
+// inPRMode is a condition: the drawer shows pull request n and has loaded it.
+func (p *prDrawer) inPRMode(n int) func() bool {
+	return p.viewHolds(func(v *reviewView) bool {
+		rv := p.review()
+
+		return rv != nil && rv.PR != nil && rv.PR.Number == n && v.pr.Number == n && v.loaded && !v.loading
+	})
+}
+
+// pressP presses p and returns the command that asks; its messages are fed to
+// the app one at a time by the caller.
+func (p *prDrawer) pressP() tea.Cmd { return p.step(keyRune('p')) }
+
+func plainTop(t *testing.T, r *prDrawer) string { return ansi.Strip(topLine(t, r.App)) }
+
+func TestPRModeShowsThePRDiff(t *testing.T) {
+	t.Parallel()
+
+	r := newPRDrawer(t)
+	r.poll()
+	r.opened(t)
+	r.typed("p")
+	r.until(t, "PR mode", r.inPRMode(7))
+
+	v := r.view()
+	if want := (git.PRSource{Worktree: r.root, Number: 7}); v.src != want {
+		t.Errorf("source = %+v, want %+v", v.src, want)
+	}
+
+	if v.res.Head != r.prHead || v.res.Head == r.localOK {
+		t.Errorf("head = %s, want the remote's %s, not the worktree's %s", v.res.Head, r.prHead, r.localOK)
+	}
+
+	if got := viewPaths(v); !slices.Equal(got, []string{"a.txt", "new.txt"}) {
+		t.Errorf("files = %v, want a.txt and new.txt", got)
+	}
+
+	if top := plainTop(t, r); !strings.Contains(top, " "+iconPR+" #7 ") {
+		t.Errorf("top border %q, want the #7 tag", top)
+	}
+
+	r.icons = false
+
+	if top := plainTop(t, r); !strings.Contains(top, " #7 ") {
+		t.Errorf("top border %q without icons, want the #7 tag", top)
+	}
+}
+
+func TestPRModeNotices(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		setup func(t *testing.T, r *prDrawer)
+		want  string
+	}{
+		{"no pull request for the branch", func(t *testing.T, r *prDrawer) {}, "no pull request for feat/x"},
+		{"a remote not on GitHub", func(t *testing.T, r *prDrawer) { r.notGitHub.Store(true) }, "feat/x's remote is not on GitHub"},
+		{"a detached head", func(t *testing.T, r *prDrawer) { gitIn(t, "git", r.dir, "checkout", "-q", "--detach") }, "pull request: HEAD is detached"},
+		{"the pull request is not on the remote", func(t *testing.T, r *prDrawer) {
+			pr := prSeven()
+			pr.Number = 8
+			r.run(r.step(snapshotOf(pr)))
+		}, "#8 is not on origin"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			r := newPRDrawer(t)
+			tc.setup(t, r)
+			r.opened(t)
+
+			was := r.view().src
+			r.typed("p")
+			r.until(t, "the notice", func() bool { return r.notice == tc.want })
+
+			if rv := r.review(); rv == nil || rv.PR != nil {
+				t.Errorf("review = %+v, want a drawer with no PR", rv)
+			}
+
+			if r.view().src != was {
+				t.Errorf("source = %+v, want it left as %+v", r.view().src, was)
+			}
+		})
+	}
+}
+
+func TestPRModeLooksUpOnce(t *testing.T) {
+	t.Parallel()
+
+	r := newPRDrawer(t)
+	r.found["feat/x"] = prSeven()
+	r.opened(t)
+	r.typed("p")
+	r.until(t, "PR mode", r.inPRMode(7))
+
+	if got := r.lookedUp(); !slices.Equal(got, []string{prRepoKey + " feat/x"}) {
+		t.Errorf("lookups = %v, want one for feat/x", got)
+	}
+}
+
+func TestPRModeHoldsItsPR(t *testing.T) {
+	t.Parallel()
+
+	r := newPRDrawer(t)
+	r.poll()
+
+	other := newRepoDir(t)
+	write(t, filepath.Join(other, "only-in-other.txt"), "other\n")
+	commitEverything(t, other, "other")
+	write(t, filepath.Join(other, "dirty.txt"), "dirty\n")
+
+	r.opened(t)
+	r.typed("p")
+	r.until(t, "PR mode", r.inPRMode(7))
+
+	openIn(t, r.App, core.SetPaneCwd{ID: r.focus(), Cwd: other})
+	r.settle()
+	r.quiet(t, 50e6)
+
+	if rv := r.review(); rv.PR == nil || rv.PR.Number != 7 || r.view().pr.Number != 7 || r.view().root != r.root {
+		t.Fatalf("review %+v, view root %q: want #7 held on %q", rv, r.view().root, r.root)
+	}
+
+	r.typed("b")
+	r.until(t, "the followed place", r.viewHolds(func(v *reviewView) bool {
+		return v.root == rootOf(t, other) && v.loaded && !v.loading && v.pr == (core.ReviewPR{})
+	}))
+
+	if rv := r.review(); rv.PR != nil {
+		t.Errorf("review = %+v, want PR mode left", rv)
+	}
+
+	if _, ok := r.view().src.(git.BranchSource); !ok {
+		t.Errorf("source = %+v, want the branch", r.view().src)
+	}
+}
+
+func TestPRModeLeaves(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		do   func(t *testing.T, r *prDrawer)
+	}{
+		{"b", func(t *testing.T, r *prDrawer) { r.typed("b") }},
+		{"t", func(t *testing.T, r *prDrawer) { r.typed("t") }},
+		{",", func(t *testing.T, r *prDrawer) { r.typed(",") }},
+		{"a pick in the worktree list", func(t *testing.T, r *prDrawer) {
+			openIn(t, r.App, core.PinReview{Root: r.root})
+		}},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			dir := prFeatureRepo(t)
+			snapshotTurn(t, dir, testSession)
+			write(t, filepath.Join(dir, "turn.txt"), "turn\n")
+			snapshotTurn(t, dir, testSession)
+
+			r := newPRDrawerOn(t, dir)
+			r.poll()
+			id := r.agent(t, dir, testSession)
+			r.run(r.openReview(id, true))
+			r.until(t, "the drawer", func() bool { return r.review() != nil })
+			r.idle(t)
+			r.typed("p")
+			r.until(t, "PR mode", r.inPRMode(7))
+
+			tc.do(t, r)
+			r.settle()
+			r.until(t, "PR mode to end", r.viewHolds(func(v *reviewView) bool {
+				return v.pr == (core.ReviewPR{}) && v.loaded && !v.loading
+			}))
+
+			if rv := r.review(); rv == nil || rv.PR != nil {
+				t.Errorf("review = %+v, want no PR", rv)
+			}
+
+			if _, ok := r.view().src.(git.PRSource); ok {
+				t.Errorf("source = %+v, want it left the pull request", r.view().src)
+			}
+		})
+	}
+}
+
+func TestPRModeLateAnswers(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		move func(t *testing.T, r *prDrawer)
+	}{
+		{"the drawer closed", func(t *testing.T, r *prDrawer) {
+			openIn(t, r.App, core.CloseReview{})
+			r.settle()
+		}},
+		{"b", func(t *testing.T, r *prDrawer) { r.typed("b") }},
+		{"a second p", func(t *testing.T, r *prDrawer) { r.pressP() }},
+	}
+
+	for _, tc := range tests {
+		for _, stage := range []string{"the place answered", "the fetch answered"} {
+			t.Run(tc.name+" before "+stage, func(t *testing.T) {
+				t.Parallel()
+
+				r := newPRDrawer(t)
+				r.poll()
+				r.opened(t)
+
+				msgs := flatten(r.pressP())
+				if len(msgs) != 1 {
+					t.Fatalf("p raised %d messages, want the place's answer", len(msgs))
+				}
+
+				late := msgs[0]
+
+				if stage == "the fetch answered" {
+					fetch := r.step(msgs[0])
+
+					fm := flatten(fetch)
+					if len(fm) != 1 {
+						t.Fatalf("the place raised %d messages, want the fetch's answer", len(fm))
+					}
+
+					late = fm[0]
+				}
+
+				tc.move(t, r)
+
+				r.settle()
+
+				notice, rv := r.notice, r.review()
+
+				if cmd := r.step(late); cmd != nil {
+					for _, m := range flatten(cmd) {
+						if _, ok := m.(prFetchedMsg); ok {
+							t.Errorf("a late answer started a fetch")
+						}
+					}
+				}
+
+				r.settle()
+
+				if got := r.review(); (got == nil) != (rv == nil) || got != nil && got.PR != nil {
+					t.Errorf("review = %+v after the late answer, want no PR (was %+v)", got, rv)
+				}
+
+				if r.notice != notice {
+					t.Errorf("notice = %q after the late answer, was %q", r.notice, notice)
+				}
+			})
+		}
+	}
+}
+
+func TestPRModeIgnoresBatches(t *testing.T) {
+	t.Parallel()
+
+	r := newPRDrawer(t)
+	r.poll()
+	r.opened(t)
+	r.typed("p")
+	r.until(t, "PR mode", r.inPRMode(7))
+
+	v := r.view()
+	gen := v.gen
+
+	write(t, filepath.Join(r.dir, "a.txt"), "edited after the fetch\n")
+	r.run(r.batch(r.root, git.Batch{Paths: []string{"a.txt"}}))
+	r.run(r.batch(r.root, git.Batch{Git: true}))
+	r.run(r.reviewRefresh(r.focus()))
+	r.settle()
+
+	if v.loading || v.queued != nil || v.gen != gen {
+		t.Errorf("loading %v, queued %v, gen %d (was %d): a batch reloaded a pull request diff", v.loading, v.queued, v.gen, gen)
+	}
+}
+
+func TestPRModeRefresh(t *testing.T) {
+	t.Parallel()
+
+	t.Run("pull request", func(t *testing.T) {
+		t.Parallel()
+
+		r := newPRDrawer(t)
+		r.poll()
+		r.opened(t)
+		r.typed("p")
+		r.until(t, "PR mode", r.inPRMode(7))
+
+		write(t, filepath.Join(r.dir, "pushed-later.txt"), "later\n")
+		commitEverything(t, r.dir, "pushed later")
+		gitIn(t, "git", r.dir, "push", "-q", "-f", "origin", "HEAD:refs/pull/7/head")
+
+		newHead := gitRead(t, "git", r.dir, "rev-parse", "HEAD")
+
+		r.typed("r")
+		r.until(t, "the new head", func() bool { return r.view().res.Head == newHead && !r.view().loading })
+
+		if got := r.rec.refreshed(); !slices.Equal(got, []github.Repo{prRepo}) {
+			t.Errorf("refreshed %v, want the pull request's repository", got)
+		}
+
+		if !slices.Contains(viewPaths(r.view()), "pushed-later.txt") {
+			t.Errorf("files = %v, want the new commit's file", viewPaths(r.view()))
+		}
+	})
+
+	t.Run("branch", func(t *testing.T) {
+		t.Parallel()
+
+		r := newPRDrawer(t)
+		r.poll()
+		r.opened(t)
+
+		write(t, filepath.Join(r.dir, "fresh.txt"), "fresh\n")
+		r.typed("r")
+		r.until(t, "the reload", func() bool { return slices.Contains(viewPaths(r.view()), "fresh.txt") })
+
+		if got := r.rec.refreshed(); len(got) != 0 {
+			t.Errorf("refreshed %v in branch mode, want none", got)
+		}
+	})
+}
+
+func TestPRModeWatchesTheFocusedPR(t *testing.T) {
+	t.Parallel()
+
+	r := newPRDrawer(t)
+	r.poll()
+	r.opened(t)
+	r.typed("p")
+	r.until(t, "PR mode", r.inPRMode(7))
+
+	want := []github.Watch{{Repo: prRepo, Visible: []int{7}, Focused: 7}}
+	if got := r.rec.last(); !slices.EqualFunc(got, want, func(x, y github.Watch) bool {
+		return x.Repo == y.Repo && x.Focused == y.Focused && slices.Equal(x.Visible, y.Visible)
+	}) {
+		t.Errorf("watches = %+v, want %+v for a repository no agent follows", got, want)
+	}
+
+	r.typed("b")
+	r.until(t, "branch mode", r.viewHolds(func(v *reviewView) bool { return v.pr == (core.ReviewPR{}) && !v.loading }))
+
+	if got := r.rec.last(); len(got) != 0 {
+		t.Errorf("watches = %+v after leaving PR mode, want none", got)
+	}
+}
+
+func TestPRModeHints(t *testing.T) {
+	t.Parallel()
+
+	r := newPRDrawer(t)
+	r.poll()
+	r.opened(t)
+
+	branch := r.drawn(t)
+	if !strings.Contains(branch, "j/k line   ]/[ hunk   }/{ file   tab tree") || !strings.Contains(branch, "e edit") {
+		t.Errorf("branch mode hints changed:\n%s", branch)
+	}
+
+	r.typed("p")
+	r.until(t, "PR mode", r.inPRMode(7))
+
+	text := r.drawn(t)
+	if !strings.Contains(text, "j/k line   ]/[ hunk   b/t mode") {
+		t.Errorf("PR mode hints missing j/k line, ]/[ hunk, b/t mode:\n%s", text)
+	}
+
+	for _, gone := range []string{"}/{ file", "w worktree", "e edit", "/ search", "tab tree"} {
+		if strings.Contains(text, gone) {
+			t.Errorf("PR mode hints hold %q:\n%s", gone, text)
+		}
+	}
+}
+
+func TestPRModeShowsTheModeRow(t *testing.T) {
+	t.Parallel()
+
+	r := newPRDrawer(t)
+	r.poll()
+	r.opened(t)
+	r.showTree(t)
+	r.typed("p")
+	r.until(t, "PR mode", r.inPRMode(7))
+
+	if text := r.drawn(t); !strings.Contains(text, iconPR+" #7 vs main") {
+		t.Errorf("drawer lacks the mode row:\n%s", text)
+	}
+}
+
+func TestPRThenIsConsumedWhenTheResultLands(t *testing.T) {
+	t.Parallel()
+
+	r := newPRDrawer(t)
+	r.poll()
+	r.opened(t)
+
+	r.run(r.showPR(r.store.State().Tab().ID, nil, thenChecks))
+	r.until(t, "PR mode", func() bool { return r.review().PR != nil && r.view().then == thenChecks })
+	r.until(t, "the result", r.inPRMode(7))
+
+	if got := r.view().then; got != thenNothing {
+		t.Errorf("then = %v after the result landed, want it consumed", got)
+	}
+}
+
+func TestOpenWithPR(t *testing.T) {
+	t.Parallel()
+
+	t.Run("the drawer closed", func(t *testing.T) {
+		t.Parallel()
+
+		r := newPRDrawer(t)
+		r.poll()
+
+		pane := r.focus()
+		r.run(r.openWithPR(pane, &prWant{repo: prRepoKey, number: 7, root: r.root}, thenNothing))
+		r.until(t, "PR mode", r.inPRMode(7))
+
+		if rv := r.review(); rv.Pane != pane {
+			t.Errorf("drawer on %s, want %s", rv.Pane, pane)
+		}
+	})
+
+	t.Run("open on another pane", func(t *testing.T) {
+		t.Parallel()
+
+		r := newPRDrawer(t)
+		r.poll()
+		r.opened(t)
+
+		second := r.shell(t, r.dir)
+		r.run(r.openWithPR(second, &prWant{repo: prRepoKey, number: 7, root: r.root}, thenNothing))
+		r.until(t, "PR mode", r.inPRMode(7))
+
+		if rv := r.review(); rv.Pane != second {
+			t.Errorf("drawer on %s, want %s", rv.Pane, second)
+		}
+	})
+
+	t.Run("a leader d before the open answers", func(t *testing.T) {
+		t.Parallel()
+
+		r := newPRDrawer(t)
+		r.poll()
+
+		pane := r.focus()
+		stale := r.openWithPR(pane, &prWant{repo: prRepoKey, number: 7, root: r.root}, thenNothing)
+
+		r.leader('d')
+		r.until(t, "the drawer", func() bool { return r.review() != nil })
+		r.idle(t)
+
+		for _, m := range flatten(stale) {
+			r.run(r.step(m))
+		}
+
+		r.settle()
+		r.quiet(t, 50e6)
+
+		if rv := r.review(); rv == nil || rv.PR != nil {
+			t.Errorf("review = %+v, want a drawer that shows no pull request", rv)
+		}
+	})
+}
+
+func TestPRPlaceErrors(t *testing.T) {
+	t.Parallel()
+
+	resolve := func(context.Context, string, string) (github.Repo, error) { return prRepo, nil }
+
+	if _, err := resolvePRPlace(context.Background(), resolve, t.TempDir()); !errors.Is(err, errPRNoRepo) {
+		t.Errorf("outside a repository: err = %v, want %v", err, errPRNoRepo)
+	}
+
+	dir := prFeatureRepo(t)
+	gitIn(t, "git", dir, "switch", "-q", "-c", "feat/y")
+
+	if _, err := resolvePRPlace(context.Background(), resolve, dir); !errors.Is(err, errPRNoRemote) {
+		t.Errorf("with no remote: err = %v, want %v", err, errPRNoRemote)
+	}
+}

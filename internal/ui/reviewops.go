@@ -48,6 +48,8 @@ func pinnedTo(tab core.Tab, pane core.PaneID) bool {
 // loop; the drawer opens when they answer, in turn mode when the pane has turns
 // and the config allows it, else in branch mode.
 func (a *App) openReview(pane core.PaneID, focus bool) tea.Cmd {
+	a.drawer.prNext = nil
+
 	st := a.store.State()
 	tab := st.Tab()
 
@@ -100,6 +102,13 @@ func (a *App) openReview(pane core.PaneID, focus bool) tea.Cmd {
 func (a *App) onReviewOpen(msg reviewOpenMsg) tea.Cmd {
 	st := a.store.State()
 
+	next := a.drawer.prNext
+	if next != nil && next.tab == msg.tab && next.pane == msg.pane {
+		a.drawer.prNext = nil
+	} else {
+		next = nil
+	}
+
 	if _, ok := st.Panes[msg.pane]; !ok || st.Tab().ID != msg.tab || a.drawerDir(st, st.Tab(), msg.pane) != msg.cwd || !slices.Contains(st.Tab().Panes, msg.pane) {
 		return nil
 	}
@@ -133,6 +142,11 @@ func (a *App) onReviewOpen(msg reviewOpenMsg) tea.Cmd {
 
 	if msg.focus {
 		a.drawerTake()
+	}
+
+	if next != nil {
+		next.open = true
+		a.drawer.prNext = next
 	}
 
 	// The check found the pane's repository: hand it to the watch bookkeeping
@@ -187,6 +201,12 @@ func (a *App) setReviewMode(mode core.ReviewMode) tea.Cmd {
 	}
 
 	if err := a.dispatch(core.SetReviewMode{Mode: mode}); err != nil {
+		return nil
+	}
+
+	// Leaving PR mode may also leave its root: the sync after this update loads
+	// the place the drawer follows.
+	if v.pr != (core.ReviewPR{}) {
 		return nil
 	}
 

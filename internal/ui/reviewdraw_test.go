@@ -120,6 +120,12 @@ func reviewCases() []reviewCase {
 				showList(a, rows, "other · feature/follow-the-agents-edits", 3)
 			}
 		})},
+		{"pr", with(func(s *reviewScene) {
+			s.branch, s.tune = true, prScene
+		})},
+		{"pr-tree", with(func(s *reviewScene) {
+			s.branch, s.tree, s.tune = true, true, prScene
+		})},
 		{"unfocused", with(func(s *reviewScene) {
 			s.focused = false
 			s.tune = func(t *testing.T, a *App, v *reviewView) { v.cursor = rowWith(t, v, "review.toggle") }
@@ -1006,4 +1012,17 @@ func TestLineEndingCR(t *testing.T) {
 			}
 		})
 	}
+}
+
+// prScene puts the scene's drawer in PR mode on pull request 7, as the sync
+// after a fetch leaves it.
+func prScene(t *testing.T, a *App, v *reviewView) {
+	t.Helper()
+
+	pr := core.ReviewPR{Repo: prRepoKey, Number: 7, Root: "/w/p1"}
+	openIn(t, a, core.ShowReviewPR(pr))
+
+	v.pr, v.base = pr, "main"
+	v.src = git.PRSource{Worktree: pr.Root, Number: pr.Number}
+	v.cursor = rowWith(t, v, "a review pane needs an agent pane")
 }
