@@ -46,6 +46,9 @@ type Event struct {
 	// Edit is the cleaned absolute path of the file an edit tool is about to
 	// change or has changed; empty for every other event.
 	Edit string `json:"edit,omitempty"`
+	// Plan is the cleaned absolute path of the plan file an ExitPlanMode
+	// PreToolUse names; empty for every other event. The text is not carried.
+	Plan string `json:"plan,omitempty"`
 	// Before marks a PreToolUse whose Edit names a file its tool has not
 	// changed yet; the server holds its answer like a turn start's.
 	Before bool `json:"before,omitempty"`

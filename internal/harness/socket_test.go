@@ -125,6 +125,24 @@ func TestServerDeliversEditAndSubagent(t *testing.T) {
 	}
 }
 
+func TestServerDeliversPlan(t *testing.T) {
+	t.Parallel()
+
+	s := startServer(t, 1, nil)
+	want := Event{Pane: "p1", Name: "PreToolUse", Cwd: "/r", Plan: "/home/u/.claude/plans/x.md"}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	if err := Send(ctx, s.path, want); err != nil {
+		t.Fatalf("Send() error = %v", err)
+	}
+
+	if got := recv(t, s.out); !reflect.DeepEqual(got, want) {
+		t.Fatalf("event = %+v, want %+v", got, want)
+	}
+}
+
 func TestServerDeliversChanged(t *testing.T) {
 	t.Parallel()
 

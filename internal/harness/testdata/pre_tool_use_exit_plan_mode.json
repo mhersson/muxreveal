@@ -1,0 +1,6 @@
+{
+  "session_id": "11111111-2222-4333-8444-555555555555", "transcript_path": "/home/user/.claude/projects/-work/11111111-2222-4333-8444-555555555555.jsonl", "cwd": "/work",
+  "permission_mode": "plan", "hook_event_name": "PreToolUse", "tool_name": "ExitPlanMode",
+  "tool_input": {"plan": "# Plan\n\n1. Read the code.\n2. Change it.\n", "planFilePath": "/home/u/.claude/plans/lexical-hugging-muffin.md"},
+  "tool_use_id": "toolu_02"
+}
