@@ -223,6 +223,7 @@ func TestTurnStepping(t *testing.T) {
 	r.showTree(t)
 
 	// The latest turn took no snapshot: it reads as such, with its two info rows.
+	// Turn 3 stayed open behind it, so it has no snapshot either.
 	if !v.noSnapshot || v.turns != 4 || v.err != nil || len(v.res.Files) != 0 {
 		t.Fatalf("latest: noSnapshot=%v turns=%d err=%v files=%d, want a turn 4 of 4 without a snapshot",
 			v.noSnapshot, v.turns, v.err, len(v.res.Files))
@@ -235,21 +236,21 @@ func TestTurnStepping(t *testing.T) {
 		}
 	}
 
-	step := func(delta, turn int, through int, files ...string) {
+	step := func(delta, turn int, noSnap bool, files ...string) {
 		t.Helper()
 
 		r.run(r.stepReviewTurn(delta))
 		v := r.idle(t)
 
-		if v.res.Turn != turn || v.res.Through != through || !slices.Equal(viewPaths(v), files) {
-			t.Errorf("after stepping %d: turn %d through %d files %v, want turn %d through %d files %v",
-				delta, v.res.Turn, v.res.Through, viewPaths(v), turn, through, files)
+		if v.shownTurn() != turn || v.noSnapshot != noSnap || (!noSnap && v.res.Turn != turn) || !slices.Equal(viewPaths(v), files) {
+			t.Errorf("after stepping %d: turn %d (res %d) no snapshot %v files %v, want turn %d no snapshot %v files %v",
+				delta, v.shownTurn(), v.res.Turn, v.noSnapshot, viewPaths(v), turn, noSnap, files)
 		}
 	}
 
-	step(-1, 3, 4, "dir/c.txt")
-	step(-1, 2, 2, "b.txt", "d.txt", "new.txt")
-	step(-1, 1, 1, "a.txt")
+	step(-1, 3, true)
+	step(-1, 2, false, "b.txt", "d.txt", "new.txt")
+	step(-1, 1, false, "a.txt")
 
 	r.notice = ""
 	r.run(r.stepReviewTurn(-1))
@@ -262,8 +263,8 @@ func TestTurnStepping(t *testing.T) {
 		t.Errorf("the first turn's end reloaded: turn %d loading=%v", v.res.Turn, v.loading)
 	}
 
-	step(1, 2, 2, "b.txt", "d.txt", "new.txt")
-	step(1, 3, 4, "dir/c.txt")
+	step(1, 2, false, "b.txt", "d.txt", "new.txt")
+	step(1, 3, true)
 
 	// The latest turn is the source's turn 0 again, here without a snapshot.
 	r.run(r.stepReviewTurn(1))

@@ -487,10 +487,7 @@ func (j reviewJob) describe(ctx context.Context, info *reviewInfo) {
 		return
 	}
 
-	info.turns = 0
-	if len(turns) > 0 {
-		info.turns = turns[len(turns)-1].N
-	}
+	info.turns = len(turns)
 }
 
 // onReviewLoaded applies a load's answer unless its source was replaced since.
@@ -602,7 +599,7 @@ func (a *App) reviewApply(v *reviewView, msg reviewLoadedMsg) tea.Cmd {
 // sameResult reports whether two results are the same diff: trees are named by
 // their content.
 func sameResult(a, b git.Result) bool {
-	return a.Old == b.Old && a.New == b.New && a.Turn == b.Turn && a.Through == b.Through &&
+	return a.Old == b.Old && a.New == b.New && a.Turn == b.Turn &&
 		a.Live == b.Live && len(a.Files) == len(b.Files)
 }
 

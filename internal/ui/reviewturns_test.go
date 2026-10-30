@@ -675,39 +675,19 @@ func TestOpenDrawerOnAnotherWorktreeStartsInBranch(t *testing.T) {
 	}
 }
 
-func TestTurnModeAfterOwnDirectoryMoves(t *testing.T) {
-	t.Parallel()
-	r := newTurnRig(t, turnFirst)
-	r.open(t, r.id)
-
-	r.hookNow(cwdHook(r.id, r.dirB))
-	r.until(t, "A's turn on b", r.settledOn(r.rootB, true))
-
-	if v := r.view(); v.foreign || v.turns != 1 || r.coreMode() != core.ReviewTurn {
-		t.Errorf("foreign %v with %d turns in %q mode, want turn mode with the session's turn", v.foreign, v.turns, r.coreMode())
-	}
-
-	r.notice = ""
-	r.run(r.setReviewMode(core.ReviewTurn))
-	r.idle(t)
-
-	if _, ok := r.view().src.(git.TurnSource); !ok || r.notice != "" {
-		t.Errorf("source %T notice %q after t, want a turn and no notice", r.view().src, r.notice)
-	}
-}
-
 // The agent's own directory moving into or out of the shown worktree switches a
-// turn drawer between the turn and the branch.
+// turn drawer between the worktree's turn and the branch: b has no turn of the
+// session, so it shows the branch either way.
 func TestOwnDirectoryMovingFlipsTurnMode(t *testing.T) {
 	t.Parallel()
 	r := newTurnRig(t, turnFirst)
 	r.followB(t)
 
 	r.hookNow(cwdHook(r.id, r.dirB))
-	r.until(t, "the turn on b", r.settledOn(r.rootB, true))
+	r.until(t, "the branch of b as the agent's own", r.viewHolds(func(v *reviewView) bool { return v.root == r.rootB && !v.foreign && v.loaded && !v.loading }))
 
-	if v := r.view(); v.foreign || v.turns != 1 || r.pane().FollowDir() != r.dirB {
-		t.Errorf("foreign %v with %d turns following %q, want the turn of b followed", v.foreign, v.turns, r.pane().FollowDir())
+	if v := r.view(); v.turns != 0 || isTurnSource(v) || r.pane().FollowDir() != r.dirB {
+		t.Errorf("%d turns, source %T following %q, want b's branch with no turns, followed", v.turns, v.src, r.pane().FollowDir())
 	}
 
 	r.hookNow(cwdHook(r.id, r.dirA))
@@ -855,5 +835,70 @@ func TestTurnModeWithoutAnOwnRepository(t *testing.T) {
 				t.Errorf("t: notice = %q, want %q", r.notice, want)
 			}
 		})
+	}
+}
+
+// A turn is listed in the worktree it was taken in: after the agent's own
+// directory moved into b, A's turn is not a turn of b.
+func TestOwnDirectoryMovedListsOnlyItsWorktreesTurns(t *testing.T) {
+	t.Parallel()
+	r := newTurnRig(t, turnFirst)
+	r.open(t, r.id)
+
+	r.hookNow(cwdHook(r.id, r.dirB))
+	r.until(t, "the drawer to show b", r.viewHolds(func(v *reviewView) bool { return v.root == r.rootB && v.loaded && !v.loading }))
+
+	if v := r.view(); v.turns != 0 || isTurnSource(v) || r.coreMode() != core.ReviewTurn {
+		t.Errorf("b has %d turns, source %T, core mode %q, want none, the branch and turn mode kept", v.turns, v.src, r.coreMode())
+	}
+
+	r.notice = ""
+	r.run(r.stepReviewTurn(-1))
+	r.idle(t)
+
+	if r.notice != "no turns yet" {
+		t.Errorf("notice %q, want %q", r.notice, "no turns yet")
+	}
+}
+
+// A session that moved worktrees keeps each turn with the worktree it began in.
+func TestPastTurnOfAMovedSessionStaysInItsWorktree(t *testing.T) {
+	t.Parallel()
+	r := newFollowRig(t, testSession, turnFirst)
+
+	const lineOfA = "only in worktree A"
+
+	write(t, filepath.Join(r.dirA, "a.txt"), "one\n"+lineOfA+"\n")
+	snapshotTurn(t, r.dirA, testSession)
+	r.open(t, r.id)
+
+	r.hookNow(cwdHook(r.id, r.dirB))
+	r.until(t, "the drawer to show b", r.viewHolds(func(v *reviewView) bool { return v.root == r.rootB && v.loaded && !v.loading }))
+
+	write(t, filepath.Join(r.dirB, "b.txt"), "changed in b\n")
+
+	done := r.turnStartFirst(t, r.id)
+
+	snapshotTurn(t, r.dirB, testSession)
+	done()
+
+	write(t, filepath.Join(r.dirB, "after.txt"), "after the turn\n")
+	r.until(t, "b's turn", r.viewHolds(func(v *reviewView) bool { return v.turns > 0 && isTurnSource(v) && !v.loading }))
+
+	got := r.drawn(t)
+	if !strings.Contains(got, "turn 1/1") || strings.Contains(got, lineOfA) {
+		t.Errorf("the drawer should read turn 1/1 without A's line:\n%s", got)
+	}
+
+	r.notice = ""
+	r.run(r.stepReviewTurn(-1))
+	r.idle(t)
+
+	if want := "turn 1 is the first turn"; r.notice != want {
+		t.Errorf("notice %q, want %q", r.notice, want)
+	}
+
+	if got := r.drawn(t); strings.Contains(got, lineOfA) {
+		t.Errorf("a row holds A's line:\n%s", got)
 	}
 }

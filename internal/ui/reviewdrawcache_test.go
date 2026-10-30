@@ -171,7 +171,6 @@ func TestDrawerLinesFollowTheirInputs(t *testing.T) {
 		}, differs: true},
 		{name: "the icons go off", scene: small, change: func(t *testing.T, a *App, v *reviewView) { a.icons = false }, differs: true},
 		{name: "the turn count changes", scene: small, change: func(t *testing.T, a *App, v *reviewView) { v.turns = 9 }, differs: true},
-		{name: "the turns the diff covers change", scene: func(s *reviewScene) { s.turn, s.tree = 3, true }, change: func(t *testing.T, a *App, v *reviewView) { v.res.Through = 4 }, differs: true},
 		{name: "the source changes", scene: small, change: func(t *testing.T, a *App, v *reviewView) {
 			v.src, v.base = git.BranchSource{Worktree: "/w/p1"}, "origin/dev"
 		}, differs: true},

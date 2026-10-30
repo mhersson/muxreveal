@@ -25,8 +25,9 @@ func fileRows(v *reviewView) []string {
 
 // An agent launched in the main checkout that moves into a linked worktree
 // takes the rail, the drawer in both modes and the tab's name with it, and
-// brings them back when it returns. The turn it started in the main checkout
-// stays readable once a turn has started in the worktree.
+// brings them back when it returns. A turn it started in the main checkout is
+// not a turn of the worktree: turn mode there has none until the worktree has
+// a turn of its own.
 func TestAgentMovingIntoAWorktreeTakesTheRailAndDrawer(t *testing.T) {
 	t.Parallel()
 	r := newDrawerRig(t)
@@ -122,23 +123,32 @@ func TestAgentMovingIntoAWorktreeTakesTheRailAndDrawer(t *testing.T) {
 		t.Errorf("branch mode shows %v on %q, want a.txt on feat/x", fileRows(v), v.branch)
 	}
 
+	// The turn started in the main checkout is not a turn of the worktree.
+	r.notice = ""
+	r.keys(keyRune('t'))
+	r.idle(t)
+
+	if v := r.view(); !isBranchSource(v) || r.notice != "no turns yet" {
+		t.Errorf("t in the worktree gives source %T and notice %q, want the branch and %q", v.src, r.notice, "no turns yet")
+	}
+
+	// The worktree's own turn starts, and the agent changes a file after it.
+	turnStart(linked)
+	write(t, filepath.Join(linked, "a.txt"), "one\ntwo\nthree\nfour\n")
+	r.until(t, "the worktree's turn to be counted", r.viewHolds(func(v *reviewView) bool { return v.turns == 1 && v.loaded && !v.loading }))
+
+	r.notice = ""
 	r.keys(keyRune('t'))
 	r.until(t, "turn mode", r.viewHolds(func(v *reviewView) bool { return !isBranchSource(v) && v.loaded && !v.loading }))
 
-	if v := r.view(); !v.res.Live || v.res.Turn != 1 || v.err != nil || !slices.Contains(fileRows(v), "a.txt") {
-		t.Errorf("turn mode shows %v of turn %d (live %v, err %v), want the live turn 1 with a.txt", fileRows(v), v.res.Turn, v.res.Live, v.err)
+	if v := r.view(); !v.res.Live || v.res.Turn != 1 || v.turns != 1 || v.err != nil || !slices.Contains(fileRows(v), "a.txt") {
+		t.Errorf("turn mode shows %v of turn %d of %d (live %v, err %v), want the live turn 1 of 1 with a.txt", fileRows(v), v.res.Turn, v.turns, v.res.Live, v.err)
 	}
 
-	// The next turn starts in the worktree; the first is then a past turn,
-	// whose diff may be noisy but must load.
-	turnStart(linked)
-	r.until(t, "turn 2", r.viewHolds(func(v *reviewView) bool { return v.res.Turn == 2 && v.turns == 2 && v.loaded && !v.loading }))
-
 	r.keys(keyRune(','))
-	r.until(t, "turn 1", r.viewHolds(func(v *reviewView) bool { return v.res.Turn == 1 && !v.res.Live && v.loaded && !v.loading }))
 
-	if v := r.view(); v.err != nil || v.noSnapshot || r.notice != "" || !slices.Contains(fileRows(v), "a.txt") {
-		t.Errorf("turn 1 shows %v (err %v, no snapshot %v, notice %q), want a loaded diff with a.txt", fileRows(v), v.err, v.noSnapshot, r.notice)
+	if want := "turn 1 is the first turn"; r.notice != want {
+		t.Errorf("notice %q after ',', want %q", r.notice, want)
 	}
 
 	// Back in the main checkout the rail and the drawer return to it.

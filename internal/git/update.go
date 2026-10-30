@@ -114,7 +114,7 @@ func (e *Engine) update(ctx context.Context, r Repo, prev Result, src Source, b 
 			return Result{}, err
 		}
 
-		if len(turns) == 0 || turns[len(turns)-1].N != prev.Through {
+		if last := len(turns); last == 0 || prev.Turn != last || !stillLive(turns[last-1], prev.Old) {
 			return e.Diff(ctx, src)
 		}
 	}
@@ -155,12 +155,17 @@ func (e *Engine) update(ctx context.Context, r Repo, prev Result, src Source, b 
 		}
 	}
 
-	res := Result{Old: prev.Old, New: wt.Tree, Live: true, Turn: prev.Turn, Through: prev.Through, Files: files}
+	res := Result{Old: prev.Old, New: wt.Tree, Live: true, Turn: prev.Turn, Files: files}
 	for _, f := range files {
 		res.Truncated = res.Truncated || f.Truncated
 	}
 
 	return res, nil
+}
+
+// stillLive reports whether t is the open current turn that started at tree.
+func stillLive(t Turn, tree string) bool {
+	return !t.Missing && t.EndCommit == "" && t.Current && t.Tree == tree
 }
 
 // worktreeOf returns the worktree of a branch or turn source.

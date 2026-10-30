@@ -30,8 +30,9 @@ type Source interface{ source() }
 // An empty Base means the default branch.
 type BranchSource struct{ Worktree, Base string }
 
-// TurnSource compares one turn's snapshot with what followed it. Turn 0 is the
-// latest turn.
+// TurnSource compares one turn of a worktree with what followed it. Turn is a
+// position in the worktree's list of the session's turns: 1 the oldest, 0 the
+// latest.
 type TurnSource struct {
 	Worktree, Session string
 	Turn              int
@@ -105,8 +106,7 @@ type FileDiff struct {
 type Result struct {
 	Old, New  string // tree ids
 	Live      bool   // New is the working tree
-	Turn      int    // turn sources: the turn shown
-	Through   int    // turn sources: the last turn the diff covers
+	Turn      int    // turn sources: the position shown in the worktree's list
 	Head      string // PR sources: the head commit shown; a merge passes it
 	Files     []FileDiff
 	Truncated bool
@@ -259,62 +259,42 @@ func (e *Engine) diffTurn(ctx context.Context, s TurnSource) (Result, error) {
 		return Result{}, fmt.Errorf("diff session %s: %w", s.Session, ErrNoTurns)
 	}
 
-	latest := turns[len(turns)-1].N
-
-	want := s.Turn
-	if want == 0 {
-		want = latest
+	pos := s.Turn
+	if pos == 0 {
+		pos = len(turns)
 	}
 
-	idx := -1
-
-	for i, t := range turns {
-		if t.N == want {
-			idx = i
-		}
+	if pos < 1 || pos > len(turns) {
+		return Result{}, fmt.Errorf("diff turn %d: %w", pos, ErrNoSnapshot)
 	}
 
-	if idx < 0 || turns[idx].Missing {
-		return Result{}, fmt.Errorf("diff turn %d: %w", want, ErrNoSnapshot)
-	}
-
-	next := -1
-
-	for i := idx + 1; i < len(turns); i++ {
-		if !turns[i].Missing {
-			next = i
-
-			break
-		}
-	}
+	t := turns[pos-1]
 
 	var res Result
 
-	if next < 0 {
+	switch {
+	case t.Missing, t.EndCommit != "" && t.EndMissing, t.EndCommit == "" && !t.Current:
+		return Result{}, fmt.Errorf("diff turn %d: %w", pos, ErrNoSnapshot)
+	case t.EndCommit != "":
+		res, err = e.compare(ctx, r, t.Tree, WorkTree{Tree: t.EndTree})
+		if err != nil {
+			return Result{}, err
+		}
+	default:
 		wt, err := e.workingTree(ctx, r)
 		if err != nil {
 			return Result{}, fmt.Errorf("diff: %w", err)
 		}
 
-		res, err = e.compare(ctx, r, turns[idx].Tree, wt)
+		res, err = e.compare(ctx, r, t.Tree, wt)
 		if err != nil {
 			return Result{}, err
 		}
 
 		res.Live = true
-		res.Through = latest
-		res.Turn = want
-
-		return res, nil
 	}
 
-	res, err = e.compare(ctx, r, turns[idx].Tree, WorkTree{Tree: turns[next].Tree})
-	if err != nil {
-		return Result{}, err
-	}
-
-	res.Through = turns[next].N - 1
-	res.Turn = want
+	res.Turn = pos
 
 	return res, nil
 }

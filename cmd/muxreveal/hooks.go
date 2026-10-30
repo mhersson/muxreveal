@@ -131,7 +131,7 @@ func setupHooks(logger *slog.Logger, stateDir, indexCache string, watches *git.W
 	})
 
 	wg.Go(func() {
-		runTurnGate(ctx, raw, events, gitSnapshot(runDir, indexCache), gitMarker, watchSeq(watches), logger)
+		runTurnGate(ctx, raw, events, gitTurnWriter{tempDir: runDir, indexCache: indexCache}, watchSeq(watches), logger)
 	})
 
 	stop := sync.OnceFunc(func() {
@@ -157,22 +157,6 @@ func warnStatusLineOff(logger *slog.Logger, exe string) {
 	if _, err := harness.QuotePath(exe); err != nil {
 		logger.Warn("status line is off", "err", err)
 	}
-}
-
-// gitSnapshot snapshots the working tree with its temporary index in tempDir
-// and the refreshed index copies in indexCache.
-func gitSnapshot(tempDir, indexCache string) snapshotFunc {
-	return func(ctx context.Context, dir, session string, unchanged bool) error {
-		_, err := git.Snapshot(ctx, dir, session, git.SnapshotOptions{TempDir: tempDir, IndexCache: indexCache, Unchanged: unchanged})
-
-		return err
-	}
-}
-
-func gitMarker(ctx context.Context, dir, session string, _ bool) error {
-	_, err := git.MarkMissing(ctx, dir, session)
-
-	return err
 }
 
 // watchSeq reads the change counter of the worktree containing dir. The root is

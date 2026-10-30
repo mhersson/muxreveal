@@ -376,6 +376,34 @@ func TestUpdateLiveTurn(t *testing.T) {
 	}
 }
 
+// A turn that ended is a start against an end now, so the live result is no
+// base for an incremental update.
+func TestUpdateEndedTurnFallsBack(t *testing.T) {
+	t.Parallel()
+
+	dir := turnRepo(t)
+	e := testEngine(t)
+	src := TurnSource{Worktree: dir, Session: sessA}
+	prev := diffOK(t, e, src)
+
+	writeFile(t, dir, "b.txt", "edited before the next prompt\n")
+
+	end, err := EndTurn(context.Background(), dir, sessA, 1, SnapshotOptions{TempDir: t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	writeFile(t, dir, "c.txt", "after the end\n")
+
+	res := updateOK(t, e, prev, src, Batch{Paths: []string{"c.txt"}})
+
+	if res.Live || res.New != end.EndTree {
+		t.Errorf("Live=%v New=%s, want the closed turn ending at %s", res.Live, res.New, end.EndTree)
+	}
+
+	sameAsFull(t, res, src)
+}
+
 func TestUpdateKeepsCaps(t *testing.T) {
 	t.Parallel()
 	dir := branchRepo(t, func(dir string) {

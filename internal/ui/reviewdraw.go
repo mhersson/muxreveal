@@ -183,7 +183,7 @@ type drawKey struct {
 	project, branch      string
 	base                 string
 	turns                int
-	resTurn, resThrough  int
+	resTurn              int
 	noSnapshot           bool
 	pinned               bool
 	list                 wtKey
@@ -201,7 +201,7 @@ func (d *drawCtx) key(r core.Rect, name string) drawKey {
 		top: d.top, cursor: v.cursor, treeSel: v.treeSel,
 		query: d.query, searching: v.search != nil,
 		src: v.src, project: v.project, branch: v.branch, base: v.base,
-		turns: v.turns, resTurn: v.res.Turn, resThrough: v.res.Through, noSnapshot: v.noSnapshot, pinned: d.pinned,
+		turns: v.turns, resTurn: v.res.Turn, noSnapshot: v.noSnapshot, pinned: d.pinned,
 		list: d.listKey(),
 	}
 

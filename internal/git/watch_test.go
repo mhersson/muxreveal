@@ -382,11 +382,17 @@ func TestWatchSnapshotRefsDoNotWake(t *testing.T) {
 
 		gitOut(t, dir, "update-ref", "refs/muxreveal/x/2", "HEAD")
 		quiet(t, w, 500*time.Millisecond, func(Batch) bool { return true })
+
+		// A turn's refs sit three directories deep.
+		gitOut(t, dir, "update-ref", turnRef(sessA, "0123456789abcdef", 1, false), "HEAD")
+		gitOut(t, dir, "update-ref", turnRef(sessA, "0123456789abcdef", 1, true), "HEAD")
+		quiet(t, w, 500*time.Millisecond, func(Batch) bool { return true })
 	})
 
 	t.Run("directory exists at start", func(t *testing.T) {
 		dir := baseRepo(t)
 		gitOut(t, dir, "update-ref", "refs/muxreveal/x/1", "HEAD")
+		gitOut(t, dir, "update-ref", turnRef(sessA, "0123456789abcdef", 1, false), "HEAD")
 
 		w := startWatch(t, dir, fastWatch)
 
@@ -397,6 +403,9 @@ func TestWatchSnapshotRefsDoNotWake(t *testing.T) {
 		}
 
 		gitOut(t, dir, "update-ref", "refs/muxreveal/x/2", "HEAD")
+		quiet(t, w, 500*time.Millisecond, func(Batch) bool { return true })
+
+		gitOut(t, dir, "update-ref", turnRef(sessA, "0123456789abcdef", 2, false), "HEAD")
 		quiet(t, w, 500*time.Millisecond, func(Batch) bool { return true })
 	})
 }

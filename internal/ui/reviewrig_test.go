@@ -56,10 +56,25 @@ func numberedLines(prefix string, n int) string {
 	return b.String()
 }
 
+// snapshotTurn takes the session's next turn in dir's worktree. Like the next
+// prompt, it ends the worktree's latest turn when that is open.
 func snapshotTurn(t *testing.T, dir string, session core.SessionID) {
 	t.Helper()
 
-	if _, err := git.Snapshot(context.Background(), dir, string(session), git.SnapshotOptions{TempDir: t.TempDir()}); err != nil {
+	opts := git.SnapshotOptions{TempDir: t.TempDir()}
+
+	r, err := git.Open(context.Background(), dir)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+
+	if turns, err := git.Turns(context.Background(), r, string(session)); err == nil && len(turns) > 0 {
+		if last := turns[len(turns)-1]; last.EndCommit == "" && !last.Missing {
+			opts.Ends = last.N
+		}
+	}
+
+	if _, err := git.Snapshot(context.Background(), dir, string(session), opts); err != nil {
 		t.Fatalf("Snapshot: %v", err)
 	}
 }
@@ -67,7 +82,7 @@ func snapshotTurn(t *testing.T, dir string, session core.SessionID) {
 func missingTurn(t *testing.T, dir string, session core.SessionID) {
 	t.Helper()
 
-	if _, err := git.MarkMissing(context.Background(), dir, string(session)); err != nil {
+	if _, err := git.MarkMissing(context.Background(), dir, string(session), 0, false); err != nil {
 		t.Fatalf("MarkMissing: %v", err)
 	}
 }

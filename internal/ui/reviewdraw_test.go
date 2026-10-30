@@ -567,7 +567,6 @@ func TestDrawerTitleAndTags(t *testing.T) {
 		{"icons", true, func(s *reviewScene) {}, []string{"\U000F02DA turn 4/4 ", "\uF4D2 muxreveal"}, nil},
 		{"past turn", false, func(s *reviewScene) { s.turn = 2 }, []string{" turn 2/4 ─╮", "turn 2 of 4"}, []string{", live"}},
 		{"latest turn is live", false, func(s *reviewScene) {}, []string{"turn 4 of 4, live"}, nil},
-		{"range of turns", false, func(s *reviewScene) { s.turn, s.through = 3, 4 }, []string{"turns 3-4 of 4"}, nil},
 		{"branch", false, func(s *reviewScene) { s.branch = true }, []string{" branch ─╮", "branch vs origin/main"}, []string{"turn 4/4"}},
 		{"branch icon", true, func(s *reviewScene) { s.branch = true }, []string{"\U000F062C branch ", "\U000F062C branch vs origin/main"}, nil},
 		{"split tag", false, func(s *reviewScene) {
@@ -885,7 +884,7 @@ func TestDrawerTreeLayout(t *testing.T) {
 func crResult(specs ...string) git.Result {
 	f := fileSpec("eol.txt", git.Modified, hunkSpec(1, 1, "", specs...))
 
-	return git.Result{Turn: 4, Through: 4, Files: []git.FileDiff{f}}
+	return git.Result{Turn: 4, Files: []git.FileDiff{f}}
 }
 
 func TestLineEndingCR(t *testing.T) {

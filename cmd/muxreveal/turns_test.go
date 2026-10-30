@@ -20,6 +20,20 @@ import (
 
 const gateSession = "11111111-2222-4333-8444-555555555555"
 
+// snapshotFunc is a fake snapshot or marker; funcWriter adapts a pair of them to
+// the gate's turnWriter. A marker ignores unchanged.
+type snapshotFunc func(ctx context.Context, dir, session string, unchanged bool) error
+
+type funcWriter struct{ snap, mark snapshotFunc }
+
+func (w funcWriter) Start(ctx context.Context, dir, session string, _, _ int, unchanged bool) error {
+	return w.snap(ctx, dir, session, unchanged)
+}
+
+func (w funcWriter) Mark(ctx context.Context, dir, session string, _ int, _ bool) error {
+	return w.mark(ctx, dir, session, false)
+}
+
 // gateRig runs a gate over fake snapshot functions.
 type gateRig struct {
 	in   chan harness.Event
@@ -44,7 +58,7 @@ func startSeqGate(t *testing.T, snap, mark snapshotFunc, seq seqFunc) *gateRig {
 	go func() {
 		defer close(r.done)
 
-		runTurnGate(ctx, r.in, r.out, snap, mark, seq, discardLogger())
+		runTurnGate(ctx, r.in, r.out, funcWriter{snap, mark}, seq, discardLogger())
 	}()
 
 	t.Cleanup(func() {
@@ -224,7 +238,7 @@ func startUnreadGate(t *testing.T, snap snapshotFunc) chan<- harness.Event {
 	go func() {
 		defer close(done)
 
-		runTurnGate(ctx, in, make(chan harness.Event), snap, func(context.Context, string, string, bool) error { return nil }, noSeq, discardLogger())
+		runTurnGate(ctx, in, make(chan harness.Event), funcWriter{snap, func(context.Context, string, string, bool) error { return nil }}, noSeq, discardLogger())
 	}()
 
 	t.Cleanup(func() {
@@ -613,7 +627,7 @@ func TestGateCancelWaitsForSnapshotsAndWritesNoMarker(t *testing.T) {
 	go func() {
 		defer close(returned)
 
-		runTurnGate(ctx, in, out, snap, mark, noSeq, discardLogger())
+		runTurnGate(ctx, in, out, funcWriter{snap, mark}, noSeq, discardLogger())
 	}()
 
 	turn, _ := turnEvent("UserPromptSubmit", gateSession, "/repo")
@@ -822,8 +836,8 @@ func TestHookBudgetSlowSnapshot(t *testing.T) {
 		time.Sleep(20 * time.Millisecond)
 	}
 
-	if len(turns) != 1 || !turns[0].Missing || turns[0].N != 1 {
-		t.Fatalf("turns = %+v, want only a marker for turn 1", turns)
+	if len(turns) != 1 || !turns[0].Missing || turns[0].N == 0 {
+		t.Fatalf("turns = %+v, want only a marker for the turn", turns)
 	}
 
 	if out := gitOut(t, repo, "for-each-ref", "refs/muxreveal/"); strings.Count(out, "\n") != 0 {
@@ -1122,5 +1136,171 @@ func TestGateKeepsSeqPerSession(t *testing.T) {
 
 	if <-s.flags {
 		t.Fatal("another session's first turn was skipped")
+	}
+}
+
+func TestNextTurnID(t *testing.T) {
+	t.Parallel()
+
+	at := time.UnixMilli(1_700_000_000_500)
+
+	tests := []struct {
+		name string
+		prev int
+		want int
+	}{
+		{"a later time", 1_700_000_000_000, 1_700_000_000_500},
+		{"the same millisecond", 1_700_000_000_500, 1_700_000_000_501},
+		{"a clock set back", 1_700_000_009_000, 1_700_000_009_001},
+		{"the pane's first turn", 0, 1_700_000_000_500},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			if got := nextTurnID(tt.prev, at); got != tt.want {
+				t.Errorf("nextTurnID(%d) = %d, want %d", tt.prev, got, tt.want)
+			}
+		})
+	}
+}
+
+// recordedStart is one call of a recording writer.
+type recordedStart struct {
+	pane       core.PaneID
+	dir        string
+	turn, ends int
+	mark       bool
+}
+
+// recordingWriter records what the gate writes; failing starts return an error.
+type recordingWriter struct {
+	mu    sync.Mutex
+	calls []recordedStart
+	fail  func(dir string) bool
+}
+
+func (w *recordingWriter) Start(_ context.Context, dir, _ string, turn, ends int, _ bool) error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	w.calls = append(w.calls, recordedStart{dir: dir, turn: turn, ends: ends})
+
+	if w.fail != nil && w.fail(dir) {
+		return errors.New("boom")
+	}
+
+	return nil
+}
+
+func (w *recordingWriter) Mark(_ context.Context, dir, _ string, turn int, _ bool) error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	w.calls = append(w.calls, recordedStart{dir: dir, turn: turn, mark: true})
+
+	return nil
+}
+
+func (w *recordingWriter) starts() []recordedStart {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	var out []recordedStart
+
+	for _, c := range w.calls {
+		if !c.mark {
+			out = append(out, c)
+		}
+	}
+
+	return out
+}
+
+// dirSeq resolves a directory to the worktree root named like it.
+func dirSeq(_ context.Context, dir string) (string, uint64, bool) { return "root" + dir, 1, true }
+
+// sendTurns sends one turn start per (pane, cwd) pair and waits for each to be
+// answered, so the starts run in order.
+func sendTurns(t *testing.T, w turnWriter, seq seqFunc, sends ...recordedStart) {
+	t.Helper()
+
+	in, out := make(chan harness.Event, 16), make(chan harness.Event, 16)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+
+	go func() {
+		defer close(done)
+
+		runTurnGate(ctx, in, out, w, seq, discardLogger())
+	}()
+
+	t.Cleanup(func() {
+		cancel()
+		<-done
+	})
+
+	for _, s := range sends {
+		ev, released := turnEvent("UserPromptSubmit", gateSession, s.dir)
+
+		ev.Pane = s.pane
+		in <- ev
+
+		within(t, released, time.Second, "turn release")
+	}
+}
+
+func TestGateEndsThePreviousTurnInTheSameWorktree(t *testing.T) {
+	t.Parallel()
+
+	w := &recordingWriter{}
+
+	sendTurns(t, w, dirSeq, recordedStart{dir: "/a"}, recordedStart{dir: "/a"}, recordedStart{dir: "/a"})
+
+	got := w.starts()
+	if len(got) != 3 {
+		t.Fatalf("starts = %+v, want 3", got)
+	}
+
+	if got[0].ends != 0 || got[1].ends != got[0].turn || got[2].ends != got[1].turn {
+		t.Errorf("ends = %d, %d, %d, want 0 then each previous number %d, %d", got[0].ends, got[1].ends, got[2].ends, got[0].turn, got[1].turn)
+	}
+
+	if got[0].turn <= 0 || got[1].turn <= got[0].turn || got[2].turn <= got[1].turn {
+		t.Errorf("numbers %d, %d, %d do not increase", got[0].turn, got[1].turn, got[2].turn)
+	}
+}
+
+func TestGateEndsNothingAcrossWorktrees(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		sends []recordedStart
+		fail  func(dir string) bool
+	}{
+		{"a start in another worktree", []recordedStart{{dir: "/a"}, {dir: "/b"}}, nil},
+		{"after a failed start", []recordedStart{{dir: "/a"}, {dir: "/a"}}, func(string) bool { return true }},
+		{"another pane", []recordedStart{{dir: "/a", pane: "p1"}, {dir: "/a", pane: "p2"}}, nil},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			w := &recordingWriter{fail: tt.fail}
+
+			sendTurns(t, w, dirSeq, tt.sends...)
+
+			got := w.starts()
+			if len(got) != 2 {
+				t.Fatalf("starts = %+v, want 2", got)
+			}
+
+			if got[0].ends != 0 || got[1].ends != 0 {
+				t.Errorf("ends = %d, %d, want 0 and 0", got[0].ends, got[1].ends)
+			}
+		})
 	}
 }

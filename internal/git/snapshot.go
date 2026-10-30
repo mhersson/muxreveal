@@ -3,6 +3,8 @@ package git
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"path/filepath"
@@ -15,6 +17,7 @@ import (
 
 const (
 	refPrefix      = "refs/muxreveal/"
+	turnsPrefix    = refPrefix + "turns/"
 	maxSkippedTags = 20
 
 	// refWriteBudget bounds writing a ref and its commit once the tree exists;
@@ -27,7 +30,9 @@ var ErrBadSession = errors.New("git: session id is not a UUID")
 
 var (
 	sessionRE = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
-	turnRefRE = regexp.MustCompile(`^refs/muxreveal/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/([0-9]+)$`)
+	turnRefRE = regexp.MustCompile(`^refs/muxreveal/turns/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/([0-9a-f]{16})/([0-9]+)/(start|end)$`)
+	// legacyRefRE is the earlier layout, which is pruned but no longer read.
+	legacyRefRE = regexp.MustCompile(`^refs/muxreveal/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/([0-9]+)$`)
 )
 
 // refWriteContext returns the context for a ref write: the caller's error when
@@ -47,22 +52,49 @@ type SnapshotOptions struct {
 	TempDir      string // where the temporary index is created
 	IndexCache   string // keeps a refreshed index copy per worktree; empty = none
 	MaxUntracked int64  // bytes; 0 = 50 MiB, negative = no cap
-	Unchanged    bool   // reuse the previous turn's tree without staging
+	Unchanged    bool   // reuse the worktree's latest tree in the session without staging
+	Turn         int    // the turn's number; 0 takes one more than the session's highest in the repository
+	Ends         int    // a turn of this worktree to end with the same tree when it is open; 0 for none
 }
 
-// Turn is one recorded turn of a session.
+// Turn is one turn of a session in one worktree.
 type Turn struct {
-	N       int
-	Commit  string
-	Tree    string
-	Missing bool // a "no snapshot" marker
-	Skipped []string
-	Time    time.Time // committer time
+	N          int
+	Commit     string // the start
+	Tree       string
+	Missing    bool   // the start is a "no snapshot" marker
+	EndCommit  string // "" while the turn is open
+	EndTree    string
+	EndMissing bool // the end is a marker
+	Current    bool // N is the session's highest turn number in the repository
+	Skipped    []string
+	Time       time.Time // the start's committer time
 }
 
-// Snapshot records the working tree of the worktree containing dir as the
-// session's next turn under refs/muxreveal/<session>/<n>. The user's index,
-// refs, stash and files are only read.
+// ErrTurnNotOpen means the turn to end has no start in this worktree, or has an
+// end already.
+var ErrTurnNotOpen = errors.New("git: the turn is not open in this worktree")
+
+// turnKey names a worktree in turn refs: the first 16 hex digits of the SHA-256
+// of its root.
+func turnKey(root string) string {
+	sum := sha256.Sum256([]byte(root))
+
+	return hex.EncodeToString(sum[:])[:16]
+}
+
+func turnRef(session, key string, n int, end bool) string {
+	leaf := "start"
+	if end {
+		leaf = "end"
+	}
+
+	return fmt.Sprintf("%s%s/%s/%d/%s", turnsPrefix, session, key, n, leaf)
+}
+
+// Snapshot records the working tree of the worktree containing dir as the start
+// of turn opts.Turn of the session. The user's index, refs, stash and files are
+// only read.
 func Snapshot(ctx context.Context, dir, session string, opts SnapshotOptions) (Turn, error) {
 	session, err := normalizeSession(session)
 	if err != nil {
@@ -74,7 +106,7 @@ func Snapshot(ctx context.Context, dir, session string, opts SnapshotOptions) (T
 		return Turn{}, err
 	}
 
-	turns, err := Turns(ctx, r, session)
+	mine, _, err := sessionTurns(ctx, r, session)
 	if err != nil {
 		return Turn{}, err
 	}
@@ -84,9 +116,9 @@ func Snapshot(ctx context.Context, dir, session string, opts SnapshotOptions) (T
 	reused := false
 
 	if opts.Unchanged {
-		for _, t := range slices.Backward(turns) {
-			if !t.Missing {
-				wt = WorkTree{Tree: t.Tree, Skipped: t.Skipped}
+		for _, t := range slices.Backward(mine) {
+			if tree, ok := latestTree(t); ok {
+				wt = WorkTree{Tree: tree, Skipped: t.Skipped}
 				reused = true
 
 				break
@@ -101,12 +133,25 @@ func Snapshot(ctx context.Context, dir, session string, opts SnapshotOptions) (T
 		}
 	}
 
-	return writeTurn(ctx, r, session, turns, wt.Tree, wt.Skipped, false)
+	return writeStart(ctx, r, session, opts.Turn, opts.Ends, wt.Tree, wt.Skipped, false)
 }
 
-// MarkMissing records that a turn has no snapshot: a commit of the empty tree
-// with the trailer "Snapshot: none", so later turns keep their numbers.
-func MarkMissing(ctx context.Context, dir, session string) (Turn, error) {
+// latestTree is the tree a turn left the worktree in: its end, else its start.
+func latestTree(t Turn) (string, bool) {
+	switch {
+	case t.EndCommit != "" && !t.EndMissing:
+		return t.EndTree, true
+	case !t.Missing:
+		return t.Tree, true
+	}
+
+	return "", false
+}
+
+// EndTurn records the working tree as the end of turn n of the worktree
+// containing dir. A turn with no start there, a start marker or an end is
+// ErrTurnNotOpen.
+func EndTurn(ctx context.Context, dir, session string, n int, opts SnapshotOptions) (Turn, error) {
 	session, err := normalizeSession(session)
 	if err != nil {
 		return Turn{}, err
@@ -117,9 +162,67 @@ func MarkMissing(ctx context.Context, dir, session string) (Turn, error) {
 		return Turn{}, err
 	}
 
-	turns, err := Turns(ctx, r, session)
+	mine, _, err := sessionTurns(ctx, r, session)
 	if err != nil {
 		return Turn{}, err
+	}
+
+	t, ok := openTurn(mine, n)
+	if !ok || t.Missing {
+		return Turn{}, fmt.Errorf("end turn %d: %w", n, ErrTurnNotOpen)
+	}
+
+	tree := t.Tree
+
+	if !opts.Unchanged {
+		wt, err := WorkingTree(ctx, r, TreeOptions{TempDir: opts.TempDir, IndexCache: opts.IndexCache, MaxUntracked: opts.MaxUntracked})
+		if err != nil {
+			return Turn{}, fmt.Errorf("snapshot %s: %w", r.Root, err)
+		}
+
+		tree = wt.Tree
+	}
+
+	return writeEnd(ctx, r, session, t, tree, false)
+}
+
+func openTurn(turns []Turn, n int) (Turn, bool) {
+	for _, t := range turns {
+		if t.N == n && t.EndCommit == "" {
+			return t, true
+		}
+	}
+
+	return Turn{}, false
+}
+
+// MarkMissing records that a turn has no snapshot: a commit of the empty tree
+// with the trailer "Snapshot: none". As a start it is turn n (0 for the next),
+// so later turns keep their numbers; as an end (end true) it closes the open
+// turn n.
+func MarkMissing(ctx context.Context, dir, session string, n int, end bool) (Turn, error) {
+	session, err := normalizeSession(session)
+	if err != nil {
+		return Turn{}, err
+	}
+
+	r, err := Open(ctx, dir)
+	if err != nil {
+		return Turn{}, err
+	}
+
+	var t Turn
+
+	if end {
+		mine, _, err := sessionTurns(ctx, r, session)
+		if err != nil {
+			return Turn{}, err
+		}
+
+		var ok bool
+		if t, ok = openTurn(mine, n); !ok {
+			return Turn{}, fmt.Errorf("mark turn %d: %w", n, ErrTurnNotOpen)
+		}
 	}
 
 	wctx, cancel, err := refWriteContext(ctx)
@@ -134,86 +237,147 @@ func MarkMissing(ctx context.Context, dir, session string) (Turn, error) {
 		return Turn{}, fmt.Errorf("mark missing: %w", err)
 	}
 
-	return writeTurn(ctx, r, session, turns, strings.TrimSpace(string(out)), nil, true)
-}
+	tree := strings.TrimSpace(string(out))
 
-// writeTurn commits tree as the next turn and creates its ref. A ref that
-// already exists (another writer took the number) is retried once.
-func writeTurn(ctx context.Context, r Repo, session string, turns []Turn, tree string, skipped []string, none bool) (Turn, error) {
-	parent, err := headCommit(ctx, r.Root)
-	if err != nil && !errors.Is(err, errUnborn) {
-		return Turn{}, err
+	if end {
+		return writeEnd(ctx, r, session, t, tree, true)
 	}
 
+	return writeStart(ctx, r, session, n, 0, tree, nil, true)
+}
+
+// turnWrite is one ref to create: the start or end of turn n.
+type turnWrite struct {
+	n       int
+	end     bool
+	tree    string
+	skipped []string
+	none    bool
+}
+
+// writeStart commits tree as the start of turn n and creates its ref; n 0
+// takes one more than the session's highest in the repository, and a ref that
+// already exists (another writer took the number) is then retried once. When
+// ends names an open turn of this worktree, the same tree ends it, in the same
+// transaction.
+func writeStart(ctx context.Context, r Repo, session string, n, ends int, tree string, skipped []string, none bool) (Turn, error) {
+	computed := n == 0
+
 	for attempt := 0; ; attempt++ {
-		wctx, cancel, err := refWriteContext(ctx)
+		mine, highest, err := sessionTurns(ctx, r, session)
 		if err != nil {
 			return Turn{}, err
 		}
 
-		n := nextTurn(turns)
-
-		turn, err := writeRef(wctx, r, session, n, tree, parent, skipped, none)
-
-		cancel()
-
-		if err == nil {
-			return turn, nil
+		num := n
+		if computed {
+			num = highest + 1
 		}
 
-		if attempt > 0 || ctx.Err() != nil {
+		writes := []turnWrite{{n: num, tree: tree, skipped: skipped, none: none}}
+
+		if prev, ok := openTurn(mine, ends); ok && ends != 0 && !prev.Missing && prev.N != num {
+			writes = append(writes, turnWrite{n: ends, end: true, tree: tree, skipped: skipped})
+		}
+
+		now := time.Now().Truncate(time.Second)
+
+		commits, err := writeTurns(ctx, r, session, writes, now)
+		if err == nil {
+			return Turn{N: num, Commit: commits[0], Tree: tree, Missing: none, Skipped: skipped, Time: now}, nil
+		}
+
+		if !computed || attempt > 0 || ctx.Err() != nil {
 			return Turn{}, err
 		}
 
 		updateErr := err
 
-		turns, err = Turns(ctx, r, session)
+		_, again, err := sessionTurns(ctx, r, session)
 		if err != nil {
 			return Turn{}, fmt.Errorf("%w (then %w)", updateErr, err)
 		}
 
-		if nextTurn(turns) == n {
+		if again+1 == num {
 			return Turn{}, updateErr
 		}
 	}
 }
 
-// writeRef commits tree as turn n and creates its ref.
-func writeRef(ctx context.Context, r Repo, session string, n int, tree, parent string, skipped []string, none bool) (Turn, error) {
+// writeEnd commits tree as the end of the open turn t and creates its ref.
+func writeEnd(ctx context.Context, r Repo, session string, t Turn, tree string, none bool) (Turn, error) {
 	now := time.Now().Truncate(time.Second)
 
-	commit, err := commitTurn(ctx, r, session, n, tree, parent, skipped, none, now)
+	commits, err := writeTurns(ctx, r, session, []turnWrite{{n: t.N, end: true, tree: tree, skipped: t.Skipped, none: none}}, now)
 	if err != nil {
 		return Turn{}, err
 	}
 
-	ref := fmt.Sprintf("%s%s/%d", refPrefix, session, n)
+	t.EndCommit, t.EndTree, t.EndMissing = commits[0], tree, none
 
-	_, err = run(ctx, call{
-		dir:  r.Root,
-		args: []string{"update-ref", "--no-deref", "-m", "muxreveal turn", ref, commit, ""},
-		env:  isolatedEnv(),
-	})
-	if err != nil {
-		return Turn{}, fmt.Errorf("write %s: %w", ref, err)
-	}
-
-	return Turn{N: n, Commit: commit, Tree: tree, Missing: none, Skipped: skipped, Time: now}, nil
+	return t, nil
 }
 
-func commitTurn(ctx context.Context, r Repo, session string, n int, tree, parent string, skipped []string, none bool, at time.Time) (string, error) {
+// writeTurns commits every write and creates all their refs in one transaction.
+// It returns the commits in order.
+func writeTurns(ctx context.Context, r Repo, session string, writes []turnWrite, at time.Time) ([]string, error) {
+	parent, err := headCommit(ctx, r.Root)
+	if err != nil && !errors.Is(err, errUnborn) {
+		return nil, err
+	}
+
+	wctx, cancel, err := refWriteContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer cancel()
+
+	key := turnKey(r.Root)
+	commits := make([]string, len(writes))
+
+	var stdin bytes.Buffer
+
+	for i, w := range writes {
+		commits[i], err = commitTurn(wctx, r, session, w, parent, at)
+		if err != nil {
+			return nil, err
+		}
+
+		fmt.Fprintf(&stdin, "create %s %s\n", turnRef(session, key, w.n, w.end), commits[i])
+	}
+
+	_, err = run(wctx, call{
+		dir:   r.Root,
+		args:  []string{"update-ref", "-m", "muxreveal turn", "--stdin"},
+		env:   isolatedEnv(),
+		stdin: &stdin,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("write turn refs: %w", err)
+	}
+
+	return commits, nil
+}
+
+func commitTurn(ctx context.Context, r Repo, session string, w turnWrite, parent string, at time.Time) (string, error) {
 	var msg strings.Builder
 
-	fmt.Fprintf(&msg, "muxreveal turn %d\n\nSession: %s\nWorktree: %s\n", n, session, quoteValue(r.Root))
+	fmt.Fprintf(&msg, "muxreveal turn %d", w.n)
 
-	if none {
+	if w.end {
+		msg.WriteString(" end")
+	}
+
+	fmt.Fprintf(&msg, "\n\nSession: %s\nWorktree: %s\n", session, quoteValue(r.Root))
+
+	if w.none {
 		msg.WriteString("Snapshot: none\n")
 	}
 
-	if len(skipped) > 0 {
-		fmt.Fprintf(&msg, "Skipped-Count: %d\n", len(skipped))
+	if len(w.skipped) > 0 {
+		fmt.Fprintf(&msg, "Skipped-Count: %d\n", len(w.skipped))
 
-		for _, p := range skipped[:min(len(skipped), maxSkippedTags)] {
+		for _, p := range w.skipped[:min(len(w.skipped), maxSkippedTags)] {
 			fmt.Fprintf(&msg, "Skipped: %s\n", quoteValue(p))
 		}
 	}
@@ -225,25 +389,17 @@ func commitTurn(ctx context.Context, r Repo, session string, n int, tree, parent
 		"GIT_AUTHOR_DATE="+date, "GIT_COMMITTER_DATE="+date,
 	)
 
-	args := []string{"commit-tree", "--no-gpg-sign", tree}
+	args := []string{"commit-tree", "--no-gpg-sign", w.tree}
 	if parent != "" {
 		args = append(args, "-p", parent)
 	}
 
 	out, err := run(ctx, call{dir: r.Root, args: args, env: env, stdin: strings.NewReader(msg.String())})
 	if err != nil {
-		return "", fmt.Errorf("commit turn %d: %w", n, err)
+		return "", fmt.Errorf("commit turn %d: %w", w.n, err)
 	}
 
 	return strings.TrimSpace(string(out)), nil
-}
-
-func nextTurn(turns []Turn) int {
-	if len(turns) == 0 {
-		return 1
-	}
-
-	return turns[len(turns)-1].N + 1
 }
 
 func normalizeSession(session string) (string, error) {
@@ -283,15 +439,19 @@ const turnFormat = "%(refname)%00%(objectname)%00%(tree)%00%(committerdate:unix)
 type turnRecord struct {
 	Turn
 
+	ref      string
 	session  string
+	key      string // "" for the earlier layout
 	worktree string
+	end      bool
 }
 
-// listRefs reads every turn ref under pattern in one for-each-ref call.
-func listRefs(ctx context.Context, r Repo, pattern string) ([]turnRecord, error) {
+// listRefs reads every turn ref under the patterns in one for-each-ref call,
+// both layouts.
+func listRefs(ctx context.Context, r Repo, patterns ...string) ([]turnRecord, error) {
 	out, err := run(ctx, call{
 		dir:  r.CommonDir,
-		args: []string{"for-each-ref", "--format=" + turnFormat, pattern},
+		args: append([]string{"for-each-ref", "--format=" + turnFormat}, patterns...),
 		read: true,
 	})
 	if err != nil {
@@ -306,25 +466,15 @@ func listRefs(ctx context.Context, r Repo, pattern string) ([]turnRecord, error)
 			continue
 		}
 
-		m := turnRefRE.FindStringSubmatch(f[0])
-		if m == nil {
-			continue
-		}
-
-		n, err := strconv.Atoi(m[2])
-		if err != nil {
+		rec, ok := parseTurnRef(f[0])
+		if !ok {
 			continue
 		}
 
 		secs, _ := strconv.ParseInt(f[3], 10, 64)
-		rec := turnRecord{
-			Turn: Turn{
-				N: n, Commit: f[1], Tree: f[2], Time: time.Unix(secs, 0),
-				Missing: strings.TrimSpace(f[4]) == "none",
-			},
-			session:  m[1],
-			worktree: unquoteValue(strings.TrimSpace(f[6])),
-		}
+		rec.Commit, rec.Tree, rec.Time = f[1], f[2], time.Unix(secs, 0)
+		rec.Missing = strings.TrimSpace(f[4]) == "none"
+		rec.worktree = unquoteValue(strings.TrimSpace(f[6]))
 
 		if f[5] != "" {
 			for p := range strings.SplitSeq(f[5], "\x1f") {
@@ -338,31 +488,88 @@ func listRefs(ctx context.Context, r Repo, pattern string) ([]turnRecord, error)
 	return recs, nil
 }
 
-// Turns lists the session's turns in ascending order.
+func parseTurnRef(ref string) (turnRecord, bool) {
+	if m := turnRefRE.FindStringSubmatch(ref); m != nil {
+		n, err := strconv.Atoi(m[3])
+		if err != nil {
+			return turnRecord{}, false
+		}
+
+		return turnRecord{Turn: Turn{N: n}, ref: ref, session: m[1], key: m[2], end: m[4] == "end"}, true
+	}
+
+	if m := legacyRefRE.FindStringSubmatch(ref); m != nil {
+		n, err := strconv.Atoi(m[2])
+		if err != nil {
+			return turnRecord{}, false
+		}
+
+		return turnRecord{Turn: Turn{N: n}, ref: ref, session: m[1]}, true
+	}
+
+	return turnRecord{}, false
+}
+
+// sessionTurns lists the session's turns in r's worktree in ascending order,
+// and the session's highest turn number in the repository. The earlier layout
+// is not read.
+func sessionTurns(ctx context.Context, r Repo, session string) ([]Turn, int, error) {
+	recs, err := listRefs(ctx, r, turnsPrefix+session+"/")
+	if err != nil {
+		return nil, 0, err
+	}
+
+	key := turnKey(r.Root)
+	highest := 0
+	byN := map[int]*Turn{}
+
+	var ends []turnRecord
+
+	for _, rec := range recs {
+		highest = max(highest, rec.N)
+
+		switch {
+		case rec.key != key:
+		case rec.end:
+			ends = append(ends, rec)
+		default:
+			t := rec.Turn
+			byN[rec.N] = &t
+		}
+	}
+
+	for _, e := range ends {
+		if t := byN[e.N]; t != nil {
+			t.EndCommit, t.EndTree, t.EndMissing = e.Commit, e.Tree, e.Missing
+		}
+	}
+
+	turns := make([]Turn, 0, len(byN))
+	for _, t := range byN {
+		t.Current = t.N == highest
+		turns = append(turns, *t)
+	}
+
+	slices.SortFunc(turns, func(a, b Turn) int { return a.N - b.N })
+
+	return turns, highest, nil
+}
+
+// Turns lists the session's turns in r's worktree in ascending order.
 func Turns(ctx context.Context, r Repo, session string) ([]Turn, error) {
 	session, err := normalizeSession(session)
 	if err != nil {
 		return nil, err
 	}
 
-	recs, err := listRefs(ctx, r, refPrefix+session+"/")
-	if err != nil {
-		return nil, err
-	}
+	turns, _, err := sessionTurns(ctx, r, session)
 
-	slices.SortFunc(recs, func(a, b turnRecord) int { return a.N - b.N })
-
-	turns := make([]Turn, len(recs))
-	for i, rec := range recs {
-		turns[i] = rec.Turn
-	}
-
-	return turns, nil
+	return turns, err
 }
 
-// PruneWorktree deletes every turn ref whose commit names worktree and returns
-// how many it removed. worktree is a worktree root as Repo.Root gives it, the
-// form the commits record; a symlinked spelling does not match.
+// PruneWorktree deletes every turn ref of worktree, in both layouts, and
+// returns how many it removed. worktree is a worktree root as Repo.Root gives
+// it, the form the commits record; a symlinked spelling does not match.
 func PruneWorktree(ctx context.Context, r Repo, worktree string) (int, error) {
 	recs, err := listRefs(ctx, r, refPrefix)
 	if err != nil {
@@ -370,18 +577,22 @@ func PruneWorktree(ctx context.Context, r Repo, worktree string) (int, error) {
 	}
 
 	want := filepath.Clean(worktree)
+	key := turnKey(want)
 
-	return deleteRefs(ctx, r, recs, func(rec turnRecord) bool { return filepath.Clean(rec.worktree) == want })
+	return deleteRefs(ctx, r, recs, func(rec turnRecord) bool {
+		return rec.key == key || filepath.Clean(rec.worktree) == want
+	})
 }
 
-// PruneSession deletes every turn ref of the session and returns how many.
+// PruneSession deletes every turn ref of the session, in both layouts, and
+// returns how many.
 func PruneSession(ctx context.Context, r Repo, session string) (int, error) {
 	session, err := normalizeSession(session)
 	if err != nil {
 		return 0, err
 	}
 
-	recs, err := listRefs(ctx, r, refPrefix+session+"/")
+	recs, err := listRefs(ctx, r, refPrefix+session+"/", turnsPrefix+session+"/")
 	if err != nil {
 		return 0, err
 	}
@@ -398,7 +609,7 @@ func deleteRefs(ctx context.Context, r Repo, recs []turnRecord, match func(turnR
 
 	for _, rec := range recs {
 		if match(rec) {
-			fmt.Fprintf(&stdin, "delete %s%s/%d %s\n", refPrefix, rec.session, rec.N, rec.Commit)
+			fmt.Fprintf(&stdin, "delete %s %s\n", rec.ref, rec.Commit)
 
 			count++
 		}

@@ -166,8 +166,6 @@ func modeParts(v *reviewView, icons bool) (icon, word, rest string) {
 		switch {
 		case v.noSnapshot:
 			rest += ", no snapshot"
-		case v.res.Through > v.res.Turn && v.res.Turn > 0:
-			word = "turns " + strconv.Itoa(v.res.Turn) + "-" + strconv.Itoa(v.res.Through)
 		case n == m:
 			rest += ", live"
 		}
