@@ -113,6 +113,7 @@ type App struct {
 	prompt                 *prompt     // text input; owns every key and paste while open
 	checks                 *checksView // a pull request's checks; owns every key while open
 	merge                  *mergeView  // the merge box; owns every key while open
+	prList                 *prListView // the agents' pull requests; owns every key while open
 	merging                map[mergeKey]bool
 	openLink               urlOpener
 	actions                prActions // GitHub writes; nil means they are off
@@ -748,6 +749,10 @@ func (a *App) View() tea.View {
 
 	if a.picker.open != nil {
 		content = a.overlayPicker(content, lk)
+	}
+
+	if a.prList != nil {
+		content = a.overlayPRList(content, lk)
 	}
 
 	if a.checks != nil {
