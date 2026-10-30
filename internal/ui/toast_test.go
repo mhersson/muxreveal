@@ -401,6 +401,7 @@ func TestSequencePopup(t *testing.T) {
 		{'>', []string{"1-9  Move pane to tab N", "esc  Cancel"}},
 		{'.', []string{"1-9  Send pane to tab N", "esc  Cancel"}},
 		{';', []string{"h j k l  Preselect side", "esc      Clear preselection"}},
+		{'g', []string{"l    Pull requests", "p    Push", "o    Open a pull request", "m    Merge pull request", "esc  Cancel"}},
 	}
 
 	for _, tt := range tests {

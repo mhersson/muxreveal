@@ -3,7 +3,7 @@
 ╭─  shell ─────────────────────────────────────────────────────────────────────────────────────────╭─  muxreveal · feat/review-pane ──────────────────────────────────────────────────────────  #7 ─╮
 │$ claude                                                                                           │ #7 Show the pull request over its diff                                                           │
 │reviewing the diff of the last turn                                                                │  feat/review-pane → main   󰔟 2/4   changes requested   @mhersson   3h                           │
-│                                                                                                   │ ↑2 not pushed: the PR shows the pushed head; leader p pushes                                     │
+│                                                                                                   │ ↑2 not pushed: the PR shows the pushed head; leader g p pushes                                   │
 │                                                                                                   │──────────────────────────────────────────────────────────────────────────────────────────────────│
 │                                                                                                   │  M internal/core/state.go                                                                  +9 -1 │
 │                                                                                                   │  @@ -22,5 +22,13 @@ type Pane struct                                                             │

@@ -89,7 +89,7 @@ func (d *drawCtx) headerRow(y int) string {
 	return p.line([]railRun{
 		sp(markW),
 		{text: "↑" + strconv.Itoa(v.unpushed) + " not pushed", fg: ui.Warning, bold: true},
-		{text: ": the PR shows the pushed head; leader p pushes", fg: ui.Muted},
+		{text: ": the PR shows the pushed head; leader g p pushes", fg: ui.Muted},
 	}, w)
 }
 

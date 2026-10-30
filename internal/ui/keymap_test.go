@@ -108,6 +108,7 @@ func TestKeymapSequences(t *testing.T) {
 	for key, want := range map[string]string{
 		"> 1": "pane.move.tab.1", "> 9": "pane.move.tab.9", ". 3": "pane.send.tab.3",
 		"; h": "pane.preselect.left", "; esc": "pane.preselect.clear",
+		"g l": "pr.list", "g p": "git.push", "g o": "pr.open", "g m": "pr.merge",
 		"!": "pane.break", "space": "layout.cycle", "r": "layout.rotate", "=": "layout.equalize", "enter": "layout.promote",
 	} {
 		if got, ok := km.lookup(key); !ok || got != want {
@@ -115,13 +116,13 @@ func TestKeymapSequences(t *testing.T) {
 		}
 	}
 
-	for _, key := range []string{">", ".", ";"} {
+	for _, key := range []string{">", ".", ";", "g"} {
 		if !km.isPrefix(key) {
 			t.Errorf("isPrefix(%q) = false", key)
 		}
 	}
 
-	for _, key := range []string{"q", "1", "h", "!", ""} {
+	for _, key := range []string{"q", "1", "h", "!", "p", "o", "m", ""} {
 		if km.isPrefix(key) {
 			t.Errorf("isPrefix(%q) = true", key)
 		}
@@ -149,6 +150,52 @@ func TestNoKeyIsBothSingleAndPrefix(t *testing.T) {
 
 		if _, ok := km.lookup(first); ok {
 			t.Errorf("prefix %q is also bound as a single key", first)
+		}
+	}
+}
+
+func TestGitGroupKeys(t *testing.T) {
+	t.Parallel()
+
+	a := newTestApp(t)
+
+	for key, id := range map[string]string{"g l": "pr.list", "g p": "git.push", "g o": "pr.open", "g m": "pr.merge"} {
+		got, ok := a.keymap.lookup(key)
+		if !ok || got != id {
+			t.Errorf("lookup(%q) = %q, %v, want %q", key, got, ok, id)
+		}
+
+		if _, ok := a.reg.get(id); !ok {
+			t.Errorf("%s is not registered", id)
+		}
+
+		if full, _ := a.keymap.keyFor(id); full != "ctrl+space "+key {
+			t.Errorf("keyFor(%s) = %q, want ctrl+space %s", id, full, key)
+		}
+	}
+
+	var git []hint
+
+	for _, h := range a.hints() {
+		if h.group == "Git" {
+			git = append(git, h)
+		}
+	}
+
+	if want := []hint{{key: "g", title: "Push and pull requests", group: "Git"}}; !slices.Equal(git, want) {
+		t.Errorf("Git hints = %v, want %v", git, want)
+	}
+}
+
+func TestOldGitKeysAreUnbound(t *testing.T) {
+	t.Parallel()
+
+	for _, k := range []string{"p", "o", "m"} {
+		a := newTestApp(t)
+		press(a, keyLeader, keyRune(rune(k[0])))
+
+		if want := "ctrl+space " + k + " is not bound"; a.notice != want {
+			t.Errorf("leader %s: notice %q, want %q", k, a.notice, want)
 		}
 	}
 }

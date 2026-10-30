@@ -144,7 +144,7 @@ func (v *prListView) move(rows []prListRow, delta int) {
 	v.sel = rows[v.idx].key
 }
 
-// prListCommand is `leader g`.
+// prListCommand is `leader g l`.
 func (a *App) prListCommand() tea.Cmd {
 	a.endLeader()
 

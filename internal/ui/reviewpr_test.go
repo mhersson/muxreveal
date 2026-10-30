@@ -731,7 +731,7 @@ func TestPRHeader(t *testing.T) {
 		},
 		{
 			name: "unpushed commits", icons: true, rows: 4, unpushed: 2,
-			want: []string{"↑2 not pushed: the PR shows the pushed head; leader p pushes"},
+			want: []string{"↑2 not pushed: the PR shows the pushed head; leader g p pushes"},
 		},
 		{
 			name: "the poll's head differs", icons: true, rows: 4, unpushed: 2,

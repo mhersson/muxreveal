@@ -133,10 +133,10 @@ func TestPRListKeysMove(t *testing.T) {
 	t.Parallel()
 
 	a := listApp(t, true, 120, 40, listAgents())
-	press(a, keyLeader, keyRune('g'))
+	press(a, keyLeader, keyRune('g'), keyRune('l'))
 
 	if a.prList == nil {
-		t.Fatalf("leader g opened no list; notice %q", a.notice)
+		t.Fatalf("leader g l opened no list; notice %q", a.notice)
 	}
 
 	sel := func() string {
@@ -197,7 +197,7 @@ func TestPRListKeysSideKeys(t *testing.T) {
 		t.Parallel()
 
 		a := listApp(t, true, 120, 40, listAgents())
-		press(a, keyLeader, keyRune('g'))
+		press(a, keyLeader, keyRune('g'), keyRune('l'))
 		typedList(a, "jj")
 		typedList(a, "c")
 
@@ -223,7 +223,7 @@ func TestPRListKeysSideKeys(t *testing.T) {
 		f := &fakeOpen{}
 		a.openLink = f.open
 
-		press(a, keyLeader, keyRune('g'))
+		press(a, keyLeader, keyRune('g'), keyRune('l'))
 
 		cmd := press(a, keyRune('O'))
 		for _, m := range flatten(cmd) {
@@ -248,7 +248,7 @@ func TestPRListKeysSideKeys(t *testing.T) {
 		f := &fakeOpen{}
 		a.openLink = f.open
 
-		press(a, keyLeader, keyRune('g'))
+		press(a, keyLeader, keyRune('g'), keyRune('l'))
 		press(a, keyRune('O'))
 
 		if len(f.urls()) != 0 || a.notice != noticeLinkRefused {
@@ -262,7 +262,7 @@ func TestPRListKeysSideKeys(t *testing.T) {
 		a := listApp(t, true, 120, 40, listAgents())
 		rec := a.prs.src.(*refreshRec)
 
-		press(a, keyLeader, keyRune('g'))
+		press(a, keyLeader, keyRune('g'), keyRune('l'))
 		press(a, keyRune('r'))
 
 		var got []string
@@ -282,7 +282,7 @@ func TestPRListKeysSideKeys(t *testing.T) {
 		a := listApp(t, true, 120, 40, listAgents())
 		a.actions = nil
 
-		press(a, keyLeader, keyRune('g'))
+		press(a, keyLeader, keyRune('g'), keyRune('l'))
 		press(a, keyRune('a'))
 
 		if a.notice != noticePRsOff || a.prList == nil {
@@ -304,7 +304,7 @@ func TestPRListKeysSideKeys(t *testing.T) {
 		agents[2].pr.ViewerAuthored = true
 		a := listApp(t, true, 120, 40, agents)
 
-		press(a, keyLeader, keyRune('g'))
+		press(a, keyLeader, keyRune('g'), keyRune('l'))
 		press(a, keyRune('a'))
 
 		if a.notice != noticeApproveOwn || a.prList == nil || a.confirm != nil {
@@ -312,13 +312,13 @@ func TestPRListKeysSideKeys(t *testing.T) {
 		}
 	})
 
-	t.Run("leader g with no source says so", func(t *testing.T) {
+	t.Run("leader g l with no source says so", func(t *testing.T) {
 		t.Parallel()
 
 		a := listApp(t, true, 120, 40, listAgents())
 		a.prs.src = nil
 
-		press(a, keyLeader, keyRune('g'))
+		press(a, keyLeader, keyRune('g'), keyRune('l'))
 
 		if a.prList != nil || a.notice != noticePRsOff {
 			t.Errorf("list %v, notice %q; want %q and no list", a.prList, a.notice, noticePRsOff)
@@ -364,6 +364,7 @@ func TestPRListKeysThroughTheDrawer(t *testing.T) {
 
 		r := newListRig(t)
 		r.leader('g')
+		r.typed("l")
 
 		if r.prList == nil {
 			t.Fatalf("no list; notice %q", r.notice)
@@ -391,6 +392,7 @@ func TestPRListKeysThroughTheDrawer(t *testing.T) {
 
 		r := newListRig(t)
 		r.leader('g')
+		r.typed("l")
 		r.keys(keyRune('a'))
 
 		if r.prList != nil {
@@ -413,6 +415,7 @@ func TestPRListKeysThroughTheDrawer(t *testing.T) {
 
 		r := newListRig(t)
 		r.leader('g')
+		r.typed("l")
 		r.keys(keyRune('M'))
 
 		r.until(t, "the merge box", func() bool { return r.merge != nil })
@@ -431,7 +434,7 @@ func TestPRListKeepsSelection(t *testing.T) {
 	t.Parallel()
 
 	a := listApp(t, true, 120, 40, listAgents())
-	press(a, keyLeader, keyRune('g'))
+	press(a, keyLeader, keyRune('g'), keyRune('l'))
 	typedList(a, "j")
 
 	selected := func() prListKey { return a.prList.sel }
@@ -502,7 +505,7 @@ func TestPRListCleansText(t *testing.T) {
 		t.Fatalf("rows = %+v, want one with the hostile head branch", rows)
 	}
 
-	press(a, keyLeader, keyRune('g'))
+	press(a, keyLeader, keyRune('g'), keyRune('l'))
 
 	view := a.View().Content
 	text := ansi.Strip(view)
@@ -532,7 +535,7 @@ func TestPRListEmpty(t *testing.T) {
 	t.Parallel()
 
 	a := listApp(t, true, 120, 40, []railAgent{{newTab: true, project: "api", branch: "main", state: core.AgentIdle}})
-	press(a, keyLeader, keyRune('g'))
+	press(a, keyLeader, keyRune('g'), keyRune('l'))
 
 	if a.prList == nil {
 		t.Fatalf("no list; notice %q", a.notice)
@@ -562,7 +565,7 @@ func TestPRListBlocksTheMouse(t *testing.T) {
 	t.Parallel()
 
 	a := listApp(t, true, 120, 40, listAgents())
-	press(a, keyLeader, keyRune('g'))
+	press(a, keyLeader, keyRune('g'), keyRune('l'))
 
 	if !a.mouseBlocked() {
 		t.Error("the mouse reaches past the list")
@@ -574,7 +577,7 @@ func TestPRListOnASmallTerminal(t *testing.T) {
 
 	for _, size := range [][2]int{{80, 24}, {60, 16}, {40, 10}, {30, 6}} {
 		a := listApp(t, true, size[0], size[1], listAgents())
-		press(a, keyLeader, keyRune('g'))
+		press(a, keyLeader, keyRune('g'), keyRune('l'))
 
 		lines := strings.Split(a.View().Content, "\n")
 		if len(lines) != size[1] {
@@ -599,7 +602,7 @@ func prListScene(t *testing.T, icons bool, w, h int) *App {
 	})
 
 	a := listApp(t, icons, w, h, agents)
-	press(a, keyLeader, keyRune('g'))
+	press(a, keyLeader, keyRune('g'), keyRune('l'))
 	typedList(a, "jj")
 
 	return a

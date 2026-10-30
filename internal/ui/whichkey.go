@@ -159,10 +159,33 @@ func (a *App) hints() []hint {
 			}
 		}
 
+		// A group prefix shows one row, whatever its second keys are.
+		if first, _, ok := strings.Cut(b.key, " "); ok {
+			if title, ok := groupPrefixTitle(first); ok {
+				if !done["prefix "+first] {
+					hints = append(hints, hint{key: first, title: title, group: b.group})
+				}
+
+				done["prefix "+first] = true
+
+				continue
+			}
+		}
+
 		hints = append(hints, hint{key: b.key, title: c.title, group: b.group})
 	}
 
 	return hints
+}
+
+// groupPrefixTitle is the which-key row title of a prefix that opens a
+// sequence popup of its group's commands.
+func groupPrefixTitle(prefix string) (string, bool) {
+	if prefix == "g" {
+		return "Push and pull requests", true
+	}
+
+	return "", false
 }
 
 // groupOrder lists the which-key groups left to right and top to bottom;
@@ -271,6 +294,14 @@ func sequenceRows(prefix string) []hint {
 		return []hint{{key: "1-9", title: "Send pane to tab N"}, {key: "esc", title: "Cancel"}}
 	case ";":
 		return []hint{{key: "h j k l", title: "Preselect side"}, {key: "esc", title: "Clear preselection"}}
+	case "g":
+		return []hint{
+			{key: "l", title: "Pull requests"},
+			{key: "p", title: "Push"},
+			{key: "o", title: "Open a pull request"},
+			{key: "m", title: "Merge pull request"},
+			{key: "esc", title: "Cancel"},
+		}
 	}
 
 	return nil

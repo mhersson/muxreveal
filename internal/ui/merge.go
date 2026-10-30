@@ -178,7 +178,7 @@ func mergeStateWord(state, base string, ui theme.UI) railRun {
 // showed, after showing the pull request first when it is not shown.
 func (a *App) reviewMerge() tea.Cmd { return a.prAct(thenMerge) }
 
-// mergeCommand is `leader m`: it merges what the active tab's drawer shows, or
+// mergeCommand is `leader g m`: it merges what the active tab's drawer shows, or
 // when none is open opens one on the focused pane first.
 func (a *App) mergeCommand() tea.Cmd {
 	if a.actions == nil {

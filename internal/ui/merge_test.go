@@ -331,10 +331,11 @@ func TestMergeFromLeaderM(t *testing.T) {
 	r.actions = f
 
 	r.poll()
-	r.leader('m')
+	r.leader('g')
+	r.typed("m")
 
 	if r.merge != nil {
-		t.Fatal("leader m opened the box before the pull request loaded")
+		t.Fatal("leader g m opened the box before the pull request loaded")
 	}
 
 	r.until(t, "the box", func() bool { return r.merge != nil })
@@ -365,10 +366,11 @@ func TestMergeWithoutActions(t *testing.T) {
 	}
 
 	r.keys(keyEsc)
-	r.leader('m')
+	r.leader('g')
+	r.typed("m")
 
 	if r.merge != nil || r.notice != noticePRsOff {
-		t.Errorf("leader m: box %v, notice %q, want no box and %q", r.merge, r.notice, noticePRsOff)
+		t.Errorf("leader g m: box %v, notice %q, want no box and %q", r.merge, r.notice, noticePRsOff)
 	}
 }
 
@@ -385,7 +387,8 @@ func TestMergeWithoutAFocusedPane(t *testing.T) {
 		t.Skipf("the tab still has panes: %v", st.Tab().Panes)
 	}
 
-	r.leader('m')
+	r.leader('g')
+	r.typed("m")
 
 	if r.merge != nil || r.notice != noticeMergeNoPane {
 		t.Errorf("box %v, notice %q, want no box and %q", r.merge, r.notice, noticeMergeNoPane)
@@ -485,10 +488,11 @@ func TestMergeOnce(t *testing.T) {
 		t.Errorf("box %v, notice %q, want no box and the busy notice", r.merge, r.notice)
 	}
 
-	r.leader('m')
+	r.leader('g')
+	r.typed("m")
 
 	if r.merge != nil || r.notice != "#7 is already being merged" {
-		t.Errorf("leader m: box %v, notice %q, want no box and the busy notice", r.merge, r.notice)
+		t.Errorf("leader g m: box %v, notice %q, want no box and the busy notice", r.merge, r.notice)
 	}
 
 	r.cancel()
