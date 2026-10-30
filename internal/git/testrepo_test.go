@@ -1,22 +1,37 @@
 package git
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"syscall"
 	"testing"
 )
 
 // TestMain isolates git from the machine's config once for the binary, so
-// tests that build repositories need no t.Setenv.
+// tests that build repositories need no t.Setenv. Its global config turns
+// auto-maintenance off for every git the tests start; it is a file because
+// cleanEnv and git's local transport drop GIT_CONFIG_COUNT.
 func TestMain(m *testing.M) {
+	dir, err := os.MkdirTemp("", "git-test-")
+	if err != nil {
+		panic(err)
+	}
+
+	cfg := filepath.Join(dir, "gitconfig")
+	if err := os.WriteFile(cfg, []byte("[maintenance]\n\tauto = false\n"), 0o600); err != nil {
+		panic(err)
+	}
+
 	env := map[string]string{
 		"GIT_CONFIG_NOSYSTEM": "1",
-		"GIT_CONFIG_GLOBAL":   os.DevNull,
+		"GIT_CONFIG_GLOBAL":   cfg,
 		"GIT_AUTHOR_NAME":     "Test",
 		"GIT_AUTHOR_EMAIL":    "test@example.com",
 		"GIT_COMMITTER_NAME":  "Test",
@@ -28,7 +43,75 @@ func TestMain(m *testing.M) {
 		}
 	}
 
-	os.Exit(m.Run())
+	code := m.Run()
+	_ = os.RemoveAll(dir)
+
+	os.Exit(code)
+}
+
+// No git the tests run may start auto-maintenance, the app's own calls
+// included: its detached run outlives the git that started it and races the
+// removal of the repository.
+func TestGitStartsNoAutoMaintenance(t *testing.T) {
+	t.Parallel()
+
+	repo, clone, remote := newRepo(t), newRepo(t), t.TempDir()
+	gitOut(t, remote, "init", "-q", "--bare", "-b", "main")
+
+	steps := []struct {
+		name string
+		dir  string
+		args []string
+		want string
+	}{
+		{"commit", repo, []string{"commit", "-q", "--allow-empty", "-m", "one"}, "commit"},
+		{"push", repo, []string{"push", "-q", remote, "main"}, "receive-pack"},
+		{"fetch", clone, []string{"fetch", "-q", repo, "main"}, "fetch"},
+	}
+
+	for _, s := range steps {
+		trace := filepath.Join(t.TempDir(), "trace")
+
+		_, err := run(context.Background(), call{dir: s.dir, args: s.args, env: []string{"GIT_TRACE2_EVENT=" + trace}})
+		if err != nil {
+			t.Fatalf("%s: %v", s.name, err)
+		}
+
+		names := gitCommands(t, trace)
+		if !slices.Contains(names, s.want) || slices.Contains(names, "maintenance") {
+			t.Errorf("%s ran %v, want %s and no maintenance", s.name, names, s.want)
+		}
+	}
+}
+
+// gitCommands returns the name of every git command the trace2 event file at
+// path records, children included.
+func gitCommands(t *testing.T, path string) []string {
+	t.Helper()
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var names []string
+
+	for line := range bytes.Lines(data) {
+		var ev struct {
+			Event string `json:"event"`
+			Name  string `json:"name"`
+		}
+
+		if err := json.Unmarshal(line, &ev); err != nil {
+			t.Fatalf("trace line %q: %v", line, err)
+		}
+
+		if ev.Event == "cmd_name" {
+			names = append(names, ev.Name)
+		}
+	}
+
+	return names
 }
 
 // newRepo creates an empty repository on branch main in a temp dir and returns

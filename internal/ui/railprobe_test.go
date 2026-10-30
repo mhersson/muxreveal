@@ -28,7 +28,7 @@ func gitIn(t *testing.T, bin, dir string, args ...string) {
 	cmd := exec.CommandContext(ctx, bin, args...)
 	cmd.Dir = dir
 
-	cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_SYSTEM=/dev/null",
+	cmd.Env = append(os.Environ(),
 		"GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t", "GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t", gitFileOnly)
 
 	if out, err := cmd.CombinedOutput(); err != nil {

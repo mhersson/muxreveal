@@ -3,7 +3,6 @@ package ui
 import (
 	"context"
 	"errors"
-	"os"
 	"os/exec"
 	"runtime"
 	"strings"
@@ -559,8 +558,6 @@ func TestAppCloseNoLeaksWithWatches(t *testing.T) {
 	r.watches.set = set
 
 	cmd := exec.Command("git", "init", "-q", r.cwd)
-
-	cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_SYSTEM=/dev/null")
 
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Skipf("git init: %v %s", err, out)

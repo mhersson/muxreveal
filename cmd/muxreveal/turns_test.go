@@ -1,8 +1,10 @@
 package main
 
 import (
+	"bytes"
 	"cmp"
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"os/exec"
@@ -674,8 +676,9 @@ func TestGateCancelWaitsForSnapshotsAndWritesNoMarker(t *testing.T) {
 func isolateGit(t *testing.T) {
 	t.Helper()
 
+	// Detached auto-maintenance would race the removal of a test's repository.
 	cfg := filepath.Join(t.TempDir(), "gitconfig")
-	if err := os.WriteFile(cfg, nil, 0o600); err != nil {
+	if err := os.WriteFile(cfg, []byte("[maintenance]\n\tauto = false\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -689,6 +692,50 @@ func isolateGit(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", shortDir(t))
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+}
+
+// No git a test runs under isolateGit may start auto-maintenance: its detached
+// run outlives the git that started it and races the removal of the repository.
+func TestIsolateGitStartsNoAutoMaintenance(t *testing.T) {
+	dir := seededRepo(t)
+	trace := filepath.Join(t.TempDir(), "trace")
+	t.Setenv("GIT_TRACE2_EVENT", trace)
+
+	gitOut(t, dir, "commit", "-q", "--allow-empty", "-m", "two")
+
+	if names := gitCommands(t, trace); !slices.Contains(names, "commit") || slices.Contains(names, "maintenance") {
+		t.Errorf("ran %v, want commit and no maintenance", names)
+	}
+}
+
+// gitCommands returns the name of every git command the trace2 event file at
+// path records, children included.
+func gitCommands(t *testing.T, path string) []string {
+	t.Helper()
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var names []string
+
+	for line := range bytes.Lines(data) {
+		var ev struct {
+			Event string `json:"event"`
+			Name  string `json:"name"`
+		}
+
+		if err := json.Unmarshal(line, &ev); err != nil {
+			t.Fatalf("trace line %q: %v", line, err)
+		}
+
+		if ev.Event == "cmd_name" {
+			names = append(names, ev.Name)
+		}
+	}
+
+	return names
 }
 
 // seededRepo returns a repository with one commit and an untracked file, so a

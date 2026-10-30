@@ -120,11 +120,19 @@ what to do about it. Skim it before your first commit each session.
 
 ## Tests
 
-- In internal/git and internal/ui, `TestMain` sets `GIT_CONFIG_NOSYSTEM`,
-  `GIT_CONFIG_GLOBAL=/dev/null` and a fixed identity once for the test binary,
-  so their tests need no `t.Setenv` and can call `t.Parallel()`. Packages
-  without such a `TestMain`, like `cmd/muxreveal`, isolate git per test with
-  `isolateGit`, which uses `t.Setenv`.
+- In internal/git and internal/ui, `TestMain` sets `GIT_CONFIG_NOSYSTEM`, a
+  fixed identity and `GIT_CONFIG_GLOBAL` to a config file of its own once for
+  the test binary, so their tests need no `t.Setenv` and can call
+  `t.Parallel()`. Packages without such a `TestMain`, like `cmd/muxreveal`,
+  isolate git per test with `isolateGit`, which uses `t.Setenv`. A helper that
+  builds its own `cmd.Env` keeps that `GIT_CONFIG_GLOBAL`.
+- `commit`, `merge`, `fetch` and a push's `receive-pack` start
+  `git maintenance run --auto`, which detaches by default
+  (`maintenance.autoDetach`) and removes `.git/objects/maintenance.lock` after
+  the command has returned, racing a copy or removal of the repository. The
+  tests' global config sets `maintenance.auto = false`; `GIT_CONFIG_COUNT`
+  would not reach every git, since internal/git's `cleanEnv` and git's local
+  transport drop it.
 - To see or change git calls in an internal/git test, use `wrapGit`: it
   returns a context that routes git through a logging wrapper and leaves
   `PATH` alone, so the test can run in parallel. `fakeGit` puts the wrapper on
