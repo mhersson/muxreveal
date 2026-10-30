@@ -1307,6 +1307,8 @@ func TestGateEndsNothingAcrossWorktrees(t *testing.T) {
 
 // An edit's before-event is answered when the gate reads it, with no snapshot.
 func TestGateReleasesAnEditAtOnce(t *testing.T) {
+	t.Parallel()
+
 	snapped := make(chan struct{}, 1)
 	snap := func(context.Context, string, string, bool) error {
 		snapped <- struct{}{}
