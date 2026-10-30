@@ -705,3 +705,51 @@ func TestMergedPRShowsMergedInTheDrawer(t *testing.T) {
 	r.run(r.step(snapshotOf()))
 	check("after a poll that drops it")
 }
+
+// The delete row keeps its hint only whole: when it does not fit beside the
+// checkbox text, the row ends after "after merging".
+func TestMergeDeleteHintDropsWhole(t *testing.T) {
+	t.Parallel()
+
+	const hint = "(the repository deletes head branches)"
+
+	tests := []struct {
+		name   string
+		branch string
+		w      int
+		want   bool
+	}{
+		{"a short branch in a wide box shows it", "fix/a", 200, true},
+		{"a long branch drops it", "feat/review-pane-with-a-long-name", 200, false},
+		{"a narrow terminal drops it", "fix/a", 60, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			a := mergeScene(t, true, tt.w, 40, false)
+			a.merge.pr.HeadBranch = tt.branch
+
+			var row string
+
+			for _, l := range strings.Split(ansi.Strip(a.View().Content), "\n") {
+				if strings.Contains(l, "after merging") || strings.Contains(l, "(the") {
+					row = l
+				}
+			}
+
+			if row == "" {
+				t.Fatal("no delete row")
+			}
+
+			if got := strings.Contains(row, hint); got != tt.want {
+				t.Errorf("hint shown = %v, want %v:\n%s", got, tt.want, row)
+			}
+
+			if !tt.want && (strings.Contains(row, "(the") || strings.Contains(row, "…")) {
+				t.Errorf("a partial hint or cut is left:\n%s", row)
+			}
+		})
+	}
+}

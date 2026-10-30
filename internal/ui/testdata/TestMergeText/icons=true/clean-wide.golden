@@ -25,7 +25,7 @@
 │                                                           │                                                                              │                                                           │
 │                                                           │  method   s squash   m merge   r rebase                                      │ pane beside an agent, or focuses the open one.            │
 │                                                           │                                                                              │ context.Context, agent core.PaneID) tea.Cmd {             │
-│                                                           │  [x] delete feat/review-pane after merging   (the repository deletes head br…│ind != core.KindAgent {                                    │
+│                                                           │  [x] delete feat/review-pane after merging                                   │ind != core.KindAgent {                                    │
 │                                                           │                                                                              │                                                           │
 │                                                           │  s/m/r method    d delete branch    enter merge    esc cancel                │                                                           │
 │                                                           ╰──────────────────────────────────────────────────────────────────────────────╯ent)                                                       │

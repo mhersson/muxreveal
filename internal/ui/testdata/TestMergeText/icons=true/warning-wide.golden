@@ -27,7 +27,7 @@
 │                                                           │                                                                              │ context.Context, agent core.PaneID) tea.Cmd {             │
 │                                                           │  method   s squash   m merge   r rebase                                      │ind != core.KindAgent {                                    │
 │                                                           │                                                                              │                                                           │
-│                                                           │  [x] delete feat/review-pane after merging   (the repository deletes head br…│                                                           │
+│                                                           │  [x] delete feat/review-pane after merging                                   │                                                           │
 │                                                           │                                                                              │ent)                                                       │
 │                                                           │  s/m/r method    d delete branch    enter merge    esc cancel                │.KindAgent {                                               │
 │                                                           ╰──────────────────────────────────────────────────────────────────────────────╯eview pane needs an agent pane")                           │

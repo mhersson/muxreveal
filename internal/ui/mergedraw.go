@@ -99,7 +99,7 @@ func (a *App) mergeBox(lk look, w, room int) []string {
 	lines = append(lines, mergeLine{blank: true}, mergeLine{text: a.mergeChips(v, lk)})
 
 	if v.deleteShown() {
-		lines = append(lines, mergeLine{blank: true}, mergeLine{text: a.mergeDelete(v, lk)})
+		lines = append(lines, mergeLine{blank: true}, mergeLine{text: a.mergeDelete(v, lk, cw)})
 	}
 
 	hints := mergeHints(v, cw, lk)
@@ -177,8 +177,9 @@ func (a *App) mergeChips(v *mergeView, lk look) string {
 	return sb.String()
 }
 
-// mergeDelete draws the delete-branch row.
-func (a *App) mergeDelete(v *mergeView, lk look) string {
+// mergeDelete draws the delete-branch row in cw cells; the hint after it shows
+// only whole.
+func (a *App) mergeDelete(v *mergeView, lk look, cw int) string {
 	ui := lk.theme.UI
 	box, fg := "[ ]", ui.Subtle
 
@@ -186,11 +187,12 @@ func (a *App) mergeDelete(v *mergeView, lk look) string {
 		box, fg = "[x]", ui.Accent
 	}
 
-	out := paint(fg, ui.Panel, v.del).Render(box) +
-		paint(ui.Fg, ui.Panel, false).Render(" delete "+printable(v.pr.HeadBranch)+" after merging")
+	text := " delete " + printable(v.pr.HeadBranch) + " after merging"
+	out := paint(fg, ui.Panel, v.del).Render(box) + paint(ui.Fg, ui.Panel, false).Render(text)
 
-	if v.info.DeleteBranchOnMerge {
-		out += paint(ui.Subtle, ui.Panel, false).Render("   (the repository deletes head branches)")
+	const hint = "   (the repository deletes head branches)"
+	if v.info.DeleteBranchOnMerge && ansi.StringWidth(box+text+hint) <= cw {
+		out += paint(ui.Subtle, ui.Panel, false).Render(hint)
 	}
 
 	return out
