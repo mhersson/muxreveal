@@ -131,18 +131,19 @@ func TestPRFor(t *testing.T) {
 		acts   []Action
 		repo   string
 		branch string
-		want   int // 0 for none
+		want   int    // 0 for none
+		state  string // the state wanted, when the case checks it
 	}{
-		{"nothing known", nil, repoKey, "feat", 0},
+		{"nothing known", nil, repoKey, "feat", 0, ""},
 		{
 			"an open PR for the branch",
 			[]Action{SetRepoPRs{Repo: repoKey, Open: []PRInfo{{Number: 1, HeadBranch: "other"}, {Number: 2, HeadBranch: "feat"}}}},
-			repoKey, "feat", 2,
+			repoKey, "feat", 2, "",
 		},
 		{
 			"the newest of several open PRs, whatever their order",
 			[]Action{SetRepoPRs{Repo: repoKey, Open: []PRInfo{{Number: 5, HeadBranch: "feat"}, {Number: 8, HeadBranch: "feat"}, {Number: 6, HeadBranch: "feat"}}}},
-			repoKey, "feat", 8,
+			repoKey, "feat", 8, "",
 		},
 		{
 			"an open PR beats the lookup",
@@ -150,7 +151,7 @@ func TestPRFor(t *testing.T) {
 				SetBranchPR{Repo: repoKey, Branch: "feat", PR: lookup, Found: true},
 				SetRepoPRs{Repo: repoKey, Open: []PRInfo{{Number: 4, HeadBranch: "feat"}}},
 			},
-			repoKey, "feat", 4,
+			repoKey, "feat", 4, "",
 		},
 		{
 			"a merged lookup of the same PR beats a poll that still lists it open",
@@ -158,7 +159,15 @@ func TestPRFor(t *testing.T) {
 				SetRepoPRs{Repo: repoKey, Open: []PRInfo{{Number: 3, HeadBranch: "feat", State: "OPEN"}}},
 				SetBranchPR{Repo: repoKey, Branch: "feat", PR: lookup, Found: true},
 			},
-			repoKey, "feat", 3,
+			repoKey, "feat", 3, "MERGED",
+		},
+		{
+			"an open PR reusing the branch beats an older merged record",
+			[]Action{
+				SetBranchPR{Repo: repoKey, Branch: "feat", PR: lookup, Found: true},
+				SetRepoPRs{Repo: repoKey, Open: []PRInfo{{Number: 9, HeadBranch: "feat", State: "OPEN"}}},
+			},
+			repoKey, "feat", 9, "OPEN",
 		},
 		{
 			"the lookup when no open PR matches",
@@ -166,12 +175,12 @@ func TestPRFor(t *testing.T) {
 				SetRepoPRs{Repo: repoKey, Open: []PRInfo{{Number: 1, HeadBranch: "other"}}},
 				SetBranchPR{Repo: repoKey, Branch: "feat", PR: lookup, Found: true},
 			},
-			repoKey, "feat", 3,
+			repoKey, "feat", 3, "",
 		},
 		{
 			"a cross-repository open PR never matches",
 			[]Action{SetRepoPRs{Repo: repoKey, Open: []PRInfo{fork}}},
-			repoKey, "feat", 0,
+			repoKey, "feat", 0, "",
 		},
 		{
 			"a cross-repository PR does not hide the lookup",
@@ -179,17 +188,17 @@ func TestPRFor(t *testing.T) {
 				SetRepoPRs{Repo: repoKey, Open: []PRInfo{fork}},
 				SetBranchPR{Repo: repoKey, Branch: "feat", PR: lookup, Found: true},
 			},
-			repoKey, "feat", 3,
+			repoKey, "feat", 3, "",
 		},
 		{
 			"a cross-repository lookup never matches",
 			[]Action{SetBranchPR{Repo: repoKey, Branch: "feat", PR: fork, Found: true}},
-			repoKey, "feat", 0,
+			repoKey, "feat", 0, "",
 		},
 		{
 			"another repository's PRs do not match",
 			[]Action{SetRepoPRs{Repo: "github.com/o/other", Open: []PRInfo{{Number: 1, HeadBranch: "feat"}}}},
-			repoKey, "feat", 0,
+			repoKey, "feat", 0, "",
 		},
 	}
 
@@ -198,8 +207,8 @@ func TestPRFor(t *testing.T) {
 			s := prState(t, tt.acts...)
 
 			pr, ok := s.PRFor(tt.repo, tt.branch)
-			if ok != (tt.want != 0) || pr.Number != tt.want {
-				t.Errorf("PRFor(%q, %q) = #%d, %v, want #%d", tt.repo, tt.branch, pr.Number, ok, tt.want)
+			if ok != (tt.want != 0) || pr.Number != tt.want || (tt.state != "" && pr.State != tt.state) {
+				t.Errorf("PRFor(%q, %q) = #%d, %v, want #%d %s", tt.repo, tt.branch, pr.Number, ok, tt.want, tt.state)
 			}
 		})
 	}

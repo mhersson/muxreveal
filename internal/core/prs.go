@@ -163,7 +163,8 @@ func (s State) OpenPRFor(repo, branch string) (PRInfo, bool) {
 
 // PRFor returns the pull request of a branch of the repository keyed
 // "host/owner/name": the open one the last poll lists (see OpenPRFor), else the
-// one a lookup found.
+// one a lookup found. A merged lookup record of the same number outranks the
+// poll's entry.
 func (s State) PRFor(repo, branch string) (PRInfo, bool) {
 	if p, ok := s.OpenPRFor(repo, branch); ok {
 		// A merge never reverts: the lookup's merged record outranks a poll

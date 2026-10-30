@@ -753,3 +753,33 @@ func TestMergeDeleteHintDropsWhole(t *testing.T) {
 		})
 	}
 }
+
+func TestPRInfoByNumberMergedRecord(t *testing.T) {
+	t.Parallel()
+
+	const repo = "github.com/o/r"
+
+	merged := core.PRInfo{Number: 3, State: prMergedState, HeadBranch: "feat"}
+	store := core.NewStore(core.InitialState(core.DefaultConfig()))
+
+	for _, act := range []core.Action{
+		core.SetRepoPRs{Repo: repo, Open: []core.PRInfo{
+			{Number: 3, State: prOpenState, HeadBranch: "feat"},
+			{Number: 9, State: prOpenState, HeadBranch: "feat"},
+		}},
+		core.SetBranchPR{Repo: repo, Branch: "feat", PR: merged, Found: true},
+	} {
+		if err := store.Dispatch(act); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	st := store.State()
+
+	for number, want := range map[int]string{3: prMergedState, 9: prOpenState} {
+		info, ok := prInfoByNumber(st, repo, number)
+		if !ok || info.Number != number || info.State != want {
+			t.Errorf("#%d = %+v, %v, want state %s", number, info, ok, want)
+		}
+	}
+}
