@@ -19,7 +19,7 @@ const (
 	// maxLine bounds one event line on the socket.
 	maxLine = 64 << 10
 	// connDeadline bounds reading the event line and, separately, writing the
-	// answer: the write deadline is reset after a turn start's hold.
+	// answer: the write deadline is reset after a held event's hold (a turn start or an edit).
 	connDeadline = 2 * time.Second
 	// sendTimeout bounds how long a full out channel holds an event.
 	sendTimeout = time.Second

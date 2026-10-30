@@ -79,7 +79,8 @@ type Event struct {
 	// safe to call more than once and concurrently. Nil when nothing is held.
 	Done func() `json:"-"`
 	// Deadline is when the turn snapshot must be done, stamped by the server
-	// as it reads a held turn start; zero when unset.
+	// as it reads a held event (a turn start or an edit's before-event); zero
+	// when unset.
 	Deadline time.Time `json:"-"`
 	// Snapped is closed when the turn's snapshot (or its marker) is finished,
 	// whether or not it succeeded. Nil when no snapshot is taken for the event.

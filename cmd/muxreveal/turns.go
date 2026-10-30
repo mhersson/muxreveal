@@ -18,8 +18,8 @@ import (
 )
 
 const (
-	// turnHold is how long the hook server holds a prompt hook's answer; the
-	// hook client gives up at 2 s.
+	// turnHold is how long the hook server holds a prompt hook's or an edit's
+	// answer; the hook client gives up at 2 s.
 	turnHold = 1500 * time.Millisecond
 	// turnBudget bounds a turn snapshot, counted from when the hook server
 	// reads the event (the gate's arrival time for an event without a deadline).
