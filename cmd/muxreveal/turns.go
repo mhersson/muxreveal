@@ -761,7 +761,16 @@ func (g *gate) edit(parent context.Context, deadline time.Time, cur paneCurrent,
 	// turn could hold this edit's file.
 	var resolved atomic.Pointer[string]
 
-	stop := context.AfterFunc(ctx, func() {
+	// The deadline's work runs on the gate's own goroutine, which ends with the edit.
+	finished := make(chan struct{})
+
+	g.wg.Go(func() {
+		select {
+		case <-finished:
+			return
+		case <-ctx.Done():
+		}
+
 		root := ""
 		if r := resolved.Load(); r != nil {
 			root = *r
@@ -770,7 +779,8 @@ func (g *gate) edit(parent context.Context, deadline time.Time, cur paneCurrent,
 		g.cancelAndWait(parent, ev.Pane, cur.turn, root)
 		release(ev)
 	})
-	defer stop()
+
+	defer close(finished)
 	defer release(ev)
 
 	answers := g.lookup(parent, []string{ev.Edit})
