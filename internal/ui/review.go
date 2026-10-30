@@ -68,7 +68,7 @@ type reviewView struct {
 	base            string // the base the branch is compared with, resolved
 	turns           int    // how many turns turnsFor has
 	noSnapshot      bool   // the turn shown has no snapshot
-	foreign         bool   // the shown root is not the root of the agent's own directory, so it has no turns
+	foreign         bool   // the shown root is not the root of the agent's own directory
 
 	rowsSplit bool // rows hold side by side pairs
 	rowsRev   int  // bumps whenever rows are replaced; rebuild is the only place that does

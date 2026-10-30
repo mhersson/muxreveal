@@ -62,7 +62,7 @@ func (a *App) openReview(pane core.PaneID, focus bool) tea.Cmd {
 		return nil
 	}
 
-	session, own, tabID, pinned, eng := paneSession(st, pane), st.Panes[pane].WorkDir(), tab.ID, pinnedTo(tab, pane), a.engine
+	session, tabID, pinned, eng := paneSession(st, pane), tab.ID, pinnedTo(tab, pane), a.engine
 
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(a.ctx, reviewOpenTimeout)
@@ -80,18 +80,6 @@ func (a *App) openReview(pane core.PaneID, focus bool) tea.Cmd {
 		}
 
 		if session == "" {
-			return msg
-		}
-
-		// Only the own directory has turns.
-		foreign, err := isForeign(ctx, own, msg.repo.Root)
-		if err != nil {
-			msg.err = err
-
-			return msg
-		}
-
-		if foreign {
 			return msg
 		}
 
@@ -207,17 +195,14 @@ func (a *App) setReviewMode(mode core.ReviewMode) tea.Cmd {
 	return a.reviewRetarget(tab.ID, v, 0)
 }
 
-// turnsGate decides whether a turn key can go on. A pane with no turns, or a
-// drawer on a worktree that is not the agent's own, gets the notice that says
-// why. While the count is another session's, which a new session leaves
-// behind, the key waits: the answer of the probe for the new session runs retry
-// again.
+// turnsGate decides whether a turn key can go on. A pane with no session, or a
+// worktree with no turns, gets the notice that says why. While the count is
+// another session's, which a new session leaves behind, the key waits: the
+// answer of the probe for the new session runs retry again.
 func (a *App) turnsGate(tab core.TabID, v *reviewView, session string, retry func() tea.Cmd) (bool, tea.Cmd) {
 	switch {
 	case session == "":
 		a.notice = noticeNoTurns
-	case v.loaded && v.foreign:
-		a.notice = fmt.Sprintf(noticeNoTurnsIn, printable(v.project), printable(v.branch))
 	case v.loaded && v.turnsFor != session:
 		// Hold the key only while a probe can answer it.
 		if probe := a.reviewCount(tab, v); probe != nil || v.loading {
@@ -227,6 +212,8 @@ func (a *App) turnsGate(tab core.TabID, v *reviewView, session string, retry fun
 		}
 
 		a.notice = noticeNoTurnsYet
+	case v.loaded && v.turns == 0 && v.foreign:
+		a.notice = fmt.Sprintf(noticeNoTurnsIn, printable(v.project), printable(v.branch))
 	case v.loaded && v.turns == 0:
 		a.notice = noticeNoTurnsYet
 	default:

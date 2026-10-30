@@ -481,8 +481,7 @@ func (v *reviewView) shownTurn() int {
 }
 
 // showsTurn reports whether the drawer shows a turn. A turn-mode drawer with no
-// session, no turns yet or a foreign root shows the branch while core keeps
-// turn mode.
+// session or no turns yet shows the branch while core keeps turn mode.
 func (v *reviewView) showsTurn() bool {
 	_, ok := v.src.(git.TurnSource)
 

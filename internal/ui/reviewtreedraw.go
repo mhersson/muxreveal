@@ -161,7 +161,7 @@ func modeParts(v *reviewView, icons bool) (icon, word, rest string) {
 	case git.TurnSource:
 		n, m := v.shownTurn(), v.turns
 
-		icon, word, rest = iconTurn, "turn "+strconv.Itoa(n), " of "+strconv.Itoa(m)
+		icon, word, rest = iconTurn, "turn "+strconv.Itoa(n), " of "+strconv.Itoa(m)+" in this worktree"
 
 		switch {
 		case v.noSnapshot:

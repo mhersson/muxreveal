@@ -67,6 +67,7 @@ func reviewCases() []reviewCase {
 		})},
 		{"binary-and-truncated", with(func(s *reviewScene) { s.res, s.turn = edgeResult(), 3 })},
 		{"no-snapshot", with(func(s *reviewScene) { s.res, s.turn, s.noSnap = git.Result{}, 1, true })},
+		{"turn-past", with(func(s *reviewScene) { s.turn, s.turns, s.tree = 2, 3, true })},
 		{"empty", with(func(s *reviewScene) { s.res, s.branch = git.Result{}, true })},
 		{"sticky-header", with(func(s *reviewScene) {
 			s.h = 24
@@ -553,6 +554,33 @@ func TestFreshRowsFlash(t *testing.T) {
 	}
 }
 
+func TestModeRowOfATurn(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		v    reviewView
+		want string
+	}{
+		{"latest", reviewView{turns: 3, res: git.Result{Turn: 3}}, "turn 3 of 3 in this worktree, live"},
+		{"past", reviewView{turns: 3, res: git.Result{Turn: 2}}, "turn 2 of 3 in this worktree"},
+		{"no snapshot", reviewView{turns: 3, res: git.Result{Turn: 1}, noSnapshot: true}, "turn 1 of 3 in this worktree, no snapshot"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			tt.v.src = git.TurnSource{Worktree: "/w", Session: "s", Turn: tt.v.res.Turn}
+
+			_, word, rest := modeParts(&tt.v, false)
+			if got := word + rest; got != tt.want {
+				t.Errorf("mode row = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestDrawerTitleAndTags(t *testing.T) {
 	t.Parallel()
 
@@ -565,8 +593,8 @@ func TestDrawerTitleAndTags(t *testing.T) {
 	}{
 		{"turn tag", false, func(s *reviewScene) {}, []string{"╭─ muxreveal · feat/review-pane ", " turn 4/4 ─╮"}, []string{" split ─"}},
 		{"icons", true, func(s *reviewScene) {}, []string{"\U000F02DA turn 4/4 ", "\uF4D2 muxreveal"}, nil},
-		{"past turn", false, func(s *reviewScene) { s.turn = 2 }, []string{" turn 2/4 ─╮", "turn 2 of 4"}, []string{", live"}},
-		{"latest turn is live", false, func(s *reviewScene) {}, []string{"turn 4 of 4, live"}, nil},
+		{"past turn", false, func(s *reviewScene) { s.turn = 2 }, []string{" turn 2/4 ─╮", "turn 2 of 4 in this worktree"}, []string{", live"}},
+		{"latest turn is live", false, func(s *reviewScene) {}, []string{"turn 4 of 4 in this worktree"}, nil},
 		{"branch", false, func(s *reviewScene) { s.branch = true }, []string{" branch ─╮", "branch vs origin/main"}, []string{"turn 4/4"}},
 		{"branch icon", true, func(s *reviewScene) { s.branch = true }, []string{"\U000F062C branch ", "\U000F062C branch vs origin/main"}, nil},
 		{"split tag", false, func(s *reviewScene) {
@@ -575,7 +603,7 @@ func TestDrawerTitleAndTags(t *testing.T) {
 		{"split tag icon", true, func(s *reviewScene) {
 			s.tune = func(t *testing.T, a *App, v *reviewView) { v.split = true }
 		}, []string{"\U000F08DF split ─ \U000F02DA turn 4/4"}, nil},
-		{"no snapshot", false, func(s *reviewScene) { s.res, s.turn, s.noSnap = git.Result{}, 1, true }, []string{"turn 1 of 4, no snapshot", "turn 1 has no snapshot", ", and . step through the turns; b shows the branch"}, nil},
+		{"no snapshot", false, func(s *reviewScene) { s.res, s.turn, s.noSnap = git.Result{}, 1, true }, []string{"turn 1 of 4 in this worktree", "turn 1 has no snapshot", ", and . step through the turns; b shows the branch"}, nil},
 		{"empty branch", false, func(s *reviewScene) { s.res, s.branch = git.Result{}, true }, []string{"no changes against origin/main", "0 files"}, nil},
 		{"empty turn", false, func(s *reviewScene) { s.res, s.turn = git.Result{Turn: 3}, 3 }, []string{"turn 3 changed nothing"}, nil},
 		{"totals", false, func(s *reviewScene) {}, []string{"4 files  +25 -4"}, nil},
@@ -617,7 +645,7 @@ func TestDrawerModeShowsOnlyInTheTagWithoutTheTree(t *testing.T) {
 		}
 	}
 
-	for _, not := range []string{"turn 4 of 4, live", "4 files"} {
+	for _, not := range []string{"turn 4 of 4 in this worktree", "4 files"} {
 		if strings.Contains(text, not) {
 			t.Errorf("the frame holds %q although the tree is hidden:\n%s", not, text)
 		}
