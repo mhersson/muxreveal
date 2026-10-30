@@ -219,7 +219,8 @@ func (a *App) handleClick(msg tea.MouseClickMsg) tea.Cmd {
 }
 
 // otherPress handles the middle and right buttons: they focus the pane and go
-// to a guest that tracks the mouse, and never select.
+// to a guest that tracks the mouse, and never select. Otherwise a middle press
+// pastes.
 func (a *App) otherPress(h hitResult, m tea.Mouse) tea.Cmd {
 	cmd := a.focusPane(h.pane)
 
@@ -231,6 +232,12 @@ func (a *App) otherPress(h hitResult, m tea.Mouse) tea.Cmd {
 	if tracking, _ := p.inputModes(); tracking {
 		p.sendMouse(uv.MouseClickEvent(uv.Mouse{X: h.local.col, Y: h.local.row, Button: m.Button, Mod: m.Mod}))
 		a.mouse.fwd = &forwarded{pane: h.pane, button: m.Button, col: h.local.col, row: h.local.row}
+
+		return cmd
+	}
+
+	if m.Button == tea.MouseMiddle {
+		return tea.Batch(cmd, a.middlePaste(p))
 	}
 
 	return cmd
