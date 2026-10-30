@@ -143,11 +143,18 @@ func next(t *testing.T, p *pane) tea.Msg {
 	}
 }
 
-// feedAndWait writes s as one chunk and waits for its dirty message.
+// feedAndWait writes s as one chunk and waits until the pane has fed it to the
+// emulator and reported it dirty. A dirty message left by an earlier feed cannot
+// satisfy it: the empty write below is taken only once the reader is back in
+// Read, which is after it fed s and notified.
 func feedAndWait(t *testing.T, p *pane, fp *fakeProc, s string) {
 	t.Helper()
 
 	if _, err := fp.feed.Write([]byte(s)); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := fp.feed.Write(nil); err != nil {
 		t.Fatal(err)
 	}
 
@@ -167,6 +174,23 @@ func eventually(t *testing.T, what string, cond func() bool) {
 		}
 
 		time.Sleep(time.Millisecond)
+	}
+}
+
+func TestFeedAndWaitIgnoresStaleDirty(t *testing.T) {
+	t.Parallel()
+	p, fp := newTestPane(t, 20, 3, realClock{})
+
+	feedAndWait(t, p, fp, "first")
+
+	// A notification from an earlier feed that nobody consumed.
+	p.dirty <- struct{}{}
+
+	feedAndWait(t, p, fp, "\x1b[1;1HZZZ")
+	p.render()
+
+	if !strings.HasPrefix(p.lines()[0], "ZZZ") {
+		t.Fatalf("row 0 = %q, want the second feed on screen", p.lines()[0])
 	}
 }
 
