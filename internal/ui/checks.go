@@ -14,6 +14,7 @@ import (
 const (
 	noticeChecksLoading = "loading checks…"
 	noticeChecksNone    = "no checks on %s"
+	noticeCheckNoPage   = "no page for that check"
 )
 
 // checksView is the open checks overlay: the pull request whose checks it lists,
@@ -151,6 +152,12 @@ func (a *App) handleChecksKey(msg tea.KeyPressMsg) tea.Cmd {
 		v.sel = max(v.sel-1, 0)
 	case "enter":
 		if v.sel < len(rows) {
+			if rows[v.sel].url == "" {
+				a.notice = noticeCheckNoPage
+
+				return nil
+			}
+
 			return a.openURL(rows[v.sel].url)
 		}
 	case "r":

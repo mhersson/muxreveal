@@ -1,11 +1,13 @@
 package ui
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
@@ -622,5 +624,60 @@ func TestComposeSizes(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestComposeBaseChangeRecount(t *testing.T) {
+	r := newComposeRig(t)
+	gitIn(t, r.real, r.dir, "push", "-q", "origin", "HEAD~1:refs/heads/mid")
+
+	v := r.mustOpen(t)
+	if v.commits != 2 {
+		t.Fatalf("commits = %d on main, want 2", v.commits)
+	}
+
+	// A base whose remote-tracking ref is gone has no commits, and that is no error.
+	gitIn(t, r.real, r.dir, "update-ref", "-d", "refs/remotes/origin/mid")
+	r.churn(t, r.composeStep(v, 1))
+
+	if v.commits != 0 || v.status != "" || v.statusErr {
+		t.Errorf("a missing base: commits %d, status %q (err %v), want 0 and no status", v.commits, v.status, v.statusErr)
+	}
+
+	// Any other failure is shown, not counted as no commits.
+	v.commits = 5
+	r.onComposeLog(composeLogMsg{logSeq: v.logSeq, box: v, err: errors.New("git log: boom")})
+
+	if !v.statusErr || !strings.Contains(v.status, "boom") || v.commits != 5 {
+		t.Errorf("a git error: status %q (err %v), commits %d, want the error shown and the count kept", v.status, v.statusErr, v.commits)
+	}
+
+	// An answer for another box is dropped.
+	v.status, v.statusErr = "", false
+	r.onComposeLog(composeLogMsg{logSeq: v.logSeq, box: &composeView{}, commits: []github.Commit{{}}})
+
+	if v.commits != 5 {
+		t.Errorf("commits = %d after another box's answer, want 5", v.commits)
+	}
+}
+
+func TestReadBodyFileKeepsWholeRunes(t *testing.T) {
+	t.Parallel()
+
+	// "é" is two bytes, so the limit splits the last one.
+	text := strings.Repeat("a", maxEditedBody-1) + "é"
+	file := filepath.Join(t.TempDir(), "body")
+
+	if err := os.WriteFile(file, []byte(text), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := readBodyFile(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if want := strings.Repeat("a", maxEditedBody-1); got != want {
+		t.Errorf("read %d bytes (valid %v), want the %d bytes before the split rune", len(got), utf8.ValidString(got), len(want))
 	}
 }

@@ -166,6 +166,9 @@ type App struct {
 	ctx     context.Context
 	cancel  context.CancelFunc
 	closing sync.WaitGroup // pane closes running off the update loop
+
+	// bodyFiles tracks editor files written but not yet handed to the update loop.
+	bodyFiles bodyFileSet
 }
 
 // New returns the root model. It fails when the store's theme is unknown.

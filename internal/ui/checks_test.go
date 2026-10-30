@@ -146,6 +146,23 @@ func inChecks(t *testing.T) (*prDrawer, *fakeOpen) {
 	return r, f
 }
 
+func TestChecksEnterOnACheckWithoutAPage(t *testing.T) {
+	t.Parallel()
+
+	r, f := inChecks(t)
+
+	r.run(r.step(snapshotWithChecks("aaaaaaa", "aaaaaaa", 7, github.Check{Name: "bare", State: github.CheckSuccess})))
+	r.keys(keyEnter)
+
+	if r.notice != noticeCheckNoPage {
+		t.Errorf("notice = %q, want %q", r.notice, noticeCheckNoPage)
+	}
+
+	if got := f.urls(); len(got) != 0 {
+		t.Errorf("opened %v, want nothing opened", got)
+	}
+}
+
 func TestChecksOverlay(t *testing.T) {
 	t.Parallel()
 

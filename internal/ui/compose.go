@@ -7,9 +7,12 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"os/exec"
 	"slices"
 	"strings"
+	"sync"
 	"time"
+	"unicode/utf8"
 
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
@@ -122,6 +125,7 @@ type composeLogMsg struct {
 	seq     int
 	logSeq  int
 	open    *composeView
+	box     *composeView // the box a change of base recounts
 	tmpl    *github.Template
 	commits []github.Commit
 	err     error
@@ -380,7 +384,7 @@ func (a *App) composeLog(v *composeView, seq, logSeq int, opening bool, tmpl *gi
 		ctx, cancel := context.WithTimeout(appCtx, pushResolveTimeout)
 		defer cancel()
 
-		msg := composeLogMsg{seq: seq, logSeq: logSeq, open: open, tmpl: tmpl}
+		msg := composeLogMsg{seq: seq, logSeq: logSeq, open: open, box: v, tmpl: tmpl}
 
 		r, err := git.Open(ctx, t.root)
 		if err != nil {
@@ -392,7 +396,9 @@ func (a *App) composeLog(v *composeView, seq, logSeq int, opening bool, tmpl *gi
 		// A base the remote-tracking ref of which is gone has no commits to list.
 		cs, err := git.Log(ctx, r, base)
 		if err != nil {
-			msg.err = err
+			if !baseRefMissing(err) {
+				msg.err = err
+			}
 
 			return msg
 		}
@@ -405,6 +411,14 @@ func (a *App) composeLog(v *composeView, seq, logSeq int, opening bool, tmpl *gi
 	}
 }
 
+// baseRefMissing reports whether err is git saying the base ref does not
+// exist: rev-parse --verify --quiet exits 1 and says nothing.
+func baseRefMissing(err error) bool {
+	var ee *exec.ExitError
+
+	return errors.As(err, &ee) && ee.ExitCode() == 1
+}
+
 // onComposeLog opens the box with the commits it starts from, or recounts a
 // box already open. An answer for an earlier request is dropped.
 func (a *App) onComposeLog(msg composeLogMsg) {
@@ -413,8 +427,12 @@ func (a *App) onComposeLog(msg composeLogMsg) {
 	}
 
 	if msg.open == nil {
-		if v := a.compose; v != nil && msg.logSeq == v.logSeq {
-			v.commits = len(msg.commits)
+		if v := a.compose; v != nil && v == msg.box && msg.logSeq == v.logSeq {
+			if msg.err != nil {
+				v.status, v.statusErr = "commits: "+gitReason(msg.err), true
+			} else {
+				v.commits = len(msg.commits)
+			}
 		}
 
 		return
@@ -438,6 +456,10 @@ func (a *App) onComposeLog(msg composeLogMsg) {
 	v.title.CursorEnd()
 	v.body = newTextArea(d.Body, maxComposeBody)
 	v.commits = len(msg.commits)
+
+	if msg.err != nil {
+		v.status, v.statusErr = "commits: "+gitReason(msg.err), true
+	}
 
 	a.endLeader()
 	a.compose = v
@@ -733,13 +755,14 @@ func (a *App) composeEditor() tea.Cmd {
 		dir    = a.runDir
 		body   = v.body.Value()
 		appCtx = a.ctx
+		files  = &a.bodyFiles
 	)
 
 	return func() tea.Msg {
 		file, err := writeBodyFile(dir, body)
 
 		// An app that closed meanwhile never sees the file.
-		if err == nil && appCtx.Err() != nil {
+		if err == nil && (appCtx.Err() != nil || !files.add(file)) {
 			_ = os.Remove(file)
 		}
 
@@ -772,6 +795,8 @@ func writeBodyFile(dir, body string) (string, error) {
 // box back when it cannot.
 func (a *App) onBodyWritten(msg bodyWrittenMsg) tea.Cmd {
 	v := msg.v
+
+	a.bodyFiles.remove(msg.file)
 
 	fail := func(reason string) {
 		if msg.file != "" {
@@ -850,6 +875,10 @@ func readBodyFile(file string) (string, error) {
 		return "", err
 	}
 
+	if len(b) == maxEditedBody {
+		b = dropPartialRune(b)
+	}
+
 	return string(b), nil
 }
 
@@ -873,6 +902,53 @@ func (a *App) onBodyRead(msg bodyReadMsg) {
 	v.body = newTextArea(msg.text, maxComposeBody)
 }
 
+// bodyFileSet is the editor files written by a command and not yet handed to
+// the update loop, so Close can remove one that is still on its way.
+type bodyFileSet struct {
+	mu     sync.Mutex
+	closed bool
+	files  map[string]struct{}
+}
+
+// add records file, or reports false when the set already closed.
+func (s *bodyFileSet) add(file string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.closed {
+		return false
+	}
+
+	if s.files == nil {
+		s.files = map[string]struct{}{}
+	}
+
+	s.files[file] = struct{}{}
+
+	return true
+}
+
+func (s *bodyFileSet) remove(file string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	delete(s.files, file)
+}
+
+// closeAll deletes the recorded files and refuses later ones.
+func (s *bodyFileSet) closeAll() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.closed = true
+
+	for f := range s.files {
+		_ = os.Remove(f)
+	}
+
+	clear(s.files)
+}
+
 // removeEditFiles deletes the temp files of editors still open.
 func (a *App) removeEditFiles() {
 	for id, e := range a.editing {
@@ -880,4 +956,19 @@ func (a *App) removeEditFiles() {
 
 		delete(a.editing, id)
 	}
+}
+
+// dropPartialRune cuts a rune the size limit split off the end of b.
+func dropPartialRune(b []byte) []byte {
+	for i := len(b) - 1; i >= 0 && i >= len(b)-utf8.UTFMax; i-- {
+		if utf8.RuneStart(b[i]) {
+			if !utf8.FullRune(b[i:]) {
+				return b[:i]
+			}
+
+			break
+		}
+	}
+
+	return b
 }

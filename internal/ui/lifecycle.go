@@ -733,6 +733,7 @@ func (a *App) renameTab() tea.Cmd {
 func (a *App) Close(ctx context.Context) error {
 	a.endSlide()
 	a.removeEditFiles()
+	a.bodyFiles.closeAll()
 	a.watches.holds.closeAll()
 
 	for id, p := range a.panes {

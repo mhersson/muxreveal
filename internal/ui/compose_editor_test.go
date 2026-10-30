@@ -183,3 +183,56 @@ func TestComposeEditorBoxClosedMeanwhile(t *testing.T) {
 		t.Errorf("file removed = %v, compose = %v", os.IsNotExist(err), r.compose)
 	}
 }
+
+func TestComposeEditorCloseRemovesUndeliveredFile(t *testing.T) {
+	r := newEditorRig(t)
+
+	// The write finished but its answer never reached the update loop.
+	cmd := press(r.App, keyCtrlE)
+	if cmd == nil {
+		t.Fatal("ctrl+e raised no write")
+	}
+
+	_ = cmd()
+	file := r.file(t)
+
+	closeApp(t, r.App)
+
+	if _, err := os.Stat(file); !os.IsNotExist(err) {
+		t.Errorf("body file still there after Close: %v", err)
+	}
+
+	// A write that finishes after Close removes its own file.
+	_ = cmd()
+
+	if files, _ := filepath.Glob(filepath.Join(r.run, "pr-body-*.md")); len(files) != 0 {
+		t.Errorf("body files %q after Close, want none", files)
+	}
+}
+
+func TestComposeEditorTabClosedHandsFileBack(t *testing.T) {
+	r := newEditorRig(t)
+	r.ctrlE(t)
+	r.edit(t, "from the editor")
+
+	file := r.file(t)
+	r.churn(t, r.closeTabByID(r.store.State().Tab().ID))
+
+	if r.compose == nil || r.compose.body.Value() != "from the editor" {
+		t.Errorf("compose = %v, want the edited body handed back", r.compose)
+	}
+
+	if _, err := os.Stat(file); !os.IsNotExist(err) {
+		t.Errorf("body file still there after the tab closed: %v", err)
+	}
+}
+
+func TestComposeOpensFromTheLeaderKeys(t *testing.T) {
+	r := newComposeRig(t)
+
+	r.churn(t, press(r.App, keyLeader, keyRune('g'), keyRune('o')))
+
+	if r.compose == nil {
+		t.Fatalf("leader g o opened no box; notice %q", r.notice)
+	}
+}

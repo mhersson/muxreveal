@@ -84,13 +84,15 @@ func (d *drawCtx) headerRow(y int) string {
 		return p.line([]railRun{{text: strings.Repeat("─", w), fg: ui.Border}}, w)
 	case prMoved(v, pr):
 		return p.line([]railRun{sp(markW), {text: "the PR moved to " + pr.HeadOID[:min(len(pr.HeadOID), 7)] + " since this diff; r fetches it", fg: ui.Warning}}, w)
+	case v.unpushed > 0:
+		return p.line([]railRun{
+			sp(markW),
+			{text: "↑" + strconv.Itoa(v.unpushed) + " not pushed", fg: ui.Warning, bold: true},
+			{text: ": the PR shows the pushed head; leader g p pushes", fg: ui.Muted},
+		}, w)
 	}
 
-	return p.line([]railRun{
-		sp(markW),
-		{text: "↑" + strconv.Itoa(v.unpushed) + " not pushed", fg: ui.Warning, bold: true},
-		{text: ": the PR shows the pushed head; leader g p pushes", fg: ui.Muted},
-	}, w)
+	return p.line(nil, w)
 }
 
 // prMetaRuns is the header's second row: branch and base, checks, review,

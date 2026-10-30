@@ -415,6 +415,7 @@ func (a *App) onPRPlace(msg prPlaceMsg) tea.Cmd {
 		place  = msg.place
 		number = msg.number
 		appCtx = a.ctx
+		log    = a.log
 	)
 
 	ask.base = base
@@ -431,7 +432,12 @@ func (a *App) onPRPlace(msg prPlaceMsg) tea.Cmd {
 		}
 
 		if err == nil {
-			out.unpushed, _ = git.Unpushed(ctx, r, place.remote)
+			var uerr error
+
+			out.unpushed, uerr = git.Unpushed(ctx, r, place.remote)
+			if uerr != nil {
+				log.Debug("unpushed count dropped", "err", uerr)
+			}
 		}
 
 		out.err = err
@@ -607,7 +613,7 @@ func (a *App) prNextAfterSync() tea.Cmd {
 	}
 
 	if v.src == nil {
-		// A view that resolved without a source (an error, not a repository) never gets one for this open.
+		// A view that finished loading without a source never gets one for this open.
 		if v.loaded {
 			a.drawer.prNext = nil
 		}

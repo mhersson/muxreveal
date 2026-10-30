@@ -12,8 +12,8 @@ import (
 const textAreaPage = 10
 
 // textArea is a multi-line text field without soft wrap. Its cursor is a
-// (row, col) in runes; top is the first row View draws. A max over zero caps
-// the value's characters, newlines included.
+// (row, col) in runes; top is the first row View draws. A max above zero limits
+// the value to that many characters, newlines included.
 type textArea struct {
 	lines    [][]rune
 	row, col int
