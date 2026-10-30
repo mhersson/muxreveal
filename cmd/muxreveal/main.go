@@ -107,6 +107,10 @@ func run(ctx context.Context, env core.Env, configPath, recordDir string, fresh 
 		return fmt.Errorf("config %s: %w", configPath, err)
 	}
 
+	if err := cfg.Plans.Validate(); err != nil {
+		return fmt.Errorf("config %s: %w", configPath, err)
+	}
+
 	f, err := openLog(core.StateDir(env))
 	if err != nil {
 		return err

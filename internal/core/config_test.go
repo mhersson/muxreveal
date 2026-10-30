@@ -145,6 +145,11 @@ func TestLoadConfig(t *testing.T) {
 				tt.want.Worktrees = DefaultConfig().Worktrees
 			}
 
+			// And for Plans.
+			if tt.want.Plans.Paths == nil {
+				tt.want.Plans = DefaultConfig().Plans
+			}
+
 			if !tt.wantErr {
 				if err != nil {
 					t.Fatalf("LoadConfig() error = %v", err)

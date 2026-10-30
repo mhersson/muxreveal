@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 
@@ -26,6 +27,7 @@ type Config struct {
 	Layout    LayoutConfig    `toml:"layout"`
 	Diff      DiffConfig      `toml:"diff"`
 	Worktrees WorktreesConfig `toml:"worktrees"`
+	Plans     PlansConfig     `toml:"plans"`
 }
 
 // LayoutConfig is the [layout] section. Validate rejects an out-of-range value
@@ -192,6 +194,24 @@ func (c WorktreesConfig) Validate() error {
 // root style.
 func (c WorktreesConfig) Sibling() bool { return c.Root == "sibling" }
 
+// PlansConfig is the [plans] section: the folders, relative to a worktree
+// root, whose markdown files count as plans.
+type PlansConfig struct {
+	Paths []string `toml:"paths"`
+}
+
+// Validate names the first entry that is not a relative path inside a worktree.
+func (c PlansConfig) Validate() error {
+	for _, p := range c.Paths {
+		clean := filepath.Clean(p)
+		if p == "" || filepath.IsAbs(p) || clean == "." || clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
+			return fmt.Errorf("plans.paths: %q is not a relative path inside a worktree", p)
+		}
+	}
+
+	return nil
+}
+
 // Mouse is the [mouse] section; both switches are off by default.
 type Mouse struct {
 	FocusFollowsMouse bool `toml:"focus_follows_mouse"`
@@ -227,6 +247,7 @@ func DefaultConfig() Config {
 		},
 		Diff:      DiffConfig{Layout: "unified", Mode: string(ReviewBranch), MaxFiles: 400, MaxBytes: 2 << 20, MaxLines: 5000},
 		Worktrees: WorktreesConfig{Root: "inside"},
+		Plans:     PlansConfig{Paths: []string{"docs/superpowers/plans/", "docs/superpowers/specs/"}},
 	}
 }
 

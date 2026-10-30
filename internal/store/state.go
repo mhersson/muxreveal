@@ -15,6 +15,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 	"unicode"
 
 	"github.com/mhersson/muxreveal/internal/core"
@@ -73,7 +74,19 @@ type paneJSON struct {
 	Harness    string `json:"harness,omitempty"`
 	SessionID  string `json:"session_id,omitempty"`
 	Transcript string `json:"transcript,omitempty"`
+
+	Plan json.RawMessage `json:"plan,omitempty"` // raw so a bad plan drops alone
 }
+
+type planJSON struct {
+	Path   string    `json:"path"`
+	Root   string    `json:"root,omitempty"`
+	Kind   string    `json:"kind"`
+	At     time.Time `json:"at"`
+	Unread bool      `json:"unread,omitempty"`
+}
+
+var planKinds = map[core.PlanKind]string{core.PlanMode: "mode", core.PlanFile: "file"}
 
 // Report says which fallbacks Decode used, for the start-up notices.
 type Report struct {
@@ -224,10 +237,23 @@ func encodePane(p core.Pane) (paneJSON, error) {
 			return paneJSON{Kind: string(core.KindShell), Cwd: p.Cwd}, nil
 		}
 
-		return paneJSON{
+		jp := paneJSON{
 			Kind: string(p.Kind), Cwd: p.Cwd, Harness: p.Harness,
 			SessionID: string(p.Session), Transcript: p.Transcript,
-		}, nil
+		}
+
+		if p.Plan.Valid() {
+			raw, err := json.Marshal(planJSON{
+				Path: p.Plan.Path, Root: p.Plan.Root, Kind: planKinds[p.Plan.Kind], At: p.Plan.At.UTC(), Unread: p.Plan.Unread,
+			})
+			if err != nil {
+				return paneJSON{}, fmt.Errorf("encoding plan: %w", err)
+			}
+
+			jp.Plan = raw
+		}
+
+		return jp, nil
 	}
 
 	return paneJSON{}, fmt.Errorf("unknown kind %q", p.Kind)
@@ -477,11 +503,35 @@ func decodePane(jp paneJSON) (core.Pane, error) {
 			p.Session = core.SessionID(jp.SessionID)
 			p.Transcript = jp.Transcript
 		}
+
+		p.Plan = decodePlan(jp.Plan)
 	default:
 		return core.Pane{}, fmt.Errorf("unknown kind %q", jp.Kind)
 	}
 
 	return p, nil
+}
+
+// decodePlan reads an agent's plan; anything unreadable or invalid is dropped.
+func decodePlan(raw json.RawMessage) core.Plan {
+	var jp planJSON
+	if len(raw) == 0 || json.Unmarshal(raw, &jp) != nil {
+		return core.Plan{}
+	}
+
+	plan := core.Plan{Path: jp.Path, Root: jp.Root, At: jp.At.UTC(), Unread: jp.Unread}
+
+	for kind, name := range planKinds {
+		if name == jp.Kind {
+			plan.Kind = kind
+		}
+	}
+
+	if !plan.Valid() {
+		return core.Plan{}
+	}
+
+	return plan
 }
 
 // parseNumbered reads ids such as "p12": the prefix, then a positive number
