@@ -354,7 +354,8 @@ func (a *App) handlePlanKey(msg tea.KeyPressMsg) tea.Cmd {
 		return nil
 	}
 
-	if _, _, _, _, ok := planBox(a.width, a.height); !ok {
+	_, _, _, boxH, ok := planBox(a.width, a.height)
+	if !ok {
 		return nil
 	}
 
@@ -394,7 +395,10 @@ func (a *App) handlePlanKey(msg tea.KeyPressMsg) tea.Cmd {
 	case "enter":
 		return a.planEnter()
 	case "/":
-		pv.searching, pv.query = true, ""
+		// The prompt draws in the hint row, so without one there is nowhere to type.
+		if _, _, hint := planRows(boxH); hint {
+			pv.searching, pv.query = true, ""
+		}
 	case "n":
 		a.planFind(pv.last, false)
 	case "N":

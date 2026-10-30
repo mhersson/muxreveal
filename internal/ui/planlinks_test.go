@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -239,6 +240,61 @@ func TestPlanLinkChooser(t *testing.T) {
 			t.Error("esc did not close the chooser alone")
 		}
 	})
+}
+
+func TestPlanNarrowWidths(t *testing.T) {
+	t.Parallel()
+
+	// The links sit on a line short enough to stay one view line at every width.
+	const doc = "# Doc\n\n[a](https://e.example/1) [b](https://e.example/2) [c](../../b.md)\n\n[b page](../../b.md)\n"
+
+	rig := func(t *testing.T, w, h int) *planRig {
+		t.Helper()
+
+		r := newPlanRig(t, w, h)
+		r.filePlan(t, planLinkPath, doc)
+		write(t, filepath.Join(r.wt, "docs/b.md"), "# Bee\n\nbee words\n")
+		chord(r.a, 'a')
+		r.open(t)
+
+		return r
+	}
+
+	for _, sz := range [][2]int{{28, 14}, {30, 14}, {34, 16}, {40, 16}, {80, 24}} {
+		w, h := sz[0], sz[1]
+
+		t.Run(fmt.Sprintf("%dx%d chooser", w, h), func(t *testing.T) {
+			t.Parallel()
+
+			r := rig(t, w, h)
+			r.onLine(t, "a b c")
+			r.enter()
+
+			if r.a.plan.chooser == nil {
+				t.Fatal("the chooser did not open")
+			}
+
+			if !strings.Contains(r.shown(t), "Links") {
+				t.Error("the chooser is not drawn")
+			}
+
+			assertScreen(t, r.a, w, h)
+		})
+
+		t.Run(fmt.Sprintf("%dx%d page", w, h), func(t *testing.T) {
+			t.Parallel()
+
+			r := rig(t, w, h)
+			r.onLine(t, "b page")
+			r.page(r.enter())
+
+			if len(r.a.plan.pages) != 1 {
+				t.Fatalf("%d pages, want 1", len(r.a.plan.pages))
+			}
+
+			assertScreen(t, r.a, w, h)
+		})
+	}
 }
 
 func TestPlanPages(t *testing.T) {

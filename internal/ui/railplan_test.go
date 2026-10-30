@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"cmp"
 	"strings"
 	"testing"
 	"time"
@@ -34,10 +35,12 @@ func TestRailPlanMark(t *testing.T) {
 		card  func(c *railCard)
 		want  string
 		mark  bool
+		cw    int // the content width, 40 when 0
 	}{
 		{name: "meter, age and dot", icons: true, want: "41%  " + iconPlan + "  2m ●", mark: true},
 		{name: "icons off", want: "41%  plan  2m ●", mark: true},
 		{name: "long name keeps the tail", icons: true, card: func(c *railCard) { c.project = strings.Repeat("n", 60) }, want: iconPlan + "  2m ●", mark: true},
+		{name: "wider rail", icons: true, want: "41%  " + iconPlan + "  2m ●", mark: true, cw: 60},
 		{name: "read plan", icons: true, card: func(c *railCard) { c.plan = false }, want: "41%  2m ●"},
 	}
 
@@ -54,21 +57,45 @@ func TestRailPlanMark(t *testing.T) {
 				tt.card(&c)
 			}
 
-			got := titleText(a, c, 40)
+			cw := cmp.Or(tt.cw, 40)
+
+			got := titleText(a, c, cw)
 			if !strings.HasSuffix(got, tt.want) {
 				t.Errorf("title %q, want it to end in %q", got, tt.want)
 			}
 
-			if w := ansi.StringWidth(got); w != 40 {
-				t.Errorf("title is %d cells, want 40", w)
+			if w := ansi.StringWidth(got); w != cw {
+				t.Errorf("title is %d cells, want %d", w, cw)
 			}
 
 			info := a.current().theme.UI.Info
 
-			for _, r := range a.railTitleLine(a.current().theme.UI, c, nil, 40) {
+			for _, r := range a.railTitleLine(a.current().theme.UI, c, nil, cw) {
 				if r.mark && (r.fg != info || !tt.mark) {
 					t.Errorf("mark run %+v, want Info (marked: %v)", r, tt.mark)
 				}
+			}
+
+			if !tt.mark {
+				return
+			}
+
+			// The mark's own cell opens the card's plan; the cell left of it does not.
+			box := core.Rect{X: 3, Y: 1, W: cw + 4, H: 8}
+			v := railView{
+				geom:  railGeometry(box, false),
+				shown: []railCard{c},
+				rows:  []railRow{{kind: railRowCard, card: 0, line: 0}},
+				marks: a.railMarks([]railCard{c}, cw),
+			}
+			x, y := box.X+2+v.marks[0].x, v.geom.list.Y
+
+			if id, ok := v.markAt(x, y); !ok || id != "p2" {
+				t.Errorf("markAt(%d, %d) = %q, %v; want p2", x, y, id, ok)
+			}
+
+			if id, ok := v.markAt(x-1, y); ok {
+				t.Errorf("markAt one cell left of the mark = %q; want none", id)
 			}
 		})
 	}

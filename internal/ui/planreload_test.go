@@ -307,7 +307,8 @@ func TestPlanRewriteBurst(t *testing.T) {
 		}
 	}
 
-	// The newest lands in the middle of the older ones.
+	// Answers 11-20 land first, then the newest (index 10), then 1-10 and 21-49:
+	// every older answer is stale and changes nothing, so the newest shows from i = 10.
 	order := append(append(append([]planReadMsg{}, msgs[10:20]...), msgs[n-1]), msgs[:10]...)
 	order = append(order, msgs[20:n-1]...)
 

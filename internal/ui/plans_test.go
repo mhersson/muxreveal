@@ -30,6 +30,12 @@ func TestPlanFileRoot(t *testing.T) {
 		{"folder prefix only", def, "/r/docs/superpowers/plansX/a.md", "", false},
 		{"relative", def, "docs/superpowers/plans/a.md", "", false},
 		{"custom folder", []string{"notes"}, "/r/notes/a.md", "/r", true},
+		{"folder entry without a slash", []string{"docs/plans"}, "/r/docs/plans/a.md", "/r", true},
+		{"folder entry with a slash", []string{"docs/plans/"}, "/r/docs/plans/a.md", "/r", true},
+		{"multi-component entry", []string{"docs/specs"}, "/r/x/docs/specs/s.md", "/r/x", true},
+		{"match at the path start", def, "/docs/superpowers/plans/a.md", "/", true},
+		{"two folders, the deepest wins", []string{"docs", "docs/plans"}, "/r/docs/a/docs/plans/x.md", "/r/docs/a", true},
+		{"two folders, the deeper one first", []string{"a", "b"}, "/r/b/x/a/f.md", "/r/b/x", true},
 		{"no folders", nil, "/r/docs/superpowers/plans/a.md", "", false},
 	}
 	for _, tt := range tests {

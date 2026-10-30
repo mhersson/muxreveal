@@ -178,8 +178,8 @@ func TestPlanSearch(t *testing.T) {
 		t.Parallel()
 
 		r := searchRig(t, 120, 40)
-		if matchCount(t, r.a) != 0 {
-			t.Skip("the match colour is used elsewhere in the overlay")
+		if n := matchCount(t, r.a); n != 0 {
+			t.Fatalf("%d cells paint in the Match colour before any query", n)
 		}
 
 		r.keys("/")
@@ -339,6 +339,23 @@ func TestPlanSearch(t *testing.T) {
 		if r.a.plan.query != "" || r.a.plan.searching {
 			t.Errorf("a paste reached the closed prompt: %+v", r.a.plan)
 		}
+	})
+
+	t.Run("a box without a hint row opens no prompt", func(t *testing.T) {
+		t.Parallel()
+
+		r := searchRig(t, 80, 9)
+		if _, _, hint := planRows(5); hint {
+			t.Fatal("setup: the box still shows the hint row")
+		}
+
+		r.keys("/", "a")
+
+		if pv := r.a.plan; pv.searching || pv.query != "" {
+			t.Errorf("searching %v, query %q; want no prompt and the letter dropped", pv.searching, pv.query)
+		}
+
+		assertScreen(t, r.a, 80, 9)
 	})
 
 	t.Run("a box too small to draw takes esc alone", func(t *testing.T) {

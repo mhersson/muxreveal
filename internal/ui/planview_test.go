@@ -658,6 +658,36 @@ func TestPlanOverlayResize(t *testing.T) {
 	}
 }
 
+func TestPlanOverlayResizeSmallAndBack(t *testing.T) {
+	t.Parallel()
+
+	var src strings.Builder
+
+	for i := 1; i <= 60; i++ {
+		fmt.Fprintf(&src, "- item %d %s\n", i, strings.Repeat("word ", 30))
+	}
+
+	r := newPlanRig(t, 120, 40)
+	r.filePlan(t, "docs/superpowers/plans/p.md", src.String())
+	r.open(t)
+
+	v := &r.a.plan.view
+	v.goSource(30)
+
+	sized(t, r.a, 20, 6)
+
+	if s := assertScreen(t, r.a, 20, 6); strings.Contains(ansi.Strip(s), "item") {
+		t.Error("a box too small to draw still shows the doc")
+	}
+
+	sized(t, r.a, 120, 40)
+	assertScreen(t, r.a, 120, 40)
+
+	if got := v.layout().Source[v.cursor]; got.First > 30 || got.Last < 30 {
+		t.Errorf("back at 120x40 the cursor is on source %+v, want a line holding 30", got)
+	}
+}
+
 func TestPlanOverlayHugeDoc(t *testing.T) {
 	t.Parallel()
 
