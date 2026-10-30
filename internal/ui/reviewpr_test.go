@@ -669,3 +669,208 @@ func TestPRPlaceErrors(t *testing.T) {
 		t.Errorf("with no remote: err = %v, want %v", err, errPRNoRemote)
 	}
 }
+
+// prHeaderLines are the drawer's lines of a scene in PR mode, without styling.
+func prHeaderLines(t *testing.T, a *App) []string {
+	t.Helper()
+
+	st := a.store.State()
+
+	r, ok := a.drawerRect(st)
+	if !ok {
+		t.Fatal("no drawer on screen")
+	}
+
+	return strings.Split(ansi.Strip(strings.Join(a.drawerLines(st, r), "\n")), "\n")
+}
+
+func TestPRHeader(t *testing.T) {
+	t.Parallel()
+
+	const moved = "the PR moved to bbbbbbb since this diff; r fetches it"
+
+	tests := []struct {
+		name     string
+		tune     func(*core.PRInfo)
+		unpushed int
+		icons    bool
+		want     []string
+		absent   []string
+		rows     int
+	}{
+		{
+			name: "passed and approved", icons: true, rows: 3,
+			want:   []string{"#7 Show the pull request over its diff", iconGit + " feat/review-pane → main", iconPassed + " 4/4", "approved", "@mhersson", "3h"},
+			absent: []string{"not pushed", "moved", "no review yet"},
+		},
+		{
+			name: "running", icons: true, rows: 3,
+			tune: func(p *core.PRInfo) { p.ChecksDone = 1 },
+			want: []string{iconRunning + " 1/4"},
+		},
+		{
+			name: "failed", icons: true, rows: 3,
+			tune: func(p *core.PRInfo) { p.ChecksFailed = 2 },
+			want: []string{iconFailed + " 2 failed"},
+		},
+		{
+			name: "changes requested", icons: true, rows: 3,
+			tune: func(p *core.PRInfo) { p.ReviewDecision = "CHANGES_REQUESTED" },
+			want: []string{"changes requested"},
+		},
+		{
+			name: "no review yet", icons: true, rows: 3,
+			tune:   func(p *core.PRInfo) { p.ReviewDecision = "" },
+			want:   []string{"no review yet"},
+			absent: []string{"approved"},
+		},
+		{
+			name: "no checks", icons: true, rows: 3,
+			tune:   func(p *core.PRInfo) { p.ChecksTotal, p.ChecksDone = 0, 0 },
+			absent: []string{iconPassed, "0/0"},
+		},
+		{
+			name: "unpushed commits", icons: true, rows: 4, unpushed: 2,
+			want: []string{"↑2 not pushed: the PR shows the pushed head; leader p pushes"},
+		},
+		{
+			name: "the poll's head differs", icons: true, rows: 4, unpushed: 2,
+			tune:   func(p *core.PRInfo) { p.HeadOID = "bbbbbbb0000000000000000000000000000000bb" },
+			want:   []string{moved},
+			absent: []string{"not pushed"},
+		},
+		{
+			name: "no icons", rows: 3,
+			want:   []string{"feat/review-pane → main", "ci 4/4", "approved"},
+			absent: []string{iconGit, iconPassed},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			s := reviewScene{
+				theme: "catppuccin-mocha", icons: tc.icons, w: 200, h: 52, res: turn4Result(), turn: 4, turns: 4, focused: true,
+				branch: true, tune: func(t *testing.T, a *App, v *reviewView) { prSceneWith(tc.tune, tc.unpushed)(t, a, v) },
+			}
+			a := s.build(t)
+
+			text := strings.Join(prHeaderLines(t, a), "\n")
+			for _, w := range tc.want {
+				if !strings.Contains(text, w) {
+					t.Errorf("drawer lacks %q:\n%s", w, text)
+				}
+			}
+
+			for _, w := range tc.absent {
+				if strings.Contains(text, w) {
+					t.Errorf("drawer holds %q:\n%s", w, text)
+				}
+			}
+
+			v := a.drawer.views[a.store.State().Tab().ID]
+			info, _ := prInfoByNumber(a.store.State(), prRepoKey, 7)
+
+			if got := prHeaderRows(v, info); got != tc.rows {
+				t.Errorf("prHeaderRows = %d, want %d", got, tc.rows)
+			}
+		})
+	}
+}
+
+func TestPRHeaderKeepsTheCursorInView(t *testing.T) {
+	t.Parallel()
+
+	s := reviewScene{
+		theme: "catppuccin-mocha", icons: true, w: 200, h: 24, res: turn4Result(), turn: 4, turns: 4, focused: true,
+		branch: true, tune: func(t *testing.T, a *App, v *reviewView) { prSceneWith(nil, 1)(t, a, v); v.cursor = 0 },
+	}
+	a := s.build(t)
+	st := a.store.State()
+	v := a.drawer.views[st.Tab().ID]
+
+	box, _ := a.drawerFull(st)
+	lay := a.drawerLayoutOf(box, v, drawerTree(st))
+
+	info, _ := prInfoByNumber(st, prRepoKey, 7)
+	head := prHeaderRows(v, info)
+
+	if head != 4 || lay.bodyH-lay.diffH != head {
+		t.Fatalf("header %d rows, bodyH %d, diffH %d: want the diff column to lose 4", head, lay.bodyH, lay.diffH)
+	}
+
+	if got := a.reviewBodyH(v); got != lay.diffH {
+		t.Fatalf("reviewBodyH = %d, want %d", got, lay.diffH)
+	}
+
+	a.Update(keyRune('G'))
+
+	if v.cursor != len(v.rows)-1 || v.top != len(v.rows)-lay.diffH {
+		t.Errorf("G: cursor %d top %d, want %d and %d", v.cursor, v.top, len(v.rows)-1, len(v.rows)-lay.diffH)
+	}
+
+	// The last row is drawn on the last row of the diff column.
+	last := strings.Join(rowTexts(v.res, v.rows[len(v.rows)-1]), "")
+	lines := prHeaderLines(t, a)
+
+	if row := lines[1+lay.bodyH-1]; !strings.Contains(row, strings.TrimSpace(last)) {
+		t.Errorf("last diff row of the drawer %q does not hold the last line %q", row, last)
+	}
+
+	a.Update(keyRune('g'))
+	a.Update(tea.KeyPressMsg{Code: 'd', Mod: tea.ModCtrl})
+
+	if v.cursor != lay.diffH/2 {
+		t.Errorf("ctrl+d: cursor = %d, want half the diff column, %d", v.cursor, lay.diffH/2)
+	}
+
+	a.Update(keyRune('g'))
+
+	r, _ := a.drawerRect(st)
+	k := 3 // the diff column's fourth row
+
+	mdown(a, r.X+1+lay.treeW+3, r.Y+1+head+k, tea.MouseLeft, 0)
+
+	if v.cursor != k {
+		t.Errorf("a click on diff row %d put the cursor on %d", k, v.cursor)
+	}
+
+	a.Update(keyRune('g'))
+	mdown(a, r.X+1+lay.treeW+3, r.Y+1+head-1, tea.MouseLeft, 0)
+
+	if v.cursor != 0 {
+		t.Errorf("a click on the header moved the cursor to %d", v.cursor)
+	}
+}
+
+func TestPRHeaderNarrow(t *testing.T) {
+	t.Parallel()
+
+	long := strings.Repeat("a long title ", 12)
+	s := reviewScene{
+		theme: "catppuccin-mocha", icons: true, w: 60, h: 40, res: turn4Result(), turn: 4, turns: 4, focused: true,
+		branch: true, tune: func(t *testing.T, a *App, v *reviewView) {
+			prSceneWith(func(p *core.PRInfo) {
+				p.Title, p.HeadBranch, p.Author = long, "feature/"+long, "someone-with-a-long-name"
+				p.HeadOID = "bbbbbbb0000000000000000000000000000000bb"
+			}, 3)(t, a, v)
+		},
+	}
+	a := s.build(t)
+	st := a.store.State()
+
+	r, _ := a.drawerRect(st)
+	lines, fits := a.drawerDrawn(st, r)
+
+	if len(lines) != r.H || !fits {
+		t.Fatalf("drawer drew %d lines (want %d), fits %v: a header row wrapped or overran", len(lines), r.H, fits)
+	}
+
+	plain := prHeaderLines(t, a)
+	for _, i := range []int{1, 2} {
+		if !strings.Contains(plain[i], "…") {
+			t.Errorf("header row %d is not cut with …: %q", i, plain[i])
+		}
+	}
+}

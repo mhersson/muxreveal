@@ -240,7 +240,7 @@ func (a *App) reviewBodyH(v *reviewView) int {
 		return 0
 	}
 
-	return a.drawerLayoutOf(box, v, drawerTree(st)).bodyH
+	return a.drawerLayoutOf(box, v, drawerTree(st)).diffH
 }
 
 // reviewGo puts the cursor on a row and scrolls only as far as it needs.

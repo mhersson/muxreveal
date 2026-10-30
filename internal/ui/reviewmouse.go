@@ -39,7 +39,7 @@ func (a *App) drawerClick(x, y int) {
 		return
 	}
 
-	top := v.viewTop(lay.bodyH)
+	top := v.viewTop(lay.diffH)
 	d := &drawCtx{v: v, c: v.derived(), lay: lay, top: top, tree: treeWas}
 
 	switch {
@@ -48,10 +48,11 @@ func (a *App) drawerClick(x, y int) {
 		if i := d.treeTop(lay.bodyH-3) + iy - 3; iy >= 3 && i >= 0 && i < len(d.c.tree) && !d.c.tree[i].dir {
 			a.reviewJumpFile(v, d.c.tree[i].file)
 		}
-	case lay.treeW == 0 || ix > lay.treeW:
-		i := top + iy
+	case (lay.treeW == 0 || ix > lay.treeW) && iy >= lay.headH:
+		dy := iy - lay.headH
+		i := top + dy
 
-		if sticky, ok := d.stickyHeader(); iy == 0 && ok {
+		if sticky, ok := d.stickyHeader(); dy == 0 && ok {
 			i = sticky
 		}
 

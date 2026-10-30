@@ -107,7 +107,10 @@ type prFetchedMsg struct {
 	prAsk
 	place  prPlace
 	number int
-	err    error
+	// unpushed is the commits the worktree has that its remote lacks; 0 when
+	// they could not be counted, which only leaves the header's line out.
+	unpushed int
+	err      error
 }
 
 // localPRPlace reads the root, branch and push remote of the worktree at dir.
@@ -427,6 +430,10 @@ func (a *App) onPRPlace(msg prPlaceMsg) tea.Cmd {
 			_, err = git.FetchPR(ctx, r, place.remote, number, base)
 		}
 
+		if err == nil {
+			out.unpushed, _ = git.Unpushed(ctx, r, place.remote)
+		}
+
 		out.err = err
 
 		return out
@@ -464,7 +471,7 @@ func (a *App) onPRFetched(msg prFetchedMsg) tea.Cmd {
 
 	v := a.drawer.views[msg.tab]
 	epoch := v.epoch
-	v.prBase = msg.base
+	v.prBase, v.unpushed = msg.base, msg.unpushed
 
 	show := core.ShowReviewPR{Repo: msg.place.repo.String(), Number: msg.number, Root: msg.place.root}
 	if err := a.dispatch(show); err != nil {
