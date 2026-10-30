@@ -510,16 +510,55 @@ func (a *App) reviewThen(v *reviewView, msg reviewLoadedMsg) tea.Cmd {
 		return nil
 	}
 
+	// A pull request loaded under a tab that is not shown is not acted on.
+	if a.drawer.views[a.store.State().Tab().ID] != v {
+		return nil
+	}
+
 	return a.prThenRun(then)
 }
 
 // prThenRun is what a key asked of the pull request once its diff has loaded.
 func (a *App) prThenRun(then prThen) tea.Cmd {
+	_, v, ok := a.reviewActive()
+	if !ok || v.pr == (core.ReviewPR{}) {
+		return nil
+	}
+
 	switch then {
-	case thenNothing, thenChecks, thenBrowser, thenApprove, thenMerge:
+	case thenChecks:
+		return a.openChecks(v.pr.Repo, v.pr.Number)
+	case thenBrowser:
+		return a.openURL(a.prLink(v.pr))
+	case thenNothing, thenApprove, thenMerge:
 	}
 
 	return nil
+}
+
+// prLink is the page of a pull request: the poll's, else the one its repository
+// and number make.
+func (a *App) prLink(pr core.ReviewPR) string {
+	if info, ok := prInfoByNumber(a.store.State(), pr.Repo, pr.Number); ok && info.URL != "" {
+		return info.URL
+	}
+
+	return "https://" + pr.Repo + "/pull/" + strconv.Itoa(pr.Number)
+}
+
+// prAct runs then on the active drawer's pull request: at once when the drawer
+// shows it loaded, else after showing the drawer's place's pull request first.
+func (a *App) prAct(then prThen) tea.Cmd {
+	tab, v, ok := a.reviewActive()
+	if !ok {
+		return nil
+	}
+
+	if v.pr != (core.ReviewPR{}) && v.loaded && !v.loading && v.err == nil {
+		return a.prThenRun(then)
+	}
+
+	return a.showPR(tab.ID, nil, then)
 }
 
 // openWithPR opens or retargets the active tab's drawer on pane, as leader d

@@ -46,7 +46,7 @@ type RepoPRs struct {
 	// squash, rebase.
 	Methods             []string
 	DeleteBranchOnMerge bool
-	Focused             *PRChecks         // the focused pane's PR with its checks, when there is one
+	Focused             *PRChecks         // the focused pull request with its checks, when there is one
 	Branch              map[string]PRInfo // per branch, the pull request a lookup found
 }
 

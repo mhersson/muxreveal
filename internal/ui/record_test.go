@@ -41,6 +41,7 @@ func TestRecordFlag(t *testing.T) {
 
 	// A copy must never reach the operator's real clipboard tools.
 	app.clip.run = (&fakeRun{}).run
+	app.openLink = (&fakeOpen{}).open
 
 	app.start = shCommand("printf hi")
 
@@ -279,6 +280,7 @@ func TestRecordDirCollisionSetsNotice(t *testing.T) {
 
 	// A copy must never reach the operator's real clipboard tools.
 	app.clip.run = (&fakeRun{}).run
+	app.openLink = (&fakeOpen{}).open
 
 	app.start = func(context.Context, term.Command, int, int) (proc, error) { return newFakeProc(), nil }
 

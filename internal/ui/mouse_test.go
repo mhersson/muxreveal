@@ -18,6 +18,7 @@ import (
 func fakeClip(a *App) *fakeRun {
 	f := &fakeRun{}
 	a.clip.run = f.run
+	a.openLink = (&fakeOpen{}).open
 	a.clip.getenv = envFrom(map[string]string{"WAYLAND_DISPLAY": "wayland-0"})
 	a.clip.goos = "linux"
 
@@ -536,6 +537,7 @@ func modalCases() []struct {
 			a.openConfirm(confirm{action: "x", prompt: "x?", yes: func(*App) tea.Cmd { return nil }})
 		}},
 		{"prompt", func(a *App) { a.renameTab() }},
+		{"checks", func(a *App) { a.openChecks(prRepoKey, 7) }},
 		{"palette", func(a *App) { a.openCommandPalette() }},
 		{"leader pending", func(a *App) { press(a, keyLeader) }},
 		{"which-key popup", func(a *App) {
@@ -585,7 +587,7 @@ func TestMouseIsIgnoredUnderModalUI(t *testing.T) {
 			}
 
 			// Drop the modal so the probe is not swallowed, then check nothing was sent.
-			a.pending, a.popup, a.confirm, a.prompt, a.overlay = false, false, nil, nil, nil
+			a.pending, a.popup, a.confirm, a.prompt, a.overlay, a.checks = false, false, nil, nil, nil, nil
 			if got := settle(t, a, procs["p1"], c); got != "" {
 				t.Errorf("sent %q to the guest", got)
 			}

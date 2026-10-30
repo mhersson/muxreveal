@@ -109,6 +109,7 @@ func restoreApp(t *testing.T, st core.State, opts ...func(*Options)) *restored {
 	}
 
 	a.clip.run = (&fakeRun{}).run
+	a.openLink = (&fakeOpen{}).open
 	a.start = r.st.start
 	a.clock = r.clk
 	a.tick = r.ticks.tick

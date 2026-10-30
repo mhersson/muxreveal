@@ -295,6 +295,14 @@ func (a *App) prWatches(st core.State) []github.Watch {
 		}
 	}
 
+	// The open checks overlay's pull request is the one whose checks are read.
+	if c := a.checks; c != nil {
+		if repo, ok := repoOfKey(c.repo); ok {
+			visible[repo] = append(visible[repo], c.number)
+			focused[repo] = c.number
+		}
+	}
+
 	ws := make([]github.Watch, 0, len(visible))
 
 	for repo, nums := range visible {

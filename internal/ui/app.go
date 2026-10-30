@@ -75,6 +75,8 @@ type Options struct {
 	// PRLookup finds the merged or closed pull request of a branch whose open one
 	// is gone; nil means no lookups.
 	PRLookup PRLookup
+	// OpenURL opens a link in the browser; nil means the platform's opener.
+	OpenURL urlOpener
 }
 
 // App is the root Bubble Tea model.
@@ -104,8 +106,10 @@ type App struct {
 	preview *look // theme picker preview; nil unless previewing
 	// reportedFg and reportedBg are the colours last given to the panes.
 	reportedFg, reportedBg theme.Hex
-	confirm                *confirm // yes/no question; owns every key while open
-	prompt                 *prompt  // text input; owns every key and paste while open
+	confirm                *confirm    // yes/no question; owns every key while open
+	prompt                 *prompt     // text input; owns every key and paste while open
+	checks                 *checksView // a pull request's checks; owns every key while open
+	openLink               urlOpener
 
 	panes        map[core.PaneID]*pane // runtime panes, keyed like State.Panes
 	later        []tea.Cmd             // commands raised outside the update's return path; Update batches them
@@ -218,6 +222,11 @@ func New(opts Options) (*App, error) {
 		edits:        editState{resolve: places.Place},
 		focusFollows: opts.FocusFollowsMouse, copyOnSelect: opts.CopyOnSelect,
 		clip: newClipboard(clipboardConfig{OSC52: !opts.NoOSC52, Native: !opts.NoNativeClipboard}, getenv, runtime.GOOS, opts.Logger),
+	}
+
+	a.openLink = opts.OpenURL
+	if a.openLink == nil {
+		a.openLink = openBrowser
 	}
 
 	if opts.PRs != nil {
@@ -574,6 +583,8 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, a.onPRPlace(msg)
 	case prFetchedMsg:
 		return a, a.onPRFetched(msg)
+	case browserDoneMsg:
+		a.onBrowserDone(msg)
 	case reviewSnappedMsg:
 		return a, a.reviewRefresh(msg.pane)
 	case reviewFullMsg:
@@ -725,6 +736,10 @@ func (a *App) View() tea.View {
 
 	if a.picker.open != nil {
 		content = a.overlayPicker(content, lk)
+	}
+
+	if a.checks != nil {
+		content = a.overlayChecks(content, lk)
 	}
 
 	if a.confirm != nil {

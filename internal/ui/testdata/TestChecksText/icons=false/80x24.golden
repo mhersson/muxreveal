@@ -1,0 +1,24 @@
+ 1 p1                                                       layout master-stack 
+────────────────────────────────────────────────────────────────────────────────
+╭─ shell ───────────╭─ muxreveal · feat/review-pane ────────────────────── #7 ─╮
+│$ claude           │ #7 Show the pull request over its diff                   │
+│reviewing the diff │ feat/review-pane → main   ci 4/4   approved   @mhersson …│
+│                   │──────────────────────────────────────────────────────────│
+│                   │  M internal/core/state.go                          +9 -1 │
+│                   │      31 +     Agent PaneID                               │
+│    ╭─ #7 checks ────────────────────────────────────────────────────────╮    │
+│    │                                                                    │    │
+│    │    ✗ lint [31mand vet with a very long name that does not…  3m 04s │    │
+│    │  ▎ ✗ vet                                                           │ -3 │
+│    │    … e2e                                            running 1m 04s │    │
+│    │    ✓ build                                                     12s │    │
+│    │    ✓ unit                                                   1h 02m │ ag…│
+│    │    ✓ docs                                                          │t, …│
+│    │                                                                    │dAg…│
+│    │  j/k check    enter open in browser    r refresh    esc close      │    │
+│    ╰────────────────────────────────────────────────────────────────────╯    │
+│                   │      43 +     p, ok := a.store.Pane(agent)               │
+│                   │      44 +     if !ok || p.Kind != core.KindAgent {       │
+│                   │▎     45 +         return a.notify("a review pane needs a…│
+│                   │ j/k line   ]/[ hunk   c checks   O browser   b/t mode    │
+╰───────────────────╰──────────────────────────────────────────────────────────╯

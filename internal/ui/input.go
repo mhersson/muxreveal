@@ -8,7 +8,7 @@ import (
 )
 
 // handleKey routes a key press: an open confirm first, then an open prompt, then
-// copy mode, then the open overlay or worktree picker, then the leader state
+// copy mode, then the open overlay, checks or worktree picker, then the leader state
 // machine, then the rail while it has the keyboard, then the review drawer while
 // it has it, then the focused pane.
 func (a *App) handleKey(msg tea.KeyPressMsg) tea.Cmd {
@@ -26,6 +26,10 @@ func (a *App) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 
 	if a.overlay != nil {
 		return a.updateOverlay(msg)
+	}
+
+	if a.checks != nil {
+		return a.handleChecksKey(msg)
 	}
 
 	if a.picker.open != nil {
@@ -68,6 +72,10 @@ func (a *App) handlePaste(msg tea.PasteMsg) tea.Cmd {
 
 	if a.overlay != nil {
 		return a.updateOverlay(msg)
+	}
+
+	if a.checks != nil {
+		return nil
 	}
 
 	if a.picker.open != nil {
