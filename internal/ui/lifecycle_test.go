@@ -1071,7 +1071,7 @@ func (p *pump) halt() { p.stop.Do(func() { close(p.done) }) }
 
 // stopWith registers the cleanup that closes a, which ends the commands the
 // pump ran, and waits for them, so none still writes into a dir t.TempDir is
-// removing. a's own cleanup then closes an app with nothing left to close.
+// removing. kindApp's cleanup closes a again later, which is harmless.
 func (p *pump) stopWith(t *testing.T, a *App) {
 	t.Helper()
 
