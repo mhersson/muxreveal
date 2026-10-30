@@ -33,7 +33,7 @@ const (
 	noticePRNoBase      = "#%d: its base branch is unknown"
 	noticePRFetching    = "fetching #%d…"
 	noticePRNotOnRemote = "#%d is not on %s"
-	noticePRLoaded      = "#%d loaded; press %s"
+	noticePRLoaded      = "#%d loaded"
 )
 
 // prThen is what the drawer does once the shown pull request's diff has loaded.
@@ -532,7 +532,7 @@ func (a *App) reviewThen(v *reviewView, msg reviewLoadedMsg) tea.Cmd {
 
 	// A late answer never takes the keyboard from where it went since the key.
 	if a.modalOpen() || !a.drawerHasKeys() {
-		a.notice = fmt.Sprintf(noticePRLoaded, v.pr.Number, then.key())
+		a.notice = a.prLoadedNotice(v.pr.Number, then)
 
 		return nil
 	}
@@ -540,21 +540,29 @@ func (a *App) reviewThen(v *reviewView, msg reviewLoadedMsg) tea.Cmd {
 	return a.prThenRun(then)
 }
 
-// key is the drawer key that asks for t, as the notice of a dropped answer names it.
-func (t prThen) key() string {
-	switch t {
+// prLoadedNotice is the notice of a dropped answer: it names the drawer key
+// that asks for then as bound, and only the number when the command has no key.
+func (a *App) prLoadedNotice(number int, then prThen) string {
+	id, what := "", ""
+
+	switch then {
 	case thenChecks:
-		return "c for checks"
+		id, what = "review.checks", "for checks"
 	case thenBrowser:
-		return "O to open it"
+		id, what = "review.browser", "to open it"
 	case thenApprove:
-		return "a to approve"
+		id, what = "review.approve", "to approve"
 	case thenMerge:
-		return "M to merge"
+		id, what = "review.merge", "to merge"
 	case thenNothing:
 	}
 
-	return ""
+	key, ok := a.keys.drawer.first(id)
+	if !ok {
+		return fmt.Sprintf(noticePRLoaded, number)
+	}
+
+	return fmt.Sprintf(noticePRLoaded, number) + "; press " + key + " " + what
 }
 
 // prThenRun is what a key asked of the pull request once its diff has loaded.

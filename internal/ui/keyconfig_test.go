@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/mhersson/muxreveal/internal/core"
+	"github.com/mhersson/muxreveal/internal/git"
 )
 
 // leaderKeys builds a [keys] config with the leader entries in the given order.
@@ -556,17 +557,22 @@ func TestKeyTableHint(t *testing.T) {
 	tb := keyTable{binds: []reviewKey{{"j", "a"}, {"k", "b"}}}
 
 	tests := []struct {
+		name string
 		ids  []string
 		want string
 	}{
-		{[]string{"a", "b"}, "j/k"},
-		{[]string{"a"}, "j"},
-		{[]string{"a", "missing"}, ""},
+		{"two commands", []string{"a", "b"}, "j/k"},
+		{"one command", []string{"a"}, "j"},
+		{"one unbound", []string{"a", "missing"}, ""},
 	}
 	for _, tt := range tests {
-		if got := tb.hint(tt.ids...); got != tt.want {
-			t.Errorf("hint(%q) = %q, want %q", tt.ids, got, tt.want)
-		}
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			if got := tb.hint(tt.ids...); got != tt.want {
+				t.Errorf("hint(%q) = %q, want %q", tt.ids, got, tt.want)
+			}
+		})
 	}
 }
 
@@ -684,3 +690,119 @@ func TestDrawerHintsFollowBindings(t *testing.T) {
 		})
 	}
 }
+
+func TestPRLoadedNoticeFollowsBindings(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		cfg  core.KeysConfig
+		then prThen
+		want string
+	}{
+		{"checks", core.KeysConfig{}, thenChecks, "#7 loaded; press c for checks"},
+		{"browser", core.KeysConfig{}, thenBrowser, "#7 loaded; press O to open it"},
+		{"approve", core.KeysConfig{}, thenApprove, "#7 loaded; press a to approve"},
+		{"merge", core.KeysConfig{}, thenMerge, "#7 loaded; press M to merge"},
+		{"approve moved", drawerKeys("x", "review.approve", "a", "none"), thenApprove, "#7 loaded; press x to approve"},
+		{"merge moved", drawerKeys("m", "review.merge", "M", "none"), thenMerge, "#7 loaded; press m to merge"},
+		{"checks unbound", drawerKeys("c", "none"), thenChecks, "#7 loaded"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			if got := newKeyedApp(t, "catppuccin-mocha", tt.cfg).prLoadedNotice(7, tt.then); got != tt.want {
+				t.Errorf("notice = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestDrawerTextFollowsBindings(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		cfg   core.KeysConfig
+		scene func(s *reviewScene)
+		want  []string
+		not   []string
+	}{
+		{
+			name:  "fold key",
+			cfg:   drawerKeys("x", "review.fold", "enter", "none"),
+			scene: ghostScene,
+			want:  []string{"2 removed lines   x shows them"}, not: []string{"enter shows them"},
+		},
+		{
+			name: "fold unbound", cfg: drawerKeys("enter", "none"), scene: ghostScene,
+			want: []string{"2 removed lines"}, not: []string{"shows them"},
+		},
+		{
+			name: "full file key", cfg: drawerKeys("F", "review.full", "f", "none"), scene: truncatedScene,
+			want: []string{"too large, press F for the full file"}, not: []string{"press f "},
+		},
+		{
+			name: "full file unbound", cfg: drawerKeys("f", "none"), scene: truncatedScene,
+			want: []string{"too large"}, not: []string{"for the full file"},
+		},
+		{
+			name: "no snapshot keys", cfg: drawerKeys("z", "review.mode.branch", "b", "none"), scene: noSnapScene,
+			want: []string{", and . step through the turns; z shows the branch"},
+		},
+		{
+			name: "no snapshot, turn keys unbound", cfg: drawerKeys(",", "none", ".", "none"), scene: noSnapScene,
+			want: []string{"b shows the branch"}, not: []string{"step through"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			s := reviewScene{
+				theme: "catppuccin-mocha", icons: true, w: 200, h: 52, res: turn4Result(), turn: 4, turns: 4,
+				focused: true, keys: tt.cfg,
+			}
+			if tt.scene != nil {
+				tt.scene(&s)
+			}
+
+			text := ansi.Strip(s.build(t).View().Content)
+
+			for _, w := range tt.want {
+				if !strings.Contains(text, w) {
+					t.Errorf("the frame lacks %q:\n%s", w, text)
+				}
+			}
+
+			for _, n := range tt.not {
+				if strings.Contains(text, n) {
+					t.Errorf("the frame holds %q:\n%s", n, text)
+				}
+			}
+		})
+	}
+}
+
+func ghostScene(s *reviewScene) {
+	s.tune = func(t *testing.T, a *App, v *reviewView) {
+		v.full = map[string]fullText{appGoPath: appGoFull()}
+		v.folded = map[string]bool{foldKey(appGoPath, 1): true}
+		v.rebuild(false)
+	}
+}
+
+func truncatedScene(s *reviewScene) {
+	s.res = edgeResult()
+	s.tune = func(t *testing.T, a *App, v *reviewView) {
+		i := slices.IndexFunc(v.rows, func(r reviewRow) bool { return r.kind == rowInfo && r.text == infoTruncated })
+		if i < 0 {
+			t.Fatal("no row holds the truncated note")
+		}
+
+		v.cursor = i
+	}
+}
+
+func noSnapScene(s *reviewScene) { s.res, s.turn, s.noSnap = git.Result{}, 1, true }

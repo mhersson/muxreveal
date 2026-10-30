@@ -711,7 +711,7 @@ func (d *drawCtx) emptyRuns(y int) []railRun {
 	case git.TurnSource:
 		n := strconv.Itoa(v.shownTurn())
 		if v.noSnapshot {
-			lines = []string{"turn " + n + " has no snapshot", ", and . step through the turns; b shows the branch"}
+			lines = append([]string{"turn " + n + " has no snapshot"}, d.noSnapshotHint()...)
 		} else {
 			lines = []string{"turn " + n + " changed nothing"}
 		}
@@ -737,6 +737,42 @@ func (d *drawCtx) emptyRuns(y int) []railRun {
 	return []railRun{{text: "    "}, {text: text, fg: fg}}
 }
 
+// infoText is an info row's text with the key it names taken from the table,
+// and the clause dropped when the command has no key.
+func (d *drawCtx) infoText(text string) string {
+	if text != infoTruncated {
+		return text
+	}
+
+	if key, ok := d.bind.first("review.full"); ok {
+		return "too large, press " + key + " for the full file"
+	}
+
+	return "too large"
+}
+
+// noSnapshotHint is the second line of an empty turn without a snapshot: the
+// bound keys that step through the turns and show the branch.
+func (d *drawCtx) noSnapshotHint() []string {
+	var parts []string
+
+	if prev, ok := d.bind.first("review.turn.prev"); ok {
+		if next, ok := d.bind.first("review.turn.next"); ok {
+			parts = append(parts, prev+" and "+next+" step through the turns")
+		}
+	}
+
+	if key, ok := d.bind.first("review.mode.branch"); ok {
+		parts = append(parts, key+" shows the branch")
+	}
+
+	if len(parts) == 0 {
+		return nil
+	}
+
+	return []string{strings.Join(parts, "; ")}
+}
+
 // markRun is the first cell of a row: the cursor mark or a blank.
 func (d *drawCtx) markRun(cursor bool) railRun {
 	if cursor {
@@ -759,7 +795,7 @@ func (d *drawCtx) rowCells(i int, cursor bool) string {
 		return d.fileRow(r.file, cursor)
 	case rowInfo:
 		bg := d.cursorGround(ui.Bg, cursor)
-		text, _ := cleanText(r.text)
+		text, _ := cleanText(d.infoText(r.text))
 
 		return railPainter{bg: bg}.line([]railRun{d.markRun(cursor), {text: "   "}, {text: text, fg: ui.Subtle}}, w)
 	case rowHunk:

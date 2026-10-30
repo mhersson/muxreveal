@@ -21,8 +21,8 @@ const (
 // reviewKey binds a key, while the drawer has the keyboard, to a command.
 type reviewKey struct{ key, command string }
 
-// reviewKeys is the drawer's default keymap; [keys.drawer] is laid over it. The leader works as everywhere; a key
-// that is not here is dropped.
+// reviewKeys is the drawer's default keymap; [keys.drawer] is laid over it.
+// The leader works as everywhere; a key that is not here is dropped.
 var reviewKeys = []reviewKey{
 	{"j", "review.line.next"},
 	{"down", "review.line.next"},
