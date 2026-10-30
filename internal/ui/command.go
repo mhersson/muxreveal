@@ -200,6 +200,11 @@ func defaultCommands() []command {
 		title: "Push branch",
 		run:   (*App).push,
 	}, command{
+		id:    "pr.open",
+		icon:  iconPR,
+		title: "Open a pull request",
+		run:   (*App).composeCommand,
+	}, command{
 		id:    "pr.merge",
 		icon:  iconMerge,
 		title: "Merge pull request",

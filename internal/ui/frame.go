@@ -378,6 +378,14 @@ func (a *App) cursorBase(g geometry) *tea.Cursor {
 		return a.promptCursor(g)
 	}
 
+	if a.compose != nil {
+		if a.overlay != nil || a.picker.open != nil || a.confirm != nil || a.popup || a.sequenceOpen() {
+			return nil
+		}
+
+		return a.composeCursor()
+	}
+
 	if a.overlay != nil || a.checks != nil || a.merge != nil || a.prList != nil || a.popup || a.sequenceOpen() || a.confirm != nil {
 		return nil
 	}

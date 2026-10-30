@@ -153,6 +153,7 @@ func TestDefaultCommands(t *testing.T) {
 		want{"review.back", "Review: back to the panes", iconReview},
 		want{"pr.list", "Pull requests", iconPR},
 		want{"git.push", "Push branch", iconPush},
+		want{"pr.open", "Open a pull request", iconPR},
 		want{"pr.merge", "Merge pull request", iconMerge},
 		want{"app.quit", "Quit MuxReveal", iconQuit},
 	)

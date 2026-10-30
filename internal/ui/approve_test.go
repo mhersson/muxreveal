@@ -32,6 +32,15 @@ type fakeActions struct {
 
 	mergeRes  github.Merged
 	mergeFail error
+
+	creates    []createCall
+	createRes  github.PR
+	createFail error
+}
+
+type createCall struct {
+	repo github.Repo
+	pr   github.NewPR
 }
 
 type mergeCall struct {
@@ -41,8 +50,26 @@ type mergeCall struct {
 	opts github.MergeOptions
 }
 
-func (f *fakeActions) CreatePR(context.Context, github.Repo, github.NewPR) (github.PR, error) {
-	return github.PR{}, errors.New("fakeActions: CreatePR")
+func (f *fakeActions) CreatePR(ctx context.Context, r github.Repo, n github.NewPR) (github.PR, error) {
+	f.mu.Lock()
+	f.creates = append(f.creates, createCall{r, n})
+	res, fail, hold := f.createRes, f.createFail, f.hold
+	f.mu.Unlock()
+
+	if hold {
+		<-ctx.Done()
+
+		return github.PR{}, ctx.Err()
+	}
+
+	return res, fail
+}
+
+func (f *fakeActions) created() []createCall {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	return slices.Clone(f.creates)
 }
 
 func (f *fakeActions) Merge(ctx context.Context, r github.Repo, pr github.PR, info github.RepoInfo, opts github.MergeOptions) (github.Merged, error) {

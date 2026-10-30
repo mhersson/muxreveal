@@ -28,6 +28,10 @@ func (a *App) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		return a.updateOverlay(msg)
 	}
 
+	if a.compose != nil {
+		return a.handleComposeKey(msg)
+	}
+
 	if a.checks != nil {
 		return a.handleChecksKey(msg)
 	}
@@ -80,6 +84,10 @@ func (a *App) handlePaste(msg tea.PasteMsg) tea.Cmd {
 
 	if a.overlay != nil {
 		return a.updateOverlay(msg)
+	}
+
+	if a.compose != nil {
+		return a.handleComposePaste(msg)
 	}
 
 	if a.checks != nil || a.merge != nil || a.prList != nil {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 )
 
@@ -160,4 +161,37 @@ func RemoteHasBranch(ctx context.Context, r Repo, remote, branch string) (bool, 
 	}
 
 	return true, nil
+}
+
+// RemoteBranches returns the names of the remote-tracking branches of remote,
+// without the remote's name and without HEAD, sorted. A remote with no
+// tracking refs, or one that is not configured, has none.
+func RemoteBranches(ctx context.Context, r Repo, remote string) ([]string, error) {
+	if remote == "" || strings.HasPrefix(remote, "-") {
+		return nil, errNotConfigured
+	}
+
+	prefix := "refs/remotes/" + remote + "/"
+
+	out, err := run(ctx, call{
+		dir:  r.CommonDir,
+		args: []string{"for-each-ref", "--format=%(refname)%00", prefix},
+		read: true,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("remote branches: %w", err)
+	}
+
+	var names []string
+
+	for ref := range strings.SplitSeq(string(out), "\x00") {
+		name, ok := strings.CutPrefix(strings.TrimPrefix(ref, "\n"), prefix)
+		if ok && name != "" && name != "HEAD" {
+			names = append(names, name)
+		}
+	}
+
+	slices.Sort(names)
+
+	return names, nil
 }

@@ -190,7 +190,6 @@ func (a *App) mergeDelete(v *mergeView, lk look) string {
 // mergeHints are the key hints that fit cw cells; ones that do not are dropped
 // from the end, and none that fit leaves "".
 func mergeHints(v *mergeView, cw int, lk look) string {
-	st := lk.styles
 	pairs := [][2]string{{"s/m/r", "method"}}
 
 	if v.deleteShown() {
@@ -199,6 +198,12 @@ func mergeHints(v *mergeView, cw int, lk look) string {
 
 	pairs = append(pairs, [2]string{"enter", "merge"}, [2]string{"esc", "cancel"})
 
+	return hintLine(pairs, cw, lk.styles)
+}
+
+// hintLine draws key and label pairs four cells apart; pairs that do not fit
+// cw cells are dropped from the end.
+func hintLine(pairs [][2]string, cw int, st styles) string {
 	var sb strings.Builder
 
 	used := 0

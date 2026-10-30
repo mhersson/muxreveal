@@ -1,0 +1,626 @@
+package ui
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
+	"github.com/charmbracelet/x/exp/golden"
+
+	"github.com/mhersson/muxreveal/internal/core"
+	"github.com/mhersson/muxreveal/internal/github"
+)
+
+var (
+	keyCtrlS = tea.KeyPressMsg{Code: 's', Mod: tea.ModCtrl}
+	keyLeft  = tea.KeyPressMsg{Code: tea.KeyLeft}
+	keyRight = tea.KeyPressMsg{Code: tea.KeyRight}
+	keySpace = tea.KeyPressMsg{Code: tea.KeySpace, Text: " "}
+)
+
+const composeRepo = "github.com/o/r"
+
+// composeRig is the push rig with the remote on GitHub for fetches and writes
+// faked: feat/x is two commits past main, which origin has.
+type composeRig struct {
+	*pushRig
+	acts *fakeActions
+}
+
+func newComposeRig(t *testing.T) *composeRig {
+	t.Helper()
+
+	r := &composeRig{pushRig: newPushRig(t), acts: &fakeActions{}}
+	r.splitURLs(t, githubURL)
+	r.actions = r.acts
+	r.acts.createRes = github.PR{Number: 12}
+
+	return r
+}
+
+// openCompose runs the pr.open command and answers what it reads.
+func (r *composeRig) openCompose(t *testing.T) {
+	t.Helper()
+
+	c, ok := r.reg.get("pr.open")
+	if !ok {
+		t.Fatal("no pr.open command")
+	}
+
+	r.churn(t, c.run(r.App))
+}
+
+func (r *composeRig) mustOpen(t *testing.T) *composeView {
+	t.Helper()
+
+	r.openCompose(t)
+
+	if r.compose == nil {
+		t.Fatalf("no compose box; notice = %q", r.notice)
+	}
+
+	return r.compose
+}
+
+func (r *composeRig) keys(t *testing.T, ks ...tea.KeyPressMsg) {
+	t.Helper()
+
+	for _, k := range ks {
+		r.churn(t, press(r.App, k))
+	}
+}
+
+func (r *composeRig) typed(t *testing.T, s string) {
+	t.Helper()
+
+	for _, c := range s {
+		r.keys(t, keyRune(c))
+	}
+}
+
+// pushBranch pushes feat/x so the box has nothing to push.
+func (r *composeRig) pushBranch(t *testing.T) {
+	t.Helper()
+
+	gitIn(t, r.real, r.dir, "push", "-q", "-u", "origin", "feat/x")
+}
+
+// oneCommit leaves feat/x one commit past main.
+func (r *composeRig) oneCommit(t *testing.T, subject, body string) {
+	t.Helper()
+
+	gitIn(t, r.real, r.dir, "reset", "-q", "--hard", "origin/main")
+	gitIn(t, r.real, r.dir, "commit", "-q", "--allow-empty", "-m", subject, "-m", body)
+}
+
+func (r *composeRig) text() string { return ansi.Strip(r.View().Content) }
+
+func TestComposePrefill(t *testing.T) {
+	tests := []struct {
+		name       string
+		setup      func(t *testing.T, r *composeRig)
+		wantTitle  string
+		wantBody   string
+		wantSource string
+		wantCount  string
+	}{
+		{
+			name: "a template",
+			setup: func(t *testing.T, r *composeRig) {
+				t.Helper()
+
+				if err := os.MkdirAll(filepath.Join(r.dir, ".github"), 0o755); err != nil {
+					t.Fatal(err)
+				}
+
+				body := "## Summary\n\nWhat changed?\n"
+				if err := os.WriteFile(filepath.Join(r.dir, ".github", "pull_request_template.md"), []byte(body), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			},
+			wantTitle:  "Feat/x",
+			wantBody:   "## Summary\n\nWhat changed?\n",
+			wantSource: ".github/pull_request_template.md",
+			wantCount:  "2 commits",
+		},
+		{
+			name:       "one commit",
+			setup:      func(t *testing.T, r *composeRig) { t.Helper(); r.oneCommit(t, "Add the lexer", "It reads tokens.") },
+			wantTitle:  "Add the lexer",
+			wantBody:   "It reads tokens.",
+			wantSource: "the commits",
+			wantCount:  "1 commit",
+		},
+		{
+			name:       "several commits",
+			setup:      func(t *testing.T, r *composeRig) { t.Helper() },
+			wantTitle:  "Feat/x",
+			wantBody:   "- add the lexer\n- fix the parser\n",
+			wantSource: "the commits",
+			wantCount:  "2 commits",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := newComposeRig(t)
+			tt.setup(t, r)
+
+			v := r.mustOpen(t)
+
+			if got := v.title.Value(); got != tt.wantTitle {
+				t.Errorf("title = %q, want %q", got, tt.wantTitle)
+			}
+
+			if got := strings.TrimSpace(v.body.Value()); got != strings.TrimSpace(tt.wantBody) {
+				t.Errorf("body = %q, want %q", got, tt.wantBody)
+			}
+
+			if v.source != tt.wantSource {
+				t.Errorf("source = %q, want %q", v.source, tt.wantSource)
+			}
+
+			text := r.text()
+			for _, want := range []string{"o/r", "feat/x", "main", tt.wantCount, " from " + tt.wantSource + " "} {
+				if !strings.Contains(text, want) {
+					t.Errorf("the box lacks %q:\n%s", want, text)
+				}
+			}
+		})
+	}
+}
+
+func TestComposeFields(t *testing.T) {
+	r := newComposeRig(t)
+	// origin/mid holds the first commit, so main is two commits away and mid one.
+	gitIn(t, r.real, r.dir, "push", "-q", "origin", "HEAD~1:refs/heads/mid")
+
+	v := r.mustOpen(t)
+
+	if want := []string{"main", "mid"}; fmt.Sprint(v.t.bases) != fmt.Sprint(want) || v.base != 0 {
+		t.Fatalf("bases = %v at %d, want %v at 0", v.t.bases, v.base, want)
+	}
+
+	if v.field != composeTitle {
+		t.Fatalf("first field = %v, want the title", v.field)
+	}
+
+	order := []composeField{composeBase, composeDraft, composeBody, composeTitle}
+	for _, want := range order {
+		r.keys(t, keyTab)
+
+		if v.field != want {
+			t.Fatalf("after tab the field is %v, want %v", v.field, want)
+		}
+	}
+
+	r.keys(t, keyShiftTab)
+
+	if v.field != composeBody {
+		t.Fatalf("after shift+tab the field is %v, want the body", v.field)
+	}
+
+	r.keys(t, keyTab, keyTab)
+
+	if v.field != composeBase {
+		t.Fatalf("field = %v, want the base", v.field)
+	}
+
+	r.keys(t, keyRight)
+
+	if v.base != 1 || !strings.Contains(r.text(), "1 commit") {
+		t.Errorf("→: base %d, view:\n%s\nwant mid and 1 commit", v.base, r.text())
+	}
+
+	r.keys(t, keyRight)
+
+	if v.base != 0 || !strings.Contains(r.text(), "2 commits") {
+		t.Errorf("→ wraps: base %d, want main and 2 commits", v.base)
+	}
+
+	r.keys(t, keyLeft)
+
+	if v.base != 1 {
+		t.Errorf("←: base %d, want 1", v.base)
+	}
+
+	r.keys(t, keyTab, keySpace)
+
+	if !v.draft {
+		t.Error("space did not set draft")
+	}
+
+	r.keys(t, keySpace)
+
+	if v.draft {
+		t.Error("space did not clear draft")
+	}
+
+	r.keys(t, keyTab)
+	r.typed(t, "xyz")
+	r.keys(t, keyEnter)
+	r.typed(t, "q")
+
+	if got := v.body.Value(); !strings.HasSuffix(got, "xyz\nq") {
+		t.Errorf("body = %q, want it to end with the typed text", got)
+	}
+
+	// Typed text survives a change of base.
+	r.keys(t, keyShiftTab, keyShiftTab, keyRight)
+
+	if !strings.HasSuffix(v.body.Value(), "xyz\nq") {
+		t.Errorf("a change of base lost the typed body: %q", v.body.Value())
+	}
+
+	r.keys(t, keyEsc)
+
+	if r.compose != nil {
+		t.Error("esc left the box open")
+	}
+}
+
+func TestComposeCreates(t *testing.T) {
+	r := newComposeRig(t)
+	r.pushBranch(t)
+
+	v := r.mustOpen(t)
+	if v.t.unpushed != 0 {
+		t.Fatalf("unpushed = %d, want 0", v.t.unpushed)
+	}
+
+	r.keys(t, keyTab, keyTab, keySpace)
+	r.keys(t, keyCtrlS)
+
+	got := r.acts.created()
+	if len(got) != 1 {
+		t.Fatalf("creates = %v, want one", got)
+	}
+
+	want := createCall{
+		repo: github.Repo{Host: "github.com", Owner: "o", Name: "r"},
+		pr: github.NewPR{
+			Title: "Feat/x", Body: "- add the lexer\n- fix the parser\n", Base: "main", Head: "feat/x", Draft: true,
+		},
+	}
+	if got[0] != want {
+		t.Errorf("create = %+v, want %+v", got[0], want)
+	}
+
+	if r.compose != nil {
+		t.Error("the box is still open after the PR was created")
+	}
+
+	if r.notice != "opened #12" {
+		t.Errorf("notice = %q, want opened #12", r.notice)
+	}
+
+	if refreshed := r.rec.refreshed(); len(refreshed) == 0 || refreshed[len(refreshed)-1].String() != composeRepo {
+		t.Errorf("refreshed = %v, want %s", refreshed, composeRepo)
+	}
+}
+
+func TestComposePushesFirst(t *testing.T) {
+	r := newComposeRig(t)
+	v := r.mustOpen(t)
+
+	if v.t.unpushed != 2 {
+		t.Fatalf("unpushed = %d, want 2", v.t.unpushed)
+	}
+
+	if want := "\u21912 not pushed yet: creating the PR pushes feat/x to origin first"; !strings.Contains(r.text(), want) {
+		t.Errorf("the box lacks %q:\n%s", want, r.text())
+	}
+
+	r.keys(t, keyCtrlS)
+
+	if r.pushCalls() != 1 {
+		t.Errorf("pushes = %d, want 1", r.pushCalls())
+	}
+
+	if refs := r.remoteRefs(t); !strings.Contains(refs, "refs/heads/feat/x") {
+		t.Errorf("the remote holds %q, want feat/x pushed", refs)
+	}
+
+	if got := r.acts.created(); len(got) != 1 || got[0].pr.Head != "feat/x" {
+		t.Errorf("creates = %v, want one for feat/x after the push", got)
+	}
+
+	if r.compose != nil || r.notice != "opened #12" {
+		t.Errorf("box %v, notice %q; want it closed with opened #12", r.compose, r.notice)
+	}
+}
+
+func TestComposeTargetIsFrozen(t *testing.T) {
+	for _, pushed := range []bool{false, true} {
+		t.Run(fmt.Sprintf("branch pushed=%v", pushed), func(t *testing.T) {
+			r := newComposeRig(t)
+			if pushed {
+				r.pushBranch(t)
+			}
+
+			r.mustOpen(t)
+
+			gitIn(t, r.real, r.dir, "commit", "-q", "--allow-empty", "-m", "late commit")
+			r.keys(t, keyCtrlS)
+
+			if got := r.acts.created(); len(got) != 0 {
+				t.Errorf("creates = %v after the branch moved, want none", got)
+			}
+
+			if n := r.pushCalls(); n != 0 {
+				t.Errorf("a moved branch was pushed %d times", n)
+			}
+
+			if r.compose == nil {
+				t.Fatal("the box closed")
+			}
+
+			if want := "feat/x changed since you opened this; nothing created"; r.compose.status != want || !r.compose.statusErr || r.compose.busy {
+				t.Errorf("status %q (err %v, busy %v), want %q as an error", r.compose.status, r.compose.statusErr, r.compose.busy, want)
+			}
+
+			if !strings.Contains(r.text(), r.compose.status) {
+				t.Errorf("the box does not show its status:\n%s", r.text())
+			}
+		})
+	}
+}
+
+func TestComposeErrors(t *testing.T) {
+	tests := []struct {
+		name       string
+		setup      func(t *testing.T, r *composeRig)
+		afterOpen  func(t *testing.T, r *composeRig)
+		want       string
+		wantPushes int
+		wantCreate int
+	}{
+		{
+			name:  "a pull request exists",
+			setup: func(t *testing.T, r *composeRig) { t.Helper(); r.pushBranch(t) },
+			afterOpen: func(t *testing.T, r *composeRig) {
+				t.Helper()
+
+				r.acts.createFail = fmt.Errorf("x: %w", github.ErrPRExists)
+			},
+			want:       "feat/x already has an open pull request",
+			wantCreate: 1,
+		},
+		{
+			name: "a rejected push",
+			setup: func(t *testing.T, r *composeRig) {
+				t.Helper()
+				gitIn(t, r.real, r.dir, "config", "remote.origin.pushurl", "../missing.git")
+			},
+			afterOpen:  func(t *testing.T, r *composeRig) { t.Helper() },
+			want:       "missing.git",
+			wantPushes: 1,
+		},
+		{
+			name:      "an empty title",
+			setup:     func(t *testing.T, r *composeRig) { t.Helper() },
+			afterOpen: func(t *testing.T, r *composeRig) { t.Helper(); r.compose.title.SetValue("") },
+			want:      "enter a title",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := newComposeRig(t)
+			tt.setup(t, r)
+			r.mustOpen(t)
+			tt.afterOpen(t, r)
+			r.keys(t, keyCtrlS)
+
+			v := r.compose
+			if v == nil {
+				t.Fatalf("the box closed; notice %q", r.notice)
+			}
+
+			if !strings.Contains(v.status, tt.want) || !v.statusErr || v.busy {
+				t.Errorf("status %q (err %v, busy %v), want it to contain %q as an error", v.status, v.statusErr, v.busy, tt.want)
+			}
+
+			if n := len(r.acts.created()); n != tt.wantCreate {
+				t.Errorf("creates = %d, want %d", n, tt.wantCreate)
+			}
+
+			if n := r.pushCalls(); n != tt.wantPushes {
+				t.Errorf("pushes = %d, want %d", n, tt.wantPushes)
+			}
+
+			// A failed run leaves the keys working.
+			r.keys(t, keyEsc)
+
+			if r.compose != nil {
+				t.Error("esc did not close the box after the failure")
+			}
+		})
+	}
+}
+
+func TestComposeNotices(t *testing.T) {
+	tests := []struct {
+		name  string
+		setup func(t *testing.T, r *composeRig)
+		want  string
+	}{
+		{
+			name: "a branch with an open pull request",
+			setup: func(t *testing.T, r *composeRig) {
+				t.Helper()
+				openIn(t, r.App, core.SetRepoPRs{
+					Repo: composeRepo, DefaultBranch: "main",
+					Open: []core.PRInfo{{Number: 9, HeadBranch: "feat/x", State: prOpenState}},
+				})
+			},
+			want: "feat/x already has #9",
+		},
+		{
+			name: "a remote that is not on GitHub",
+			setup: func(t *testing.T, r *composeRig) {
+				t.Helper()
+				gitIn(t, r.real, r.dir, "config", "remote.origin.url", "../remote.git")
+			},
+			want: "feat/x's remote is not on GitHub",
+		},
+		{
+			name:  "a detached HEAD",
+			setup: func(t *testing.T, r *composeRig) { t.Helper(); gitIn(t, r.real, r.dir, "checkout", "-q", "--detach") },
+			want:  "open a PR: HEAD is detached",
+		},
+		{
+			name: "no pull request writes",
+			setup: func(t *testing.T, r *composeRig) {
+				t.Helper()
+
+				r.actions = nil
+			},
+			want: noticePRsOff,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := newComposeRig(t)
+			tt.setup(t, r)
+			r.openCompose(t)
+
+			if r.compose != nil {
+				t.Errorf("the box opened:\n%s", r.text())
+			}
+
+			if r.notice != tt.want {
+				t.Errorf("notice = %q, want %q", r.notice, tt.want)
+			}
+		})
+	}
+}
+
+func TestComposeBusyDropsKeys(t *testing.T) {
+	r := newComposeRig(t)
+	r.pushBranch(t)
+	r.acts.hold = true
+
+	v := r.mustOpen(t)
+	cmd := press(r.App, keyCtrlS)
+
+	if !v.busy || v.status != "opening the pull request…" {
+		t.Fatalf("busy %v, status %q; want it running", v.busy, v.status)
+	}
+
+	before := v.title.Value()
+
+	r.keys(t, keyRune('z'), keyTab, keyEsc, keyEnter)
+
+	if v.title.Value() != before || v.field != composeTitle || r.compose != v {
+		t.Errorf("a key reached the busy box: title %q, field %v, open %v", v.title.Value(), v.field, r.compose == v)
+	}
+
+	// Closing the app ends the run, and a run cut short says nothing.
+	r.cancel()
+	r.churn(t, cmd)
+
+	if r.notice != "" && strings.Contains(r.notice, "opened") {
+		t.Errorf("a cancelled run reported %q", r.notice)
+	}
+}
+
+func TestComposeIgnoresStaleAnswer(t *testing.T) {
+	r := newComposeRig(t)
+
+	c, _ := r.reg.get("pr.open")
+	stale := c.run(r.App)
+	// A second request supersedes the first, and a modal opened meanwhile blocks both.
+	fresh := c.run(r.App)
+
+	r.churn(t, stale)
+
+	if r.compose != nil {
+		t.Error("an answer to a superseded request opened the box")
+	}
+
+	r.churn(t, fresh)
+
+	if r.compose == nil {
+		t.Errorf("the current answer did not open the box; notice %q", r.notice)
+	}
+}
+
+func composeScene(t *testing.T, r *composeRig, w, h int) string {
+	t.Helper()
+
+	blank := strings.TrimSuffix(strings.Repeat(strings.Repeat(" ", w)+"\n", h), "\n")
+	r.width, r.height = w, h
+
+	return r.overlayCompose(blank, r.current())
+}
+
+func TestComposeGolden(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		setup func(t *testing.T, r *composeRig)
+		w, h  int
+	}{
+		{"template", func(t *testing.T, r *composeRig) {
+			t.Helper()
+			r.pushBranch(t)
+
+			if err := os.MkdirAll(filepath.Join(r.dir, ".github"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+
+			body := "## Summary\n\nWhat changed?\n\n## Testing\n"
+			if err := os.WriteFile(filepath.Join(r.dir, ".github", "pull_request_template.md"), []byte(body), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}, 110, 30},
+		{"unpushed", func(t *testing.T, r *composeRig) { t.Helper() }, 110, 30},
+		{"small", func(t *testing.T, r *composeRig) { t.Helper() }, 80, 24},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := newComposeRig(t)
+			tc.setup(t, r)
+			r.mustOpen(t)
+
+			t.Run("catppuccin-mocha/icons=true", func(t *testing.T) {
+				r.icons = true
+				golden.RequireEqual(t, []byte(composeScene(t, r, tc.w, tc.h)))
+			})
+
+			for _, icons := range []bool{true, false} {
+				t.Run(fmt.Sprintf("text/icons=%v", icons), func(t *testing.T) {
+					r.icons = icons
+					golden.RequireEqual(t, []byte(ansi.Strip(composeScene(t, r, tc.w, tc.h))))
+				})
+			}
+		})
+	}
+}
+
+func TestComposeSizes(t *testing.T) {
+	r := newComposeRig(t)
+	r.mustOpen(t)
+
+	for _, sz := range [][2]int{{110, 30}, {80, 24}, {40, 10}, {30, 8}, {12, 5}, {5, 3}, {1, 1}} {
+		t.Run(fmt.Sprintf("%dx%d", sz[0], sz[1]), func(t *testing.T) {
+			r.width, r.height = sz[0], sz[1]
+			sized(t, r.App, sz[0], sz[1])
+
+			lines := strings.Split(r.View().Content, "\n")
+			if len(lines) != sz[1] {
+				t.Fatalf("view has %d lines, want %d", len(lines), sz[1])
+			}
+
+			for i, l := range lines {
+				if got := ansi.StringWidth(l); got != sz[0] {
+					t.Errorf("line %d is %d cells wide, want %d", i, got, sz[0])
+				}
+			}
+		})
+	}
+}

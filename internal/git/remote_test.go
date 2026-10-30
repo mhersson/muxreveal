@@ -345,3 +345,43 @@ func TestHasUpstreamIsARead(t *testing.T) {
 		}
 	}
 }
+
+func TestRemoteBranches(t *testing.T) {
+	f := newPushFixture(t)
+	gitOut(t, f.root, "push", "-q", "origin", "feat", "feat:release/1.0", "feat:alpha")
+
+	second := newBare(t)
+	gitOut(t, f.root, "remote", "add", "second", second)
+	gitOut(t, f.root, "push", "-q", "second", "feat:other")
+	// A symbolic HEAD under the remote is not a branch.
+	gitOut(t, f.root, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/feat")
+
+	tests := []struct {
+		name   string
+		remote string
+		want   []string
+	}{
+		{"nested names, sorted, HEAD left out", "origin", []string{"alpha", "feat", "release/1.0"}},
+		{"the other remote", "second", []string{"other"}},
+		{"a remote that is not configured", "nope", nil},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := RemoteBranches(context.Background(), f.repo, tt.remote)
+			if err != nil {
+				t.Fatalf("RemoteBranches(%q) error = %v", tt.remote, err)
+			}
+
+			if !slices.Equal(got, tt.want) {
+				t.Errorf("RemoteBranches(%q) = %q, want %q", tt.remote, got, tt.want)
+			}
+		})
+	}
+
+	for _, remote := range []string{"", "--all", "-x"} {
+		if _, err := RemoteBranches(context.Background(), f.repo, remote); !errors.Is(err, ErrNoRemote) {
+			t.Errorf("remote %q: err = %v, want ErrNoRemote", remote, err)
+		}
+	}
+}

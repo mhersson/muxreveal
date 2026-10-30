@@ -109,11 +109,13 @@ type App struct {
 	preview *look // theme picker preview; nil unless previewing
 	// reportedFg and reportedBg are the colours last given to the panes.
 	reportedFg, reportedBg theme.Hex
-	confirm                *confirm    // yes/no question; owns every key while open
-	prompt                 *prompt     // text input; owns every key and paste while open
-	checks                 *checksView // a pull request's checks; owns every key while open
-	merge                  *mergeView  // the merge box; owns every key while open
-	prList                 *prListView // the agents' pull requests; owns every key while open
+	confirm                *confirm     // yes/no question; owns every key while open
+	prompt                 *prompt      // text input; owns every key and paste while open
+	checks                 *checksView  // a pull request's checks; owns every key while open
+	merge                  *mergeView   // the merge box; owns every key while open
+	prList                 *prListView  // the agents' pull requests; owns every key while open
+	compose                *composeView // the compose box; owns every key while open
+	composeSeq             int          // compose request counter; an answer for another request is stale
 	merging                map[mergeKey]bool
 	openLink               urlOpener
 	actions                prActions // GitHub writes; nil means they are off
@@ -557,6 +559,14 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.onPushResolved(msg)
 	case pushedMsg:
 		return a, a.onPushed(msg)
+	case composeResolvedMsg:
+		return a, a.onComposeResolved(msg)
+	case composeLogMsg:
+		a.onComposeLog(msg)
+	case composePushedMsg:
+		return a, a.onComposePushed(msg)
+	case composeCreatedMsg:
+		a.onComposeCreated(msg)
 	case watchAcquiredMsg:
 		a.onWatchAcquired(msg)
 	case pinAcquiredMsg:
@@ -761,6 +771,10 @@ func (a *App) View() tea.View {
 
 	if a.merge != nil {
 		content = a.overlayMerge(content, lk)
+	}
+
+	if a.compose != nil {
+		content = a.overlayCompose(content, lk)
 	}
 
 	if a.confirm != nil {
