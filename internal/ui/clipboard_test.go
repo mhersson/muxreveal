@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io"
 	"log/slog"
 	"os/exec"
 	"reflect"
@@ -85,12 +86,17 @@ type fakeRun struct {
 	mu    sync.Mutex
 	calls []runCall
 	err   func(argv []string) error
+	out   string
 }
 
-func (f *fakeRun) run(_ context.Context, argv []string, stdin string) error {
+func (f *fakeRun) run(_ context.Context, argv []string, stdin string, stdout io.Writer) error {
 	f.mu.Lock()
 	f.calls = append(f.calls, runCall{argv, stdin})
 	f.mu.Unlock()
+
+	if stdout != nil {
+		_, _ = io.WriteString(stdout, f.out)
+	}
 
 	if f.err != nil {
 		return f.err(argv)
@@ -99,7 +105,7 @@ func (f *fakeRun) run(_ context.Context, argv []string, stdin string) error {
 	return nil
 }
 
-func newTestClipboard(cfg clipboardConfig, env map[string]string, goos string, run func(context.Context, []string, string) error) (*clipboard, *bytes.Buffer) {
+func newTestClipboard(cfg clipboardConfig, env map[string]string, goos string, run func(context.Context, []string, string, io.Writer) error) (*clipboard, *bytes.Buffer) {
 	var buf bytes.Buffer
 
 	log := slog.New(slog.NewTextHandler(&buf, nil))
@@ -191,7 +197,7 @@ func TestClipboardCopy(t *testing.T) {
 func TestClipboardNativeTimeout(t *testing.T) {
 	t.Parallel()
 
-	run := func(ctx context.Context, _ []string, _ string) error {
+	run := func(ctx context.Context, _ []string, _ string, _ io.Writer) error {
 		<-ctx.Done()
 
 		return ctx.Err()
@@ -264,8 +270,189 @@ func TestClipboardOtherFailuresLoggedEachTime(t *testing.T) {
 func TestRunNativeReportsAMissingTool(t *testing.T) {
 	t.Parallel()
 
-	err := runNative(context.Background(), []string{"muxreveal-no-such-clipboard-tool", "-x"}, "text")
+	err := runNative(context.Background(), []string{"muxreveal-no-such-clipboard-tool", "-x"}, "text", nil)
 	if !errors.Is(err, exec.ErrNotFound) {
 		t.Errorf("runNative error = %v, want exec.ErrNotFound", err)
+	}
+}
+
+func TestRunNativeWritesStdout(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+	if err := runNative(context.Background(), []string{"printf", "%s", "out"}, "", &buf); err != nil {
+		t.Fatalf("runNative: %v", err)
+	}
+
+	if buf.String() != "out" {
+		t.Fatalf("stdout = %q, want %q", buf.String(), "out")
+	}
+}
+
+func TestPasteCommand(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		env  map[string]string
+		goos string
+		want []string
+	}{
+		{"darwin", nil, "darwin", []string{"pbpaste"}},
+		{
+			"wayland",
+			map[string]string{"WAYLAND_DISPLAY": "wayland-0", "DISPLAY": ":0"},
+			"linux",
+			[]string{"wl-paste", "--primary", "--no-newline", "--type", "text"},
+		},
+		{"x11", map[string]string{"DISPLAY": ":0"}, "linux", []string{"xclip", "-selection", "primary", "-o"}},
+		{"no display", nil, "linux", nil},
+		{"ssh connection", map[string]string{"SSH_CONNECTION": "a b c d", "DISPLAY": ":0"}, "linux", nil},
+		{"ssh tty", map[string]string{"SSH_TTY": "/dev/pts/1", "WAYLAND_DISPLAY": "w"}, "linux", nil},
+		{"ssh darwin", map[string]string{"SSH_CONNECTION": "a"}, "darwin", nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := pasteCommand(envFrom(tt.env), tt.goos)
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Fatalf("pasteCommand = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestClipboardPaste(t *testing.T) {
+	t.Parallel()
+
+	wlPaste := []string{"wl-paste", "--primary", "--no-newline", "--type", "text"}
+	xclipPaste := []string{"xclip", "-selection", "primary", "-o"}
+	native := clipboardConfig{Native: true}
+	wayland := map[string]string{"WAYLAND_DISPLAY": "w"}
+	notFound := &exec.Error{Name: "wl-paste", Err: exec.ErrNotFound}
+
+	tests := []struct {
+		name      string
+		cfg       clipboardConfig
+		env       map[string]string
+		goos      string
+		last, out string
+		err       error
+		want      string
+		wantReads [][]string
+		wantWarn  int
+	}{
+		{"wayland", native, wayland, "linux", "old", "sel", nil, "sel", [][]string{wlPaste}, 0},
+		{"x11", native, map[string]string{"DISPLAY": ":0"}, "linux", "old", "sel", nil, "sel", [][]string{xclipPaste}, 0},
+		{"darwin", native, nil, "darwin", "old", "sel", nil, "sel", [][]string{{"pbpaste"}}, 0},
+		{"ssh", native, map[string]string{"SSH_CONNECTION": "x", "DISPLAY": ":0"}, "linux", "old", "sel", nil, "old", nil, 0},
+		{"no display", native, nil, "linux", "old", "sel", nil, "old", nil, 0},
+		{"native off", clipboardConfig{}, wayland, "linux", "old", "sel", nil, "old", nil, 0},
+		{"missing tool", native, wayland, "linux", "old", "", notFound, "old", [][]string{wlPaste}, 1},
+		{"empty selection", native, wayland, "linux", "old", "", nil, "", [][]string{wlPaste}, 0},
+		{"failed read", native, wayland, "linux", "old", "", errors.New("exit status 1"), "", [][]string{wlPaste}, 1},
+		{"nothing copied over ssh", native, map[string]string{"SSH_TTY": "x"}, "linux", "", "sel", nil, "", nil, 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			fr := &fakeRun{out: tt.out, err: func([]string) error { return tt.err }}
+			c, buf := newTestClipboard(tt.cfg, tt.env, tt.goos, fr.run)
+			c.last = tt.last
+
+			got := c.paste(func(s string) tea.Msg { return s })()
+			if got != tt.want {
+				t.Fatalf("delivered %#v, want %q", got, tt.want)
+			}
+
+			var reads [][]string
+			for _, call := range fr.calls {
+				reads = append(reads, call.argv)
+			}
+
+			if !reflect.DeepEqual(reads, tt.wantReads) {
+				t.Fatalf("reads = %v, want %v", reads, tt.wantReads)
+			}
+
+			if n := strings.Count(buf.String(), "level=WARN"); n != tt.wantWarn {
+				t.Fatalf("warnings = %d, want %d:\n%s", n, tt.wantWarn, buf.String())
+			}
+		})
+	}
+}
+
+func TestClipboardPasteMissingToolLoggedOnce(t *testing.T) {
+	t.Parallel()
+
+	fr := &fakeRun{err: func(argv []string) error { return &exec.Error{Name: argv[0], Err: exec.ErrNotFound} }}
+	c, buf := newTestClipboard(clipboardConfig{Native: true}, map[string]string{"WAYLAND_DISPLAY": "w"}, "linux", fr.run)
+	c.last = "old"
+
+	for range 3 {
+		if got := c.paste(func(s string) tea.Msg { return s })(); got != "old" {
+			t.Fatalf("delivered %#v, want the last copy", got)
+		}
+	}
+
+	if got := strings.Count(buf.String(), "level=WARN"); got != 1 {
+		t.Fatalf("missing tool logged %d times, want 1:\n%s", got, buf.String())
+	}
+}
+
+func TestClipboardPasteHasATimeout(t *testing.T) {
+	t.Parallel()
+
+	var hasDeadline bool
+
+	run := func(ctx context.Context, _ []string, _ string, _ io.Writer) error {
+		_, hasDeadline = ctx.Deadline()
+
+		return context.DeadlineExceeded
+	}
+	c, buf := newTestClipboard(clipboardConfig{Native: true}, map[string]string{"WAYLAND_DISPLAY": "w"}, "linux", run)
+	c.last = "old"
+
+	if got := c.paste(func(s string) tea.Msg { return s })(); got != "" {
+		t.Fatalf("delivered %#v, want empty", got)
+	}
+
+	if !hasDeadline {
+		t.Fatal("the read ran without a deadline")
+	}
+
+	if got := strings.Count(buf.String(), "context deadline exceeded"); got != 1 {
+		t.Fatalf("timeout logged %d times, want 1:\n%s", got, buf.String())
+	}
+}
+
+func TestClipboardCopyRecordsTheLastCopy(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		cfg    clipboardConfig
+		copies []string
+		want   string
+	}{
+		{"one", clipboardConfig{OSC52: true}, []string{"a"}, "a"},
+		{"empty keeps the last", clipboardConfig{OSC52: true}, []string{"a", ""}, "a"},
+		{"latest wins", clipboardConfig{OSC52: true}, []string{"a", "b"}, "b"},
+		{"both switches off", clipboardConfig{}, []string{"a"}, "a"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			c, _ := newTestClipboard(tt.cfg, nil, "linux", (&fakeRun{}).run)
+			for _, text := range tt.copies {
+				c.copy(text)
+			}
+
+			if c.last != tt.want {
+				t.Fatalf("last = %q, want %q", c.last, tt.want)
+			}
+		})
 	}
 }

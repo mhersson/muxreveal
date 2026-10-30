@@ -1,9 +1,11 @@
 package ui
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"os/exec"
 	"strings"
@@ -23,14 +25,19 @@ const (
 type clipboardConfig struct{ OSC52, Native bool }
 
 // clipboard writes copied text to the system clipboard through OSC 52 and,
-// on a local session, through native tools.
+// on a local session, through native tools. It also reads the primary
+// selection back for a middle-click paste.
 type clipboard struct {
 	cfg     clipboardConfig
 	getenv  func(string) string
 	goos    string
 	log     *slog.Logger
 	timeout time.Duration
-	run     func(ctx context.Context, argv []string, stdin string) error
+	run     func(ctx context.Context, argv []string, stdin string, stdout io.Writer) error
+
+	// last is the latest non-empty text copy was given; only the update loop
+	// touches it.
+	last string
 
 	mu      sync.Mutex
 	missing map[string]bool
@@ -54,6 +61,8 @@ func (c *clipboard) copy(text string) tea.Cmd {
 	if text == "" {
 		return nil
 	}
+
+	c.last = text
 
 	var cmds []tea.Cmd
 	if c.cfg.OSC52 {
@@ -79,17 +88,59 @@ func (c *clipboard) copy(text string) tea.Cmd {
 func (c *clipboard) writeNative(argvs [][]string, text string) {
 	for _, argv := range argvs {
 		ctx, cancel := context.WithTimeout(context.Background(), c.timeout)
-		err := c.run(ctx, argv, text)
+		err := c.run(ctx, argv, text, nil)
 
 		cancel()
 
 		if err != nil {
-			c.logFailure(argv, err)
+			c.logFailure("write", argv, err)
 		}
 	}
 }
 
-func (c *clipboard) logFailure(argv []string, err error) {
+// paste returns a Cmd that delivers the text to paste: the primary selection
+// when a native tool can read it, else the last copy.
+func (c *clipboard) paste(deliver func(text string) tea.Msg) tea.Cmd {
+	last := c.last
+
+	var argv []string
+	if c.cfg.Native {
+		argv = pasteCommand(c.getenv, c.goos)
+	}
+
+	if argv == nil {
+		return func() tea.Msg { return deliver(last) }
+	}
+
+	return func() tea.Msg {
+		text, err := c.readNative(argv)
+		if err == nil {
+			return deliver(text)
+		}
+
+		c.logFailure("read", argv, err)
+
+		if errors.Is(err, exec.ErrNotFound) {
+			return deliver(last)
+		}
+
+		return deliver("")
+	}
+}
+
+func (c *clipboard) readNative(argv []string) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), c.timeout)
+	defer cancel()
+
+	var buf bytes.Buffer
+	if err := c.run(ctx, argv, "", &buf); err != nil {
+		return "", err
+	}
+
+	return buf.String(), nil
+}
+
+func (c *clipboard) logFailure(op string, argv []string, err error) {
 	if errors.Is(err, exec.ErrNotFound) {
 		c.mu.Lock()
 		seen := c.missing[argv[0]]
@@ -101,7 +152,7 @@ func (c *clipboard) logFailure(argv []string, err error) {
 		}
 	}
 
-	c.log.Warn("native clipboard write failed", "cmd", strings.Join(argv, " "), "err", err)
+	c.log.Warn("native clipboard "+op+" failed", "cmd", strings.Join(argv, " "), "err", err)
 }
 
 // nativeCommands returns the tools to write with, in order; none on an SSH
@@ -126,11 +177,31 @@ func nativeCommands(getenv func(string) string, goos string) [][]string {
 	return nil
 }
 
-// runNative leaves Stdout and Stderr nil so a forked selection server cannot
-// hold a pipe open past the context.
-func runNative(ctx context.Context, argv []string, stdin string) error {
+// pasteCommand returns the tool to read the primary selection with; nil on an
+// SSH session or when no display is known.
+func pasteCommand(getenv func(string) string, goos string) []string {
+	if getenv("SSH_CONNECTION") != "" || getenv("SSH_TTY") != "" {
+		return nil
+	}
+
+	switch {
+	case goos == "darwin":
+		return []string{"pbpaste"}
+	case getenv("WAYLAND_DISPLAY") != "":
+		return []string{"wl-paste", "--primary", "--no-newline", "--type", "text"}
+	case getenv("DISPLAY") != "":
+		return []string{"xclip", "-selection", "primary", "-o"}
+	}
+
+	return nil
+}
+
+// runNative writes pass a nil stdout so a forked selection server cannot hold
+// a pipe open past the context; reads pass a buffer, and their tools do not fork.
+func runNative(ctx context.Context, argv []string, stdin string, stdout io.Writer) error {
 	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
 	cmd.Stdin = strings.NewReader(stdin)
+	cmd.Stdout = stdout
 
 	cmd.WaitDelay = nativeWaitDelay
 	if err := cmd.Run(); err != nil {
