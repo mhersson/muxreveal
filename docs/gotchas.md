@@ -136,11 +136,18 @@ what to do about it. Skim it before your first commit each session.
   sooner, and a late batch then reloads the drawer after the test read its
   `epoch` or `gen`. The rig's `reportedAll` waits for the paths written.
 - `t.Setenv` and `t.Chdir` panic in a parallel test. That is why tests that
-  use them, and tests that assert on wall-clock time, skip `t.Parallel()`.
+  use them, tests that assert on wall-clock time, and tests that count or scan
+  the process's goroutines skip `t.Parallel()`.
 - Writing an executable and then running it while parallel tests fork can
   fail with `ETXTBSY`: a concurrent fork inherits the still-open write
   descriptor (go.dev/issue/22315). Hold `syscall.ForkLock.RLock()` around the
   write, as `writeGitWrapper` does.
+- Chroma gives each lexer rule a 250 ms wall-clock match timeout and skips a
+  rule that times out. Under `-race` on a loaded runner a highlighted span can
+  then come out in another colour with no error. A test that compares
+  highlighted colours (the drawer's code spans, the welcome card's sample)
+  skips `t.Parallel()`; one that compares only text, counts or widths can run
+  in parallel.
 - A flaky test, or one that fails only on macOS, has a cause to find. Never
   give it a longer timeout, skip it or re-run it until it passes.
 - The nightly workflow runs the race suite at `-count=2`, so every test must
