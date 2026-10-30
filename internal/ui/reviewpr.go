@@ -33,6 +33,7 @@ const (
 	noticePRNoBase      = "#%d: its base branch is unknown"
 	noticePRFetching    = "fetching #%d…"
 	noticePRNotOnRemote = "#%d is not on %s"
+	noticePRLoaded      = "#%d loaded; press %s"
 )
 
 // prThen is what the drawer does once the shown pull request's diff has loaded.
@@ -279,6 +280,7 @@ func (a *App) askPR(tab core.TabID, want *prWant, base string, then prThen) tea.
 	}
 
 	v := a.reviewViewOf(tab)
+	v.then = thenNothing
 
 	a.drawer.prSeq++
 	ask := prAsk{tab: tab, pane: t.Review.Pane, seq: a.drawer.prSeq, epoch: v.epoch, then: then, want: want, base: base}
@@ -521,7 +523,31 @@ func (a *App) reviewThen(v *reviewView, msg reviewLoadedMsg) tea.Cmd {
 		return nil
 	}
 
+	// A late answer never takes the keyboard from where it went since the key.
+	if a.modalOpen() || !a.drawerHasKeys() {
+		a.notice = fmt.Sprintf(noticePRLoaded, v.pr.Number, then.key())
+
+		return nil
+	}
+
 	return a.prThenRun(then)
+}
+
+// key is the drawer key that asks for t, as the notice of a dropped answer names it.
+func (t prThen) key() string {
+	switch t {
+	case thenChecks:
+		return "c for checks"
+	case thenBrowser:
+		return "O to open it"
+	case thenApprove:
+		return "a to approve"
+	case thenMerge:
+		return "M to merge"
+	case thenNothing:
+	}
+
+	return ""
 }
 
 // prThenRun is what a key asked of the pull request once its diff has loaded.
@@ -564,11 +590,20 @@ func (a *App) prAct(then prThen) tea.Cmd {
 		return nil
 	}
 
+	a.drawerTake()
+
 	if v.pr != (core.ReviewPR{}) && v.loaded && !v.loading && v.err == nil {
 		return a.prThenRun(then)
 	}
 
-	return a.showPR(tab.ID, nil, then)
+	// The held pull request is asked for again as itself: resolving the worktree's
+	// branch could pick another.
+	var want *prWant
+	if v.pr != (core.ReviewPR{}) && v.root != "" {
+		want = &prWant{repo: v.pr.Repo, number: v.pr.Number, root: v.root}
+	}
+
+	return a.showPR(tab.ID, want, then)
 }
 
 // openWithPR opens or retargets the active tab's drawer on pane, as leader d

@@ -44,6 +44,10 @@ func (a *App) reviewApprove() tea.Cmd { return a.prAct(thenApprove) }
 // openApprove opens the approve confirm on the pull request the drawer has
 // loaded, or says why it cannot.
 func (a *App) openApprove(repoKey string, number int, sha string) {
+	if a.modalOpen() {
+		return
+	}
+
 	repo, ok := repoOfKey(repoKey)
 	if !ok || a.actions == nil {
 		a.notice = noticePRsOff

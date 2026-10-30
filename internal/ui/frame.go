@@ -379,7 +379,7 @@ func (a *App) cursorBase(g geometry) *tea.Cursor {
 	}
 
 	if a.composeShown() {
-		if a.overlay != nil || a.picker.open != nil || a.confirm != nil || a.popup || a.sequenceOpen() {
+		if a.otherModalOpen() || a.popup || a.sequenceOpen() {
 			return nil
 		}
 

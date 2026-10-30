@@ -152,7 +152,7 @@ func (a *App) newAgent() tea.Cmd {
 func (a *App) onPickerOpen(msg pickerOpenMsg) tea.Cmd {
 	st := a.store.State()
 	if msg.seq != a.picker.seq || st.Tab().ID != msg.tab || st.Tab().Focus != msg.pane ||
-		a.overlay != nil || a.confirm != nil || a.prompt != nil || a.copy != nil {
+		a.modalOpen() {
 		return nil
 	}
 

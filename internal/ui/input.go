@@ -32,12 +32,12 @@ func (a *App) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		return a.handleComposeKey(msg)
 	}
 
-	if a.checks != nil {
-		return a.handleChecksKey(msg)
-	}
-
 	if a.merge != nil {
 		return a.handleMergeKey(msg)
+	}
+
+	if a.checks != nil {
+		return a.handleChecksKey(msg)
 	}
 
 	if a.prList != nil {
@@ -152,4 +152,16 @@ func (a *App) reportFocusChange(from, to core.PaneID) {
 	if p, ok := a.panes[to]; ok {
 		p.sendFocus(true)
 	}
+}
+
+// modalOpen reports whether any modal owns the keyboard: a confirm, prompt,
+// copy mode, the palette or another overlay, the compose box, the merge box,
+// the checks, the pull request list, the worktree picker or the drawer's
+// worktree list.
+func (a *App) modalOpen() bool { return a.composeShown() || a.otherModalOpen() }
+
+// otherModalOpen is modalOpen without the compose box.
+func (a *App) otherModalOpen() bool {
+	return a.confirm != nil || a.prompt != nil || a.copy != nil || a.overlay != nil || a.merge != nil ||
+		a.checks != nil || a.prList != nil || a.picker.open != nil || a.drawer.list != nil
 }

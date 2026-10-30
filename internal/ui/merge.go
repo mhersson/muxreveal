@@ -204,6 +204,10 @@ func (a *App) mergeCommand() tea.Cmd {
 // openMerge opens the merge box on the pull request the drawer has loaded, or
 // says why it cannot.
 func (a *App) openMerge(repoKey string, number int, sha string) {
+	if a.modalOpen() {
+		return
+	}
+
 	repo, ok := repoOfKey(repoKey)
 	if !ok || a.actions == nil {
 		a.notice = noticePRsOff

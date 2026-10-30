@@ -269,10 +269,7 @@ func resolveCompose(ctx context.Context, log *slog.Logger, resolve func(ctx cont
 }
 
 // composeBlocked reports whether a modal other than the compose box is open.
-func (a *App) composeBlocked() bool {
-	return a.overlay != nil || a.confirm != nil || a.prompt != nil || a.copy != nil || a.picker.open != nil ||
-		a.checks != nil || a.merge != nil || a.prList != nil || a.compose != nil
-}
+func (a *App) composeBlocked() bool { return a.modalOpen() || a.compose != nil }
 
 // onComposeResolved shows why there is no box, or goes on to read the commits
 // the box starts from. An answer for an earlier request, a pane that lost
