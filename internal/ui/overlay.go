@@ -74,9 +74,12 @@ func (a *App) closeOverlay() {
 func (a *App) openCommandPalette() {
 	cmds := a.reg.all()
 
-	items := make([]palette.Item, len(cmds))
-	for i, c := range cmds {
-		items[i] = palette.Item{ID: c.id, Title: c.title, Hint: a.paletteHint(c.id), Icon: a.glyph(c.icon)}
+	items := make([]palette.Item, 0, len(cmds))
+
+	for _, c := range cmds {
+		if c.scope == "" {
+			items = append(items, palette.Item{ID: c.id, Title: c.title, Hint: a.paletteHint(c.id), Icon: a.glyph(c.icon)})
+		}
 	}
 
 	a.openOverlay(overlayCommands, a.titled(iconPalette, "Commands"), items)

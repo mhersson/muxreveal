@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"slices"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
@@ -61,7 +62,8 @@ func TestRegistry(t *testing.T) {
 func TestDefaultCommands(t *testing.T) {
 	t.Parallel()
 
-	cmds := defaultCommands()
+	// The scoped commands have their own test.
+	cmds := slices.DeleteFunc(defaultCommands(), func(c command) bool { return c.scope != "" })
 
 	type want struct{ id, title, icon string }
 

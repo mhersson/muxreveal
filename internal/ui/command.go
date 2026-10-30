@@ -16,6 +16,7 @@ import (
 type command struct {
 	id, title, icon string
 	short           string // title in a sequence popup, where the group names the rest; "" means title
+	scope           string // "", or the view whose keys run it: "rail", "pr_list" or "checks"
 	run             func(a *App) tea.Cmd
 }
 
@@ -231,5 +232,8 @@ func defaultCommands() []command {
 		})
 	}
 
-	return cmds
+	cmds = append(cmds, railCommands()...)
+	cmds = append(cmds, prListCommands()...)
+
+	return append(cmds, checksCommands()...)
 }

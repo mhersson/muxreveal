@@ -43,8 +43,13 @@ func resolveLeader(cfg core.KeysConfig, reg *registry) (keymap, error) {
 			continue
 		}
 
-		if _, ok := reg.get(b.Command); !ok {
+		c, ok := reg.get(b.Command)
+		if !ok {
 			return keymap{}, fmt.Errorf("keys.leader: %q = %q: no such command", b.Key, b.Command)
+		}
+
+		if c.scope != "" {
+			return keymap{}, fmt.Errorf("keys.leader: %q = %q: a %s command", b.Key, b.Command, scopeNoun(c.scope))
 		}
 	}
 
@@ -71,9 +76,9 @@ type keyTable struct{ binds []reviewKey }
 // keyTables holds the resolved tables of the contexts other than the leader.
 type keyTables struct {
 	drawer keyTable
-	rail   keyTable //nolint:unused // empty until the rail reads its keys from the table
-	prList keyTable //nolint:unused // empty until the PR list reads its keys from the table
-	checks keyTable //nolint:unused // empty until the checks overlay reads its keys from the table
+	rail   keyTable
+	prList keyTable
+	checks keyTable
 }
 
 // lookup is the command a key runs.
@@ -117,17 +122,44 @@ func resolveKeys(cfg core.KeysConfig, reg *registry) (keymap, keyTables, error) 
 		return keymap{}, keyTables{}, err
 	}
 
-	drawer, err := resolveTable("drawer", reviewKeys, cfg, func(id string) bool { return strings.HasPrefix(id, "review.") }, reg)
-	if err != nil {
-		return keymap{}, keyTables{}, err
+	var tables keyTables
+
+	contexts := []struct {
+		context, noun string
+		defaults      []reviewKey
+		accept        func(id string) bool
+		into          *keyTable
+	}{
+		{"drawer", "drawer", reviewKeys, func(id string) bool { return strings.HasPrefix(id, "review.") }, &tables.drawer},
+		{"rail", "rail", railKeys, scopedTo(reg, "rail"), &tables.rail},
+		{"pr_list", "PR list", prListKeys, scopedTo(reg, "pr_list"), &tables.prList},
+		{"checks", "checks", checksKeys, scopedTo(reg, "checks"), &tables.checks},
 	}
 
-	return km, keyTables{drawer: drawer}, nil
+	for _, c := range contexts {
+		t, err := resolveTable(c.context, c.noun, c.defaults, cfg, c.accept, reg)
+		if err != nil {
+			return keymap{}, keyTables{}, err
+		}
+
+		*c.into = t
+	}
+
+	return km, tables, nil
+}
+
+// scopedTo accepts the commands of one view.
+func scopedTo(reg *registry, scope string) func(id string) bool {
+	return func(id string) bool {
+		c, ok := reg.get(id)
+
+		return ok && c.scope == scope
+	}
 }
 
 // resolveTable lays a context's config over its default keys; accept says
 // which commands the context takes.
-func resolveTable(context string, defaults []reviewKey, cfg core.KeysConfig, accept func(id string) bool, reg *registry) (keyTable, error) {
+func resolveTable(context, noun string, defaults []reviewKey, cfg core.KeysConfig, accept func(id string) bool, reg *registry) (keyTable, error) {
 	binds := cfg.Binds(context)
 
 	for _, b := range binds {
@@ -140,7 +172,7 @@ func resolveTable(context string, defaults []reviewKey, cfg core.KeysConfig, acc
 		}
 
 		if !accept(b.Command) {
-			return keyTable{}, fmt.Errorf("keys.%s: %q = %q: not a %s command", context, b.Key, b.Command, context)
+			return keyTable{}, fmt.Errorf("keys.%s: %q = %q: not a %s command", context, b.Key, b.Command, noun)
 		}
 	}
 

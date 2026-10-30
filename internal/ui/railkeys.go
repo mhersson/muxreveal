@@ -23,24 +23,7 @@ func (a *App) handleRailKey(msg tea.KeyPressMsg) tea.Cmd {
 }
 
 func (a *App) railNavKey(msg tea.KeyPressMsg) tea.Cmd {
-	switch msg.String() {
-	case "j", "down":
-		a.railMove(1)
-	case "k", "up":
-		a.railMove(-1)
-	case "/":
-		a.railSetSearch(true, a.rail.query)
-	case "enter":
-		return a.railJump(a.rail.sel)
-	case "esc":
-		if a.rail.query != "" {
-			a.railSetSearch(false, "")
-		} else {
-			a.railRelease()
-		}
-	}
-
-	return nil
+	return a.runKey(a.keys.rail, bindingKey(msg))
 }
 
 func (a *App) railTypeKey(msg tea.KeyPressMsg) {

@@ -72,9 +72,13 @@ func TestPaletteListsEveryCommand(t *testing.T) {
 		t.Fatal("overlay not open after leader :")
 	}
 
+	// Scoped commands act on one view and are not listed.
 	var want []string
+
 	for _, c := range a.reg.all() {
-		want = append(want, c.id)
+		if c.scope == "" {
+			want = append(want, c.id)
+		}
 	}
 
 	view := ansi.Strip(a.View().Content)
