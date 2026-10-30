@@ -232,6 +232,8 @@ func TestRailCardsGroupsAndOrder(t *testing.T) {
 }
 
 func TestRailMatcher(t *testing.T) {
+	t.Parallel()
+
 	c := railCard{tab: 1, tabName: "Backend", project: "muxreveal", branch: "feat/Rail", action: "Edit internal/core/modes.go"}
 
 	tests := []struct {
@@ -257,6 +259,8 @@ func TestRailMatcher(t *testing.T) {
 }
 
 func TestRailSearchMatchesTheName(t *testing.T) {
+	t.Parallel()
+
 	c := railCard{project: "muxreveal", name: "muxr-Orchestrator", branch: "feat/orch"}
 
 	tests := []struct {

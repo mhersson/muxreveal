@@ -37,6 +37,8 @@ func toastApp(t *testing.T, w, h int) (*App, map[core.PaneID]*fakeProc) {
 }
 
 func TestToastBox(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name   string
 		icons  bool
@@ -78,6 +80,7 @@ func TestToastBox(t *testing.T) {
 }
 
 func TestToastColours(t *testing.T) {
+	t.Parallel()
 	ui := mochaUI(t)
 	a, _ := toastApp(t, 100, 30)
 	a.notice = "boom"
@@ -97,6 +100,7 @@ func TestToastColours(t *testing.T) {
 }
 
 func TestToastGoesWithTheFirstKey(t *testing.T) {
+	t.Parallel()
 	a, procs := toastApp(t, 100, 30)
 	a.notice = "boom"
 
@@ -115,6 +119,7 @@ func TestToastGoesWithTheFirstKey(t *testing.T) {
 }
 
 func TestToastTakesNoClicks(t *testing.T) {
+	t.Parallel()
 	a, _ := toastApp(t, 100, 30)
 
 	if err := a.dispatch(core.FocusPane{ID: "p1"}); err != nil {
@@ -136,6 +141,7 @@ func TestToastTakesNoClicks(t *testing.T) {
 }
 
 func TestToastSitsUnderWhichKey(t *testing.T) {
+	t.Parallel()
 	a, _ := toastApp(t, 140, 40)
 
 	press(a, keyLeader)
@@ -153,6 +159,7 @@ func TestToastSitsUnderWhichKey(t *testing.T) {
 }
 
 func TestToastIsCutAtANarrowWidth(t *testing.T) {
+	t.Parallel()
 	a, _ := toastApp(t, 20, 12)
 	a.notice = strings.Repeat("n", 40)
 
@@ -170,6 +177,8 @@ func TestToastIsCutAtANarrowWidth(t *testing.T) {
 }
 
 func TestToastNeedsRoom(t *testing.T) {
+	t.Parallel()
+
 	for _, tt := range []struct{ w, h int }{{6, 12}, {40, 4}, {40, 2}, {3, 3}} {
 		a, _ := toastApp(t, tt.w, tt.h)
 		a.notice = "boom"
@@ -183,6 +192,7 @@ func TestToastNeedsRoom(t *testing.T) {
 }
 
 func TestToastGolden(t *testing.T) {
+	t.Parallel()
 	a, _ := toastApp(t, 60, 14)
 	a.notice = "cannot start shell: no such file"
 
@@ -190,6 +200,7 @@ func TestToastGolden(t *testing.T) {
 }
 
 func TestToastFlow(t *testing.T) {
+	t.Parallel()
 	a, _ := toastApp(t, 100, 30)
 	a.notice = "boom"
 
@@ -211,6 +222,8 @@ func TestToastFlow(t *testing.T) {
 // The tag and the prompt of copy mode live in the pane's own borders.
 
 func TestCopyTag(t *testing.T) {
+	t.Parallel()
+
 	for _, tt := range []struct {
 		name  string
 		icons bool
@@ -241,6 +254,7 @@ func TestCopyTag(t *testing.T) {
 }
 
 func TestCopyTagColours(t *testing.T) {
+	t.Parallel()
 	ui := mochaUI(t)
 	a, _, _ := copyApp(t)
 
@@ -254,6 +268,7 @@ func TestCopyTagColours(t *testing.T) {
 }
 
 func TestCopyTagIsLeftmostAndLastToGo(t *testing.T) {
+	t.Parallel()
 	a, _, _ := copyApp(t)
 	a.icons = false
 
@@ -284,6 +299,8 @@ func TestCopyTagIsLeftmostAndLastToGo(t *testing.T) {
 }
 
 func TestSearchPromptInTheBottomBorder(t *testing.T) {
+	t.Parallel()
+
 	for _, mark := range []string{"/", "?"} {
 		t.Run(mark, func(t *testing.T) {
 			ui := mochaUI(t)
@@ -315,6 +332,7 @@ func TestSearchPromptInTheBottomBorder(t *testing.T) {
 }
 
 func TestSearchPromptCap(t *testing.T) {
+	t.Parallel()
 	a, _, _ := copyApp(t)
 
 	enterCopy(a)
@@ -332,6 +350,7 @@ func TestSearchPromptCap(t *testing.T) {
 }
 
 func TestSearchPromptInANarrowPane(t *testing.T) {
+	t.Parallel()
 	a, _ := framedApp(t, 12, 8, shellSpec("/w/a", manyLines(30)))
 	fakeClip(a)
 
@@ -350,6 +369,7 @@ func TestSearchPromptInANarrowPane(t *testing.T) {
 }
 
 func TestSearchMissIsAToast(t *testing.T) {
+	t.Parallel()
 	a, _, _ := copyApp(t)
 
 	enterCopy(a)
@@ -372,6 +392,8 @@ func TestSearchMissIsAToast(t *testing.T) {
 // The sequence popup opens at once and lists the second keys.
 
 func TestSequencePopup(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		first rune
 		rows  []string
@@ -424,6 +446,7 @@ func TestSequencePopup(t *testing.T) {
 }
 
 func TestSequencePopupClosesOnTheSecondKey(t *testing.T) {
+	t.Parallel()
 	a, _ := splitApp(t)
 
 	press(a, keyLeader, keyRune('>'))
@@ -441,6 +464,7 @@ func TestSequencePopupClosesOnTheSecondKey(t *testing.T) {
 }
 
 func TestSequencePopupNoIcons(t *testing.T) {
+	t.Parallel()
 	a, _ := splitApp(t)
 	a.icons = false
 
@@ -452,6 +476,7 @@ func TestSequencePopupNoIcons(t *testing.T) {
 }
 
 func TestSequencePopupGolden(t *testing.T) {
+	t.Parallel()
 	a, _ := splitApp(t)
 
 	press(a, keyLeader, keyRune('>'))
@@ -460,6 +485,7 @@ func TestSequencePopupGolden(t *testing.T) {
 }
 
 func TestUnboundSequenceKeyIsAToast(t *testing.T) {
+	t.Parallel()
 	a, _ := splitApp(t)
 
 	press(a, keyLeader, keyRune('>'), keyRune('x'))
@@ -474,6 +500,7 @@ func TestUnboundSequenceKeyIsAToast(t *testing.T) {
 }
 
 func TestCursorUnderToast(t *testing.T) {
+	t.Parallel()
 	// The toast ("boom", icon on) is 10 wide at columns 89-98, rows 27-29 of 100x30.
 	// Row 26 col 42 of p2's content is screen (92, 28): under the toast's text row.
 	a, _ := framedApp(t, 100, 30, shellSpec("/w/a", ""), shellSpec("/w/b", "\x1b[26;42H"))
@@ -505,6 +532,7 @@ func TestCursorUnderToast(t *testing.T) {
 }
 
 func TestCursorOutsideToastStays(t *testing.T) {
+	t.Parallel()
 	a, _ := framedApp(t, 100, 30, shellSpec("/w/a", ""), shellSpec("/w/b", "\x1b[3;5Hx"))
 	fakeClip(a)
 	a.notice = "boom"
@@ -515,6 +543,7 @@ func TestCursorOutsideToastStays(t *testing.T) {
 }
 
 func TestCopyCursorUnderToast(t *testing.T) {
+	t.Parallel()
 	a, _ := framedApp(t, 60, 14, shellSpec("/w/a", manyLines(30)+strings.Repeat("x", 55)))
 	fakeClip(a)
 
@@ -551,6 +580,7 @@ func TestCopyCursorUnderToast(t *testing.T) {
 }
 
 func TestPromptCursorUnderToast(t *testing.T) {
+	t.Parallel()
 	a, _ := framedApp(t, 60, 14, shellSpec("/w/a", manyLines(30)))
 	fakeClip(a)
 
@@ -571,6 +601,7 @@ func TestPromptCursorUnderToast(t *testing.T) {
 }
 
 func TestToastLevels(t *testing.T) {
+	t.Parallel()
 	ui := mochaUI(t)
 
 	tests := []struct {
@@ -602,6 +633,7 @@ func TestToastLevels(t *testing.T) {
 }
 
 func TestToastLevelBelongsToItsText(t *testing.T) {
+	t.Parallel()
 	a, _ := toastApp(t, 100, 30)
 
 	a.toast(levelError, "boom")

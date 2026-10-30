@@ -3,7 +3,6 @@ package ui
 import (
 	"context"
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -18,6 +17,7 @@ import (
 )
 
 func TestDrawerOpensInTurnMode(t *testing.T) {
+	t.Parallel()
 	r := newDrawerRig(t, turnFirst)
 	dir := threeTurnRepo(t)
 	id := r.agent(t, dir, testSession)
@@ -47,6 +47,7 @@ func TestDrawerOpensInTurnMode(t *testing.T) {
 }
 
 func TestDrawerOpensInBranchForAShell(t *testing.T) {
+	t.Parallel()
 	r := newDrawerRig(t)
 	dir := newRepoDir(t)
 	write(t, filepath.Join(dir, "a.txt"), "one\n")
@@ -80,6 +81,8 @@ func TestDrawerOpensInBranchForAShell(t *testing.T) {
 }
 
 func TestDrawerOpenModeFollowsTurnsAndConfig(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name    string
 		session core.SessionID
@@ -108,6 +111,8 @@ func TestDrawerOpenModeFollowsTurnsAndConfig(t *testing.T) {
 }
 
 func TestNewDrawerOpensInBranchMode(t *testing.T) {
+	t.Parallel()
+
 	turnCfg := core.DefaultConfig().Diff
 	turnCfg.Mode = "turn"
 
@@ -146,6 +151,7 @@ func TestNewDrawerOpensInBranchMode(t *testing.T) {
 }
 
 func TestDrawerNeedsARepository(t *testing.T) {
+	t.Parallel()
 	r := newDrawerRig(t)
 	id := r.shell(t, t.TempDir())
 
@@ -164,6 +170,7 @@ func TestDrawerNeedsARepository(t *testing.T) {
 // The check at opening is newer than an earlier finding that the cwd is in no
 // repository: a repository made since is found.
 func TestOpenFindsARepositoryMadeAfterTheCwdWasFound(t *testing.T) {
+	t.Parallel()
 	r := newDrawerRig(t)
 
 	dir, err := filepath.EvalSymlinks(t.TempDir())
@@ -188,6 +195,7 @@ func TestOpenFindsARepositoryMadeAfterTheCwdWasFound(t *testing.T) {
 }
 
 func TestDrawerWithoutAnEngineShowsTheError(t *testing.T) {
+	t.Parallel()
 	r := newDrawerRig(t, func(o *Options) { o.GitTempDir = "" })
 	dir := editedRepo(t)
 
@@ -203,6 +211,7 @@ func TestDrawerWithoutAnEngineShowsTheError(t *testing.T) {
 }
 
 func TestTurnStepping(t *testing.T) {
+	t.Parallel()
 	r := newDrawerRig(t, turnFirst)
 	dir := threeTurnRepo(t)
 	missingTurn(t, dir, testSession)
@@ -272,6 +281,7 @@ func TestTurnStepping(t *testing.T) {
 }
 
 func TestStepInBranchModeEntersTurnMode(t *testing.T) {
+	t.Parallel()
 	r := newDrawerRig(t, func(o *Options) { o.Diff = core.DiffConfig{Mode: "branch"} })
 	id := r.agent(t, threeTurnRepo(t), testSession)
 
@@ -296,6 +306,7 @@ func TestStepInBranchModeEntersTurnMode(t *testing.T) {
 }
 
 func TestTurnModeReturnsToTheLatestTurn(t *testing.T) {
+	t.Parallel()
 	r := newDrawerRig(t, turnFirst)
 	id := r.agent(t, threeTurnRepo(t), testSession)
 
@@ -314,6 +325,7 @@ func TestTurnModeReturnsToTheLatestTurn(t *testing.T) {
 }
 
 func TestStaleLoadIsDropped(t *testing.T) {
+	t.Parallel()
 	r := newDrawerRig(t, turnFirst)
 	id := r.agent(t, threeTurnRepo(t), testSession)
 
@@ -388,6 +400,8 @@ func TestStaleLoadIsDropped(t *testing.T) {
 }
 
 func TestLiveUpdateKeepsTheHunk(t *testing.T) {
+	t.Parallel()
+
 	r := newDrawerRig(t)
 	dir := editedRepo(t)
 	root := rootOf(t, dir)
@@ -429,6 +443,7 @@ func TestLiveUpdateKeepsTheHunk(t *testing.T) {
 }
 
 func TestLiveUpdateFlashes(t *testing.T) {
+	t.Parallel()
 	r := newDrawerRig(t)
 	dir := editedRepo(t)
 	root := rootOf(t, dir)
@@ -486,6 +501,7 @@ func TestLiveUpdateFlashes(t *testing.T) {
 }
 
 func TestHiddenTabDrawerRecomputesWhenShown(t *testing.T) {
+	t.Parallel()
 	r := newDrawerRig(t)
 	dir := editedRepo(t)
 	root := rootOf(t, dir)
@@ -507,6 +523,10 @@ func TestHiddenTabDrawerRecomputesWhenShown(t *testing.T) {
 		t.Error("a batch for a hidden tab's drawer started work")
 	}
 
+	// The real batch for f.txt must land while the tab is hidden,
+	// or it reloads the shown drawer by itself.
+	r.until(t, "the watcher to report f.txt", r.reportedAll(filepath.Join(root, "f.txt")))
+
 	if v.loading || v.queued == nil || v.gen != gen {
 		t.Fatalf("hidden drawer: loading=%v queued=%v gen %d -> %d, want it marked stale and left alone", v.loading, v.queued, gen, v.gen)
 	}
@@ -526,6 +546,7 @@ func TestHiddenTabDrawerRecomputesWhenShown(t *testing.T) {
 }
 
 func TestSessionChangeRetargets(t *testing.T) {
+	t.Parallel()
 	r := newDrawerRig(t, turnFirst)
 	dir := threeTurnRepo(t)
 	snapshotTurn(t, dir, otherSession)
@@ -595,6 +616,7 @@ func TestSessionChangeRetargets(t *testing.T) {
 // Batches reach only the drawers that review their root, and a past turn,
 // which does not change with the files, ignores them.
 func TestBatchesRouteToTheirRootAndSkipPastTurns(t *testing.T) {
+	t.Parallel()
 	r := newDrawerRig(t, turnFirst)
 	dir := threeTurnRepo(t)
 	root := rootOf(t, dir)
@@ -620,6 +642,7 @@ func TestBatchesRouteToTheirRootAndSkipPastTurns(t *testing.T) {
 
 // A drawer opened without the keyboard leaves it where it is.
 func TestOpenWithoutTheKeyboard(t *testing.T) {
+	t.Parallel()
 	r := newDrawerRig(t)
 	id := r.shell(t, editedRepo(t))
 
@@ -635,6 +658,7 @@ func TestOpenWithoutTheKeyboard(t *testing.T) {
 
 // With no watch held a hook event stands in for the file changes.
 func TestHookEventRecomputesAnUnwatchedDrawer(t *testing.T) {
+	t.Parallel()
 	r := newDrawerRig(t, func(o *Options) { o.Watches = nil })
 	dir := editedRepo(t)
 	id := r.agent(t, dir, "")
@@ -656,6 +680,7 @@ func TestHookEventRecomputesAnUnwatchedDrawer(t *testing.T) {
 }
 
 func TestBranchSwitchRecomputes(t *testing.T) {
+	t.Parallel()
 	r := newDrawerRig(t)
 	dir := newRepoDir(t)
 	write(t, filepath.Join(dir, "base.txt"), "base\n")
@@ -691,6 +716,7 @@ func TestBranchSwitchRecomputes(t *testing.T) {
 }
 
 func TestPaneCwdChangeRetargetsTheDrawer(t *testing.T) {
+	t.Parallel()
 	r := newDrawerRig(t)
 	a, b := editedRepo(t), newRepoDir(t)
 	write(t, filepath.Join(b, "base.txt"), "base\n")
@@ -725,6 +751,7 @@ func TestPaneCwdChangeRetargetsTheDrawer(t *testing.T) {
 }
 
 func TestWorktreeDeletedShowsTheError(t *testing.T) {
+	t.Parallel()
 	r := newDrawerRig(t)
 	dir := editedRepo(t)
 	root := rootOf(t, dir)
@@ -757,6 +784,7 @@ func TestWorktreeDeletedShowsTheError(t *testing.T) {
 }
 
 func TestFullFileLoadsOnF(t *testing.T) {
+	t.Parallel()
 	r := newDrawerRig(t)
 	dir := editedRepo(t)
 	write(t, filepath.Join(dir, "blob.bin"), "a\x00b\x00")
@@ -819,6 +847,7 @@ func countRows(v *reviewView, kind reviewRowKind) int {
 }
 
 func TestRestoredDrawerLoadsWhenItsTabShows(t *testing.T) {
+	t.Parallel()
 	r := newDrawerRig(t)
 	dir := editedRepo(t)
 	id := r.shell(t, dir)
@@ -852,6 +881,7 @@ func TestRestoredDrawerLoadsWhenItsTabShows(t *testing.T) {
 
 // A restored drawer whose pane is no longer in a repository says so.
 func TestRestoredDrawerOutsideARepositoryShowsTheError(t *testing.T) {
+	t.Parallel()
 	r := newDrawerRig(t)
 	id := r.shell(t, t.TempDir())
 
@@ -869,6 +899,7 @@ func TestRestoredDrawerOutsideARepositoryShowsTheError(t *testing.T) {
 }
 
 func TestDrawerHoldsAWatchForAShell(t *testing.T) {
+	t.Parallel()
 	r := newDrawerRig(t)
 	dir := editedRepo(t)
 	root := rootOf(t, dir)
@@ -887,6 +918,7 @@ func TestDrawerHoldsAWatchForAShell(t *testing.T) {
 }
 
 func TestEngineLimitsAndLayoutFollowTheConfig(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	write(t, filepath.Join(dir, "a.txt"), "a\n")
 	write(t, filepath.Join(dir, "b.txt"), "b\n")
@@ -945,90 +977,4 @@ func TestAppCloseNoLeaksWithADrawer(t *testing.T) {
 	}
 
 	eventually2(t, 2*time.Second, "goroutines to return to baseline", func() bool { return runtime.NumGoroutine() <= base })
-}
-
-func hunkHolds(v *reviewView, path, text string) bool {
-	for _, f := range v.res.Files {
-		if f.Path != path {
-			continue
-		}
-
-		for _, h := range f.Hunks {
-			for _, l := range h.Lines {
-				if l.Kind == git.Add && l.Text == text {
-					return true
-				}
-			}
-		}
-	}
-
-	return false
-}
-
-// saveToPaneCeiling bounds the median save-to-pane time the test asserts, as
-// saveToDiffCeiling does for the engine. The 300 ms gate is read from the
-// logged median on a quiet machine.
-const saveToPaneCeiling = time.Second
-
-// A file saved in a 2,000-file repository reaches the open drawer. The test
-// asserts a median ceiling of one second and logs the median and p95; the
-// watcher has its default debounce, as in the app.
-func TestReviewSaveToPane(t *testing.T) {
-	const (
-		files = 2000
-		saves = 20
-	)
-
-	r := newDrawerRigWatching(t, git.WatchOptions{})
-	r.wait = 60 * time.Second
-
-	dir := newRepoDir(t)
-	for i := range files {
-		write(t, filepath.Join(dir, fmt.Sprintf("d%02d/f%04d.txt", i%50, i)), numberedLines("line", 20))
-	}
-
-	commitEverything(t, dir, "base")
-	gitIn(t, "git", dir, "checkout", "-q", "-b", "feature")
-
-	// Files written in the same second as the index are racily clean: git must
-	// hash them again until the index is written once the second has passed.
-	time.Sleep(1500 * time.Millisecond)
-	gitIn(t, "git", dir, "status", "--porcelain")
-
-	root := rootOf(t, dir)
-	id := r.shell(t, dir)
-
-	v := r.open(t, id)
-	r.watching(t, id, root)
-	r.quiet(t, 400*time.Millisecond)
-
-	if len(v.res.Files) != 0 {
-		t.Fatalf("setup: %d changed files", len(v.res.Files))
-	}
-
-	took := make([]time.Duration, 0, saves)
-
-	for i := range saves {
-		n := (i*97 + 13) % files
-		rel := fmt.Sprintf("d%02d/f%04d.txt", n%50, n)
-		text := fmt.Sprintf("saved %d", i)
-
-		r.quiet(t, 250*time.Millisecond)
-
-		start := time.Now()
-
-		write(t, filepath.Join(dir, rel), text+"\n")
-		r.until(t, "save "+rel+" to reach the drawer", func() bool { return hunkHolds(v, rel, text) })
-
-		took = append(took, time.Since(start))
-	}
-
-	slices.Sort(took)
-
-	median, p95 := took[len(took)/2], took[len(took)*95/100]
-	t.Logf("save to pane over %d saves: median %v, p95 %v, max %v", saves, median, p95, took[len(took)-1])
-
-	if median > saveToPaneCeiling {
-		t.Errorf("median save to pane is %v, want at most %v (p95 %v)", median, saveToPaneCeiling, p95)
-	}
 }

@@ -36,6 +36,8 @@ func settled(t *testing.T, a *App, id core.PaneID, fp *fakeProc) string {
 }
 
 func TestKeysReachFocusedPane(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name  string
 		setup string
@@ -71,6 +73,7 @@ func TestKeysReachFocusedPane(t *testing.T) {
 }
 
 func TestKeyReleaseIgnored(t *testing.T) {
+	t.Parallel()
 	a, _, fp2 := twoPanes(t)
 
 	a.Update(tea.KeyReleaseMsg{Code: 'a', Text: "a"})
@@ -81,6 +84,7 @@ func TestKeyReleaseIgnored(t *testing.T) {
 }
 
 func TestKeysWithoutPanes(t *testing.T) {
+	t.Parallel()
 	a := newTestApp(t)
 	sized(t, a, 100, 30)
 
@@ -90,6 +94,8 @@ func TestKeysWithoutPanes(t *testing.T) {
 }
 
 func TestLeaderTwiceSendsCtrlSpace(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name  string
 		setup string
@@ -121,6 +127,7 @@ func TestLeaderTwiceSendsCtrlSpace(t *testing.T) {
 }
 
 func TestLeaderStillRuns(t *testing.T) {
+	t.Parallel()
 	a, fp1, fp2 := twoPanes(t)
 
 	press(a, keyLeader, keyRune('t'))
@@ -141,6 +148,7 @@ func TestLeaderStillRuns(t *testing.T) {
 }
 
 func TestOverlayFirst(t *testing.T) {
+	t.Parallel()
 	a, fp1, fp2 := twoPanes(t)
 	a.keymap.delay = 0
 	pressRun(a, keyLeader, keyRune(':'), keyRune('a'))
@@ -159,6 +167,7 @@ func TestOverlayFirst(t *testing.T) {
 }
 
 func TestPasteToPane(t *testing.T) {
+	t.Parallel()
 	a, _, fp2 := twoPanes(t)
 
 	a.Update(tea.PasteMsg{Content: "one"})
@@ -176,6 +185,7 @@ func TestPasteToPane(t *testing.T) {
 }
 
 func TestFocusReports(t *testing.T) {
+	t.Parallel()
 	a, fp1, fp2 := twoPanes(t)
 	feedAndWait(t, a.panes["p1"], fp1, "\x1b[?1004h")
 	feedAndWait(t, a.panes["p2"], fp2, "\x1b[?1004h")
@@ -211,6 +221,7 @@ func TestFocusReports(t *testing.T) {
 }
 
 func TestViewRequestsFocusReports(t *testing.T) {
+	t.Parallel()
 	a := newTestApp(t)
 	v := a.View()
 
@@ -228,6 +239,7 @@ func TestViewRequestsFocusReports(t *testing.T) {
 }
 
 func TestPasteEndsPendingLeader(t *testing.T) {
+	t.Parallel()
 	a, _, fp2 := twoPanes(t)
 	a.keymap.delay = 0
 	pressRun(a, keyLeader)
@@ -254,6 +266,8 @@ func TestPasteEndsPendingLeader(t *testing.T) {
 }
 
 func TestPanesAnswerThemeColours(t *testing.T) {
+	t.Parallel()
+
 	const (
 		queryFg = "\x1b]10;?\x07"
 		queryBg = "\x1b]11;?\x07"
@@ -305,6 +319,7 @@ func TestPanesAnswerThemeColours(t *testing.T) {
 }
 
 func TestNewPaneAnswersThemeColours(t *testing.T) {
+	t.Parallel()
 	a, st := lifeAppSized(t, 100, 30)
 
 	chord(a, 'v')

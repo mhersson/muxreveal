@@ -10,6 +10,8 @@ import (
 )
 
 func TestRegistry(t *testing.T) {
+	t.Parallel()
+
 	noop := func(*App) tea.Cmd { return nil }
 
 	tests := []struct {
@@ -57,6 +59,8 @@ func TestRegistry(t *testing.T) {
 }
 
 func TestDefaultCommands(t *testing.T) {
+	t.Parallel()
+
 	cmds := defaultCommands()
 
 	type want struct{ id, title, icon string }
@@ -163,6 +167,7 @@ func TestDefaultCommands(t *testing.T) {
 }
 
 func TestThemeCommands(t *testing.T) {
+	t.Parallel()
 	a := newTestApp(t)
 	sized(t, a, 100, 30)
 

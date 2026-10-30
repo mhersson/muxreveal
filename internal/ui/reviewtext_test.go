@@ -9,6 +9,8 @@ import (
 )
 
 func TestCleanText(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name   string
 		in     string
@@ -59,6 +61,8 @@ func TestCleanText(t *testing.T) {
 }
 
 func TestCleanTextLongLine(t *testing.T) {
+	t.Parallel()
+
 	in := strings.Repeat("x", 1<<20)
 
 	got, hidden := cleanText(in)
@@ -75,6 +79,8 @@ func TestCleanTextLongLine(t *testing.T) {
 }
 
 func TestCleanLine(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name, in, want string
 		hidden         bool
@@ -98,6 +104,8 @@ func TestCleanLine(t *testing.T) {
 }
 
 func TestShownLine(t *testing.T) {
+	t.Parallel()
+
 	const cutMark = "\u2026"
 
 	tests := []struct {
@@ -141,6 +149,8 @@ func TestShownLine(t *testing.T) {
 }
 
 func TestLineShown(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name, raw, other string
 		paired           bool
@@ -172,6 +182,8 @@ func xs(n int) string { return strings.Repeat("x", n) }
 
 // A CR past the cut is not drawn, but the file it is in is still flagged.
 func TestFileHiddenSeesPastTheCut(t *testing.T) {
+	t.Parallel()
+
 	for _, tt := range []struct {
 		name string
 		line string

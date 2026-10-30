@@ -18,6 +18,7 @@ import (
 // Frames and updates that change nothing the drawer shows must not draw it
 // again.
 func TestDrawerIdleFramesReuseTheirLines(t *testing.T) {
+	t.Parallel()
 	a := cacheScene().build(t)
 	a.View()
 
@@ -83,6 +84,8 @@ func edited() git.Result {
 // must be what a cold draw gives; with nothing more changed the next frame
 // reuses it.
 func TestDrawerLinesFollowTheirInputs(t *testing.T) {
+	t.Parallel()
+
 	big, _ := bigResult(3000)
 
 	small := func(s *reviewScene) { s.tree = true }
@@ -183,6 +186,8 @@ func TestDrawerLinesFollowTheirInputs(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			s := cacheScene()
 			tt.scene(&s)
 
@@ -227,6 +232,7 @@ func TestDrawerLinesFollowTheirInputs(t *testing.T) {
 
 // Whatever order the inputs change in, the lines a frame shows are the ones a
 // cold draw gives, on the frame that draws them and on the next.
+// It compares highlighted colours, so it runs serially (docs/gotchas.md).
 func TestDrawerLinesStayTrueToAColdDraw(t *testing.T) {
 	a := cacheScene().build(t)
 	v := a.reviewViewOf(a.store.State().Tab().ID)

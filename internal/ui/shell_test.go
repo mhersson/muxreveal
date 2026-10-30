@@ -32,23 +32,42 @@ func sized(t *testing.T, a *App, w, h int) {
 }
 
 func TestNewRejectsUnknownTheme(t *testing.T) {
+	t.Parallel()
+
 	_, err := New(Options{Logger: testLogger(), Store: core.NewStore(core.State{Theme: "nope"})})
 	if !errors.Is(err, theme.ErrUnknownTheme) {
 		t.Errorf("New() error = %v, want one wrapping ErrUnknownTheme", err)
 	}
 }
 
+// It compares highlighted colours, so it runs serially (docs/gotchas.md).
 func TestShellGolden(t *testing.T) {
-	for _, name := range theme.Names() {
-		t.Run(name, func(t *testing.T) {
-			a := newThemedApp(t, name)
+	t.Run("catppuccin-mocha", func(t *testing.T) {
+		a := newThemedApp(t, "catppuccin-mocha")
+		sized(t, a, 100, 30)
+		golden.RequireEqual(t, []byte(a.View().Content))
+	})
+}
+
+// TestShellText is the same screen without styling, so the layout reads.
+func TestShellText(t *testing.T) {
+	t.Parallel()
+
+	for _, icons := range []bool{true, false} {
+		t.Run(fmt.Sprintf("icons=%v", icons), func(t *testing.T) {
+			t.Parallel()
+
+			a := newThemedApp(t, "catppuccin-mocha")
+			a.icons = icons
 			sized(t, a, 100, 30)
-			golden.RequireEqual(t, []byte(a.View().Content))
+			golden.RequireEqual(t, []byte(ansi.Strip(a.View().Content)))
 		})
 	}
 }
 
 func TestViewColours(t *testing.T) {
+	t.Parallel()
+
 	for _, name := range theme.Names() {
 		t.Run(name, func(t *testing.T) {
 			a := newThemedApp(t, name)
@@ -68,6 +87,7 @@ func TestViewColours(t *testing.T) {
 }
 
 func TestThemeFollowsStore(t *testing.T) {
+	t.Parallel()
 	a := newThemedApp(t, "catppuccin-mocha")
 	sized(t, a, 100, 30)
 
@@ -84,6 +104,7 @@ func TestThemeFollowsStore(t *testing.T) {
 }
 
 func TestDispatchUnknownThemeKeepsPrevious(t *testing.T) {
+	t.Parallel()
 	a := newThemedApp(t, "catppuccin-mocha")
 	sized(t, a, 100, 30)
 	before := a.View()
@@ -103,6 +124,8 @@ func TestDispatchUnknownThemeKeepsPrevious(t *testing.T) {
 }
 
 func TestShellSizes(t *testing.T) {
+	t.Parallel()
+
 	for _, name := range theme.Names() {
 		for _, sz := range [][2]int{{100, 30}, {40, 12}, {20, 5}, {1, 1}, {3, 1}, {200, 3}} {
 			t.Run(fmt.Sprintf("%s/%dx%d", name, sz[0], sz[1]), func(t *testing.T) {
@@ -130,6 +153,8 @@ func TestShellSizes(t *testing.T) {
 }
 
 func TestShellContent(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		w, h     int
 		wantCard bool

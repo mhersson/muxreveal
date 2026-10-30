@@ -49,6 +49,7 @@ func twoShells(t *testing.T) (*App, map[core.PaneID]*fakeProc) {
 }
 
 func TestWheelScrollsUnfocusedPane(t *testing.T) {
+	t.Parallel()
 	a, _ := twoShells(t)
 	x, y := centre(a, "p1")
 
@@ -81,6 +82,7 @@ func TestWheelScrollsUnfocusedPane(t *testing.T) {
 }
 
 func TestWheelForwardsToMouseTrackingGuest(t *testing.T) {
+	t.Parallel()
 	a, procs := twoShells(t)
 	p := a.panes["p1"]
 
@@ -106,6 +108,7 @@ func TestWheelForwardsToMouseTrackingGuest(t *testing.T) {
 }
 
 func TestWheelToTrackingGuestReturnsLive(t *testing.T) {
+	t.Parallel()
 	a, procs := twoShells(t)
 	p := a.panes["p1"]
 	x, y := centre(a, "p1")
@@ -125,6 +128,8 @@ func TestWheelToTrackingGuestReturnsLive(t *testing.T) {
 }
 
 func TestWheelOnAltScreenSendsCursorKeys(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name   string
 		modes  string
@@ -154,6 +159,7 @@ func TestWheelOnAltScreenSendsCursorKeys(t *testing.T) {
 }
 
 func TestWheelIgnoredOutsideContent(t *testing.T) {
+	t.Parallel()
 	a, procs := twoShells(t)
 	r1 := a.layoutRects()["p1"]
 	c1 := contentRect(r1)
@@ -188,6 +194,8 @@ func TestWheelIgnoredOutsideContent(t *testing.T) {
 }
 
 func TestWheelIgnoredUnderModalUI(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name string
 		open func(a *App)
@@ -213,6 +221,7 @@ func TestWheelIgnoredUnderModalUI(t *testing.T) {
 }
 
 func TestViewEnablesMouse(t *testing.T) {
+	t.Parallel()
 	a, _ := twoShells(t)
 
 	if got := a.View().MouseMode; got != tea.MouseModeCellMotion {
@@ -221,6 +230,7 @@ func TestViewEnablesMouse(t *testing.T) {
 }
 
 func TestButtonlessMotionOverAShellSendsNothing(t *testing.T) {
+	t.Parallel()
 	a, procs := twoShells(t)
 	x, y := centre(a, "p1")
 
@@ -236,6 +246,7 @@ func TestButtonlessMotionOverAShellSendsNothing(t *testing.T) {
 }
 
 func TestKeyToScrolledPaneReturnsLive(t *testing.T) {
+	t.Parallel()
 	a, _ := twoShells(t)
 	x, y := centre(a, "p2")
 
@@ -257,6 +268,7 @@ func TestKeyToScrolledPaneReturnsLive(t *testing.T) {
 }
 
 func TestLeaderCommandLeavesScrollAlone(t *testing.T) {
+	t.Parallel()
 	a, _ := twoShells(t)
 	x, y := centre(a, "p1")
 	wheelAt(a, x, y, tea.MouseWheelUp)
@@ -274,6 +286,7 @@ func TestLeaderCommandLeavesScrollAlone(t *testing.T) {
 }
 
 func TestLeaderLeaderReturnsLive(t *testing.T) {
+	t.Parallel()
 	a, _ := twoShells(t)
 	feedAndWait(t, a.panes["p2"], a.panes["p2"].proc.(*fakeProc), manyLines(30))
 	a.panes["p2"].render()
@@ -288,6 +301,8 @@ func TestLeaderLeaderReturnsLive(t *testing.T) {
 }
 
 func TestScrollTag(t *testing.T) {
+	t.Parallel()
+
 	zoom := " " + iconZoom + " zoom "
 	scroll := " " + iconScroll + " 3 "
 	tests := []struct {
@@ -329,6 +344,7 @@ func TestScrollTag(t *testing.T) {
 }
 
 func TestScrollTagFollowsLines(t *testing.T) {
+	t.Parallel()
 	a, procs := framedApp(t, 50, 8, shellSpec("/w/proj", manyLines(30)))
 	x, y := centre(a, "p1")
 

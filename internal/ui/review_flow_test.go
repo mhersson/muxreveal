@@ -41,6 +41,7 @@ func waitForText(t *testing.T, tm *teatest.TestModel, want string) {
 // A drawer opened in a running program shows the worktree's diff, and a file
 // saved afterwards reaches the screen by itself.
 func TestReviewDrawerFlow(t *testing.T) {
+	t.Parallel()
 	dir := editedRepo(t)
 	set := git.NewWatchSet(context.Background(), git.WatchOptions{Debounce: 20 * time.Millisecond})
 

@@ -452,7 +452,6 @@ func TestNetCallCannotOpenTTY(t *testing.T) {
 // which git passes through as the first line of the error.
 func ttyChild(t *testing.T) {
 	t.Helper()
-	isolateGit(t)
 	clearSSHEnv(t)
 
 	script := writeScript(t, `if (exec 3</dev/tty) 2>/dev/null; then echo tty; else echo notty; fi >&2

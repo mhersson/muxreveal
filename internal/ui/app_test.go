@@ -49,6 +49,8 @@ func newTestApp(t *testing.T) *App {
 }
 
 func TestNewRequiresLogger(t *testing.T) {
+	t.Parallel()
+
 	store := core.NewStore(core.State{Theme: "catppuccin-mocha"})
 	if _, err := New(Options{Store: store}); err == nil {
 		t.Error("New() without a logger succeeded, want an error")
@@ -56,12 +58,15 @@ func TestNewRequiresLogger(t *testing.T) {
 }
 
 func TestNewRequiresStore(t *testing.T) {
+	t.Parallel()
+
 	if _, err := New(Options{Logger: testLogger()}); err == nil {
 		t.Error("New() without a store succeeded, want an error")
 	}
 }
 
 func TestAppViewSizes(t *testing.T) {
+	t.Parallel()
 	t.Run("before any size", func(t *testing.T) {
 		v := newTestApp(t).View()
 		if !v.AltScreen {
@@ -120,6 +125,8 @@ func press(a *App, keys ...tea.KeyPressMsg) tea.Cmd {
 }
 
 func TestLeader(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name        string
 		keys        []tea.KeyPressMsg
@@ -170,6 +177,7 @@ func TestLeader(t *testing.T) {
 }
 
 func TestNoticeClearsOnNextKey(t *testing.T) {
+	t.Parallel()
 	a := newTestApp(t)
 	sized(t, a, 100, 30)
 	press(a, keyLeader, keyRune('w'))
@@ -194,6 +202,7 @@ func hintCount(a *App) int {
 }
 
 func TestWhichKey(t *testing.T) {
+	t.Parallel()
 	a := newTestApp(t)
 	sized(t, a, 100, 30)
 	before := hintCount(a)
@@ -234,6 +243,7 @@ func TestWhichKey(t *testing.T) {
 }
 
 func TestWhichKeyNoIcons(t *testing.T) {
+	t.Parallel()
 	a := newTestApp(t)
 	a.icons = false
 	sized(t, a, 100, 30)
@@ -270,6 +280,7 @@ func cellOf(t *testing.T, rows []string, needle string) (x, y int) {
 }
 
 func TestWhichKeyColours(t *testing.T) {
+	t.Parallel()
 	ui := mochaUI(t)
 	a := newTestApp(t)
 	sized(t, a, 100, 30)
@@ -317,6 +328,8 @@ func bindingsWithout(keys ...string) keymap {
 }
 
 func TestHintsDeriveFromBindings(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name    string
 		unbind  []string
@@ -373,6 +386,7 @@ func TestHintsDeriveFromBindings(t *testing.T) {
 }
 
 func TestHintGroups(t *testing.T) {
+	t.Parallel()
 	a := newTestApp(t)
 	groups := map[string]string{}
 
@@ -395,6 +409,8 @@ func TestHintGroups(t *testing.T) {
 }
 
 func TestStaleWhichKey(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name string
 		keys []tea.KeyPressMsg
@@ -426,6 +442,8 @@ func TestStaleWhichKey(t *testing.T) {
 }
 
 func TestWhichKeySizes(t *testing.T) {
+	t.Parallel()
+
 	for _, sz := range [][2]int{{100, 30}, {80, 24}, {40, 12}, {20, 5}, {1, 1}} {
 		t.Run(fmt.Sprintf("%dx%d", sz[0], sz[1]), func(t *testing.T) {
 			a := newTestApp(t)
@@ -469,6 +487,7 @@ func TestWhichKeySizes(t *testing.T) {
 	}
 }
 
+// It compares highlighted colours, so it runs serially (docs/gotchas.md).
 func TestWhichKeyGolden(t *testing.T) {
 	a := newTestApp(t)
 	sized(t, a, 100, 30)
@@ -477,6 +496,7 @@ func TestWhichKeyGolden(t *testing.T) {
 	golden.RequireEqual(t, []byte(a.View().Content))
 }
 
+// It compares highlighted colours, so it runs serially (docs/gotchas.md).
 func TestWhichKeyNoIconsGolden(t *testing.T) {
 	a := newTestApp(t)
 	a.icons = false
@@ -486,6 +506,7 @@ func TestWhichKeyNoIconsGolden(t *testing.T) {
 	golden.RequireEqual(t, []byte(a.View().Content))
 }
 
+// It compares highlighted colours, so it runs serially (docs/gotchas.md).
 func TestLeaderPendingGolden(t *testing.T) {
 	a := newTestApp(t)
 	sized(t, a, 100, 30)
@@ -494,6 +515,7 @@ func TestLeaderPendingGolden(t *testing.T) {
 }
 
 func TestDispatchSyncsOnlyThemeChanges(t *testing.T) {
+	t.Parallel()
 	a := newTestApp(t)
 	sized(t, a, 100, 30)
 

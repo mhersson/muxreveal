@@ -17,6 +17,8 @@ func paths(ps ...string) []git.FileDiff {
 }
 
 func TestTreeItemsJoinChains(t *testing.T) {
+	t.Parallel()
+
 	files := paths(
 		"README.md",
 		"internal/git/testdata/b.golden",
@@ -67,6 +69,8 @@ func TestTreeItemsJoinChains(t *testing.T) {
 }
 
 func TestTreeItemsJoinsOnlyDirChains(t *testing.T) {
+	t.Parallel()
+
 	items := treeItems(paths("internal/git/testdata/a.golden", "internal/git/testdata/b.golden"))
 	if len(items) != 3 || items[0].name != "internal/git/testdata" || !items[0].dir {
 		t.Fatalf("items = %+v, want one joined folder and two files", items)
@@ -78,6 +82,8 @@ func TestTreeItemsJoinsOnlyDirChains(t *testing.T) {
 }
 
 func TestTreeItemsHostilePath(t *testing.T) {
+	t.Parallel()
+
 	files := paths("evil\nname\x1b[31m.go")
 
 	items := treeItems(files)
@@ -87,6 +93,8 @@ func TestTreeItemsHostilePath(t *testing.T) {
 }
 
 func TestTreeWidthBounds(t *testing.T) {
+	t.Parallel()
+
 	short := paths("a.go")
 	long := paths("some/dir/" + strings.Repeat("x", 80) + ".go")
 
@@ -123,6 +131,8 @@ func TestTreeWidthBounds(t *testing.T) {
 }
 
 func TestTreeWidthHiddenFlag(t *testing.T) {
+	t.Parallel()
+
 	files := paths(strings.Repeat("y", 26) + ".go")
 	files[0].Added, files[0].Removed = 12, 3
 	items := treeItems(files)

@@ -83,6 +83,8 @@ func baseOf(row func(y int) string) string {
 // something open or wide at the drawer's left edge; a base it cannot splice
 // without changing a cell goes through the compositor.
 func TestOverlayDrawerMatchesTheCompositorAtTheEdge(t *testing.T) {
+	t.Parallel()
+
 	short := func(plain string) func(y int) string {
 		return func(y int) string {
 			if y%2 == 0 {
@@ -220,6 +222,8 @@ func TestOverlayDrawerMatchesTheCompositorAtTheEdge(t *testing.T) {
 
 // The drawer can reach the left edge of the screen.
 func TestOverlayDrawerMatchesTheCompositorAtTheLeftEdge(t *testing.T) {
+	t.Parallel()
+
 	base := baseOf(func(y int) string { return sgrOpen + linkOn + repeatA(spliceWidth) + linkOff + reset })
 	r := core.Rect{X: 0, Y: 1, W: spliceWidth, H: spliceHeight - 1}
 	lines := slices.Repeat([]string{strings.Repeat("-", spliceWidth)}, r.H)
@@ -237,6 +241,8 @@ func TestOverlayDrawerMatchesTheCompositorAtTheLeftEdge(t *testing.T) {
 // What the splice cannot do cell for cell it hands to the compositor, and the
 // result is the compositor's.
 func TestOverlayDrawerFallsBackToTheCompositor(t *testing.T) {
+	t.Parallel()
+
 	plain := baseOf(func(y int) string { return repeatA(spliceWidth) })
 	dashes := func(h, w int) []string { return slices.Repeat([]string{strings.Repeat("d", w)}, h) }
 
@@ -272,6 +278,8 @@ func TestOverlayDrawerFallsBackToTheCompositor(t *testing.T) {
 // cutRow keeps the first x cells, closes what the row left open and drops
 // everything after x.
 func TestCutRow(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name string
 		row  string
@@ -297,6 +305,8 @@ func TestCutRow(t *testing.T) {
 
 // endsClean is true only when nothing is left open at the end.
 func TestEndsClean(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		s    string
 		want bool
@@ -323,6 +333,8 @@ func TestEndsClean(t *testing.T) {
 
 // carriesAcrossCells finds what uv carries from one cell to another.
 func TestCarriesAcrossCells(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		s    string
 		want bool
@@ -348,6 +360,7 @@ func TestCarriesAcrossCells(t *testing.T) {
 // drawDrawer counts the frames the compositor draws in the splice's place, and
 // draws what the compositor draws.
 func TestDrawDrawerCountsFallbacks(t *testing.T) {
+	t.Parallel()
 	a := cacheScene().build(t)
 	r := drawerRectOf(t, a, 0)
 	base := a.frameAt(a.geometry())
@@ -384,11 +397,14 @@ func TestDrawDrawerCountsFallbacks(t *testing.T) {
 // Every drawer scene, drawn whole and part way through a slide, must leave
 // the cells the compositor leaves.
 func TestOverlayDrawerMatchesTheCompositorOnTheDrawerScenes(t *testing.T) {
+	t.Parallel()
+
 	for _, th := range chromeThemes() {
 		for _, icons := range []bool{true, false} {
 			for _, c := range reviewCases() {
 				for _, slide := range []int{0, 7} {
 					t.Run(fmt.Sprintf("%s/icons=%v/%s/slide=%d", th, icons, c.name, slide), func(t *testing.T) {
+						t.Parallel()
 						a := c.scene(th, icons).build(t)
 						st := a.store.State()
 						r := drawerRectOf(t, a, slide)

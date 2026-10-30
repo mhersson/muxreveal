@@ -72,6 +72,7 @@ func (m keysFlow) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // leader d opens the drawer with the keyboard, esc hands it back, a second leader d
 // retargets it to the focused pane, and a third closes it.
 func TestLeaderDOpensFocusesClosesAndRetargets(t *testing.T) {
+	t.Parallel()
 	dir := editedRepo(t)
 	a, _, _ := kindApp(t, func(o *Options) { o.Cwd, o.GitTempDir = dir, t.TempDir() })
 	// The slide needs real time.
@@ -110,6 +111,7 @@ func TestLeaderDOpensFocusesClosesAndRetargets(t *testing.T) {
 }
 
 func TestFocusSkipsCoveredPanes(t *testing.T) {
+	t.Parallel()
 	dir := keysRepo(t)
 	r := newKeysRig(t, dir)
 
@@ -172,6 +174,7 @@ func TestFocusSkipsCoveredPanes(t *testing.T) {
 }
 
 func TestLeaderLEntersTheDrawer(t *testing.T) {
+	t.Parallel()
 	r := newKeysRig(t, keysRepo(t))
 	r.opened(t)
 	r.keys(keyEsc)
@@ -192,6 +195,7 @@ func TestLeaderLEntersTheDrawer(t *testing.T) {
 }
 
 func TestLeaderHLeavesToTheNearestVisiblePane(t *testing.T) {
+	t.Parallel()
 	dir := keysRepo(t)
 	r := newKeysRig(t, dir)
 
@@ -229,6 +233,7 @@ func TestLeaderHLeavesToTheNearestVisiblePane(t *testing.T) {
 }
 
 func TestEscReturnsTheKeyboard(t *testing.T) {
+	t.Parallel()
 	t.Run("search then drawer", func(t *testing.T) {
 		r := newKeysRig(t, keysRepo(t))
 		v := r.opened(t)
@@ -288,6 +293,7 @@ func TestEscReturnsTheKeyboard(t *testing.T) {
 // Each esc closes exactly the topmost layer: confirm, prompt, copy mode, overlay,
 // a pending leader, the rail, the drawer, then it reaches the pane.
 func TestRoutingOrder(t *testing.T) {
+	t.Parallel()
 	r := newKeysRig(t, keysRepo(t))
 	r.opened(t)
 	r.leader('a')
@@ -338,6 +344,7 @@ func TestRoutingOrder(t *testing.T) {
 }
 
 func TestRailAndDrawerShareTheKeyboard(t *testing.T) {
+	t.Parallel()
 	r := newKeysRig(t, keysRepo(t))
 	r.opened(t)
 
@@ -386,6 +393,7 @@ func TestRailAndDrawerShareTheKeyboard(t *testing.T) {
 }
 
 func TestSlideLastsAbout120ms(t *testing.T) {
+	t.Parallel()
 	r := newKeysRig(t, keysRepo(t))
 	r.leader('d')
 	r.until(t, "the drawer to open", func() bool { return r.store.State().Tab().Review != nil })
@@ -458,6 +466,7 @@ func TestSlideLastsAbout120ms(t *testing.T) {
 }
 
 func TestResizeEndsTheSlide(t *testing.T) {
+	t.Parallel()
 	r := newKeysRig(t, keysRepo(t))
 	r.leader('d')
 	r.until(t, "the drawer to open", func() bool { return r.store.State().Tab().Review != nil })
@@ -485,6 +494,8 @@ func TestResizeEndsTheSlide(t *testing.T) {
 }
 
 func TestTabSwitchShowsTheDrawerWithoutASlide(t *testing.T) {
+	t.Parallel()
+
 	for _, midSlide := range []bool{false, true} {
 		r := newKeysRig(t, keysRepo(t))
 
@@ -516,6 +527,7 @@ func TestTabSwitchShowsTheDrawerWithoutASlide(t *testing.T) {
 }
 
 func TestSecondLeaderDEndsTheSlide(t *testing.T) {
+	t.Parallel()
 	r := newKeysRig(t, keysRepo(t))
 	r.leader('d')
 	r.until(t, "the drawer to open", func() bool { return r.store.State().Tab().Review != nil })
@@ -546,6 +558,7 @@ func TestSecondLeaderDEndsTheSlide(t *testing.T) {
 }
 
 func TestZoomedTabWithADrawer(t *testing.T) {
+	t.Parallel()
 	dir := keysRepo(t)
 	r := newKeysRig(t, dir)
 	r.openShell(t, dir, core.SplitVertical)
@@ -576,6 +589,7 @@ func TestZoomedTabWithADrawer(t *testing.T) {
 }
 
 func TestRailJumpToACoveredPaneClosesTheDrawer(t *testing.T) {
+	t.Parallel()
 	dir := keysRepo(t)
 	r := newKeysRig(t, dir)
 	agent := r.agent(t, dir, "")
@@ -605,6 +619,7 @@ func TestRailJumpToACoveredPaneClosesTheDrawer(t *testing.T) {
 }
 
 func TestPaneMovedIntoATabWithADrawer(t *testing.T) {
+	t.Parallel()
 	// secondTab opens a tab with two shells and leaves the second one focused.
 	secondTab := func(t *testing.T, r *drawerRig, dir string) core.PaneID {
 		t.Helper()
@@ -669,6 +684,7 @@ func (r *drawerRig) drawerCell(t *testing.T, dx, dy int) (x, y int) {
 }
 
 func TestClickOnARowMovesTheCursor(t *testing.T) {
+	t.Parallel()
 	r := newKeysRig(t, keysRepo(t))
 	v := r.opened(t)
 	r.keys(keyEsc)
@@ -723,6 +739,7 @@ func TestClickOnARowMovesTheCursor(t *testing.T) {
 // A click on a tree file jumps to that file's header and gives the diff the
 // keyboard; the tree stays open, in a narrow drawer as in a wide one.
 func TestClickOnATreeFileKeepsTheTreeOpen(t *testing.T) {
+	t.Parallel()
 	r := newKeysRig(t, keysRepo(t))
 	sized(t, r.App, 100, 30)
 
@@ -750,6 +767,7 @@ func TestClickOnATreeFileKeepsTheTreeOpen(t *testing.T) {
 }
 
 func TestWheelScrolls(t *testing.T) {
+	t.Parallel()
 	r := newKeysRig(t, keysRepo(t))
 	v := r.opened(t)
 	lay := r.layout(t)
@@ -782,6 +800,7 @@ func TestWheelScrolls(t *testing.T) {
 }
 
 func TestClickOutsideKeepsTheDrawerOpen(t *testing.T) {
+	t.Parallel()
 	dir := keysRepo(t)
 	r := newKeysRig(t, dir)
 	r.openShell(t, dir, core.SplitVertical)

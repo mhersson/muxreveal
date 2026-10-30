@@ -7,6 +7,8 @@ import (
 )
 
 func TestEveryBindingResolves(t *testing.T) {
+	t.Parallel()
+
 	reg, err := newRegistry(defaultCommands())
 	if err != nil {
 		t.Fatal(err)
@@ -32,6 +34,8 @@ func TestEveryBindingResolves(t *testing.T) {
 }
 
 func TestDefaultKeymap(t *testing.T) {
+	t.Parallel()
+
 	km := defaultKeymap()
 	if km.leader != "ctrl+space" {
 		t.Errorf("leader = %q, want ctrl+space", km.leader)
@@ -43,6 +47,8 @@ func TestDefaultKeymap(t *testing.T) {
 }
 
 func TestKeymapLookup(t *testing.T) {
+	t.Parallel()
+
 	km := defaultKeymap()
 
 	tests := []struct {
@@ -69,6 +75,8 @@ func TestKeymapLookup(t *testing.T) {
 }
 
 func TestKeymapKeyFor(t *testing.T) {
+	t.Parallel()
+
 	km := defaultKeymap()
 
 	tests := []struct {
@@ -93,6 +101,8 @@ func TestKeymapKeyFor(t *testing.T) {
 }
 
 func TestKeymapSequences(t *testing.T) {
+	t.Parallel()
+
 	km := defaultKeymap()
 
 	for key, want := range map[string]string{
@@ -119,6 +129,8 @@ func TestKeymapSequences(t *testing.T) {
 }
 
 func TestNoKeyIsBothSingleAndPrefix(t *testing.T) {
+	t.Parallel()
+
 	km := defaultKeymap()
 
 	for _, b := range km.bindings {

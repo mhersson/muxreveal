@@ -18,6 +18,8 @@ import (
 )
 
 func TestUntilNextMinute(t *testing.T) {
+	t.Parallel()
+
 	base := time.Date(2026, 10, 26, 12, 0, 0, 0, time.UTC)
 	tests := []struct {
 		name string
@@ -42,6 +44,7 @@ func TestUntilNextMinute(t *testing.T) {
 // The clock text changes at minute boundaries only, and a message that repeats
 // it changes nothing.
 func TestClockTextChangesAtMinuteBoundaries(t *testing.T) {
+	t.Parallel()
 	a := newTestApp(t)
 	clk := &fakeClock{t: time.Date(2026, 10, 26, 14, 32, 5, 0, time.UTC)}
 	a.clock = clk
@@ -84,6 +87,7 @@ func modIDs(mods []trayModule) []string {
 }
 
 func TestTrayHasNoAgentsModule(t *testing.T) {
+	t.Parallel()
 	a := trayApp(t, true)
 	openIn(t, a, core.OpenPane{Kind: core.KindAgent, Cwd: "/w/b", Split: core.SplitVertical})
 
@@ -95,6 +99,8 @@ func TestTrayHasNoAgentsModule(t *testing.T) {
 }
 
 func TestSparkline(t *testing.T) {
+	t.Parallel()
+
 	const blank = "\u2800"
 
 	tests := []struct {
@@ -120,6 +126,8 @@ func TestSparkline(t *testing.T) {
 }
 
 func TestFormatMem(t *testing.T) {
+	t.Parallel()
+
 	const gib = 1 << 30
 
 	tests := []struct {
@@ -184,6 +192,8 @@ func findPRModule(a *App) (trayModule, bool) {
 }
 
 func TestTrayModuleWidths(t *testing.T) {
+	t.Parallel()
+
 	for _, icons := range []bool{true, false} {
 		a := trayApp(t, icons)
 		mods := a.trayModules()
@@ -201,6 +211,8 @@ func TestTrayModuleWidths(t *testing.T) {
 }
 
 func TestTrayModuleWidthsWithAPR(t *testing.T) {
+	t.Parallel()
+
 	for _, icons := range []bool{true, false} {
 		for _, pr := range []core.PRInfo{prInfo("OPEN", checksRunning), prInfo("OPEN", checksPassed), prInfo("OPEN", checksFailing), prInfo("OPEN")} {
 			a := prTrayApp(t, icons, pr)
@@ -220,6 +232,7 @@ func TestTrayModuleWidthsWithAPR(t *testing.T) {
 }
 
 func TestTrayPRModule(t *testing.T) {
+	t.Parallel()
 	agentApp := func(t *testing.T, icons bool, pr *core.PRInfo) *App {
 		t.Helper()
 
@@ -321,6 +334,7 @@ func TestTrayPRModule(t *testing.T) {
 }
 
 func TestTrayPRModuleSitsBetweenLayoutAndLoad(t *testing.T) {
+	t.Parallel()
 	a := prTrayApp(t, true, prInfo("OPEN", checksRunning))
 
 	if want := []string{modLayout, modPR, modLoad, modClock}; !slices.Equal(modIDs(a.trayModules()), want) {
@@ -329,6 +343,7 @@ func TestTrayPRModuleSitsBetweenLayoutAndLoad(t *testing.T) {
 }
 
 func TestTrayPRModuleFollowsTheFocus(t *testing.T) {
+	t.Parallel()
 	a := trayApp(t, true)
 	seedPR(t, a, "p1", "/w/api", "feat/login", prInfo("OPEN", checksPassed))
 
@@ -377,6 +392,7 @@ func TestTrayShowsFollowedPR(t *testing.T) {
 }
 
 func TestTrayPRModuleColours(t *testing.T) {
+	t.Parallel()
 	ui := mochaUI(t)
 
 	tests := []struct {
@@ -409,6 +425,7 @@ func TestTrayPRModuleColours(t *testing.T) {
 }
 
 func TestTrayOmitsAbsentModules(t *testing.T) {
+	t.Parallel()
 	a := newTestApp(t)
 	sized(t, a, 100, 30)
 
@@ -424,6 +441,8 @@ func TestTrayOmitsAbsentModules(t *testing.T) {
 }
 
 func TestBarLinesStayExactWidth(t *testing.T) {
+	t.Parallel()
+
 	for _, icons := range []bool{true, false} {
 		for _, a := range []*App{trayApp(t, icons), prTrayApp(t, icons, prInfo("OPEN", checksFailing))} {
 			for w := 1; w <= 130; w++ {
@@ -437,6 +456,8 @@ func TestBarLinesStayExactWidth(t *testing.T) {
 
 // The tray gives way in DESIGN's order as the bar narrows.
 func TestTrayDropOrder(t *testing.T) {
+	t.Parallel()
+
 	rank := map[string]int{modLoad: 0, modPR: 1, modLayout: 2, modClock: 3}
 
 	for _, icons := range []bool{true, false} {
@@ -476,6 +497,8 @@ func checkTrayDropOrder(t *testing.T, a *App, icons bool, rank map[string]int) {
 }
 
 func TestBarGoldens(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name  string
 		icons bool
@@ -509,6 +532,7 @@ func TestBarGoldens(t *testing.T) {
 }
 
 func TestTrayOnlyClockEdge(t *testing.T) {
+	t.Parallel()
 	a := newTestApp(t)
 	sized(t, a, 40, 10)
 	a.tray.clock = "14:32"
@@ -521,6 +545,7 @@ func TestTrayOnlyClockEdge(t *testing.T) {
 }
 
 func TestTrayColours(t *testing.T) {
+	t.Parallel()
 	a := trayApp(t, true)
 	ui := mochaUI(t)
 	w := 100
@@ -556,6 +581,7 @@ func trayModuleByID(a *App, id string) trayModule {
 // Messages that change nothing neither re-render state nor start work.
 // Samples that repeat what the bar shows leave its row byte-identical.
 func TestUnchangedSamplesLeaveBarIdentical(t *testing.T) {
+	t.Parallel()
 	a := newTestApp(t)
 	sized(t, a, 100, 30)
 
@@ -576,6 +602,8 @@ func TestUnchangedSamplesLeaveBarIdentical(t *testing.T) {
 }
 
 func TestClockWake(t *testing.T) {
+	t.Parallel()
+
 	base := time.Date(2026, 10, 26, 14, 32, 0, 0, time.UTC)
 	tests := []struct {
 		name      string
@@ -599,6 +627,7 @@ func TestClockWake(t *testing.T) {
 }
 
 func TestLoadHistoryKeepsLastTen(t *testing.T) {
+	t.Parallel()
 	a := newTestApp(t)
 
 	for i := range 15 {
@@ -612,6 +641,7 @@ func TestLoadHistoryKeepsLastTen(t *testing.T) {
 }
 
 func TestLoadErrorKeepsPreviousAndRearms(t *testing.T) {
+	t.Parallel()
 	a := newTestApp(t)
 	a.load = &fakeLoad{}
 
@@ -637,6 +667,7 @@ func (f *fakeLoad) Sample(context.Context) (loadSample, error) {
 
 // No tray work runs inside Update: it only returns commands.
 func TestNoIOInUpdate(t *testing.T) {
+	t.Parallel()
 	a := newTestApp(t)
 	fl := &fakeLoad{}
 	a.load = fl
@@ -653,6 +684,8 @@ func TestNoIOInUpdate(t *testing.T) {
 }
 
 func TestTrayHasNoGitModule(t *testing.T) {
+	t.Parallel()
+
 	for _, icons := range []bool{true, false} {
 		a := trayApp(t, icons)
 

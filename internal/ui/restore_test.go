@@ -138,6 +138,7 @@ func hasArgs(argv []string, flag, value string) bool {
 }
 
 func TestRestoreStartsEveryPane(t *testing.T) {
+	t.Parallel()
 	r := restoreApp(t, restoreState(), func(o *Options) {
 		o.HookSettings = "/run/1-claude.json"
 		o.HookSock = "/run/1.sock"
@@ -253,6 +254,8 @@ func TestRestoreStartsEveryPane(t *testing.T) {
 }
 
 func TestRestoreZoomedTabHiddenPaneKeepsLayoutSize(t *testing.T) {
+	t.Parallel()
+
 	st := restoreState()
 	st.Tabs[0].Zoomed = true
 
@@ -285,6 +288,7 @@ func failingStart(s *starts, panes ...string) func(context.Context, term.Command
 }
 
 func TestRestoreFailingPanes(t *testing.T) {
+	t.Parallel()
 	t.Run("a tab whose panes all fail goes away", func(t *testing.T) {
 		r := restoreApp(t, restoreState())
 		r.a.start = failingStart(r.st, "p3")
@@ -351,6 +355,8 @@ func TestRestoreFailingPanes(t *testing.T) {
 }
 
 func TestRestoreNotices(t *testing.T) {
+	t.Parallel()
+
 	st := restoreState()
 	st.Panes["p2"] = core.Pane{Kind: core.KindShell, Cwd: "/gone/web"}
 	st.Panes["p3"] = core.Pane{Kind: core.KindShell, Cwd: "/gone/db"}
@@ -387,6 +393,8 @@ func TestRestoreNotices(t *testing.T) {
 }
 
 func TestRestoreEmptyCwdStartsInLaunchDir(t *testing.T) {
+	t.Parallel()
+
 	st := restoreState()
 	st.Panes["p2"] = core.Pane{Kind: core.KindShell}
 
@@ -428,6 +436,7 @@ func probeAt(t *testing.T, r *restored, id core.PaneID, d time.Duration) {
 }
 
 func TestResumeRestartsAgentWhoseClaudeNeverAppeared(t *testing.T) {
+	t.Parallel()
 	r := resumeApp(t)
 	old := r.a.panes["p1"]
 
@@ -499,6 +508,8 @@ func TestResumeRestartsAgentWhoseClaudeNeverAppeared(t *testing.T) {
 // Claude Code files its sessions under the directory it was launched in, so an
 // agent resumes there even when its last hook named another directory.
 func TestResumeStartsInTheLaunchDirNotTheAgentCwd(t *testing.T) {
+	t.Parallel()
+
 	const worktree = "/srv/api/.worktrees/feat"
 
 	t.Run("a restored agent", func(t *testing.T) {
@@ -542,6 +553,7 @@ func TestResumeStartsInTheLaunchDirNotTheAgentCwd(t *testing.T) {
 }
 
 func TestResumeRestartSchedulesItsOwnProbe(t *testing.T) {
+	t.Parallel()
 	r := resumeApp(t)
 
 	r.st.proc(0).setFg("zsh")
@@ -564,6 +576,7 @@ func TestResumeRestartSchedulesItsOwnProbe(t *testing.T) {
 }
 
 func TestResumeKept(t *testing.T) {
+	t.Parallel()
 	t.Run("a SessionStart ends the resume", func(t *testing.T) {
 		r := resumeApp(t)
 		r.a.Update(hookMsg{ev: harness.Event{Pane: "p1", Name: "SessionStart", Session: restoreSession, Transcript: "/x/t.jsonl", Start: true, State: core.AgentIdle}})
@@ -638,6 +651,7 @@ func TestResumeKept(t *testing.T) {
 }
 
 func TestResumeRefusedIsRestartedNotDemoted(t *testing.T) {
+	t.Parallel()
 	r := resumeApp(t)
 
 	// Claude showed up, refused the resume, fired SessionEnd and left.
@@ -668,6 +682,7 @@ func TestResumeRefusedIsRestartedNotDemoted(t *testing.T) {
 }
 
 func TestMessagesFromReplacedPaneAreDropped(t *testing.T) {
+	t.Parallel()
 	r := resumeApp(t)
 	cur := r.a.panes["p2"]
 	stale := &pane{id: "p2"}
@@ -697,6 +712,7 @@ func TestMessagesFromReplacedPaneAreDropped(t *testing.T) {
 }
 
 func TestProbeMessagesCarryTheirPane(t *testing.T) {
+	t.Parallel()
 	r := resumeApp(t)
 	p := r.a.panes["p2"]
 
@@ -712,6 +728,7 @@ func TestProbeMessagesCarryTheirPane(t *testing.T) {
 }
 
 func TestResumeWithoutHooksIsNotRestarted(t *testing.T) {
+	t.Parallel()
 	r := restoreApp(t, restoreState(), func(o *Options) { o.HookSettings = "" })
 	r.size(100, 30)
 
@@ -731,6 +748,7 @@ func TestResumeWithoutHooksIsNotRestarted(t *testing.T) {
 }
 
 func TestResumeRestartFailureIsNotRetried(t *testing.T) {
+	t.Parallel()
 	r := resumeApp(t)
 	r.a.start = failingStart(r.st, "p1")
 
@@ -751,6 +769,7 @@ func TestResumeRestartFailureIsNotRetried(t *testing.T) {
 }
 
 func TestPaneLimitNotice(t *testing.T) {
+	t.Parallel()
 	r := resumeApp(t)
 
 	for len(r.a.store.State().Panes) < core.MaxPanes {

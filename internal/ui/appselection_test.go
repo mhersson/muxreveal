@@ -7,6 +7,8 @@ import (
 )
 
 func TestPaneSelectionResolve(t *testing.T) {
+	t.Parallel()
+
 	g := newFakeGrid(10, nil, "alpha", "beta", "gamma", "delta")
 	sp := func(row uint64, col int) stablePoint { return stablePoint{row: row, col: col} }
 
@@ -39,6 +41,7 @@ func TestPaneSelectionResolve(t *testing.T) {
 }
 
 func TestDropFallenSelection(t *testing.T) {
+	t.Parallel()
 	a, fp, _ := copyApp(t)
 	p := a.panes["p1"]
 

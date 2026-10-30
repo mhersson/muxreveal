@@ -23,23 +23,6 @@ const (
 	otherSession core.SessionID = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
 )
 
-// isolateGitEnv points git at an empty global config with a fixed identity.
-func isolateGitEnv(t *testing.T) {
-	t.Helper()
-
-	cfg := filepath.Join(t.TempDir(), "gitconfig")
-	if err := os.WriteFile(cfg, nil, 0o600); err != nil {
-		t.Fatal(err)
-	}
-
-	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
-	t.Setenv("GIT_CONFIG_GLOBAL", cfg)
-	t.Setenv("GIT_AUTHOR_NAME", "Test")
-	t.Setenv("GIT_AUTHOR_EMAIL", "test@example.com")
-	t.Setenv("GIT_COMMITTER_NAME", "Test")
-	t.Setenv("GIT_COMMITTER_EMAIL", "test@example.com")
-}
-
 // newRepoDir is an empty repository on main in a temp dir without symlinks.
 func newRepoDir(t *testing.T) string {
 	t.Helper()
@@ -47,8 +30,6 @@ func newRepoDir(t *testing.T) string {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not installed")
 	}
-
-	isolateGitEnv(t)
 
 	dir, err := filepath.EvalSymlinks(t.TempDir())
 	if err != nil {
@@ -208,7 +189,6 @@ func newDrawerRig(t *testing.T, opts ...func(*Options)) *drawerRig {
 
 func newDrawerRigWatching(t *testing.T, wo git.WatchOptions, opts ...func(*Options)) *drawerRig {
 	t.Helper()
-	isolateGitEnv(t)
 
 	set := git.NewWatchSet(context.Background(), wo)
 

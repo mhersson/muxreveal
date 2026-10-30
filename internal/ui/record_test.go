@@ -28,6 +28,7 @@ func shCommand(script string) func(context.Context, term.Command, int, int) (pro
 }
 
 func TestRecordFlag(t *testing.T) {
+	t.Parallel()
 	dir := filepath.Join(t.TempDir(), "rec")
 
 	app, err := New(Options{
@@ -108,6 +109,7 @@ func TestRecordFlag(t *testing.T) {
 }
 
 func TestRecordTapRecordsResizes(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	clk := &fakeClock{t: t0}
 
@@ -154,6 +156,8 @@ type nopCloser struct{}
 func (nopCloser) Close() error { return nil }
 
 func TestRecordTapFailureStopsRecording(t *testing.T) {
+	t.Parallel()
+
 	var logs strings.Builder
 
 	log := slog.New(slog.NewTextHandler(&logs, nil))
@@ -210,6 +214,8 @@ func (b *blockedWriter) Write(p []byte) (int, error) {
 }
 
 func TestRecordTapDropsWhenBehind(t *testing.T) {
+	t.Parallel()
+
 	var logs strings.Builder
 
 	log := slog.New(slog.NewTextHandler(&logs, nil))
@@ -256,6 +262,7 @@ func TestRecordTapDropsWhenBehind(t *testing.T) {
 }
 
 func TestRecordDirCollisionSetsNotice(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 
 	if err := os.WriteFile(filepath.Join(dir, "p1.rec"), nil, 0o600); err != nil {
@@ -285,6 +292,7 @@ func TestRecordDirCollisionSetsNotice(t *testing.T) {
 }
 
 func TestOpenTapRefusesExistingFile(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 
 	tp, err := openTap(testLogger(), dir, "p1", 20, 5, time.Now)

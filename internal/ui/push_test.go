@@ -117,9 +117,7 @@ func newPushRig(t *testing.T) *pushRig {
 
 	allow, protocols, _ := strings.Cut(gitFileOnly, "=")
 
-	// The app's own git reads no user configuration and speaks no network transport.
-	t.Setenv("GIT_CONFIG_GLOBAL", "/dev/null")
-	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
+	// The app's own git speaks no network transport and commits at fixed dates.
 	t.Setenv(allow, protocols)
 	t.Setenv("GIT_AUTHOR_DATE", pushDate)
 	t.Setenv("GIT_COMMITTER_DATE", pushDate)
@@ -363,6 +361,7 @@ func TestPushConfirmNamesThePushURLs(t *testing.T) {
 }
 
 func TestPushConfirmCapsThePushURLs(t *testing.T) {
+	t.Parallel()
 	a := newTestApp(t)
 
 	tests := []struct {
@@ -1056,6 +1055,7 @@ func TestPushAnswerIsDroppedWhenStale(t *testing.T) {
 }
 
 func TestPushCommand(t *testing.T) {
+	t.Parallel()
 	a := newTestApp(t)
 
 	c, ok := a.reg.get("git.push")
@@ -1073,6 +1073,8 @@ func TestPushCommand(t *testing.T) {
 }
 
 func TestCommitCount(t *testing.T) {
+	t.Parallel()
+
 	for n, want := range map[int]string{1: "1 commit", 2: "2 commits", 12: "12 commits"} {
 		if got := commitCount(n); got != want {
 			t.Errorf("commitCount(%d) = %q, want %q", n, got, want)
@@ -1096,6 +1098,8 @@ func TestPushConfirmFitsANarrowScreen(t *testing.T) {
 }
 
 func TestRemoteDisplay(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name, raw, want string
 	}{
@@ -1129,6 +1133,7 @@ func TestRemoteDisplay(t *testing.T) {
 }
 
 func TestPushConfirmDrawsRepositoryTextCleaned(t *testing.T) {
+	t.Parallel()
 	a := newTestApp(t)
 	tgt := pushTarget{
 		project: "pro\x1b[31mj", branch: "feat/\u200bx", remote: "ori\x07gin", urls: []string{"github.com/o/r", "host/\x1b[31mo/r"},

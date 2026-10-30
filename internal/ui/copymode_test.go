@@ -32,6 +32,8 @@ func pressKeys(t *testing.T, g grid, m copyMode, viewRows int, keys ...string) c
 }
 
 func TestCopyModeStart(t *testing.T) {
+	t.Parallel()
+
 	g := copyTestGrid()
 
 	tests := []struct {
@@ -52,6 +54,8 @@ func TestCopyModeStart(t *testing.T) {
 }
 
 func TestCopyModeMotions(t *testing.T) {
+	t.Parallel()
+
 	g := copyTestGrid()
 
 	tests := []struct {
@@ -112,6 +116,8 @@ func TestCopyModeMotions(t *testing.T) {
 }
 
 func TestCopyModeViewJumps(t *testing.T) {
+	t.Parallel()
+
 	g := newFakeGrid(8, nil,
 		"r0", "r1", "r2", "r3", "r4", "r5", "r6", "r7", "r8", "r9",
 		" r10", "r11",
@@ -158,6 +164,8 @@ func TestCopyModeViewJumps(t *testing.T) {
 }
 
 func TestCopyModeTopStaysConsistent(t *testing.T) {
+	t.Parallel()
+
 	for _, rows := range []int{1, 3, 12, 20} {
 		g := newFakeGrid(6, nil)
 		for i := range rows {
@@ -196,6 +204,8 @@ func TestCopyModeTopStaysConsistent(t *testing.T) {
 }
 
 func TestCopyModeViewTop(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		row, current, viewRows, want int
 	}{
@@ -214,6 +224,8 @@ func TestCopyModeViewTop(t *testing.T) {
 }
 
 func TestCopyModeSelection(t *testing.T) {
+	t.Parallel()
+
 	g := copyTestGrid()
 
 	tests := []struct {
@@ -242,6 +254,8 @@ func TestCopyModeSelection(t *testing.T) {
 }
 
 func TestCopyModeActions(t *testing.T) {
+	t.Parallel()
+
 	g := copyTestGrid()
 
 	tests := []struct {
@@ -273,6 +287,8 @@ func TestCopyModeActions(t *testing.T) {
 }
 
 func TestCopyModeSearch(t *testing.T) {
+	t.Parallel()
+
 	g := newFakeGrid(12, nil, "foo bar", "中foo", "xx foo", "none")
 
 	tests := []struct {
@@ -317,6 +333,8 @@ func TestCopyModeSearch(t *testing.T) {
 }
 
 func TestCopyModeRepeatSearch(t *testing.T) {
+	t.Parallel()
+
 	g := newFakeGrid(12, nil, "foo", "bar", "foo x", "baz", "foo")
 
 	m, ok := (copyMode{}).search(g, "foo", false)
@@ -367,6 +385,8 @@ func TestCopyModeRepeatSearch(t *testing.T) {
 }
 
 func TestCopyModeSearchMovesSelectionHead(t *testing.T) {
+	t.Parallel()
+
 	g := newFakeGrid(8, nil, "ab", "cd ab")
 	m := pressKeys(t, g, copyMode{}, 4, "v")
 
@@ -446,6 +466,7 @@ type plainGrid struct{ grid }
 
 // The text path over history gives the same matches and text as the cell path.
 func TestHistoryTextPathMatchesCellPath(t *testing.T) {
+	t.Parallel()
 	a, procs := framedApp(t, 40, 8, shellSpec("/w/a", ""))
 	p, fp := a.panes["p1"], procs["p1"]
 

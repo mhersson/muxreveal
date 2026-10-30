@@ -52,6 +52,7 @@ func screenText(a *App, y int) string {
 }
 
 func TestCopyModeStartsAtBottomOfView(t *testing.T) {
+	t.Parallel()
 	a, _, _ := copyApp(t)
 	c := contentRect(a.layoutRects()["p1"])
 
@@ -76,6 +77,7 @@ func TestCopyModeStartsAtBottomOfView(t *testing.T) {
 }
 
 func TestCopyModeMotionsMoveCursorAndScrollView(t *testing.T) {
+	t.Parallel()
 	a, _, _ := copyApp(t)
 	c := contentRect(a.layoutRects()["p1"])
 
@@ -111,6 +113,7 @@ func TestCopyModeMotionsMoveCursorAndScrollView(t *testing.T) {
 }
 
 func TestCopyModeSelectHighlightsAndYankCopies(t *testing.T) {
+	t.Parallel()
 	a, _, f := copyApp(t)
 	c := contentRect(a.layoutRects()["p1"])
 	y := c.Y + c.H - 1
@@ -144,6 +147,7 @@ func TestCopyModeSelectHighlightsAndYankCopies(t *testing.T) {
 }
 
 func TestCopyModeYankWithoutSelectionCopiesNothing(t *testing.T) {
+	t.Parallel()
 	a, _, f := copyApp(t)
 
 	enterCopy(a)
@@ -159,6 +163,8 @@ func TestCopyModeYankWithoutSelectionCopiesNothing(t *testing.T) {
 }
 
 func TestCopyModeQuitReturnsToLive(t *testing.T) {
+	t.Parallel()
+
 	for _, k := range []string{"q", "esc"} {
 		a, _, f := copyApp(t)
 
@@ -182,6 +188,7 @@ func TestCopyModeQuitReturnsToLive(t *testing.T) {
 }
 
 func TestCopyModeKeysDoNotReachTheProgram(t *testing.T) {
+	t.Parallel()
 	a, fp, _ := copyApp(t)
 
 	enterCopy(a)
@@ -196,6 +203,7 @@ func TestCopyModeKeysDoNotReachTheProgram(t *testing.T) {
 }
 
 func TestCopyModeSearchJumpsToMatch(t *testing.T) {
+	t.Parallel()
 	a, _, _ := copyApp(t)
 
 	enterCopy(a)
@@ -229,6 +237,7 @@ func TestCopyModeSearchJumpsToMatch(t *testing.T) {
 }
 
 func TestCopyModeSearchBackwardAndRepeat(t *testing.T) {
+	t.Parallel()
 	a, _, _ := copyApp(t)
 
 	enterCopy(a)
@@ -261,6 +270,7 @@ func TestCopyModeSearchBackwardAndRepeat(t *testing.T) {
 }
 
 func TestCopyModeSearchNotFoundSetsNotice(t *testing.T) {
+	t.Parallel()
 	a, _, _ := copyApp(t)
 
 	enterCopy(a)
@@ -280,6 +290,7 @@ func TestCopyModeSearchNotFoundSetsNotice(t *testing.T) {
 }
 
 func TestCopyModeSearchEscKeepsCopyMode(t *testing.T) {
+	t.Parallel()
 	a, _, _ := copyApp(t)
 
 	enterCopy(a)
@@ -291,6 +302,7 @@ func TestCopyModeSearchEscKeepsCopyMode(t *testing.T) {
 }
 
 func TestCopyModeSearchPromptStopsAtLimit(t *testing.T) {
+	t.Parallel()
 	a, _, _ := copyApp(t)
 
 	enterCopy(a)
@@ -303,6 +315,7 @@ func TestCopyModeSearchPromptStopsAtLimit(t *testing.T) {
 }
 
 func TestCopyModeIgnoresMouse(t *testing.T) {
+	t.Parallel()
 	a, _, _ := shellsWith(t, manyLines(30), manyLines(30))
 	x1, y1 := centre(a, "p1")
 	x2, y2 := centre(a, "p2")
@@ -333,6 +346,7 @@ func TestCopyModeIgnoresMouse(t *testing.T) {
 }
 
 func TestCopyModePinsTextWhileOutputArrives(t *testing.T) {
+	t.Parallel()
 	a, fp, _ := copyApp(t)
 
 	enterCopy(a)
@@ -359,6 +373,7 @@ func TestCopyModePinsTextWhileOutputArrives(t *testing.T) {
 }
 
 func TestCopyModeEndsWhenPaneResizes(t *testing.T) {
+	t.Parallel()
 	a, _, _ := copyApp(t)
 
 	enterCopy(a)
@@ -370,6 +385,7 @@ func TestCopyModeEndsWhenPaneResizes(t *testing.T) {
 }
 
 func TestCopyModeEndsWhenPaneCloses(t *testing.T) {
+	t.Parallel()
 	a, _, _ := shellsWith(t, manyLines(30), manyLines(30))
 
 	enterCopy(a)
@@ -382,6 +398,7 @@ func TestCopyModeEndsWhenPaneCloses(t *testing.T) {
 }
 
 func TestCopyModeEndsOnAltScreenSwitch(t *testing.T) {
+	t.Parallel()
 	a, fp, _ := copyApp(t)
 
 	enterCopy(a)
@@ -394,6 +411,7 @@ func TestCopyModeEndsOnAltScreenSwitch(t *testing.T) {
 }
 
 func TestCopyModeWithoutPaneDoesNothing(t *testing.T) {
+	t.Parallel()
 	a := newTestApp(t)
 	sized(t, a, 60, 14)
 
@@ -405,6 +423,7 @@ func TestCopyModeWithoutPaneDoesNothing(t *testing.T) {
 }
 
 func TestCopyModeEntryClearsMouseSelection(t *testing.T) {
+	t.Parallel()
 	a, _, _ := copyApp(t)
 	c := contentRect(a.layoutRects()["p1"])
 
@@ -422,6 +441,8 @@ func TestCopyModeEntryClearsMouseSelection(t *testing.T) {
 }
 
 func TestCopyModeShiftsRowsByTrimmedHistory(t *testing.T) {
+	t.Parallel()
+
 	cs := copyState{
 		m: copyMode{
 			cursor: point{row: 12, col: 2}, top: 8,
@@ -447,6 +468,7 @@ func TestCopyModeShiftsRowsByTrimmedHistory(t *testing.T) {
 }
 
 func TestCopyModeCursorStaysOnItsTextWhileLiveOutputScrolls(t *testing.T) {
+	t.Parallel()
 	a, fp, _ := copyApp(t)
 
 	enterCopy(a)
@@ -471,6 +493,7 @@ func TestCopyModeCursorStaysOnItsTextWhileLiveOutputScrolls(t *testing.T) {
 // Past the 10000-line cap the cursor and selection stay on their text until it
 // is trimmed, then clamp to the oldest line.
 func TestCopyModeAcrossHistoryCap(t *testing.T) {
+	t.Parallel()
 	a, fp, _ := copyApp(t)
 	p := a.panes["p1"]
 
@@ -521,6 +544,8 @@ func TestCopyModeAcrossHistoryCap(t *testing.T) {
 }
 
 func TestCopyModeTrimmedSelectionStartTakesColumnZero(t *testing.T) {
+	t.Parallel()
+
 	g := newFakeGrid(10, nil, "L00001", "L00002")
 	cs := copyState{m: copyMode{sel: &selection{mode: selStream, anchor: point{row: 0, col: 3}, head: point{row: 2, col: 3}}}}
 
@@ -537,6 +562,7 @@ func TestCopyModeTrimmedSelectionStartTakesColumnZero(t *testing.T) {
 }
 
 func TestCopyModeCursorFollowsDrawnRowsDuringSyncHold(t *testing.T) {
+	t.Parallel()
 	a, fp, _ := copyApp(t)
 
 	enterCopy(a)

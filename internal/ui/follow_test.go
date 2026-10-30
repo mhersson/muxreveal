@@ -219,6 +219,7 @@ func (r *followRig) editNow(t *testing.T, path string) {
 }
 
 func TestFollowWatchesTheFollowedPlace(t *testing.T) {
+	t.Parallel()
 	r := newFollowRig(t, "")
 
 	r.edit(filepath.Join(r.dirB, "a.txt"))
@@ -230,6 +231,8 @@ func TestFollowWatchesTheFollowedPlace(t *testing.T) {
 }
 
 func TestRailFollowsEdits(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name   string
 		dir    func(r *followRig) string
@@ -264,6 +267,7 @@ func TestRailFollowsEdits(t *testing.T) {
 }
 
 func TestDrawerFollowsEdits(t *testing.T) {
+	t.Parallel()
 	r := newFollowRig(t, "")
 	r.addLines(t, filepath.Join(r.dirB, "a.txt"))
 
@@ -325,6 +329,7 @@ func TestCwdChangeAfterEditKeepsFollowedPlace(t *testing.T) {
 }
 
 func TestCwdChangeBeforeEditMoves(t *testing.T) {
+	t.Parallel()
 	r := newFollowRig(t, "")
 	r.addLines(t, filepath.Join(r.dirB, "a.txt"))
 	r.open(t, r.id)
@@ -389,6 +394,7 @@ func TestReviewerSubagentKeepsImplementersPlace(t *testing.T) {
 }
 
 func TestEditInOwnDirectoryMovesBack(t *testing.T) {
+	t.Parallel()
 	r := newFollowRig(t, "")
 	r.open(t, r.id)
 	r.openRail(t, "main")
@@ -409,6 +415,7 @@ func TestEditInOwnDirectoryMovesBack(t *testing.T) {
 }
 
 func TestTabNameAndSplitsKeepOwnDirectory(t *testing.T) {
+	t.Parallel()
 	r := newFollowRig(t, "")
 
 	r.edit(filepath.Join(r.dirC, "c.txt"))
@@ -480,6 +487,7 @@ func TestRemovedFollowedWorktreeIsForgotten(t *testing.T) {
 }
 
 func TestAlternatingEditsEndOnLatest(t *testing.T) {
+	t.Parallel()
 	// Answers that resolve out of order never reorder the edits.
 	t.Run("answers in reverse order", func(t *testing.T) {
 		r := newFollowRig(t, "")
@@ -571,6 +579,7 @@ func TestAlternatingEditsEndOnLatest(t *testing.T) {
 }
 
 func TestNewSessionReturnsToOwnDirectory(t *testing.T) {
+	t.Parallel()
 	r := newFollowRig(t, testSession)
 	r.addLines(t, filepath.Join(r.dirC, "c.txt"))
 	r.open(t, r.id)
@@ -592,6 +601,7 @@ func TestNewSessionReturnsToOwnDirectory(t *testing.T) {
 }
 
 func TestProbeHeadOf(t *testing.T) {
+	t.Parallel()
 	r := newFollowRig(t, "")
 	scratch := t.TempDir()
 	gone := filepath.Join(t.TempDir(), "gone")

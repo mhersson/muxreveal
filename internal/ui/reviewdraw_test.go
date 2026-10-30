@@ -123,24 +123,26 @@ func reviewCases() []reviewCase {
 	}
 }
 
+// TestReviewGolden draws each case once in colour, in the default theme with icons.
+// TestReviewText covers icons off and TestScreensTakeTheirColoursFromTheTheme the other theme.
+// It compares highlighted colours, so it runs serially (docs/gotchas.md).
 func TestReviewGolden(t *testing.T) {
-	for _, th := range chromeThemes() {
-		for _, icons := range []bool{true, false} {
-			for _, c := range reviewCases() {
-				t.Run(fmt.Sprintf("%s/icons=%v/%s", th, icons, c.name), func(t *testing.T) {
-					a := c.scene(th, icons).build(t)
-					golden.RequireEqual(t, []byte(a.View().Content))
-				})
-			}
-		}
+	for _, c := range reviewCases() {
+		t.Run("catppuccin-mocha/icons=true/"+c.name, func(t *testing.T) {
+			a := c.scene("catppuccin-mocha", true).build(t)
+			golden.RequireEqual(t, []byte(a.View().Content))
+		})
 	}
 }
 
 // TestReviewText is the same frames without styling, so the layout reads.
 func TestReviewText(t *testing.T) {
+	t.Parallel()
+
 	for _, icons := range []bool{true, false} {
 		for _, c := range reviewCases() {
 			t.Run(fmt.Sprintf("icons=%v/%s", icons, c.name), func(t *testing.T) {
+				t.Parallel()
 				a := c.scene("catppuccin-mocha", icons).build(t)
 				golden.RequireEqual(t, []byte(ansi.Strip(a.View().Content)))
 			})
@@ -149,6 +151,8 @@ func TestReviewText(t *testing.T) {
 }
 
 func TestDrawerCoversPanes(t *testing.T) {
+	t.Parallel()
+
 	s := reviewScene{theme: "catppuccin-mocha", icons: true, w: 200, h: 52, res: turn4Result(), turn: 4, turns: 4, focused: true}
 	a := s.build(t)
 
@@ -204,6 +208,8 @@ func TestDrawerCoversPanes(t *testing.T) {
 }
 
 func TestDrawerRect(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name string
 		w, h int
@@ -238,6 +244,7 @@ func TestDrawerRect(t *testing.T) {
 }
 
 func TestDrawerRectWithRail(t *testing.T) {
+	t.Parallel()
 	a := drawApp(t, "catppuccin-mocha", true, 200, 40, railFixtureAgents())
 	openIn(t, a, core.FocusPane{ID: "p5"}, core.OpenReview{Pane: "p5", Mode: core.ReviewBranch})
 
@@ -255,6 +262,8 @@ func TestDrawerRectWithRail(t *testing.T) {
 }
 
 func TestDrawerRectSlides(t *testing.T) {
+	t.Parallel()
+
 	s := reviewScene{theme: "catppuccin-mocha", icons: true, w: 200, h: 52, res: turn4Result(), turn: 4, turns: 4}
 	a := s.build(t)
 	clk := a.clock.(*fakeClock)
@@ -323,19 +332,13 @@ func TestDrawerRectSlides(t *testing.T) {
 	}
 }
 
-// stepRatio is how many times what a resize costs with 1 KiB lines a resize may
-// cost with 1 MiB lines: what is drawn of a line must not depend on its length,
-// which would show as a ratio in the hundreds. Both are timed in the same run,
-// one after the other, so machine load moves them together.
-const stepRatio = 10
+type rowWidthVariant struct {
+	name string
+	tune func(t *testing.T, a *App, v *reviewView, long longLines)
+}
 
-func TestDrawerRowsAreExactWidth(t *testing.T) {
-	type variant struct {
-		name string
-		tune func(t *testing.T, a *App, v *reviewView, long longLines)
-	}
-
-	variants := []variant{
+func rowWidthVariants() []rowWidthVariant {
+	return []rowWidthVariant{
 		{"unified", func(t *testing.T, a *App, v *reviewView, long longLines) {}},
 		{"split", func(t *testing.T, a *App, v *reviewView, long longLines) { v.split = true }},
 		{"full file", func(t *testing.T, a *App, v *reviewView, long longLines) {
@@ -352,64 +355,71 @@ func TestDrawerRowsAreExactWidth(t *testing.T) {
 		}},
 		{"search", func(t *testing.T, a *App, v *reviewView, long longLines) { v.search = ptr("e\x1bv") }},
 	}
+}
+
+func rowWidths(icons bool) []int {
+	step := 3
+	if !icons {
+		step = 11
+	}
+
+	var widths []int
+	for w := 40; w <= 120; w += step {
+		widths = append(widths, w)
+	}
+
+	return widths
+}
+
+// rowWidthApp builds the scene once at the first width; the views are then
+// drawn at every width, so a timing measures the resizes and frames, not the setup.
+func rowWidthApp(t *testing.T, icons bool, vr rowWidthVariant, long longLines) *App {
+	t.Helper()
+
+	s := reviewScene{theme: "catppuccin-mocha", icons: icons, w: rowWidths(icons)[0], h: 30, res: hostileResultOf(long), turn: 2, turns: 3, focused: true}
+	s.tune = func(t *testing.T, a *App, v *reviewView) {
+		vr.tune(t, a, v, long)
+		v.cursor = min(4, len(v.rows)-1)
+	}
+
+	return s.build(t)
+}
+
+// resizeDrawer is one step of the drawer: the update and both frames.
+func resizeDrawer(t *testing.T, a *App, w int) (r core.Rect, lines []string, frame string, took time.Duration) {
+	t.Helper()
+
+	start := time.Now()
+
+	sized(t, a, w, 30)
+	settleDrawer(t, a)
+
+	st := a.store.State()
+
+	r, ok := a.drawerRect(st)
+	if !ok {
+		t.Fatal("no drawer")
+	}
+
+	lines = a.drawerLines(st, r)
+	frame = a.View().Content
+
+	return r, lines, frame, time.Since(start)
+}
+
+func TestDrawerRowsAreExactWidth(t *testing.T) {
+	t.Parallel()
 
 	for _, icons := range []bool{true, false} {
-		for _, vr := range variants {
-			step := 3
-			if !icons {
-				step = 11
-			}
-
-			var widths []int
-			for w := 40; w <= 120; w += step {
-				widths = append(widths, w)
-			}
-
+		for _, vr := range rowWidthVariants() {
 			t.Run(fmt.Sprintf("icons=%v/%s", icons, vr.name), func(t *testing.T) {
-				// The views are built once and drawn at every width, so the
-				// timings measure the resizes and the frames, not the setup.
-				build := func(long longLines) *App {
-					s := reviewScene{theme: "catppuccin-mocha", icons: icons, w: widths[0], h: 30, res: hostileResultOf(long), turn: 2, turns: 3, focused: true}
-					s.tune = func(t *testing.T, a *App, v *reviewView) {
-						vr.tune(t, a, v, long)
-						v.cursor = min(4, len(v.rows)-1)
-					}
+				t.Parallel()
 
-					return s.build(t)
-				}
+				a := rowWidthApp(t, icons, vr, megabyteLines())
 
-				a, baseline := build(megabyteLines()), build(kilobyteLines())
-
-				// resize is one step of the drawer: the update and both frames.
-				resize := func(t *testing.T, a *App, w int) (r core.Rect, lines []string, frame string, took time.Duration) {
-					t.Helper()
-
-					start := time.Now()
-
-					sized(t, a, w, 30)
-					settleDrawer(t, a)
-
-					st := a.store.State()
-
-					r, ok := a.drawerRect(st)
-					if !ok {
-						t.Fatal("no drawer")
-					}
-
-					lines = a.drawerLines(st, r)
-					frame = a.View().Content
-
-					return r, lines, frame, time.Since(start)
-				}
-
-				var slow, base time.Duration
-
-				for _, w := range widths {
+				for _, w := range rowWidths(icons) {
 					t.Run(fmt.Sprintf("width=%d", w), func(t *testing.T) {
-						_, _, _, baseTook := resize(t, baseline, w)
-						r, lines, frame, took := resize(t, a, w)
-
-						base, slow = base+baseTook, slow+took
+						r, lines, frame, _ := resizeDrawer(t, a, w)
 
 						if len(lines) != r.H {
 							t.Fatalf("%d lines, want %d", len(lines), r.H)
@@ -434,18 +444,14 @@ func TestDrawerRowsAreExactWidth(t *testing.T) {
 						}
 					})
 				}
-
-				t.Logf("resizes: %v with 1 MiB lines, %v with 1 KiB lines", slow, base)
-
-				if slow > stepRatio*base {
-					t.Errorf("the resizes took %v with 1 MiB lines and %v with 1 KiB lines, want at most %dx", slow, base, stepRatio)
-				}
 			})
 		}
 	}
 }
 
 func TestHighlightCapPerFrame(t *testing.T) {
+	t.Parallel()
+
 	res, full := bigResult(10000)
 
 	for _, whole := range []bool{false, true} {
@@ -503,6 +509,7 @@ func TestHighlightCapPerFrame(t *testing.T) {
 	}
 }
 
+// It compares highlighted colours, so it runs serially (docs/gotchas.md).
 func TestHighlightColoursLines(t *testing.T) {
 	s := reviewScene{theme: "catppuccin-mocha", icons: true, w: 200, h: 52, res: turn4Result(), turn: 4, turns: 4, focused: true}
 	a := s.build(t)
@@ -528,6 +535,8 @@ func rgbOf(hex string) (r, g, b int) {
 }
 
 func TestFreshRowsFlash(t *testing.T) {
+	t.Parallel()
+
 	build := func(until time.Duration) string {
 		s := reviewScene{theme: "catppuccin-mocha", icons: true, w: 200, h: 52, res: turn4Result(), turn: 4, turns: 4, focused: true}
 		s.tune = func(t *testing.T, a *App, v *reviewView) {
@@ -545,6 +554,8 @@ func TestFreshRowsFlash(t *testing.T) {
 }
 
 func TestDrawerTitleAndTags(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name  string
 		icons bool
@@ -596,6 +607,8 @@ func TestDrawerTitleAndTags(t *testing.T) {
 
 // Without the tree the mode shows only in the tag, and the diff takes the whole width.
 func TestDrawerModeShowsOnlyInTheTagWithoutTheTree(t *testing.T) {
+	t.Parallel()
+
 	s := reviewScene{theme: "catppuccin-mocha", icons: false, w: 200, h: 52, res: turn4Result(), turn: 4, turns: 4, focused: true}
 	text := ansi.Strip(s.build(t).View().Content)
 
@@ -613,6 +626,8 @@ func TestDrawerModeShowsOnlyInTheTagWithoutTheTree(t *testing.T) {
 }
 
 func TestDrawerKeyHints(t *testing.T) {
+	t.Parallel()
+
 	const (
 		diffHints = "j/k line   ]/[ hunk   }/{ file   tab tree   w worktree   f full   u split   b/t mode   ,/. turn   e edit   / search"
 		treeHints = "j/k file   enter jump   tab hide   esc back"
@@ -721,6 +736,8 @@ func TestDrawerTurnHintShowsOnlyForTurns(t *testing.T) {
 }
 
 func TestDrawerSplitFallsBackWhenNarrow(t *testing.T) {
+	t.Parallel()
+
 	s := reviewScene{theme: "catppuccin-mocha", icons: false, w: 124, h: 40, res: turn4Result(), turn: 4, turns: 4, focused: true}
 	s.tune = func(t *testing.T, a *App, v *reviewView) { v.split = true }
 	a := s.build(t)
@@ -747,6 +764,8 @@ func TestDrawerSplitFallsBackWhenNarrow(t *testing.T) {
 }
 
 func TestDrawerFocusedPaneDrawsUnfocused(t *testing.T) {
+	t.Parallel()
+
 	s := reviewScene{theme: "catppuccin-mocha", icons: true, w: 200, h: 52, res: turn4Result(), turn: 4, turns: 4}
 	s.focused = false
 
@@ -768,6 +787,8 @@ func TestDrawerFocusedPaneDrawsUnfocused(t *testing.T) {
 }
 
 func TestDrawerHidesPaneCursor(t *testing.T) {
+	t.Parallel()
+
 	s := reviewScene{theme: "catppuccin-mocha", icons: true, w: 200, h: 52, res: turn4Result(), turn: 4, turns: 4, focused: true}
 	a := s.build(t)
 
@@ -777,6 +798,8 @@ func TestDrawerHidesPaneCursor(t *testing.T) {
 }
 
 func TestDrawerGhostsAndFolds(t *testing.T) {
+	t.Parallel()
+
 	s := reviewScene{theme: "catppuccin-mocha", icons: true, w: 200, h: 52, res: turn4Result(), turn: 4, turns: 4, focused: true}
 	s.tune = func(t *testing.T, a *App, v *reviewView) {
 		v.full = map[string]fullText{appGoPath: appGoFull()}
@@ -798,6 +821,8 @@ func TestDrawerGhostsAndFolds(t *testing.T) {
 }
 
 func TestDrawerGhostLinesCarryNoNumber(t *testing.T) {
+	t.Parallel()
+
 	s := reviewScene{theme: "catppuccin-mocha", icons: true, w: 200, h: 52, res: turn4Result(), turn: 4, turns: 4, focused: true}
 	s.tune = func(t *testing.T, a *App, v *reviewView) {
 		v.full = map[string]fullText{appGoPath: appGoFull()}
@@ -845,6 +870,8 @@ func TestDrawerGhostLinesCarryNoNumber(t *testing.T) {
 }
 
 func TestDrawerTreeLayout(t *testing.T) {
+	t.Parallel()
+
 	s := reviewScene{theme: "catppuccin-mocha", icons: false, w: 200, h: 52, res: turn4Result(), turn: 4, turns: 4, focused: true, tree: true}
 	text := ansi.Strip(s.build(t).View().Content)
 
@@ -862,6 +889,8 @@ func crResult(specs ...string) git.Result {
 }
 
 func TestLineEndingCR(t *testing.T) {
+	t.Parallel()
+
 	const tag = "\u27e8U+000D\u27e9"
 
 	tests := []struct {

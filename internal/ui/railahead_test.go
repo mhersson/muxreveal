@@ -10,6 +10,7 @@ import (
 )
 
 func TestRailAheadColours(t *testing.T) {
+	t.Parallel()
 	ui := mochaUI(t)
 	agents := []railAgent{{newTab: true, project: "api", branch: "feat/login", state: core.AgentIdle, ahead: 2}}
 	a := drawApp(t, "catppuccin-mocha", true, 100, 30, agents)
@@ -33,6 +34,8 @@ func TestRailAheadColours(t *testing.T) {
 }
 
 func TestRailAheadIsLeftOutWithNothingAhead(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name  string
 		agent railAgent
@@ -53,6 +56,7 @@ func TestRailAheadIsLeftOutWithNothingAhead(t *testing.T) {
 }
 
 func TestRailBranchLineAhead(t *testing.T) {
+	t.Parallel()
 	a := newTestApp(t)
 	ui := a.current().theme.UI
 
@@ -107,6 +111,7 @@ func TestRailBranchLineAhead(t *testing.T) {
 }
 
 func TestRailAheadKeepsTheSearchHighlight(t *testing.T) {
+	t.Parallel()
 	a := newTestApp(t)
 	ui := a.current().theme.UI
 

@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -16,7 +17,25 @@ import (
 	"github.com/mhersson/muxreveal/internal/term"
 )
 
+// writeExecutable writes an executable script under the fork lock: a concurrent fork can
+// inherit the write fd and make exec fail with ETXTBSY (go.dev/issue/22315).
+func writeExecutable(t *testing.T, path, body string) {
+	t.Helper()
+
+	syscall.ForkLock.RLock()
+
+	err := os.WriteFile(path, []byte(body), 0o755)
+
+	syscall.ForkLock.RUnlock()
+
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestReviewEditor(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name, visual, editor, want string
 	}{
@@ -79,11 +98,7 @@ func newEditRig(t *testing.T, editorArgs string) *editRig {
 	}
 
 	argsFile, editor := filepath.Join(t.TempDir(), "args"), filepath.Join(t.TempDir(), "ed.sh")
-	write(t, editor, "#!/bin/sh\nfor a in \"$@\"; do printf '%s\\n' \"$a\"; done > \"$ARGS_FILE\"\n")
-
-	if err := os.Chmod(editor, 0o755); err != nil {
-		t.Fatal(err)
-	}
+	writeExecutable(t, editor, "#!/bin/sh\nfor a in \"$@\"; do printf '%s\\n' \"$a\"; done > \"$ARGS_FILE\"\n")
 
 	r := newKeysRig(t, dir, func(o *Options) {
 		o.Getenv = func(k string) string {
@@ -112,6 +127,8 @@ func (e *editRig) cursorOn(t *testing.T, want func(git.FileDiff, reviewRow) bool
 }
 
 func TestEditOpensAnEditorPane(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name       string
 		editorArgs string // appended to $EDITOR
@@ -232,11 +249,7 @@ func TestEditOpensAnEditorPane(t *testing.T) {
 
 		// vim runs system() through $SHELL, which the pane command points at true(1) for its closing exec.
 		wrapper := filepath.Join(t.TempDir(), "vim-ed.sh")
-		write(t, wrapper, "#!/bin/sh\nSHELL=/bin/sh exec '"+vim+"' -u NONE -i NONE -N -n -es \"$@\" -c 'qa!'\n")
-
-		if err := os.Chmod(wrapper, 0o755); err != nil {
-			t.Fatal(err)
-		}
+		writeExecutable(t, wrapper, "#!/bin/sh\nSHELL=/bin/sh exec '"+vim+"' -u NONE -i NONE -N -n -es \"$@\" -c 'qa!'\n")
 
 		// The control: given such a name as a command, this vim does run it, so the check below can fail.
 		control, home := t.TempDir(), t.TempDir()
@@ -307,6 +320,8 @@ func (e *editRig) runPaneCommand(t *testing.T, c term.Command) []string {
 
 // editLine is the line the editor opens at, for every kind of row the cursor can be on.
 func TestEditLine(t *testing.T) {
+	t.Parallel()
+
 	file := git.FileDiff{Path: "f.go", Status: git.Modified, Hunks: []git.Hunk{{
 		OldStart: 10, OldLines: 5, NewStart: 20, NewLines: 5,
 		Lines: []git.Line{
@@ -429,6 +444,7 @@ func TestEditLine(t *testing.T) {
 // The editor pane is placed beside the drawer's pane without focusing that pane
 // first, so it, which the operator never moved the focus to, hears nothing.
 func TestEditSendsNoFocusReportsToTheDrawersPane(t *testing.T) {
+	t.Parallel()
 	r := newKeysRig(t, keysRepo(t))
 	r.run(r.openPane(core.KindShell, core.SplitVertical))
 

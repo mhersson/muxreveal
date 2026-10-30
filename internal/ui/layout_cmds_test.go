@@ -61,6 +61,7 @@ func splitApp(t *testing.T) (*App, *starts) {
 }
 
 func TestMoveFollowsAndKeepsThePane(t *testing.T) {
+	t.Parallel()
 	a, st := wideTabs(t, 3)
 	p3 := a.panes["p3"]
 	fp := st.proc(2)
@@ -120,6 +121,7 @@ func TestMoveFollowsAndKeepsThePane(t *testing.T) {
 }
 
 func TestSendStaysAndBreakFollows(t *testing.T) {
+	t.Parallel()
 	t.Run("send", func(t *testing.T) {
 		a, _ := splitApp(t)
 		seq(a, ". 2")
@@ -172,6 +174,8 @@ func TestSendStaysAndBreakFollows(t *testing.T) {
 }
 
 func TestMoveNotices(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name string
 		keys string
@@ -206,6 +210,7 @@ func TestMoveNotices(t *testing.T) {
 }
 
 func TestBreakWithNineTabs(t *testing.T) {
+	t.Parallel()
 	a, _ := wideTabs(t, 9)
 	chord(a, 'v')
 	seq(a, "!")
@@ -220,6 +225,7 @@ func TestBreakWithNineTabs(t *testing.T) {
 }
 
 func TestMoveToTabNineAndLeft(t *testing.T) {
+	t.Parallel()
 	t.Run("nine tabs", func(t *testing.T) {
 		a, _ := wideTabs(t, 9)
 		seq(a, "> 9")
@@ -272,6 +278,7 @@ func scrollingMoveApp(t *testing.T) (*App, *starts) {
 }
 
 func TestMoveEndsCopyModeAndSelection(t *testing.T) {
+	t.Parallel()
 	// p2 keeps its size on the move, so only the explicit calls can end copy
 	// mode and the selection.
 	a, st := scrollingMoveApp(t)
@@ -303,6 +310,7 @@ func TestMoveEndsCopyModeAndSelection(t *testing.T) {
 }
 
 func TestMoveOfZoomedPane(t *testing.T) {
+	t.Parallel()
 	a, _ := splitApp(t)
 	p2 := a.panes["p2"]
 
@@ -336,6 +344,7 @@ func TestMoveOfZoomedPane(t *testing.T) {
 }
 
 func TestSendIntoZoomedHiddenTab(t *testing.T) {
+	t.Parallel()
 	a, _ := splitApp(t)
 	p2 := a.panes["p2"]
 
@@ -376,6 +385,7 @@ func TestSendIntoZoomedHiddenTab(t *testing.T) {
 }
 
 func TestMoveKeepsOtherSelection(t *testing.T) {
+	t.Parallel()
 	a, _ := splitApp(t)
 	a.sel = &paneSelection{pane: "p3"}
 
@@ -387,6 +397,7 @@ func TestMoveKeepsOtherSelection(t *testing.T) {
 }
 
 func TestMoveKeepsAgentState(t *testing.T) {
+	t.Parallel()
 	a, _, _ := agentApp(t)
 	hook(a, harness.Event{Pane: "p2", Name: "SessionStart", Session: "s1", Transcript: "/t/1.jsonl", Start: true, State: core.AgentIdle})
 	hook(a, harness.Event{Pane: "p2", Name: "UserPromptSubmit", State: core.AgentWorking})
@@ -412,6 +423,7 @@ func TestMoveKeepsAgentState(t *testing.T) {
 }
 
 func TestLayoutKeys(t *testing.T) {
+	t.Parallel()
 	t.Run("cycle", func(t *testing.T) {
 		a, _ := splitApp(t)
 
@@ -502,6 +514,7 @@ func TestLayoutKeys(t *testing.T) {
 }
 
 func TestRotateEqualizePromote(t *testing.T) {
+	t.Parallel()
 	t.Run("rotate", func(t *testing.T) {
 		a, _ := lifeAppSized(t, 140, 30)
 		chord(a, 'r')
@@ -579,6 +592,7 @@ func TestRotateEqualizePromote(t *testing.T) {
 }
 
 func TestPrefixSequences(t *testing.T) {
+	t.Parallel()
 	t.Run("escape cancels", func(t *testing.T) {
 		a, _ := splitApp(t)
 		press(a, keyLeader, keyRune('>'))
@@ -676,6 +690,7 @@ func TestPrefixSequences(t *testing.T) {
 }
 
 func TestLayoutCommandsInPalette(t *testing.T) {
+	t.Parallel()
 	a, _ := splitApp(t)
 
 	type row struct{ id, title, icon, key string }
@@ -725,6 +740,7 @@ func TestLayoutCommandsInPalette(t *testing.T) {
 }
 
 func TestWhichKeyLayoutGroup(t *testing.T) {
+	t.Parallel()
 	a := newTestApp(t)
 	sized(t, a, 140, 40)
 	press(a, keyLeader)

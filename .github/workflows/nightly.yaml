@@ -25,5 +25,4 @@ jobs:
       - name: make test-race at -count=2
         run: make test-race
         env:
-          # TestBenchKitOnSynth times out at -count=2, so the nightly run skips it.
-          GOFLAGS: "-count=2 -skip=^TestBenchKitOnSynth$"
+          GOFLAGS: "-count=2"

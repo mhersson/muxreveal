@@ -245,6 +245,7 @@ func TestPickerGitFailureKeepsThePaneNotice(t *testing.T) {
 }
 
 func TestPickerListsWorktrees(t *testing.T) {
+	t.Parallel()
 	a, _ := pickerApp(t, "/work")
 	agentsAt(t, a, "/home/me/code/api/.worktrees/feat-auth", 2)
 	agentsAt(t, a, "/home/me/code/api", 1)
@@ -295,6 +296,7 @@ func TestPickerListsWorktrees(t *testing.T) {
 }
 
 func TestPickerIconsOff(t *testing.T) {
+	t.Parallel()
 	a, _ := pickerApp(t, "/work")
 	a.icons = false
 	injectPicker(t, a, sampleRepo, sampleTrees())
@@ -313,6 +315,7 @@ func TestPickerIconsOff(t *testing.T) {
 }
 
 func TestPickerFilter(t *testing.T) {
+	t.Parallel()
 	a, _ := pickerApp(t, "/work")
 	injectPicker(t, a, sampleRepo, sampleTrees())
 
@@ -350,6 +353,7 @@ func TestPickerFilter(t *testing.T) {
 }
 
 func TestPickerNavigationWraps(t *testing.T) {
+	t.Parallel()
 	a, _ := pickerApp(t, "/work")
 	injectPicker(t, a, sampleRepo, sampleTrees())
 
@@ -367,6 +371,7 @@ func TestPickerNavigationWraps(t *testing.T) {
 }
 
 func TestPickerOpensAnAgentInTheWorktree(t *testing.T) {
+	t.Parallel()
 	dir := committedRepo(t)
 	wt := filepath.Join(dir, ".worktrees", "feat-x")
 	gitIn(t, "git", dir, "worktree", "add", "-q", "-b", "feat/x", wt)
@@ -407,6 +412,7 @@ func TestPickerOpensAnAgentInTheWorktree(t *testing.T) {
 }
 
 func TestPickerPrunableNotice(t *testing.T) {
+	t.Parallel()
 	a, st := pickerApp(t, "/work")
 	injectPicker(t, a, sampleRepo, sampleTrees())
 
@@ -435,6 +441,7 @@ func TestPickerPrunableNotice(t *testing.T) {
 }
 
 func TestPickerEscCloses(t *testing.T) {
+	t.Parallel()
 	a, st := pickerApp(t, "/work")
 	injectPicker(t, a, sampleRepo, sampleTrees())
 
@@ -446,6 +453,7 @@ func TestPickerEscCloses(t *testing.T) {
 }
 
 func TestNewWorktreeCreatesAndOpens(t *testing.T) {
+	t.Parallel()
 	dir := committedRepo(t)
 	a, st := pickerApp(t, dir)
 	askPicker(t, a)
@@ -518,6 +526,7 @@ func TestNewWorktreeCreatesAndOpens(t *testing.T) {
 // value stays as git named it: the worktree is created from that exact ref, which
 // a cleaned name would not be.
 func TestNewWorktreeBaseIsCleanedOnlyForDisplay(t *testing.T) {
+	t.Parallel()
 	dir := committedRepo(t)
 
 	// origin/HEAD names a branch with a bidi override, which git allows in a ref name.
@@ -560,6 +569,8 @@ func TestNewWorktreeBaseIsCleanedOnlyForDisplay(t *testing.T) {
 // A field draws its text without control and invisible characters while the
 // input keeps the value; the cursor stands after the visible characters before it.
 func TestFieldViewDrawsCleanTextAndMapsTheCursor(t *testing.T) {
+	t.Parallel()
+
 	const value = "e\u202evil"
 
 	tests := []struct {
@@ -596,6 +607,8 @@ func TestFieldViewDrawsCleanTextAndMapsTheCursor(t *testing.T) {
 }
 
 func TestNewWorktreeErrorStaysInThePage(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name   string
 		trunk  bool // the only branch is trunk: no default base
@@ -663,6 +676,8 @@ func TestNewWorktreeErrorStaysInThePage(t *testing.T) {
 }
 
 func TestNewWorktreeShowsGitsReason(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name         string
 		branch, base string
@@ -716,6 +731,8 @@ func TestNewWorktreeShowsGitsReason(t *testing.T) {
 }
 
 func TestNewWorktreeRetryAfterAnError(t *testing.T) {
+	t.Parallel()
+
 	dir := committedRepo(t)
 	if err := os.MkdirAll(filepath.Join(dir, ".worktrees", "feat-x"), 0o755); err != nil {
 		t.Fatal(err)
@@ -737,6 +754,8 @@ func TestNewWorktreeRetryAfterAnError(t *testing.T) {
 }
 
 func TestNewWorktreeCreatedAnswer(t *testing.T) {
+	t.Parallel()
+
 	path := "/home/me/code/api/.worktrees/x"
 
 	t.Run("opens the agent", func(t *testing.T) {
@@ -781,6 +800,7 @@ func TestNewWorktreeCreatedAnswer(t *testing.T) {
 }
 
 func TestNewWorktreeNeedsABranch(t *testing.T) {
+	t.Parallel()
 	a, _ := pickerApp(t, "/work")
 	injectPicker(t, a, sampleRepo, sampleTrees())
 	openSampleForm(t, a)
@@ -795,6 +815,7 @@ func TestNewWorktreeNeedsABranch(t *testing.T) {
 }
 
 func TestNewWorktreeNameWithoutADirectory(t *testing.T) {
+	t.Parallel()
 	a, _ := pickerApp(t, "/work")
 	injectPicker(t, a, sampleRepo, sampleTrees())
 	openSampleForm(t, a)
@@ -811,6 +832,7 @@ func TestNewWorktreeNameWithoutADirectory(t *testing.T) {
 }
 
 func TestNewWorktreeSiblingRoot(t *testing.T) {
+	t.Parallel()
 	a, _ := pickerApp(t, "/work")
 	a.picker.cfg = core.WorktreesConfig{Root: "sibling"}
 	injectPicker(t, a, sampleRepo, sampleTrees())
@@ -823,6 +845,7 @@ func TestNewWorktreeSiblingRoot(t *testing.T) {
 }
 
 func TestNewWorktreeShowsIgnoreWarnings(t *testing.T) {
+	t.Parallel()
 	t.Run("inside", func(t *testing.T) {
 		dir := committedRepo(t)
 		write(t, filepath.Join(dir, ".vscode", "settings.json"), "{}\n")
@@ -875,6 +898,7 @@ func TestNewWorktreeShowsIgnoreWarnings(t *testing.T) {
 }
 
 func TestNewWorktreeFieldsAndBack(t *testing.T) {
+	t.Parallel()
 	a, _ := pickerApp(t, "/work")
 	injectPicker(t, a, sampleRepo, sampleTrees())
 	openSampleForm(t, a)
@@ -917,6 +941,7 @@ func TestNewWorktreeFieldsAndBack(t *testing.T) {
 }
 
 func TestPickerStaleAnswersAreDropped(t *testing.T) {
+	t.Parallel()
 	t.Run("open", func(t *testing.T) {
 		dir := committedRepo(t)
 		a, _ := pickerApp(t, dir)
@@ -1010,6 +1035,8 @@ func TestPickerStaleAnswersAreDropped(t *testing.T) {
 }
 
 func TestPickerDoesNotOpenOverAModal(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name string
 		open func(a *App)
@@ -1040,6 +1067,7 @@ func TestPickerDoesNotOpenOverAModal(t *testing.T) {
 }
 
 func TestPickerGivesWayToAConfirm(t *testing.T) {
+	t.Parallel()
 	a, st := pickerApp(t, "/work")
 	injectPicker(t, a, sampleRepo, sampleTrees())
 	typeText(a, "au")
@@ -1075,6 +1103,7 @@ func TestPickerGivesWayToAConfirm(t *testing.T) {
 }
 
 func TestPickerClosesWhenItsTabGoes(t *testing.T) {
+	t.Parallel()
 	a, st := pickerApp(t, "/work")
 	openIn(t, a, core.NewTab{Kind: core.KindShell, Cwd: "/work"}, core.SelectTab{Index: 0})
 	injectPicker(t, a, sampleRepo, sampleTrees())
@@ -1105,6 +1134,7 @@ func TestPickerClosesWhenItsTabGoes(t *testing.T) {
 }
 
 func TestPickerOwnsInput(t *testing.T) {
+	t.Parallel()
 	a, st := pickerApp(t, "/work")
 	agentsAt(t, a, "/home/me/code/api", 1)
 
@@ -1151,6 +1181,7 @@ func TestPickerOwnsInput(t *testing.T) {
 }
 
 func TestPickerClosesWhenTheTabChanges(t *testing.T) {
+	t.Parallel()
 	a, _ := pickerApp(t, "/work")
 	injectPicker(t, a, sampleRepo, sampleTrees())
 
@@ -1270,6 +1301,7 @@ func TestPickerReleasesTheDrawersKeyboard(t *testing.T) {
 }
 
 func TestPickerCursor(t *testing.T) {
+	t.Parallel()
 	a, _ := pickerApp(t, "/work")
 	injectPicker(t, a, sampleRepo, sampleTrees())
 
@@ -1309,6 +1341,8 @@ func TestPickerCursor(t *testing.T) {
 }
 
 func TestPickerSizes(t *testing.T) {
+	t.Parallel()
+
 	for _, page := range []string{"list", "page"} {
 		for _, sz := range [][2]int{{100, 30}, {40, 12}, {30, 8}, {5, 3}, {1, 1}, {2, 2}} {
 			w, h := sz[0], sz[1]
@@ -1351,6 +1385,8 @@ func hostileTrees() []git.Worktree {
 // Text git supplies reaches the terminal only as plain characters, and every
 // line of the frame keeps its width.
 func TestPickerCleansGitText(t *testing.T) {
+	t.Parallel()
+
 	hostile := errors.New("fatal: \x1b]8;;https://evil.example\x1b\\bad\x1bPq#0\x1b\\ \u202etxt\nsecond line")
 
 	scenes := map[string]func(t *testing.T, a *App){
@@ -1419,6 +1455,8 @@ func TestPickerCleansGitText(t *testing.T) {
 // The shortened path and the reason for a failure are safe to draw wherever
 // they are used.
 func TestPickerTextHelpersCleanTheirOutput(t *testing.T) {
+	t.Parallel()
+
 	const evil = "\x1b]8;;https://evil.example\x1b\\"
 
 	tests := []struct {
@@ -1442,6 +1480,7 @@ func TestPickerTextHelpersCleanTheirOutput(t *testing.T) {
 }
 
 func TestOpenPaneInUsesTheGivenCwd(t *testing.T) {
+	t.Parallel()
 	a, st := lifeAppSized(t, 100, 30)
 
 	if cmd := a.openPaneIn(core.KindAgent, core.SplitVertical, "/srv/x"); cmd == nil {
@@ -1491,18 +1530,39 @@ func pickerScene(t *testing.T, theme string, icons, page bool) *App {
 	return a
 }
 
+func pickerGoldenCases() []struct {
+	name string
+	page bool
+} {
+	return []struct {
+		name string
+		page bool
+	}{{"list", false}, {"new-page", true}}
+}
+
 func TestPickerGolden(t *testing.T) {
-	for _, th := range chromeThemes() {
-		for _, icons := range []bool{true, false} {
-			for _, c := range []struct {
-				name string
-				page bool
-			}{{"list", false}, {"new-page", true}} {
-				t.Run(fmt.Sprintf("%s/icons=%v/%s", th, icons, c.name), func(t *testing.T) {
-					a := pickerScene(t, th, icons, c.page)
-					golden.RequireEqual(t, []byte(a.View().Content))
-				})
-			}
+	t.Parallel()
+
+	for _, c := range pickerGoldenCases() {
+		t.Run("catppuccin-mocha/icons=true/"+c.name, func(t *testing.T) {
+			t.Parallel()
+			a := pickerScene(t, "catppuccin-mocha", true, c.page)
+			golden.RequireEqual(t, []byte(a.View().Content))
+		})
+	}
+}
+
+// TestPickerText is the same screens without styling, so the layout reads.
+func TestPickerText(t *testing.T) {
+	t.Parallel()
+
+	for _, icons := range []bool{true, false} {
+		for _, c := range pickerGoldenCases() {
+			t.Run(fmt.Sprintf("icons=%v/%s", icons, c.name), func(t *testing.T) {
+				t.Parallel()
+				a := pickerScene(t, "catppuccin-mocha", icons, c.page)
+				golden.RequireEqual(t, []byte(ansi.Strip(a.View().Content)))
+			})
 		}
 	}
 }

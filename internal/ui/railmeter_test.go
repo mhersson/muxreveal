@@ -39,6 +39,7 @@ func cellBelow(t *testing.T, view string, from int, text string) (x, y int) {
 }
 
 func TestRailMeterColours(t *testing.T) {
+	t.Parallel()
 	ui := mochaUI(t)
 
 	tests := []struct {
@@ -80,6 +81,7 @@ func TestRailMeterColours(t *testing.T) {
 }
 
 func TestRailLineOneDropOrder(t *testing.T) {
+	t.Parallel()
 	a := newTestApp(t)
 	a.clock = &fakeClock{t: t0}
 
@@ -137,6 +139,8 @@ func TestRailLineOneDropOrder(t *testing.T) {
 // Core clamps what it records, so the drawing must not rely on that: a card and a
 // frame tag never show a value outside 0-100.
 func TestMeterIsClampedForDrawing(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		held int
 		want string

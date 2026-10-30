@@ -332,20 +332,21 @@ func railCases() []railCase {
 	}
 }
 
+// TestRailGolden draws each case once in colour, in the default theme with icons.
+// TestRailText covers icons off and TestScreensTakeTheirColoursFromTheTheme the other theme.
+// It compares highlighted colours, so it runs serially (docs/gotchas.md).
 func TestRailGolden(t *testing.T) {
-	for _, th := range chromeThemes() {
-		for _, icons := range []bool{true, false} {
-			for _, c := range railCases() {
-				t.Run(fmt.Sprintf("%s/icons=%v/%s", th, icons, c.name), func(t *testing.T) {
-					golden.RequireEqual(t, []byte(c.build(t, th, icons).View().Content))
-				})
-			}
-		}
+	for _, c := range railCases() {
+		t.Run("catppuccin-mocha/icons=true/"+c.name, func(t *testing.T) {
+			golden.RequireEqual(t, []byte(c.build(t, "catppuccin-mocha", true).View().Content))
+		})
 	}
 }
 
 // TestRailText is the same frames without styling, so the layout reads.
 func TestRailText(t *testing.T) {
+	t.Parallel()
+
 	for _, icons := range []bool{true, false} {
 		for _, c := range railCases() {
 			t.Run(fmt.Sprintf("icons=%v/%s", icons, c.name), func(t *testing.T) {
@@ -356,6 +357,7 @@ func TestRailText(t *testing.T) {
 }
 
 func TestRailTakesColumnsFromPanes(t *testing.T) {
+	t.Parallel()
 	a := drawApp(t, "catppuccin-mocha", true, 100, 30, railFixtureAgents())
 	a.relayout()
 
@@ -413,6 +415,8 @@ func TestRailTakesColumnsFromPanes(t *testing.T) {
 }
 
 func TestRailFramesKeepTheirWidth(t *testing.T) {
+	t.Parallel()
+
 	for _, w := range []int{1, 2, 5, 23, 40, 62, 63, 64, 65, 70, 83, 84, 85, 100, 110} {
 		for _, h := range []int{1, 2, 3, 4, 5, 8, 11, 12, 13, 20, 30} {
 			a := drawApp(t, "catppuccin-mocha", true, w, h, railFixtureAgents())
@@ -434,6 +438,8 @@ func TestRailFramesKeepTheirWidth(t *testing.T) {
 }
 
 func TestRailCutRuns(t *testing.T) {
+	t.Parallel()
+
 	runs := []railRun{{text: "ab"}, {text: "日本語テキスト"}}
 
 	for w := 0; w <= 16; w++ {
@@ -458,6 +464,7 @@ func TestRailCutRuns(t *testing.T) {
 }
 
 func TestRailColours(t *testing.T) {
+	t.Parallel()
 	a := drawApp(t, "catppuccin-mocha", true, 100, 30, railFixtureAgents())
 	ui := a.current().theme.UI
 
@@ -498,6 +505,7 @@ func TestRailColours(t *testing.T) {
 }
 
 func TestRailSearchMatchColour(t *testing.T) {
+	t.Parallel()
 	a := drawApp(t, "catppuccin-mocha", true, 100, 30, railFixtureAgents())
 	ui := a.current().theme.UI
 	a.rail.focused, a.rail.searching, a.rail.query = true, true, "web"
@@ -521,6 +529,7 @@ func TestRailSearchMatchColour(t *testing.T) {
 }
 
 func TestRailCursor(t *testing.T) {
+	t.Parallel()
 	a := drawApp(t, "catppuccin-mocha", true, 100, 30, railFixtureAgents())
 
 	a.rail.searching, a.rail.query = true, "ab"
@@ -555,6 +564,7 @@ func TestRailCursor(t *testing.T) {
 }
 
 func TestRailFlashColoursTheWholeFrame(t *testing.T) {
+	t.Parallel()
 	a := drawApp(t, "catppuccin-mocha", true, 100, 30, railFixtureAgents())
 	ui := a.current().theme.UI
 	a.relayout()
@@ -573,6 +583,7 @@ func TestRailFlashColoursTheWholeFrame(t *testing.T) {
 }
 
 func TestRailHeaderCounts(t *testing.T) {
+	t.Parallel()
 	a := drawApp(t, "catppuccin-mocha", true, 100, 30, railFixtureAgents())
 	row := []rune(ansi.Strip(strings.Split(a.View().Content, "\n")[2]))
 	line := string(row[:44])
@@ -594,6 +605,7 @@ func TestRailHeaderCounts(t *testing.T) {
 }
 
 func TestRailToastOverRailKeepsItsRows(t *testing.T) {
+	t.Parallel()
 	base := drawApp(t, "catppuccin-mocha", true, 64, 30, railFixtureAgents())
 	with := drawApp(t, "catppuccin-mocha", true, 64, 30, railFixtureAgents())
 	with.notice = longNotice
@@ -635,6 +647,7 @@ func TestRailToastOverRailKeepsItsRows(t *testing.T) {
 }
 
 func TestRailNoHooksCard(t *testing.T) {
+	t.Parallel()
 	a := drawApp(t, "catppuccin-mocha", true, 100, 30, railFixtureAgents())
 	ui := a.current().theme.UI
 	a.rail.sel = "p6"
@@ -676,6 +689,7 @@ func TestRailNoHooksCard(t *testing.T) {
 }
 
 func TestRailHighlightOnCutText(t *testing.T) {
+	t.Parallel()
 	a := drawApp(t, "catppuccin-mocha", true, 100, 30, railFixtureAgents())
 	ui := a.current().theme.UI
 	a.rail.query = "web"
@@ -714,6 +728,8 @@ func TestRailHighlightOnCutText(t *testing.T) {
 }
 
 func TestRailCardsAreMadePrintableOnce(t *testing.T) {
+	t.Parallel()
+
 	agents := railFixtureAgents()[:2]
 	agents[1].project, agents[1].branch, agents[1].action = "we\x07b", "ma\x1bin", "Ed\x01it web"
 	a := drawApp(t, "catppuccin-mocha", true, 100, 30, agents)
@@ -777,6 +793,7 @@ func cardOf(t *testing.T, a *App, id core.PaneID) railCard {
 }
 
 func TestRailCardShowsTheSessionName(t *testing.T) {
+	t.Parallel()
 	a := drawApp(t, "catppuccin-mocha", true, 100, 60, namedAgents())
 	lines := railTextLines(a)
 
@@ -812,6 +829,7 @@ func TestRailCardShowsTheSessionName(t *testing.T) {
 }
 
 func TestRailCardFallsBackToTheProject(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name   string
 		agent  railAgent
@@ -860,6 +878,8 @@ func TestRailCardFallsBackToTheProject(t *testing.T) {
 }
 
 func TestRailCardCutsTheName(t *testing.T) {
+	t.Parallel()
+
 	const (
 		wide   = "\u6f22" // two cells
 		family = "\U0001F468\u200D\U0001F469\u200D\U0001F467"
@@ -929,6 +949,7 @@ func TestRailCardCutsTheName(t *testing.T) {
 // The pane's frame keeps its own title, the guest's OSC title, however its
 // card is named.
 func TestRailNameLeavesThePaneTitleAlone(t *testing.T) {
+	t.Parallel()
 	a, _ := framedApp(t, 100, 12, paneSpec{kind: core.KindAgent, cwd: "/w/proj", split: core.SplitVertical, text: "\x1b]2;vim main.go\x07"})
 	openIn(t, a, core.SetRail{Open: true}, core.SetAgentSession{ID: "p1", Session: "s-p1", Transcript: "/w/proj/p1.jsonl"})
 	a.railEntry("p1").name = railName{text: "muxr-orchestrator", transcript: "/w/proj/p1.jsonl"}
@@ -946,6 +967,8 @@ func TestRailNameLeavesThePaneTitleAlone(t *testing.T) {
 }
 
 func TestRailCardNameIsCleaned(t *testing.T) {
+	t.Parallel()
+
 	const family = "\U0001F468\u200D\U0001F469\u200D\U0001F467"
 
 	tests := []struct {
@@ -983,6 +1006,7 @@ func TestRailCardNameIsCleaned(t *testing.T) {
 }
 
 func TestRailSearchMatchColourOnTheName(t *testing.T) {
+	t.Parallel()
 	a := drawApp(t, "catppuccin-mocha", true, 100, 30, namedAgents())
 	ui := a.current().theme.UI
 	a.rail.focused, a.rail.query = true, "orch"
@@ -1006,6 +1030,8 @@ func TestRailSearchMatchColourOnTheName(t *testing.T) {
 }
 
 func TestSpinFrame(t *testing.T) {
+	t.Parallel()
+
 	frames := []rune(spinFrames)
 
 	for n := range 3 * len(frames) {
@@ -1016,6 +1042,7 @@ func TestSpinFrame(t *testing.T) {
 }
 
 func TestRailBottomCounts(t *testing.T) {
+	t.Parallel()
 	ui := mustTheme(t, "catppuccin-mocha").UI
 
 	tests := []struct {
@@ -1044,6 +1071,7 @@ func TestRailBottomCounts(t *testing.T) {
 // While the rail has the keyboard the tab's focused pane draws as an unfocused
 // one: Border frame, Muted title. The jump flash still wins.
 func TestRailFocusedPaneDrawsUnfocused(t *testing.T) {
+	t.Parallel()
 	a := drawApp(t, "catppuccin-mocha", true, 100, 30, railFixtureAgents())
 	ui := a.current().theme.UI
 	a.relayout()
@@ -1140,6 +1168,7 @@ func frameCells(t *testing.T, a *App, skip core.Rect) map[[2]int]string {
 }
 
 func TestRailFocusRules(t *testing.T) {
+	t.Parallel()
 	t.Run("a rail the width rule hides cannot take the colours", func(t *testing.T) {
 		a := drawApp(t, "catppuccin-mocha", true, 63, 30, railFixtureAgents())
 		ui := a.current().theme.UI

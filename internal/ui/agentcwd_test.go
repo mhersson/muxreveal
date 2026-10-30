@@ -296,6 +296,7 @@ func TestWatchSettlesWhenTheAgentCwdFlips(t *testing.T) {
 }
 
 func TestDrawerOpensOnTheAgentCwd(t *testing.T) {
+	t.Parallel()
 	r := newDrawerRig(t)
 	tr := newAgentTrees(t, "git")
 	write(t, filepath.Join(tr.main, "b.txt"), "one\nmain\n")
@@ -317,6 +318,7 @@ func TestDrawerOpensOnTheAgentCwd(t *testing.T) {
 }
 
 func TestOpenDrawerFollowsTheAgentCwd(t *testing.T) {
+	t.Parallel()
 	r := newDrawerRig(t)
 	tr := newAgentTrees(t, "git")
 	write(t, filepath.Join(tr.main, "b.txt"), "one\nmain\n")
@@ -341,6 +343,7 @@ func TestOpenDrawerFollowsTheAgentCwd(t *testing.T) {
 }
 
 func TestOpenAnswerForTheDirectoryTheAgentLeftIsDropped(t *testing.T) {
+	t.Parallel()
 	r := newDrawerRig(t)
 	tr := newAgentTrees(t, "git")
 	id := r.agent(t, tr.main, "")
