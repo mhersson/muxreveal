@@ -2160,6 +2160,10 @@ func TestGateNextPromptSkipsAStartStillBeingTaken(t *testing.T) {
 	r.in <- next
 
 	within(t, released, 5*time.Second, "next turn release")
+
+	// The start is still blocked when the prompt's ends and start are done.
+	forwardedAfter(t, r, "UserPromptSubmit")
+	within(t, forwardedAfter(t, r, "UserPromptSubmit").Snapped, 5*time.Second, "the next turn's snapshot")
 	close(blocked.unblock)
 	drain(t, r)
 
