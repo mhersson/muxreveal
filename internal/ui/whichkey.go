@@ -22,19 +22,33 @@ type hintFamily struct {
 	members []string // command id suffixes, in the order their keys show
 	title   string
 	sep     string // between keys; "-" shows consecutive keys as first-last
+	// seqTitle titles the family's row in the sequence popup, whose keys are the
+	// second ones; "" means each command's own title.
+	seqTitle string
 }
 
 func hintFamilies() []hintFamily {
 	return []hintFamily{
-		{"pane.split.", []string{"down", "right"}, "Split below/right", " "},
-		{"pane.focus.", []string{"left", "down", "up", "right"}, "Focus pane", " "},
-		{"pane.resize.", []string{"left", "down", "up", "right"}, "Resize pane", " "},
-		{"pane.swap.", []string{"left", "down", "up", "right"}, "Swap pane", ""},
-		{"tab.jump.", []string{"1", "2", "3", "4", "5", "6", "7", "8", "9"}, "Jump to tab", "-"},
-		{"pane.move.tab.", []string{"1", "2", "3", "4", "5", "6", "7", "8", "9"}, "Move pane to tab", "-"},
-		{"pane.send.tab.", []string{"1", "2", "3", "4", "5", "6", "7", "8", "9"}, "Send pane to tab", "-"},
-		{"pane.preselect.", []string{"left", "down", "up", "right"}, "Preselect", ""},
+		{"pane.split.", []string{"down", "right"}, "Split below/right", " ", ""},
+		{"pane.focus.", []string{"left", "down", "up", "right"}, "Focus pane", " ", ""},
+		{"pane.resize.", []string{"left", "down", "up", "right"}, "Resize pane", " ", ""},
+		{"pane.swap.", []string{"left", "down", "up", "right"}, "Swap pane", "", ""},
+		{"tab.jump.", []string{"1", "2", "3", "4", "5", "6", "7", "8", "9"}, "Jump to tab", "-", ""},
+		{"pane.move.tab.", []string{"1", "2", "3", "4", "5", "6", "7", "8", "9"}, "Move pane to tab", "-", "Move pane to tab N"},
+		{"pane.send.tab.", []string{"1", "2", "3", "4", "5", "6", "7", "8", "9"}, "Send pane to tab", "-", "Send pane to tab N"},
+		{"pane.preselect.", []string{"left", "down", "up", "right"}, "Preselect", "", "Preselect side"},
 	}
+}
+
+// familyOf returns the family a command is a member of, or nil.
+func familyOf(families []hintFamily, id string) *hintFamily {
+	for i := range families {
+		if rest, ok := strings.CutPrefix(id, families[i].prefix); ok && slices.Contains(families[i].members, rest) {
+			return &families[i]
+		}
+	}
+
+	return nil
 }
 
 // groupIcon is the glyph of a which-key group head, or "".
@@ -64,16 +78,16 @@ func hintKey(key string) string {
 	return key
 }
 
-// collapse returns the one row for f, or false when a member is unbound.
-func (f hintFamily) collapse(a *App) (hint, bool) {
-	keys := make([]string, len(f.members))
-
-	var group string
+// keys returns the display keys of the family's members, each member's first
+// key, and the lead their sequences share ("> " for "> 1"), or false when a
+// member is unbound or the sequences differ in their first key.
+func (f hintFamily) keys(a *App) (lead string, keys []string, group string, ok bool) {
+	keys = make([]string, len(f.members))
 
 	for i, m := range f.members {
 		key, ok := a.keymap.keyOf(f.prefix + m)
 		if !ok {
-			return hint{}, false
+			return "", nil, "", false
 		}
 
 		keys[i] = hintKey(key)
@@ -82,17 +96,26 @@ func (f hintFamily) collapse(a *App) (hint, bool) {
 		}
 	}
 	// Sequence keys such as "> 1" share their first key, which leads the row.
-	lead := ""
 	if first, _, ok := strings.Cut(keys[0], " "); ok {
 		lead = first + " "
 		for i, k := range keys {
 			rest, ok := strings.CutPrefix(k, lead)
 			if !ok || strings.Contains(rest, " ") {
-				return hint{}, false
+				return "", nil, "", false
 			}
 
 			keys[i] = rest
 		}
+	}
+
+	return lead, keys, group, true
+}
+
+// collapse returns the one row for f, or false when a member is unbound.
+func (f hintFamily) collapse(a *App) (hint, bool) {
+	lead, keys, group, ok := f.keys(a)
+	if !ok {
+		return hint{}, false
 	}
 
 	if f.sep == "-" && consecutive(keys) {
@@ -126,8 +149,9 @@ func consecutive(keys []string) bool {
 	return len(keys) > 0
 }
 
-// hints lists the bound commands with their titles. A family whose keys are
-// all bound shares one row; otherwise its bound keys get a row each.
+// hints lists the bound keys with their commands' titles, a row per key. A
+// family whose commands are all bound shares one row on their first keys;
+// otherwise its keys get a row each.
 func (a *App) hints() []hint {
 	hints := make([]hint, 0, len(a.keymap.bindings))
 	done := map[string]bool{}
@@ -139,15 +163,9 @@ func (a *App) hints() []hint {
 			continue
 		}
 
-		var fam *hintFamily
+		first, _ := a.keymap.keyOf(b.command)
 
-		for i := range families {
-			if rest, ok := strings.CutPrefix(b.command, families[i].prefix); ok && slices.Contains(families[i].members, rest) {
-				fam = &families[i]
-			}
-		}
-
-		if fam != nil {
+		if fam := familyOf(families, b.command); fam != nil && first == b.key {
 			if row, ok := fam.collapse(a); ok {
 				if !done[fam.prefix] {
 					hints = append(hints, row)
@@ -285,32 +303,72 @@ func whichKeyColumn(groups [][]hint, icons bool, st styles) column {
 	return column{rows: rows, width: contentW + 2}
 }
 
-// sequenceRows are the second keys a sequence prefix waits for, as key and title.
-func sequenceRows(prefix string) []hint {
-	switch prefix {
-	case ">":
-		return []hint{{key: "1-9", title: "Move pane to tab N"}, {key: "esc", title: "Cancel"}}
-	case ".":
-		return []hint{{key: "1-9", title: "Send pane to tab N"}, {key: "esc", title: "Cancel"}}
-	case ";":
-		return []hint{{key: "h j k l", title: "Preselect side"}, {key: "esc", title: "Clear preselection"}}
-	case "g":
-		return []hint{
-			{key: "l", title: "Pull requests"},
-			{key: "p", title: "Push"},
-			{key: "o", title: "Open a pull request"},
-			{key: "m", title: "Merge pull request"},
-			{key: "esc", title: "Cancel"},
+// sequenceRows are the second keys a sequence prefix waits for, as key and
+// title, in binding order, with a cancel row last unless esc is bound.
+func (a *App) sequenceRows(prefix string) []hint {
+	lead := prefix + " "
+	families := hintFamilies()
+	done := map[string]bool{}
+
+	var rows []hint
+
+	for _, b := range a.keymap.bindings {
+		second, ok := strings.CutPrefix(b.key, lead)
+		if !ok {
+			continue
 		}
+
+		c, ok := a.reg.get(b.command)
+		if !ok {
+			continue
+		}
+
+		first, _ := a.keymap.keyOf(b.command)
+
+		if fam := familyOf(families, b.command); fam != nil && first == b.key && fam.seqTitle != "" {
+			if l, keys, _, ok := fam.keys(a); ok && l == lead {
+				if !done[fam.prefix] {
+					rows = append(rows, hint{key: joinSecond(keys, fam.sep), title: fam.seqTitle})
+				}
+
+				done[fam.prefix] = true
+
+				continue
+			}
+		}
+
+		title := c.short
+		if title == "" {
+			title = c.title
+		}
+
+		rows = append(rows, hint{key: second, title: title})
 	}
 
-	return nil
+	if len(rows) == 0 {
+		return nil
+	}
+
+	if _, bound := a.keymap.lookup(lead + "esc"); !bound {
+		rows = append(rows, hint{key: "esc", title: "Cancel"})
+	}
+
+	return rows
+}
+
+// joinSecond shows a family's second keys as first-last when they run on, else
+// separated by spaces.
+func joinSecond(keys []string, sep string) string {
+	if sep == "-" && consecutive(keys) {
+		return keys[0] + "-" + keys[len(keys)-1]
+	}
+
+	return strings.Join(keys, " ")
 }
 
 // sequencePopup draws the box a pending sequence shows: the leader's name and
 // the first key as its title, then one row per second key.
-func sequencePopup(leader, prefix string, icons bool, st styles) []string {
-	rows := sequenceRows(prefix)
+func sequencePopup(leader, prefix string, rows []hint, icons bool, st styles) []string {
 	if len(rows) == 0 {
 		return nil
 	}

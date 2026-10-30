@@ -80,6 +80,8 @@ type Options struct {
 	// PRActions makes the GitHub writes (approve, merge, open a pull request);
 	// nil turns them off.
 	PRActions prActions
+	// Keys is the [keys] config laid over the built-in leader keys.
+	Keys core.KeysConfig
 }
 
 // App is the root Bubble Tea model.
@@ -207,7 +209,11 @@ func New(opts Options) (*App, error) {
 		return nil, fmt.Errorf("build command registry: %w", err)
 	}
 
-	km := defaultKeymap()
+	km, err := resolveLeader(opts.Keys, reg)
+	if err != nil {
+		return nil, err
+	}
+
 	for _, b := range km.bindings {
 		if _, ok := reg.get(b.command); !ok {
 			return nil, fmt.Errorf("ui: binding %q names unknown command %q", b.key, b.command)
@@ -696,7 +702,7 @@ func (a *App) runLeader(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 
 	prefix := a.prefix
 	if prefix == "" && a.keymap.isPrefix(key) {
-		if key == ";" && !a.tabIsBSP() {
+		if a.keymap.preselectPrefix(key) && !a.tabIsBSP() {
 			a.notice = noticePreselectBSP
 			a.endLeader()
 
@@ -757,7 +763,7 @@ func (a *App) View() tea.View {
 
 	content = overlayToast(content, a.width, a.height, a.notice, a.noticeLevel(), a.icons, lk.styles)
 	if a.sequenceOpen() {
-		content = overlayCorner(content, a.width, a.height, sequencePopup(a.keymap.leader, a.prefix, a.icons, lk.styles))
+		content = overlayCorner(content, a.width, a.height, sequencePopup(a.keymap.leader, a.prefix, a.sequenceRows(a.prefix), a.icons, lk.styles))
 	}
 
 	if a.popup {

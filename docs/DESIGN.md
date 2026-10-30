@@ -444,19 +444,20 @@ There is no status bar. Each of these has its own home:
 
 Rounded boxes (`╭ ╮ ╰ ╯`, matching the pane frames; the which-key rule keeps its joins `┬ ┴`, the palette divider its `├ ┤`) on `Panel`. Each title is set into the top border two cells from the corner. Overlays are clipped to the screen, never wrapped, and draw over the toast.
 
-- **Which-key.** Placed bottom-right, one cell from the right edge, with its bottom border on the last row. Border `BorderFocus`; title ` 󰌌 ctrl+space ` in `Accent`, bold.
+- **Which-key.** Placed bottom-right, one cell from the right edge, with its bottom border on the last row. Border `BorderFocus`; title ` 󰌌 ctrl+space ` (the leader key, as configured) in `Accent`, bold.
+  - Rows come from the merged bindings (the built-in keys with `[keys.leader]` laid over them): a command with several keys gets a row per key, and a family collapses on each member's first key. The rows below are the defaults.
   - Two columns, split by a `Border` rule that joins the top and bottom borders (`┬`, `┴`). Panes, then Layout, are on the left. Tabs, a blank row, Git, a blank row, then App are on the right.
   - The Panes group includes the rows `a  Agents rail` and `d  Review drawer`.
   - The Git group has the one row `g  Push and pull requests`; `g` is a sequence prefix (see Sequence popup) whose second keys are `l`, `p`, `o` and `m`.
   - Group heads `󰯌 Panes`, `󰕴 Layout`, `󰓩 Tabs`, ` Git` and `󰒓 App` are `Accent` and bold, followed by a `Border` rule to the column's end.
   - Rows: the key in `Key`, bold, padded to the column's widest key; two cells; the title in `Fg`.
   - Directional commands collapse into one row each, their keys padded like any other row's: `h j k l` (Focus pane), `H J K L` (Resize pane), `^h^j^k^l` (Swap pane), `s v` (Split below/right), `1-9` (Jump to tab), `> 1-9` (Move pane to tab), `. 1-9` (Send pane to tab) and `; hjkl` (Preselect). A key that starts a two-key sequence closes the popup and opens the sequence popup. The keys come from the bindings: a family collapses only when all its keys are bound (`1-9` only when they are consecutive); otherwise each bound key gets its own row.
-- **Sequence popup.** A sequence prefix (`>`, `.`, `;`, `g` after the leader) opens it at once, in the which-key box's place and style: a single column titled ` 󰌌 ctrl+space > ` (the leader's name, then the first key; no icon with `icons = false`) in `Accent`, bold, with one row per second key, laid out like which-key rows, with the key column padded to the widest key as there (`esc      Clear preselection`): after `>`, `1-9  Move pane to tab N` and `esc  Cancel`; after `.`, `1-9  Send pane to tab N` and `esc  Cancel`; after `;`, `h j k l  Preselect side` and `esc      Clear preselection`; after `g`, `l    Pull requests`, `p    Push`, `o    Open a pull request`, `m    Merge pull request` and `esc  Cancel`. The second key closes it, as does `esc`, a paste or an opened overlay.
+- **Sequence popup.** A sequence prefix (`>`, `.`, `;`, `g` after the leader) opens it at once, in the which-key box's place and style: a single column titled ` 󰌌 ctrl+space > ` (the leader's name, then the first key; no icon with `icons = false`) in `Accent`, bold, with one row per second key, laid out like which-key rows, with the key column padded to the widest key as there (`esc      Clear preselection`): after `>`, `1-9  Move pane to tab N` and `esc  Cancel`; after `.`, `1-9  Send pane to tab N` and `esc  Cancel`; after `;`, `h j k l  Preselect side` and `esc      Clear preselection`; after `g`, `l    Pull requests`, `p    Push`, `o    Open a pull request`, `m    Merge pull request` and `esc  Cancel`. These are the defaults: the rows come from the bindings under the prefix, a family under its sequence title (`Move pane to tab N`, `Send pane to tab N`, `Preselect side`), any other command under its short title when it has one (`Push` for push) else its title, and `esc  Cancel` comes last unless `<prefix> esc` is bound. A prefix whose bindings are all preselect commands needs a BSP tab. The second key closes it, as does `esc`, a paste or an opened overlay.
 - **Palette and theme picker.** Centred, width min(64, width-4), top at a quarter of the height, border `BorderFocus`. With ten result rows the box is 16 rows tall, so it fits whole on a terminal 22 rows tall; below that the bottom rows are clipped: the count and bottom border first (a terminal 21 rows tall), then the hint row (20 rows and fewer).
   - Title: `  Commands ` (the theme picker: ` 󰏘 Theme `), in `Accent`, bold.
   - Input row: `❯ ` in `Accent`, then the query.
   - A divider row joined to both sides (`├`, `┤`).
-  - Result rows: the command's icon (`Muted`; `Accent` when selected), the title (`Fg`, matched runes in `Match` and bold), and the key hint right-aligned (`Key`, bold). The selected row is on `Selection` with a bold title.
+  - Result rows: the command's icon (`Muted`; `Accent` when selected), the title (`Fg`, matched runes in `Match` and bold), and the key hint right-aligned (`Key`, bold): the command's first leader key as the whole sequence, such as `ctrl+space q`. The selected row is on `Selection` with a bold title.
   - A divider row joined to both sides (`├`, `┤`), then one hint row: `up/down move`, `enter run`, `esc close`, one cell in from the border, each key in `Key` bold and its label in `Muted`, the three pairs three cells apart. The theme picker has the same footer with `enter apply` in place of `enter run`.
   - ` N of M ` (`Muted`) sits in the bottom border at the right.
 - **Review drawer.** Not a centred box: it slides in over the right half of the body (see Review drawer).
@@ -946,6 +947,10 @@ The config file is `$XDG_CONFIG_HOME/muxreveal/config.toml` when `XDG_CONFIG_HOM
 - `[diff]` has `layout` (`unified` or `split`, the layout a drawer starts in), `mode` (`turn` or `branch`: what a new review drawer opens in) and the engine's limits `max_files`, `max_bytes` and `max_lines` (positive integers, defaulting to 400, 2097152 and 5000). An unknown name or a non-positive limit is an error that names the key.
 - `[worktrees]` has `root`, `inside` (default) or `sibling`: where a new worktree goes (see Worktrees). An unknown name is an error that names the key.
 - `[keys]` has `leader_key` (default `ctrl+space`) and `which_key_delay` (milliseconds, 0-5000, default 300), and one table per context: `[keys.leader]` (the keys after the leader), `[keys.drawer]`, `[keys.rail]`, `[keys.pr_list]` and `[keys.checks]`. An entry is `"<key>" = "<command>"`, and `"none"` unbinds the key. A key is a Bubble Tea key string: modifiers in the order `ctrl+`, `alt+`, `shift+`, `meta+`, `hyper+`, `super+`, then a printable character or a name such as `enter`, `space`, `pgup` or `f1` to `f63`. `shift+` before a character is an error (write `"H"`). Only `[keys.leader]` takes two-key sequences, such as `"g l"`. `leader_key` needs a modifier other than `shift` alone, or must be a function key. A mistake in the section is an error that names the key and stops the start.
+- `[keys.leader]` remaps the keys after the leader; its commands are checked against the app's own (`keys.leader: "w" = "pr.lst": no such command`).
+  - A key goes right before its command's first remaining default binding, so it is the command's first key (the palette and the welcome card show it); a command with no default key left takes the end of its which-key group. The file's order holds among the config's own keys.
+  - A command with no default leader key is listed under its id prefix's group: `layout.` Layout, `tab.` Tabs, `pr.`, `git.` and `worktree.` Git, `pane.`, `agent.`, `copy.`, `rail.`, `review.`, `md.` and `plan.` Panes, anything else App.
+  - A key may not be both a key and the start of a sequence (`keys.leader: "g" is bound and starts "g l"`), and the leader key may not be bound under `[keys.leader]` (`keys.leader_key: "ctrl+a" is also bound under keys.leader`).
 - `[mouse]` has `focus_follows_mouse` and `copy_on_select`, both `false` by default (see Mouse and clipboard).
 - `[clipboard]` has `osc52` and `native`, both `true` by default. `osc52 = false` stops copies from being sent to the outer terminal as OSC 52; `native = false` stops the native tool writes on a local session. Programs' own OSC 52 writes follow the same switches. Unknown keys in either section are errors.
 - `--fresh` starts with one shell for this run, ignoring the saved layout; the first change replaces the saved state (see Persisted state).
@@ -1090,7 +1095,7 @@ State lives in the platform state dir (`$XDG_STATE_HOME/muxreveal` on Linux, `~/
 
 ## Keymap draft
 
-Terminal panes pass every key through to the agent, so global actions sit behind a leader key, `ctrl+space` by default, which few CLIs use. The review drawer and the PR and CI views aren't terminals, so they take single keys directly. Pressing the leader and waiting 300 ms shows a which-key popup that groups the bindings under Panes, Layout, Tabs, Git and App. Everything is remappable in `config.toml`.
+Terminal panes pass every key through to the agent, so global actions sit behind a leader key, `ctrl+space` by default, which few CLIs use. The review drawer and the PR and CI views aren't terminals, so they take single keys directly. Pressing the leader and waiting shows a which-key popup that groups the bindings under Panes, Layout, Tabs, Git and App. The leader is `ctrl+space` by default (`leader_key`), and the popup waits `which_key_delay` (300 ms by default). `config.toml` remaps the keys after the leader, the leader itself and the delay (see Config, `[keys]`).
 
 ### Global (after leader)
 
@@ -1100,7 +1105,7 @@ Terminal panes pass every key through to the agent, so global actions sit behind
 | `q` | Quit |
 | `n` | New agent pane in the focused pane's working directory; in a git repository the worktree picker opens first (see Overlays) |
 | `a` | Agents rail: open it, give it the keyboard, or close it (see Agents rail) |
-| `s` / `v` | Open a shell below / to the right of the focused pane (same working directory; `split_default` in config can flip this) |
+| `s` / `v` | Open a shell below / to the right of the focused pane (same working directory) |
 | `h` `j` `k` `l` | Focus pane left, down, up, right (panes covered by the review drawer are skipped) |
 | `H` `J` `K` `L` | Resize pane |
 | `ctrl+h` `ctrl+j` `ctrl+k` `ctrl+l` | Swap pane left, down, up, right |

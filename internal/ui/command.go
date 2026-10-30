@@ -15,6 +15,7 @@ import (
 // the command palette reach it the same way.
 type command struct {
 	id, title, icon string
+	short           string // title in a sequence popup, where the group names the rest; "" means title
 	run             func(a *App) tea.Cmd
 }
 
@@ -198,6 +199,7 @@ func defaultCommands() []command {
 		id:    "git.push",
 		icon:  iconPush,
 		title: "Push branch",
+		short: "Push",
 		run:   (*App).push,
 	}, command{
 		id:    "pr.open",
