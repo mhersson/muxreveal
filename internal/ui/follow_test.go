@@ -55,14 +55,15 @@ func newFollowRig(t *testing.T, session core.SessionID, opts ...func(*Options)) 
 
 	r.rootA, r.rootB, r.rootC = rootOf(t, r.dirA), rootOf(t, r.dirB), rootOf(t, r.dirC)
 
-	inner := r.edits.resolve
-	r.edits.resolve = func(ctx context.Context, path string) (git.Place, error) {
+	// The cache is the app's own, over a resolver that counts what reaches git.
+	places := git.NewPlaceCache(func(ctx context.Context, path string) (git.Place, error) {
 		r.mu.Lock()
 		r.resolved = append(r.resolved, path)
 		r.mu.Unlock()
 
-		return inner(ctx, path)
-	}
+		return git.EditPlace(ctx, path)
+	}, time.Now)
+	r.edits.resolve = places.Place
 
 	r.id = r.agent(t, r.dirA, session)
 	r.settle()
@@ -452,10 +453,6 @@ func TestRemovedFollowedWorktreeIsForgotten(t *testing.T) {
 	r.until(t, "the watch and the drawer to follow", r.onRoot(r.rootB))
 	r.until(t, "the card to follow", r.cardOn("b", -1))
 
-	if _, ok := r.edits.last[r.id]; !ok {
-		t.Fatal("no cached place for the edit just resolved")
-	}
-
 	gitIn(t, "git", r.dirA, "worktree", "remove", "--force", r.dirB)
 
 	r.clk.Advance(11 * time.Second)
@@ -465,10 +462,6 @@ func TestRemovedFollowedWorktreeIsForgotten(t *testing.T) {
 
 	if p := r.pane(); len(p.Edits) != 0 || p.FollowDir() != r.dirA {
 		t.Errorf("pane = %d edits, FollowDir %q, want none and %q", len(p.Edits), p.FollowDir(), r.dirA)
-	}
-
-	if _, ok := r.edits.last[r.id]; ok {
-		t.Error("the cached place of the removed worktree is kept")
 	}
 
 	// The same path again resolves afresh and no longer moves the pane to b.

@@ -173,6 +173,7 @@ func run(ctx context.Context, env core.Env, configPath, recordDir string, fresh 
 	}
 
 	prs := startPRs(clients)
+	places := git.NewPlaceCache(git.EditPlace, time.Now)
 
 	app, err := ui.New(ui.Options{
 		Logger: logger,
@@ -197,6 +198,7 @@ func run(ctx context.Context, env core.Env, configPath, recordDir string, fresh 
 		GitTempDir:   hooks.RunDir,
 		IndexCache:   indexCache,
 		Watches:      watches,
+		Places:       places,
 		PRs:          prs.poller,
 		PRLookup:     prs.lookup,
 		Notice:       strings.Join(notices, "; "),
