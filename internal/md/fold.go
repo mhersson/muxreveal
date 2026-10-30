@@ -115,9 +115,11 @@ func (l *layouter) footnotes(out *frag, width int) {
 
 			if len(out.lines) > 0 {
 				out.lines = append(out.lines, nil)
+				out.markNone(len(out.lines) - 1)
 			}
 
 			out.lines = append(out.lines, l.rule(RoleFootnoteRule, min(16, width)))
+			out.markNone(len(out.lines) - 1)
 		}
 
 		num := strconv.Itoa(idx)
@@ -132,6 +134,7 @@ func (l *layouter) footnotes(out *frag, width int) {
 		}
 
 		hang(out, start, first, l.spaces(numW+2), width, false)
+		out.restamp(start, l.d.ranges[def])
 	}
 }
 

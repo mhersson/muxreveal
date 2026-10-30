@@ -53,6 +53,24 @@ type reviewView struct {
 	fullAsk  map[string]fullRead
 	fullStop map[string]context.CancelFunc // ends the read of a file's text
 
+	// The files shown rendered, by path: the parsed file once its parse has
+	// answered, the parses being made and the width and icons the rows were
+	// laid out at.
+	mdOn    map[string]bool
+	mdFiles map[string]*mdFile
+	mdAsk   map[string]blobIDs
+	mdW     int
+	mdIcons bool
+
+	// The markdown pages shown over the diff column, the last one on top, and
+	// the serials of the asks to read one (a new page, and a page read again)
+	// whose answers are still wanted. UI state, not saved.
+	pages        []*mdPage
+	pageSeq      int
+	pagePush     bool // the ask in flight adds a page rather than replacing the stack
+	reloadSeq    int
+	reloadNotice bool // a failed re-read of the shown page says why
+
 	res         git.Result
 	gen         int // bumps whenever res is replaced; the caches follow it
 	rows        []reviewRow
@@ -118,8 +136,10 @@ type drawerState struct {
 	slideFrom     time.Time
 	closing       bool
 	views         map[core.TabID]*reviewView
-	list          *wtList // the open worktree list, over the active tab's drawer
-	listGen       int     // names the list wanted; an answer for another is stale
+	list          *wtList      // the open worktree list, over the active tab's drawer
+	listGen       int          // names the list wanted; an answer for another is stale
+	links         *linkChooser // the open link chooser, over the active tab's drawer
+	linksOf       linksOwner
 	hl            diffview.Highlighter
 	dv            *diffview.Theme // the diff view's theme for dvName
 	dvName        string
@@ -134,6 +154,8 @@ type drawerState struct {
 	scans         int             // searches of the visible rows for chunks to tokenise; tests read it
 	renders       int             // drawers drawn rather than reused; tests read it
 	fallbacks     int             // frames whose drawer the compositor drew because the splice declined; tests and benches read it
+	mdSeq         int             // the last markdown list wanted; an answer for another is stale
+	mdWant        *mdWant         // an md.open waiting for its drawer
 }
 
 // reviewViewOf returns the tab's view, creating it.
@@ -219,8 +241,29 @@ func (v *reviewView) rebuildFor(res git.Result, split bool) {
 	v.res = res
 	v.rowsSplit = split
 	v.rowsRev++
-	v.rows = buildRows(res, rowOpts{split: split, full: v.full, folded: v.folded})
+	v.rows = buildRows(res, rowOpts{split: split, full: v.full, whole: v.fullOn, folded: v.folded, md: v.mdRowsOf()})
 	v.cursor = restoreAnchor(res, v.rows, anchor)
+}
+
+// mdRowsOf lays out every rendered file whose parse has answered, with its
+// change marks; a file still parsing has a nil entry.
+func (v *reviewView) mdRowsOf() map[string]*mdRows {
+	if len(v.mdOn) == 0 {
+		return nil
+	}
+
+	out := make(map[string]*mdRows, len(v.mdOn))
+
+	for path := range v.mdOn {
+		out[path] = nil
+
+		if f := v.mdFiles[path]; f != nil {
+			lay := f.doc.layout(max(v.mdW, 1), v.mdIcons)
+			out[path] = &mdRows{lay: lay, marks: changeMarks(lay.Source, f.text.old, f.text.new)}
+		}
+	}
+
+	return out
 }
 
 // stop ends the work running for the view: its load and its full-file reads.

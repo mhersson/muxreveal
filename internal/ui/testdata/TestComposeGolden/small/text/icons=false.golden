@@ -11,7 +11,7 @@
  │    draft   [ ] open as a draft                                             │
  │                                                                            │
  │    body                                                                    │
- │  ╭─────────────────────────────────────────────────── from the commits ─╮  │
+ │  ╭─ Write │ Preview ───────────────────────────────── from the commits ─╮  │
  │  │ - add the lexer                                                      │  │
  │  │ - fix the parser                                                     │  │
  │  │                                                                      │  │

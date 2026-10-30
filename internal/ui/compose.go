@@ -96,6 +96,145 @@ type composeView struct {
 	statusErr bool
 	busy      bool
 	editing   core.PaneID // the pane editing the body; the box is hidden meanwhile
+	bodyRev   int         // bumped by every change of the body text
+	preview   composePreview
+}
+
+// composePreviewDelay is how long the body rests before it is rendered again.
+const composePreviewDelay = 150 * time.Millisecond
+
+// composePreview is the body box showing the body as markdown instead of its
+// text. doc is the newest parse; parsed is the body revision it came from and
+// rev the newest revision a parse was started for.
+type composePreview struct {
+	on          bool
+	doc         *mdDoc
+	rev, parsed int
+	top, rows   int
+	anchor      int // source line to put at the top once there is a doc; 0 for none
+}
+
+// composeRenderDueMsg is the rest after body revision rev.
+type composeRenderDueMsg struct {
+	v   *composeView
+	rev int
+}
+
+// composeRenderedMsg answers parsing body revision rev.
+type composeRenderedMsg struct {
+	v   *composeView
+	rev int
+	doc *mdDoc
+}
+
+// composePreviewW is the width of the body's text in a terminal width cells
+// wide: the box less its frame, label column and padding.
+func composePreviewW(width int) int { return max(min(maxComposeWidth, width-2)-10, 0) }
+
+// bodyChanged notes a change of the body text and asks for it to be rendered
+// once it rests.
+func (a *App) bodyChanged(v *composeView) tea.Cmd {
+	v.bodyRev++
+	rev := v.bodyRev
+
+	return a.tick(composePreviewDelay, func(time.Time) tea.Msg { return composeRenderDueMsg{v: v, rev: rev} })
+}
+
+// renderBody parses the body as it is now, off the update loop, unless that
+// revision was already asked for.
+func (a *App) renderBody(v *composeView) tea.Cmd {
+	if v.preview.rev == v.bodyRev {
+		return nil
+	}
+
+	v.preview.rev = v.bodyRev
+	rev := v.bodyRev
+
+	return parseCmd([]byte(v.body.Value()), "", a.drawer.hl.HighlightLang, func(d *mdDoc) tea.Msg {
+		return composeRenderedMsg{v: v, rev: rev, doc: d}
+	})
+}
+
+// onComposeRenderDue parses the body when no change came after revision rev.
+func (a *App) onComposeRenderDue(msg composeRenderDueMsg) tea.Cmd {
+	if a.compose != msg.v || msg.rev != msg.v.bodyRev {
+		return nil
+	}
+
+	return a.renderBody(msg.v)
+}
+
+// onComposeRendered keeps the parse of the body's current revision.
+func (a *App) onComposeRendered(msg composeRenderedMsg) {
+	if a.compose != msg.v || msg.rev != msg.v.bodyRev {
+		return
+	}
+
+	msg.v.preview.doc, msg.v.preview.parsed = msg.doc, msg.rev
+	a.composePreviewSettle(msg.v)
+}
+
+// composePreviewToggle is ctrl+p: it swaps Write and Preview on the body.
+func (a *App) composePreviewToggle(v *composeView) tea.Cmd {
+	v.focus(composeBody)
+
+	if v.preview.on {
+		v.preview.on = false
+
+		return nil
+	}
+
+	v.preview.on, v.preview.top, v.preview.anchor = true, 0, v.body.row+1
+	a.composePreviewSettle(v)
+
+	return a.renderBody(v)
+}
+
+// composePreviewKey scrolls the preview; every other key is dropped.
+func (a *App) composePreviewKey(v *composeView, key string) {
+	p := &v.preview
+	if p.doc == nil {
+		return
+	}
+
+	a.composePreviewSettle(v)
+
+	rows := p.rows
+
+	switch key {
+	case "up":
+		p.top--
+	case "down":
+		p.top++
+	case "pgup":
+		p.top -= max(rows-1, 1)
+	case "pgdown":
+		p.top += max(rows-1, 1)
+	}
+
+	a.composePreviewSettle(v)
+}
+
+// composePreviewSettle fits the preview to the screen: it learns the body
+// box's rows, puts the pending source line at the top once the doc for the
+// current body is there, and keeps the box full. It runs in Update, never in
+// draw.
+func (a *App) composePreviewSettle(v *composeView) {
+	p := &v.preview
+
+	p.rows = composeBodyRowCount(v, a.height-2)
+
+	if p.doc == nil {
+		return
+	}
+
+	lay := p.doc.layout(composePreviewW(a.width), a.icons)
+
+	if p.anchor > 0 && p.parsed == v.bodyRev && len(lay.Source) > 0 {
+		p.top, p.anchor = sourceLineIndex(lay.Source, p.anchor), 0
+	}
+
+	p.top = max(0, min(p.top, len(lay.Lines)-p.rows))
 }
 
 // bodyEdit is the temp file one editor pane works on, and the box it belongs to.
@@ -455,6 +594,7 @@ func (a *App) onComposeLog(msg composeLogMsg) {
 	v.title.CursorEnd()
 	v.body = newTextArea(d.Body, maxComposeBody)
 	v.body.Start()
+	v.bodyRev = 1
 	v.commits = len(msg.commits)
 
 	if msg.err != nil {
@@ -498,6 +638,8 @@ func (a *App) handleComposeKey(msg tea.KeyPressMsg) tea.Cmd {
 		return a.composeSubmit(v)
 	case "ctrl+e":
 		return a.composeEditor()
+	case "ctrl+p":
+		return a.composePreviewToggle(v)
 	}
 
 	switch v.field {
@@ -519,7 +661,18 @@ func (a *App) handleComposeKey(msg tea.KeyPressMsg) tea.Cmd {
 			v.draft = !v.draft
 		}
 	case composeBody:
+		if v.preview.on {
+			a.composePreviewKey(v, msg.String())
+
+			return nil
+		}
+
+		n := v.body.size()
 		v.body.Key(msg)
+
+		if v.body.size() != n {
+			return a.bodyChanged(v)
+		}
 	}
 
 	return nil
@@ -557,8 +710,13 @@ func (a *App) handleComposePaste(msg tea.PasteMsg) tea.Cmd {
 		v.title, cmd = v.title.Update(msg)
 
 		return cmd
-	case v.field == composeBody:
+	case v.field == composeBody && !v.preview.on:
+		n := v.body.size()
 		v.body.Paste(msg.Content)
+
+		if v.body.size() != n {
+			return a.bodyChanged(v)
+		}
 	}
 
 	return nil
@@ -884,10 +1042,10 @@ func readBodyFile(file string) (string, error) {
 
 // onBodyRead puts the edited text in the body and shows the box again on it. A
 // box closed meanwhile is left alone.
-func (a *App) onBodyRead(msg bodyReadMsg) {
+func (a *App) onBodyRead(msg bodyReadMsg) tea.Cmd {
 	v := msg.v
 	if a.compose != v {
-		return
+		return nil
 	}
 
 	v.editing = ""
@@ -896,11 +1054,21 @@ func (a *App) onBodyRead(msg bodyReadMsg) {
 	if msg.err != nil {
 		v.status, v.statusErr = statusEditorRead+gitReason(msg.err), true
 
-		return
+		return nil
 	}
 
 	v.body = newTextArea(msg.text, maxComposeBody)
 	v.body.Start()
+	v.preview.top, v.preview.anchor = 0, 1
+
+	cmd := a.bodyChanged(v)
+	a.composePreviewSettle(v)
+
+	if v.preview.on {
+		return tea.Batch(cmd, a.renderBody(v))
+	}
+
+	return cmd
 }
 
 // bodyFileSet is the editor files written by a command and not yet handed to

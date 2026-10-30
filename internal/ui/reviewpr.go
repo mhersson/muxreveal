@@ -209,20 +209,28 @@ func prInfoByNumber(st core.State, repo string, number int) (core.PRInfo, bool) 
 
 // reviewPR is `p`: it shows the pull request of the drawer's place.
 func (a *App) reviewPR() tea.Cmd {
-	tab, _, ok := a.reviewActive()
+	tab, v, ok := a.reviewActive()
 	if !ok {
 		return nil
 	}
 
+	a.dropPages(v)
+
 	return a.showPR(tab.ID, thenNothing)
 }
 
-// reviewReload is `r`: in PR mode it fetches the pull request again and asks
-// the poller for its repository; otherwise it loads the diff again.
+// reviewReload is `r`: with a markdown page shown it reads the page's file
+// again; in PR mode it fetches the pull request again and asks
+// the poller for its repository; otherwise it loads the diff again. Without a
+// page it also drops a pull request action still waiting on a load.
 func (a *App) reviewReload() tea.Cmd {
 	tab, v, ok := a.reviewActive()
 	if !ok {
 		return nil
+	}
+
+	if v.page() != nil {
+		return a.reloadPage(tab.ID, v, true)
 	}
 
 	// A drawer still opening for a pull request shows it but no longer acts on it.

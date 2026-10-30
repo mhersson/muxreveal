@@ -10,7 +10,7 @@
        │    draft   [ ] open as a draft                                                               │
        │                                                                                              │
        │    body                                                                                      │
-       │  ╭──────────────────────────────────────────────── from .github/pull_request_template.md ─╮  │
+       │  ╭─ Write │ Preview ────────────────────────────── from .github/pull_request_template.md ─╮  │
        │  │ ## Summary                                                                             │  │
        │  │                                                                                        │  │
        │  │ What changed?                                                                          │  │
@@ -25,5 +25,5 @@
        │  ╰────────────────────────────────────────────────────────────────────────────────────────╯  │
        │                                                                                              │
        │                                                                                              │
-       │  tab next field    ctrl+e body in $EDITOR    ctrl+s create    esc cancel                     │
+       │  tab next field    ctrl+e body in $EDITOR    ctrl+s create    esc cancel    ctrl+p preview   │
        ╰──────────────────────────────────────────────────────────────────────────────────────────────╯
