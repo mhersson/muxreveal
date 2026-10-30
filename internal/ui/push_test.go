@@ -61,7 +61,7 @@ func gitRead(t *testing.T, bin, dir string, args ...string) string {
 	cmd := exec.CommandContext(ctx, bin, args...)
 	cmd.Dir = dir
 
-	cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_SYSTEM=/dev/null", gitFileOnly)
+	cmd.Env = append(os.Environ(), gitFileOnly)
 
 	out, err := cmd.Output()
 	if err != nil {
