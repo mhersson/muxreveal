@@ -17,9 +17,6 @@ type mdView struct {
 
 	w, h  int
 	icons bool
-
-	gen   int // doc.layouts when plain was made
-	plain []string
 }
 
 // mdTarget is somewhere a rendered line leads: a URL or a local path.
@@ -108,15 +105,12 @@ func (v *mdView) find(q string) bool {
 		return false
 	}
 
-	if v.plain == nil || v.gen != v.doc.layouts {
-		v.plain, v.gen = lay.Plain(), v.doc.layouts
-	}
-
+	plain := v.doc.text()
 	q = strings.ToLower(q)
 
-	for k := 1; k <= len(v.plain); k++ {
-		i := (v.cursor + k) % len(v.plain)
-		if strings.Contains(strings.ToLower(v.plain[i]), q) {
+	for k := 1; k <= len(plain); k++ {
+		i := (v.cursor + k) % len(plain)
+		if strings.Contains(strings.ToLower(plain[i]), q) {
 			v.cursor = i
 			v.clamp()
 

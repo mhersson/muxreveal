@@ -140,6 +140,24 @@ func TestParseMarkdownTokenCap(t *testing.T) {
 	}
 }
 
+func TestParseMarkdownCapIsSticky(t *testing.T) {
+	t.Parallel()
+
+	src := "```go\n" + strings.Repeat("big\n", 19999) + "```\n\n```go\nover_a\nover_b\n```\n\n```go\nsmall_one\n```\n"
+
+	var calls atomic.Int32
+
+	d := parseNow(src, countingTokeniser(&calls))
+	if got := calls.Load(); got != 1 {
+		t.Fatalf("tokeniser called %d times, want 1", got)
+	}
+
+	lay := d.layout(100, false)
+	if i := lineOf(lay, "small_one"); i < 0 || hasClass(lay.Lines[i]) {
+		t.Errorf("a block after the cap was tokenised (line %d)", i)
+	}
+}
+
 func TestMDLayoutCache(t *testing.T) {
 	t.Parallel()
 
@@ -313,6 +331,22 @@ func TestMDViewFind(t *testing.T) {
 	}
 }
 
+func TestMDViewFindAfterDocSwap(t *testing.T) {
+	t.Parallel()
+
+	v := newTestView("first doc\n\nneedle_old\n", 40, 10)
+	v.layout()
+	v.find("needle")
+
+	v.doc = parseNow("# New\n\nfiller\n\nneedle_new\n", nil)
+	v.cursor, v.top = 0, 0
+	v.size(40, 10, true)
+
+	if !v.find("needle_new") || v.cursor != lineOf(v.layout(), "needle_new") {
+		t.Errorf("find after a swap landed on %d", v.cursor)
+	}
+}
+
 func TestLineTargets(t *testing.T) {
 	t.Parallel()
 
@@ -344,7 +378,7 @@ func TestLineTargets(t *testing.T) {
 			}
 
 			got := lineTargets(lay, i)
-			if fmt.Sprint(got) != fmt.Sprint(c.want) {
+			if !slices.Equal(got, c.want) {
 				t.Errorf("targets = %+v, want %+v", got, c.want)
 			}
 		})
@@ -433,11 +467,12 @@ func TestMDViewGoSource(t *testing.T) {
 	}
 }
 
-func drawTestView(t *testing.T) (*mdView, mdPainter) {
+func drawTestView(t *testing.T, icons bool) (*mdView, mdPainter) {
 	t.Helper()
 
 	th := mochaTheme(t)
 	v := newTestView(foldedBlocksDoc(), 40, 8)
+	v.size(40, 8, icons)
 	v.move(lineOf(v.layout(), "First"))
 
 	return v, newMDPainter(th, th.UI.Bg)
@@ -446,21 +481,27 @@ func drawTestView(t *testing.T) (*mdView, mdPainter) {
 func TestMDViewDraw(t *testing.T) {
 	t.Parallel()
 
-	v, p := drawTestView(t)
+	v, p := drawTestView(t, true)
 	golden.RequireEqual(t, []byte(strings.Join(v.draw(p, true), "\n")))
 }
 
 func TestMDViewDrawText(t *testing.T) {
 	t.Parallel()
 
-	v, p := drawTestView(t)
-	golden.RequireEqual(t, []byte(ansi.Strip(strings.Join(v.draw(p, true), "\n"))))
+	for _, icons := range []bool{true, false} {
+		t.Run(fmt.Sprintf("icons=%v", icons), func(t *testing.T) {
+			t.Parallel()
+
+			v, p := drawTestView(t, icons)
+			golden.RequireEqual(t, []byte(ansi.Strip(strings.Join(v.draw(p, true), "\n"))))
+		})
+	}
 }
 
 func TestMDViewDrawWidths(t *testing.T) {
 	t.Parallel()
 
-	v, p := drawTestView(t)
+	v, p := drawTestView(t, true)
 	v.doc.toggleFold(0)
 	v.end(false)
 
@@ -487,7 +528,7 @@ func TestMDViewDrawWidths(t *testing.T) {
 func TestMDViewCursorColumn(t *testing.T) {
 	t.Parallel()
 
-	v, p := drawTestView(t)
+	v, p := drawTestView(t, true)
 	rows := v.draw(p, true)
 	cur := v.cursor - v.top
 
@@ -559,5 +600,19 @@ func TestMDViewHugeDoc(t *testing.T) {
 				v.end(true)
 			}
 		})
+	}
+}
+
+func TestMDDocToggleTwice(t *testing.T) {
+	t.Parallel()
+
+	d := parseNow(foldedBlocksDoc(), nil)
+	before := len(d.layout(80, false).Lines)
+
+	d.toggleFold(0)
+	d.toggleFold(0)
+
+	if got := len(d.layout(80, false).Lines); got != before {
+		t.Errorf("two toggles left %d lines, want %d", got, before)
 	}
 }

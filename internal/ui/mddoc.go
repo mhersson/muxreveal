@@ -28,6 +28,7 @@ type mdDoc struct {
 	open  map[int]bool           // by fold ID; a present key overrides the default
 
 	lay     md.Layout
+	plain   []string // lay's text, made on first use
 	have    bool
 	width   int
 	icons   bool
@@ -57,7 +58,7 @@ func parseMarkdown(src []byte, base string, tok codeTokeniser) *mdDoc {
 		all[i] = true
 	}
 
-	used := 0
+	used, capped := 0, false
 
 	d.doc.Layout(md.LayoutOptions{Width: mdTokenWidth, Open: all, Highlight: func(lang string, lines []string) [][]md.Span {
 		key := codeKey(lang, lines)
@@ -65,7 +66,9 @@ func parseMarkdown(src []byte, base string, tok codeTokeniser) *mdDoc {
 			return nil
 		}
 
-		if used+len(lines) > mdTokenMax {
+		if capped || used+len(lines) > mdTokenMax {
+			capped = true
+
 			return nil
 		}
 
@@ -106,17 +109,32 @@ func (d *mdDoc) layout(width int, icons bool) md.Layout {
 	}
 
 	d.lay = d.doc.Layout(md.LayoutOptions{Width: width, Open: d.open, Icons: icons, Highlight: d.cached})
+	d.plain = nil
 	d.have, d.width, d.icons = true, width, icons
 	d.layouts++
 
 	return d.lay
 }
 
+// text is the last layout's lines as plain text, for search.
+func (d *mdDoc) text() []string {
+	if d.plain == nil {
+		d.plain = d.lay.Plain()
+	}
+
+	return d.plain
+}
+
 // toggleFold flips a fold of the last layout; an unknown ID changes nothing.
 func (d *mdDoc) toggleFold(id int) {
 	for _, f := range d.lay.Folds {
 		if f.ID == id {
-			d.open[id] = !f.Open
+			cur, ok := d.open[id]
+			if !ok {
+				cur = f.Open
+			}
+
+			d.open[id] = !cur
 			d.have = false
 
 			return
