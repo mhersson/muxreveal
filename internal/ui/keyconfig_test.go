@@ -427,3 +427,260 @@ func TestPrefixRowKeepsItsGroup(t *testing.T) {
 		}
 	}
 }
+
+// drawerKeys builds a [keys] config with the drawer entries in the given order.
+func drawerKeys(pairs ...string) core.KeysConfig {
+	cfg := core.KeysConfig{Drawer: map[string]string{}, Order: map[string][]string{}}
+	for i := 0; i+1 < len(pairs); i += 2 {
+		cfg.Drawer[pairs[i]] = pairs[i+1]
+		cfg.Order["drawer"] = append(cfg.Order["drawer"], pairs[i])
+	}
+
+	return cfg
+}
+
+func TestResolveDrawer(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		cfg     core.KeysConfig
+		check   func(t *testing.T, tb keyTable)
+		wantErr string
+	}{
+		{
+			name: "added key", cfg: drawerKeys("n", "review.line.next"),
+			check: func(t *testing.T, tb keyTable) {
+				for _, key := range []string{"n", "j"} {
+					if got, _ := tb.lookup(key); got != "review.line.next" {
+						t.Errorf("lookup(%s) = %q, want review.line.next", key, got)
+					}
+				}
+
+				if got, _ := tb.first("review.line.next"); got != "n" {
+					t.Errorf("first = %q, want n", got)
+				}
+			},
+		},
+		{
+			name: "dropped key", cfg: drawerKeys("j", "none"),
+			check: func(t *testing.T, tb keyTable) {
+				if got, ok := tb.lookup("j"); ok {
+					t.Errorf("lookup(j) = %q, want it unbound", got)
+				}
+
+				if got, _ := tb.lookup("down"); got != "review.line.next" {
+					t.Errorf("lookup(down) = %q, want review.line.next", got)
+				}
+
+				if got, _ := tb.first("review.line.next"); got != "down" {
+					t.Errorf("first = %q, want down", got)
+				}
+			},
+		},
+		{
+			name: "moved key", cfg: drawerKeys("o", "review.browser", "O", "none"),
+			check: func(t *testing.T, tb keyTable) {
+				if got, _ := tb.lookup("o"); got != "review.browser" {
+					t.Errorf("lookup(o) = %q, want review.browser", got)
+				}
+
+				if _, ok := tb.lookup("O"); ok {
+					t.Error("O is still bound")
+				}
+			},
+		},
+		{
+			name: "key taken over", cfg: drawerKeys("f", "review.top"),
+			check: func(t *testing.T, tb keyTable) {
+				if got, _ := tb.lookup("f"); got != "review.top" {
+					t.Errorf("lookup(f) = %q, want review.top", got)
+				}
+
+				if _, ok := tb.first("review.full"); ok {
+					t.Error("review.full kept a key")
+				}
+			},
+		},
+		{
+			name: "not a drawer command", cfg: drawerKeys("o", "pr.list"),
+			wantErr: `keys.drawer: "o" = "pr.list": not a drawer command`,
+		},
+		{
+			name: "no such command", cfg: drawerKeys("x", "review.x"),
+			wantErr: `keys.drawer: "x" = "review.x": no such command`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			_, tables, err := resolveKeys(tt.cfg, testRegistry(t))
+			if tt.wantErr != "" {
+				if err == nil || err.Error() != tt.wantErr {
+					t.Errorf("resolveKeys() = %v, want %q", err, tt.wantErr)
+				}
+
+				if cerr := CheckKeys(tt.cfg); cerr == nil || cerr.Error() != tt.wantErr {
+					t.Errorf("CheckKeys() = %v, want %q", cerr, tt.wantErr)
+				}
+
+				return
+			}
+
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			tt.check(t, tables.drawer)
+		})
+	}
+}
+
+func TestDefaultDrawerKeysUnchanged(t *testing.T) {
+	t.Parallel()
+
+	_, tables, err := resolveKeys(core.KeysConfig{}, testRegistry(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !slices.Equal(tables.drawer.binds, reviewKeys) {
+		t.Error("an empty config changed the drawer's keys")
+	}
+}
+
+func TestKeyTableHint(t *testing.T) {
+	t.Parallel()
+
+	tb := keyTable{binds: []reviewKey{{"j", "a"}, {"k", "b"}}}
+
+	tests := []struct {
+		ids  []string
+		want string
+	}{
+		{[]string{"a", "b"}, "j/k"},
+		{[]string{"a"}, "j"},
+		{[]string{"a", "missing"}, ""},
+	}
+	for _, tt := range tests {
+		if got := tb.hint(tt.ids...); got != tt.want {
+			t.Errorf("hint(%q) = %q, want %q", tt.ids, got, tt.want)
+		}
+	}
+}
+
+func TestPaletteHints(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		cfg  core.KeysConfig
+		id   string
+		want string
+	}{
+		{"leader sequence", core.KeysConfig{}, "pr.list", "ctrl+space g l"},
+		{"drawer key", core.KeysConfig{}, "review.full", "drawer: f"},
+		{"remapped drawer key", drawerKeys("F", "review.full"), "review.full", "drawer: F"},
+		{"leader key wins", core.KeysConfig{}, "review.toggle", "ctrl+space d"},
+		{"no key", drawerKeys("f", "none"), "review.full", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			if got := newKeyedApp(t, "catppuccin-mocha", tt.cfg).paletteHint(tt.id); got != tt.want {
+				t.Errorf("paletteHint(%s) = %q, want %q", tt.id, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestDrawerRemappedKeys(t *testing.T) {
+	t.Parallel()
+
+	r := newKeysRig(t, keysRepo(t), func(o *Options) {
+		o.Keys = drawerKeys("n", "review.line.next", "w", "none")
+	})
+	v := r.opened(t)
+
+	r.keys(keyRune('n'))
+
+	if v.cursor != 1 {
+		t.Errorf("cursor after n = %d, want 1", v.cursor)
+	}
+
+	r.keys(keyRune('w'))
+
+	if r.listFor(r.store.State().Tab()) != nil {
+		t.Error("w opened the worktree list although it is unbound")
+	}
+
+	r.keys(keyTab)
+
+	if !r.drawer.tree {
+		t.Fatal("tab did not give the tree the keyboard")
+	}
+
+	before := v.treeSel
+
+	r.keys(keyRune('n'))
+
+	if v.treeSel == before {
+		t.Errorf("n left the tree selection on file %d", before)
+	}
+}
+
+func TestDrawerHintsFollowBindings(t *testing.T) {
+	t.Parallel()
+
+	const (
+		diffHints = "j/k line   ]/[ hunk   }/{ file   tab tree   w worktree   f full   u split   b/t mode   ,/. turn   e edit   / search"
+		treeHints = "j/k file   enter jump   tab hide   esc back"
+		prHints   = "j/k line   ]/[ hunk   c checks   a approve   M merge   O browser   b/t mode"
+	)
+
+	tests := []struct {
+		name    string
+		cfg     core.KeysConfig
+		pr, key bool // PR mode; the tree has the keyboard
+		want    string
+		not     string
+	}{
+		{name: "defaults", want: diffHints},
+		{name: "defaults in a pull request", pr: true, want: prHints},
+		{name: "defaults in the tree", key: true, want: treeHints},
+		{name: "line next", cfg: drawerKeys("n", "review.line.next"), want: "n/k line   ]/[ hunk"},
+		{
+			name: "worktree unbound", cfg: drawerKeys("w", "none"),
+			want: "tab tree   f full", not: "worktree",
+		},
+		{name: "checks moved", cfg: drawerKeys("x", "review.checks", "c", "none"), pr: true, want: "x checks   a approve"},
+		{name: "tree moved", cfg: drawerKeys("x", "review.tree"), key: true, want: "j/k file   enter jump   x hide   esc back"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			s := reviewScene{
+				theme: "catppuccin-mocha", w: 240, h: 52, res: turn4Result(), turn: 4, turns: 4,
+				focused: true, tree: tt.key, keys: tt.cfg,
+			}
+			s.tune = func(t *testing.T, a *App, v *reviewView) {
+				a.drawer.tree = tt.key
+				if tt.pr {
+					prScene(t, a, v)
+				}
+			}
+
+			got := ansi.Strip(s.build(t).View().Content)
+			if !strings.Contains(got, tt.want) {
+				t.Errorf("the frame lacks %q:\n%s", tt.want, got)
+			}
+
+			if tt.not != "" && strings.Contains(got, tt.not) {
+				t.Errorf("the frame holds %q:\n%s", tt.not, got)
+			}
+		})
+	}
+}

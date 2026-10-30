@@ -92,6 +92,7 @@ type App struct {
 
 	reg     *registry
 	keymap  keymap
+	keys    keyTables
 	pending bool      // leader pressed, awaiting a key
 	prefix  string    // first key of a two-key sequence while pending; "" before it
 	popup   bool      // which-key popup visible; only while pending with no prefix
@@ -209,7 +210,7 @@ func New(opts Options) (*App, error) {
 		return nil, fmt.Errorf("build command registry: %w", err)
 	}
 
-	km, err := resolveLeader(opts.Keys, reg)
+	km, tables, err := resolveKeys(opts.Keys, reg)
 	if err != nil {
 		return nil, err
 	}
@@ -233,7 +234,7 @@ func New(opts Options) (*App, error) {
 	a := &App{
 		harness: h, tick: tea.Tick, hookSettings: opts.HookSettings, hookSock: opts.HookSock,
 		events: opts.Events, notice: opts.Notice, save: opts.Save,
-		log: opts.Logger, store: opts.Store, reg: reg, keymap: km,
+		log: opts.Logger, store: opts.Store, reg: reg, keymap: km, keys: tables,
 		panes: map[core.PaneID]*pane{}, outerFocused: true,
 		watches: watchState{set: opts.Watches, open: git.Open, panes: map[core.PaneID]*paneWatch{}, pins: map[core.TabID]*pinWatch{}, failed: map[string]bool{}},
 		getenv:  getenv, cwd: cwd, recordDir: opts.RecordDir, icons: opts.Icons, clock: realClock{}, start: termStart,

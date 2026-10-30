@@ -154,6 +154,7 @@ type drawCtx struct {
 	pinned bool        // the drawer is held on its root
 	home   string      // shortens the paths it names
 	list   *wtList     // the open worktree list, drawn over the drawer
+	bind   keyTable    // the drawer's keys, as the hint row shows them
 }
 
 // diffKeys reports whether the diff, not the tree, has the keyboard.
@@ -309,7 +310,7 @@ func (a *App) drawCtxFor(st core.State) (d *drawCtx, name string, ok bool) {
 
 	d = &drawCtx{
 		ui: lk.theme.UI, icons: a.icons, v: v, c: v.derived(), now: a.clock.Now(), keys: a.drawer.focused, tree: a.drawer.focused && a.drawer.tree,
-		pinned: tab.Review != nil && pinnedTo(tab, tab.Review.Pane), home: a.getenv("HOME"), list: a.listFor(tab),
+		pinned: tab.Review != nil && pinnedTo(tab, tab.Review.Pane), home: a.getenv("HOME"), list: a.listFor(tab), bind: a.keys.drawer,
 	}
 	d.lay = a.drawerLayoutOf(box, v, drawerTree(st))
 
@@ -565,30 +566,39 @@ func (d *drawCtx) bottomBorder() string {
 // hintRuns are the key hints that fit cw cells; pairs that do not are dropped
 // from the end.
 func (d *drawCtx) hintRuns(cw int) []railRun {
+	pair := func(label string, ids ...string) [2]string { return [2]string{d.bind.hint(ids...), label} }
+	next, prev := "review.line.next", "review.line.prev"
+
 	pairs := [][2]string{
-		{"j/k", "line"},
-		{"]/[", "hunk"},
-		{"}/{", "file"},
-		{"tab", "tree"},
-		{"w", "worktree"},
-		{"f", "full"},
-		{"u", "split"},
-		{"b/t", "mode"},
+		pair("line", next, prev),
+		pair("hunk", "review.hunk.next", "review.hunk.prev"),
+		pair("file", "review.file.next", "review.file.prev"),
+		pair("tree", "review.tree"),
+		pair("worktree", "review.worktrees"),
+		pair("full", "review.full"),
+		pair("split", "review.split"),
+		pair("mode", "review.mode.branch", "review.mode.turn"),
 	}
 
 	if d.v.showsTurn() {
-		pairs = append(pairs, [2]string{",/.", "turn"})
+		pairs = append(pairs, pair("turn", "review.turn.prev", "review.turn.next"))
 	}
 
-	pairs = append(pairs, [2]string{"e", "edit"}, [2]string{"/", "search"})
+	pairs = append(pairs, pair("edit", "review.edit"), pair("search", "review.search"))
 
 	if _, ok := d.v.src.(git.PRSource); ok {
-		pairs = [][2]string{{"j/k", "line"}, {"]/[", "hunk"}, {"c", "checks"}, {"a", "approve"}, {"M", "merge"}, {"O", "browser"}, {"b/t", "mode"}}
+		pairs = [][2]string{
+			pair("line", next, prev), pair("hunk", "review.hunk.next", "review.hunk.prev"),
+			pair("checks", "review.checks"), pair("approve", "review.approve"), pair("merge", "review.merge"),
+			pair("browser", "review.browser"), pair("mode", "review.mode.branch", "review.mode.turn"),
+		}
 	}
 
 	if d.tree {
-		pairs = [][2]string{{"j/k", "file"}, {"enter", "jump"}, {"tab", "hide"}, {"esc", "back"}}
+		pairs = [][2]string{pair("file", next, prev), pair("jump", "review.fold"), pair("hide", "review.tree"), pair("back", "review.back")}
 	}
+
+	pairs = slices.DeleteFunc(pairs, func(kv [2]string) bool { return kv[0] == "" })
 
 	var out []railRun
 

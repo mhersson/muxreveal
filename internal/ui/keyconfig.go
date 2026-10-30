@@ -9,15 +9,15 @@ import (
 )
 
 // CheckKeys reports the first mistake in the [keys] config that the UI can
-// find: a command that does not exist, or a key that is both a key and the
-// start of a sequence. main calls it before the TUI starts.
+// find: a command that does not exist or does not belong to its context, or a
+// key that is both a key and the start of a sequence. main calls it before the TUI starts.
 func CheckKeys(cfg core.KeysConfig) error {
 	reg, err := newRegistry(defaultCommands())
 	if err != nil {
 		return fmt.Errorf("build command registry: %w", err)
 	}
 
-	_, err = resolveLeader(cfg, reg)
+	_, _, err = resolveKeys(cfg, reg)
 
 	return err
 }
@@ -31,7 +31,6 @@ func resolveLeader(cfg core.KeysConfig, reg *registry) (keymap, error) {
 	km := defaults
 	km.leader = cfg.LeaderName()
 	km.delay = cfg.Delay()
-	km.bindings = slices.Clone(defaults.bindings)
 
 	binds := cfg.Binds("leader")
 
@@ -49,22 +48,7 @@ func resolveLeader(cfg core.KeysConfig, reg *registry) (keymap, error) {
 		}
 	}
 
-	km.bindings = slices.DeleteFunc(km.bindings, func(d binding) bool {
-		return slices.ContainsFunc(binds, func(b core.KeyBind) bool { return b.Key == d.key })
-	})
-
-	added := make([]bool, len(km.bindings))
-
-	for _, b := range binds {
-		if b.Command == core.KeyNone {
-			continue
-		}
-
-		nb := binding{key: b.Key, command: b.Command, group: groupFor(defaults, b.Command)}
-		at := insertAt(km.bindings, added, nb)
-		km.bindings = slices.Insert(km.bindings, at, nb)
-		added = slices.Insert(added, at, true)
-	}
+	km.bindings = layBinds(defaults.bindings, binds, func(id string) string { return groupFor(defaults, id) })
 
 	for _, b := range km.bindings {
 		first, _, ok := strings.Cut(b.key, " ")
@@ -78,6 +62,124 @@ func resolveLeader(cfg core.KeysConfig, reg *registry) (keymap, error) {
 	}
 
 	return km, nil
+}
+
+// keyTable is a context's resolved keys, in order: the first key of a command
+// is the one its hints show.
+type keyTable struct{ binds []reviewKey }
+
+// keyTables holds the resolved tables of the contexts other than the leader.
+type keyTables struct {
+	drawer keyTable
+	rail   keyTable //nolint:unused // empty until the rail reads its keys from the table
+	prList keyTable //nolint:unused // empty until the PR list reads its keys from the table
+	checks keyTable //nolint:unused // empty until the checks overlay reads its keys from the table
+}
+
+// lookup is the command a key runs.
+func (t keyTable) lookup(key string) (string, bool) {
+	if i := slices.IndexFunc(t.binds, func(b reviewKey) bool { return b.key == key }); i >= 0 {
+		return t.binds[i].command, true
+	}
+
+	return "", false
+}
+
+// first is the first key bound to a command.
+func (t keyTable) first(id string) (string, bool) {
+	if i := slices.IndexFunc(t.binds, func(b reviewKey) bool { return b.command == id }); i >= 0 {
+		return t.binds[i].key, true
+	}
+
+	return "", false
+}
+
+// hint joins the first keys of the commands with "/"; it is "" when one has no key.
+func (t keyTable) hint(ids ...string) string {
+	keys := make([]string, len(ids))
+
+	for i, id := range ids {
+		k, ok := t.first(id)
+		if !ok {
+			return ""
+		}
+
+		keys[i] = k
+	}
+
+	return strings.Join(keys, "/")
+}
+
+// resolveKeys lays the config over the leader keymap and the context tables.
+func resolveKeys(cfg core.KeysConfig, reg *registry) (keymap, keyTables, error) {
+	km, err := resolveLeader(cfg, reg)
+	if err != nil {
+		return keymap{}, keyTables{}, err
+	}
+
+	drawer, err := resolveTable("drawer", reviewKeys, cfg, func(id string) bool { return strings.HasPrefix(id, "review.") }, reg)
+	if err != nil {
+		return keymap{}, keyTables{}, err
+	}
+
+	return km, keyTables{drawer: drawer}, nil
+}
+
+// resolveTable lays a context's config over its default keys; accept says
+// which commands the context takes.
+func resolveTable(context string, defaults []reviewKey, cfg core.KeysConfig, accept func(id string) bool, reg *registry) (keyTable, error) {
+	binds := cfg.Binds(context)
+
+	for _, b := range binds {
+		if b.Command == core.KeyNone {
+			continue
+		}
+
+		if _, ok := reg.get(b.Command); !ok {
+			return keyTable{}, fmt.Errorf("keys.%s: %q = %q: no such command", context, b.Key, b.Command)
+		}
+
+		if !accept(b.Command) {
+			return keyTable{}, fmt.Errorf("keys.%s: %q = %q: not a %s command", context, b.Key, b.Command, context)
+		}
+	}
+
+	base := make([]binding, len(defaults))
+	for i, d := range defaults {
+		base[i] = binding{key: d.key, command: d.command}
+	}
+
+	laid := layBinds(base, binds, func(string) string { return "" })
+	out := make([]reviewKey, len(laid))
+
+	for i, b := range laid {
+		out[i] = reviewKey{b.key, b.command}
+	}
+
+	return keyTable{binds: out}, nil
+}
+
+// layBinds lays config entries over base: an entry replaces a base binding of
+// the same key, and goes right before its command's first remaining base
+// binding, else at the end of the command's group.
+func layBinds(base []binding, binds []core.KeyBind, group func(id string) string) []binding {
+	out := slices.DeleteFunc(slices.Clone(base), func(d binding) bool {
+		return slices.ContainsFunc(binds, func(b core.KeyBind) bool { return b.Key == d.key })
+	})
+	added := make([]bool, len(out))
+
+	for _, b := range binds {
+		if b.Command == core.KeyNone {
+			continue
+		}
+
+		nb := binding{key: b.Key, command: b.Command, group: group(b.Command)}
+		at := insertAt(out, added, nb)
+		out = slices.Insert(out, at, nb)
+		added = slices.Insert(added, at, true)
+	}
+
+	return out
 }
 
 // insertAt is where a config binding goes in bindings; added marks the config's

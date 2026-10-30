@@ -21,7 +21,7 @@ const (
 // reviewKey binds a key, while the drawer has the keyboard, to a command.
 type reviewKey struct{ key, command string }
 
-// reviewKeys is the drawer's own keymap. The leader works as everywhere; a key
+// reviewKeys is the drawer's default keymap; [keys.drawer] is laid over it. The leader works as everywhere; a key
 // that is not here is dropped.
 var reviewKeys = []reviewKey{
 	{"j", "review.line.next"},
@@ -136,14 +136,14 @@ func (a *App) handleDrawerKey(msg tea.KeyPressMsg) tea.Cmd {
 
 	key := bindingKey(msg)
 
-	i := slices.IndexFunc(reviewKeys, func(k reviewKey) bool { return k.key == key })
-	if i < 0 || (a.drawer.tree && !treeCommand(reviewKeys[i].command)) {
+	id, ok := a.keys.drawer.lookup(key)
+	if !ok || (a.drawer.tree && !treeCommand(id)) {
 		return nil
 	}
 
-	c, ok := a.reg.get(reviewKeys[i].command)
+	c, ok := a.reg.get(id)
 	if !ok {
-		a.log.Error("drawer key names a missing command", "key", key, "command", reviewKeys[i].command)
+		a.log.Error("drawer key names a missing command", "key", key, "command", id)
 
 		return nil
 	}
