@@ -615,6 +615,44 @@ func TestOpenWithPR(t *testing.T) {
 	})
 }
 
+func TestOpenWithPROutsideARepository(t *testing.T) {
+	t.Parallel()
+
+	r := newPRDrawer(t)
+	r.poll()
+
+	pane := r.shell(t, t.TempDir())
+	r.run(r.openWithPR(pane, &prWant{repo: prRepoKey, number: 7, root: r.root}, thenChecks))
+	r.until(t, "the notice", func() bool { return r.notice == noticeNotRepo })
+
+	openIn(t, r.App, core.SetPaneCwd{ID: pane, Cwd: r.dir})
+	r.settle()
+
+	if rv := r.review(); rv != nil {
+		t.Errorf("review = %+v, want no drawer", rv)
+	}
+
+	if r.drawer.prNext != nil {
+		t.Errorf("prNext = %+v, want the wait gone", r.drawer.prNext)
+	}
+}
+
+func TestOpenWithPRDropsAWaitOnAViewWithoutASource(t *testing.T) {
+	t.Parallel()
+
+	r := newPRDrawer(t)
+	r.opened(t)
+
+	tab := r.store.State().Tab()
+	v := r.view()
+	v.src, v.err = nil, errNotRepo
+	r.drawer.prNext = &prNext{tab: tab.ID, pane: tab.Review.Pane, then: thenNothing, open: true}
+
+	if cmd := r.prNextAfterSync(); cmd != nil || r.drawer.prNext != nil {
+		t.Errorf("cmd %v, prNext %+v: want the wait dropped and nothing asked", cmd != nil, r.drawer.prNext)
+	}
+}
+
 func TestPRPlaceErrors(t *testing.T) {
 	t.Parallel()
 

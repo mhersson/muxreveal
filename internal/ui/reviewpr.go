@@ -552,7 +552,16 @@ func (a *App) prNextAfterSync() tea.Cmd {
 	}
 
 	v := a.drawer.views[t.ID]
-	if v == nil || v.src == nil {
+	if v == nil {
+		return nil
+	}
+
+	if v.src == nil {
+		// A view that resolved without a source (an error, not a repository) never gets one for this open.
+		if v.loaded {
+			a.drawer.prNext = nil
+		}
+
 		return nil
 	}
 
