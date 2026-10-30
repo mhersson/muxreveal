@@ -513,8 +513,8 @@ func TestPRModeHints(t *testing.T) {
 	r.until(t, "PR mode", r.inPRMode(7))
 
 	text := r.drawn(t)
-	if !strings.Contains(text, "j/k line   ]/[ hunk   c checks   O browser   b/t mode") {
-		t.Errorf("PR mode hints missing j/k line, ]/[ hunk, c checks, O browser, b/t mode:\n%s", text)
+	if !strings.Contains(text, "j/k line   ]/[ hunk   c checks   a approve   O browser   b/t mode") {
+		t.Errorf("PR mode hints missing j/k line, ]/[ hunk, c checks, a approve, O browser, b/t mode:\n%s", text)
 	}
 
 	for _, gone := range []string{"}/{ file", "w worktree", "e edit", "/ search", "tab tree"} {

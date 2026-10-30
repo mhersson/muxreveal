@@ -77,6 +77,9 @@ type Options struct {
 	PRLookup PRLookup
 	// OpenURL opens a link in the browser; nil means the platform's opener.
 	OpenURL urlOpener
+	// PRActions makes the GitHub writes (approve, merge, open a pull request);
+	// nil turns them off.
+	PRActions prActions
 }
 
 // App is the root Bubble Tea model.
@@ -110,6 +113,7 @@ type App struct {
 	prompt                 *prompt     // text input; owns every key and paste while open
 	checks                 *checksView // a pull request's checks; owns every key while open
 	openLink               urlOpener
+	actions                prActions // GitHub writes; nil means they are off
 
 	panes        map[core.PaneID]*pane // runtime panes, keyed like State.Panes
 	later        []tea.Cmd             // commands raised outside the update's return path; Update batches them
@@ -223,6 +227,8 @@ func New(opts Options) (*App, error) {
 		focusFollows: opts.FocusFollowsMouse, copyOnSelect: opts.CopyOnSelect,
 		clip: newClipboard(clipboardConfig{OSC52: !opts.NoOSC52, Native: !opts.NoNativeClipboard}, getenv, runtime.GOOS, opts.Logger),
 	}
+
+	a.actions = opts.PRActions
 
 	a.openLink = opts.OpenURL
 	if a.openLink == nil {
@@ -585,6 +591,8 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, a.onPRFetched(msg)
 	case browserDoneMsg:
 		a.onBrowserDone(msg)
+	case approvedMsg:
+		a.onApproved(msg)
 	case reviewSnappedMsg:
 		return a, a.reviewRefresh(msg.pane)
 	case reviewFullMsg:

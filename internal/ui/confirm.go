@@ -25,6 +25,9 @@ type confirm struct {
 	// push, when set, makes this the push confirm: it draws pushBox and takes only
 	// enter and esc.
 	push *pushTarget
+	// approve, when set, makes this the approve confirm: it draws approveBox and
+	// takes only enter and esc.
+	approve *approveTarget
 }
 
 // openConfirm shows c and ends a pending leader sequence.
@@ -38,7 +41,7 @@ func (a *App) handleConfirmKey(msg tea.KeyPressMsg) tea.Cmd {
 	c := a.confirm
 
 	key := msg.String()
-	if c.push != nil && key != "enter" && key != "esc" {
+	if (c.push != nil || c.approve != nil) && key != "enter" && key != "esc" {
 		return nil
 	}
 
@@ -113,8 +116,12 @@ func confirmBox(c confirm, w int, icons bool, st styles) []string {
 // third of the height, clipped to the terminal.
 func overlayConfirm(base string, width, height int, c confirm, icons bool, st styles) string {
 	maxW := maxConfirmWidth
-	if c.push != nil {
+
+	switch {
+	case c.push != nil:
 		maxW = maxPushWidth
+	case c.approve != nil:
+		maxW = maxApproveWidth
 	}
 
 	w := min(maxW, width-2)
@@ -123,9 +130,13 @@ func overlayConfirm(base string, width, height int, c confirm, icons bool, st st
 	}
 
 	var lines []string
-	if c.push != nil {
+
+	switch {
+	case c.push != nil:
 		lines = pushBox(*c.push, w, icons, st)
-	} else {
+	case c.approve != nil:
+		lines = approveBox(*c.approve, w, icons, st)
+	default:
 		lines = confirmBox(c, w, icons, st)
 	}
 

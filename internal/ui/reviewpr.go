@@ -530,7 +530,9 @@ func (a *App) prThenRun(then prThen) tea.Cmd {
 		return a.openChecks(v.pr.Repo, v.pr.Number)
 	case thenBrowser:
 		return a.openURL(a.prLink(v.pr))
-	case thenNothing, thenApprove, thenMerge:
+	case thenApprove:
+		a.openApprove(v.pr.Repo, v.pr.Number, v.res.Head)
+	case thenNothing, thenMerge:
 	}
 
 	return nil

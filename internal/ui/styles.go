@@ -49,6 +49,8 @@ type styles struct {
 	confirmBorder, confirmTitle, confirmQuestion, confirmKey lipgloss.Style
 	// pushTitle is the push confirm's title, in Info and bold.
 	pushTitle lipgloss.Style
+	// approveTitle is the approve confirm's title, in Success and bold.
+	approveTitle lipgloss.Style
 	// runs memoizes rendered border runs; it is shared by copies of the styles.
 	runs *runCache
 }
@@ -110,6 +112,7 @@ func newStyles(t theme.Theme) styles {
 		confirmQuestion: onPanel.Bold(true),
 		confirmKey:      onPanel.Foreground(ui.Key).Bold(true),
 		pushTitle:       onPanel.Foreground(ui.Info).Bold(true),
+		approveTitle:    onPanel.Foreground(ui.Success).Bold(true),
 		runs:            &runCache{},
 	}
 }

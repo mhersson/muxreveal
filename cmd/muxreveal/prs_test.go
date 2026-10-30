@@ -173,3 +173,55 @@ func TestCloseRunClosesThePollerAfterTheApp(t *testing.T) {
 		}
 	}
 }
+
+func TestGhActionsUseTheClientOfTheRepositorysHost(t *testing.T) {
+	var (
+		mu    sync.Mutex
+		hosts []string
+		net   offline
+	)
+
+	p := startPRs(func(_ context.Context, host string) (*github.Client, error) {
+		mu.Lock()
+
+		hosts = append(hosts, host)
+
+		mu.Unlock()
+
+		return github.NewClient(host, github.Options{Token: "test-token", Transport: &net})
+	})
+
+	t.Cleanup(func() { _ = p.Close() })
+
+	actions := p.actions()
+	other := github.Repo{Host: "ghe.example.com", Owner: "o", Name: "r"}
+
+	for _, r := range []github.Repo{testRepo, other, other} {
+		if err := actions.Approve(t.Context(), r, 7, "abc123"); err == nil || !strings.Contains(err.Error(), "offline") {
+			t.Fatalf("Approve(%s) error = %v, want the transport's", r, err)
+		}
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+
+	if got := strings.Join(hosts, ","); got != "github.com,ghe.example.com" {
+		t.Errorf("clients built for %q, want one per host: github.com,ghe.example.com", got)
+	}
+
+	if n := net.requests.Load(); n != 3 {
+		t.Errorf("the transport saw %d requests, want 3", n)
+	}
+}
+
+func TestGhActionsReportAClientThatCannotBeBuilt(t *testing.T) {
+	failing := errors.New("stub: no token")
+
+	p := startPRs(func(context.Context, string) (*github.Client, error) { return nil, failing })
+
+	t.Cleanup(func() { _ = p.Close() })
+
+	if err := p.actions().Approve(t.Context(), testRepo, 7, "abc123"); !errors.Is(err, failing) {
+		t.Errorf("Approve error = %v, want the factory's", err)
+	}
+}

@@ -20,5 +20,5 @@
 │                   │      43 +     p, ok := a.store.Pane(agent)               │
 │                   │      44 +     if !ok || p.Kind != core.KindAgent {       │
 │                   │▎     45 +         return a.notify("a review pane needs a…│
-│                   │ j/k line   ]/[ hunk   c checks   O browser   b/t mode    │
+│                   │ j/k line   ]/[ hunk   c checks   a approve   O browser   │
 ╰───────────────────╰──────────────────────────────────────────────────────────╯

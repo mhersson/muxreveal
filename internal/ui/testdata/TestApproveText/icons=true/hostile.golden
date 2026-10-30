@@ -1,0 +1,24 @@
+ 1  p1                                                        󰛽 master-stack 
+────────────────────────────────────────────────────────────────────────────────
+╭─  shell ─────────╭─  muxreveal · feat/review-pane ──────────────────  #7 ─╮
+│$ claude           │ #7 Show the pull request over its diff                   │
+│reviewing the diff │  feat/review-pane → main    4/4   approved   @mhersson…│
+│                   │──────────────────────────────────────────────────────────│
+│                   │  M internal/core/state.go                          +9 -1 │
+│                   │      31 +     Agent PaneID                               │
+│      ╭─ 󰔓 Approve #7 ─────────────────────────────────────────────────╮      │
+│      │                                                                │      │
+│      │  bad [31mtitle here                                            │      │
+│      │  at head a1b2c3d, the commit you reviewed                      │+4 -3 │
+│      │                                                                │      │
+│      │  enter approve    esc cancel                                   │      │
+│      ╰────────────────────────────────────────────────────────────────╯an ag…│
+│                   │  42  42   func (a *App) openReview(ctx context.Context, …│
+│                   │  43     -     if a.store.Pane(agent).Kind != core.KindAg…│
+│                   │  44     -         return nil                             │
+│                   │  45     -     }                                          │
+│                   │      43 +     p, ok := a.store.Pane(agent)               │
+│                   │      44 +     if !ok || p.Kind != core.KindAgent {       │
+│                   │▎     45 +         return a.notify("a review pane needs a…│
+│                   │ j/k line   ]/[ hunk   c checks   a approve   O browser   │
+╰───────────────────╰──────────────────────────────────────────────────────────╯
