@@ -48,10 +48,7 @@ func themedScreens() []themedScreen {
 		}})
 	}
 
-	for _, c := range []struct {
-		name string
-		page bool
-	}{{"list", false}, {"new-page", true}} {
+	for _, c := range pickerGoldenCases() {
 		screens = append(screens, appScreen("picker/"+c.name, func(t *testing.T, th string, icons bool) *App {
 			return pickerScene(t, th, icons, c.page)
 		}))

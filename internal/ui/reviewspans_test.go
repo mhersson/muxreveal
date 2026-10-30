@@ -42,6 +42,7 @@ func settleCounting(t *testing.T, a *App) int {
 
 // A live result tokenises only the chunks whose text changed; the rest keep the
 // spans they had, and what is drawn is what a cold start draws.
+// It compares highlighted colours, so it runs serially (docs/gotchas.md).
 func TestLiveResultKeepsSpansOfUnchangedChunks(t *testing.T) {
 	a := cacheScene().build(t)
 	v := a.reviewViewOf(a.store.State().Tab().ID)

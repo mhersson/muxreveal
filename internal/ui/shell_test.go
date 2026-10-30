@@ -40,6 +40,7 @@ func TestNewRejectsUnknownTheme(t *testing.T) {
 	}
 }
 
+// It compares highlighted colours, so it runs serially (docs/gotchas.md).
 func TestShellGolden(t *testing.T) {
 	t.Run("catppuccin-mocha", func(t *testing.T) {
 		a := newThemedApp(t, "catppuccin-mocha")

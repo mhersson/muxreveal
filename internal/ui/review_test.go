@@ -523,7 +523,8 @@ func TestHiddenTabDrawerRecomputesWhenShown(t *testing.T) {
 		t.Error("a batch for a hidden tab's drawer started work")
 	}
 
-	// The real batch for f.txt must land while the tab is hidden, or it reloads the shown drawer by itself.
+	// The real batch for f.txt must land while the tab is hidden,
+	// or it reloads the shown drawer by itself.
 	r.until(t, "the watcher to report f.txt", r.reportedAll(filepath.Join(root, "f.txt")))
 
 	if v.loading || v.queued == nil || v.gen != gen {

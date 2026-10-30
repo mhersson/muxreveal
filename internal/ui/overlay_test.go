@@ -202,6 +202,7 @@ func TestThemePickerCommits(t *testing.T) {
 	}
 }
 
+// It compares highlighted colours, so it runs serially (docs/gotchas.md).
 func TestThemePickerEscRestores(t *testing.T) {
 	a := fastApp(t)
 	sized(t, a, 100, 30)
@@ -303,6 +304,7 @@ func TestOverlaySizes(t *testing.T) {
 	}
 }
 
+// It compares highlighted colours, so it runs serially (docs/gotchas.md).
 func TestPaletteOverlayNoIconsGolden(t *testing.T) {
 	a := fastApp(t)
 	a.icons = false
@@ -311,6 +313,7 @@ func TestPaletteOverlayNoIconsGolden(t *testing.T) {
 	golden.RequireEqual(t, []byte(a.View().Content))
 }
 
+// It compares highlighted colours, so it runs serially (docs/gotchas.md).
 func TestPaletteOverlayGolden(t *testing.T) {
 	a := fastApp(t)
 	sized(t, a, 100, 30)
@@ -318,6 +321,7 @@ func TestPaletteOverlayGolden(t *testing.T) {
 	golden.RequireEqual(t, []byte(a.View().Content))
 }
 
+// It compares highlighted colours, so it runs serially (docs/gotchas.md).
 func TestThemePickerGolden(t *testing.T) {
 	a := fastApp(t)
 	sized(t, a, 100, 30)

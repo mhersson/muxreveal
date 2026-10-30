@@ -232,6 +232,7 @@ func TestDrawerLinesFollowTheirInputs(t *testing.T) {
 
 // Whatever order the inputs change in, the lines a frame shows are the ones a
 // cold draw gives, on the frame that draws them and on the next.
+// It compares highlighted colours, so it runs serially (docs/gotchas.md).
 func TestDrawerLinesStayTrueToAColdDraw(t *testing.T) {
 	a := cacheScene().build(t)
 	v := a.reviewViewOf(a.store.State().Tab().ID)

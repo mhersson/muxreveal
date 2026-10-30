@@ -7,6 +7,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
+// It compares highlighted colours, so it runs serially (docs/gotchas.md).
 func TestHighlight(t *testing.T) {
 	mocha := mustTheme(t, "catppuccin-mocha")
 

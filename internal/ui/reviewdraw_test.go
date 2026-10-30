@@ -125,6 +125,7 @@ func reviewCases() []reviewCase {
 
 // TestReviewGolden draws each case once in colour, in the default theme with icons.
 // TestReviewText covers icons off and TestScreensTakeTheirColoursFromTheTheme the other theme.
+// It compares highlighted colours, so it runs serially (docs/gotchas.md).
 func TestReviewGolden(t *testing.T) {
 	for _, c := range reviewCases() {
 		t.Run("catppuccin-mocha/icons=true/"+c.name, func(t *testing.T) {
@@ -508,6 +509,7 @@ func TestHighlightCapPerFrame(t *testing.T) {
 	}
 }
 
+// It compares highlighted colours, so it runs serially (docs/gotchas.md).
 func TestHighlightColoursLines(t *testing.T) {
 	s := reviewScene{theme: "catppuccin-mocha", icons: true, w: 200, h: 52, res: turn4Result(), turn: 4, turns: 4, focused: true}
 	a := s.build(t)

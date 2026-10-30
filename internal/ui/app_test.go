@@ -487,6 +487,7 @@ func TestWhichKeySizes(t *testing.T) {
 	}
 }
 
+// It compares highlighted colours, so it runs serially (docs/gotchas.md).
 func TestWhichKeyGolden(t *testing.T) {
 	a := newTestApp(t)
 	sized(t, a, 100, 30)
@@ -495,6 +496,7 @@ func TestWhichKeyGolden(t *testing.T) {
 	golden.RequireEqual(t, []byte(a.View().Content))
 }
 
+// It compares highlighted colours, so it runs serially (docs/gotchas.md).
 func TestWhichKeyNoIconsGolden(t *testing.T) {
 	a := newTestApp(t)
 	a.icons = false
@@ -504,6 +506,7 @@ func TestWhichKeyNoIconsGolden(t *testing.T) {
 	golden.RequireEqual(t, []byte(a.View().Content))
 }
 
+// It compares highlighted colours, so it runs serially (docs/gotchas.md).
 func TestLeaderPendingGolden(t *testing.T) {
 	a := newTestApp(t)
 	sized(t, a, 100, 30)
