@@ -31,10 +31,11 @@ const noticeNothingToClean = "nothing to clean up"
 
 // cleanupFound is the worktree that has a merged branch checked out and what a
 // cleanup would remove with it. managed is false for the main checkout and for a
-// worktree outside MuxReveal's roots: those are found but never removed.
+// worktree outside MuxReveal's roots: those are found but never removed, nor is
+// a locked one.
 type cleanupFound struct {
 	main, path, branch, tip string
-	managed                 bool
+	managed, locked         bool
 	changes, ahead          int
 	headErr                 error // git.ErrNoCommit: the merged head is not in this repository
 }
@@ -173,7 +174,10 @@ func findCleanup(ctx context.Context, root, branch, head string) (found cleanupF
 		return found, true, nil
 	}
 
-	found.managed = true
+	found.managed, found.locked = true, wt.Locked
+	if found.locked {
+		return found, true, nil
+	}
 
 	if found.changes, err = git.WorktreeChanges(ctx, wt.Path); err != nil {
 		return cleanupFound{}, false, err
@@ -296,6 +300,8 @@ func (a *App) onCleanupFound(msg cleanupFoundMsg) tea.Cmd { //nolint:unparam // 
 	switch {
 	case !f.managed:
 		a.cleanupSay(msg, fmt.Sprintf("%s is outside MuxReveal's worktrees, so it stays", path))
+	case f.locked:
+		a.cleanupSay(msg, fmt.Sprintf("%s is locked, so it stays", path))
 	case f.changes > 0:
 		a.cleanupSay(msg, fmt.Sprintf("%s has %s, so it stays", path, plural(f.changes, "uncommitted change")))
 	case working:

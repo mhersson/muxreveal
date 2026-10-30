@@ -325,6 +325,14 @@ func TestCleanupGuards(t *testing.T) {
 			branch: true, panes: 2,
 		},
 		{
+			name:  "locked worktree",
+			setup: func(t *testing.T, r *cleanupRig) { gitIn(t, "git", r.main, "worktree", "lock", r.wt) },
+			toast: func(*cleanupRig) string {
+				return mergedToast + "; .worktrees/feat-x is locked, so it stays"
+			},
+			branch: true, panes: 2,
+		},
+		{
 			name: "working agent",
 			setup: func(t *testing.T, r *cleanupRig) {
 				openIn(t, r.App, core.SetAgentState{ID: r.agentID, State: core.AgentWorking})
