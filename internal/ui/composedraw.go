@@ -187,7 +187,7 @@ func (a *App) composeBody(lk look, cw, rows int) (lines []composeLine) {
 
 // composeHints are the key hints that fit cw cells.
 func composeHints(cw int, st styles) string {
-	return hintLine([][2]string{{"tab", "next field"}, {"ctrl+s", "create"}, {"esc", "cancel"}}, cw, st)
+	return hintLine([][2]string{{"tab", "next field"}, {"ctrl+e", "body in $EDITOR"}, {"ctrl+s", "create"}, {"esc", "cancel"}}, cw, st)
 }
 
 // overlayCompose draws the compose box over base, centred.

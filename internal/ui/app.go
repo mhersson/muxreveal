@@ -116,6 +116,8 @@ type App struct {
 	prList                 *prListView  // the agents' pull requests; owns every key while open
 	compose                *composeView // the compose box; owns every key while open
 	composeSeq             int          // compose request counter; an answer for another request is stale
+	runDir                 string       // the state run dir; empty with agent hooks off
+	editing                map[core.PaneID]*bodyEdit
 	merging                map[mergeKey]bool
 	openLink               urlOpener
 	actions                prActions // GitHub writes; nil means they are off
@@ -247,6 +249,8 @@ func New(opts Options) (*App, error) {
 	a.drawer.cfg = opts.Diff
 	a.picker.cfg = opts.Worktrees
 	a.drawersOpen = anyReview(opts.Store.State())
+
+	a.runDir = opts.GitTempDir
 
 	if opts.GitTempDir != "" {
 		a.engine = git.NewEngine(git.EngineOptions{
@@ -567,6 +571,10 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, a.onComposePushed(msg)
 	case composeCreatedMsg:
 		a.onComposeCreated(msg)
+	case bodyWrittenMsg:
+		return a, a.onBodyWritten(msg)
+	case bodyReadMsg:
+		a.onBodyRead(msg)
 	case watchAcquiredMsg:
 		a.onWatchAcquired(msg)
 	case pinAcquiredMsg:
@@ -773,7 +781,7 @@ func (a *App) View() tea.View {
 		content = a.overlayMerge(content, lk)
 	}
 
-	if a.compose != nil {
+	if a.composeShown() {
 		content = a.overlayCompose(content, lk)
 	}
 

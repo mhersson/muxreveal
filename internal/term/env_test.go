@@ -192,6 +192,33 @@ func TestEditorCommand(t *testing.T) {
 	}
 }
 
+func TestEditorOnlyCommand(t *testing.T) {
+	tests := []struct {
+		name string
+		sh   string
+		want []string // the arguments after -l -i -c
+	}{
+		{"sh", "/bin/sh", []string{`vi "$@"`, "sh", "/run/body.md"}},
+		{"bash", "/usr/bin/bash", []string{`vi "$@"`, "bash", "/run/body.md"}},
+		{"zsh", "/usr/bin/zsh", []string{`vi "$@"`, "zsh", "/run/body.md"}},
+		{"fish", "/usr/bin/fish", []string{`status job-control full; vi $argv`, "/run/body.md"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := EditorOnlyCommand(func(string) string { return tt.sh }, "/work", "vi", []string{"/run/body.md"}, nil)
+
+			if want := append([]string{tt.sh, "-l", "-i", "-c"}, tt.want...); !slices.Equal(c.Argv, want) {
+				t.Errorf("Argv = %q, want %q", c.Argv, want)
+			}
+
+			if strings.Contains(strings.Join(c.Argv, " "), "exec") {
+				t.Errorf("Argv = %q, want no trailing shell", c.Argv)
+			}
+		})
+	}
+}
+
 // TestAgentCommandPinned pins, byte for byte, the Command AgentCommand returns.
 // It runs nothing, so unlike the tests that start a shell it holds on every platform.
 func TestAgentCommandPinned(t *testing.T) {

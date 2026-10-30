@@ -126,7 +126,7 @@ func (a *App) hitTab(x int) hitResult {
 // its popup). It also drops any held button, releasing a forwarded one in its guest, since the modal would
 // swallow the release.
 func (a *App) mouseBlocked() bool {
-	if a.confirm == nil && a.prompt == nil && a.overlay == nil && a.checks == nil && a.merge == nil && a.compose == nil && a.prList == nil && a.picker.open == nil && a.drawer.list == nil && a.copy == nil && !a.pending {
+	if a.confirm == nil && a.prompt == nil && a.overlay == nil && a.checks == nil && a.merge == nil && !a.composeShown() && a.prList == nil && a.picker.open == nil && a.drawer.list == nil && a.copy == nil && !a.pending {
 		return false
 	}
 

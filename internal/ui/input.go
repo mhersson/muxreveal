@@ -28,7 +28,7 @@ func (a *App) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		return a.updateOverlay(msg)
 	}
 
-	if a.compose != nil {
+	if a.composeShown() {
 		return a.handleComposeKey(msg)
 	}
 
@@ -86,7 +86,7 @@ func (a *App) handlePaste(msg tea.PasteMsg) tea.Cmd {
 		return a.updateOverlay(msg)
 	}
 
-	if a.compose != nil {
+	if a.composeShown() {
 		return a.handleComposePaste(msg)
 	}
 

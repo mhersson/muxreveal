@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
+	"os"
 	"slices"
 	"strings"
 	"time"
@@ -28,6 +30,15 @@ const (
 
 	noticeComposeNotRepo  = "open a PR: not a git repository"
 	noticeComposeDetached = "open a PR: HEAD is detached"
+
+	noticeEditorNoRunDir = "the editor needs the run directory, which is off with agent hooks"
+	noticeEditorOpen     = "the PR body is open in an editor"
+	statusEditorRead     = "could not read the edited body: "
+
+	// maxEditedBody is the most of the edited file that is read back.
+	maxEditedBody = 64 << 10
+	// editPending stands for the editor pane while its file is being written.
+	editPending core.PaneID = "?"
 )
 
 // Status rows of the compose box.
@@ -79,7 +90,18 @@ type composeView struct {
 	status    string
 	statusErr bool
 	busy      bool
+	editing   core.PaneID // the pane editing the body; the box is hidden meanwhile
 }
+
+// bodyEdit is the temp file one editor pane works on, and the box it belongs to.
+type bodyEdit struct {
+	file string
+	v    *composeView
+}
+
+// composeShown reports whether the compose box is open and not hidden behind
+// its editor.
+func (a *App) composeShown() bool { return a.compose != nil && a.compose.editing == "" }
 
 // composeResolvedMsg answers reading what a pull request of one pane's branch
 // would be.
@@ -125,6 +147,10 @@ func (a *App) composeCommand() tea.Cmd {
 	a.endLeader()
 
 	if a.compose != nil {
+		if a.compose.editing != "" {
+			a.notice = noticeEditorOpen
+		}
+
 		return nil
 	}
 
@@ -448,6 +474,8 @@ func (a *App) handleComposeKey(msg tea.KeyPressMsg) tea.Cmd {
 		return nil
 	case "ctrl+s":
 		return a.composeSubmit(v)
+	case "ctrl+e":
+		return a.composeEditor()
 	}
 
 	switch v.field {
@@ -671,5 +699,185 @@ func (a *App) onComposeCreated(msg composeCreatedMsg) {
 
 	if a.prs.src != nil {
 		a.prs.src.Refresh(v.t.repo)
+	}
+}
+
+// bodyWrittenMsg answers writing the body to its temp file.
+type bodyWrittenMsg struct {
+	v    *composeView
+	file string
+	err  error
+}
+
+// bodyReadMsg answers reading the edited body back.
+type bodyReadMsg struct {
+	v    *composeView
+	text string
+	err  error
+}
+
+// composeEditor is ctrl+e: it writes the body to a temp file in the run dir,
+// off the update loop, then opens a pane running only the editor on it.
+func (a *App) composeEditor() tea.Cmd {
+	v := a.compose
+
+	if a.runDir == "" {
+		a.notice = noticeEditorNoRunDir
+
+		return nil
+	}
+
+	v.editing = editPending
+
+	var (
+		dir    = a.runDir
+		body   = v.body.Value()
+		appCtx = a.ctx
+	)
+
+	return func() tea.Msg {
+		file, err := writeBodyFile(dir, body)
+
+		// An app that closed meanwhile never sees the file.
+		if err == nil && appCtx.Err() != nil {
+			_ = os.Remove(file)
+		}
+
+		return bodyWrittenMsg{v: v, file: file, err: err}
+	}
+}
+
+// writeBodyFile writes body to a new 0600 file in dir.
+func writeBodyFile(dir, body string) (string, error) {
+	f, err := os.CreateTemp(dir, "pr-body-*.md")
+	if err != nil {
+		return "", fmt.Errorf("create the body file: %w", err)
+	}
+
+	_, werr := f.WriteString(body)
+	if cerr := f.Close(); werr == nil {
+		werr = cerr
+	}
+
+	if werr != nil {
+		_ = os.Remove(f.Name())
+
+		return "", fmt.Errorf("write the body file: %w", werr)
+	}
+
+	return f.Name(), nil
+}
+
+// onBodyWritten opens the editor pane beside the focused pane, or brings the
+// box back when it cannot.
+func (a *App) onBodyWritten(msg bodyWrittenMsg) tea.Cmd {
+	v := msg.v
+
+	fail := func(reason string) {
+		if msg.file != "" {
+			a.closing.Go(func() { _ = os.Remove(msg.file) })
+		}
+
+		if a.compose == v {
+			v.editing = ""
+			v.status, v.statusErr = reason, true
+		}
+	}
+
+	switch {
+	case msg.err != nil:
+		fail(gitReason(msg.err))
+
+		return nil
+	case a.compose != v || v.editing != editPending:
+		fail("")
+
+		return nil
+	}
+
+	st := a.store.State()
+	anchor := st.Tab().Focus
+	id := st.NewPaneID()
+	run := &paneRun{program: reviewEditor(a.getenv), args: []string{msg.file}, once: true}
+
+	cmd, opened := a.openPaneAt(core.KindShell, core.SplitVertical, anchor, v.t.root, run)
+	if !opened {
+		fail("")
+
+		return nil
+	}
+
+	v.editing = id
+
+	if a.editing == nil {
+		a.editing = map[core.PaneID]*bodyEdit{}
+	}
+
+	a.editing[id] = &bodyEdit{file: msg.file, v: v}
+
+	return cmd
+}
+
+// composeEdited hands the file of editor pane id back: off the update loop it
+// reads at most 64 KiB and removes the file. It is nil for any other pane.
+func (a *App) composeEdited(id core.PaneID) tea.Cmd {
+	e, ok := a.editing[id]
+	if !ok {
+		return nil
+	}
+
+	delete(a.editing, id)
+
+	return func() tea.Msg {
+		text, err := readBodyFile(e.file)
+
+		return bodyReadMsg{v: e.v, text: text, err: err}
+	}
+}
+
+// readBodyFile reads at most maxEditedBody bytes of file and removes it.
+func readBodyFile(file string) (string, error) {
+	defer func() { _ = os.Remove(file) }()
+
+	f, err := os.Open(file)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+
+	b, err := io.ReadAll(io.LimitReader(f, maxEditedBody))
+	if err != nil {
+		return "", err
+	}
+
+	return string(b), nil
+}
+
+// onBodyRead puts the edited text in the body and shows the box again on it. A
+// box closed meanwhile is left alone.
+func (a *App) onBodyRead(msg bodyReadMsg) {
+	v := msg.v
+	if a.compose != v {
+		return
+	}
+
+	v.editing = ""
+	v.focus(composeBody)
+
+	if msg.err != nil {
+		v.status, v.statusErr = statusEditorRead+gitReason(msg.err), true
+
+		return
+	}
+
+	v.body = newTextArea(msg.text, maxComposeBody)
+}
+
+// removeEditFiles deletes the temp files of editors still open.
+func (a *App) removeEditFiles() {
+	for id, e := range a.editing {
+		_ = os.Remove(e.file)
+
+		delete(a.editing, id)
 	}
 }

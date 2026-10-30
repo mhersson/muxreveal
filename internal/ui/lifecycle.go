@@ -93,6 +93,7 @@ func (a *App) focusedCwd(st core.State) string {
 type paneRun struct {
 	program string
 	args    []string
+	once    bool // the pane ends with the program, with no shell after it
 }
 
 // openPaneAt starts a pane of kind in cwd next to anchor, a pane of the active
@@ -190,6 +191,8 @@ func (a *App) startPaneRunning(id core.PaneID, kind core.PaneKind, cwd string, c
 		// Restored and restarted agents use the app's harness; a second harness
 		// must pass the pane's own (harness.ByID(Pane.Harness)).
 		c = term.AgentCommand(a.getenv, cwd, a.harness.Launch(a.hookSettings, resume), env)
+	case run != nil && run.once:
+		c = term.EditorOnlyCommand(a.getenv, cwd, run.program, run.args, env)
 	case run != nil:
 		c = term.EditorCommand(a.getenv, cwd, run.program, run.args, env)
 	}
@@ -252,6 +255,8 @@ func usableDir(dir string) bool {
 // closePane removes a pane from the state and the registry at once and closes
 // its process in the background. An open confirm about it closes.
 func (a *App) closePane(id core.PaneID) tea.Cmd {
+	handBack := a.composeEdited(id)
+
 	p := a.panes[id]
 	delete(a.panes, id)
 	a.clearSelectionOf(id)
@@ -267,12 +272,12 @@ func (a *App) closePane(id core.PaneID) tea.Cmd {
 	}
 
 	if p == nil {
-		return nil
+		return handBack
 	}
 
 	a.closeAsync(p)
 
-	return a.relayout()
+	return tea.Batch(handBack, a.relayout())
 }
 
 // closeAsync closes a pane that has left the registry. Pane.close can take a
@@ -685,11 +690,15 @@ func (a *App) closeTabByID(id core.TabID) tea.Cmd {
 		return nil
 	}
 
-	var closing []*pane
+	var (
+		closing  []*pane
+		handBack []tea.Cmd
+	)
 
 	for pid, p := range a.panes {
 		if at, ok := st.TabOf(pid); ok && at == i {
 			closing = append(closing, p)
+			handBack = append(handBack, a.composeEdited(pid))
 
 			delete(a.panes, pid)
 		}
@@ -702,7 +711,7 @@ func (a *App) closeTabByID(id core.TabID) tea.Cmd {
 		a.closeAsync(p)
 	}
 
-	return a.relayout()
+	return tea.Batch(append(handBack, a.relayout())...)
 }
 
 // renameTab implements tab.rename: edit the active tab's custom name in the bar.
@@ -723,6 +732,7 @@ func (a *App) renameTab() tea.Cmd {
 // It is safe to call twice, and only after the program stopped running Update.
 func (a *App) Close(ctx context.Context) error {
 	a.endSlide()
+	a.removeEditFiles()
 	a.watches.holds.closeAll()
 
 	for id, p := range a.panes {
