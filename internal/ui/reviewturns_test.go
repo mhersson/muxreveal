@@ -684,6 +684,10 @@ func TestQuestionTurnIsNotListed(t *testing.T) {
 		t.Fatalf("turns %d shown %d live %v, want turn 1 of 1, not live", v.turns, v.res.Turn, v.res.Live)
 	}
 
+	if got, want := modeRow(v), "turn 1 of 1 in this worktree"; got != want {
+		t.Errorf("mode row = %q, want %q", got, want)
+	}
+
 	if got := r.drawn(t); !strings.Contains(got, "turn 1/1") {
 		t.Errorf("the tag does not read turn 1/1:\n%s", got)
 	}
@@ -694,6 +698,10 @@ func TestQuestionTurnIsNotListed(t *testing.T) {
 
 	if got := r.drawn(t); !strings.Contains(got, "turn 2/2") {
 		t.Errorf("the tag does not read turn 2/2:\n%s", got)
+	}
+
+	if got, want := modeRow(r.view()), "turn 2 of 2 in this worktree, live"; got != want {
+		t.Errorf("mode row = %q, want %q", got, want)
 	}
 }
 
@@ -763,6 +771,13 @@ func newTwoTurnRig(t *testing.T, opts ...func(*Options)) *followRig {
 	return r
 }
 
+// modeRow is the mode row's text for the view as it loaded.
+func modeRow(v *reviewView) string {
+	_, word, rest := modeParts(v, false)
+
+	return word + rest
+}
+
 func TestTurnModeInAFollowedWorktree(t *testing.T) {
 	t.Parallel()
 	r := newTwoTurnRig(t, turnFirst)
@@ -776,12 +791,20 @@ func TestTurnModeInAFollowedWorktree(t *testing.T) {
 		t.Errorf("A's tag does not read turn 1/1:\n%s", got)
 	}
 
+	if got, want := modeRow(v), "turn 1 of 1 in this worktree"; got != want {
+		t.Errorf("A's mode row = %q, want %q", got, want)
+	}
+
 	r.edit(filepath.Join(r.dirB, "a.txt"))
 	r.until(t, "b's turn", r.settledOn(r.rootB, true))
 
 	v = r.view()
 	if got := viewPaths(v); !slices.Equal(got, []string{"a.txt"}) || v.res.Turn != 1 || !v.res.Live || v.turns != 1 || !v.foreign {
 		t.Errorf("b shows %v as turn %d (live %v) of %d turns, want a.txt as its live turn 1 of 1", got, v.res.Turn, v.res.Live, v.turns)
+	}
+
+	if got, want := modeRow(v), "turn 1 of 1 in this worktree, live"; got != want {
+		t.Errorf("b's mode row = %q, want %q", got, want)
 	}
 
 	r.showTree(t)

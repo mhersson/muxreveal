@@ -166,7 +166,7 @@ func modeParts(v *reviewView, icons bool) (icon, word, rest string) {
 		switch {
 		case v.noSnapshot:
 			rest += ", no snapshot"
-		case n == m:
+		case v.res.Live:
 			rest += ", live"
 		}
 	default:

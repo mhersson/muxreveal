@@ -67,7 +67,10 @@ func reviewCases() []reviewCase {
 		})},
 		{"binary-and-truncated", with(func(s *reviewScene) { s.res, s.turn = edgeResult(), 3 })},
 		{"no-snapshot", with(func(s *reviewScene) { s.res, s.turn, s.noSnap = git.Result{}, 1, true })},
-		{"turn-past", with(func(s *reviewScene) { s.turn, s.turns, s.tree = 2, 3, true })},
+		{"turn-past", with(func(s *reviewScene) {
+			s.turn, s.turns, s.tree = 2, 3, true
+			s.res.Live = false
+		})},
 		{"empty", with(func(s *reviewScene) { s.res, s.branch = git.Result{}, true })},
 		{"sticky-header", with(func(s *reviewScene) {
 			s.h = 24
@@ -562,7 +565,8 @@ func TestModeRowOfATurn(t *testing.T) {
 		v    reviewView
 		want string
 	}{
-		{"latest", reviewView{turns: 3, res: git.Result{Turn: 3}}, "turn 3 of 3 in this worktree, live"},
+		{"latest", reviewView{turns: 3, res: git.Result{Turn: 3, Live: true}}, "turn 3 of 3 in this worktree, live"},
+		{"latest but closed", reviewView{turns: 1, res: git.Result{Turn: 1}}, "turn 1 of 1 in this worktree"},
 		{"past", reviewView{turns: 3, res: git.Result{Turn: 2}}, "turn 2 of 3 in this worktree"},
 		{"no snapshot", reviewView{turns: 3, res: git.Result{Turn: 1}, noSnapshot: true}, "turn 1 of 3 in this worktree, no snapshot"},
 	}
