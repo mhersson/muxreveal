@@ -227,7 +227,13 @@ func (v *mdView) sourceLine() int {
 // goSource puts the cursor on the first line of the narrowest block holding
 // source line n, else the next block, else the last line.
 func (v *mdView) goSource(n int) {
-	src := v.layout().Source
+	v.cursor = sourceLineIndex(v.layout().Source, n)
+	v.clamp()
+}
+
+// sourceLineIndex is the layout line of the narrowest range holding source
+// line n, else of the first range after it, else the last line.
+func sourceLineIndex(src []md.SourceRange, n int) int {
 	best, width := -1, 0
 
 	for i, r := range src {
@@ -250,8 +256,7 @@ func (v *mdView) goSource(n int) {
 		best = len(src) - 1
 	}
 
-	v.cursor = best
-	v.clamp()
+	return best
 }
 
 // draw is h rows of w cells. Cell 0 of the cursor's row holds ▎ on the cursor

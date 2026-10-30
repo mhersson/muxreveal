@@ -91,7 +91,7 @@ func (a *App) composeBox(lk look, w, room int) (lines []string, curX, curY int) 
 
 	head = append(head, blank, titleLine, blank, baseLine, blank, draftLine, blank, plain(label(composeBody, "body")))
 
-	tail := []composeLine{blank, plain(run(printable(v.status), statusColor(v, ui), false)), plain(composeHints(cw, st))}
+	tail := []composeLine{blank, plain(run(printable(v.status), statusColor(v, ui), false)), plain(composeHints(cw, v.preview.on, st))}
 
 	// The frame is two lines, the body box two more around its rows.
 	rows := min(composeBodyRows, max(room-2-len(head)-2-len(tail), composeMinBody))
@@ -155,14 +155,33 @@ func (a *App) composeBody(lk look, cw, rows int) (lines []composeLine) {
 	text := paint(ui.Fg, ui.Panel, false)
 	inner := max(cw-2, 0)
 
+	toggle := func(name string, shown bool) string {
+		if shown {
+			return paint(ui.Accent, ui.Panel, true).Render(name)
+		}
+
+		return paint(ui.Subtle, ui.Panel, false).Render(name)
+	}
+	label := border.Render("╭─ ") + toggle("Write", !v.preview.on) + border.Render(" │ ") + toggle("Preview", v.preview.on) + border.Render(" ")
+	total := inner + 2
+
 	src := " from " + printable(v.source) + " "
-	src = ansi.Truncate(src, max(inner-2, 0), "…")
-	topLine := border.Render("╭"+strings.Repeat("─", max(inner-ansi.StringWidth(src)-1, 0))) +
+	src = ansi.Truncate(src, max(total-ansi.StringWidth(label)-2, 0), "…")
+	topLine := label + border.Render(strings.Repeat("─", max(total-ansi.StringWidth(label)-ansi.StringWidth(src)-2, 0))) +
 		paint(ui.Subtle, ui.Panel, false).Render(src) + border.Render("─╮")
-	lines = append(lines, composeLine{text: topLine, cur: -1})
+	lines = append(lines, composeLine{text: ansi.Truncate(topLine, total, ""), cur: -1})
 
 	bw := max(inner-2, 0)
-	body, r, c := v.body.View(bw, rows, text)
+
+	var body []string
+
+	r, c := -1, 0
+
+	if v.preview.on {
+		body = a.composePreviewRows(lk, bw, rows)
+	} else {
+		body, r, c = v.body.View(bw, rows, text)
+	}
 
 	for i := range rows {
 		cell := ""
@@ -185,9 +204,38 @@ func (a *App) composeBody(lk look, cw, rows int) (lines []composeLine) {
 	return lines
 }
 
-// composeHints are the key hints that fit cw cells.
-func composeHints(cw int, st styles) string {
-	return hintLine([][2]string{{"tab", "next field"}, {"ctrl+e", "body in $EDITOR"}, {"ctrl+s", "create"}, {"esc", "cancel"}}, cw, st)
+// composePreviewRows paints the visible rows of the rendered body, w cells
+// each, and notes how many rows the box has for scrolling.
+func (a *App) composePreviewRows(lk look, w, rows int) []string {
+	p := &a.compose.preview
+	p.rows = rows
+
+	if p.doc == nil {
+		return nil
+	}
+
+	lay := p.doc.layout(composePreviewW(a.width), a.icons)
+	p.settle(lay, rows)
+
+	paintr := newMDPainter(lk.theme, lk.theme.UI.Panel)
+	out := make([]string, 0, rows)
+
+	for i := p.top; i < min(p.top+rows, len(lay.Lines)); i++ {
+		out = append(out, paintr.line(lay.Lines[i], lay.Links, w))
+	}
+
+	return out
+}
+
+// composeHints are the key hints that fit cw cells; preview says the body box
+// shows the preview.
+func composeHints(cw int, preview bool, st styles) string {
+	toggle := "preview"
+	if preview {
+		toggle = "write"
+	}
+
+	return hintLine([][2]string{{"tab", "next field"}, {"ctrl+p", toggle}, {"ctrl+e", "body in $EDITOR"}, {"ctrl+s", "create"}, {"esc", "cancel"}}, cw, st)
 }
 
 // overlayCompose draws the compose box over base, centred.

@@ -582,7 +582,11 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case bodyWrittenMsg:
 		return a, a.onBodyWritten(msg)
 	case bodyReadMsg:
-		a.onBodyRead(msg)
+		return a, a.onBodyRead(msg)
+	case composeRenderDueMsg:
+		return a, a.onComposeRenderDue(msg)
+	case composeRenderedMsg:
+		a.onComposeRendered(msg)
 	case watchAcquiredMsg:
 		a.onWatchAcquired(msg)
 	case pinAcquiredMsg:

@@ -11,7 +11,7 @@
  │    draft   [ ] open as a draft                                             │
  │                                                                            │
  │    body                                                                    │
- │  ╭─────────────────────────────────────────────────── from the commits ─╮  │
+ │  ╭─ Write │ Preview ───────────────────────────────── from the commits ─╮  │
  │  │ - add the lexer                                                      │  │
  │  │ - fix the parser                                                     │  │
  │  │                                                                      │  │
@@ -19,5 +19,5 @@
  │  ╰──────────────────────────────────────────────────────────────────────╯  │
  │                                                                            │
  │                                                                            │
- │  tab next field    ctrl+e body in $EDITOR    ctrl+s create    esc cancel   │
+ │  tab next field    ctrl+p preview    ctrl+e body in $EDITOR                │
  ╰────────────────────────────────────────────────────────────────────────────╯
