@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -112,6 +113,50 @@ func TestTurnListKeepsTurnsThatChangedTheWorktree(t *testing.T) {
 
 			if !slices.Equal(have, want) || got.Live != tt.live {
 				t.Errorf("turns = %v live = %v, want %v live = %v", have, got.Live, want, tt.live)
+			}
+		})
+	}
+}
+
+func TestTurnListAtComparesWithTheTreeItIsGiven(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		tree     func(start Turn, working string) string
+		wantLive bool
+	}{
+		{"the working tree's id counts like TurnList", func(_ Turn, working string) string { return working }, false},
+		{"the open turn's own tree leaves it out", func(start Turn, _ string) string { return start.Tree }, false},
+		{"another id makes the open turn live, whatever the files hold", func(Turn, string) string {
+			return "0000000000000000000000000000000000000000"
+		}, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			dir := seedRepo(t)
+			start := snap(t, dir, sessA, SnapshotOptions{})
+
+			r, err := Open(context.Background(), dir)
+			must(t, err)
+
+			wt, err := WorkingTree(context.Background(), r, TreeOptions{})
+			must(t, err)
+
+			ctx, logPath := wrapGit(t, "")
+
+			got, err := testEngine(t).TurnListAt(ctx, dir, sessA, tt.tree(start, wt.Tree))
+			must(t, err)
+
+			if calls := wrappedCalls(t, logPath); strings.Contains(calls, "write-tree") {
+				t.Errorf("TurnListAt snapshotted the working tree; git calls:\n%s", calls)
+			}
+
+			if got.Live != tt.wantLive || len(got.Turns) != map[bool]int{false: 0, true: 1}[tt.wantLive] {
+				t.Errorf("turns = %d live = %v, want live = %v", len(got.Turns), got.Live, tt.wantLive)
 			}
 		})
 	}

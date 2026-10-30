@@ -250,7 +250,7 @@ func (e *Engine) diffTurn(ctx context.Context, s TurnSource) (Result, error) {
 		return Result{}, err
 	}
 
-	list, wt, err := e.turnList(ctx, r, s.Session)
+	list, wt, err := e.turnList(ctx, r, s.Session, "")
 	if err != nil {
 		return Result{}, err
 	}

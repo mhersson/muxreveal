@@ -114,7 +114,7 @@ func (e *Engine) update(ctx context.Context, r Repo, prev Result, src Source, b 
 	)
 
 	if ts, ok := src.(TurnSource); ok {
-		list, w, err := e.turnList(ctx, r, ts.Session)
+		list, w, err := e.turnList(ctx, r, ts.Session, "")
 		if err != nil {
 			return Result{}, err
 		}

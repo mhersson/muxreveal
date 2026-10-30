@@ -21,14 +21,29 @@ func (e *Engine) TurnList(ctx context.Context, worktree, session string) (TurnLi
 		return TurnList{}, err
 	}
 
-	l, _, err := e.turnList(ctx, r, session)
+	l, _, err := e.turnList(ctx, r, session, "")
 
 	return l, err
 }
 
-// turnList is TurnList on the opened repo r. It also returns the working tree
-// when it had to compute it, which is only for an open current turn.
-func (e *Engine) turnList(ctx context.Context, r Repo, session string) (TurnList, *WorkTree, error) {
+// TurnListAt is TurnList for a caller that already has the worktree's current
+// tree id, such as the New side of a live branch diff: the open current turn
+// is compared with it instead of a fresh working-tree snapshot.
+func (e *Engine) TurnListAt(ctx context.Context, worktree, session, workingTree string) (TurnList, error) {
+	r, err := Open(ctx, worktree)
+	if err != nil {
+		return TurnList{}, err
+	}
+
+	l, _, err := e.turnList(ctx, r, session, workingTree)
+
+	return l, err
+}
+
+// turnList is TurnList on the opened repo r. A known working tree id replaces
+// the snapshot; the working tree is returned when it had to be computed, which
+// is only for an open current turn.
+func (e *Engine) turnList(ctx context.Context, r Repo, session, known string) (TurnList, *WorkTree, error) {
 	turns, err := Turns(ctx, r, session)
 	if err != nil {
 		return TurnList{}, nil, err
@@ -46,14 +61,18 @@ func (e *Engine) turnList(ctx context.Context, r Repo, session string) (TurnList
 				continue
 			}
 		case t.Current && !t.Missing:
-			w, err := e.workingTree(ctx, r)
-			if err != nil {
-				return TurnList{}, nil, fmt.Errorf("turns: %w", err)
+			tree := known
+
+			if tree == "" {
+				w, err := e.workingTree(ctx, r)
+				if err != nil {
+					return TurnList{}, nil, fmt.Errorf("turns: %w", err)
+				}
+
+				wt, tree = &w, w.Tree
 			}
 
-			wt = &w
-
-			if w.Tree == t.Tree {
+			if tree == t.Tree {
 				continue
 			}
 

@@ -367,8 +367,11 @@ func (j reviewJob) run(ctx context.Context) reviewLoadedMsg {
 		msg.res = res
 		msg.info.hidden = hiddenFlags(res.Files)
 
-		if j.countsFromDiff() && msg.src == nil {
+		switch {
+		case j.countsFromDiff() && msg.src == nil:
 			msg.info.turns = res.Turns
+		case j.countsAfterDiff() && msg.src == nil:
+			j.countTurnsAt(ctx, &msg.info, res)
 		}
 	}
 
@@ -381,6 +384,33 @@ func (j reviewJob) countsFromDiff() bool {
 	_, ok := j.src.(git.TurnSource)
 
 	return ok && !j.infoOnly
+}
+
+// countsAfterDiff reports whether a load of j.src counts the turns once the
+// diff is done, from the working tree the diff already snapshotted.
+func (j reviewJob) countsAfterDiff() bool {
+	_, ok := j.src.(git.BranchSource)
+
+	return ok && !j.infoOnly
+}
+
+// countTurnsAt is countTurns for a live result: its New side is the working
+// tree, so the count needs no snapshot of its own.
+func (j reviewJob) countTurnsAt(ctx context.Context, info *reviewInfo, res git.Result) {
+	if !res.Live || j.session == "" {
+		j.countTurns(ctx, info)
+
+		return
+	}
+
+	list, err := j.eng.TurnListAt(ctx, j.root, j.session, res.New)
+	if err != nil {
+		j.log.Debug("review: turns", "root", j.root, "err", err)
+
+		return
+	}
+
+	info.turns = len(list.Turns)
 }
 
 // countTurns sets info.turns to the length of the root's list of turns, unless
@@ -449,7 +479,7 @@ func isForeign(ctx context.Context, own, root string) (bool, error) {
 // change only with git's own state, so a batch of plain paths keeps them.
 func (j reviewJob) describe(ctx context.Context, info *reviewInfo) {
 	probe := j.batch == nil || j.batch.Git || j.batch.Overflow || info.project == ""
-	if !probe && (j.session == "" || j.countsFromDiff()) {
+	if !probe && (j.session == "" || j.countsFromDiff() || j.countsAfterDiff()) {
 		return
 	}
 
@@ -484,7 +514,7 @@ func (j reviewJob) describe(ctx context.Context, info *reviewInfo) {
 		info.base = base
 	}
 
-	if !j.countsFromDiff() {
+	if !j.countsFromDiff() && !j.countsAfterDiff() {
 		j.countTurns(ctx, info)
 	}
 }
