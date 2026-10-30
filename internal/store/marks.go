@@ -218,6 +218,7 @@ func (m *MarkFiles) run() {
 				continue
 			}
 
+			// A failed write is not retried before the next Save for this repository: marks need not survive.
 			if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 				m.log.Error("creating marks dir", "path", path, "err", err)
 

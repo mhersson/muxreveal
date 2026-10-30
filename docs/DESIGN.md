@@ -1110,9 +1110,9 @@ State lives in the platform state dir (`$XDG_STATE_HOME/muxreveal` on Linux, `~/
 
 - Each repository has `<state dir>/reviews/<hex of the first 16 bytes of SHA-256 of its common dir>.json` (mode 0600, `reviews/` 0700), where the common dir is `git.Repo.CommonDir` with symlinks resolved. The shape is `{"version": 1, "repo": "<common dir>", "marks": {"<id>": "2026-10-30"}}` with sorted keys. A mark's day is the UTC date it was last set or last matched a shown hunk.
 - The id is `git.HunkID(path, hunk)`: the hex of the first 16 bytes of SHA-256 over the path, a NUL, then for each added or removed line its kind byte, its text, a `\` when it has no newline at the end, and `\n`. Context lines, line numbers and a rename's old path are left out.
-- At load a mark whose day is more than 90 days before today's UTC date is dropped, as is one whose day does not parse. `core.TouchMarks` sets today on marks that a shown hunk matches, and the new marks are saved, so a mark the operator keeps seeing never expires.
+- At load a mark whose day is more than 90 days before today's UTC date is dropped, as is one whose day does not parse. `core.TouchMarks` sets today's day on the already-marked ids it is given.
 - A `MarkFiles` goroutine writes the files with `WriteAtomicNoSync` (marks need not survive a crash); the latest marks per file win and `Close` writes what is pending. A second instance that does not save has none.
-- A file that does not decode, has another version or names another `repo` is renamed to `<name>.bad` (replacing an older one), logged, and the marks start empty.
+- A file that does not decode, has another version or names another `repo` is renamed to `<name>.bad` (replacing an older one), and the marks start empty.
 
 **Writing**
 
