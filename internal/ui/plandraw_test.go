@@ -313,10 +313,12 @@ type planScene struct {
 	name string
 	w, h int
 	mode bool
+	// rewrite has the agent rewrite the shown plan after it opened.
+	rewrite bool
 }
 
 func planScenes() []planScene {
-	return []planScene{{"plan-file", 120, 40, false}, {"plan-mode", 120, 40, true}, {"plan-80x24", 80, 24, false}}
+	return []planScene{{"plan-file", 120, 40, false, false}, {"plan-mode", 120, 40, true, false}, {"plan-80x24", 80, 24, false, false}, {"plan-rewritten", 120, 40, false, true}}
 }
 
 func planSceneApp(t *testing.T, icons bool, sc planScene) *App {
@@ -324,6 +326,7 @@ func planSceneApp(t *testing.T, icons bool, sc planScene) *App {
 
 	r := newPlanRig(t, sc.w, sc.h)
 	r.a.icons = icons
+	r.a.plans = core.DefaultConfig().Plans
 
 	if sc.mode {
 		path := filepath.Join(r.home, ".claude", "plans", "x.md")
@@ -338,6 +341,18 @@ func planSceneApp(t *testing.T, icons bool, sc planScene) *App {
 
 	if r.a.plan == nil {
 		t.Fatal("the overlay did not open")
+	}
+
+	if sc.rewrite {
+		path := r.a.plan.plan.Path
+		text := strings.Replace(demoPlan(t), "# Session Caching Implementation Plan\n", "# Session Caching Implementation Plan\n\nRewritten by the agent after review.\n", 1)
+
+		msgs := r.rewrite(t, "p2", path, text)
+		if len(msgs) != 1 {
+			t.Fatalf("the rewrite raised %d reads", len(msgs))
+		}
+
+		r.a.Update(msgs[0])
 	}
 
 	return r.a

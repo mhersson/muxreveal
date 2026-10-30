@@ -5,6 +5,8 @@ import (
 	"slices"
 	"strings"
 
+	tea "charm.land/bubbletea/v2"
+
 	"github.com/mhersson/muxreveal/internal/core"
 	"github.com/mhersson/muxreveal/internal/harness"
 	"github.com/mhersson/muxreveal/internal/md"
@@ -41,14 +43,26 @@ func planFileRoot(paths []string, path string) (root string, ok bool) {
 }
 
 // notePlans records the plans an event reports, in event order so the last is
-// the latest. A path equal to the latest plan's own is a rewrite of it.
-func (a *App) notePlans(m core.Pane, id core.PaneID, ev harness.Event) {
+// the latest. A path equal to the latest plan's own is a rewrite of it; one the
+// overlay shows is recorded read and reloaded, which the returned command does.
+func (a *App) notePlans(m core.Pane, id core.PaneID, ev harness.Event) tea.Cmd {
 	cur := m.Plan
-	note := func(p core.Plan) {
-		p.At, p.Unread = a.clock.Now(), true
 
-		if a.dispatch(core.NotePlan{ID: id, Plan: p}) == nil {
-			cur = p
+	var reloads []tea.Cmd
+
+	note := func(p core.Plan) {
+		p.At = a.clock.Now()
+		shown := p.Path == cur.Path && a.planShowing(id, p.Path)
+		p.Unread = !shown
+
+		if a.dispatch(core.NotePlan{ID: id, Plan: p}) != nil {
+			return
+		}
+
+		cur = p
+
+		if shown {
+			reloads = append(reloads, a.reloadPlan(p))
 		}
 	}
 
@@ -68,4 +82,6 @@ func (a *App) notePlans(m core.Pane, id core.PaneID, ev harness.Event) {
 			note(core.Plan{Path: p, Root: root, Kind: core.PlanFile})
 		}
 	}
+
+	return tea.Batch(reloads...)
 }

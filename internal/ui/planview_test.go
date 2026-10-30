@@ -357,13 +357,14 @@ func TestPlanOpenLate(t *testing.T) {
 		name     string
 		run      func(t *testing.T, r *planRig) []planReadMsg // the answers to deliver, in order
 		wantOpen bool
+		stale    bool // a newer plan noted meanwhile stays unread and the overlay shows the older text
 	}{
 		{"after esc", func(t *testing.T, r *planRig) []planReadMsg {
 			msgs := planMsgs(r.ask())
 			r.keys("esc")
 
 			return msgs
-		}, false},
+		}, false, false},
 		{"after a second leader p", func(t *testing.T, r *planRig) []planReadMsg {
 			first := planMsgs(r.ask())
 			second := planMsgs(r.ask())
@@ -375,19 +376,25 @@ func TestPlanOpenLate(t *testing.T) {
 			}
 
 			return []planReadMsg{second[0], first[0]}
-		}, true},
+		}, true, false},
 		{"after the palette opened", func(t *testing.T, r *planRig) []planReadMsg {
 			msgs := planMsgs(r.ask())
 			r.a.openCommandPalette()
 
 			return msgs
-		}, false},
+		}, false, false},
 		{"after the pane closed", func(t *testing.T, r *planRig) []planReadMsg {
 			msgs := planMsgs(r.ask())
 			openIn(t, r.a, core.ClosePane{ID: "p2"})
 
 			return msgs
-		}, false},
+		}, false, false},
+		{"after a newer plan was noted", func(t *testing.T, r *planRig) []planReadMsg {
+			msgs := planMsgs(r.ask())
+			r.notePlan(t, core.Plan{Path: filepath.Join(r.wt, "docs/superpowers/specs/s.md"), Root: r.wt, Kind: core.PlanFile})
+
+			return msgs
+		}, true, true},
 	}
 
 	for _, tt := range tests {
@@ -415,6 +422,16 @@ func TestPlanOpenLate(t *testing.T) {
 
 			if p, ok := r.a.store.State().Panes["p2"]; ok && !tt.wantOpen && !p.Plan.Unread {
 				t.Error("a late answer marked the plan read")
+			}
+
+			if tt.stale {
+				if !r.unread() {
+					t.Error("showing an older plan marked the newer one read")
+				}
+
+				if !strings.HasSuffix(r.a.plan.plan.Path, "plans/p.md") {
+					t.Errorf("the overlay shows %s, want the plan that was read", r.a.plan.plan.Path)
+				}
 			}
 		})
 	}

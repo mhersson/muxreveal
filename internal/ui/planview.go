@@ -6,10 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"strings"
 
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/mhersson/muxreveal/internal/core"
+	"github.com/mhersson/muxreveal/internal/md"
 )
 
 // The plan overlay's notices.
@@ -34,15 +36,23 @@ type planView struct {
 	pageSeq int
 	chooser *linkChooser
 
+	// reloadSeq is the serial of the newest reload ask; rewritten is set by a
+	// reload and cleared by the next key.
+	reloadSeq int
+	rewritten bool
+
 	// searching is the prompt being open, typing into query; last is the query
 	// n and N repeat. query stays painted after enter.
 	searching   bool
 	query, last string
 }
 
-// planReadMsg answers the read and parse of a plan; seq is the serial of the ask.
+// planReadMsg answers the read and parse of a plan; seq is the serial of the
+// ask. A reload is asked of the open overlay view, under its reloadSeq.
 type planReadMsg struct {
 	seq        int
+	reload     bool
+	view       *planView
 	pane       core.PaneID
 	plan       core.Plan
 	root, base string
@@ -120,6 +130,12 @@ func (a *App) readPlanCmd(msg planReadMsg) tea.Cmd {
 // an esc superseded, one that lands under another modal, or one for a pane that
 // is gone or no longer an agent is dropped.
 func (a *App) onPlanRead(msg planReadMsg) {
+	if msg.reload {
+		a.onPlanReload(msg)
+
+		return
+	}
+
 	m, ok := a.store.State().Panes[msg.pane]
 	if msg.seq != a.planSeq || a.modalOpen() || !ok || m.Kind != core.KindAgent {
 		return
@@ -140,8 +156,138 @@ func (a *App) onPlanRead(msg planReadMsg) {
 	}
 	a.sizePlan()
 
-	// dispatch logs its own failures.
-	_ = a.dispatch(core.ReadPlan{ID: msg.pane})
+	// A newer plan noted meanwhile stays unread.
+	if m.Plan.Path == msg.plan.Path {
+		// dispatch logs its own failures.
+		_ = a.dispatch(core.ReadPlan{ID: msg.pane})
+	}
+}
+
+// planShowing reports whether the overlay is open on pane id's plan at path,
+// pages above it included.
+func (a *App) planShowing(id core.PaneID, path string) bool {
+	return a.plan != nil && a.plan.pane == id && a.plan.plan.Path == path
+}
+
+// reloadPlan reads the rewritten plan p again for the open overlay, off the
+// update loop.
+func (a *App) reloadPlan(p core.Plan) tea.Cmd {
+	pv := a.plan
+	pv.reloadSeq++
+
+	return a.readPlanCmd(planReadMsg{seq: pv.reloadSeq, reload: true, view: pv, pane: pv.pane, plan: p, root: pv.root, base: pv.base})
+}
+
+// onPlanReload swaps in a rewritten plan, keeping the view's place. An answer
+// for an overlay that closed, or for a reload a newer one superseded, is
+// dropped; a failed read keeps the old doc and says why.
+func (a *App) onPlanReload(msg planReadMsg) {
+	pv := a.plan
+	if pv == nil || msg.view != pv || msg.seq != pv.reloadSeq {
+		return
+	}
+
+	if msg.err != nil {
+		if !errors.Is(msg.err, context.Canceled) {
+			a.notice = markdownNotice(planReadRoot(msg.plan), msg.plan.Path, a.getenv("HOME"), msg.err)
+		}
+
+		return
+	}
+
+	v := &pv.view
+	v.top, v.cursor = keepPlace(v.layout(), msg.doc.layout(v.textWidth(), v.icons), v.top, v.cursor)
+	v.doc = msg.doc
+	pv.plan, pv.rewritten = msg.plan, true
+
+	a.sizePlan()
+}
+
+// keepPlace maps a view's top line and cursor from the old layout onto the
+// new: the heading at or above the top is found again by its text and
+// occurrence and the top keeps its offset below it; else the top keeps its
+// source line. The cursor keeps its offset from the top.
+func keepPlace(old, next md.Layout, top, cursor int) (newTop, newCursor int) {
+	newTop = -1
+
+	if text, nth, at, ok := headingAbove(old, top); ok {
+		if i, found := findHeading(next, text, nth); found {
+			newTop = i + top - at
+		}
+	}
+
+	if newTop < 0 {
+		newTop = sourceLineIndex(next.Source, blockEditLine(old.Source, top))
+	}
+
+	last := max(len(next.Lines)-1, 0)
+	newTop = max(min(newTop, last), 0)
+
+	return newTop, max(min(newTop+cursor-top, last), 0)
+}
+
+// headings lists the first line of each heading in lay with its text.
+func headings(lay md.Layout) (at []int, text []string) {
+	for i, l := range lay.Lines {
+		if !isHeadingLine(l) || i > 0 && isHeadingLine(lay.Lines[i-1]) && lay.Source[i] == lay.Source[i-1] {
+			continue
+		}
+
+		var b strings.Builder
+
+		for j := i; j < len(lay.Lines) && isHeadingLine(lay.Lines[j]) && lay.Source[j] == lay.Source[i]; j++ {
+			for _, r := range lay.Lines[j] {
+				b.WriteString(r.Text)
+			}
+		}
+
+		at, text = append(at, i), append(text, b.String())
+	}
+
+	return at, text
+}
+
+// headingAbove is the last heading starting at or above line top: its text,
+// which occurrence of that text it is, and its line.
+func headingAbove(lay md.Layout, top int) (text string, nth, at int, ok bool) {
+	lines, texts := headings(lay)
+
+	for k := len(lines) - 1; k >= 0; k-- {
+		if lines[k] <= top {
+			return texts[k], countText(texts[:k], texts[k]), lines[k], true
+		}
+	}
+
+	return "", 0, 0, false
+}
+
+// findHeading is the line of the nth heading reading text.
+func findHeading(lay md.Layout, text string, nth int) (int, bool) {
+	lines, texts := headings(lay)
+
+	for k, t := range texts {
+		if t == text {
+			if nth == 0 {
+				return lines[k], true
+			}
+
+			nth--
+		}
+	}
+
+	return 0, false
+}
+
+func countText(texts []string, text string) int {
+	n := 0
+
+	for _, t := range texts {
+		if t == text {
+			n++
+		}
+	}
+
+	return n
 }
 
 // closePlan closes the overlay and drops any read still on its way.
@@ -191,6 +337,7 @@ func (a *App) handlePlanKey(msg tea.KeyPressMsg) tea.Cmd {
 	key := bindingKey(msg)
 
 	pv := a.plan
+	pv.rewritten = false
 
 	if key == "esc" {
 		switch {

@@ -98,6 +98,18 @@ func planCutStart(s string, n int) string {
 	return s
 }
 
+// planRewritten is the tag's age while a reload shows a rewrite.
+const planRewritten = "rewritten"
+
+// planTagStyled renders tag in muted, with a trailing "rewritten" in loud.
+func planTagStyled(tag string, muted, loud lipgloss.Style) string {
+	if head, ok := strings.CutSuffix(tag, planRewritten+" "); ok {
+		return muted.Render(head) + loud.Render(planRewritten) + muted.Render(" ")
+	}
+
+	return muted.Render(tag)
+}
+
 // planTop fits the title and the tag into the top border of a box w cells
 // wide. A path too long for its room is cut from its start; when that would
 // leave it under 12 cells the tag drops and the path takes the room, at least
@@ -141,7 +153,9 @@ func (a *App) planLines(lk look, w, h int) []string {
 	}
 
 	tag := " " + planKindWord(v.plan.Kind)
-	if age := railAge(v.plan.At, a.clock.Now()); age != "" {
+	if v.rewritten {
+		tag += " · " + planRewritten
+	} else if age := railAge(v.plan.At, a.clock.Now()); age != "" {
 		tag += " · " + age
 	}
 
@@ -156,7 +170,7 @@ func (a *App) planLines(lk look, w, h int) []string {
 	top := border.Render("╭─") + on(ui.Info).Bold(true).Render(title)
 
 	if tag != "" {
-		top += border.Render(strings.Repeat("─", w-4-ansi.StringWidth(title)-ansi.StringWidth(tag))) + on(ui.Muted).Render(tag) + border.Render("─╮")
+		top += border.Render(strings.Repeat("─", w-4-ansi.StringWidth(title)-ansi.StringWidth(tag))) + planTagStyled(tag, on(ui.Muted), on(ui.Accent).Bold(true)) + border.Render("─╮")
 	} else {
 		top += border.Render(strings.Repeat("─", w-3-ansi.StringWidth(title)) + "╮")
 	}
