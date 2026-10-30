@@ -515,6 +515,34 @@ func TestMarkdownOpenLate(t *testing.T) {
 		}
 	})
 
+	for _, tt := range []struct {
+		name         string
+		after, undo  func(m *pageRig)
+		wantKeyboard bool
+	}{
+		{"a page read after the compose box opened", func(m *pageRig) { m.compose = &composeView{} }, func(m *pageRig) { m.compose = nil }, true},
+		{"a page read after esc to the panes", func(m *pageRig) { m.drawerRelease() }, nil, false},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			m := newPageRig(t, nil)
+			shown := m.openPage(t, "README.md", false)
+			held := m.flow(m.openMarkdownPage(m.tabID(), filepath.Join(m.root, "docs/a.md"), true), holdPages)
+
+			tt.after(m)
+			m.flow(m.step(held[0]), nil)
+
+			if len(m.v.pages) != 1 || m.v.page() != shown || m.drawer.focused != tt.wantKeyboard {
+				t.Errorf("pages = %v, keyboard %v, want the stack unchanged and the keyboard %v", m.v.pages, m.drawer.focused, tt.wantKeyboard)
+			}
+
+			if tt.undo != nil {
+				tt.undo(m)
+			}
+		})
+	}
+
 	t.Run("a page read after b", func(t *testing.T) {
 		t.Parallel()
 

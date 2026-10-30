@@ -276,6 +276,11 @@ func (a *App) onMDPage(msg mdPageMsg) {
 		return
 	}
 
+	// The operator moved on during the read: a page must not take the keyboard back.
+	if a.modalOpen() || !a.drawer.focused {
+		return
+	}
+
 	if msg.err != nil {
 		if active && !errors.Is(msg.err, context.Canceled) {
 			a.notice = markdownNotice(v.root, msg.path, a.getenv("HOME"), msg.err)
@@ -588,6 +593,8 @@ func (a *App) pickMarkdown(pick *mdPick, rel string) tea.Cmd {
 	if v == nil || v.epoch != pick.gen {
 		return nil
 	}
+
+	a.drawerTake()
 
 	return a.openMarkdownPage(tab.ID, filepath.Join(v.root, filepath.FromSlash(rel)), false)
 }

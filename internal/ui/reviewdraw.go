@@ -990,7 +990,6 @@ func (d *drawCtx) mdPainter() mdPainter {
 // pageRow is row y of the shown markdown page, which fills the diff column.
 func (d *drawCtx) pageRow(p *mdPage, y int) string {
 	if d.pageRows == nil {
-		p.resize(d.lay.diffW, d.lay.diffH, d.icons)
 		d.pageRows = p.view.draw(d.mdPainter(), d.diffKeys())
 	}
 
