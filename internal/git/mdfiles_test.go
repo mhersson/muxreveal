@@ -94,6 +94,11 @@ func TestMarkdownFiles(t *testing.T) {
 			want: []string{"ok/d.md"},
 		},
 		{
+			name:    "root holding a .git folder is still listed",
+			entries: []mdEntry{{path: ".git/HEAD"}, {path: "a.md"}, {path: "docs/b.md"}},
+			want:    []string{"a.md", "docs/b.md"},
+		},
+		{
 			name: "symlinked folder not followed, symlinked file listed",
 			entries: []mdEntry{
 				{path: "real/a.md"},
@@ -117,6 +122,26 @@ func TestMarkdownFiles(t *testing.T) {
 				t.Errorf("got %v, want %v", got, tc.want)
 			}
 		})
+	}
+}
+
+func TestMarkdownFilesSymlinkedRoot(t *testing.T) {
+	t.Parallel()
+
+	target := buildMDTree(t, []mdEntry{{path: "a.md"}, {path: "docs/b.md"}})
+	link := filepath.Join(t.TempDir(), "link")
+
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := MarkdownFiles(context.Background(), link)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if want := []string{"a.md", "docs/b.md"}; !slices.Equal(got, want) {
+		t.Errorf("got %v, want %v", got, want)
 	}
 }
 

@@ -24,6 +24,11 @@ const maxMarkdownFiles = 5000
 func MarkdownFiles(ctx context.Context, root string) ([]string, error) {
 	var files []string
 
+	// WalkDir does not follow a root that is itself a symlink.
+	if resolved, err := filepath.EvalSymlinks(root); err == nil {
+		root = resolved
+	}
+
 	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			if path == root {

@@ -166,9 +166,8 @@ func layoutAllOpen(d *Doc, o LayoutOptions) Layout {
 
 // assertSource checks the source ranges of l against a source of srcLines
 // lines: one per layout line, in bounds, and consecutive lines for one range.
-// The one gap allowed holds blank lines and lines of overlapping ranges, which
-// a paragraph split by an inline <details> makes: the text before the fold, the
-// fold's head and its body all start on one source line.
+// Lines between may have no source or an overlapping range: an inline
+// <details> starts several blocks on one source line.
 func assertSource(t testing.TB, l Layout, srcLines int) {
 	t.Helper()
 

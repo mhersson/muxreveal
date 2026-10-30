@@ -131,6 +131,15 @@ func TestLayoutSource(t *testing.T) {
 			},
 		},
 		{
+			name: "html block ends on a bare marker line",
+			src:  "<div>\nx\n>\n\nafter\n",
+			want: []string{
+				"1-3 x >",
+				"0-0 ",
+				"5-5 after",
+			},
+		},
+		{
 			name: "paragraph split by an inline fold",
 			src:  "before <details open>\nbody text\n</details>\n",
 			open: map[int]bool{0: true},

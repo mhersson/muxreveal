@@ -51,19 +51,37 @@ func (d *Doc) lineAt(off int) int {
 	return sort.Search(len(d.starts), func(i int) bool { return d.starts[i] > off })
 }
 
-// blankLine reports a line with nothing but whitespace and quote markers.
-func (d *Doc) blankLine(line int) bool {
+// blankLine reports a line with nothing but whitespace, and quote markers when
+// quoted.
+func (d *Doc) blankLine(line int, quoted bool) bool {
 	end := len(d.src)
 	if line < len(d.starts) {
 		end = d.starts[line]
 	}
 
-	return len(bytes.Trim(d.src[d.starts[line-1]:end], " \t\r\n>")) == 0
+	cut := " \t\r\n"
+	if quoted {
+		cut += ">"
+	}
+
+	return len(bytes.Trim(d.src[d.starts[line-1]:end], cut)) == 0
+}
+
+// inQuote reports whether n is a quote or alert, or sits inside one.
+func inQuote(n ast.Node) bool {
+	for ; n != nil; n = n.Parent() {
+		switch n.(type) {
+		case *ast.Blockquote, *alertNode:
+			return true
+		}
+	}
+
+	return false
 }
 
 // trimBlank moves last up past blank lines, but not above first.
-func (d *Doc) trimBlank(first, last int) int {
-	for last > first && d.blankLine(last) {
+func (d *Doc) trimBlank(first, last int, quoted bool) int {
+	for last > first && d.blankLine(last, quoted) {
 		last--
 	}
 
@@ -132,7 +150,7 @@ func holdsBlocks(n ast.Node) bool {
 // trailing blank lines dropped.
 func (d *Doc) indexRanges() {
 	d.ranges = map[ast.Node]SourceRange{}
-	root := SourceRange{First: 1, Last: d.trimBlank(1, len(d.starts))}
+	root := SourceRange{First: 1, Last: d.trimBlank(1, len(d.starts), false)}
 	d.ranges[d.root] = root
 
 	walkTree(d.root, func(n ast.Node) bool {
@@ -162,7 +180,7 @@ func (d *Doc) indexRanges() {
 			}
 		}
 
-		d.ranges[n] = SourceRange{First: first, Last: d.trimBlank(first, last)}
+		d.ranges[n] = SourceRange{First: first, Last: d.trimBlank(first, last, inQuote(n))}
 
 		return holdsBlocks(n)
 	})

@@ -217,6 +217,7 @@ func (l *layouter) blocks(out *frag, parent ast.Node, width int, c blockCtx, com
 func dropBlank(out *frag, at int) {
 	if len(out.lines) == at+1 && out.lines[at] == nil {
 		out.lines = out.lines[:at]
+		out.src = out.src[:min(at, len(out.src))]
 	}
 }
 
