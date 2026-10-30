@@ -32,6 +32,8 @@ type placeEntry struct {
 	seq   uint64
 }
 
+var errResolveAborted = errors.New("git: the place lookup did not finish")
+
 // placeFlight is a lookup in flight; done closes once place and err are set.
 type placeFlight struct {
 	done  chan struct{}
@@ -91,8 +93,15 @@ func (c *PlaceCache) Place(ctx context.Context, path string) (Place, error) {
 		c.flights[path] = f
 		c.mu.Unlock()
 
-		f.place, f.err = c.resolve(ctx, path)
+		return c.lead(ctx, path, f)
+	}
+}
 
+// lead resolves path for f and its waiters. The flight ends even if resolve panics.
+func (c *PlaceCache) lead(ctx context.Context, path string, f *placeFlight) (Place, error) {
+	f.err = errResolveAborted
+
+	defer func() {
 		c.mu.Lock()
 		delete(c.flights, path)
 
@@ -102,9 +111,11 @@ func (c *PlaceCache) Place(ctx context.Context, path string) (Place, error) {
 
 		c.mu.Unlock()
 		close(f.done)
+	}()
 
-		return f.place, f.err
-	}
+	f.place, f.err = c.resolve(ctx, path)
+
+	return f.place, f.err
 }
 
 // kept returns the live entry of path, dropping one that is old or whose root is gone.

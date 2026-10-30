@@ -214,13 +214,30 @@ func TestPlaceCacheDropsTheOldest(t *testing.T) {
 	}
 }
 
+// joinCtx is a context whose Done is first asked for by a caller that parks on
+// a lookup in flight, which Place does only inside its join; waiting closes then.
+type joinCtx struct {
+	context.Context
+
+	once    sync.Once
+	waiting chan struct{}
+}
+
+func newJoinCtx(parent context.Context) *joinCtx {
+	return &joinCtx{Context: parent, waiting: make(chan struct{})}
+}
+
+func (c *joinCtx) Done() <-chan struct{} {
+	c.once.Do(func() { close(c.waiting) })
+
+	return c.Context.Done()
+}
+
 func TestPlaceCacheJoinsInFlight(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
 	entered, release := make(chan struct{}, 4), make(chan struct{})
-
-	var runs sync.WaitGroup
 
 	res := &fakePlaces{}
 	res.reply = func(string) (Place, error) {
@@ -231,8 +248,7 @@ func TestPlaceCacheJoinsInFlight(t *testing.T) {
 		return Place{Root: root}, nil
 	}
 
-	clk := &testClock{t: time.Unix(1000, 0)}
-	c := NewPlaceCache(res.resolve, clk.now)
+	c := NewPlaceCache(res.resolve, (&testClock{t: time.Unix(1000, 0)}).now)
 
 	type answer struct {
 		place Place
@@ -240,25 +256,21 @@ func TestPlaceCacheJoinsInFlight(t *testing.T) {
 	}
 
 	answers := make(chan answer, 2)
-	ask := func() {
-		runs.Add(1)
-
+	ask := func(ctx context.Context) {
 		go func() {
-			defer runs.Done()
-
-			p, err := c.Place(context.Background(), "/f")
+			p, err := c.Place(ctx, "/f")
 			answers <- answer{p, err}
 		}()
 	}
 
-	ask()
+	ask(context.Background())
 	<-entered
 
-	ask()
+	second := newJoinCtx(context.Background())
 
-	// Joined or answered from the kept place, the second call never resolves.
+	ask(second)
+	<-second.waiting
 	close(release)
-	runs.Wait()
 
 	for range 2 {
 		if a := <-answers; a.err != nil || a.place.Root != root {
@@ -308,14 +320,15 @@ func TestPlaceCacheResolvesAfterTheLeaderIsCancelled(t *testing.T) {
 
 	<-leaderIn
 
+	second := newJoinCtx(context.Background())
 	waiter := make(chan Place, 1)
 
 	go func() {
-		p, _ := cache.Place(context.Background(), "/f")
+		p, _ := cache.Place(second, "/f")
 		waiter <- p
 	}()
 
-	// Whether the waiter joined before or after the cancel, it resolves itself.
+	<-second.waiting
 	cancel()
 
 	if err := <-leaderDone; !errors.Is(err, context.Canceled) {
@@ -324,5 +337,9 @@ func TestPlaceCacheResolvesAfterTheLeaderIsCancelled(t *testing.T) {
 
 	if p := <-waiter; p.Root != root {
 		t.Errorf("waiter place = %+v, want root %q", p, root)
+	}
+
+	if got := res.count("/f"); got != 1 {
+		t.Errorf("waiter's own resolutions = %d, want 1", got)
 	}
 }
