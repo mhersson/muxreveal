@@ -195,6 +195,11 @@ func defaultCommands() []command {
 		title: "Push branch",
 		run:   (*App).push,
 	}, command{
+		id:    "pr.merge",
+		icon:  iconMerge,
+		title: "Merge pull request",
+		run:   (*App).mergeCommand,
+	}, command{
 		id:    "app.quit",
 		icon:  iconQuit,
 		title: "Quit MuxReveal",

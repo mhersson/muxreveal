@@ -1,0 +1,24 @@
+ 1 p1                                                       layout master-stack 
+────────────────────────────────────────────────────────────────────────────────
+╭─ shell ───────────╭─ muxreveal · feat/review-pane ────────────────────── #7 ─╮
+│$ claude           │ #7 Show the pull request over its diff                   │
+│reviewing the diff │ feat/review-pane → main   ci 4/4   approved   @mhersson …│
+│                   │──────────────────────────────────────────────────────────│
+│                   │  M internal/core/state.go                          +9 -1 │
+│                   │      31 +     Agent PaneID                               │
+│╭─ Merge #7 ─────────────────────────────────────────────────────────────────╮│
+││                                                                            ││
+││  Show the pull request over its diff                                       ││
+││  o/r  feat/review-pane → main                                              ││
+││                                                                            ││
+││  head a1b2c3d, the commit you reviewed; GitHub refuses if the PR moved sin…││
+││  ci 4/4   approved   mergeable                                             ││
+││                                                                            ││
+││  method   s squash   m merge   r rebase                                    ││
+││                                                                            ││
+││  [x] delete feat/review-pane after merging   (the repository deletes head …││
+││                                                                            ││
+││  s/m/r method    d delete branch    enter merge    esc cancel              ││
+│╰────────────────────────────────────────────────────────────────────────────╯│
+│                   │ j/k line   ]/[ hunk   c checks   a approve   M merge     │
+╰───────────────────╰──────────────────────────────────────────────────────────╯

@@ -48,5 +48,5 @@
 │                                                                                                   │  A internal/ui/review_test.go                                        󰀦 hidden characters  +11 -0 │
 │                                                                                                   │  @@ -0,0 +1,11 @@                                                                                │
 │                                                                                                   │       1 + package ui                                                                             │
-│                                                                                                   │ j/k line   ]/[ hunk   c checks   a approve   O browser   b/t mode                                │
+│                                                                                                   │ j/k line   ]/[ hunk   c checks   a approve   M merge   O browser   b/t mode                      │
 ╰───────────────────────────────────────────────────────────────────────────────────────────────────╰──────────────────────────────────────────────────────────────────────────────────────────────────╯

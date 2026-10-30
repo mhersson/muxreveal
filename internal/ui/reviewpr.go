@@ -532,7 +532,9 @@ func (a *App) prThenRun(then prThen) tea.Cmd {
 		return a.openURL(a.prLink(v.pr))
 	case thenApprove:
 		a.openApprove(v.pr.Repo, v.pr.Number, v.res.Head)
-	case thenNothing, thenMerge:
+	case thenMerge:
+		a.openMerge(v.pr.Repo, v.pr.Number, v.res.Head)
+	case thenNothing:
 	}
 
 	return nil

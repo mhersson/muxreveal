@@ -583,7 +583,7 @@ func (d *drawCtx) hintRuns(cw int) []railRun {
 	pairs = append(pairs, [2]string{"e", "edit"}, [2]string{"/", "search"})
 
 	if _, ok := d.v.src.(git.PRSource); ok {
-		pairs = [][2]string{{"j/k", "line"}, {"]/[", "hunk"}, {"c", "checks"}, {"a", "approve"}, {"O", "browser"}, {"b/t", "mode"}}
+		pairs = [][2]string{{"j/k", "line"}, {"]/[", "hunk"}, {"c", "checks"}, {"a", "approve"}, {"M", "merge"}, {"O", "browser"}, {"b/t", "mode"}}
 	}
 
 	if d.tree {

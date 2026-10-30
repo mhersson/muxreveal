@@ -26,16 +26,45 @@ type approveCall struct {
 type fakeActions struct {
 	mu        sync.Mutex
 	approvals []approveCall
+	merges    []mergeCall
 	fail      error
 	hold      bool // block until the context ends
+
+	mergeRes  github.Merged
+	mergeFail error
+}
+
+type mergeCall struct {
+	repo github.Repo
+	pr   github.PR
+	info github.RepoInfo
+	opts github.MergeOptions
 }
 
 func (f *fakeActions) CreatePR(context.Context, github.Repo, github.NewPR) (github.PR, error) {
 	return github.PR{}, errors.New("fakeActions: CreatePR")
 }
 
-func (f *fakeActions) Merge(context.Context, github.Repo, github.PR, github.RepoInfo, github.MergeOptions) (github.Merged, error) {
-	return github.Merged{}, errors.New("fakeActions: Merge")
+func (f *fakeActions) Merge(ctx context.Context, r github.Repo, pr github.PR, info github.RepoInfo, opts github.MergeOptions) (github.Merged, error) {
+	f.mu.Lock()
+	f.merges = append(f.merges, mergeCall{r, pr, info, opts})
+	res, fail, hold := f.mergeRes, f.mergeFail, f.hold
+	f.mu.Unlock()
+
+	if hold {
+		<-ctx.Done()
+
+		return github.Merged{}, ctx.Err()
+	}
+
+	return res, fail
+}
+
+func (f *fakeActions) merged() []mergeCall {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	return slices.Clone(f.merges)
 }
 
 func (f *fakeActions) Approve(ctx context.Context, r github.Repo, number int, sha string) error {

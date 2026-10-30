@@ -112,6 +112,8 @@ type App struct {
 	confirm                *confirm    // yes/no question; owns every key while open
 	prompt                 *prompt     // text input; owns every key and paste while open
 	checks                 *checksView // a pull request's checks; owns every key while open
+	merge                  *mergeView  // the merge box; owns every key while open
+	merging                map[mergeKey]bool
 	openLink               urlOpener
 	actions                prActions // GitHub writes; nil means they are off
 
@@ -593,6 +595,8 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.onBrowserDone(msg)
 	case approvedMsg:
 		a.onApproved(msg)
+	case mergedMsg:
+		a.onMerged(msg)
 	case reviewSnappedMsg:
 		return a, a.reviewRefresh(msg.pane)
 	case reviewFullMsg:
@@ -748,6 +752,10 @@ func (a *App) View() tea.View {
 
 	if a.checks != nil {
 		content = a.overlayChecks(content, lk)
+	}
+
+	if a.merge != nil {
+		content = a.overlayMerge(content, lk)
 	}
 
 	if a.confirm != nil {

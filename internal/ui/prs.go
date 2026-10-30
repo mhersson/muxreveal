@@ -295,6 +295,12 @@ func (a *App) prWatches(st core.State) []github.Watch {
 		}
 	}
 
+	// The merge box's pull request is the one whose checks it warns with.
+	if m := a.merge; m != nil {
+		visible[m.repo] = append(visible[m.repo], m.pr.Number)
+		focused[m.repo] = m.pr.Number
+	}
+
 	// The open checks overlay's pull request is the one whose checks are read.
 	if c := a.checks; c != nil {
 		if repo, ok := repoOfKey(c.repo); ok {

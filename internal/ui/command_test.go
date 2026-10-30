@@ -142,6 +142,7 @@ func TestDefaultCommands(t *testing.T) {
 		want{"review.mode.pr", "Review: pull request", iconReview},
 		want{"review.checks", "Review: checks", iconReview},
 		want{"review.approve", "Review: approve", iconReview},
+		want{"review.merge", "Review: merge", iconReview},
 		want{"review.browser", "Review: open in browser", iconReview},
 		want{"review.turn.prev", "Review: previous turn", iconReview},
 		want{"review.turn.next", "Review: next turn", iconReview},
@@ -151,6 +152,7 @@ func TestDefaultCommands(t *testing.T) {
 		want{"review.refresh", "Review: refresh", iconReview},
 		want{"review.back", "Review: back to the panes", iconReview},
 		want{"git.push", "Push branch", iconPush},
+		want{"pr.merge", "Merge pull request", iconMerge},
 		want{"app.quit", "Quit MuxReveal", iconQuit},
 	)
 	if len(cmds) != len(fixed)+len(theme.All()) {

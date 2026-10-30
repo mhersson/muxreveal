@@ -32,6 +32,10 @@ func (a *App) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		return a.handleChecksKey(msg)
 	}
 
+	if a.merge != nil {
+		return a.handleMergeKey(msg)
+	}
+
 	if a.picker.open != nil {
 		return a.handlePickerKey(msg)
 	}
@@ -74,7 +78,7 @@ func (a *App) handlePaste(msg tea.PasteMsg) tea.Cmd {
 		return a.updateOverlay(msg)
 	}
 
-	if a.checks != nil {
+	if a.checks != nil || a.merge != nil {
 		return nil
 	}
 

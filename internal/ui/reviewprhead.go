@@ -123,16 +123,7 @@ func (d *drawCtx) prMetaRuns(sp func(int) railRun) []railRun {
 		runs = append(runs, sp(3), glyph, sp(1), counts)
 	}
 
-	review := railRun{text: "no review yet", fg: ui.Subtle}
-
-	switch pr.ReviewDecision {
-	case "APPROVED":
-		review = railRun{text: "approved", fg: ui.Success}
-	case "CHANGES_REQUESTED":
-		review = railRun{text: "changes requested", fg: ui.Warning}
-	}
-
-	runs = append(runs, sp(3), review)
+	runs = append(runs, sp(3), prReviewWords(pr, ui))
 
 	if pr.Author != "" {
 		runs = append(runs, railRun{text: "   @" + printable(pr.Author), fg: ui.Subtle})

@@ -51,6 +51,8 @@ type styles struct {
 	pushTitle lipgloss.Style
 	// approveTitle is the approve confirm's title, in Success and bold.
 	approveTitle lipgloss.Style
+	// mergeTitle is the merge box's title, in Accent and bold.
+	mergeTitle lipgloss.Style
 	// runs memoizes rendered border runs; it is shared by copies of the styles.
 	runs *runCache
 }
@@ -113,6 +115,7 @@ func newStyles(t theme.Theme) styles {
 		confirmKey:      onPanel.Foreground(ui.Key).Bold(true),
 		pushTitle:       onPanel.Foreground(ui.Info).Bold(true),
 		approveTitle:    onPanel.Foreground(ui.Success).Bold(true),
+		mergeTitle:      onPanel.Foreground(ui.Accent).Bold(true),
 		runs:            &runCache{},
 	}
 }

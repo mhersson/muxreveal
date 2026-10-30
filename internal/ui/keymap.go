@@ -72,6 +72,7 @@ func defaultKeymap() keymap {
 			{key: "9", command: "tab.jump.9", group: "Tabs"},
 			{key: "!", command: "pane.break", group: "Tabs"},
 			{key: "p", command: "git.push", group: "Git"},
+			{key: "m", command: "pr.merge", group: "Git"},
 			{key: "q", command: "app.quit", group: "App"},
 		},
 	}
