@@ -372,6 +372,26 @@ func TestMergeWithoutActions(t *testing.T) {
 	}
 }
 
+func TestMergeWithoutAFocusedPane(t *testing.T) {
+	t.Parallel()
+
+	r := newPRDrawer(t)
+	r.actions = &fakeActions{}
+
+	st := r.store.State()
+	openIn(t, r.App, core.ClosePane{ID: st.Tab().Focus})
+
+	if st = r.store.State(); len(st.Tab().Panes) != 0 {
+		t.Skipf("the tab still has panes: %v", st.Tab().Panes)
+	}
+
+	r.leader('m')
+
+	if r.merge != nil || r.notice != noticeMergeNoPane {
+		t.Errorf("box %v, notice %q, want no box and %q", r.merge, r.notice, noticeMergeNoPane)
+	}
+}
+
 func TestMergeNotOpen(t *testing.T) {
 	t.Parallel()
 

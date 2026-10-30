@@ -26,6 +26,7 @@ const (
 	noticeMerging     = "merging #%d…"
 	noticeMergeBusy   = "#%d is already being merged"
 	noticeMergeClosed = "#%d is %s"
+	noticeMergeNoPane = "merge: not a git repository"
 )
 
 // mergeView is the open merge box. Everything it sends is frozen when it opens:
@@ -57,7 +58,9 @@ type mergedMsg struct {
 }
 
 // mergeMethods lists the methods in the order the chips show them.
-var mergeMethods = [...]github.MergeMethod{github.Squash, github.MergeCommit, github.Rebase}
+func mergeMethods() []github.MergeMethod {
+	return []github.MergeMethod{github.Squash, github.MergeCommit, github.Rebase}
+}
 
 // defaultMethod is the method a merge starts with: merge, else squash, else rebase.
 func defaultMethod(allowed []string) github.MergeMethod {
@@ -187,6 +190,12 @@ func (a *App) mergeCommand() tea.Cmd {
 	tab := a.store.State().Tab()
 	if tab.Review != nil {
 		return a.prAct(thenMerge)
+	}
+
+	if _, ok := a.store.State().Panes[tab.Focus]; !ok || !slices.Contains(tab.Panes, tab.Focus) {
+		a.notice = noticeMergeNoPane
+
+		return nil
 	}
 
 	return a.openWithPR(tab.Focus, nil, thenMerge)

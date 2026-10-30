@@ -146,7 +146,7 @@ func (a *App) mergeChips(v *mergeView, lk look) string {
 
 	first := true
 
-	for _, m := range mergeMethods {
+	for _, m := range mergeMethods() {
 		if !v.allows(m) {
 			continue
 		}
