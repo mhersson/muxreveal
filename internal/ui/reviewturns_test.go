@@ -193,6 +193,7 @@ func TestTurnStartRefreshesTheDrawer(t *testing.T) {
 	})
 
 	t.Run("a turn that changes nothing yet", func(t *testing.T) {
+		t.Parallel()
 		r := newDrawerRig(t, turnFirst)
 		dir := threeTurnRepo(t)
 		id := r.agent(t, dir, testSession)

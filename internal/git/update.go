@@ -120,7 +120,7 @@ func (e *Engine) update(ctx context.Context, r Repo, prev Result, src Source, b 
 		}
 
 		last := len(list.Turns)
-		if !list.Live || prev.Turn != last || !stillLive(list.Turns[last-1], prev.Old) {
+		if !list.Live || w == nil || prev.Turn != last || !stillLive(list.Turns[last-1], prev.Old) {
 			return e.Diff(ctx, src)
 		}
 

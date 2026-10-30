@@ -796,7 +796,7 @@ func (a *App) reviewFlush(active bool, tab core.TabID, v *reviewView) tea.Cmd {
 		_, isTurn := v.src.(git.TurnSource)
 
 		switch {
-		case isTurn || (!v.noSnapshot && (b.Git || b.Overflow)):
+		case isTurn || b.Git || b.Overflow:
 			return a.reviewStart(tab, v, &b, true)
 		case !v.noSnapshot:
 			return nil
