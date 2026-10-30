@@ -108,20 +108,28 @@ func (e *Engine) Update(ctx context.Context, prev Result, src Source, b Batch) (
 
 // update is Update on the opened repo r.
 func (e *Engine) update(ctx context.Context, r Repo, prev Result, src Source, b Batch) (Result, error) {
+	var (
+		wt    WorkTree
+		count int
+	)
+
 	if ts, ok := src.(TurnSource); ok {
-		turns, err := Turns(ctx, r, ts.Session)
+		list, w, err := e.turnList(ctx, r, ts.Session, "")
 		if err != nil {
 			return Result{}, err
 		}
 
-		if len(turns) == 0 || turns[len(turns)-1].N != prev.Through {
+		last := len(list.Turns)
+		if !list.Live || w == nil || prev.Turn != last || !stillLive(list.Turns[last-1], prev.Old) {
 			return e.Diff(ctx, src)
 		}
-	}
 
-	wt, err := e.workingTree(ctx, r)
-	if err != nil {
-		return Result{}, fmt.Errorf("update: %w", err)
+		wt, count = *w, last
+	} else {
+		var err error
+		if wt, err = e.workingTree(ctx, r); err != nil {
+			return Result{}, fmt.Errorf("update: %w", err)
+		}
 	}
 
 	touched, err := listFiles(ctx, r, prev.Old, wt.Tree, b.Paths...)
@@ -155,12 +163,17 @@ func (e *Engine) update(ctx context.Context, r Repo, prev Result, src Source, b 
 		}
 	}
 
-	res := Result{Old: prev.Old, New: wt.Tree, Live: true, Turn: prev.Turn, Through: prev.Through, Files: files}
+	res := Result{Old: prev.Old, New: wt.Tree, Live: true, Turn: prev.Turn, Turns: count, Files: files}
 	for _, f := range files {
 		res.Truncated = res.Truncated || f.Truncated
 	}
 
 	return res, nil
+}
+
+// stillLive reports whether t is the open current turn that started at tree.
+func stillLive(t Turn, tree string) bool {
+	return !t.Missing && t.EndCommit == "" && t.Current && t.Tree == tree
 }
 
 // worktreeOf returns the worktree of a branch or turn source.

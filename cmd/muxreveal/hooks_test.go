@@ -20,6 +20,7 @@ import (
 
 	"github.com/mhersson/muxreveal/internal/core"
 	"github.com/mhersson/muxreveal/internal/git"
+	"github.com/mhersson/muxreveal/internal/harness"
 )
 
 func discardLogger() *slog.Logger { return slog.New(slog.NewTextHandler(io.Discard, nil)) }
@@ -113,7 +114,7 @@ func TestStartHooksFailureTurnsHooksOff(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	h := startHooks(discardLogger(), stateDir, "", testWatches(t))
+	h := startHooks(discardLogger(), stateDir, "", testWatches(t), testPlaces())
 	defer h.Stop()
 
 	if h.Settings != "" || h.Sock != "" || h.Events != nil {
@@ -128,7 +129,7 @@ func TestStartHooksFailureTurnsHooksOff(t *testing.T) {
 func TestStartHooksNamesAnOverlongSocketPath(t *testing.T) {
 	stateDir := filepath.Join(t.TempDir(), strings.Repeat("d", maxSockPath))
 
-	h := startHooks(discardLogger(), stateDir, "", testWatches(t))
+	h := startHooks(discardLogger(), stateDir, "", testWatches(t), testPlaces())
 	defer h.Stop()
 
 	if h.Settings != "" || h.Sock != "" || h.Events != nil {
@@ -225,7 +226,7 @@ func TestStartHooksSweepsDeadInstances(t *testing.T) {
 		}
 	}
 
-	h := startHooks(discardLogger(), stateDir, "", testWatches(t))
+	h := startHooks(discardLogger(), stateDir, "", testWatches(t), testPlaces())
 	defer h.Stop()
 
 	if h.Notice != "" {
@@ -298,6 +299,8 @@ func waitUntil(t *testing.T, failure string, cond func() bool) {
 	}
 }
 
+func testPlaces() *git.PlaceCache { return git.NewPlaceCache(git.EditPlace, time.Now) }
+
 func testWatches(t *testing.T) *git.WatchSet {
 	t.Helper()
 
@@ -342,5 +345,49 @@ func TestWatchSeqResolvesTheRootFromASubdirectory(t *testing.T) {
 
 	if _, _, ok := seq(ctx, t.TempDir()); ok {
 		t.Fatal("a directory outside any repository reported a watcher")
+	}
+}
+
+// A turn ends at the pane's next prompt, so it keeps what changed after Stop.
+func TestHookNextPromptWritesTheEnd(t *testing.T) {
+	repo := seededRepo(t)
+
+	h, err := setupHooks(discardLogger(), shortDir(t), "", testWatches(t), testPlaces())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	t.Cleanup(h.Stop)
+
+	sendTurn(t, h.Sock, repo, gateSession)
+
+	if err := os.WriteFile(filepath.Join(repo, "during.txt"), []byte("during\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	stop := harness.Event{Name: "Stop", Session: gateSession, Cwd: repo, Pane: "p"}
+	if err := harness.Send(t.Context(), h.Sock, stop); err != nil {
+		t.Fatalf("Send(Stop) error = %v", err)
+	}
+
+	if turns := gitTurns(t, repo); len(turns) != 1 || turns[0].EndCommit != "" {
+		t.Fatalf("turns after Stop = %+v, want one open turn", turns)
+	}
+
+	if err := os.WriteFile(filepath.Join(repo, "after.txt"), []byte("after\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	sendTurn(t, h.Sock, repo, gateSession)
+
+	turns := gitTurns(t, repo)
+	if len(turns) != 2 || turns[0].EndCommit == "" || turns[0].EndMissing || turns[1].EndCommit != "" {
+		t.Fatalf("turns = %+v, want the first ended and the second open", turns)
+	}
+
+	for _, name := range []string{"during.txt", "after.txt"} {
+		if out := gitOut(t, repo, "ls-tree", "--name-only", turns[0].EndTree, name); out != name {
+			t.Errorf("first turn's end tree lacks %s", name)
+		}
 	}
 }

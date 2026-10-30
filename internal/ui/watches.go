@@ -182,14 +182,11 @@ func (w *paneWatch) drop(a *App) {
 // agents (while there is a set to hold watches in) and the panes a drawer
 // reviews: it starts resolving a pane whose followed directory changed and
 // releases those of panes that closed, stopped being agents or are no longer
-// reviewed. A pane that closed or stopped being an agent also loses its cached
-// edit place. It also syncs the pins' watches.
+// reviewed. It also syncs the pins' watches.
 func (a *App) watchSync() tea.Cmd {
 	st := a.store.State()
 	reviewed := reviewedPanes(st)
 	agents := a.watches.set != nil
-
-	a.dropEdits(st)
 
 	for id, w := range a.watches.panes {
 		if m, ok := st.Panes[id]; ok && (reviewed[id] || agents && m.Kind == core.KindAgent) {

@@ -58,6 +58,9 @@ type Options struct {
 	// Watches shares one git watcher per worktree among the agent panes in it;
 	// nil means no watches.
 	Watches *git.WatchSet
+	// Places answers which worktree an edited file belongs to; nil means a cache
+	// of the app's own over git.EditPlace.
+	Places *git.PlaceCache
 	// Diff is the [diff] config: the review drawer's starting layout and mode and
 	// the diff engine's limits. The zero value means the defaults.
 	Diff core.DiffConfig
@@ -198,6 +201,11 @@ func New(opts Options) (*App, error) {
 		h = harness.Claude{}
 	}
 
+	places := opts.Places
+	if places == nil {
+		places = git.NewPlaceCache(git.EditPlace, time.Now)
+	}
+
 	a := &App{
 		harness: h, tick: tea.Tick, hookSettings: opts.HookSettings, hookSock: opts.HookSock,
 		events: opts.Events, notice: opts.Notice, save: opts.Save,
@@ -207,7 +215,7 @@ func New(opts Options) (*App, error) {
 		getenv:  getenv, cwd: cwd, recordDir: opts.RecordDir, icons: opts.Icons, clock: realClock{}, start: termStart,
 		load:         newSysLoad(),
 		probeSem:     make(chan struct{}, railProbeMax),
-		edits:        editState{last: map[core.PaneID]lastEdit{}, resolve: git.EditPlace},
+		edits:        editState{resolve: places.Place},
 		focusFollows: opts.FocusFollowsMouse, copyOnSelect: opts.CopyOnSelect,
 		clip: newClipboard(clipboardConfig{OSC52: !opts.NoOSC52, Native: !opts.NoNativeClipboard}, getenv, runtime.GOOS, opts.Logger),
 	}

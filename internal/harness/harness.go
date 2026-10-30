@@ -46,6 +46,9 @@ type Event struct {
 	// Edit is the cleaned absolute path of the file an edit tool is about to
 	// change or has changed; empty for every other event.
 	Edit string `json:"edit,omitempty"`
+	// Before marks a PreToolUse whose Edit names a file its tool has not
+	// changed yet; the server holds its answer like a turn start's.
+	Before bool `json:"before,omitempty"`
 	// Subagent marks an event a subagent sent, not the agent's own session.
 	Subagent bool `json:"subagent,omitempty"`
 	// Changed holds the cleaned absolute paths of the files a finished Bash
@@ -69,13 +72,15 @@ type Event struct {
 	InputTokens int `json:"input_tokens,omitempty"`
 
 	// TurnStart marks a prompt submission: the agent starts working once the
-	// hook is answered, so the server holds the answer until Done.
+	// hook is answered, so the server holds the answer until Done (as it does
+	// for Before).
 	TurnStart bool `json:"turn_start,omitempty"`
 	// Done releases the held answer. The server sets it on a held event; it is
 	// safe to call more than once and concurrently. Nil when nothing is held.
 	Done func() `json:"-"`
 	// Deadline is when the turn snapshot must be done, stamped by the server
-	// as it reads a held turn start; zero when unset.
+	// as it reads a held event (a turn start or an edit's before-event); zero
+	// when unset.
 	Deadline time.Time `json:"-"`
 	// Snapped is closed when the turn's snapshot (or its marker) is finished,
 	// whether or not it succeeded. Nil when no snapshot is taken for the event.

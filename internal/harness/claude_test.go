@@ -278,6 +278,41 @@ func TestParseEventEdit(t *testing.T) {
 	}
 }
 
+func TestParseEventBefore(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		event string
+		rest  string
+		want  bool
+	}{
+		{"pre edit", "PreToolUse", `"tool_name":"Edit","tool_input":{"file_path":"/r/a.go"}`, true},
+		{"pre write", "PreToolUse", `"tool_name":"Write","tool_input":{"file_path":"/r/a.go"}`, true},
+		{"pre multi edit", "PreToolUse", `"tool_name":"MultiEdit","tool_input":{"file_path":"/r/a.go"}`, true},
+		{"pre notebook edit", "PreToolUse", `"tool_name":"NotebookEdit","tool_input":{"notebook_path":"/r/n.ipynb"}`, true},
+		{"subagent pre edit", "PreToolUse", `"agent_id":"a1","tool_name":"Edit","tool_input":{"file_path":"/r/a.go"}`, true},
+		{"post edit", "PostToolUse", `"tool_name":"Edit","tool_input":{"file_path":"/r/a.go"}`, false},
+		{"pre read", "PreToolUse", `"tool_name":"Read","tool_input":{"file_path":"/r/a.go"}`, false},
+		{"pre bash", "PreToolUse", `"tool_name":"Bash","tool_input":{"command":"sed -i x /r/a.go"}`, false},
+		{"pre edit with a relative path", "PreToolUse", `"tool_name":"Edit","tool_input":{"file_path":"src/a.go"}`, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			ev, err := Claude{}.ParseEvent(payload(tt.event, tt.rest))
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if ev.Before != tt.want {
+				t.Errorf("Before = %v, want %v", ev.Before, tt.want)
+			}
+		})
+	}
+}
+
 func TestParseEventChanged(t *testing.T) {
 	t.Parallel()
 

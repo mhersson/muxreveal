@@ -24,7 +24,7 @@ func longLinesResult() git.Result {
 		"+K"+marks(lineBudget-2),
 	))
 
-	return git.Result{Turn: 1, Through: 1, Files: []git.FileDiff{f}}
+	return git.Result{Turn: 1, Files: []git.FileDiff{f}}
 }
 
 func longLinesFull() fullText {
@@ -116,7 +116,7 @@ func TestChunkLinesAreBounded(t *testing.T) {
 		"+"+longPlain()+"\r",
 		"-"+longTags(),
 	))
-	res := git.Result{Turn: 1, Through: 1, Files: []git.FileDiff{f}}
+	res := git.Result{Turn: 1, Files: []git.FileDiff{f}}
 
 	for _, tt := range []struct {
 		name string

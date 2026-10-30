@@ -161,12 +161,12 @@ func (r *drawerRig) turnStartFirst(t *testing.T, id core.PaneID) (snapshotDone f
 }
 
 // A turn's snapshot ref never wakes the watcher, so the turn's start event
-// recomputes the drawer, once the turn's snapshot exists. A turn that changes
-// no files moves the count and the mode row; a past turn only learns the new
-// count.
+// recomputes the drawer, once the turn's snapshot exists. A turn that has
+// changed files moves the count and the mode row; a past turn only learns the
+// new count.
 func TestTurnStartRefreshesTheDrawer(t *testing.T) {
 	t.Parallel()
-	t.Run("a turn that changes no files", func(t *testing.T) {
+	t.Run("a turn that changes files", func(t *testing.T) {
 		r := newDrawerRig(t, turnFirst)
 		dir := threeTurnRepo(t)
 		id := r.agent(t, dir, testSession)
@@ -180,15 +180,32 @@ func TestTurnStartRefreshesTheDrawer(t *testing.T) {
 		snapshotDone := r.turnStartFirst(t, id)
 
 		snapshotTurn(t, dir, testSession)
+		write(t, filepath.Join(dir, "four.txt"), "turn four\n")
 		snapshotDone()
 		r.until(t, "turn 4", r.viewHolds(func(v *reviewView) bool { return v.turns == 4 && v.res.Turn == 4 && !v.loading }))
 
 		got := r.drawn(t)
-		for _, want := range []string{"turn 4 of 4, live", "turn 4 changed nothing"} {
+		for _, want := range []string{"turn 4 of 4, live", "four.txt"} {
 			if !strings.Contains(got, want) {
 				t.Errorf("the drawer lacks %q:\n%s", want, got)
 			}
 		}
+	})
+
+	t.Run("a turn that changes nothing yet", func(t *testing.T) {
+		t.Parallel()
+		r := newDrawerRig(t, turnFirst)
+		dir := threeTurnRepo(t)
+		id := r.agent(t, dir, testSession)
+
+		r.open(t, id)
+		r.watching(t, id, rootOf(t, dir))
+
+		snapshotDone := r.turnStartFirst(t, id)
+
+		snapshotTurn(t, dir, testSession)
+		snapshotDone()
+		r.until(t, "turn 3 closed", r.viewHolds(func(v *reviewView) bool { return v.turns == 3 && v.res.Turn == 3 && !v.res.Live && !v.loading }))
 	})
 
 	t.Run("a past turn", func(t *testing.T) {
@@ -207,6 +224,7 @@ func TestTurnStartRefreshesTheDrawer(t *testing.T) {
 		snapshotDone := r.turnStartFirst(t, id)
 
 		snapshotTurn(t, dir, testSession)
+		write(t, filepath.Join(dir, "four.txt"), "turn four\n")
 		snapshotDone()
 		r.until(t, "the new count", func() bool { return v.turns == 4 && !v.loading })
 
@@ -374,6 +392,7 @@ func TestTurnKeysSwitchToANewSessionThatHasTurns(t *testing.T) {
 	dir := threeTurnRepo(t)
 	root := rootOf(t, dir)
 	snapshotTurn(t, dir, otherSession)
+	write(t, filepath.Join(dir, "other.txt"), "the other session's change\n")
 	id := r.agent(t, dir, testSession)
 
 	r.open(t, id)
@@ -523,80 +542,11 @@ func (r *followRig) settledOn(root string, turn bool) func() bool {
 	})
 }
 
-// followB opens the drawer in turn mode on A, then edits in b and waits for the
-// drawer to show b.
-func (r *followRig) followB(t *testing.T) *reviewView {
-	t.Helper()
-
-	if v := r.open(t, r.id); v.root != r.rootA || v.turns != 1 || r.coreMode() != core.ReviewTurn {
-		t.Fatalf("setup: root %q with %d turns in %q mode, want A's turn mode", v.root, v.turns, r.coreMode())
-	}
-
-	r.edit(filepath.Join(r.dirB, "a.txt"))
-	r.until(t, "the drawer to show b", r.settledOn(r.rootB, false))
-
-	return r.view()
-}
-
-func TestTurnModeInAnotherWorktreeShowsBranch(t *testing.T) {
-	t.Parallel()
-	r := newTurnRig(t, turnFirst)
-	v := r.followB(t)
-
-	if want := (git.BranchSource{Worktree: r.rootB}); v.src != want {
-		t.Errorf("source = %+v, want %+v", v.src, want)
-	}
-
-	// A turn of A's session would show x.txt, the file A changed after it.
-	if got := viewPaths(v); !slices.Equal(got, []string{"a.txt"}) || v.res.Turn != 0 || v.turns != 0 || !v.foreign {
-		t.Errorf("shows %v as turn %d of %d turns, foreign %v, want a.txt of b's branch with no turns", got, v.res.Turn, v.turns, v.foreign)
-	}
-
-	if r.coreMode() != core.ReviewTurn {
-		t.Errorf("core mode = %q, want turn mode kept", r.coreMode())
-	}
-
-	if got := r.drawn(t); !strings.Contains(got, "branch") || strings.Contains(got, "turn 1/1") {
-		t.Errorf("the tag does not read branch:\n%s", got)
-	}
-}
-
-func TestTurnKeysInAnotherWorktree(t *testing.T) {
-	t.Parallel()
-	r := newTurnRig(t, turnFirst)
-	v := r.followB(t)
-	want := "no turns in " + filepath.Base(r.dirA) + " · b yet"
-
-	keys := []struct {
-		name  string
-		press func() tea.Cmd
-	}{
-		{"t", func() tea.Cmd { return r.setReviewMode(core.ReviewTurn) }},
-		{",", func() tea.Cmd { return r.stepReviewTurn(-1) }},
-		{".", func() tea.Cmd { return r.stepReviewTurn(1) }},
-	}
-
-	for _, k := range keys {
-		r.notice = ""
-		epoch, gen := v.epoch, v.gen
-
-		cmd := k.press()
-
-		if r.notice != want {
-			t.Errorf("%s: notice = %q, want %q", k.name, r.notice, want)
-		}
-
-		if cmd != nil || v.loading || v.epoch != epoch || v.gen != gen || r.coreMode() != core.ReviewTurn || !isBranchSource(v) {
-			t.Errorf("%s changed something: command %v, loading %v, epoch %d -> %d, core mode %q, source %T", k.name, cmd != nil, v.loading, epoch, v.epoch, r.coreMode(), v.src)
-		}
-	}
-}
-
 func TestNoTurnsNoticeCleansNames(t *testing.T) {
 	t.Parallel()
 	r := newDrawerRig(t)
 	tab := r.store.State().Tab().ID
-	v := &reviewView{loaded: true, foreign: true, project: "my\x07repo", branch: "feat\u200b/x"}
+	v := &reviewView{loaded: true, foreign: true, turnsFor: string(testSession), project: "my\x07repo", branch: "feat\u200b/x"}
 
 	if ok, cmd := r.turnsGate(tab, v, string(testSession), nil); ok || cmd != nil {
 		t.Fatalf("turnsGate() = %v, %v, want the key stopped", ok, cmd != nil)
@@ -612,109 +562,6 @@ func TestNoTurnsNoticeCleansNames(t *testing.T) {
 
 	if want := "no turns: this pane has no agent session"; r.notice != want {
 		t.Errorf("notice = %q, want %q", r.notice, want)
-	}
-}
-
-func TestTurnModeBackInOwnWorktree(t *testing.T) {
-	t.Parallel()
-	r := newTurnRig(t, turnFirst)
-	r.followB(t)
-
-	r.edit(filepath.Join(r.dirA, "x.txt"))
-	r.until(t, "A's turn", r.settledOn(r.rootA, true))
-
-	v := r.view()
-	if got := viewPaths(v); !slices.Equal(got, []string{"x.txt"}) || v.res.Turn != 1 || !v.res.Live || v.turns != 1 || v.foreign {
-		t.Errorf("shows %v as turn %d (live %v) of %d turns, foreign %v, want x.txt in A's latest turn", got, v.res.Turn, v.res.Live, v.turns, v.foreign)
-	}
-
-	// The turn keys work again.
-	r.notice = ""
-	r.run(r.stepReviewTurn(1))
-
-	if want := "turn 1 is the latest turn"; r.notice != want {
-		t.Errorf("notice = %q, want %q", r.notice, want)
-	}
-}
-
-func TestOpenDrawerOnAnotherWorktreeStartsInBranch(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name   string
-		edit   bool
-		want   core.ReviewMode
-		source func(r *followRig) git.Source
-	}{
-		{"agent in its own worktree", false, core.ReviewTurn, func(r *followRig) git.Source {
-			return git.TurnSource{Worktree: r.rootA, Session: string(testSession)}
-		}},
-		{"agent following another worktree", true, core.ReviewBranch, func(r *followRig) git.Source {
-			return git.BranchSource{Worktree: r.rootB}
-		}},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			r := newTurnRig(t, turnFirst)
-
-			if tt.edit {
-				r.edit(filepath.Join(r.dirB, "a.txt"))
-			}
-
-			v := r.open(t, r.id)
-
-			if got := r.coreMode(); got != tt.want {
-				t.Errorf("opened in %q mode, want %q", got, tt.want)
-			}
-
-			if want := tt.source(r); v.src != want {
-				t.Errorf("source = %+v, want %+v", v.src, want)
-			}
-		})
-	}
-}
-
-func TestTurnModeAfterOwnDirectoryMoves(t *testing.T) {
-	t.Parallel()
-	r := newTurnRig(t, turnFirst)
-	r.open(t, r.id)
-
-	r.hookNow(cwdHook(r.id, r.dirB))
-	r.until(t, "A's turn on b", r.settledOn(r.rootB, true))
-
-	if v := r.view(); v.foreign || v.turns != 1 || r.coreMode() != core.ReviewTurn {
-		t.Errorf("foreign %v with %d turns in %q mode, want turn mode with the session's turn", v.foreign, v.turns, r.coreMode())
-	}
-
-	r.notice = ""
-	r.run(r.setReviewMode(core.ReviewTurn))
-	r.idle(t)
-
-	if _, ok := r.view().src.(git.TurnSource); !ok || r.notice != "" {
-		t.Errorf("source %T notice %q after t, want a turn and no notice", r.view().src, r.notice)
-	}
-}
-
-// The agent's own directory moving into or out of the shown worktree switches a
-// turn drawer between the turn and the branch.
-func TestOwnDirectoryMovingFlipsTurnMode(t *testing.T) {
-	t.Parallel()
-	r := newTurnRig(t, turnFirst)
-	r.followB(t)
-
-	r.hookNow(cwdHook(r.id, r.dirB))
-	r.until(t, "the turn on b", r.settledOn(r.rootB, true))
-
-	if v := r.view(); v.foreign || v.turns != 1 || r.pane().FollowDir() != r.dirB {
-		t.Errorf("foreign %v with %d turns following %q, want the turn of b followed", v.foreign, v.turns, r.pane().FollowDir())
-	}
-
-	r.hookNow(cwdHook(r.id, r.dirA))
-	r.until(t, "the branch of b", r.settledOn(r.rootB, false))
-
-	if v := r.view(); !v.foreign || v.turns != 0 || r.coreMode() != core.ReviewTurn {
-		t.Errorf("foreign %v with %d turns in %q mode, want b's branch in turn mode", v.foreign, v.turns, r.coreMode())
 	}
 }
 
@@ -749,15 +596,466 @@ func isTurnSource(v *reviewView) bool {
 	return ok
 }
 
-// A live load that starts after the own directory moved away from the shown
-// root swaps the turn for the branch, and computes the branch afresh rather
-// than updating the turn's result.
-func TestLiveLoadAfterOwnDirectoryMovedComputesTheBranch(t *testing.T) {
+// A turn is listed in the worktree it was taken in: after the agent's own
+// directory moved into b, A's turn is not a turn of b.
+func TestOwnDirectoryMovedListsOnlyItsWorktreesTurns(t *testing.T) {
+	t.Parallel()
+	r := newTurnRig(t, turnFirst)
+	r.open(t, r.id)
+
+	r.hookNow(cwdHook(r.id, r.dirB))
+	r.until(t, "the drawer to show b", r.viewHolds(func(v *reviewView) bool { return v.root == r.rootB && v.loaded && !v.loading }))
+
+	if v := r.view(); v.turns != 0 || isTurnSource(v) || r.coreMode() != core.ReviewTurn {
+		t.Errorf("b has %d turns, source %T, core mode %q, want none, the branch and turn mode kept", v.turns, v.src, r.coreMode())
+	}
+
+	r.notice = ""
+	r.run(r.stepReviewTurn(-1))
+	r.idle(t)
+
+	if r.notice != "no turns yet" {
+		t.Errorf("notice %q, want %q", r.notice, "no turns yet")
+	}
+}
+
+// A session that moved worktrees keeps each turn with the worktree it began in.
+func TestPastTurnOfAMovedSessionStaysInItsWorktree(t *testing.T) {
+	t.Parallel()
 	r := newFollowRig(t, testSession, turnFirst)
 
-	// The turn's snapshot holds m.txt changed. Since then m.txt is back to its
-	// committed text and n.txt is changed, so the turn shows both files and the
-	// branch only n.txt.
+	const lineOfA = "only in worktree A"
+
+	snapshotTurn(t, r.dirA, testSession)
+	write(t, filepath.Join(r.dirA, "a.txt"), "one\n"+lineOfA+"\n")
+	r.open(t, r.id)
+
+	r.hookNow(cwdHook(r.id, r.dirB))
+	r.until(t, "the drawer to show b", r.viewHolds(func(v *reviewView) bool { return v.root == r.rootB && v.loaded && !v.loading }))
+
+	write(t, filepath.Join(r.dirB, "b.txt"), "changed in b\n")
+
+	done := r.turnStartFirst(t, r.id)
+
+	snapshotTurn(t, r.dirB, testSession)
+	done()
+
+	write(t, filepath.Join(r.dirB, "after.txt"), "after the turn\n")
+	r.until(t, "b's turn", r.viewHolds(func(v *reviewView) bool { return v.turns > 0 && isTurnSource(v) && !v.loading }))
+
+	got := r.drawn(t)
+	if !strings.Contains(got, "turn 1/1") || strings.Contains(got, lineOfA) {
+		t.Errorf("the drawer should read turn 1/1 without A's line:\n%s", got)
+	}
+
+	r.notice = ""
+	r.run(r.stepReviewTurn(-1))
+	r.idle(t)
+
+	if want := "turn 1 is the first turn"; r.notice != want {
+		t.Errorf("notice %q, want %q", r.notice, want)
+	}
+
+	if got := r.drawn(t); strings.Contains(got, lineOfA) {
+		t.Errorf("a row holds A's line:\n%s", got)
+	}
+}
+
+// A turn that changed nothing is not one of the worktree's turns: the drawer
+// shows the one before it until a file changes.
+func TestQuestionTurnIsNotListed(t *testing.T) {
+	t.Parallel()
+	r := newDrawerRig(t, turnFirst)
+	dir := newRepoDir(t)
+	write(t, filepath.Join(dir, "a.txt"), "a\n")
+	commitEverything(t, dir, "init")
+
+	snapshotTurn(t, dir, testSession)
+	write(t, filepath.Join(dir, "a.txt"), "turn one\n")
+	snapshotTurn(t, dir, testSession)
+
+	root := rootOf(t, dir)
+	id := r.agent(t, dir, testSession)
+
+	v := r.open(t, id)
+	r.watching(t, id, root)
+
+	if v.turns != 1 || v.res.Turn != 1 || v.res.Live {
+		t.Fatalf("turns %d shown %d live %v, want turn 1 of 1, not live", v.turns, v.res.Turn, v.res.Live)
+	}
+
+	if got, want := modeRow(v), "turn 1 of 1 in this worktree"; got != want {
+		t.Errorf("mode row = %q, want %q", got, want)
+	}
+
+	if got := r.drawn(t); !strings.Contains(got, "turn 1/1") {
+		t.Errorf("the tag does not read turn 1/1:\n%s", got)
+	}
+
+	write(t, filepath.Join(dir, "b.txt"), "turn two\n")
+	r.run(r.batch(root, git.Batch{Paths: []string{"b.txt"}}))
+	r.until(t, "turn 2", r.viewHolds(func(v *reviewView) bool { return v.turns == 2 && v.res.Turn == 2 && v.res.Live && !v.loading }))
+
+	if got := r.drawn(t); !strings.Contains(got, "turn 2/2") {
+		t.Errorf("the tag does not read turn 2/2:\n%s", got)
+	}
+
+	if got, want := modeRow(r.view()), "turn 2 of 2 in this worktree, live"; got != want {
+		t.Errorf("mode row = %q, want %q", got, want)
+	}
+}
+
+// A drawer on a past turn recounts on a batch of plain paths: the open turn may
+// have started to differ from the working tree. The turn shown stays.
+func TestPastTurnViewRecountsOnPathBatches(t *testing.T) {
+	t.Parallel()
+	r := newDrawerRig(t, turnFirst)
+	dir := threeTurnRepo(t)
+	root := rootOf(t, dir)
+	id := r.agent(t, dir, testSession)
+
+	r.open(t, id)
+	r.watching(t, id, root)
+	r.run(r.stepReviewTurn(-1))
+
+	v := r.idle(t)
+	gen := v.gen
+
+	snapshotTurn(t, dir, testSession)
+	write(t, filepath.Join(dir, "four.txt"), "turn four\n")
+	r.run(r.batch(root, git.Batch{Paths: []string{"four.txt"}}))
+	r.until(t, "the new count", func() bool { return v.turns == 4 && !v.loading })
+
+	if v.res.Turn != 2 || v.gen != gen {
+		t.Errorf("the shown turn moved: turn %d, generation %d -> %d", v.res.Turn, gen, v.gen)
+	}
+
+	if got := r.drawn(t); !strings.Contains(got, "turn 2/4") {
+		t.Errorf("the tag does not read turn 2/4:\n%s", got)
+	}
+}
+
+// takeTurn starts the session's turn n in dir's worktree, as the gate does.
+func takeTurn(t *testing.T, dir string, n int) {
+	t.Helper()
+
+	opts := git.SnapshotOptions{TempDir: t.TempDir(), Turn: n}
+	if _, err := git.Snapshot(context.Background(), dir, string(testSession), opts); err != nil {
+		t.Fatalf("Snapshot turn %d: %v", n, err)
+	}
+}
+
+// endTurn ends the session's turn n in dir's worktree.
+func endTurn(t *testing.T, dir string, n int) {
+	t.Helper()
+
+	if _, err := git.EndTurn(context.Background(), dir, string(testSession), n, git.SnapshotOptions{TempDir: t.TempDir()}); err != nil {
+		t.Fatalf("EndTurn %d: %v", n, err)
+	}
+}
+
+// newTwoTurnRig is a follow rig whose session has turn 1 in A, ended after a
+// new x.txt, and turn 2 in b, open with five uncommitted lines in a.txt.
+func newTwoTurnRig(t *testing.T, opts ...func(*Options)) *followRig {
+	t.Helper()
+
+	r := newFollowRig(t, testSession, opts...)
+
+	takeTurn(t, r.dirA, 1)
+	write(t, filepath.Join(r.dirA, "x.txt"), "turn one\n")
+	endTurn(t, r.dirA, 1)
+
+	takeTurn(t, r.dirB, 2)
+	r.addLines(t, filepath.Join(r.dirB, "a.txt"))
+
+	return r
+}
+
+// modeRow is the mode row's text for the view as it loaded.
+func modeRow(v *reviewView) string {
+	_, word, rest := modeParts(v, false, false)
+
+	return word + rest
+}
+
+func TestTurnModeInAFollowedWorktree(t *testing.T) {
+	t.Parallel()
+	r := newTwoTurnRig(t, turnFirst)
+
+	v := r.open(t, r.id)
+	if got := viewPaths(v); !slices.Equal(got, []string{"x.txt"}) || v.turns != 1 || v.res.Live || v.foreign {
+		t.Fatalf("A shows %v as turn %d of %d (live %v), want x.txt in its only turn, not live", got, v.res.Turn, v.turns, v.res.Live)
+	}
+
+	if got := r.drawn(t); !strings.Contains(got, "turn 1/1") {
+		t.Errorf("A's tag does not read turn 1/1:\n%s", got)
+	}
+
+	if got, want := modeRow(v), "turn 1 of 1 in this worktree"; got != want {
+		t.Errorf("A's mode row = %q, want %q", got, want)
+	}
+
+	r.edit(filepath.Join(r.dirB, "a.txt"))
+	r.until(t, "b's turn", r.settledOn(r.rootB, true))
+
+	v = r.view()
+	if got := viewPaths(v); !slices.Equal(got, []string{"a.txt"}) || v.res.Turn != 1 || !v.res.Live || v.turns != 1 || !v.foreign {
+		t.Errorf("b shows %v as turn %d (live %v) of %d turns, want a.txt as its live turn 1 of 1", got, v.res.Turn, v.res.Live, v.turns)
+	}
+
+	if got, want := modeRow(v), "turn 1 of 1 in this worktree, live"; got != want {
+		t.Errorf("b's mode row = %q, want %q", got, want)
+	}
+
+	r.showTree(t)
+
+	if got := r.drawn(t); !strings.Contains(got, "turn 1/1") || !strings.Contains(got, "turn 1 of 1, live") {
+		t.Errorf("b's drawer does not read turn 1/1, live:\n%s", got)
+	}
+}
+
+func TestTurnModeInAPinnedWorktree(t *testing.T) {
+	t.Parallel()
+	r := newTwoTurnRig(t, turnFirst)
+
+	r.open(t, r.id)
+	r.followC(t)
+	r.until(t, "C's branch", r.settledOn(r.rootC, false))
+
+	r.pinTo(t, r.rootB)
+	r.until(t, "b's turn", r.settledOn(r.rootB, true))
+
+	v := r.view()
+	if got := viewPaths(v); !slices.Equal(got, []string{"a.txt"}) || v.turns != 1 || r.coreMode() != core.ReviewTurn {
+		t.Errorf("pinned b shows %v of %d turns in %q mode, want its turn with a.txt", got, v.turns, r.coreMode())
+	}
+}
+
+func TestTurnKeysInAWorktreeWithoutTurns(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		rig  func(t *testing.T) (*followRig, string)
+	}{
+		{"another worktree", func(t *testing.T) (*followRig, string) {
+			r := newTwoTurnRig(t, turnFirst)
+			r.open(t, r.id)
+			r.followC(t)
+			r.until(t, "C's branch", r.settledOn(r.rootC, false))
+
+			return r, "no turns in " + filepath.Base(r.dirC) + " · other yet"
+		}},
+		{"the agent's own worktree", func(t *testing.T) (*followRig, string) {
+			r := newFollowRig(t, testSession, turnFirst)
+			r.open(t, r.id)
+
+			return r, "no turns yet"
+		}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			r, want := tt.rig(t)
+			v := r.view()
+
+			keys := []struct {
+				name  string
+				press func() tea.Cmd
+			}{
+				{"t", func() tea.Cmd { return r.setReviewMode(core.ReviewTurn) }},
+				{",", func() tea.Cmd { return r.stepReviewTurn(-1) }},
+				{".", func() tea.Cmd { return r.stepReviewTurn(1) }},
+			}
+
+			for _, k := range keys {
+				r.notice = ""
+				epoch, gen, mode := v.epoch, v.gen, r.coreMode()
+
+				cmd := k.press()
+
+				if r.notice != want {
+					t.Errorf("%s: notice = %q, want %q", k.name, r.notice, want)
+				}
+
+				if cmd != nil || v.loading || v.epoch != epoch || v.gen != gen || r.coreMode() != mode || !isBranchSource(v) {
+					t.Errorf("%s changed something: command %v, loading %v, epoch %d -> %d, core mode %q, source %T", k.name, cmd != nil, v.loading, epoch, v.epoch, r.coreMode(), v.src)
+				}
+			}
+		})
+	}
+}
+
+// A move of the own directory changes only whether b is the agent's own
+// worktree, so it recounts and keeps the diff.
+func TestOwnDirectoryMoveRecountsOnly(t *testing.T) {
+	t.Parallel()
+	r := newTurnRig(t, turnFirst)
+	r.open(t, r.id)
+	r.edit(filepath.Join(r.dirB, "a.txt"))
+	r.until(t, "the drawer to show b", r.settledOn(r.rootB, false))
+
+	v := r.view()
+	epoch, gen := v.epoch, v.gen
+	notice := func(own string) string {
+		r.hookNow(cwdHook(r.id, own))
+		r.until(t, "the own directory to be seen", func() bool { return v.own == own && !v.loading })
+
+		r.notice = ""
+		r.run(r.setReviewMode(core.ReviewTurn))
+
+		return r.notice
+	}
+
+	if got := notice(r.dirB); got != "no turns yet" {
+		t.Errorf("b as the own worktree: notice %q, want %q", got, "no turns yet")
+	}
+
+	if got, want := notice(r.dirA), "no turns in "+filepath.Base(r.dirA)+" · b yet"; got != want {
+		t.Errorf("b as another worktree: notice %q, want %q", got, want)
+	}
+
+	if v != r.view() || v.epoch != epoch || v.gen != gen {
+		t.Errorf("the diff reloaded: epoch %d -> %d, generation %d -> %d", epoch, v.epoch, gen, v.gen)
+	}
+}
+
+func TestOpenDrawerInTurnModeWhereTurnsExist(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		edit string
+		want core.ReviewMode
+	}{
+		{"the agent's own worktree", "", core.ReviewTurn},
+		{"a followed worktree with turns", "b", core.ReviewTurn},
+		{"a followed worktree without turns", "c", core.ReviewBranch},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			r := newTwoTurnRig(t, turnFirst)
+
+			switch tt.edit {
+			case "b":
+				r.edit(filepath.Join(r.dirB, "a.txt"))
+			case "c":
+				r.followC(t)
+			}
+
+			v := r.open(t, r.id)
+
+			if got := r.coreMode(); got != tt.want || isTurnSource(v) != (tt.want == core.ReviewTurn) {
+				t.Errorf("opened in %q mode with source %T, want %q", got, v.src, tt.want)
+			}
+		})
+	}
+}
+
+func TestStepThroughAWorktreesTurns(t *testing.T) {
+	t.Parallel()
+	r := newFollowRig(t, testSession, turnFirst)
+
+	takeTurn(t, r.dirB, 1)
+	write(t, filepath.Join(r.dirB, "b1.txt"), "one\n")
+	endTurn(t, r.dirB, 1)
+
+	takeTurn(t, r.dirA, 2)
+	write(t, filepath.Join(r.dirA, "x.txt"), "A's turn\n")
+	endTurn(t, r.dirA, 2)
+
+	takeTurn(t, r.dirB, 3)
+	write(t, filepath.Join(r.dirB, "b2.txt"), "two\n")
+	endTurn(t, r.dirB, 3)
+
+	takeTurn(t, r.dirB, 4)
+	write(t, filepath.Join(r.dirB, "b3.txt"), "three\n")
+
+	r.open(t, r.id)
+	r.pinTo(t, r.rootB)
+	r.until(t, "b's turns", r.settledOn(r.rootB, true))
+
+	step := func(delta int, wantFiles []string, wantNotice string) {
+		t.Helper()
+
+		r.notice = ""
+		r.run(r.stepReviewTurn(delta))
+		r.idle(t)
+
+		v := r.view()
+		if got := viewPaths(v); !slices.Equal(got, wantFiles) || r.notice != wantNotice {
+			t.Errorf("after %+d: %v as turn %d of %d, notice %q, want %v and notice %q", delta, got, v.res.Turn, v.turns, r.notice, wantFiles, wantNotice)
+		}
+	}
+
+	if v := r.view(); v.turns != 3 || v.res.Turn != 3 || !slices.Equal(viewPaths(v), []string{"b3.txt"}) {
+		t.Fatalf("setup: turn %d of %d showing %v, want b's live turn 3 of 3", v.res.Turn, v.turns, viewPaths(v))
+	}
+
+	step(-1, []string{"b2.txt"}, "")
+	step(-1, []string{"b1.txt"}, "")
+	step(-1, []string{"b1.txt"}, "turn 1 is the first turn")
+	step(1, []string{"b2.txt"}, "")
+	step(1, []string{"b3.txt"}, "")
+	step(1, []string{"b3.txt"}, "turn 3 is the latest turn")
+}
+
+// Without an own repository the drawer still shows the turns of the worktree it
+// follows.
+func TestTurnModeWithoutAnOwnRepository(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		own  func(t *testing.T) string
+	}{
+		{"own directory in no repository", func(t *testing.T) string { return t.TempDir() }},
+		{"own directory gone", func(t *testing.T) string {
+			dir := filepath.Join(t.TempDir(), "gone")
+			if err := os.Mkdir(dir, 0o750); err != nil {
+				t.Fatal(err)
+			}
+
+			return dir
+		}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			r := newTwoTurnRig(t)
+			own := tt.own(t)
+
+			r.edit(filepath.Join(r.dirB, "a.txt"))
+			r.hookNow(cwdHook(r.id, own))
+
+			if tt.name == "own directory gone" {
+				if err := os.Remove(own); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			openIn(t, r.App, core.OpenReview{Pane: r.id, Mode: core.ReviewTurn})
+			r.settle()
+			r.until(t, "b's turn", r.settledOn(r.rootB, true))
+
+			v := r.view()
+			if got := viewPaths(v); !slices.Equal(got, []string{"a.txt"}) || v.turns != 1 || !v.res.Live || r.coreMode() != core.ReviewTurn {
+				t.Errorf("shows %v as turn %d of %d (live %v) in %q mode, want b's live turn with a.txt", got, v.res.Turn, v.turns, v.res.Live, r.coreMode())
+			}
+		})
+	}
+}
+
+// A live load after the own directory moved off the shown root keeps updating
+// the turn. It waits for the watcher to go quiet (quiet), so it stays serial.
+func TestLiveLoadAfterOwnDirectoryMovedKeepsTheTurn(t *testing.T) {
+	r := newFollowRig(t, testSession, turnFirst)
+
+	// The turn's start holds m.txt changed. Since then m.txt is back to its
+	// committed text and n.txt is changed, so the turn shows both files.
 	write(t, filepath.Join(r.dirA, "m.txt"), "m\n")
 	write(t, filepath.Join(r.dirA, "n.txt"), "n\n")
 	commitEverything(t, r.dirA, "more files")
@@ -791,69 +1089,8 @@ func TestLiveLoadAfterOwnDirectoryMovedComputesTheBranch(t *testing.T) {
 		return v.own == r.dirB && !v.loading && v.queued == nil
 	})
 
-	fresh, err := r.engine.Diff(context.Background(), git.BranchSource{Worktree: r.rootA})
-	if err != nil {
-		t.Fatal(err)
-	}
-
 	v = r.view()
-	if want := (git.BranchSource{Worktree: r.rootA}); v.src != want || !v.foreign {
-		t.Errorf("source %+v foreign %v, want %+v and foreign", v.src, v.foreign, want)
-	}
-
-	if got := viewPaths(v); !slices.Equal(got, []string{"n.txt"}) || v.res.Turn != 0 || v.res.Old != fresh.Old {
-		t.Errorf("shows %v as turn %d against %q, want n.txt of the branch against %q", got, v.res.Turn, v.res.Old, fresh.Old)
-	}
-}
-
-// An own directory that is gone, or in no repository, is not the shown root:
-// turn mode shows the branch and the turn keys say there are no turns.
-func TestTurnModeWithoutAnOwnRepository(t *testing.T) {
-	t.Parallel()
-	tests := []struct {
-		name string
-		own  func(t *testing.T) string
-	}{
-		{"own directory in no repository", func(t *testing.T) string { return t.TempDir() }},
-		{"own directory gone", func(t *testing.T) string {
-			dir := filepath.Join(t.TempDir(), "gone")
-			if err := os.Mkdir(dir, 0o750); err != nil {
-				t.Fatal(err)
-			}
-
-			return dir
-		}},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			r := newTurnRig(t)
-			own := tt.own(t)
-
-			r.edit(filepath.Join(r.dirB, "a.txt"))
-			r.hookNow(cwdHook(r.id, own))
-
-			if tt.name == "own directory gone" {
-				if err := os.Remove(own); err != nil {
-					t.Fatal(err)
-				}
-			}
-
-			openIn(t, r.App, core.OpenReview{Pane: r.id, Mode: core.ReviewTurn})
-			r.settle()
-			r.until(t, "b's branch", r.settledOn(r.rootB, false))
-
-			v := r.view()
-			if want := (git.BranchSource{Worktree: r.rootB}); v.src != want || !v.foreign || v.turns != 0 || r.coreMode() != core.ReviewTurn {
-				t.Errorf("source %+v foreign %v with %d turns in %q mode, want b's branch in turn mode with no turns", v.src, v.foreign, v.turns, r.coreMode())
-			}
-
-			r.notice = ""
-			r.run(r.setReviewMode(core.ReviewTurn))
-
-			if want := "no turns in " + filepath.Base(r.dirA) + " · b yet"; r.notice != want {
-				t.Errorf("t: notice = %q, want %q", r.notice, want)
-			}
-		})
+	if got := viewPaths(v); !isTurnSource(v) || !v.foreign || !slices.Equal(got, []string{"m.txt", "n.txt"}) || !v.res.Live {
+		t.Errorf("source %T foreign %v shows %v (live %v), want A's live turn with m.txt and n.txt", v.src, v.foreign, got, v.res.Live)
 	}
 }

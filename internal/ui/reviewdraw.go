@@ -37,6 +37,7 @@ type drawerLayout struct {
 	innerW, innerH int
 	treeW, diffW   int  // treeW 0 hides the tree
 	bodyH          int  // rows of the tree and diff columns
+	modeShort      bool // the mode row drops " in this worktree" for lack of room
 	hints          bool // the last inner row holds the key hints
 	split          bool // side by side fits the diff column
 	gw             int  // width of one line number column
@@ -48,6 +49,7 @@ type layoutKey struct {
 	tree       bool // the tree is open
 	split      bool
 	modeW      int // the mode row's width
+	modeShortW int // and its width without " in this worktree"
 	fullDigits int // digits of the longest file shown whole
 }
 
@@ -68,8 +70,8 @@ func fullDigits(v *reviewView) int {
 // is asked for on every update.
 func (a *App) drawerLayoutOf(box core.Rect, v *reviewView, tree bool) drawerLayout {
 	c := v.derived()
-	mw := modeWidth(v, a.icons)
-	key := layoutKey{box: box, tree: tree, split: v.split, modeW: mw, fullDigits: fullDigits(v)}
+	full, short := modeWidth(v, a.icons, false), modeWidth(v, a.icons, true)
+	key := layoutKey{box: box, tree: tree, split: v.split, modeW: full, modeShortW: short, fullDigits: fullDigits(v)}
 
 	if c.layOK && c.layKey == key {
 		return c.lay
@@ -89,8 +91,17 @@ func (a *App) drawerLayoutOf(box core.Rect, v *reviewView, tree bool) drawerLayo
 
 	if tree {
 		tw := c.treeWidthAt(v.res.Files, l.innerW)
-		// The mode row is a row of the tree too, up to the same share of the width.
-		tw = max(tw, min(mw, l.innerW*treeMaxShare/100))
+		limit := l.innerW * treeMaxShare / 100
+
+		// The mode row is a row of the tree too, up to the same share of the
+		// width. It drops its words about the worktree before it is cut.
+		mw := full
+
+		if full > max(tw, limit) {
+			l.modeShort, mw = true, short
+		}
+
+		tw = max(tw, min(mw, limit))
 
 		if l.innerW-tw-1 >= 1 {
 			l.treeW, l.diffW = tw, l.innerW-tw-1
@@ -183,7 +194,7 @@ type drawKey struct {
 	project, branch      string
 	base                 string
 	turns                int
-	resTurn, resThrough  int
+	resTurn              int
 	noSnapshot           bool
 	pinned               bool
 	list                 wtKey
@@ -201,7 +212,7 @@ func (d *drawCtx) key(r core.Rect, name string) drawKey {
 		top: d.top, cursor: v.cursor, treeSel: v.treeSel,
 		query: d.query, searching: v.search != nil,
 		src: v.src, project: v.project, branch: v.branch, base: v.base,
-		turns: v.turns, resTurn: v.res.Turn, resThrough: v.res.Through, noSnapshot: v.noSnapshot, pinned: d.pinned,
+		turns: v.turns, resTurn: v.res.Turn, noSnapshot: v.noSnapshot, pinned: d.pinned,
 		list: d.listKey(),
 	}
 
@@ -481,8 +492,7 @@ func (v *reviewView) shownTurn() int {
 }
 
 // showsTurn reports whether the drawer shows a turn. A turn-mode drawer with no
-// session, no turns yet or a foreign root shows the branch while core keeps
-// turn mode.
+// session or no turns yet shows the branch while core keeps turn mode.
 func (v *reviewView) showsTurn() bool {
 	_, ok := v.src.(git.TurnSource)
 

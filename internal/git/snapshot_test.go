@@ -3,7 +3,10 @@ package git
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -46,7 +49,8 @@ func openRepo(t *testing.T, dir string) Repo {
 	return r
 }
 
-// snap takes a snapshot and fails when it leaves anything in its temp dir.
+// snap takes a snapshot and fails when it leaves anything in its temp dir. Like
+// the next prompt, it ends the worktree's latest turn when that is open.
 func snap(t *testing.T, dir, session string, opts SnapshotOptions) Turn {
 	t.Helper()
 
@@ -59,6 +63,14 @@ func snapContext(ctx context.Context, t *testing.T, dir, session string, opts Sn
 
 	tmp := t.TempDir()
 	opts.TempDir = tmp
+
+	if opts.Ends == 0 {
+		if turns, err := Turns(ctx, openRepo(t, dir), session); err == nil && len(turns) > 0 {
+			if last := turns[len(turns)-1]; last.EndCommit == "" && !last.Missing {
+				opts.Ends = last.N
+			}
+		}
+	}
 
 	turn, err := Snapshot(ctx, dir, session, opts)
 	if err != nil {
@@ -600,7 +612,7 @@ func TestSnapshotLeavesUserStateAlone(t *testing.T) {
 	turn := snap(t, dir, sessA, SnapshotOptions{})
 	mark := snap(t, dir, sessA, SnapshotOptions{Unchanged: true})
 
-	missing, err := MarkMissing(context.Background(), dir, sessA)
+	missing, err := MarkMissing(context.Background(), dir, sessA, 0, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -644,7 +656,7 @@ func TestSnapshotUnbornHead(t *testing.T) {
 		t.Errorf("tree = %s, want %s", turn.Tree, want)
 	}
 
-	missing, err := MarkMissing(context.Background(), dir, sessB)
+	missing, err := MarkMissing(context.Background(), dir, sessB, 0, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -691,8 +703,9 @@ func TestSnapshotLinkedWorktree(t *testing.T) {
 		t.Errorf("tree = %s, want %s", turn.Tree, want)
 	}
 
-	if got := gitOut(t, dir, "for-each-ref", "--format=%(refname)", "refs/muxreveal"); got != "refs/muxreveal/"+sessA+"/1" {
-		t.Errorf("refs seen from the main checkout = %q", got)
+	want := "refs/muxreveal/turns/" + sessA + "/" + turnKey(openRepo(t, wt).Root) + "/1/start"
+	if got := gitOut(t, dir, "for-each-ref", "--format=%(refname)", "refs/muxreveal"); got != want {
+		t.Errorf("refs seen from the main checkout = %q, want %q", got, want)
 	}
 
 	if msg := gitOut(t, wt, "log", "-1", "--format=%B", turn.Commit); !strings.Contains(msg, "Worktree: "+wt) {
@@ -722,8 +735,9 @@ func TestSnapshotLinkedWorktreeOfBareRepo(t *testing.T) {
 		t.Errorf("tree = %s, want %s", turn.Tree, want)
 	}
 
-	if got := gitOut(t, bare, "for-each-ref", "--format=%(refname)", "refs/muxreveal"); got != "refs/muxreveal/"+sessA+"/1" {
-		t.Errorf("refs in the bare repository = %q", got)
+	want := "refs/muxreveal/turns/" + sessA + "/" + turnKey(openRepo(t, wt).Root) + "/1/start"
+	if got := gitOut(t, bare, "for-each-ref", "--format=%(refname)", "refs/muxreveal"); got != want {
+		t.Errorf("refs in the bare repository = %q, want %q", got, want)
 	}
 }
 
@@ -847,7 +861,7 @@ func TestSnapshotUnchangedReusesPreviousTree(t *testing.T) {
 	ctx, logPath := wrapGit(t, "")
 
 	// Marker in between: the reuse skips it and takes the real snapshot's tree.
-	if _, err := MarkMissing(ctx, dir, sessA); err != nil {
+	if _, err := MarkMissing(ctx, dir, sessA, 0, false); err != nil {
 		t.Fatal(err)
 	}
 
@@ -875,6 +889,25 @@ func TestSnapshotUnchangedReusesPreviousTree(t *testing.T) {
 	}
 }
 
+// A turn ended by a marker leaves no known tree, so Unchanged takes a full
+// snapshot instead of reusing the turn's stale start.
+func TestSnapshotUnchangedSkipsAnEndMarker(t *testing.T) {
+	t.Parallel()
+
+	dir := seedRepo(t)
+	snap(t, dir, sessA, SnapshotOptions{Turn: 1})
+	writeFile(t, dir, "a.txt", "changed after the start\n")
+
+	if _, err := MarkMissing(context.Background(), dir, sessA, 1, true); err != nil {
+		t.Fatal(err)
+	}
+
+	got := snap(t, dir, sessA, SnapshotOptions{Unchanged: true})
+	if want := scratchTree(t, dir); got.Tree != want {
+		t.Errorf("tree = %s, want a full snapshot %s", got.Tree, want)
+	}
+}
+
 func TestMarkMissing(t *testing.T) {
 	t.Parallel()
 	dir := seedRepo(t)
@@ -882,7 +915,7 @@ func TestMarkMissing(t *testing.T) {
 
 	snap(t, dir, sessA, SnapshotOptions{})
 
-	m, err := MarkMissing(ctx, dir, sessA)
+	m, err := MarkMissing(ctx, dir, sessA, 0, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -923,7 +956,7 @@ func TestBadSession(t *testing.T) {
 			t.Errorf("Snapshot(%q) error = %v, want ErrBadSession", s, err)
 		}
 
-		if _, err := MarkMissing(ctx, dir, s); !errors.Is(err, ErrBadSession) {
+		if _, err := MarkMissing(ctx, dir, s, 0, false); !errors.Is(err, ErrBadSession) {
 			t.Errorf("MarkMissing(%q) error = %v, want ErrBadSession", s, err)
 		}
 
@@ -963,11 +996,12 @@ func TestSnapshotRetriesWhenTheRefExists(t *testing.T) {
 	}
 
 	// A racing writer takes number 1 right before our update-ref, once.
+	racing := "refs/muxreveal/turns/" + sessA + "/" + turnKey(openRepo(t, dir).Root) + "/1/start"
 	ctx, _ := wrapGit(t, `case "$*" in
-*update-ref*--no-deref*)
+*update-ref*--stdin*)
 	if [ ! -e "$LOG.raced" ]; then
 		: > "$LOG.raced"
-		'`+realGit+`' update-ref refs/muxreveal/`+sessA+`/1 "$('`+realGit+`' rev-parse HEAD)"
+		'`+realGit+`' update-ref `+racing+` "$('`+realGit+`' rev-parse HEAD)"
 	fi;;
 esac`)
 
@@ -986,35 +1020,83 @@ esac`)
 	}
 }
 
+// legacyTurnRef writes a turn ref of the earlier layout, a commit of HEAD's tree
+// carrying the trailers it had, and returns the ref's name.
+func legacyTurnRef(t *testing.T, dir, root, session string, n int) string {
+	t.Helper()
+
+	msg := fmt.Sprintf("muxreveal turn %d\n\nSession: %s\nWorktree: %s\n", n, session, root)
+	commit := gitInput(t, dir, msg, "commit-tree", gitOut(t, dir, "rev-parse", "HEAD^{tree}"))
+	ref := fmt.Sprintf("refs/muxreveal/%s/%d", session, n)
+	gitOut(t, dir, "update-ref", ref, commit)
+
+	return ref
+}
+
+// legacyRefs lists the refs under refs/muxreveal in the earlier layout.
+func legacyRefs(t *testing.T, dir string) []string {
+	t.Helper()
+
+	var out []string
+
+	for _, ref := range strings.Fields(gitOut(t, dir, "for-each-ref", "--format=%(refname)", "refs/muxreveal")) {
+		if legacyRefRE.MatchString(ref) {
+			out = append(out, ref)
+		}
+	}
+
+	return out
+}
+
+func TestLegacyTurnRefsAreIgnored(t *testing.T) {
+	t.Parallel()
+	dir := seedRepo(t)
+	r := openRepo(t, dir)
+	legacyTurnRef(t, dir, r.Root, sessA, 1)
+
+	turns, err := Turns(context.Background(), r, sessA)
+	if err != nil || len(turns) != 0 {
+		t.Fatalf("Turns = %+v, %v; want none", turns, err)
+	}
+
+	// The number after it ignores the earlier layout too.
+	if turn := snap(t, dir, sessA, SnapshotOptions{}); turn.N != 1 {
+		t.Errorf("first turn = %d, want 1", turn.N)
+	}
+
+	if turns, err := Turns(context.Background(), r, sessA); err != nil || len(turns) != 1 {
+		t.Errorf("Turns = %+v, %v; want the one turn", turns, err)
+	}
+}
+
 func TestPrune(t *testing.T) {
 	t.Parallel()
 	dir := seedRepo(t)
 	ctx := context.Background()
 
-	wt := filepath.Join(filepath.Dir(dir), filepath.Base(dir)+"-other")
-	gitOut(t, dir, "worktree", "add", "-q", "-b", "other", wt)
+	wt := linkedWorktree(t, dir, "other")
+	r := openRepo(t, dir)
 
-	wt, err := filepath.EvalSymlinks(wt)
-	if err != nil {
-		t.Fatal(err)
-	}
-
+	// Session A in the main checkout: turn 1 with its end, turn 2 open. Session
+	// B in the other worktree: turn 1 open and a marker. Both have a turn of the
+	// earlier layout as well.
 	snap(t, dir, sessA, SnapshotOptions{})
 	snap(t, dir, sessA, SnapshotOptions{})
 	snap(t, wt, sessB, SnapshotOptions{})
 
-	if _, err := MarkMissing(ctx, wt, sessB); err != nil {
+	if _, err := MarkMissing(ctx, wt, sessB, 0, false); err != nil {
 		t.Fatal(err)
 	}
 
-	r := openRepo(t, dir)
+	legacyTurnRef(t, dir, r.Root, sessA, 7)
+	legacyTurnRef(t, dir, openRepo(t, wt).Root, sessB, 7)
 
-	n, err := PruneWorktree(ctx, r, wt)
-	if err != nil || n != 2 {
-		t.Fatalf("PruneWorktree = %d, %v; want 2", n, err)
+	n, err := PruneWorktree(ctx, r, openRepo(t, wt).Root)
+	if err != nil || n != 3 {
+		t.Fatalf("PruneWorktree = %d, %v; want 3", n, err)
 	}
 
-	if got, _ := Turns(ctx, r, sessB); len(got) != 0 {
+	if got, _ := Turns(ctx, openRepo(t, wt), sessB); len(got) != 0 {
 		t.Errorf("session B turns left: %+v", got)
 	}
 
@@ -1022,14 +1104,18 @@ func TestPrune(t *testing.T) {
 		t.Errorf("session A turns = %+v, want both kept", got)
 	}
 
+	if got := legacyRefs(t, dir); len(got) != 1 {
+		t.Errorf("earlier-layout refs = %v, want session A's kept", got)
+	}
+
 	snap(t, wt, sessB, SnapshotOptions{})
 
 	n, err = PruneSession(ctx, r, sessA)
-	if err != nil || n != 2 {
-		t.Fatalf("PruneSession = %d, %v; want 2", n, err)
+	if err != nil || n != 4 {
+		t.Fatalf("PruneSession = %d, %v; want 4", n, err)
 	}
 
-	if got, _ := Turns(ctx, r, sessB); len(got) != 1 {
+	if got, _ := Turns(ctx, openRepo(t, wt), sessB); len(got) != 1 {
 		t.Errorf("session B turns = %+v, want 1 kept", got)
 	}
 
@@ -1116,7 +1202,7 @@ esac`)
 	}
 }
 
-func TestWriteTurnWithDoneContextWritesNothing(t *testing.T) {
+func TestWriteStartWithDoneContextWritesNothing(t *testing.T) {
 	t.Parallel()
 	dir := seedRepo(t)
 	r := openRepo(t, dir)
@@ -1126,15 +1212,407 @@ func TestWriteTurnWithDoneContextWritesNothing(t *testing.T) {
 
 	tree := gitOut(t, dir, "rev-parse", "HEAD^{tree}")
 
-	if _, err := writeTurn(ctx, r, sessA, nil, tree, nil, false); !errors.Is(err, context.Canceled) {
-		t.Errorf("writeTurn error = %v, want context.Canceled", err)
+	if _, err := writeStart(ctx, r, sessA, 0, 0, tree, nil, false); !errors.Is(err, context.Canceled) {
+		t.Errorf("writeStart error = %v, want context.Canceled", err)
 	}
 
-	if _, err := MarkMissing(ctx, dir, sessA); err == nil {
+	if _, err := MarkMissing(ctx, dir, sessA, 0, false); err == nil {
 		t.Error("MarkMissing with a done context succeeded")
 	}
 
 	if refs := gitOut(t, dir, "for-each-ref", "refs/muxreveal"); refs != "" {
 		t.Errorf("refs written: %s", refs)
+	}
+}
+
+// linkedWorktree adds a linked worktree on a new branch next to dir.
+func linkedWorktree(t *testing.T, dir, branch string) string {
+	t.Helper()
+
+	wt := filepath.Join(t.TempDir(), branch)
+	gitOut(t, dir, "worktree", "add", "-q", "-b", branch, wt)
+
+	wt, err := filepath.EvalSymlinks(wt)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return wt
+}
+
+func TestTurnsListOneWorktree(t *testing.T) {
+	t.Parallel()
+	dir := seedRepo(t)
+	b := linkedWorktree(t, dir, "b")
+
+	writeFile(t, dir, "a.txt", "in main\n")
+	writeFile(t, b, "a.txt", "in b\n")
+	snap(t, dir, sessA, SnapshotOptions{})
+	snap(t, b, sessA, SnapshotOptions{})
+
+	for name, d := range map[string]string{"main": dir, "b": b} {
+		turns, err := Turns(context.Background(), openRepo(t, d), sessA)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if len(turns) != 1 {
+			t.Errorf("%s lists %d turns, want 1", name, len(turns))
+		}
+	}
+}
+
+func TestTurnRefsLayout(t *testing.T) {
+	t.Parallel()
+
+	main := seedRepo(t)
+	linked := linkedWorktree(t, main, "b")
+
+	odd := filepath.Join(t.TempDir(), "wt \u00f8 1")
+	gitOut(t, main, "worktree", "add", "-q", "-b", "odd", odd)
+
+	tests := []struct {
+		name string
+		dir  string
+	}{
+		{"main checkout", main},
+		{"linked worktree", linked},
+		{"worktree with a space and a non-ASCII name", odd},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			r := openRepo(t, tt.dir)
+			sum := sha256.Sum256([]byte(r.Root))
+			key := hex.EncodeToString(sum[:8])
+
+			// The earlier turn of this worktree is closed by the next one.
+			snap(t, tt.dir, sessA, SnapshotOptions{Turn: 1})
+			snap(t, tt.dir, sessA, SnapshotOptions{Turn: 2})
+
+			base := "refs/muxreveal/turns/" + sessA + "/" + key + "/"
+			want := []string{base + "1/end", base + "1/start", base + "2/start"}
+
+			got := strings.Fields(gitOut(t, tt.dir, "for-each-ref", "--format=%(refname)", base))
+			if !slices.Equal(got, want) {
+				t.Errorf("refs = %v, want %v", got, want)
+			}
+
+			if turnRef(sessA, key, 1, true) != want[0] || turnRef(sessA, key, 1, false) != want[1] {
+				t.Errorf("turnRef disagrees with the layout")
+			}
+		})
+	}
+}
+
+func TestSnapshotEndsTheOpenTurn(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	t.Run("ends the open turn with its own tree", func(t *testing.T) {
+		t.Parallel()
+
+		dir := seedRepo(t)
+		writeFile(t, dir, "a.txt", "one\n")
+		first := snap(t, dir, sessA, SnapshotOptions{Turn: 1})
+
+		writeFile(t, dir, "a.txt", "two\n")
+		second := snap(t, dir, sessA, SnapshotOptions{Turn: 2, Ends: 1})
+
+		turns, err := Turns(ctx, openRepo(t, dir), sessA)
+		if err != nil || len(turns) != 2 {
+			t.Fatalf("Turns = %+v, %v", turns, err)
+		}
+
+		if turns[0].Commit != first.Commit || turns[0].EndTree != second.Tree || turns[0].EndCommit == "" || turns[0].EndMissing {
+			t.Errorf("turn 1 = %+v, want it ended with turn 2's tree %s", turns[0], second.Tree)
+		}
+
+		if turns[1].EndCommit != "" || !turns[1].Current || turns[0].Current {
+			t.Errorf("turn 2 = %+v, want it open and current", turns[1])
+		}
+	})
+
+	t.Run("changes nothing otherwise", func(t *testing.T) {
+		t.Parallel()
+
+		dir := seedRepo(t)
+		other := linkedWorktree(t, dir, "b")
+
+		snap(t, other, sessA, SnapshotOptions{Turn: 1})
+		snap(t, dir, sessA, SnapshotOptions{Turn: 2})
+		snap(t, dir, sessA, SnapshotOptions{Turn: 3, Ends: 2})
+
+		if _, err := MarkMissing(ctx, dir, sessA, 4, false); err != nil {
+			t.Fatal(err)
+		}
+
+		for i, ends := range []int{2, 1, 4, 99} {
+			before := gitOut(t, dir, "for-each-ref", "--format=%(refname) %(objectname)", "refs/muxreveal")
+
+			next := 10 + i
+			if _, err := Snapshot(ctx, dir, sessA, SnapshotOptions{TempDir: t.TempDir(), Turn: next, Ends: ends}); err != nil {
+				t.Fatalf("Ends %d: %v", ends, err)
+			}
+
+			after := gitOut(t, dir, "for-each-ref", "--format=%(refname) %(objectname)", "refs/muxreveal")
+			if strings.Count(after, "\n") != strings.Count(before, "\n")+1 {
+				t.Errorf("Ends %d changed more than the new start:\n%s\n--\n%s", ends, before, after)
+			}
+		}
+	})
+}
+
+func TestEndTurn(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	tests := []struct {
+		name      string
+		setup     func(t *testing.T, dir string)
+		turn      int
+		unchanged bool
+		wantErr   error
+		wantTree  func(t *testing.T, dir string, start Turn) string
+	}{
+		{
+			name: "ends an open turn with the working tree",
+			setup: func(t *testing.T, dir string) {
+				snap(t, dir, sessA, SnapshotOptions{Turn: 1})
+				writeFile(t, dir, "a.txt", "changed after the start\n")
+			},
+			turn:     1,
+			wantTree: func(t *testing.T, dir string, _ Turn) string { return scratchTree(t, dir) },
+		},
+		{
+			name: "unchanged reuses the start's tree",
+			setup: func(t *testing.T, dir string) {
+				snap(t, dir, sessA, SnapshotOptions{Turn: 1})
+				writeFile(t, dir, "a.txt", "x\n")
+			},
+			turn:      1,
+			unchanged: true,
+			wantTree:  func(_ *testing.T, _ string, start Turn) string { return start.Tree },
+		},
+		{
+			name:    "refuses a turn with no start here",
+			setup:   func(t *testing.T, dir string) { snap(t, dir, sessA, SnapshotOptions{Turn: 1}) },
+			turn:    2,
+			wantErr: ErrTurnNotOpen,
+		},
+		{
+			name: "refuses a turn that has an end",
+			setup: func(t *testing.T, dir string) {
+				snap(t, dir, sessA, SnapshotOptions{Turn: 1})
+				snap(t, dir, sessA, SnapshotOptions{Turn: 2, Ends: 1})
+			},
+			turn:    1,
+			wantErr: ErrTurnNotOpen,
+		},
+		{
+			name: "refuses a start marker",
+			setup: func(t *testing.T, dir string) {
+				if _, err := MarkMissing(ctx, dir, sessA, 1, false); err != nil {
+					t.Fatal(err)
+				}
+			},
+			turn:    1,
+			wantErr: ErrTurnNotOpen,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			dir := seedRepo(t)
+			tt.setup(t, dir)
+
+			r := openRepo(t, dir)
+
+			var start Turn
+
+			if turns, _ := Turns(ctx, r, sessA); len(turns) > 0 {
+				start = turns[0]
+			}
+
+			got, err := EndTurn(ctx, dir, sessA, tt.turn, SnapshotOptions{TempDir: t.TempDir(), Unchanged: tt.unchanged})
+			if tt.wantErr != nil {
+				if !errors.Is(err, tt.wantErr) {
+					t.Fatalf("EndTurn error = %v, want %v", err, tt.wantErr)
+				}
+
+				return
+			}
+
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if want := tt.wantTree(t, dir, start); got.EndTree != want || got.EndCommit == "" {
+				t.Errorf("EndTurn = %+v, want end tree %s", got, want)
+			}
+
+			turns, err := Turns(ctx, r, sessA)
+			if err != nil || turns[0].EndCommit != got.EndCommit || turns[0].EndTree != got.EndTree {
+				t.Errorf("listed turn = %+v, %v; want the end EndTurn wrote", turns, err)
+			}
+		})
+	}
+}
+
+func TestMarkMissingStartAndEnd(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	dir := seedRepo(t)
+
+	snap(t, dir, sessA, SnapshotOptions{Turn: 1})
+
+	start, err := MarkMissing(ctx, dir, sessA, 0, false)
+	if err != nil || start.N != 2 || !start.Missing {
+		t.Fatalf("start marker = %+v, %v; want turn 2 as a marker", start, err)
+	}
+
+	if _, err := MarkMissing(ctx, dir, sessA, 1, true); err != nil {
+		t.Fatalf("end marker on the open turn: %v", err)
+	}
+
+	turns, err := Turns(ctx, openRepo(t, dir), sessA)
+	if err != nil || len(turns) != 2 {
+		t.Fatalf("Turns = %+v, %v", turns, err)
+	}
+
+	if !turns[0].EndMissing || turns[0].EndCommit == "" || !turns[1].Missing {
+		t.Errorf("turns = %+v, want turn 1 ended by a marker and turn 2 a start marker", turns)
+	}
+
+	if _, err := MarkMissing(ctx, dir, sessA, 1, true); !errors.Is(err, ErrTurnNotOpen) {
+		t.Errorf("end marker on a closed turn: error = %v, want ErrTurnNotOpen", err)
+	}
+
+	if _, err := MarkMissing(ctx, dir, sessA, 5, true); !errors.Is(err, ErrTurnNotOpen) {
+		t.Errorf("end marker on a turn with no start: error = %v, want ErrTurnNotOpen", err)
+	}
+}
+
+func TestOpenTurnBehindALaterTurnHasNoSnapshot(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	dir := seedRepo(t)
+	b := linkedWorktree(t, dir, "b")
+
+	writeFile(t, b, "a.txt", "in b\n")
+	snap(t, b, sessA, SnapshotOptions{})
+	writeFile(t, dir, "a.txt", "in main\n")
+	snap(t, dir, sessA, SnapshotOptions{})
+
+	turns, err := Turns(ctx, openRepo(t, b), sessA)
+	if err != nil || len(turns) != 1 {
+		t.Fatalf("Turns = %+v, %v", turns, err)
+	}
+
+	if turns[0].Current || turns[0].EndCommit != "" {
+		t.Errorf("turn = %+v, want it open and not current", turns[0])
+	}
+
+	_, err = testEngine(t).Diff(ctx, TurnSource{Worktree: b, Session: sessA})
+	if !errors.Is(err, ErrNoSnapshot) {
+		t.Errorf("Diff error = %v, want ErrNoSnapshot", err)
+	}
+}
+
+func TestOpenTurns(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	tests := []struct {
+		name  string
+		setup func(t *testing.T, a, b, c string)
+		want  func(a, b, c string) []string
+	}{
+		{
+			name: "open turns at the highest number in two worktrees",
+			setup: func(t *testing.T, a, b, _ string) {
+				snap(t, a, sessA, SnapshotOptions{Turn: 5})
+				snap(t, b, sessA, SnapshotOptions{Turn: 5})
+			},
+			want: func(a, b, _ string) []string { return []string{a, b} },
+		},
+		{
+			name: "a closed turn is left out",
+			setup: func(t *testing.T, a, b, _ string) {
+				snap(t, a, sessA, SnapshotOptions{Turn: 5})
+				snap(t, b, sessA, SnapshotOptions{Turn: 5})
+
+				if _, err := EndTurn(ctx, b, sessA, 5, SnapshotOptions{}); err != nil {
+					t.Fatal(err)
+				}
+			},
+			want: func(a, _, _ string) []string { return []string{a} },
+		},
+		{
+			name: "an open turn behind a later one is left out",
+			setup: func(t *testing.T, a, b, _ string) {
+				snap(t, a, sessA, SnapshotOptions{Turn: 4})
+				snap(t, b, sessA, SnapshotOptions{Turn: 5})
+			},
+			want: func(_, b, _ string) []string { return []string{b} },
+		},
+		{
+			name: "a start marker is left out",
+			setup: func(t *testing.T, a, _, c string) {
+				snap(t, a, sessA, SnapshotOptions{Turn: 5})
+
+				if _, err := MarkMissing(ctx, c, sessA, 5, false); err != nil {
+					t.Fatal(err)
+				}
+			},
+			want: func(a, _, _ string) []string { return []string{a} },
+		},
+		{
+			name: "another session's turn is left out",
+			setup: func(t *testing.T, a, b, _ string) {
+				snap(t, a, sessA, SnapshotOptions{Turn: 5})
+				snap(t, b, sessB, SnapshotOptions{Turn: 9})
+			},
+			want: func(a, _, _ string) []string { return []string{a} },
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			a := seedRepo(t)
+			b := linkedWorktree(t, a, "b")
+			c := linkedWorktree(t, a, "c")
+			a = openRepo(t, a).Root
+
+			tt.setup(t, a, b, c)
+
+			got, err := OpenTurns(ctx, openRepo(t, a), sessA)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			var roots []string
+			for _, o := range got {
+				roots = append(roots, o.Root)
+			}
+
+			want := tt.want(a, b, c)
+			slices.Sort(want)
+
+			if !slices.Equal(roots, want) {
+				t.Errorf("OpenTurns roots = %v, want %v", roots, want)
+			}
+		})
 	}
 }

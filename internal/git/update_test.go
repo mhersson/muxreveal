@@ -342,6 +342,8 @@ func TestUpdateLiveTurn(t *testing.T) {
 	t.Parallel()
 
 	dir := turnRepo(t)
+	writeFile(t, dir, "a.txt", "edited during the turn\n")
+
 	e := testEngine(t)
 	src := TurnSource{Worktree: dir, Session: sessA}
 	prev := diffOK(t, e, src)
@@ -374,6 +376,64 @@ func TestUpdateLiveTurn(t *testing.T) {
 	if restricted != 0 {
 		t.Error("a restricted listing ran after a new turn")
 	}
+}
+
+// A turn that ended is a start against an end now, so the live result is no
+// base for an incremental update.
+func TestUpdateEndedTurnFallsBack(t *testing.T) {
+	t.Parallel()
+
+	dir := turnRepo(t)
+	writeFile(t, dir, "a.txt", "edited during the turn\n")
+
+	e := testEngine(t)
+	src := TurnSource{Worktree: dir, Session: sessA}
+	prev := diffOK(t, e, src)
+
+	writeFile(t, dir, "b.txt", "edited before the next prompt\n")
+
+	end, err := EndTurn(context.Background(), dir, sessA, 1, SnapshotOptions{TempDir: t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	writeFile(t, dir, "c.txt", "after the end\n")
+
+	res := updateOK(t, e, prev, src, Batch{Paths: []string{"c.txt"}})
+
+	if res.Live || res.New != end.EndTree {
+		t.Errorf("Live=%v New=%s, want the closed turn ending at %s", res.Live, res.New, end.EndTree)
+	}
+
+	sameAsFull(t, res, src)
+}
+
+func TestUpdateFallsBackWhenTheLiveTurnStopsCounting(t *testing.T) {
+	t.Parallel()
+
+	dir := seedRepo(t)
+	snap(t, dir, sessA, SnapshotOptions{})
+	writeFile(t, dir, "a.txt", "one\n")
+	snap(t, dir, sessA, SnapshotOptions{})
+	writeFile(t, dir, "a.txt", "two\n")
+
+	e := testEngine(t)
+	src := TurnSource{Worktree: dir, Session: sessA}
+	prev := diffOK(t, e, src)
+
+	if !prev.Live || prev.Turn != 2 || prev.Turns != 2 {
+		t.Fatalf("setup: Live=%v Turn=%d Turns=%d, want turn 2 of 2 live", prev.Live, prev.Turn, prev.Turns)
+	}
+
+	writeFile(t, dir, "a.txt", "one\n")
+
+	res := updateOK(t, e, prev, src, Batch{Paths: []string{"a.txt"}})
+
+	if res.Live || res.Turn != 1 || res.Turns != 1 {
+		t.Errorf("Live=%v Turn=%d Turns=%d, want the previous turn, 1 of 1", res.Live, res.Turn, res.Turns)
+	}
+
+	sameAsFull(t, res, src)
 }
 
 func TestUpdateKeepsCaps(t *testing.T) {

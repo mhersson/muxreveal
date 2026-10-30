@@ -198,16 +198,10 @@ func (a *App) reviewSync() tea.Cmd {
 		v.mode, need = rv.Mode, true
 	}
 
-	// A turn drawer that showed the branch because its session had no turns
-	// shows the session's latest turn as soon as there is one. One that shows a
-	// turn of a worktree that is not the agent's own shows the branch.
-	_, isTurn := v.src.(git.TurnSource)
-
-	switch {
-	case rv.Mode == core.ReviewTurn && !isTurn && v.loaded && v.session != "" && !v.foreign &&
-		v.turnsFor == v.session && v.turns > 0:
-		need = true
-	case isTurn && v.loaded && v.foreign:
+	// A turn drawer that showed the branch because its worktree had no turns
+	// shows the worktree's latest turn as soon as there is one.
+	if _, isTurn := v.src.(git.TurnSource); rv.Mode == core.ReviewTurn && !isTurn && v.loaded && v.session != "" &&
+		v.turnsFor == v.session && v.turns > 0 {
 		need = true
 	}
 
@@ -216,7 +210,7 @@ func (a *App) reviewSync() tea.Cmd {
 	}
 
 	// The count is the previous session's, or the own directory moved, which
-	// changes whether the shown root is foreign.
+	// changes whether the shown root is the agent's own.
 	if v.loaded && v.session != "" && (v.turnsFor != v.session || v.own != st.Panes[rv.Pane].WorkDir()) {
 		return a.reviewCount(tab.ID, v)
 	}
@@ -249,15 +243,14 @@ func (a *App) reviewReset(tab core.TabID, pane core.PaneID) *reviewView {
 }
 
 // reviewRetarget points the view at its mode's source, turn being the turn to
-// show (0 is the latest), and loads it. A turn view of a pane with no session,
-// or of a worktree that is not the agent's own, shows the branch; core keeps the
-// mode.
+// show (0 is the latest), and loads it. A turn view of a pane with no session
+// shows the branch; core keeps the mode.
 func (a *App) reviewRetarget(tab core.TabID, v *reviewView, turn int) tea.Cmd {
 	if v.root == "" {
 		return nil
 	}
 
-	if v.mode == core.ReviewTurn && v.session != "" && !v.foreign {
+	if v.mode == core.ReviewTurn && v.session != "" {
 		v.src = git.TurnSource{Worktree: v.root, Session: v.session, Turn: turn}
 	} else {
 		v.src = git.BranchSource{Worktree: v.root}
@@ -278,7 +271,7 @@ type reviewJob struct {
 	src      git.Source
 	root     string
 	session  string
-	own      string     // the pane's own directory; its turns are the only ones the drawer shows
+	own      string     // the pane's own directory, which decides the no-turns notice
 	batch    *git.Batch // nil: a full diff of src
 	infoOnly bool       // skip the diff: refresh only what describe finds
 	prev     git.Result // the result batch updates
@@ -341,15 +334,6 @@ func (j reviewJob) run(ctx context.Context) reviewLoadedMsg {
 		return msg
 	}
 
-	// The snapshots are of the agent's own directory, so a turn of it is not a
-	// turn of another worktree. The branch is computed afresh, as the previous
-	// result is the turn's.
-	if _, ok := j.src.(git.TurnSource); ok && msg.info.foreign {
-		j.src = git.BranchSource{Worktree: j.root}
-		j.batch, j.prev = nil, git.Result{}
-		msg.src = j.src
-	}
-
 	// What the drawing shows besides the diff is found beside the diff, so a
 	// save reaches the screen as soon as the diff is done.
 	described := make(chan struct{})
@@ -376,14 +360,76 @@ func (j reviewJob) run(ctx context.Context) reviewLoadedMsg {
 	switch {
 	case errors.Is(err, git.ErrNoSnapshot):
 		msg.info.noSnapshot = true
+		j.countTurns(ctx, &msg.info)
 	case err != nil:
 		msg.err = err
 	default:
 		msg.res = res
 		msg.info.hidden = hiddenFlags(res.Files)
+
+		switch {
+		case j.countsFromDiff() && msg.src == nil:
+			msg.info.turns = res.Turns
+		case j.countsAfterDiff() && msg.src == nil:
+			j.countTurnsAt(ctx, &msg.info, res)
+		}
 	}
 
 	return msg
+}
+
+// countsFromDiff reports whether a load of j.src learns the turn count from the
+// diff itself, so describe leaves it alone.
+func (j reviewJob) countsFromDiff() bool {
+	_, ok := j.src.(git.TurnSource)
+
+	return ok && !j.infoOnly
+}
+
+// countsAfterDiff reports whether a load of j.src counts the turns once the
+// diff is done, from the working tree the diff already snapshotted.
+func (j reviewJob) countsAfterDiff() bool {
+	_, ok := j.src.(git.BranchSource)
+
+	return ok && !j.infoOnly
+}
+
+// countTurnsAt is countTurns for a live result: its New side is the working
+// tree, so the count needs no snapshot of its own.
+func (j reviewJob) countTurnsAt(ctx context.Context, info *reviewInfo, res git.Result) {
+	if !res.Live || j.session == "" {
+		j.countTurns(ctx, info)
+
+		return
+	}
+
+	list, err := j.eng.TurnListAt(ctx, j.root, j.session, res.New)
+	if err != nil {
+		j.log.Debug("review: turns", "root", j.root, "err", err)
+
+		return
+	}
+
+	info.turns = len(list.Turns)
+}
+
+// countTurns sets info.turns to the length of the root's list of turns, unless
+// the root has none or the count is not available.
+func (j reviewJob) countTurns(ctx context.Context, info *reviewInfo) {
+	if j.session == "" {
+		info.turns = 0
+
+		return
+	}
+
+	list, err := j.eng.TurnList(ctx, j.root, j.session)
+	if err != nil {
+		j.log.Debug("review: turns", "root", j.root, "err", err)
+
+		return
+	}
+
+	info.turns = len(list.Turns)
 }
 
 // diff computes src, updating the previous result when a batch asks for it.
@@ -411,9 +457,8 @@ func (j reviewJob) foreign(ctx context.Context) bool {
 }
 
 // isForeign reports whether root is not the root of the agent's own directory
-// own, as when own is in no repository or gone. Turns are snapshotted in the
-// own directory only, so no other worktree has any. It returns ctx's error
-// when the check was cut short.
+// own, as when own is in no repository or gone. It returns ctx's error when the
+// check was cut short.
 func isForeign(ctx context.Context, own, root string) (bool, error) {
 	switch own {
 	case "":
@@ -430,16 +475,11 @@ func isForeign(ctx context.Context, own, root string) (bool, error) {
 	return err != nil || !sameDir(r.Root, root), nil
 }
 
-// describe fills what the drawing shows besides the diff, and reports no turns
-// for a foreign root. The head and the base change only with git's own state,
-// so a batch of plain paths keeps them.
+// describe fills what the drawing shows besides the diff. The head and the base
+// change only with git's own state, so a batch of plain paths keeps them.
 func (j reviewJob) describe(ctx context.Context, info *reviewInfo) {
-	if info.foreign {
-		info.turns = 0
-	}
-
 	probe := j.batch == nil || j.batch.Git || j.batch.Overflow || info.project == ""
-	if !probe && (j.session == "" || info.foreign) {
+	if !probe && (j.session == "" || j.countsFromDiff() || j.countsAfterDiff()) {
 		return
 	}
 
@@ -474,22 +514,8 @@ func (j reviewJob) describe(ctx context.Context, info *reviewInfo) {
 		info.base = base
 	}
 
-	if j.session == "" || info.foreign {
-		info.turns = 0
-
-		return
-	}
-
-	turns, err := git.Turns(ctx, r, j.session)
-	if err != nil {
-		j.log.Debug("review: turns", "root", j.root, "err", err)
-
-		return
-	}
-
-	info.turns = 0
-	if len(turns) > 0 {
-		info.turns = turns[len(turns)-1].N
+	if !j.countsFromDiff() && !j.countsAfterDiff() {
+		j.countTurns(ctx, info)
 	}
 }
 
@@ -506,7 +532,16 @@ func (a *App) onReviewLoaded(msg reviewLoadedMsg) tea.Cmd {
 	if msg.infoOnly {
 		in := msg.info
 		v.project, v.branch, v.base, v.foreign = in.project, in.branch, in.base, in.foreign
+
+		before := v.turns
 		v.adoptTurns(msg.session, in.turns)
+
+		// The latest turn is whichever the list ends with, so a new count moves it.
+		if ts, ok := v.src.(git.TurnSource); ok && ts.Turn == 0 && v.turns != before {
+			v.queued = nil
+
+			return tea.Batch(a.reviewResume(active, v), a.reviewStart(msg.tab, v, nil, false))
+		}
 
 		return tea.Batch(a.reviewResume(active, v), a.reviewFlush(active, msg.tab, v))
 	}
@@ -602,7 +637,7 @@ func (a *App) reviewApply(v *reviewView, msg reviewLoadedMsg) tea.Cmd {
 // sameResult reports whether two results are the same diff: trees are named by
 // their content.
 func sameResult(a, b git.Result) bool {
-	return a.Old == b.Old && a.New == b.New && a.Turn == b.Turn && a.Through == b.Through &&
+	return a.Old == b.Old && a.New == b.New && a.Turn == b.Turn &&
 		a.Live == b.Live && len(a.Files) == len(b.Files)
 }
 
@@ -754,8 +789,9 @@ func (a *App) refreshViews(pane core.PaneID, pick func(v *reviewView) bool) tea.
 
 // reviewFlush starts the load the changes in v.queued call for. A load already
 // running keeps them for its answer; a hidden tab keeps them until it shows. A
-// past turn does not change with the files: only a git change, an overflow or a
-// hook, which a new turn may have caused, refreshes its turn count.
+// turn that is not live does not change with the files, but the count of turns
+// may: it is recounted on every batch, since the open turn may have started to
+// differ from the working tree.
 func (a *App) reviewFlush(active bool, tab core.TabID, v *reviewView) tea.Cmd {
 	if !active || v.queued == nil || v.loading || !v.loaded {
 		return nil
@@ -764,12 +800,15 @@ func (a *App) reviewFlush(active bool, tab core.TabID, v *reviewView) tea.Cmd {
 	b := *v.queued
 	v.queued = nil
 
-	if v.err == nil && !v.res.Live && !v.noSnapshot {
-		if b.Git || b.Overflow {
-			return a.reviewStart(tab, v, &b, true)
-		}
+	if v.err == nil && !v.res.Live {
+		_, isTurn := v.src.(git.TurnSource)
 
-		return nil
+		switch {
+		case isTurn || b.Git || b.Overflow:
+			return a.reviewStart(tab, v, &b, true)
+		case !v.noSnapshot:
+			return nil
+		}
 	}
 
 	return a.reviewStart(tab, v, &b, false)

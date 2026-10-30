@@ -120,7 +120,7 @@ func turn4Result() git.Result {
 		"+}",
 	))
 
-	return git.Result{Turn: 4, Through: 4, Live: true, Files: []git.FileDiff{state, app, keymap, test}}
+	return git.Result{Turn: 4, Live: true, Files: []git.FileDiff{state, app, keymap, test}}
 }
 
 // appGoFull is app.go whole, before and after, with two removed blocks.
@@ -218,7 +218,7 @@ func hostileResultOf(long longLines) git.Result {
 	zero.OldPath = "old\u200bname.go"
 	zero.Status = git.Renamed
 
-	return git.Result{Turn: 2, Through: 2, Files: []git.FileDiff{body, pathy, zero}}
+	return git.Result{Turn: 2, Files: []git.FileDiff{body, pathy, zero}}
 }
 
 func hostileFullOf(long longLines) fullText {
@@ -243,7 +243,7 @@ func edgeResult() git.Result {
 		" )",
 	))
 
-	return git.Result{Turn: 3, Through: 3, Files: []git.FileDiff{bin, big, small, mode}}
+	return git.Result{Turn: 3, Files: []git.FileDiff{bin, big, small, mode}}
 }
 
 // bigResult is one added Go file of n lines in a single hunk.
@@ -258,7 +258,7 @@ func bigResult(n int) (git.Result, fullText) {
 
 	f := fileSpec("big.go", git.Added, hunkSpec(0, 1, "", specs...))
 
-	return git.Result{Turn: 1, Through: 1, Files: []git.FileDiff{f}}, fullText{new: text}
+	return git.Result{Turn: 1, Files: []git.FileDiff{f}}, fullText{new: text}
 }
 
 // reviewScene is a master with two workers under an open drawer on the master,
@@ -270,7 +270,6 @@ type reviewScene struct {
 	rail    bool
 	res     git.Result
 	turn    int
-	through int // the last turn the diff covers; 0 for turn
 	turns   int
 	branch  bool
 	noSnap  bool
@@ -284,7 +283,7 @@ func (s reviewScene) build(t *testing.T) *App {
 	t.Helper()
 
 	if !s.branch && s.turn > 0 {
-		s.res.Turn, s.res.Through = s.turn, max(s.through, s.turn)
+		s.res.Turn = s.turn
 	}
 
 	a := newThemedApp(t, s.theme)

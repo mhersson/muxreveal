@@ -662,8 +662,8 @@ func TestDiffTurnLiveAndPast(t *testing.T) {
 	latest := diffOK(t, e, src(0))
 	golden(t, "diff_turn_live", latest)
 
-	if !latest.Live || latest.Turn != 2 || latest.Through != 2 {
-		t.Errorf("latest: Live=%v Turn=%d Through=%d", latest.Live, latest.Turn, latest.Through)
+	if !latest.Live || latest.Turn != 2 {
+		t.Errorf("latest: Live=%v Turn=%d", latest.Live, latest.Turn)
 	}
 
 	if !fileByPath(t, latest, "live.txt").Untracked {
@@ -677,8 +677,8 @@ func TestDiffTurnLiveAndPast(t *testing.T) {
 	past := diffOK(t, e, src(1))
 	golden(t, "diff_turn_past", past)
 
-	if past.Live || past.Turn != 1 || past.Through != 1 {
-		t.Errorf("past: Live=%v Turn=%d Through=%d", past.Live, past.Turn, past.Through)
+	if past.Live || past.Turn != 1 {
+		t.Errorf("past: Live=%v Turn=%d", past.Live, past.Turn)
 	}
 
 	for _, f := range past.Files {
@@ -751,14 +751,16 @@ func TestMarkUntracked(t *testing.T) {
 	}
 }
 
-func TestDiffTurnSkipsMissingSnapshots(t *testing.T) {
+// A turn whose start or end is a marker, or that stayed open behind a later
+// turn, has no snapshot; it is never shown against a later state.
+func TestDiffTurnMissingSnapshots(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
 	dir := turnRepo(t)
 	writeFile(t, dir, "a.txt", "between\n")
 
-	_, err := MarkMissing(ctx, dir, sessA)
+	_, err := MarkMissing(ctx, dir, sessA, 0, false)
 	must(t, err)
 
 	writeFile(t, dir, "a.txt", "turn three\n")
@@ -767,32 +769,37 @@ func TestDiffTurnSkipsMissingSnapshots(t *testing.T) {
 
 	e := testEngine(t)
 
-	past := diffOK(t, e, TurnSource{Worktree: dir, Session: sessA, Turn: 1})
-	golden(t, "diff_turn_next_missing", past)
-
-	if past.Live || past.Turn != 1 || past.Through != 2 {
-		t.Errorf("Live=%v Turn=%d Through=%d, want a past diff through turn 2", past.Live, past.Turn, past.Through)
-	}
-
-	for _, turn := range []int{2, 9} {
+	for _, turn := range []int{1, 2, 9} {
 		_, err := e.Diff(ctx, TurnSource{Worktree: dir, Session: sessA, Turn: turn})
 		if !errors.Is(err, ErrNoSnapshot) {
 			t.Errorf("turn %d: err = %v, want ErrNoSnapshot", turn, err)
 		}
 	}
 
-	// A past turn with only markers after it runs to the working tree.
-	if _, err := MarkMissing(ctx, dir, sessA); err != nil {
+	live := diffOK(t, e, TurnSource{Worktree: dir, Session: sessA, Turn: 3})
+	if !live.Live || live.Turn != 3 {
+		t.Errorf("Live=%v Turn=%d, want turn 3 live", live.Live, live.Turn)
+	}
+
+	// A marker after it makes turn 3 a past turn with no end.
+	if _, err := MarkMissing(ctx, dir, sessA, 0, false); err != nil {
 		t.Fatal(err)
 	}
 
-	live := diffOK(t, e, TurnSource{Worktree: dir, Session: sessA, Turn: 3})
-	if !live.Live || live.Turn != 3 || live.Through != 4 {
-		t.Errorf("Live=%v Turn=%d Through=%d, want live through turn 4", live.Live, live.Turn, live.Through)
+	for _, turn := range []int{0, 3} {
+		if _, err := e.Diff(ctx, TurnSource{Worktree: dir, Session: sessA, Turn: turn}); !errors.Is(err, ErrNoSnapshot) {
+			t.Errorf("turn %d: err = %v, want ErrNoSnapshot", turn, err)
+		}
 	}
 
-	if _, err := e.Diff(ctx, TurnSource{Worktree: dir, Session: sessA}); !errors.Is(err, ErrNoSnapshot) {
-		t.Errorf("latest turn is a marker: err = %v, want ErrNoSnapshot", err)
+	// An end marker leaves the turn without a snapshot too.
+	dir = turnRepo(t)
+	if _, err := MarkMissing(ctx, dir, sessA, 1, true); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := e.Diff(ctx, TurnSource{Worktree: dir, Session: sessA, Turn: 1}); !errors.Is(err, ErrNoSnapshot) {
+		t.Errorf("end marker: err = %v, want ErrNoSnapshot", err)
 	}
 }
 
@@ -1421,5 +1428,35 @@ func TestDiffIgnoresUserDiffConfig(t *testing.T) {
 
 	if _, err := os.Stat(mark); err == nil {
 		t.Error("diff.external ran")
+	}
+}
+
+func TestPastTurnStaysInItsWorktree(t *testing.T) {
+	t.Parallel()
+	dir := seedRepo(t)
+	b := linkedWorktree(t, dir, "b")
+
+	writeFile(t, dir, "a.txt", "a\nonly in main\n")
+	snap(t, dir, sessA, SnapshotOptions{})
+	snap(t, b, sessA, SnapshotOptions{})
+	writeFile(t, b, "b-only.txt", "b\n")
+
+	e := testEngine(t)
+
+	for name, wt := range map[string]string{"b": b, "main": dir} {
+		res, err := e.Diff(context.Background(), TurnSource{Worktree: wt, Session: sessA, Turn: 1})
+		if err != nil {
+			if !errors.Is(err, ErrNoSnapshot) {
+				t.Fatalf("%s: %v", name, err)
+			}
+
+			continue
+		}
+
+		for _, f := range res.Files {
+			if f.Path == "a.txt" {
+				t.Errorf("%s: turn 1 shows a.txt, which belongs to the other worktree's state", name)
+			}
+		}
 	}
 }

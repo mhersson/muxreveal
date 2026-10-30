@@ -227,27 +227,26 @@ func TestEditNotCounted(t *testing.T) {
 func TestEditSamePathResolvesOnce(t *testing.T) {
 	t.Parallel()
 
-	r := newHookEditRig(t, map[string]git.Place{"/w/b/x.go": placeAt("/w/b")}, nil)
-
-	// The tool runs between the two hooks, so the first answer is in by the second.
-	r.deliver(r.hook(r.event("PreToolUse", "/w/b/x.go")))
-
-	first, _ := r.pane().Followed()
-
-	post := r.hook(r.event("PostToolUse", "/w/b/x.go"))
-	if got := r.res.count(); got != 1 {
-		t.Fatalf("resolver ran %d times by the PostToolUse, want 1", got)
+	tests := []struct{ name, file string }{
+		{"a counted path", "a.txt"},
+		{"an ignored path", "ledger.log"},
 	}
 
-	r.deliver(post)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 
-	if got := r.res.count(); got != 1 {
-		t.Errorf("resolver ran %d times, want 1", got)
-	}
+			r := newFollowRig(t, "")
+			path := filepath.Join(r.dirA, tt.file)
 
-	e, ok := r.pane().Followed()
-	if !ok || len(r.pane().Edits) != 1 || e.Root != "/w/b" || e.Seq != first.Seq+1 {
-		t.Errorf("Followed() = %+v, %v with %d entries, want /w/b with Seq %d", e, ok, len(r.pane().Edits), first.Seq+1)
+			// The tool runs between the two hooks, so the first answer is in by the second.
+			r.hookNow(harness.Event{Pane: r.id, Name: "PreToolUse", Edit: path, Before: true})
+			r.hookNow(r.editHook(path))
+
+			if got := r.resolverCalls(); got != 1 {
+				t.Errorf("resolver ran %d times for a PreToolUse and a PostToolUse, want 1", got)
+			}
+		})
 	}
 }
 
@@ -288,62 +287,6 @@ func TestEditAfterSessionChange(t *testing.T) {
 	if got := r.roots(); !slices.Equal(got, []string{"/w/c"}) {
 		t.Errorf("edited places = %v after an edit in the new session, want /w/c", got)
 	}
-}
-
-func TestEditCacheFollowsThePane(t *testing.T) {
-	t.Parallel()
-
-	places := map[string]git.Place{"/w/b/x.go": placeAt("/w/b")}
-
-	t.Run("becomes a shell", func(t *testing.T) {
-		t.Parallel()
-
-		r := newHookEditRig(t, places, nil)
-		r.deliver(r.hook(r.event("PostToolUse", "/w/b/x.go")))
-
-		if len(r.edits.last) != 1 {
-			t.Fatalf("cache = %v, want the place just resolved", r.edits.last)
-		}
-
-		openIn(t, r.App, core.SetPaneKind{ID: r.id, Kind: core.KindShell})
-		r.Update(struct{}{})
-
-		if len(r.edits.last) != 0 {
-			t.Errorf("cache = %v, want none for a shell", r.edits.last)
-		}
-	})
-
-	t.Run("closes", func(t *testing.T) {
-		t.Parallel()
-
-		r := newHookEditRig(t, places, nil)
-		r.deliver(r.hook(r.event("PostToolUse", "/w/b/x.go")))
-
-		if len(r.edits.last) != 1 {
-			t.Fatalf("cache = %v, want the place just resolved", r.edits.last)
-		}
-
-		r.closePane(r.id)
-		r.Update(struct{}{})
-
-		if len(r.edits.last) != 0 {
-			t.Errorf("cache = %v, want none for a closed pane", r.edits.last)
-		}
-	})
-
-	t.Run("an answer for a closed pane", func(t *testing.T) {
-		t.Parallel()
-
-		r := newHookEditRig(t, places, nil)
-		cmd := r.hook(r.event("PostToolUse", "/w/b/x.go"))
-
-		r.closePane(r.id)
-		r.deliver(cmd)
-
-		if len(r.edits.last) != 0 {
-			t.Errorf("cache = %v, want none: the pane is gone", r.edits.last)
-		}
-	})
 }
 
 func TestSubagentCwdKeepsOwnDirectory(t *testing.T) {

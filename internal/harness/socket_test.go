@@ -638,3 +638,50 @@ func TestServerStampsTheTurnDeadline(t *testing.T) {
 
 	<-res
 }
+
+func TestServerHoldsAnEditBeforeItsTool(t *testing.T) {
+	t.Parallel()
+
+	const budget = 1400 * time.Millisecond
+
+	s := startBudgetServer(t, 30*time.Second, budget)
+
+	res := sendAsync(s.path, Event{Pane: "p", Name: "PreToolUse", Edit: "/r/a.go", Before: true})
+	ev := recv(t, s.out)
+
+	if ev.Done == nil || ev.Deadline.IsZero() {
+		t.Fatalf("held edit has Done %v and Deadline %v", ev.Done != nil, ev.Deadline)
+	}
+
+	// The hold is far longer than the test, so an answer now would not be the hold's.
+	select {
+	case r := <-res:
+		t.Fatalf("answered before Done: %+v", r)
+	default:
+	}
+
+	ev.Done()
+
+	select {
+	case r := <-res:
+		if r.err != nil {
+			t.Errorf("Send() = %v, want ok", r.err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("no answer after Done")
+	}
+
+	res = sendAsync(s.path, Event{Pane: "p", Name: "PostToolUse", Edit: "/r/a.go"})
+	if post := recv(t, s.out); post.Done != nil {
+		t.Error("PostToolUse edit has Done")
+	}
+
+	select {
+	case r := <-res:
+		if r.err != nil {
+			t.Errorf("Send() = %v, want ok", r.err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("PostToolUse edit was held")
+	}
+}
