@@ -935,6 +935,12 @@ The UI maps roles to theme colours by the table below (`mdPainter`), then adds t
 | `RoleFootnoteNumber` | `Info` | | footnote numbers |
 | `RoleFootnoteText` | `Dim` | | footnote text |
 
+#### Markdown on screen
+
+A markdown doc on screen is an `mdDoc` under an `mdView`. Parsing and tokenising the code run off the update loop in a `tea.Cmd`, because `md.Parse` recurses per nesting level: `parseMarkdown` lays the doc out once at width 100 with every fold open and tokenises each code block once, folded ones included, through `diffview.Highlighter.HighlightLang`, at most 20,000 code lines a doc (later blocks stay plain). Layout runs on the loop and is cached until the width, the icons or a fold changes; its highlighter only reads the spans kept at parse, which index the code as written and so hold at every width.
+
+The view's rows are `w` cells wide: cell 0 holds `▎` in `Accent` on the cursor's line (on `Accent` mixed into the ground, as the review drawer tints its cursor row), cell 1 is blank, and the text starts at cell 2, laid out at `w - 4`, so two cells stay free on the right. An unfocused view draws no cursor.
+
 ### Config
 
 The config file is `$XDG_CONFIG_HOME/muxreveal/config.toml` when `XDG_CONFIG_HOME` is set to an absolute path, else `~/.config/muxreveal/config.toml`, the same on Linux and macOS. `--config <path>` overrides it.
