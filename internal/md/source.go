@@ -67,13 +67,11 @@ func (d *Doc) blankLine(line int, quoted bool) bool {
 	return len(bytes.Trim(d.src[d.starts[line-1]:end], cut)) == 0
 }
 
-// inQuote reports whether n is a quote or alert, or sits inside one.
-func inQuote(n ast.Node) bool {
-	for ; n != nil; n = n.Parent() {
-		switch n.(type) {
-		case *ast.Blockquote, *alertNode:
-			return true
-		}
+// quoteHolder reports whether n is a quote or alert.
+func quoteHolder(n ast.Node) bool {
+	switch n.(type) {
+	case *ast.Blockquote, *alertNode:
+		return true
 	}
 
 	return false
@@ -153,6 +151,11 @@ func (d *Doc) indexRanges() {
 	root := SourceRange{First: 1, Last: d.trimBlank(1, len(d.starts), false)}
 	d.ranges[d.root] = root
 
+	// Whether a block sits in a quote is carried down from its parent: only
+	// the blocks that hold blocks can be a parent, and a walk up per node costs
+	// the square of the depth.
+	quoted := map[ast.Node]bool{}
+
 	walkTree(d.root, func(n ast.Node) bool {
 		if n == d.root {
 			return true
@@ -180,7 +183,14 @@ func (d *Doc) indexRanges() {
 			}
 		}
 
-		d.ranges[n] = SourceRange{First: first, Last: d.trimBlank(first, last, inQuote(n))}
+		d.quoteSteps++
+
+		q := quoted[n.Parent()] || quoteHolder(n)
+		if q {
+			quoted[n] = true
+		}
+
+		d.ranges[n] = SourceRange{First: first, Last: d.trimBlank(first, last, q)}
 
 		return holdsBlocks(n)
 	})

@@ -37,6 +37,8 @@ type Doc struct {
 	starts    []int                    // the byte offset each source line starts at
 	at        map[ast.Node]int         // the source line of a node md made
 	ranges    map[ast.Node]SourceRange // the source lines of each block
+
+	quoteSteps int // the nodes looked at to find which blocks sit in a quote
 }
 
 // noteIndex is what the footnote section needs from the tree, found once at
