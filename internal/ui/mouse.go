@@ -367,7 +367,7 @@ func (a *App) handleRelease(msg tea.MouseReleaseMsg) tea.Cmd {
 			a.dropRedrawnSelection(p)
 		}
 
-		return nil
+		return a.clip.copyPrimary(a.selectedText())
 	}
 
 	if !pr.tracking {

@@ -194,6 +194,65 @@ func TestClipboardCopy(t *testing.T) {
 	}
 }
 
+func TestClipboardCopyPrimary(t *testing.T) {
+	t.Parallel()
+
+	const text = "hello"
+
+	prim := tea.SetPrimaryClipboard(text)()
+	wayland := map[string]string{"WAYLAND_DISPLAY": "w"}
+	both := clipboardConfig{true, true}
+	wlPrimary := []runCall{{[]string{"wl-copy", "--primary"}, text}}
+
+	tests := []struct {
+		name      string
+		cfg       clipboardConfig
+		env       map[string]string
+		goos      string
+		text      string
+		wantMsgs  []tea.Msg
+		wantCalls []runCall
+		wantLast  string
+	}{
+		{"wayland", both, wayland, "linux", text, []tea.Msg{prim, nil}, wlPrimary, text},
+		{
+			"x11", both,
+			map[string]string{"DISPLAY": ":0"},
+			"linux", text,
+			[]tea.Msg{prim, nil},
+			[]runCall{{[]string{"xclip", "-selection", "primary"}, text}},
+			text,
+		},
+		{"darwin", both, nil, "darwin", text, nil, nil, text},
+		{"ssh on linux", both, map[string]string{"SSH_CONNECTION": "x", "WAYLAND_DISPLAY": "w"}, "linux", text, []tea.Msg{prim}, nil, text},
+		{"native off", clipboardConfig{true, false}, wayland, "linux", text, []tea.Msg{prim}, nil, text},
+		{"osc52 off", clipboardConfig{false, true}, wayland, "linux", text, []tea.Msg{nil}, wlPrimary, text},
+		{"empty text", both, wayland, "linux", "", nil, nil, "old"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			fr := &fakeRun{}
+			c, _ := newTestClipboard(tt.cfg, tt.env, tt.goos, fr.run)
+			c.last = "old"
+
+			cmd := c.copyPrimary(tt.text)
+			if got := flatten(cmd); !reflect.DeepEqual(got, tt.wantMsgs) {
+				t.Fatalf("msgs = %#v, want %#v", got, tt.wantMsgs)
+			}
+
+			if !reflect.DeepEqual(fr.calls, tt.wantCalls) {
+				t.Fatalf("calls = %v, want %v", fr.calls, tt.wantCalls)
+			}
+
+			if c.last != tt.wantLast {
+				t.Fatalf("last = %q, want %q", c.last, tt.wantLast)
+			}
+		})
+	}
+}
+
 func TestClipboardNativeTimeout(t *testing.T) {
 	t.Parallel()
 

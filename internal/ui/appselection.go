@@ -164,16 +164,16 @@ func (a *App) dropRedrawnSelection(p *pane) {
 	}
 }
 
-// copySelection implements copy.selection; the selection stays.
-func (a *App) copySelection() tea.Cmd {
+// selectedText is the text of the selection, "" when none or its pane is gone.
+func (a *App) selectedText() string {
 	s := a.sel
 	if s == nil {
-		return nil
+		return ""
 	}
 
 	p := a.panes[s.pane]
 	if p == nil {
-		return nil
+		return ""
 	}
 
 	var text string
@@ -184,7 +184,12 @@ func (a *App) copySelection() tea.Cmd {
 		}
 	})
 
-	return a.clip.copy(text)
+	return text
+}
+
+// copySelection implements copy.selection; the selection stays.
+func (a *App) copySelection() tea.Cmd {
+	return a.clip.copy(a.selectedText())
 }
 
 // inView expresses the selection in rows relative to base, the stable row of

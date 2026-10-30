@@ -162,6 +162,29 @@ func TestMiddleClickOverSSHPastesTheLastCopy(t *testing.T) {
 	}
 }
 
+func TestMiddleClickPastesTheSelectionOverSSH(t *testing.T) {
+	t.Parallel()
+
+	a, procs, f := shellsWith(t, sampleText, "")
+	a.clip.getenv = envFrom(map[string]string{"SSH_CONNECTION": "x", "WAYLAND_DISPLAY": "w"})
+	a.copyOnSelect = false
+
+	c := contentRectOf(a, "p1")
+	dragRun(a, c.X, c.Y, c.X+4, c.Y, 0)
+
+	c2 := contentRectOf(a, "p2")
+	middleRun(a, c2.X+1, c2.Y+1, 0)
+
+	eventually(t, "paste", func() bool { return strings.Contains(procs["p2"].sent(), "hello") })
+
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	if len(f.calls) != 0 {
+		t.Fatalf("native calls %v, want none", f.calls)
+	}
+}
+
 func TestMiddlePasteClearsOnlyItsPaneSelection(t *testing.T) {
 	t.Parallel()
 

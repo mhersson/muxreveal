@@ -27,16 +27,52 @@ func fakeClip(a *App) *fakeRun {
 	return f
 }
 
-// copiedText is the text of the first native write, "" when none happened.
-func copiedText(f *fakeRun) string {
+// isPrimaryOnly reports whether argv writes the primary selection alone.
+func isPrimaryOnly(argv []string) bool {
+	return slices.Equal(argv, []string{"wl-copy", "--primary"}) ||
+		slices.Equal(argv, []string{"xclip", "-selection", "primary"})
+}
+
+// clipboardWrites are the stdins of the native writes to the clipboard, in order.
+func clipboardWrites(f *fakeRun) []string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	if len(f.calls) == 0 {
-		return ""
+	var out []string
+
+	for _, c := range f.calls {
+		if !isPrimaryOnly(c.argv) {
+			out = append(out, c.stdin)
+		}
 	}
 
-	return f.calls[0].stdin
+	return out
+}
+
+// primaryWrites are the stdins of the primary-only native writes, in order.
+func primaryWrites(f *fakeRun) []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	var out []string
+
+	for _, c := range f.calls {
+		if isPrimaryOnly(c.argv) {
+			out = append(out, c.stdin)
+		}
+	}
+
+	return out
+}
+
+// copiedText is the text of the first native clipboard write (primary-only
+// writes skipped), "" when none happened.
+func copiedText(f *fakeRun) string {
+	if w := clipboardWrites(f); len(w) > 0 {
+		return w[0]
+	}
+
+	return ""
 }
 
 func mdown(a *App, x, y int, b tea.MouseButton, mod tea.KeyMod) {

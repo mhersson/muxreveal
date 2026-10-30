@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"os/exec"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -35,8 +36,8 @@ type clipboard struct {
 	timeout time.Duration
 	run     func(ctx context.Context, argv []string, stdin string, stdout io.Writer) error
 
-	// last is the latest non-empty text copy was given; only the update loop
-	// touches it.
+	// last is the latest non-empty text copy or copyPrimary was given; only the
+	// update loop touches it.
 	last string
 
 	mu      sync.Mutex
@@ -55,9 +56,15 @@ func newClipboard(cfg clipboardConfig, getenv func(string) string, goos string, 
 	}
 }
 
-// copy returns a Cmd that sends text to the clipboard, or nil when there is
-// nothing to send.
-func (c *clipboard) copy(text string) tea.Cmd {
+// copy returns a Cmd that sends text to the clipboard and the primary
+// selection, or nil when there is nothing to send.
+func (c *clipboard) copy(text string) tea.Cmd { return c.send(text, false) }
+
+// copyPrimary is copy for the primary selection alone. macOS has none, so
+// there it only records text as the last copy.
+func (c *clipboard) copyPrimary(text string) tea.Cmd { return c.send(text, true) }
+
+func (c *clipboard) send(text string, primaryOnly bool) tea.Cmd {
 	if text == "" {
 		return nil
 	}
@@ -65,15 +72,24 @@ func (c *clipboard) copy(text string) tea.Cmd {
 	c.last = text
 
 	var cmds []tea.Cmd
+
 	if c.cfg.OSC52 {
-		cmds = append(cmds, tea.SetClipboard(text))
+		if !primaryOnly {
+			cmds = append(cmds, tea.SetClipboard(text))
+		}
+
 		if c.goos == "linux" {
 			cmds = append(cmds, tea.SetPrimaryClipboard(text))
 		}
 	}
 
 	if c.cfg.Native {
-		if argvs := nativeCommands(c.getenv, c.goos); len(argvs) > 0 {
+		argvs := nativeCommands(c.getenv, c.goos)
+		if primaryOnly {
+			argvs = slices.DeleteFunc(argvs, func(argv []string) bool { return !writesPrimary(argv) })
+		}
+
+		if len(argvs) > 0 {
 			cmds = append(cmds, func() tea.Msg {
 				c.writeNative(argvs, text)
 
@@ -83,6 +99,11 @@ func (c *clipboard) copy(text string) tea.Cmd {
 	}
 
 	return tea.Batch(cmds...)
+}
+
+// writesPrimary reports whether a nativeCommands argv writes the primary selection.
+func writesPrimary(argv []string) bool {
+	return argv[len(argv)-1] == "--primary" || argv[len(argv)-1] == "primary"
 }
 
 func (c *clipboard) writeNative(argvs [][]string, text string) {
