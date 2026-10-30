@@ -48,5 +48,5 @@
 │                                                                                                   │   7   8       "s": "pane.split.down",                                                            │
 │                                                                                                   │   8   9       "v": "pane.split.right",                                                           │
 │                                                                                                   │  A internal/ui/review_test.go                                        ! hidden characters  +11 -0 │
-│                                                                                                   │ j/k line   ]/[ hunk   space reviewed   R show reviewed   }/{ file   tab tree   w worktree        │
+│                                                                                                   │ j/k line   ]/[ hunk   }/{ file   tab tree   w worktree   f full   u split   e edit   / search    │
 ╰───────────────────────────────────────────────────────────────────────────────────────────────────╰──────────────────────────────────────────────────────────────────────────────────────────────────╯

@@ -36,5 +36,5 @@
 │  @@ -3,6 +3,7 @@                     │
 │   3   3   // defaultLeader maps the …│
 │   4   4   var defaultLeader = map[st…│
-│ j/k line   ]/[ hunk   space reviewed │
+│ j/k line   ]/[ hunk   }/{ file       │
 ╰──────────────────────────────────────╯

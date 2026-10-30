@@ -647,7 +647,6 @@ func (d *drawCtx) hintRuns(cw int) []railRun {
 	pairs := [][2]string{
 		pair("line", next, prev),
 		pair("hunk", "review.hunk.next", "review.hunk.prev"),
-		pair("reviewed", "review.mark"), d.showReadPair(pair),
 		pair("file", "review.file.next", "review.file.prev"),
 		pair("tree", "review.tree"),
 		pair("worktree", "review.worktrees"),
@@ -660,6 +659,8 @@ func (d *drawCtx) hintRuns(cw int) []railRun {
 	pairs = append(pairs,
 		pair("full", "review.full"),
 		pair("split", "review.split"),
+		pair("edit", "review.edit"), pair("search", "review.search"),
+		pair("reviewed", "review.mark"), d.showReadPair(pair),
 		pair("mode", "review.mode.branch", "review.mode.turn"),
 	)
 
@@ -667,14 +668,13 @@ func (d *drawCtx) hintRuns(cw int) []railRun {
 		pairs = append(pairs, pair("turn", "review.turn.prev", "review.turn.next"))
 	}
 
-	pairs = append(pairs, pair("edit", "review.edit"), pair("search", "review.search"))
-
 	if _, ok := d.v.src.(git.PRSource); ok {
 		pairs = [][2]string{
 			pair("line", next, prev), pair("hunk", "review.hunk.next", "review.hunk.prev"),
-			pair("reviewed", "review.mark"), d.showReadPair(pair),
 			pair("checks", "review.checks"), pair("approve", "review.approve"), pair("merge", "review.merge"),
-			pair("browser", "review.browser"), pair("mode", "review.mode.branch", "review.mode.turn"),
+			pair("browser", "review.browser"),
+			pair("reviewed", "review.mark"), d.showReadPair(pair),
+			pair("mode", "review.mode.branch", "review.mode.turn"),
 		}
 	}
 

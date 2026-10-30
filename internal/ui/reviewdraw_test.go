@@ -740,7 +740,7 @@ func TestDrawerKeyHints(t *testing.T) {
 	t.Parallel()
 
 	const (
-		diffHints = "j/k line   ]/[ hunk   space reviewed   R show reviewed   }/{ file   tab tree   w worktree   f full   u split   b/t mode   ,/. turn   e edit   / search"
+		diffHints = "j/k line   ]/[ hunk   }/{ file   tab tree   w worktree   f full   u split   e edit   / search   space reviewed   R show reviewed   b/t mode   ,/. turn"
 		treeHints = "j/k file   enter jump   tab hide   esc back"
 	)
 
@@ -780,11 +780,11 @@ func TestDrawerTurnHintShowsOnlyForTurns(t *testing.T) {
 	t.Parallel()
 
 	const (
-		head     = "j/k line   ]/[ hunk   space reviewed   R show reviewed   }/{ file   tab tree   w worktree   f full   u split   b/t mode"
-		viaTurn  = head + "   ,/. turn"
-		viaEdit  = head + "   e edit"
-		wideTurn = viaTurn + "   e edit   / search"
-		wideEdit = viaEdit + "   / search"
+		head     = "j/k line   ]/[ hunk   }/{ file   tab tree   w worktree   f full   u split   e edit   / search   space reviewed   R show reviewed   b/t mode"
+		wideTurn = head + "   ,/. turn"
+		wideEdit = head
+		viaTurn  = "w worktree   f full   u split   e edit   / search   space reviewed   R show reviewed"
+		viaEdit  = viaTurn
 	)
 
 	// A turn-mode drawer that shows the branch while core keeps turn mode.

@@ -506,7 +506,7 @@ func TestPRModeHints(t *testing.T) {
 	r.opened(t)
 
 	branch := r.drawn(t)
-	if !strings.Contains(branch, "j/k line   ]/[ hunk   space reviewed   R show reviewed   }/{ file   tab tree") {
+	if !strings.Contains(branch, "j/k line   ]/[ hunk   }/{ file   tab tree") {
 		t.Errorf("branch mode hints changed:\n%s", branch)
 	}
 
@@ -514,7 +514,7 @@ func TestPRModeHints(t *testing.T) {
 	r.until(t, "PR mode", r.inPRMode(7))
 
 	text := r.drawn(t)
-	if !strings.Contains(text, "j/k line   ]/[ hunk   space reviewed   R show reviewed   c checks   a approve   M merge   O browser   b/t mode") {
+	if !strings.Contains(text, "j/k line   ]/[ hunk   c checks   a approve   M merge   O browser   space reviewed   R show reviewed   b/t mode") {
 		t.Errorf("PR mode hints missing j/k line, ]/[ hunk, the mark pairs, c checks, a approve, M merge, O browser, b/t mode:\n%s", text)
 	}
 

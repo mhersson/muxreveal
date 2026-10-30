@@ -48,5 +48,5 @@
 │                                                                                                   │       3 + import "testing"                                                                       │
 │                                                                                                   │       4 +                                                                                        │
 │                                                                                                   │       5 + func TestReviewTitle(t *testing.T) {                                                   │
-│                                                                                                   │ j/k line   ]/[ hunk   space reviewed   R show reviewed   }/{ file   tab tree   w worktree        │
+│                                                                                                   │ j/k line   ]/[ hunk   }/{ file   tab tree   w worktree   f full   u split   e edit   / search    │
 ╰───────────────────────────────────────────────────────────────────────────────────────────────────╰──────────────────────────────────────────────────────────────────────────────────────────────────╯

@@ -265,8 +265,8 @@ func TestReviewHintsReviewed(t *testing.T) {
 	t.Parallel()
 
 	const (
-		diff = "j/k line   ]/[ hunk   space reviewed   R show reviewed   }/{ file   tab tree"
-		pr   = "j/k line   ]/[ hunk   space reviewed   R show reviewed   c checks"
+		diff = "j/k line   ]/[ hunk   }/{ file   tab tree   w worktree   f full   u split   e edit   / search   space reviewed   R show reviewed   b/t mode"
+		pr   = "j/k line   ]/[ hunk   c checks   a approve   M merge   O browser   space reviewed   R show reviewed   b/t mode"
 	)
 
 	hintRow := func(a *App) string {
@@ -290,31 +290,31 @@ func TestReviewHintsReviewed(t *testing.T) {
 	}{
 		{"diff", func() reviewScene {
 			s := markedScene(hunksUpTo(1))
-			s.w, s.h = 200, 52
+			s.w, s.h = 312, 52
 
 			return s
 		}, diff},
 		{"R on", func() reviewScene {
 			s := markedScene(hunksUpTo(1))
-			s.w, s.h = 200, 52
+			s.w, s.h = 312, 52
 			s.tune = withMarked(hunksUpTo(1), func(t *testing.T, a *App, v *reviewView) { v.showRead = true })
 
 			return s
-		}, "j/k line   ]/[ hunk   space reviewed   R unread only   }/{ file"},
+		}, "j/k line   ]/[ hunk   }/{ file   tab tree   w worktree   f full   u split   e edit   / search   space reviewed   R unread only   b/t mode"},
 		{"pr", func() reviewScene {
 			s := markedScene(hunksUpTo(1))
-			s.w, s.h, s.branch = 200, 52, true
+			s.w, s.h, s.branch = 312, 52, true
 			s.tune = withMarked(hunksUpTo(1), func(t *testing.T, a *App, v *reviewView) { v.src = git.PRSource{Worktree: "/w/p1", Number: 7} })
 
 			return s
 		}, pr},
 		{"remapped", func() reviewScene {
 			s := markedScene(hunksUpTo(1))
-			s.w, s.h = 200, 52
+			s.w, s.h = 312, 52
 			s.keys = core.KeysConfig{Drawer: map[string]string{"m": "review.mark", "space": "none"}}
 
 			return s
-		}, "j/k line   ]/[ hunk   m reviewed   R show reviewed   }/{ file"},
+		}, "j/k line   ]/[ hunk   }/{ file   tab tree   w worktree   f full   u split   e edit   / search   m reviewed   R show reviewed   b/t mode"},
 	}
 
 	for _, tt := range tests {

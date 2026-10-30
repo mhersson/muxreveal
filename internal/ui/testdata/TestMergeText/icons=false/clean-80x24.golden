@@ -20,5 +20,5 @@
 ││                                                                            ││
 ││  s/m/r method    d delete branch    enter merge    esc cancel              ││
 │╰────────────────────────────────────────────────────────────────────────────╯│
-│                   │ j/k line   ]/[ hunk   space reviewed   R show reviewed   │
+│                   │ j/k line   ]/[ hunk   c checks   a approve   M merge     │
 ╰───────────────────╰──────────────────────────────────────────────────────────╯

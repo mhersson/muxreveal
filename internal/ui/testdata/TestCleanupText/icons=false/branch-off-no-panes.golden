@@ -36,5 +36,5 @@
 │                                                           │  47  48       if r, ok := a.reviews[agent]; ok {         │
 │                                                           │  48  49           return a.focus(r.pane)                 │
 │                                                           │  R internal/ui/keys.go → internal/ui/keymap.go     +1 -0 │
-│                                                           │ j/k line   ]/[ hunk   space reviewed   R show reviewed   │
+│                                                           │ j/k line   ]/[ hunk   c checks   a approve   M merge     │
 ╰───────────────────────────────────────────────────────────╰──────────────────────────────────────────────────────────╯
