@@ -73,17 +73,21 @@ func TestPaletteListsEveryCommand(t *testing.T) {
 	}
 
 	// Scoped commands act on one view and are not listed.
-	var want []string
+	var (
+		want   []string
+		listed []command
+	)
 
 	for _, c := range a.reg.all() {
 		if c.scope == "" {
 			want = append(want, c.id)
+			listed = append(listed, c)
 		}
 	}
 
 	view := ansi.Strip(a.View().Content)
 	// The list scrolls past one page; the first page shows in registration order.
-	for _, c := range a.reg.all()[:min(len(want), palette.MaxRows)] {
+	for _, c := range listed[:min(len(listed), palette.MaxRows)] {
 		if !strings.Contains(view, c.title) {
 			t.Errorf("palette view lacks command %q (%s)", c.title, c.id)
 		}

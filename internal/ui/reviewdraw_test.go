@@ -740,12 +740,12 @@ func TestDrawerKeyHints(t *testing.T) {
 	t.Parallel()
 
 	const (
-		diffHints = "j/k line   ]/[ hunk   space reviewed   R show reviewed   }/{ file   tab tree   w worktree   f full   u split"
+		diffHints = "j/k line   ]/[ hunk   space reviewed   R show reviewed   }/{ file   tab tree   w worktree   f full   u split   b/t mode   ,/. turn   e edit   / search"
 		treeHints = "j/k file   enter jump   tab hide   esc back"
 	)
 
 	build := func(h int, tree, keys bool) string {
-		s := reviewScene{theme: "catppuccin-mocha", icons: false, w: 240, h: h, res: turn4Result(), turn: 4, turns: 4, focused: true, tree: tree}
+		s := reviewScene{theme: "catppuccin-mocha", icons: false, w: 312, h: h, res: turn4Result(), turn: 4, turns: 4, focused: true, tree: tree}
 		s.tune = func(t *testing.T, a *App, v *reviewView) { a.drawer.tree = keys }
 
 		return ansi.Strip(s.build(t).View().Content)

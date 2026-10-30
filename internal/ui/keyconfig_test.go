@@ -641,7 +641,7 @@ func TestDrawerHintsFollowBindings(t *testing.T) {
 	t.Parallel()
 
 	const (
-		diffHints = "j/k line   ]/[ hunk   space reviewed   R show reviewed   }/{ file   tab tree   w worktree   f full   u split"
+		diffHints = "j/k line   ]/[ hunk   space reviewed   R show reviewed   }/{ file   tab tree   w worktree   f full   u split   b/t mode   ,/. turn   e edit   / search"
 		treeHints = "j/k file   enter jump   tab hide   esc back"
 		prHints   = "j/k line   ]/[ hunk   space reviewed   R show reviewed   c checks   a approve   M merge   O browser   b/t mode"
 	)
@@ -669,7 +669,7 @@ func TestDrawerHintsFollowBindings(t *testing.T) {
 			t.Parallel()
 
 			s := reviewScene{
-				theme: "catppuccin-mocha", w: 240, h: 52, res: turn4Result(), turn: 4, turns: 4,
+				theme: "catppuccin-mocha", w: 312, h: 52, res: turn4Result(), turn: 4, turns: 4,
 				focused: true, tree: tt.key, keys: tt.cfg,
 			}
 			s.tune = func(t *testing.T, a *App, v *reviewView) {

@@ -3,10 +3,12 @@ package ui
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"maps"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -555,6 +557,40 @@ func TestReviewMarksAcrossWorktrees(t *testing.T) {
 	}
 }
 
+// A hunk marked in another worktree of the repository is also hidden in PR
+// mode, where the main checkout's drawer shows the pull request's diff.
+func TestReviewMarksInPRMode(t *testing.T) {
+	t.Parallel()
+
+	dir := prFeatureRepo(t)
+	fm := &fakeMarks{}
+	r := newPRDrawerOn(t, dir, withMarks(fm))
+
+	// The mark is for the pull request's a.txt hunk, which the branch drawer does not show.
+	a := git.Hunk{Lines: []git.Line{{Kind: git.Del, Text: "a"}, {Kind: git.Add, Text: "a changed"}}}
+	fm.set(commonOf(t, dir), git.HunkID("a.txt", a), marksToday)
+
+	r.poll()
+	r.opened(t)
+	r.typed("p")
+	r.until(t, "PR mode", r.inPRMode(7))
+
+	pv := r.view()
+
+	marked, other := slices.Index(viewPaths(pv), "a.txt"), slices.Index(viewPaths(pv), "new.txt")
+	if marked < 0 || other < 0 {
+		t.Fatalf("PR mode shows %v, want a.txt and new.txt", viewPaths(pv))
+	}
+
+	if pv.rowOfHunkHeader(marked, 0) >= 0 || !pv.rows[pv.rowOfFileHeader(marked)].read {
+		t.Errorf("a.txt's marked hunk shows in PR mode")
+	}
+
+	if pv.rowOfHunkHeader(other, 0) < 0 {
+		t.Errorf("new.txt's unmarked hunk is hidden in PR mode")
+	}
+}
+
 func TestReviewMarksLive(t *testing.T) {
 	t.Parallel()
 
@@ -678,7 +714,7 @@ func TestReviewMarksBadFile(t *testing.T) {
 	fm := &fakeMarks{err: errors.New("marks file unreadable")}
 	dir := marksRepo(t)
 
-	r, v := newMarksRig(t, dir, fm, func(o *Options) { o.Logger = slog.New(slog.NewTextHandler(logs, nil)) })
+	r, v := newMarksRig(t, dir, fm, func(o *Options) { o.Logger = slog.New(slog.NewJSONHandler(logs, nil)) })
 
 	if v.countRows(rowHunk) != 6 {
 		t.Fatalf("the drawer shows %d hunks, want 6", v.countRows(rowHunk))
@@ -689,8 +725,25 @@ func TestReviewMarksBadFile(t *testing.T) {
 	r.keys(keyRune('r'))
 	r.idle(t)
 
-	if got := strings.Count(logs.String(), "marks file unreadable"); got != 1 {
-		t.Errorf("the error was logged %d times, want once:\n%s", got, logs.String())
+	common := commonOf(t, dir)
+	warned := 0
+
+	for line := range strings.SplitSeq(strings.TrimSpace(logs.String()), "\n") {
+		var rec struct {
+			Level string `json:"level"`
+			Repo  string `json:"repo"`
+		}
+		if err := json.Unmarshal([]byte(line), &rec); err != nil {
+			t.Fatalf("log line %q: %v", line, err)
+		}
+
+		if rec.Level == slog.LevelWarn.String() && rec.Repo == common {
+			warned++
+		}
+	}
+
+	if warned != 1 {
+		t.Errorf("the marks error was logged %d times, want once:\n%s", warned, logs.String())
 	}
 
 	// The drawer keeps working: a mark still hides its hunk.
