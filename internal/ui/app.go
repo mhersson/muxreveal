@@ -67,6 +67,9 @@ type Options struct {
 	// Worktrees is the [worktrees] config: where a new worktree goes. The zero
 	// value means inside the main checkout.
 	Worktrees core.WorktreesConfig
+	// Plans is the [plans] config: the folders whose markdown files count as
+	// plans. Nil Paths records no plan files.
+	Plans core.PlansConfig
 	// Save is called with the state after every successful dispatch; nil saves nothing.
 	Save func(core.State)
 	// PRs polls the pull requests of the repositories the agents work in; nil
@@ -89,6 +92,7 @@ type App struct {
 	width, height int
 
 	reg     *registry
+	plans   core.PlansConfig // the [plans] folders; see notePlans
 	keymap  keymap
 	pending bool      // leader pressed, awaiting a key
 	prefix  string    // first key of a two-key sequence while pending; "" before it
@@ -251,6 +255,7 @@ func New(opts Options) (*App, error) {
 
 	a.drawer.cfg = opts.Diff
 	a.picker.cfg = opts.Worktrees
+	a.plans = opts.Plans
 	a.drawersOpen = anyReview(opts.Store.State())
 
 	a.runDir = opts.GitTempDir

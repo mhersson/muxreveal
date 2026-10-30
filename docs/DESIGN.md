@@ -969,6 +969,12 @@ A plan is a markdown file an agent produced: the file ExitPlanMode names (a plan
 
 - `core.Pane.Plan` holds the agent's latest plan only: `Path`, `Root` (for a plan file, the folder its `[plans] paths` entry sits under; empty for a plan-mode plan), `Kind`, `At` (when it arrived or was last rewritten) and `Unread`. A zero `Path` means none. A plan is valid when its path is absolute and clean and its kind is known, a plan file has an absolute, clean root that strictly holds its path, and a plan-mode plan has no root.
 - `NotePlan` replaces the pane's plan and is a no-op, with no error, for a closed pane or a shell; an invalid plan is an error. `ReadPlan` clears `Unread` and is a no-op when the pane has no plan.
+- The UI records plans from hook events, after the session is recorded:
+  - ExitPlanMode's `Event.Plan` is a plan-mode plan when its name is markdown; any other path records nothing.
+  - A plan file is a finished edit (`Edit` with `Before` false) or a path of a Bash `Changed` list that names a markdown file under a `[plans]` folder. It is matched on the path alone, with no git, so ignored folders count. The folder's components must appear as consecutive directory components with at least the file name after them, at any depth.
+  - The root is the directory above the last such folder in the path.
+  - A finished edit of the latest plan's own path, of either kind, is a rewrite: it keeps the kind and root and takes a new time. Only agents' edits count, not the operator's editor.
+  - Subagents count. The latest plan wins, and every plan recorded this way is unread.
 - A plan survives a change of session (`/clear`, a resume), goes when the pane becomes a shell, and is saved in `state.json` with its time and unread flag (see Persisted state).
 
 ### Config

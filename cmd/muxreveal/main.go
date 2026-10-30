@@ -189,6 +189,7 @@ func run(ctx context.Context, env core.Env, configPath, recordDir string, fresh 
 		Diff:   cfg.Diff,
 
 		Worktrees: cfg.Worktrees,
+		Plans:     cfg.Plans,
 
 		FocusFollowsMouse: cfg.Mouse.FocusFollowsMouse,
 		CopyOnSelect:      cfg.Mouse.CopyOnSelect,
