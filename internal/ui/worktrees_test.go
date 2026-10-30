@@ -429,6 +429,19 @@ func TestWorktreeListSelectsShown(t *testing.T) {
 	})
 }
 
+// A test that ends as the list opens leaves its row probes running; the rig's
+// cleanup ends them before its temporary dirs go.
+func TestFollowRigEndsItsProbesBeforeItsDirsGo(t *testing.T) {
+	t.Parallel()
+	watch := probesEndFirst(t)
+	r := newFollowRig(t, "")
+	watch(r.App)
+
+	r.open(t, r.id)
+	r.followC(t)
+	r.openList(t)
+}
+
 // The pin may name its root through a symlink; the list still opens on that
 // worktree's row.
 func TestWorktreeListSelectsPinnedThroughSymlink(t *testing.T) {
