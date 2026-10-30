@@ -13,12 +13,12 @@
 ││                                                                            ││
 ││  head a1b2c3d, the commit you reviewed; GitHub refuses if the PR moved sin…││
 ││   1 failed   no review yet   blocked by branch protection                 ││
-││  󰀪 1 check failed, 1 check running, no approval yet; enter still merges if…││
+││  󰀪 1 check failed, 1 check running, no approval yet                        ││
+││  enter still merges if GitHub allows it                                    ││
 ││                                                                            ││
 ││  method   s squash   m merge   r rebase                                    ││
 ││                                                                            ││
 ││  [x] delete feat/review-pane after merging   (the repository deletes head …││
-││                                                                            ││
 ││  s/m/r method    d delete branch    enter merge    esc cancel              ││
 │╰────────────────────────────────────────────────────────────────────────────╯│
 ╰───────────────────╰──────────────────────────────────────────────────────────╯

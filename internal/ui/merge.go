@@ -9,6 +9,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/mhersson/muxreveal/internal/core"
 	"github.com/mhersson/muxreveal/internal/github"
@@ -104,11 +105,14 @@ func (v *mergeView) deleteShown() bool {
 	return b != "" && !v.pr.CrossRepo && v.info.DefaultBranch != "" && b != v.info.DefaultBranch
 }
 
-// mergeWarning is why a merge may not be wanted: failed or running checks and a
-// missing approval, or "" when none applies. c are the checks of pr, when loaded.
-func mergeWarning(pr core.PRInfo, c *core.PRChecks) string {
-	var parts []string
+// mergeReminder is the line under the warning: what enter does regardless.
+const mergeReminder = "enter still merges if GitHub allows it"
 
+// mergeWarning is what is wrong with a merge: failed or running checks and a
+// missing approval, or "" when none applies. c are the checks of pr, when
+// loaded. Failed checks are named while the line fits fit cells (fit <= 0 has no
+// limit), else counted.
+func mergeWarning(pr core.PRInfo, c *core.PRChecks, fit int) string {
 	var names []string
 
 	if c != nil {
@@ -119,18 +123,32 @@ func mergeWarning(pr core.PRInfo, c *core.PRChecks) string {
 		}
 	}
 
+	failed := max(pr.ChecksFailed, len(names))
+
+	for named := len(names) > 0; ; named = false {
+		text := mergeWarningText(pr, names, failed, named)
+		if !named || fit <= 0 || ansi.StringWidth(text) <= fit {
+			return text
+		}
+	}
+}
+
+// mergeWarningText is mergeWarning with the failed checks named or counted.
+func mergeWarningText(pr core.PRInfo, names []string, failed int, named bool) string {
+	var parts []string
+
 	switch {
-	case len(names) > 0:
+	case named:
 		text := strings.Join(names[:min(len(names), 2)], ", ")
 		if more := len(names) - 2; more > 0 {
 			text += fmt.Sprintf(" and %d more", more)
 		}
 
 		parts = append(parts, text+" failed")
-	case pr.ChecksFailed == 1:
+	case failed == 1:
 		parts = append(parts, "1 check failed")
-	case pr.ChecksFailed > 1:
-		parts = append(parts, fmt.Sprintf("%d checks failed", pr.ChecksFailed))
+	case failed > 1:
+		parts = append(parts, fmt.Sprintf("%d checks failed", failed))
 	}
 
 	if running := pr.ChecksTotal - pr.ChecksDone; running == 1 {
@@ -147,11 +165,7 @@ func mergeWarning(pr core.PRInfo, c *core.PRChecks) string {
 		parts = append(parts, "no approval yet")
 	}
 
-	if len(parts) == 0 {
-		return ""
-	}
-
-	return strings.Join(parts, ", ") + "; enter still merges if GitHub allows it"
+	return strings.Join(parts, ", ")
 }
 
 // mergeStateWord is GitHub's merge state of a pull request into base in words.

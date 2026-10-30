@@ -11,10 +11,11 @@ import (
 )
 
 // mergeLine is one row of the merge box; a blank one goes first when the box
-// is too tall.
+// is too tall, then the hint row.
 type mergeLine struct {
 	text  string
 	blank bool
+	hint  bool
 }
 
 // repoLabel names a repository as owner/name, with its host off github.com.
@@ -84,13 +85,15 @@ func (a *App) mergeBox(lk look, w, room int) []string {
 		{text: railPainter{bg: ui.Panel}.line(status, cw)},
 	}
 
-	if warn := mergeWarning(pr, a.mergeChecks(state, v)); warn != "" {
-		mark := ""
-		if a.icons {
-			mark = iconAlert + " "
-		}
+	mark := ""
+	if a.icons {
+		mark = iconAlert + " "
+	}
 
-		lines = append(lines, mergeLine{text: run(mark+printable(warn), ui.Warning, false)})
+	if warn := mergeWarning(pr, a.mergeChecks(state, v), cw-ansi.StringWidth(mark)); warn != "" {
+		lines = append(lines,
+			mergeLine{text: run(mark+printable(warn), ui.Warning, false)},
+			mergeLine{text: run(mergeReminder, ui.Warning, false)})
 	}
 
 	lines = append(lines, mergeLine{blank: true}, mergeLine{text: a.mergeChips(v, lk)})
@@ -99,8 +102,9 @@ func (a *App) mergeBox(lk look, w, room int) []string {
 		lines = append(lines, mergeLine{blank: true}, mergeLine{text: a.mergeDelete(v, lk)})
 	}
 
-	if hints := mergeHints(v, cw, lk); hints != "" {
-		lines = append(lines, mergeLine{blank: true}, mergeLine{text: hints})
+	hints := mergeHints(v, cw, lk)
+	if hints != "" {
+		lines = append(lines, mergeLine{blank: true}, mergeLine{text: hints, hint: true})
 	}
 
 	// The frame takes two lines beyond these.
@@ -112,6 +116,11 @@ func (a *App) mergeBox(lk look, w, room int) []string {
 
 		lines = append(lines[:i], lines[i+1:]...)
 		over--
+	}
+
+	// The hint row goes whole after the blank rows.
+	if over := len(lines) + 2 - room; over > 0 && len(lines) > 0 && lines[len(lines)-1].hint {
+		lines = lines[:len(lines)-1]
 	}
 
 	out := []string{top}

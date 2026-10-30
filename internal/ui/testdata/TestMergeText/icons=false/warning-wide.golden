@@ -22,15 +22,15 @@
 │                                                           │                                                                              │                                                           │
 │                                                           │  head a1b2c3d, the commit you reviewed; GitHub refuses if the PR moved since │                                                     +4 -3 │
 │                                                           │  ci 1 failed   no review yet   blocked by branch protection                  │() tea.Cmd                                                 │
-│                                                           │  1 check failed, 1 check running, no approval yet; enter still merges if Git…│                                                           │
-│                                                           │                                                                              │ pane beside an agent, or focuses the open one.            │
-│                                                           │  method   s squash   m merge   r rebase                                      │ context.Context, agent core.PaneID) tea.Cmd {             │
-│                                                           │                                                                              │ind != core.KindAgent {                                    │
-│                                                           │  [x] delete feat/review-pane after merging   (the repository deletes head br…│                                                           │
+│                                                           │  1 check failed, 1 check running, no approval yet                            │                                                           │
+│                                                           │  enter still merges if GitHub allows it                                      │ pane beside an agent, or focuses the open one.            │
+│                                                           │                                                                              │ context.Context, agent core.PaneID) tea.Cmd {             │
+│                                                           │  method   s squash   m merge   r rebase                                      │ind != core.KindAgent {                                    │
 │                                                           │                                                                              │                                                           │
-│                                                           │  s/m/r method    d delete branch    enter merge    esc cancel                │ent)                                                       │
-│                                                           ╰──────────────────────────────────────────────────────────────────────────────╯.KindAgent {                                               │
-│                                                                                                   │▎     45 +         return a.notify("a review pane needs an agent pane")                           │
+│                                                           │  [x] delete feat/review-pane after merging   (the repository deletes head br…│                                                           │
+│                                                           │                                                                              │ent)                                                       │
+│                                                           │  s/m/r method    d delete branch    enter merge    esc cancel                │.KindAgent {                                               │
+│                                                           ╰──────────────────────────────────────────────────────────────────────────────╯eview pane needs an agent pane")                           │
 │                                                                                                   │      46 +     }                                                                                  │
 │                                                                                                   │  46  47                                                                                          │
 │                                                                                                   │  47  48       if r, ok := a.reviews[agent]; ok {                                                 │

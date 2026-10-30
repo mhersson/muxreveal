@@ -73,8 +73,6 @@ func TestDefaultMethod(t *testing.T) {
 func TestMergeWarning(t *testing.T) {
 	t.Parallel()
 
-	const tail = "; enter still merges if GitHub allows it"
-
 	checks := func(names ...string) *core.PRChecks {
 		c := &core.PRChecks{Number: 7}
 		for _, n := range names {
@@ -90,24 +88,27 @@ func TestMergeWarning(t *testing.T) {
 		name string
 		pr   core.PRInfo
 		c    *core.PRChecks
+		fit  int
 		want string
 	}{
-		{"failed with one name", core.PRInfo{ReviewDecision: "APPROVED", ChecksTotal: 4, ChecksDone: 4, ChecksFailed: 1}, checks("lint"), "lint failed" + tail},
-		{"failed with two names", core.PRInfo{ReviewDecision: "APPROVED", ChecksTotal: 4, ChecksDone: 4, ChecksFailed: 2}, checks("lint", "test"), "lint, test failed" + tail},
-		{"failed with more names", core.PRInfo{ReviewDecision: "APPROVED", ChecksTotal: 5, ChecksDone: 5, ChecksFailed: 3}, checks("a", "b", "c"), "a, b and 1 more failed" + tail},
-		{"failed before names load", core.PRInfo{ReviewDecision: "APPROVED", ChecksTotal: 4, ChecksDone: 4, ChecksFailed: 2}, nil, "2 checks failed" + tail},
-		{"running", core.PRInfo{ReviewDecision: "APPROVED", ChecksTotal: 4, ChecksDone: 2}, nil, "2 checks running" + tail},
-		{"changes requested", core.PRInfo{ReviewDecision: "CHANGES_REQUESTED", ChecksTotal: 4, ChecksDone: 4}, nil, "changes were requested" + tail},
-		{"no approval", core.PRInfo{ChecksTotal: 4, ChecksDone: 4}, nil, "no approval yet" + tail},
-		{"all at once", core.PRInfo{ChecksTotal: 4, ChecksDone: 3, ChecksFailed: 1}, checks("lint"), "lint failed, 1 check running, no approval yet" + tail},
-		{"none", approved, nil, ""},
+		{"failed with one name", core.PRInfo{ReviewDecision: "APPROVED", ChecksTotal: 4, ChecksDone: 4, ChecksFailed: 1}, checks("lint"), 0, "lint failed"},
+		{"failed with two names", core.PRInfo{ReviewDecision: "APPROVED", ChecksTotal: 4, ChecksDone: 4, ChecksFailed: 2}, checks("lint", "test"), 0, "lint, test failed"},
+		{"failed with more names", core.PRInfo{ReviewDecision: "APPROVED", ChecksTotal: 5, ChecksDone: 5, ChecksFailed: 3}, checks("a", "b", "c"), 0, "a, b and 1 more failed"},
+		{"failed before names load", core.PRInfo{ReviewDecision: "APPROVED", ChecksTotal: 4, ChecksDone: 4, ChecksFailed: 2}, nil, 0, "2 checks failed"},
+		{"running", core.PRInfo{ReviewDecision: "APPROVED", ChecksTotal: 4, ChecksDone: 2}, nil, 0, "2 checks running"},
+		{"changes requested", core.PRInfo{ReviewDecision: "CHANGES_REQUESTED", ChecksTotal: 4, ChecksDone: 4}, nil, 0, "changes were requested"},
+		{"no approval", core.PRInfo{ChecksTotal: 4, ChecksDone: 4}, nil, 0, "no approval yet"},
+		{"all at once", core.PRInfo{ChecksTotal: 4, ChecksDone: 3, ChecksFailed: 1}, checks("lint"), 0, "lint failed, 1 check running, no approval yet"},
+		{"names give way to a count when the line is short", core.PRInfo{ReviewDecision: "APPROVED", ChecksTotal: 4, ChecksDone: 4, ChecksFailed: 2}, checks("lint-everything", "test-everything"), 20, "2 checks failed"},
+		{"names stay when they fit", core.PRInfo{ReviewDecision: "APPROVED", ChecksTotal: 4, ChecksDone: 4, ChecksFailed: 1}, checks("lint"), 20, "lint failed"},
+		{"none", approved, nil, 0, ""},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			if got := mergeWarning(tc.pr, tc.c); got != tc.want {
+			if got := mergeWarning(tc.pr, tc.c, tc.fit); got != tc.want {
 				t.Errorf("mergeWarning = %q, want %q", got, tc.want)
 			}
 		})
@@ -622,6 +623,34 @@ func TestMergeText(t *testing.T) {
 				got := ansi.Strip(mergeScene(t, icons, c.w, c.h, c.warn).View().Content)
 				golden.RequireEqual(t, []byte(got))
 			})
+		}
+	}
+}
+
+// A box taller than the terminal gives up its blank rows and then its hint row
+// whole, and keeps its frame and its delete row.
+func TestMergeBoxFitsAShortTerminal(t *testing.T) {
+	t.Parallel()
+
+	got := ansi.Strip(mergeScene(t, true, 100, 18, true).View().Content)
+
+	for _, want := range []string{"[x] delete feat/review-pane after merging", "enter still merges if GitHub allows it"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("the box lost %q:\n%s", want, got)
+		}
+	}
+
+	if strings.Contains(got, "esc cancel") {
+		t.Errorf("a hint row is left:\n%s", got)
+	}
+
+	// The box's bottom border is the one under the delete row.
+	lines := strings.Split(got, "\n")
+	for i, l := range lines {
+		if strings.Contains(l, "after merging") {
+			if i+1 >= len(lines) || !strings.Contains(lines[i+1], "╯") {
+				t.Errorf("the row under the delete row is not the box's bottom border:\n%s", got)
+			}
 		}
 	}
 }
