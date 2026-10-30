@@ -173,9 +173,7 @@ func TestShellFlow(t *testing.T) {
 	}
 
 	for _, pid := range pids {
-		if !gone(pid) {
-			t.Errorf("process group %d survived", pid)
-		}
+		eventually(t, fmt.Sprintf("process group %d to be gone after Close", pid), func() bool { return gone(pid) })
 	}
 }
 
@@ -262,8 +260,6 @@ func TestTabFlow(t *testing.T) {
 	}
 
 	for _, pid := range pids {
-		if !gone(pid) {
-			t.Errorf("process group %d survived", pid)
-		}
+		eventually(t, fmt.Sprintf("process group %d to be gone after Close", pid), func() bool { return gone(pid) })
 	}
 }
