@@ -52,6 +52,7 @@ const (
 	iconGhost      = "\U000F165D" // nf-md-ghost_outline
 	iconFolder     = "\U000F0256" // nf-md-folder_outline
 	iconMarkdown   = "\uF48A"     // nf-oct-markdown
+	iconLinks      = "\U000F0339" // nf-md-link_variant
 
 	iconNewWorktree = "\U000F14CA" // nf-md-source_branch_plus
 	iconPin         = "\U000F0403" // nf-md-pin

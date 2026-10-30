@@ -167,10 +167,11 @@ type drawCtx struct {
 	mdp      *mdPainter // paints rendered rows; made on first use
 	pageRows []string   // the shown page's rows, drawn on first use
 
-	pr     core.PRInfo // the pull request the header shows; zero when headH is 0
-	pinned bool        // the drawer is held on its root
-	home   string      // shortens the paths it names
-	list   *wtList     // the open worktree list, drawn over the drawer
+	pr     core.PRInfo  // the pull request the header shows; zero when headH is 0
+	pinned bool         // the drawer is held on its root
+	home   string       // shortens the paths it names
+	list   *wtList      // the open worktree list, drawn over the drawer
+	links  *linkChooser // the open link chooser, drawn over the drawer
 }
 
 // diffKeys reports whether the diff, not the tree, has the keyboard.
@@ -221,6 +222,7 @@ type drawKey struct {
 	noSnapshot           bool
 	pinned               bool
 	list                 wtKey
+	links                linksKey
 	err                  string
 	hasErr               bool
 	page                 *mdPage
@@ -243,8 +245,8 @@ func (d *drawCtx) key(r core.Rect, name string) drawKey {
 		query: d.query, searching: v.search != nil,
 		src: v.src, project: v.project, branch: v.branch, base: v.base,
 		turns: v.turns, resTurn: v.res.Turn, noSnapshot: v.noSnapshot, pinned: d.pinned,
-		list: d.listKey(),
-		pr:   d.pr, unpushed: v.unpushed, head: v.res.Head,
+		list: d.listKey(), links: d.linksKey(),
+		pr: d.pr, unpushed: v.unpushed, head: v.res.Head,
 	}
 
 	if d.lay.headH > 0 {
@@ -332,7 +334,7 @@ func (a *App) drawCtxFor(st core.State) (d *drawCtx, name string, ok bool) {
 
 	d = &drawCtx{
 		ui: lk.theme.UI, th: lk.theme, icons: a.icons, v: v, c: v.derived(), now: a.clock.Now(), keys: a.drawer.focused, tree: a.drawer.focused && a.drawer.tree,
-		pinned: tab.Review != nil && pinnedTo(tab, tab.Review.Pane), home: a.getenv("HOME"), list: a.listFor(tab),
+		pinned: tab.Review != nil && pinnedTo(tab, tab.Review.Pane), home: a.getenv("HOME"), list: a.listFor(tab), links: a.linksFor(tab),
 	}
 	d.lay = a.drawerLayoutOf(box, v, drawerTree(st))
 
@@ -410,6 +412,7 @@ func (d *drawCtx) render() []string {
 
 	lines = append(lines, d.bottomBorder())
 	d.overlayList(lines)
+	d.overlayLinks(lines)
 
 	return lines
 }

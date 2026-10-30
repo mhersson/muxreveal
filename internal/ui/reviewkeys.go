@@ -153,6 +153,10 @@ func (a *App) handleDrawerKey(msg tea.KeyPressMsg) tea.Cmd {
 		return a.handleWorktreesKey(msg)
 	}
 
+	if c := a.linksFor(tab); c != nil {
+		return a.handleLinksKey(c, msg)
+	}
+
 	if v.search != nil {
 		a.searchKey(v, msg)
 
@@ -245,6 +249,7 @@ func (a *App) reviewSearch() tea.Cmd {
 
 	a.drawerTake()
 	a.closeWorktrees()
+	a.closeLinks()
 
 	q := ""
 	v.search = &q
@@ -446,10 +451,17 @@ func (v *reviewView) fileStarts() []int {
 }
 
 // reviewFold folds the ghost block under the cursor into one row, or shows it
-// again from that row; in the tree it jumps to the selected file.
+// again from that row; on a rendered line it toggles a fold, else follows the
+// line's links; in the tree it jumps to the selected file.
 func (a *App) reviewFold() tea.Cmd {
-	if a.onPage(func(_ *reviewView, p *mdPage) { p.view.fold() }) {
-		return nil
+	if v, p := a.activePage(); p != nil {
+		p.rev++
+
+		if p.view.fold() {
+			return nil
+		}
+
+		return a.followLine(a.store.State().Tab().ID, v, p.view.targets())
 	}
 
 	_, v, ok := a.reviewActive()
@@ -469,9 +481,11 @@ func (a *App) reviewFold() tea.Cmd {
 
 	r := v.rows[v.cursor]
 	if r.kind == rowMD {
-		a.foldRendered(v, r)
+		if a.foldRendered(v, r) {
+			return nil
+		}
 
-		return nil
+		return a.followLine(a.store.State().Tab().ID, v, a.renderedTargets(v, r))
 	}
 
 	if r.kind != rowGhost && r.kind != rowFold {
@@ -497,12 +511,12 @@ func (a *App) reviewFold() tea.Cmd {
 	return nil
 }
 
-// foldRendered opens or closes the fold whose head is rendered row r; any other
-// rendered row does nothing.
-func (a *App) foldRendered(v *reviewView, r reviewRow) {
+// foldRendered opens or closes the fold whose head is rendered row r and
+// reports whether there was one.
+func (a *App) foldRendered(v *reviewView, r reviewRow) bool {
 	f := v.mdFiles[v.res.Files[r.file].Path]
 	if f == nil {
-		return
+		return false
 	}
 
 	for _, fold := range f.doc.layout(max(v.mdW, 1), v.mdIcons).Folds {
@@ -510,9 +524,21 @@ func (a *App) foldRendered(v *reviewView, r reviewRow) {
 			f.doc.toggleFold(fold.ID)
 			v.rebuild(v.rowsSplit)
 
-			return
+			return true
 		}
 	}
+
+	return false
+}
+
+// renderedTargets are the links and paths of rendered row r.
+func (a *App) renderedTargets(v *reviewView, r reviewRow) []mdTarget {
+	f := v.mdFiles[v.res.Files[r.file].Path]
+	if f == nil {
+		return nil
+	}
+
+	return lineTargets(f.doc.layout(max(v.mdW, 1), v.mdIcons), r.line)
 }
 
 // reviewSplit switches between unified and side by side; a drawer too narrow

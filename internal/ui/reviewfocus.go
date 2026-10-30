@@ -43,6 +43,7 @@ func (a *App) drawerTake() {
 func (a *App) drawerRelease() {
 	a.drawer.focused, a.drawer.tree = false, false
 	a.closeWorktrees()
+	a.closeLinks()
 
 	for _, v := range a.drawer.views {
 		v.search = nil

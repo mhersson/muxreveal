@@ -157,11 +157,11 @@ func (a *App) reportFocusChange(from, to core.PaneID) {
 // modalOpen reports whether any modal owns the keyboard: a confirm, prompt,
 // copy mode, the palette or another overlay, the compose box, the merge box,
 // the checks, the pull request list, the worktree picker or the drawer's
-// worktree list.
+// worktree list or link chooser.
 func (a *App) modalOpen() bool { return a.composeShown() || a.otherModalOpen() }
 
 // otherModalOpen is modalOpen without the compose box.
 func (a *App) otherModalOpen() bool {
 	return a.confirm != nil || a.prompt != nil || a.copy != nil || a.overlay != nil || a.merge != nil ||
-		a.checks != nil || a.prList != nil || a.picker.open != nil || a.drawer.list != nil
+		a.checks != nil || a.prList != nil || a.picker.open != nil || a.drawer.list != nil || a.drawer.links != nil
 }

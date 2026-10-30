@@ -136,8 +136,10 @@ type drawerState struct {
 	slideFrom     time.Time
 	closing       bool
 	views         map[core.TabID]*reviewView
-	list          *wtList // the open worktree list, over the active tab's drawer
-	listGen       int     // names the list wanted; an answer for another is stale
+	list          *wtList      // the open worktree list, over the active tab's drawer
+	listGen       int          // names the list wanted; an answer for another is stale
+	links         *linkChooser // the open link chooser, over the active tab's drawer
+	linksOf       linksOwner
 	hl            diffview.Highlighter
 	dv            *diffview.Theme // the diff view's theme for dvName
 	dvName        string

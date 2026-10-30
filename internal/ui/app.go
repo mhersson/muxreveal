@@ -423,6 +423,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	a.worktreesSync()
+	a.linksSync()
 
 	if c := a.drawerAfterUpdate(); c != nil {
 		a.later = append(a.later, c)

@@ -300,6 +300,7 @@ func (a *App) onMDPage(msg mdPageMsg) {
 
 	if active {
 		a.closeWorktrees()
+		a.closeLinks()
 		a.drawerTake()
 		a.sizePage(v, p)
 	}
@@ -364,6 +365,10 @@ func (a *App) pageBatch(tab core.TabID, v *reviewView, b git.Batch) tea.Cmd {
 
 // dropPages ends the page stack and any read for it.
 func (a *App) dropPages(v *reviewView) {
+	if a.drawer.linksOf.view == v {
+		a.closeLinks()
+	}
+
 	v.pages = nil
 	v.pageSeq++
 	v.reloadSeq++
@@ -477,6 +482,7 @@ func (a *App) mdOpenCommand() tea.Cmd {
 	tab := a.store.State().Tab()
 	if tab.Review != nil {
 		a.closeWorktrees()
+		a.closeLinks()
 		a.drawer.mdWant = &mdWant{tab: tab.ID, open: true}
 
 		return nil

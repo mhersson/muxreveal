@@ -249,6 +249,7 @@ func (a *App) openWorktrees() tea.Cmd {
 	}
 
 	a.drawerTake()
+	a.closeLinks()
 
 	v.search = nil
 

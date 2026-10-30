@@ -135,6 +135,7 @@ func reviewCases() []reviewCase {
 		{"rendered", mdScene(false)},
 		{"rendered-narrow", mdScene(true)},
 		{"md-page", mdPageScene},
+		{"links", linksScene},
 		{"unfocused", with(func(s *reviewScene) {
 			s.focused = false
 			s.tune = func(t *testing.T, a *App, v *reviewView) { v.cursor = rowWith(t, v, "review.toggle") }
