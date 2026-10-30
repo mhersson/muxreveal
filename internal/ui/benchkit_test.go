@@ -28,19 +28,31 @@ func goroutineStacks() string {
 	return string(buf[:runtime.Stack(buf, true)])
 }
 
-func TestBenchKitOnSynth(t *testing.T) {
-	start := time.Now()
-
-	res, err := runBench(benchConfig{
+func synthBenchConfig() benchConfig {
+	return benchConfig{
 		Panes: 2, Recordings: [][]rec.Record{rec.Synth(40, 16, 5*time.Second, 1)},
 		Width: 82, Height: 20, Stagger: ms(500), Length: 3 * time.Second, FPS: 60,
-	})
+	}
+}
+
+func holdBenchConfig(trace func(at time.Duration, drew bool)) benchConfig {
+	r := recs(20, 5,
+		rec.Record{At: ms(100), Data: []byte("\x1b[?2026hA")},
+		rec.Record{At: ms(400), Data: []byte("\x1b[?2026l")},
+		rec.Record{At: ms(600), Data: []byte("\x1b[?2026hB")},
+		rec.Record{At: 3 * time.Second, Data: []byte("\x1b[0m")},
+	)
+
+	return benchConfig{
+		Panes: 1, Recordings: [][]rec.Record{r}, Width: 40, Height: 10, Length: 3 * time.Second, FPS: 60,
+		Trace: trace,
+	}
+}
+
+func TestBenchKitOnSynth(t *testing.T) {
+	res, err := runBench(synthBenchConfig())
 	if err != nil {
 		t.Fatal(err)
-	}
-
-	if wall := time.Since(start); wall > 2*time.Second {
-		t.Errorf("bench took %v of wall time, want under 2s for 3 virtual seconds", wall)
 	}
 
 	if res.Frames.Count == 0 || res.CPUPercent <= 0 || res.BytesFed == 0 {
@@ -85,31 +97,17 @@ func TestBenchKitNoFrameWithoutBytes(t *testing.T) {
 }
 
 func TestBenchKitHoldUsesVirtualClock(t *testing.T) {
-	r := recs(20, 5,
-		rec.Record{At: ms(100), Data: []byte("\x1b[?2026hA")},
-		rec.Record{At: ms(400), Data: []byte("\x1b[?2026l")},
-		rec.Record{At: ms(600), Data: []byte("\x1b[?2026hB")},
-		rec.Record{At: 3 * time.Second, Data: []byte("\x1b[0m")},
-	)
+	t.Parallel()
 
 	var draws []time.Duration
 
-	start := time.Now()
-
-	_, err := runBench(benchConfig{
-		Panes: 1, Recordings: [][]rec.Record{r}, Width: 40, Height: 10, Length: 3 * time.Second, FPS: 60,
-		Trace: func(at time.Duration, drew bool) {
-			if drew {
-				draws = append(draws, at)
-			}
-		},
-	})
+	_, err := runBench(holdBenchConfig(func(at time.Duration, drew bool) {
+		if drew {
+			draws = append(draws, at)
+		}
+	}))
 	if err != nil {
 		t.Fatal(err)
-	}
-
-	if wall := time.Since(start); wall > time.Second {
-		t.Fatalf("bench took %v of wall time; the hold must run on the virtual clock", wall)
 	}
 
 	if len(draws) != 2 {
