@@ -34,6 +34,9 @@ type Doc struct {
 	base      base
 	footnotes extension.Footnotes
 	notes     noteIndex
+	starts    []int                    // the byte offset each source line starts at
+	at        map[ast.Node]int         // the source line of a node md made
+	ranges    map[ast.Node]SourceRange // the source lines of each block
 }
 
 // noteIndex is what the footnote section needs from the tree, found once at
@@ -65,7 +68,7 @@ type base struct {
 // UTF-8 included, yields a Doc.
 func Parse(src []byte, o ParseOptions) *Doc {
 	src, cut := bound(src)
-	d := &Doc{src: src, cut: cut, base: classifyBase(o.Base)}
+	d := &Doc{src: src, cut: cut, base: classifyBase(o.Base), at: map[ast.Node]int{}}
 	d.parse()
 
 	return d
@@ -112,9 +115,11 @@ func (d *Doc) parse() {
 	p := parser.New(parser.WithExtensions(extension.NewGFMParser(), extension.NewFootnoteParser()))
 	d.root = p.Parse(d.src, parser.WithContext(pc))
 	d.footnotes = extension.ContextFootnotes(pc)
+	d.indexLines()
 	d.restructure(d.root)
 	d.numberFolds()
 	d.indexNotes()
+	d.indexRanges()
 }
 
 // recoverParse is deferred by parse. goldmark is not ours; a bug in it must not
@@ -124,6 +129,8 @@ func (d *Doc) recoverParse() {
 		d.root = ast.NewDocument()
 		d.folds = 0
 		d.notes = noteIndex{}
+		d.at = map[ast.Node]int{}
+		d.ranges = map[ast.Node]SourceRange{}
 		d.footnotes = extension.ContextFootnotes(parser.NewContext())
 	}
 }
@@ -372,6 +379,12 @@ func (d *Doc) convertAlert(q *ast.Blockquote) ast.Node {
 	}
 
 	a := newAlert(kind)
+	d.setLine(a, d.lineOf(q))
+
+	if p.HasChildren() {
+		d.setLine(p, d.childLine(p))
+	}
+
 	a.SetBlankPreviousLines(q.HasBlankPreviousLines())
 	moveChildren(a, q)
 	q.Parent().ReplaceChild(q, a)
@@ -577,6 +590,7 @@ func (g *folder) add(c ast.Node) {
 
 	raw := string(h.Value.Bytes(g.d.src))
 	tags := scanTags(raw)
+	rawLine := func(i int) int { return g.d.lineOf(h) + strings.Count(raw[:i], "\n") }
 	cand := g.pending
 	g.pending = nil
 	opened := false
@@ -585,7 +599,9 @@ func (g *folder) add(c ast.Node) {
 	flush := func(upTo int) {
 		if upTo > last {
 			if s := strings.TrimSpace(raw[last:upTo]); s != "" {
-				g.target().AppendChild(newFragment(s))
+				frag := newFragment(s)
+				g.d.setLine(frag, rawLine(last+strings.Index(raw[last:upTo], s)))
+				g.target().AppendChild(frag)
 			}
 		}
 	}
@@ -598,6 +614,7 @@ func (g *folder) add(c ast.Node) {
 
 			f := newFold()
 			f.Open = hasOpenAttr(raw[t.start:t.end])
+			g.d.setLine(f, rawLine(t.start))
 			g.target().AppendChild(f)
 			g.stack = append(g.stack, f)
 			cand, opened, acted = f, true, true
@@ -730,9 +747,28 @@ func (g *folder) addParagraph(p *ast.Paragraph) {
 		cur = nil
 	}
 
+	// A piece or fold made from p stands where its first inline node was.
+	line := func(n ast.Node) int {
+		if l := g.d.inlineLine(n); l > 0 {
+			return l
+		}
+
+		return g.d.lineOf(p)
+	}
+
+	// A piece stands where its first text is, not at a leading line break.
+	placed := false
+
 	keep := func(n ast.Node) {
 		if cur == nil {
 			cur = ast.NewParagraph()
+			placed = false
+		}
+
+		if t, ok := n.(*ast.Text); !placed && (!ok || strings.TrimSpace(t.Value.Value(g.d.src)) != "") {
+			g.d.setLine(cur, line(n))
+
+			placed = true
 		}
 
 		cur.AppendChild(n)
@@ -749,6 +785,7 @@ func (g *folder) addParagraph(p *ast.Paragraph) {
 
 			f := newFold()
 			f.Open = hasOpenAttr(raw)
+			g.d.setLine(f, line(kids[i]))
 			g.target().AppendChild(f)
 			g.stack = append(g.stack, f)
 			cand, opened = f, true

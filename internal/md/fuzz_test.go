@@ -63,6 +63,7 @@ func FuzzLayout(f *testing.F) {
 			assertSafe(t, l, limit)
 			assertReferences(t, l, icons, limit)
 			assertImageSrcs(t, l)
+			assertSource(t, l, len(d.starts))
 
 			for _, k := range l.Links {
 				if !allowedScheme(k.URL) {
