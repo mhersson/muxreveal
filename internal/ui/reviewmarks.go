@@ -200,16 +200,6 @@ func (v *reviewView) fileRead(f int) bool {
 	return true
 }
 
-// reviewCounts are the hunks reviewed and all the hunks of the files shown as
-// hunks.
-func reviewCounts(v *reviewView, st core.State) (read, all int) {
-	return v.countHunks(func(fi, hi int) bool {
-		id := v.hunkID(fi, hi)
-
-		return id != "" && st.Reviewed(v.common, id)
-	})
-}
-
 // countHunks counts the hunks of the files shown as hunks and those read
 // reports reviewed.
 func (v *reviewView) countHunks(read func(file, hunk int) bool) (n, all int) {

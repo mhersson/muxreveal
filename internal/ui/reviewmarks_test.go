@@ -755,12 +755,12 @@ func TestReviewMarksBadFile(t *testing.T) {
 	}
 }
 
-func TestReviewCounts(t *testing.T) {
+func TestCountHunks(t *testing.T) {
 	t.Parallel()
 
 	r, v := newMarksRig(t, marksRepo(t), &fakeMarks{})
 
-	if read, all := reviewCounts(v, r.store.State()); read != 0 || all != 6 {
+	if read, all := v.countHunks(v.hunkRead); read != 0 || all != 6 {
 		t.Fatalf("counts = %d of %d, want 0 of 6", read, all)
 	}
 
@@ -768,7 +768,7 @@ func TestReviewCounts(t *testing.T) {
 
 	r.keys(keySpace)
 
-	if read, all := reviewCounts(v, r.store.State()); read != 2 || all != 6 {
+	if read, all := v.countHunks(v.hunkRead); read != 2 || all != 6 {
 		t.Errorf("counts after a file = %d of %d, want 2 of 6", read, all)
 	}
 
@@ -778,7 +778,7 @@ func TestReviewCounts(t *testing.T) {
 	r.keys(keyRune('f'))
 	r.until(t, "the full file", func() bool { return v.countRows(rowFull) > 0 })
 
-	if read, all := reviewCounts(v, r.store.State()); read != 2 || all != 4 {
+	if read, all := v.countHunks(v.hunkRead); read != 2 || all != 4 {
 		t.Errorf("counts with a file shown whole = %d of %d, want 2 of 4", read, all)
 	}
 }
