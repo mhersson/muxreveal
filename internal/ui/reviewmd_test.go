@@ -711,3 +711,74 @@ func mdResult() git.Result {
 
 	return git.Result{Files: []git.FileDiff{plan, goFile}}
 }
+
+// A full-text read that answers after m went off keeps no text and starts no parse.
+func TestReviewMarkdownLateRead(t *testing.T) {
+	t.Parallel()
+
+	m := newMDRig(t)
+	v := m.v
+
+	m.onFile(t, planPath)
+
+	reads := flatten(m.step(keyRune('m')))
+	if len(reads) != 1 {
+		t.Fatalf("m started %d reads, want 1", len(reads))
+	}
+
+	if _, ok := reads[0].(reviewFullMsg); !ok {
+		t.Fatalf("m started %T, want a full-text read", reads[0])
+	}
+
+	m.press(keyRune('m'))
+
+	rows := slices.Clone(v.rows)
+
+	if held := m.drive(m.step(reads[0])); len(held) != 0 {
+		t.Errorf("the late read started %d parses", len(held))
+	}
+
+	if _, kept := v.full[planPath]; kept || len(v.mdOn) != 0 || len(v.mdAsk) != 0 || len(v.mdFiles) != 0 || !slices.Equal(v.rows, rows) {
+		t.Errorf("a late read changed the view: text kept %v, mdOn %v, mdAsk %v, rows %d, was %d", kept, v.mdOn, v.mdAsk, len(v.rows), len(rows))
+	}
+}
+
+// A parse that answers after p moved the drawer to the pull request changes nothing.
+func TestReviewMarkdownLateAfterP(t *testing.T) {
+	t.Parallel()
+
+	dir := newRepoDir(t)
+	write(t, filepath.Join(dir, "a.txt"), "a\n")
+	write(t, filepath.Join(dir, planPath), planWith(nil))
+	commitEverything(t, dir, "init")
+	write(t, filepath.Join(dir, "a.txt"), "a changed\n")
+	commitEverything(t, dir, "feature work")
+
+	r := newPRDrawerOn(t, dir)
+	r.poll()
+
+	// The plan is edited in the working tree, which branch mode shows.
+	write(t, filepath.Join(dir, planPath), planEdited())
+
+	v := r.opened(t)
+
+	for i, row := range v.rows {
+		if row.kind == rowFile && v.res.Files[row.file].Path == planPath {
+			v.cursor = i
+		}
+	}
+
+	held := r.drive(r.step(keyRune('m')))
+	if len(held) != 1 {
+		t.Fatalf("%d parses started, want 1 (files %v, notice %q)", len(held), viewPaths(v), r.notice)
+	}
+
+	r.typed("p")
+	r.until(t, "PR mode", r.inPRMode(7))
+
+	r.send(held)
+
+	if len(v.mdFiles) != 0 || len(v.mdOn) != 0 || kindsOf(v, planPath)[rowMD] != 0 {
+		t.Errorf("a late answer changed the PR view: mdFiles %v, mdOn %v, rows %v", v.mdFiles, v.mdOn, kindsOf(v, planPath))
+	}
+}
