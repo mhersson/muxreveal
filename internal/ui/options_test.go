@@ -234,6 +234,63 @@ func TestCopyOnSelect(t *testing.T) {
 	}
 }
 
+func TestRedrawDuringAGestureWaitsForRelease(t *testing.T) {
+	t.Parallel()
+
+	// hold leaves the button down; relX is where it is released.
+	drag := func(a *App, c core.Rect) int {
+		mdown(a, c.X, c.Y, tea.MouseLeft, 0)
+		mmove(a, c.X+4, c.Y, tea.MouseLeft)
+
+		return c.X + 4
+	}
+	double := func(a *App, c core.Rect) int {
+		clickRun(a, c.X+1, c.Y)
+		mdown(a, c.X+1, c.Y, tea.MouseLeft, 0)
+
+		return c.X + 1
+	}
+
+	tests := []struct {
+		name       string
+		option     bool
+		hold       func(a *App, c core.Rect) int
+		wantCopied string
+	}{
+		{"drag, copy on", true, drag, "jello"},
+		{"double click, copy on", true, double, "jello"},
+		{"drag, copy off", false, drag, ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			a, procs, f := shellsWith(t, sampleText, "RIGHT")
+			a.copyOnSelect = tt.option
+			c := contentRectOf(a, "p1")
+
+			relX := tt.hold(a, c)
+
+			feedAndWait(t, a.panes["p1"], procs["p1"], "\x1b[1;1Hjello")
+			a.Update(paneDirtyMsg{id: "p1", p: a.panes["p1"]})
+
+			if a.sel == nil {
+				t.Fatal("selection cleared while the button is down, want kept")
+			}
+
+			release(a, relX, c.Y)
+
+			if got := lastCopied(f); got != tt.wantCopied {
+				t.Errorf("copied %q, want %q", got, tt.wantCopied)
+			}
+
+			if a.sel != nil {
+				t.Error("selection kept after the release, want cleared")
+			}
+		})
+	}
+}
+
 func TestCopyOnSelectClearsOnRelease(t *testing.T) {
 	t.Parallel()
 

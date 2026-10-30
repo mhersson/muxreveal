@@ -145,9 +145,13 @@ func (a *App) dropFallenSelection(p *pane) {
 }
 
 // dropRedrawnSelection clears the selection of p once a render changed the
-// text it covers.
+// text it covers; it waits for the release of the press that is making it.
 func (a *App) dropRedrawnSelection(p *pane) {
 	if a.sel == nil || a.sel.pane != p.id || !a.sel.watched {
+		return
+	}
+
+	if pr := a.mouse.press; pr != nil && pr.pane == p.id {
 		return
 	}
 

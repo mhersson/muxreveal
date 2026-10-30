@@ -348,6 +348,10 @@ func (a *App) handleRelease(msg tea.MouseReleaseMsg) tea.Cmd {
 			return cmd
 		}
 
+		if p := a.panes[pr.pane]; p != nil {
+			a.dropRedrawnSelection(p)
+		}
+
 		return nil
 	}
 
