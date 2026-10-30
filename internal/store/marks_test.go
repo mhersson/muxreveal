@@ -294,3 +294,49 @@ func TestMarkFiles(t *testing.T) {
 		}
 	})
 }
+
+func TestMarksAcrossSpellings(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	realDir := filepath.Join(dir, "real", ".git")
+
+	if err := os.MkdirAll(realDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	linkDir := filepath.Join(dir, "link", ".git")
+	if err := os.Symlink(filepath.Join(dir, "real"), filepath.Join(dir, "link")); err != nil {
+		t.Fatal(err)
+	}
+
+	m := NewMarkFiles(dir, nil)
+	m.Save(linkDir, map[string]string{"a": "2026-10-30"})
+
+	if err := m.Close(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, spelling := range []string{realDir, linkDir} {
+		path := MarksPath(dir, spelling)
+
+		got, err := LoadMarks(path, spelling, marksNow)
+		if err != nil || got["a"] != "2026-10-30" {
+			t.Errorf("LoadMarks via %s = %v, %v", spelling, got, err)
+		}
+
+		if _, serr := os.Stat(path + ".bad"); serr == nil {
+			t.Errorf("LoadMarks via %s renamed the file to .bad", spelling)
+		}
+	}
+
+	enc, err := EncodeMarks(linkDir, map[string]string{"a": "2026-10-30"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want, err := os.ReadFile(MarksPath(dir, realDir))
+	if err != nil || string(enc) != string(want) {
+		t.Errorf("EncodeMarks via a symlink differs from the written file: %v\n%s\n%s", err, enc, want)
+	}
+}

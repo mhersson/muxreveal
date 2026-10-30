@@ -47,11 +47,14 @@ func MarksPath(stateDir, commonDir string) string {
 	return filepath.Join(stateDir, "reviews", hex.EncodeToString(sum[:16])+".json")
 }
 
-// LoadMarks reads the marks at path, dropping those whose day is over MarkTTL
+// LoadMarks reads the marks at path for the repository with the given common
+// dir (resolved like MarksPath's), dropping those whose day is over MarkTTL
 // before now. A missing file gives no marks. A file that does not decode, has
 // another version or names another repo is renamed to path+".bad", and the
 // result is empty with an error that says so.
 func LoadMarks(path, commonDir string, now time.Time) (map[string]string, error) {
+	commonDir = resolveCommonDir(commonDir)
+
 	data, err := os.ReadFile(path)
 	if errors.Is(err, fs.ErrNotExist) {
 		return map[string]string{}, nil
@@ -99,8 +102,11 @@ func LoadMarks(path, commonDir string, now time.Time) (map[string]string, error)
 	return out, nil
 }
 
-// EncodeMarks returns the marks file for the repository: indented, keys sorted.
+// EncodeMarks returns the marks file for the repository, naming its common dir
+// resolved like MarksPath's: indented, keys sorted.
 func EncodeMarks(commonDir string, days map[string]string) ([]byte, error) {
+	commonDir = resolveCommonDir(commonDir)
+
 	if days == nil {
 		days = map[string]string{}
 	}
@@ -150,18 +156,14 @@ func NewMarkFiles(stateDir string, log *slog.Logger) *MarkFiles {
 // Load reads the marks of the repository with the given common dir. A bad file
 // is kept as .bad and the error says so; the marks are empty then.
 func (m *MarkFiles) Load(commonDir string, now time.Time) (map[string]string, error) {
-	common := resolveCommonDir(commonDir)
-
-	return LoadMarks(MarksPath(m.dir, common), common, now)
+	return LoadMarks(MarksPath(m.dir, commonDir), commonDir, now)
 }
 
 // Save queues the marks for writing and returns at once; newer marks for the
 // same repository replace ones still waiting, and days is not kept. Saves after
 // Close are dropped.
 func (m *MarkFiles) Save(commonDir string, days map[string]string) {
-	common := resolveCommonDir(commonDir)
-
-	data, err := EncodeMarks(common, days)
+	data, err := EncodeMarks(commonDir, days)
 	if err != nil {
 		m.log.Error("encoding marks", "err", err)
 
@@ -175,7 +177,7 @@ func (m *MarkFiles) Save(commonDir string, days map[string]string) {
 		return
 	}
 
-	m.pending[MarksPath(m.dir, common)] = data
+	m.pending[MarksPath(m.dir, commonDir)] = data
 	m.mu.Unlock()
 
 	select {
