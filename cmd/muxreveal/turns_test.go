@@ -1519,45 +1519,50 @@ func TestGateEndsTheLastTurnAfterARestart(t *testing.T) {
 func TestGateFailedEndWritesAnEndMarker(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name     string
-		err      error
-		wantMark bool
-	}{
-		{"a failed end", errors.New("boom"), true},
-		{"a turn that is not open", git.ErrTurnNotOpen, false},
+	w := &recordingWriter{
+		failEnd:     func(string) error { return errors.New("boom") },
+		markHold:    make(chan struct{}),
+		markStarted: make(chan recordedStart, 4),
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
+	sendTurns(t, w, dirSeq, recordedStart{dir: "/a"}, recordedStart{dir: "/b"})
 
-			w := &recordingWriter{
-				failEnd:     func(string) error { return tt.err },
-				markHold:    make(chan struct{}),
-				markStarted: make(chan recordedStart, 4),
-			}
+	// The second start was answered while the marker is still unwritten.
+	select {
+	case m := <-w.markStarted:
+		if !m.end || m.dir != "root/a" || m.session != gateSession || m.turn != w.starts()[0].turn {
+			t.Errorf("marker = %+v, want the end of the first turn in root/a", m)
+		}
 
-			sendTurns(t, w, dirSeq, recordedStart{dir: "/a"}, recordedStart{dir: "/b"})
+		close(w.markHold)
+	case <-time.After(5 * time.Second):
+		t.Fatal("no end marker")
+	}
+}
 
-			// The second start was answered while the marker is still unwritten.
-			select {
-			case m := <-w.markStarted:
-				if !tt.wantMark {
-					t.Fatalf("marker %+v written, want none", m)
-				}
+func TestGateEndOfATurnThatIsNotOpenWritesNoMarker(t *testing.T) {
+	t.Parallel()
 
-				if !m.end || m.dir != "root/a" || m.session != gateSession || m.turn != w.starts()[0].turn {
-					t.Errorf("marker = %+v, want the end of the first turn in root/a", m)
-				}
+	w := &recordingWriter{failEnd: func(string) error { return git.ErrTurnNotOpen }}
+	r := startWriterGate(t, w, dirSeq)
 
-				close(w.markHold)
-			case <-time.After(300 * time.Millisecond):
-				if tt.wantMark {
-					t.Fatal("no end marker")
-				}
-			}
-		})
+	for _, dir := range []string{"/a", "/b"} {
+		ev, released := turnEvent("UserPromptSubmit", gateSession, dir)
+		r.in <- ev
+
+		within(t, released, time.Second, "turn release")
+	}
+
+	// The gate runs its goroutines, markers included, before it returns.
+	close(r.in)
+	within(t, r.done, 5*time.Second, "gate drain")
+
+	if len(w.endings()) != 1 {
+		t.Fatalf("End calls = %+v, want one", w.endings())
+	}
+
+	if marks := w.filter(func(c recordedStart) bool { return c.mark }); len(marks) != 0 {
+		t.Errorf("markers = %+v, want none", marks)
 	}
 }
 

@@ -327,10 +327,9 @@ func (g *gate) endAndStart(ctx context.Context, ev harness.Event, session string
 	for _, r := range last.roots {
 		p := pendingEnd{root: r, session: last.session, turn: last.turn}
 
-		switch {
-		case root != "" && r == root && last.session == session:
+		if root != "" && r == root && last.session == session {
 			ends = last.turn
-		default:
+		} else {
 			pending = append(pending, p)
 		}
 	}
