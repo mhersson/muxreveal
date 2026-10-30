@@ -2140,3 +2140,30 @@ func TestHookHoldsAFirstEditUntilItsStartExists(t *testing.T) {
 		t.Fatalf("turns = %+v, own = %+v, want the worktree's start at the turn's number", turns, own)
 	}
 }
+
+func TestGateNextPromptSkipsAStartStillBeingTaken(t *testing.T) {
+	t.Parallel()
+
+	blocked := newBlockedStart("root/b")
+	w := &recordingWriter{onStart: blocked.onStart}
+	places := &countingPlaces{}
+	r := startedTurn(t, w, places.place)
+
+	ev, _ := editEvent(gateSession, "/b/f.go", nil, nil)
+	r.in <- ev
+
+	within(t, blocked.entered, time.Second, "the edit's start")
+
+	next, released := turnEvent("UserPromptSubmit", gateSession, "/a")
+	next.Deadline = time.Now().Add(200 * time.Millisecond)
+
+	r.in <- next
+
+	within(t, released, 5*time.Second, "next turn release")
+	close(blocked.unblock)
+	drain(t, r)
+
+	if got := callsIn(w.endings(), "root/b"); len(got) != 0 {
+		t.Errorf("ends in root/b = %+v, want none while its start was not written", got)
+	}
+}

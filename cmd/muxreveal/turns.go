@@ -143,13 +143,13 @@ type paneTurn struct {
 	unsure  bool
 }
 
-// snapshotted lists, in order, the worktrees the turn started with a snapshot:
-// the ones the pane's next prompt ends.
+// snapshotted lists, in order, the worktrees the turn started with a snapshot
+// that is written: the ones the pane's next prompt ends.
 func (t paneTurn) snapshotted() []string {
 	var out []string
 
 	for root, e := range t.roots {
-		if !e.marker {
+		if !e.marker && closed(e.done) {
 			out = append(out, root)
 		}
 	}
@@ -157,6 +157,15 @@ func (t paneTurn) snapshotted() []string {
 	slices.Sort(out)
 
 	return out
+}
+
+func closed(c <-chan struct{}) bool {
+	select {
+	case <-c:
+		return true
+	default:
+		return false
+	}
 }
 
 func closedChan() chan struct{} {
@@ -426,6 +435,8 @@ func (g *gate) startTurn(parent context.Context, deadline time.Time, prev <-chan
 	if err = snapCtx.Err(); err == nil {
 		pending, err = g.endAndStart(snapCtx, ev, session, turn)
 	} else {
+		release(ev)
+
 		pending = g.forget(parent, ev, session, turn)
 	}
 
