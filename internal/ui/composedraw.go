@@ -94,7 +94,7 @@ func (a *App) composeBox(lk look, w, room int) (lines []string, curX, curY int) 
 	tail := []composeLine{blank, plain(run(printable(v.status), statusColor(v, ui), false)), plain(composeHints(cw, v.preview.on, st))}
 
 	// The frame is two lines, the body box two more around its rows.
-	rows := min(composeBodyRows, max(room-2-len(head)-2-len(tail), composeMinBody))
+	rows := composeBodyRowCount(v, room)
 	bodyBox := a.composeBody(lk, cw-2, rows)
 
 	all := append(append(head, bodyBox...), tail...)
@@ -204,23 +204,33 @@ func (a *App) composeBody(lk look, cw, rows int) (lines []composeLine) {
 	return lines
 }
 
-// composePreviewRows paints the visible rows of the rendered body, w cells
-// each, and notes how many rows the box has for scrolling.
-func (a *App) composePreviewRows(lk look, w, rows int) []string {
-	p := &a.compose.preview
-	p.rows = rows
+// composeBodyRowCount is how many text rows the body box takes in a box with
+// room lines, as composeBox lays it out.
+func composeBodyRowCount(v *composeView, room int) int {
+	// Ten head rows (eleven with the push note), the frame, the box's borders
+	// and the three tail rows.
+	fixed := 10 + 3 + 2 + 2
+	if v.t.unpushed > 0 {
+		fixed++
+	}
 
+	return min(composeBodyRows, max(room-fixed, composeMinBody))
+}
+
+// composePreviewRows paints the visible rows of the rendered body, w cells
+// each. It only reads; composePreviewSettle keeps the scroll fitted.
+func (a *App) composePreviewRows(lk look, w, rows int) []string {
+	p := a.compose.preview
 	if p.doc == nil {
 		return nil
 	}
 
 	lay := p.doc.layout(composePreviewW(a.width), a.icons)
-	p.settle(lay, rows)
-
+	top := max(0, min(p.top, len(lay.Lines)-rows))
 	paintr := newMDPainter(lk.theme, lk.theme.UI.Panel)
 	out := make([]string, 0, rows)
 
-	for i := p.top; i < min(p.top+rows, len(lay.Lines)); i++ {
+	for i := top; i < min(top+rows, len(lay.Lines)); i++ {
 		out = append(out, paintr.line(lay.Lines[i], lay.Links, w))
 	}
 
@@ -235,7 +245,7 @@ func composeHints(cw int, preview bool, st styles) string {
 		toggle = "write"
 	}
 
-	return hintLine([][2]string{{"tab", "next field"}, {"ctrl+p", toggle}, {"ctrl+e", "body in $EDITOR"}, {"ctrl+s", "create"}, {"esc", "cancel"}}, cw, st)
+	return hintLine([][2]string{{"tab", "next field"}, {"ctrl+e", "body in $EDITOR"}, {"ctrl+s", "create"}, {"esc", "cancel"}, {"ctrl+p", toggle}}, cw, st)
 }
 
 // overlayCompose draws the compose box over base, centred.

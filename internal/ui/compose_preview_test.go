@@ -472,3 +472,70 @@ func TestComposePreviewGolden(t *testing.T) {
 		})
 	}
 }
+
+// Entering Preview while the shown doc is older than the body puts the cursor's
+// source line on top only once the doc for the body has landed.
+func TestComposePreviewStaleDoc(t *testing.T) {
+	r := newPreviewRig(t, 120, 40)
+	r.setBody("short")
+	r.churn(t, press(r.App, keyCtrlP))
+	r.churn(t, press(r.App, keyCtrlP))
+
+	r.v.body = newTextArea(listBody(60), maxComposeBody)
+	r.v.body.row = 39
+	r.v.bodyRev++
+
+	cmd := press(r.App, keyCtrlP)
+	r.View()
+
+	if r.v.preview.top != 0 || r.v.preview.anchor == 0 {
+		t.Fatalf("top = %d, anchor = %d: the anchor was spent on the stale doc", r.v.preview.top, r.v.preview.anchor)
+	}
+
+	r.churn(t, cmd)
+
+	lay := r.v.preview.doc.layout(composePreviewW(120), r.icons)
+	if src := lay.Source[r.v.preview.top]; src.First > 40 || src.Last < 40 || r.v.preview.top == 0 {
+		t.Errorf("top = %d holds source %v, want line 40", r.v.preview.top, src)
+	}
+
+	if text := r.text(); !strings.Contains(text, "item 40") || strings.Contains(text, "item 39") {
+		t.Errorf("source line 40 is not the first line shown:\n%s", text)
+	}
+}
+
+func TestComposePreviewEditorReturnScroll(t *testing.T) {
+	r := newEditorRig(t)
+	sized(t, r.App, 120, 40)
+	r.v.body = newTextArea(listBody(60), maxComposeBody)
+	r.v.body.row = 39
+	r.v.bodyRev++
+	r.churn(t, press(r.App, keyCtrlP))
+
+	if r.v.preview.top == 0 {
+		t.Fatal("Preview did not open scrolled")
+	}
+
+	r.ctrlE(t)
+	r.edit(t, listBody(80))
+	r.exit(t)
+
+	p := r.v.preview
+	if p.top != 0 || p.anchor != 0 || p.parsed != r.v.bodyRev {
+		t.Errorf("top %d, anchor %d, parsed %d of %d: want the new body parsed and shown from its start", p.top, p.anchor, p.parsed, r.v.bodyRev)
+	}
+}
+
+func TestComposePreviewResize(t *testing.T) {
+	r := newPreviewRig(t, 120, 40)
+	r.setBody(listBody(60))
+	r.churn(t, press(r.App, keyCtrlP))
+
+	wide := r.v.preview.rows
+
+	sized(t, r.App, 120, 20)
+
+	if got := r.v.preview.rows; got >= wide || got != composeBodyRowCount(r.v, 18) {
+		t.Errorf("rows = %d after the resize, was %d", got, wide)
+	}
+}

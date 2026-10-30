@@ -505,6 +505,11 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.endSlide()
 
 		a.width, a.height = msg.Width, msg.Height
+
+		if a.compose != nil {
+			a.composePreviewSettle(a.compose)
+		}
+
 		a.log.Debug("window size", "width", msg.Width, "height", msg.Height)
 
 		var cmds []tea.Cmd

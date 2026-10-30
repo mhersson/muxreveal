@@ -21,7 +21,6 @@ import (
 	"github.com/mhersson/muxreveal/internal/core"
 	"github.com/mhersson/muxreveal/internal/git"
 	"github.com/mhersson/muxreveal/internal/github"
-	"github.com/mhersson/muxreveal/internal/md"
 )
 
 const (
@@ -172,6 +171,7 @@ func (a *App) onComposeRendered(msg composeRenderedMsg) {
 	}
 
 	msg.v.preview.doc, msg.v.preview.parsed = msg.doc, msg.rev
+	a.composePreviewSettle(msg.v)
 }
 
 // composePreviewToggle is ctrl+p: it swaps Write and Preview on the body.
@@ -185,6 +185,7 @@ func (a *App) composePreviewToggle(v *composeView) tea.Cmd {
 	}
 
 	v.preview.on, v.preview.top, v.preview.anchor = true, 0, v.body.row+1
+	a.composePreviewSettle(v)
 
 	return a.renderBody(v)
 }
@@ -196,9 +197,9 @@ func (a *App) composePreviewKey(v *composeView, key string) {
 		return
 	}
 
-	rows := cmp.Or(p.rows, composeBodyRows)
-	lay := p.doc.layout(composePreviewW(a.width), a.icons)
-	p.settle(lay, rows)
+	a.composePreviewSettle(v)
+
+	rows := p.rows
 
 	switch key {
 	case "up":
@@ -211,16 +212,29 @@ func (a *App) composePreviewKey(v *composeView, key string) {
 		p.top += max(rows-1, 1)
 	}
 
-	p.settle(lay, rows)
+	a.composePreviewSettle(v)
 }
 
-// settle puts a pending source line at the top and keeps the box full.
-func (p *composePreview) settle(lay md.Layout, rows int) {
-	if p.anchor > 0 && len(lay.Source) > 0 {
+// composePreviewSettle fits the preview to the screen: it learns the body
+// box's rows, puts the pending source line at the top once the doc for the
+// current body is there, and keeps the box full. It runs in Update, never in
+// draw.
+func (a *App) composePreviewSettle(v *composeView) {
+	p := &v.preview
+
+	p.rows = composeBodyRowCount(v, a.height-2)
+
+	if p.doc == nil {
+		return
+	}
+
+	lay := p.doc.layout(composePreviewW(a.width), a.icons)
+
+	if p.anchor > 0 && p.parsed == v.bodyRev && len(lay.Source) > 0 {
 		p.top, p.anchor = sourceLineIndex(lay.Source, p.anchor), 0
 	}
 
-	p.top = max(0, min(p.top, len(lay.Lines)-rows))
+	p.top = max(0, min(p.top, len(lay.Lines)-p.rows))
 }
 
 // bodyEdit is the temp file one editor pane works on, and the box it belongs to.
@@ -1046,6 +1060,7 @@ func (a *App) onBodyRead(msg bodyReadMsg) tea.Cmd {
 	v.body = newTextArea(msg.text, maxComposeBody)
 	v.body.Start()
 	v.preview.top, v.preview.anchor = 0, 1
+	a.composePreviewSettle(v)
 
 	cmd := a.bodyChanged(v)
 	if v.preview.on {
