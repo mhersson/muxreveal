@@ -64,6 +64,24 @@ func (v *mdView) move(delta int) {
 // page moves half the height.
 func (v *mdView) page(dir int) { v.move(dir * max(v.h/2, 1)) }
 
+// pageFull moves the window and the cursor by the height less one line.
+func (v *mdView) pageFull(dir int) {
+	d := dir * max(v.h-1, 1)
+	n, h := len(v.layout().Lines), max(v.h, 1)
+
+	v.top = min(max(v.top+d, 0), max(n-h, 0))
+	v.cursor = min(max(v.cursor+d, 0), max(n-1, 0))
+	v.clamp()
+}
+
+// scroll moves the window by delta lines; the cursor moves only to stay in it.
+func (v *mdView) scroll(delta int) {
+	n, h := len(v.layout().Lines), max(v.h, 1)
+
+	v.top = min(max(v.top+delta, 0), max(n-h, 0))
+	v.cursor = min(max(v.cursor, v.top), max(min(v.top+h-1, n-1), 0))
+}
+
 func (v *mdView) end(bottom bool) {
 	v.cursor = 0
 	if bottom {

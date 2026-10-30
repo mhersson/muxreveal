@@ -455,11 +455,37 @@ func (a *App) releaseForwarded() {
 	}
 }
 
+// planWheel scrolls the plan overlay when the wheel is over its box and reports
+// whether it took the event.
+func (a *App) planWheel(msg tea.MouseWheelMsg) bool {
+	if a.plan == nil {
+		return false
+	}
+
+	m := msg.Mouse()
+
+	x, y, w, h, ok := planBox(a.width, a.height)
+	if !ok || m.X < x || m.X >= x+w || m.Y < y || m.Y >= y+h {
+		return false
+	}
+
+	a.sizePlan()
+
+	switch m.Button {
+	case tea.MouseWheelDown:
+		a.plan.view.scroll(scrollStep)
+	case tea.MouseWheelUp:
+		a.plan.view.scroll(-scrollStep)
+	}
+
+	return true
+}
+
 // handleWheel acts on the pane under the pointer without moving focus: a guest
 // that tracks the mouse gets the event, the alt screen gets cursor-key presses,
 // and any other pane scrolls its view.
 func (a *App) handleWheel(msg tea.MouseWheelMsg) {
-	if a.mouseBlocked() {
+	if a.planWheel(msg) || a.mouseBlocked() {
 		return
 	}
 

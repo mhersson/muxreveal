@@ -231,8 +231,8 @@ type column struct {
 }
 
 // whichKeyColumn lays out the groups of hints one under another, a blank row
-// between them. Each row is exactly the column's width.
-func whichKeyColumn(groups [][]hint, icons bool, st styles) column {
+// between them when gaps is set. Each row is exactly the column's width.
+func whichKeyColumn(groups [][]hint, gaps, icons bool, st styles) column {
 	keyW, contentW := 0, 0
 
 	headW := func(name string) int {
@@ -260,7 +260,7 @@ func whichKeyColumn(groups [][]hint, icons bool, st styles) column {
 	var rows []string
 
 	for i, g := range groups {
-		if i > 0 {
+		if i > 0 && gaps {
 			rows = append(rows, st.popup.Render(strings.Repeat(" ", contentW+2)))
 		}
 
@@ -367,7 +367,7 @@ func whichKeyPopup(leader string, hints []hint, icons bool, st styles) []string 
 		title = " " + iconLeader + " " + leader + " "
 	}
 
-	l := whichKeyColumn(left, icons, st)
+	l := whichKeyColumn(left, false, icons, st)
 	// The title sits after the corner and one dash, with a dash left before the column rule.
 	if need := lipgloss.Width(title) + 2; l.width < need {
 		l = padColumn(l, need, st)
@@ -375,7 +375,7 @@ func whichKeyPopup(leader string, hints []hint, icons bool, st styles) []string 
 
 	cols := []column{l}
 	if len(right) > 0 {
-		cols = append(cols, whichKeyColumn(right, icons, st))
+		cols = append(cols, whichKeyColumn(right, true, icons, st))
 	}
 
 	height := 0

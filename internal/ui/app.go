@@ -117,6 +117,8 @@ type App struct {
 	prompt                 *prompt      // text input; owns every key and paste while open
 	checks                 *checksView  // a pull request's checks; owns every key while open
 	merge                  *mergeView   // the merge box; owns every key while open
+	plan                   *planView    // an agent's plan; owns every key while open
+	planSeq                int          // plan read counter; an answer for another read is stale
 	prList                 *prListView  // the agents' pull requests; owns every key while open
 	compose                *composeView // the compose box; owns every key while open
 	composeSeq             int          // compose request counter; an answer for another request is stale
@@ -529,6 +531,7 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		cmds = append(cmds, a.relayout())
+		a.sizePlan()
 
 		return a, tea.Batch(cmds...)
 	case tea.KeyPressMsg:
@@ -652,6 +655,8 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.onMDPage(msg)
 	case mdListMsg:
 		a.onMDList(msg)
+	case planReadMsg:
+		a.onPlanRead(msg)
 	case reviewFlashMsg:
 		a.onReviewFlash(msg)
 	case wtOpenMsg:
@@ -811,6 +816,10 @@ func (a *App) View() tea.View {
 
 	if a.merge != nil {
 		content = a.overlayMerge(content, lk)
+	}
+
+	if a.plan != nil {
+		content = a.overlayPlan(content, lk)
 	}
 
 	if a.composeShown() {

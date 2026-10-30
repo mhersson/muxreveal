@@ -12,6 +12,11 @@ import (
 // machine, then the rail while it has the keyboard, then the review drawer while
 // it has it, then the focused pane.
 func (a *App) handleKey(msg tea.KeyPressMsg) tea.Cmd {
+	// An esc cancels a plan read that has not answered yet.
+	if msg.String() == "esc" {
+		a.planSeq++
+	}
+
 	if a.confirm != nil {
 		return a.handleConfirmKey(msg)
 	}
@@ -34,6 +39,10 @@ func (a *App) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 
 	if a.merge != nil {
 		return a.handleMergeKey(msg)
+	}
+
+	if a.plan != nil {
+		return a.handlePlanKey(msg)
 	}
 
 	if a.checks != nil {
@@ -90,7 +99,7 @@ func (a *App) handlePaste(msg tea.PasteMsg) tea.Cmd {
 		return a.handleComposePaste(msg)
 	}
 
-	if a.checks != nil || a.merge != nil || a.prList != nil {
+	if a.checks != nil || a.merge != nil || a.prList != nil || a.plan != nil {
 		return nil
 	}
 
@@ -156,12 +165,12 @@ func (a *App) reportFocusChange(from, to core.PaneID) {
 
 // modalOpen reports whether any modal owns the keyboard: a confirm, prompt,
 // copy mode, the palette or another overlay, the compose box, the merge box,
-// the checks, the pull request list, the worktree picker or the drawer's
+// the plan, the checks, the pull request list, the worktree picker or the drawer's
 // worktree list or link chooser.
 func (a *App) modalOpen() bool { return a.composeShown() || a.otherModalOpen() }
 
 // otherModalOpen is modalOpen without the compose box.
 func (a *App) otherModalOpen() bool {
 	return a.confirm != nil || a.prompt != nil || a.copy != nil || a.overlay != nil || a.merge != nil ||
-		a.checks != nil || a.prList != nil || a.picker.open != nil || a.drawer.list != nil || a.drawer.links != nil
+		a.plan != nil || a.checks != nil || a.prList != nil || a.picker.open != nil || a.drawer.list != nil || a.drawer.links != nil
 }

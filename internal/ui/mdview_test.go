@@ -653,3 +653,54 @@ func TestMDDocToggleTwice(t *testing.T) {
 		t.Errorf("two toggles left %d lines, want %d", got, before)
 	}
 }
+
+func TestMDViewScroll(t *testing.T) {
+	t.Parallel()
+
+	src := ""
+	for i := range 60 {
+		src += fmt.Sprintf("line %d\n\n", i)
+	}
+
+	// The window is 10 rows; n is the layout's line count.
+	tests := []struct {
+		name        string
+		cursor, top int
+		do          func(v *mdView)
+		want        func(n int) (top, cursor int)
+	}{
+		{"down keeps a cursor in view", 5, 0, func(v *mdView) { v.scroll(3) }, func(int) (int, int) { return 3, 5 }},
+		{"down pushes a cursor off the top", 1, 0, func(v *mdView) { v.scroll(3) }, func(int) (int, int) { return 3, 3 }},
+		{"up pulls a cursor off the bottom", 14, 5, func(v *mdView) { v.scroll(-3) }, func(int) (int, int) { return 2, 11 }},
+		{"up clamps at the first line", 2, 1, func(v *mdView) { v.scroll(-9) }, func(int) (int, int) { return 0, 2 }},
+		{"down clamps at the last page", 0, 0, func(v *mdView) { v.scroll(999) }, func(n int) (int, int) { return n - 10, n - 10 }},
+		{"page down moves both by the rows less one", 2, 1, func(v *mdView) { v.pageFull(1) }, func(int) (int, int) { return 10, 11 }},
+		{"page up moves both back", 12, 10, func(v *mdView) { v.pageFull(-1) }, func(int) (int, int) { return 1, 3 }},
+		{"page up clamps at the top", 3, 2, func(v *mdView) { v.pageFull(-1) }, func(int) (int, int) { return 0, 0 }},
+		{"page down clamps at the end", 0, 0, func(v *mdView) {
+			for range 99 {
+				v.pageFull(1)
+			}
+		}, func(n int) (int, int) { return n - 10, n - 1 }},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			v := newTestView(src, 40, 10)
+			n := len(v.layout().Lines)
+			v.top, v.cursor = tt.top, tt.cursor
+			tt.do(v)
+
+			wantTop, wantCursor := tt.want(n)
+			if v.top != wantTop || v.cursor != wantCursor {
+				t.Errorf("top, cursor = %d, %d; want %d, %d (%d lines)", v.top, v.cursor, wantTop, wantCursor, n)
+			}
+
+			if v.cursor < v.top || v.cursor >= v.top+v.h {
+				t.Errorf("cursor %d left the window [%d, %d)", v.cursor, v.top, v.top+v.h)
+			}
+		})
+	}
+}
