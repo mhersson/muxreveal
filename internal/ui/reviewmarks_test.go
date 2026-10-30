@@ -782,3 +782,22 @@ func TestReviewCounts(t *testing.T) {
 		t.Errorf("counts with a file shown whole = %d of %d, want 2 of 4", read, all)
 	}
 }
+
+// R stays on when the drawer starts over, as it does across reloads; the hunks
+// unfolded under it belong to the old view and are dropped.
+func TestReviewResetKeepsShowRead(t *testing.T) {
+	t.Parallel()
+
+	m := newPageRig(t, nil)
+	m.v.showRead, m.v.readOpen = true, map[string]bool{"h": true}
+
+	v := m.reviewReset(m.tabID(), m.v.pane)
+
+	if !v.showRead {
+		t.Error("R is off after the drawer started over")
+	}
+
+	if len(v.readOpen) != 0 {
+		t.Errorf("readOpen = %v, want none", v.readOpen)
+	}
+}
