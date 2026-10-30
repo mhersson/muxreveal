@@ -28,7 +28,8 @@ const (
 	tintGhostNr = 0.05
 
 	markGlyph    = "▎" // ▎ at the first cell of the row under the cursor
-	tagDigitsMin = 4   // the least hex digits of a hidden-character tag
+	markReviewed = "✓ reviewed"
+	tagDigitsMin = 4 // the least hex digits of a hidden-character tag
 	minNumW      = 3
 )
 
@@ -809,16 +810,30 @@ func (d *drawCtx) emptyRuns(y int) []railRun {
 
 // infoText is an info row's text with the key it names taken from the table,
 // and the clause dropped when the command has no key.
-func (d *drawCtx) infoText(text string) string {
-	if text != infoTruncated {
-		return text
+func (d *drawCtx) infoText(r reviewRow) string {
+	switch r.text {
+	case infoTruncated:
+		if key, ok := d.bind.first("review.full"); ok {
+			return "too large, press " + key + " for the full file"
+		}
+
+		return "too large"
+	case infoAllRead:
+		key, bound := d.bind.first("review.show.reviewed")
+
+		switch {
+		case r.block == 1 && bound:
+			return "the one hunk is reviewed; " + key + " shows it"
+		case r.block == 1:
+			return "the one hunk is reviewed"
+		case bound:
+			return "all " + strconv.Itoa(r.block) + " hunks reviewed; " + key + " shows them"
+		}
+
+		return "all " + strconv.Itoa(r.block) + " hunks reviewed"
 	}
 
-	if key, ok := d.bind.first("review.full"); ok {
-		return "too large, press " + key + " for the full file"
-	}
-
-	return "too large"
+	return r.text
 }
 
 // noSnapshotHint is the second line of an empty turn without a snapshot: the
@@ -862,10 +877,10 @@ func (d *drawCtx) rowCells(i int, cursor bool) string {
 
 	switch r.kind {
 	case rowFile:
-		return d.fileRow(r.file, cursor)
+		return d.fileRow(r.file, r.read, cursor)
 	case rowInfo:
 		bg := d.cursorGround(ui.Bg, cursor)
-		text, _ := cleanText(d.infoText(r.text))
+		text, _ := cleanText(d.infoText(r))
 
 		return railPainter{bg: bg}.line([]railRun{d.markRun(cursor), {text: "   "}, {text: text, fg: ui.Subtle}}, w)
 	case rowHunk:
@@ -876,6 +891,11 @@ func (d *drawCtx) rowCells(i int, cursor bool) string {
 		runs := []railRun{d.markRun(cursor), {text: " " + hunkHeader(h), fg: ui.Info}}
 		if section != "" {
 			runs = append(runs, railRun{text: " " + section, fg: ui.Muted})
+		}
+
+		if r.read {
+			gap := max(w-runsWidth(runs)-ansi.StringWidth(markReviewed)-1, 1)
+			runs = append(runs, railRun{text: strings.Repeat(" ", gap)}, railRun{text: markReviewed, fg: ui.Success})
 		}
 
 		return railPainter{bg: bg}.line(runs, w)
@@ -906,7 +926,7 @@ func (d *drawCtx) cursorGround(bg theme.Hex, cursor bool) theme.Hex {
 }
 
 // fileRow is a file's header: status, path, flags and counts.
-func (d *drawCtx) fileRow(fi int, cursor bool) string {
+func (d *drawCtx) fileRow(fi int, read, cursor bool) string {
 	f := d.v.res.Files[fi]
 	ui, w := d.ui, d.lay.diffW
 	bg := d.cursorGround(ui.Surface, cursor)
@@ -932,9 +952,12 @@ func (d *drawCtx) fileRow(fi int, cursor bool) string {
 		right = append(right, railRun{text: d.withIcon(iconFull, "full"), fg: ui.Accent, bold: true}, railRun{text: "  "})
 	}
 
-	if f.Binary {
+	switch {
+	case read:
+		right = append(right, railRun{text: markReviewed, fg: ui.Success})
+	case f.Binary:
 		right = append(right, railRun{text: "bin", fg: ui.Subtle})
-	} else {
+	default:
 		right = append(right, railRun{text: "+" + strconv.Itoa(f.Added), fg: ui.Success}, railRun{text: " -" + strconv.Itoa(f.Removed), fg: ui.Error})
 	}
 

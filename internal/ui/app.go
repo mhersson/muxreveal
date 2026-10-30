@@ -157,6 +157,7 @@ type App struct {
 	prs       prState
 	edits     editState
 	storeVer  uint64        // counts the dispatches the store accepted
+	marks     markFiles     // the reviewed-hunk files; nil keeps marks for the session only
 	engine    *git.Engine   // nil when the rail's diff stats and the review drawer's diffs are off
 	probeSem  chan struct{} // its capacity bounds the head, stats and name probes running at once
 	clip      *clipboard
@@ -245,7 +246,7 @@ func New(opts Options) (*App, error) {
 
 	a := &App{
 		harness: h, tick: tea.Tick, hookSettings: opts.HookSettings, hookSock: opts.HookSock,
-		events: opts.Events, notice: opts.Notice, save: opts.Save,
+		events: opts.Events, notice: opts.Notice, save: opts.Save, marks: opts.Marks,
 		log: opts.Logger, store: opts.Store, reg: reg, keymap: km, keys: tables,
 		panes: map[core.PaneID]*pane{}, outerFocused: true,
 		watches: watchState{set: opts.Watches, open: git.Open, panes: map[core.PaneID]*paneWatch{}, pins: map[core.TabID]*pinWatch{}, failed: map[string]bool{}},

@@ -40,6 +40,8 @@ var reviewKeys = []reviewKey{
 	{"m", "review.markdown"},
 	{"u", "review.split"},
 	{"enter", "review.fold"},
+	{"space", "review.mark"},
+	{"R", "review.show.reviewed"},
 	{"b", "review.mode.branch"},
 	{"t", "review.mode.turn"},
 	{"p", "review.mode.pr"},
@@ -105,6 +107,8 @@ func reviewCommands() []command {
 		cmd("review.markdown", "Review: rendered or source", (*App).toggleReviewMarkdown),
 		cmd("review.split", "Review: unified or side by side", (*App).reviewSplit),
 		cmd("review.fold", "Review: fold or show removed lines", (*App).reviewFold),
+		cmd("review.mark", "Review: mark the hunk reviewed", (*App).reviewMark),
+		cmd("review.show.reviewed", "Review: show reviewed hunks too", (*App).reviewShowRead),
 		cmd("review.mode.branch", "Review: branch mode", mode(core.ReviewBranch)),
 		cmd("review.mode.turn", "Review: turn mode", mode(core.ReviewTurn)),
 		cmd("review.mode.pr", "Review: pull request", (*App).reviewPR),
@@ -486,6 +490,10 @@ func (a *App) reviewFold() tea.Cmd {
 		}
 
 		return a.followLine(a.store.State().Tab().ID, v, a.renderedTargets(v, r))
+	}
+
+	if a.foldRead(v, r) {
+		return nil
 	}
 
 	if r.kind != rowGhost && r.kind != rowFold {

@@ -140,6 +140,8 @@ func TestDefaultCommands(t *testing.T) {
 		want{"review.markdown", "Review: rendered or source", iconReview},
 		want{"review.split", "Review: unified or side by side", iconReview},
 		want{"review.fold", "Review: fold or show removed lines", iconReview},
+		want{"review.mark", "Review: mark the hunk reviewed", iconReview},
+		want{"review.show.reviewed", "Review: show reviewed hunks too", iconReview},
 		want{"review.mode.branch", "Review: branch mode", iconReview},
 		want{"review.mode.turn", "Review: turn mode", iconReview},
 		want{"review.mode.pr", "Review: pull request", iconReview},
