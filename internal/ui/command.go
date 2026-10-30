@@ -213,6 +213,11 @@ func defaultCommands() []command {
 		title: "Merge pull request",
 		run:   (*App).mergeCommand,
 	}, command{
+		id:    "worktree.cleanup",
+		icon:  iconCleanup,
+		title: "Clean up a merged worktree",
+		run:   (*App).cleanupCommand,
+	}, command{
 		id:    "app.quit",
 		icon:  iconQuit,
 		title: "Quit MuxReveal",

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/charmbracelet/x/exp/golden"
 
@@ -744,5 +745,330 @@ func TestCleanupBoxFits(t *testing.T) {
 				t.Errorf("the worktree row is gone:\n%s", got)
 			}
 		})
+	}
+}
+
+// merged makes the state read pull request number of branch merged at the
+// rig's head, as the poll or a lookup leaves it after the merge.
+func (r *cleanupRig) merged(t *testing.T, branch string, number int, tune func(*core.PRInfo)) {
+	t.Helper()
+
+	pr := core.PRInfo{
+		Number: number, Title: "Add x", State: prMergedState, HeadBranch: branch, HeadOID: r.prHead, BaseBranch: "main",
+	}
+	if tune != nil {
+		tune(&pr)
+	}
+
+	// A lookup the rail makes for the branch must find the same record, or it clears this one.
+	r.know(branch, github.PR{
+		Number: pr.Number, Title: pr.Title, State: pr.State, HeadBranch: pr.HeadBranch, HeadOID: pr.HeadOID,
+		BaseBranch: pr.BaseBranch, CrossRepo: pr.CrossRepo,
+	})
+	openIn(t, r.App, core.SetBranchPR{Repo: prRepoKey, Branch: branch, PR: pr, Found: true})
+}
+
+// know makes the lookup of branch find pr.
+func (r *cleanupRig) know(branch string, pr github.PR) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.found[branch] = pr
+}
+
+// command starts worktree.cleanup and returns the command it makes.
+func (r *cleanupRig) command(t *testing.T) tea.Cmd {
+	t.Helper()
+
+	c, ok := r.reg.get("worktree.cleanup")
+	if !ok {
+		t.Fatal("worktree.cleanup is not registered")
+	}
+
+	return c.run(r.App)
+}
+
+// held runs the command's work and returns its answer without feeding it to the app.
+func (r *cleanupRig) held(t *testing.T) cleanupPlaceMsg {
+	t.Helper()
+
+	cmd := r.command(t)
+	if cmd == nil {
+		t.Fatalf("worktree.cleanup made no command; notice %q", r.notice)
+	}
+
+	return cmd().(cleanupPlaceMsg)
+}
+
+// said runs the command and waits for the notice it ends in; no box may open.
+func (r *cleanupRig) said(t *testing.T) string {
+	t.Helper()
+
+	r.notice = ""
+	r.run(r.command(t))
+	r.until(t, "the notice", func() bool { return r.notice != "" })
+
+	if r.confirm != nil {
+		t.Fatalf("a box opened:\n%s", r.text())
+	}
+
+	return r.notice
+}
+
+func TestCleanupCommand(t *testing.T) {
+	t.Parallel()
+
+	r := newCleanupRig(t)
+	r.merged(t, "feat/x", 7, nil)
+
+	r.run(r.command(t))
+	r.until(t, "the cleanup box", func() bool { return r.confirm != nil && r.confirm.cleanup != nil })
+
+	got := r.text()
+	for _, want := range []string{
+		"Clean up after #7 ", "#7 Add x", "is merged at " + r.prHead[:7] + ". Clean up its worktree?",
+		"[x] remove the worktree  .worktrees/feat-x", "[x] delete the local branch  feat/x",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("the box lacks %q:\n%s", want, got)
+		}
+	}
+
+	r.notice = ""
+	r.keys(keyEnter)
+	r.done(t)
+
+	if want := "removed .worktrees/feat-x and closed 2 panes; deleted feat/x"; r.notice != want {
+		t.Errorf("toast = %q, want %q", r.notice, want)
+	}
+
+	if r.worktreeExists() || r.branchExists(t) || r.panesLeft() != 0 {
+		t.Errorf("worktree %v, branch %v, panes %d; want all gone", r.worktreeExists(), r.branchExists(t), r.panesLeft())
+	}
+}
+
+func TestCleanupCommandNotices(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		setup func(t *testing.T, r *cleanupRig)
+		want  func(r *cleanupRig) string
+	}{
+		{
+			name:  "no pull request source",
+			setup: func(_ *testing.T, r *cleanupRig) { r.prs.src = nil },
+			want:  func(*cleanupRig) string { return "pull requests are off" },
+		},
+		{
+			name: "outside a repository",
+			setup: func(t *testing.T, r *cleanupRig) {
+				openIn(t, r.App, core.SetPaneCwd{ID: r.shellID, Cwd: t.TempDir()})
+			},
+			want: func(*cleanupRig) string { return "not a git repository" },
+		},
+		{
+			name:  "detached head",
+			setup: func(t *testing.T, r *cleanupRig) { gitIn(t, "git", r.wt, "switch", "-q", "--detach") },
+			want:  func(*cleanupRig) string { return "clean up: HEAD is detached" },
+		},
+		{
+			name:  "no pull request",
+			setup: func(t *testing.T, r *cleanupRig) { gitIn(t, "git", r.wt, "switch", "-q", "-c", "nopr") },
+			want:  func(*cleanupRig) string { return "no pull request for nopr" },
+		},
+		{
+			name: "pull request open",
+			setup: func(t *testing.T, r *cleanupRig) {
+				openIn(t, r.App, core.SetRepoPRs{Repo: prRepoKey, DefaultBranch: "main", Open: []core.PRInfo{{Number: 7, HeadBranch: "feat/x", State: prOpenState}}})
+			},
+			want: func(*cleanupRig) string { return "#7 is not merged" },
+		},
+		{
+			name: "pull request closed",
+			setup: func(t *testing.T, r *cleanupRig) {
+				openIn(t, r.App, core.SetRepoPRs{Repo: prRepoKey, DefaultBranch: "main"})
+				r.merged(t, "feat/x", 7, func(p *core.PRInfo) { p.State = "CLOSED" })
+			},
+			want: func(*cleanupRig) string { return "#7 is not merged" },
+		},
+		{
+			name: "dirty worktree",
+			setup: func(t *testing.T, r *cleanupRig) {
+				r.merged(t, "feat/x", 7, nil)
+				write(t, filepath.Join(r.wt, "a.txt"), "changed\n")
+			},
+			want: func(*cleanupRig) string { return ".worktrees/feat-x has 1 uncommitted change, so it stays" },
+		},
+		{
+			name: "working agent",
+			setup: func(t *testing.T, r *cleanupRig) {
+				r.merged(t, "feat/x", 7, nil)
+				openIn(t, r.App, core.SetAgentState{ID: r.agentID, State: core.AgentWorking})
+			},
+			want: func(r *cleanupRig) string { return r.name() + " is still working in .worktrees/feat-x" },
+		},
+		{
+			name: "main checkout",
+			setup: func(t *testing.T, r *cleanupRig) {
+				r.merged(t, "feat/x", 7, nil)
+				gitIn(t, "git", r.wt, "switch", "-q", "--detach")
+				gitIn(t, "git", r.main, "switch", "-q", "feat/x")
+				openIn(t, r.App, core.FocusPane{ID: r.other})
+			},
+			want: func(r *cleanupRig) string { return r.main + " is outside MuxReveal's worktrees, so it stays" },
+		},
+		{
+			name: "pull request from another repository",
+			setup: func(t *testing.T, r *cleanupRig) {
+				openIn(t, r.App, core.SetRepoPRs{Repo: prRepoKey, DefaultBranch: "main"})
+				r.merged(t, "fork-branch", 7, func(p *core.PRInfo) { p.CrossRepo = true; p.HeadBranch = "feat/x" })
+				r.know("feat/x", github.PR{Number: 7, HeadBranch: "feat/x", BaseBranch: "main", State: prMergedState})
+			},
+			want: func(*cleanupRig) string { return "#7's branch is in another repository" },
+		},
+		{
+			name: "default branch",
+			setup: func(t *testing.T, r *cleanupRig) {
+				r.merged(t, "main", 9, nil)
+				openIn(t, r.App, core.FocusPane{ID: r.other})
+			},
+			want: func(*cleanupRig) string { return "main is the default branch, so it stays" },
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			r := newCleanupRig(t)
+			tc.setup(t, r)
+
+			if got, want := r.said(t), tc.want(r); got != want {
+				t.Errorf("notice = %q, want %q", got, want)
+			}
+
+			if r.noticeLevel() != levelNotice {
+				t.Errorf("notice level = %v, want a plain notice", r.noticeLevel())
+			}
+
+			r.assertEnd(t, false, true, 2)
+		})
+	}
+}
+
+func TestCleanupCommandLate(t *testing.T) {
+	t.Parallel()
+
+	// feed gives the app the place answer and returns the check it starts.
+	feed := func(r *cleanupRig, msg cleanupPlaceMsg) tea.Cmd { return r.step(msg) }
+
+	tests := []struct {
+		name string
+		run  func(t *testing.T, r *cleanupRig)
+	}{
+		{"focus moved before the place answer", func(t *testing.T, r *cleanupRig) {
+			held := r.held(t)
+
+			openIn(t, r.App, core.FocusPane{ID: r.other})
+			r.run(feed(r, held))
+		}},
+		{"palette opened before the place answer", func(t *testing.T, r *cleanupRig) {
+			held := r.held(t)
+
+			r.openCommandPalette()
+			r.run(feed(r, held))
+		}},
+		{"confirm opened before the place answer", func(t *testing.T, r *cleanupRig) {
+			held := r.held(t)
+
+			r.openConfirm(confirm{tab: r.store.State().Tab().ID, yes: func(*App) tea.Cmd { return nil }})
+			r.run(feed(r, held))
+		}},
+		{"newer command before the place answer", func(t *testing.T, r *cleanupRig) {
+			older := r.held(t)
+			_ = r.held(t)
+
+			r.run(feed(r, older))
+		}},
+		{"focus moved before the check answer", func(t *testing.T, r *cleanupRig) {
+			check := feed(r, r.held(t))
+			if check == nil {
+				t.Fatal("the place answer started no check")
+			}
+
+			held := check()
+
+			openIn(t, r.App, core.FocusPane{ID: r.other})
+			r.run(r.step(held))
+		}},
+		{"palette opened before the check answer", func(t *testing.T, r *cleanupRig) {
+			check := feed(r, r.held(t))
+			if check == nil {
+				t.Fatal("the place answer started no check")
+			}
+
+			held := check()
+
+			r.openCommandPalette()
+			r.run(r.step(held))
+		}},
+		{"newer command before the check answer", func(t *testing.T, r *cleanupRig) {
+			check := feed(r, r.held(t))
+			if check == nil {
+				t.Fatal("the place answer started no check")
+			}
+
+			held := check()
+			_ = r.held(t)
+
+			r.run(r.step(held))
+		}},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			r := newCleanupRig(t)
+			r.merged(t, "feat/x", 7, nil)
+			r.notice = ""
+
+			tc.run(t, r)
+
+			if r.confirm != nil && r.confirm.cleanup != nil {
+				t.Errorf("a cleanup box opened:\n%s", r.text())
+			}
+
+			if r.notice != "" {
+				t.Errorf("notice = %q, want none", r.notice)
+			}
+
+			r.assertEnd(t, false, true, 2)
+		})
+	}
+}
+
+func TestCleanupCommandRegistered(t *testing.T) {
+	t.Parallel()
+
+	reg := testRegistry(t)
+
+	c, ok := reg.get("worktree.cleanup")
+	if !ok || c.title != "Clean up a merged worktree" || c.icon != iconCleanup {
+		t.Errorf("worktree.cleanup = %+v, %v; want the broom and its title", c, ok)
+	}
+
+	km, err := resolveLeader(leaderKeys("W", "worktree.cleanup"), reg)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if got, _ := km.lookup("W"); got != "worktree.cleanup" {
+		t.Errorf("lookup(W) = %q, want worktree.cleanup", got)
+	}
+
+	if g := groupFor(km, "worktree.cleanup"); g != "Git" {
+		t.Errorf("group = %q, want Git", g)
 	}
 }

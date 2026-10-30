@@ -157,6 +157,7 @@ func TestDefaultCommands(t *testing.T) {
 		want{"git.push", "Push branch", iconPush},
 		want{"pr.open", "Open a pull request", iconPR},
 		want{"pr.merge", "Merge pull request", iconMerge},
+		want{"worktree.cleanup", "Clean up a merged worktree", iconCleanup},
 		want{"app.quit", "Quit MuxReveal", iconQuit},
 	)
 	if len(cmds) != len(fixed)+len(theme.All()) {

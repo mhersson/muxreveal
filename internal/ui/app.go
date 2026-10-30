@@ -628,6 +628,8 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.onApproved(msg)
 	case mergedMsg:
 		return a, a.onMerged(msg)
+	case cleanupPlaceMsg:
+		return a, a.onCleanupPlace(msg)
 	case cleanupFoundMsg:
 		return a, a.onCleanupFound(msg)
 	case cleanedMsg:

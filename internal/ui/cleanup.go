@@ -119,6 +119,7 @@ const (
 type cleanupFoundMsg struct {
 	seq   int
 	from  cleanupFrom
+	pane  core.PaneID // the focused pane when asked
 	repo  github.Repo
 	pr    core.PRInfo
 	head  string
@@ -197,6 +198,7 @@ func (a *App) cleanupCheck(from cleanupFrom, repo github.Repo, pr core.PRInfo, r
 
 	var (
 		seq    = a.cleanupSeq
+		pane   = a.store.State().Tab().Focus
 		appCtx = a.ctx
 	)
 
@@ -206,7 +208,7 @@ func (a *App) cleanupCheck(from cleanupFrom, repo github.Repo, pr core.PRInfo, r
 
 		found, ok, err := findCleanup(ctx, root, pr.HeadBranch, head)
 
-		return cleanupFoundMsg{seq: seq, from: from, repo: repo, pr: pr, head: head, found: found, ok: ok, err: err}
+		return cleanupFoundMsg{seq: seq, from: from, pane: pane, repo: repo, pr: pr, head: head, found: found, ok: ok, err: err}
 	}
 }
 
@@ -262,7 +264,7 @@ func workingAgent(panes []cleanupPane) (cleanupPane, bool) {
 // answer that is not the newest check's, or that arrives under a modal, is
 // dropped.
 func (a *App) onCleanupFound(msg cleanupFoundMsg) tea.Cmd { //nolint:unparam // every handler of the update loop's messages has this shape
-	if msg.seq != a.cleanupSeq || a.modalOpen() {
+	if msg.seq != a.cleanupSeq || a.modalOpen() || (msg.from == fromCommand && msg.pane != a.store.State().Tab().Focus) {
 		return nil
 	}
 
@@ -545,4 +547,133 @@ func (a *App) onCleaned(msg cleanedMsg) {
 	}
 
 	a.toast(levelSuccess, text)
+}
+
+const (
+	noticeCleanupDetached  = "clean up: HEAD is detached"
+	noticeCleanupNotMerged = "%s is not merged"
+	noticeCleanupFork      = "%s's branch is in another repository"
+	noticeCleanupDefault   = "%s is the default branch, so it stays"
+	noticeCleanupNoHead    = "%s: its merged head is unknown"
+)
+
+// cleanupPlaceMsg answers finding the place and pull request of the focused pane.
+type cleanupPlaceMsg struct {
+	seq    int
+	pane   core.PaneID
+	place  prPlace
+	number int
+	repo   github.Repo
+	err    error
+}
+
+// cleanupCommand is worktree.cleanup: it finds, off the update loop, the
+// focused pane's followed place and its pull request, and cleans up after the
+// pull request when the state reads it merged.
+func (a *App) cleanupCommand() tea.Cmd {
+	if a.prs.src == nil || a.prs.resolve == nil {
+		a.notice = noticePRsOff
+
+		return nil
+	}
+
+	st := a.store.State()
+	pane := st.Tab().Focus
+
+	dir := st.Panes[pane].FollowDir()
+	if dir == "" {
+		a.notice = noticeNotRepo
+
+		return nil
+	}
+
+	a.cleanupSeq++
+
+	var (
+		seq                     = a.cleanupSeq
+		resolve, lookup, appCtx = a.prs.resolve, a.prs.lookup, a.ctx
+	)
+
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(appCtx, prShowTimeout)
+		defer cancel()
+
+		msg := cleanupPlaceMsg{seq: seq, pane: pane}
+		if msg.place, msg.err = resolvePRPlace(ctx, resolve, dir); msg.err != nil {
+			return msg
+		}
+
+		msg.repo = msg.place.repo
+		msg.number, _, msg.err = prOfPlace(ctx, st, lookup, msg.place)
+
+		return msg
+	}
+}
+
+// onCleanupPlace checks that the pull request is merged and starts the
+// worktree check, or says why there is nothing to clean up. An answer that is
+// not the newest request's, or whose pane lost the focus, is dropped.
+func (a *App) onCleanupPlace(msg cleanupPlaceMsg) tea.Cmd {
+	st := a.store.State()
+	if msg.seq != a.cleanupSeq || a.modalOpen() || msg.pane != st.Tab().Focus {
+		return nil
+	}
+
+	branch := printable(msg.place.branch)
+
+	switch err := msg.err; {
+	case err == nil:
+	case errors.Is(err, context.Canceled):
+		return nil
+	case errors.Is(err, errPRNoRepo):
+		a.notice = noticeNotRepo
+
+		return nil
+	case errors.Is(err, errPRDetached):
+		a.notice = noticeCleanupDetached
+
+		return nil
+	case errors.Is(err, errPRNoRemote):
+		a.notice = fmt.Sprintf(noticePRNoRemote, branch)
+
+		return nil
+	case errors.Is(err, errPRNotGitHub):
+		a.notice = fmt.Sprintf(noticePRNotGitHub, branch)
+
+		return nil
+	case errors.Is(err, errPRNone):
+		a.notice = fmt.Sprintf(noticePRNone, branch)
+
+		return nil
+	case errors.Is(err, context.DeadlineExceeded):
+		a.toast(levelError, "clean up: timed out")
+
+		return nil
+	default:
+		a.toast(levelError, gitReason(err))
+
+		return nil
+	}
+
+	pr, ok := prInfoByNumber(st, msg.repo.String(), msg.number)
+	if pr.HeadBranch == "" {
+		pr.HeadBranch = msg.place.branch
+	}
+
+	num := prNumberText(msg.number)
+
+	switch {
+	case !ok || pr.State != prMergedState:
+		a.notice = fmt.Sprintf(noticeCleanupNotMerged, num)
+	case pr.CrossRepo:
+		a.notice = fmt.Sprintf(noticeCleanupFork, num)
+	case pr.HeadBranch == st.PRs[msg.repo.String()].DefaultBranch:
+		a.notice = fmt.Sprintf(noticeCleanupDefault, printable(pr.HeadBranch))
+	case pr.HeadOID == "":
+		a.notice = fmt.Sprintf(noticeCleanupNoHead, num)
+	default:
+		return a.cleanupCheck(fromCommand, msg.repo, pr, msg.place.root, pr.HeadOID)
+	}
+
+	return nil
 }
