@@ -226,6 +226,9 @@ func (a *App) reviewReload() tea.Cmd {
 	}
 
 	if v.pr == (core.ReviewPR{}) {
+		// A pull request asked for before r is dropped with its action, as a newer ask drops it.
+		a.drawer.prSeq++
+
 		return a.refreshViews(tab.Review.Pane, nil)
 	}
 

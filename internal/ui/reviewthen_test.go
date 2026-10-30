@@ -113,23 +113,54 @@ func TestAfterLoadActionNeedsTheKeyboard(t *testing.T) {
 func TestAfterLoadActionDroppedByANewerAsk(t *testing.T) {
 	t.Parallel()
 
-	t.Run("r before the first load lands", func(t *testing.T) {
-		t.Parallel()
+	// a's place and fetch answers are fed by hand, so r lands between them where
+	// the case says.
+	for _, tt := range []struct {
+		name       string
+		placeFirst bool // the place answer arrives before r
+	}{
+		{"r before the place answer", false},
+		{"r before the fetch answer", true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 
-		r := newPRDrawer(t)
-		r.actions = &fakeActions{}
+			r := newPRDrawer(t)
+			r.actions = &fakeActions{}
 
-		r.poll()
-		r.opened(t)
-		r.typed("a")
-		r.typed("r")
-		r.settle()
-		r.quiet(t, 0)
+			r.poll()
+			r.opened(t)
 
-		if r.confirm != nil {
-			t.Errorf("a r before the load left a confirm open: %+v", *r.confirm)
-		}
-	})
+			place := r.step(keyRune('a'))
+			if place == nil {
+				t.Fatalf("a asked for nothing; notice = %q", r.notice)
+			}
+
+			var fetch tea.Cmd
+
+			if tt.placeFirst {
+				if fetch = r.step(place()); fetch == nil {
+					t.Fatalf("the place answer started no fetch; notice = %q", r.notice)
+				}
+
+				r.typed("r")
+			} else {
+				r.typed("r")
+
+				fetch = r.step(place())
+			}
+
+			if fetch != nil {
+				r.run(r.step(fetch()))
+			}
+
+			r.quiet(t, 0)
+
+			if r.confirm != nil {
+				t.Errorf("a's answers after r opened a confirm: %+v", *r.confirm)
+			}
+		})
+	}
 
 	t.Run("r while the pull request's diff loads", func(t *testing.T) {
 		t.Parallel()
