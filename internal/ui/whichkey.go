@@ -179,9 +179,9 @@ func (a *App) hints() []hint {
 
 		// A group prefix shows one row, whatever its second keys are.
 		if first, _, ok := strings.Cut(b.key, " "); ok {
-			if title, ok := groupPrefixTitle(first); ok {
+			if title, group, ok := groupPrefixTitle(first); ok {
 				if !done["prefix "+first] {
-					hints = append(hints, hint{key: first, title: title, group: b.group})
+					hints = append(hints, hint{key: first, title: title, group: group})
 				}
 
 				done["prefix "+first] = true
@@ -196,14 +196,15 @@ func (a *App) hints() []hint {
 	return hints
 }
 
-// groupPrefixTitle is the which-key row title of a prefix that opens a
-// sequence popup of its group's commands.
-func groupPrefixTitle(prefix string) (string, bool) {
+// groupPrefixTitle is the which-key row title and group of a prefix that opens
+// a sequence popup of its group's commands; the group does not follow whatever
+// binding under the prefix comes first.
+func groupPrefixTitle(prefix string) (title, group string, ok bool) {
 	if prefix == "g" {
-		return "Push and pull requests", true
+		return "Push and pull requests", "Git", true
 	}
 
-	return "", false
+	return "", "", false
 }
 
 // groupOrder lists the which-key groups left to right and top to bottom;

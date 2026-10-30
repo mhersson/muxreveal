@@ -36,7 +36,7 @@ func resolveLeader(cfg core.KeysConfig, reg *registry) (keymap, error) {
 	binds := cfg.Binds("leader")
 
 	for _, b := range binds {
-		if b.Key == km.leader {
+		if first, _, _ := strings.Cut(b.Key, " "); first == km.leader {
 			return keymap{}, fmt.Errorf("keys.leader_key: %q is also bound under keys.leader", km.leader)
 		}
 
@@ -72,7 +72,7 @@ func resolveLeader(cfg core.KeysConfig, reg *registry) (keymap, error) {
 			continue
 		}
 
-		if _, bound := km.lookup(first); bound || first == km.leader {
+		if _, bound := km.lookup(first); bound {
 			return keymap{}, fmt.Errorf("keys.leader: %q is bound and starts %q", first, b.key)
 		}
 	}

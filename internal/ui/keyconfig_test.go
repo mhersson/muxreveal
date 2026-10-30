@@ -160,6 +160,16 @@ func TestCheckKeysErrors(t *testing.T) {
 			}(),
 			`keys.leader_key: "ctrl+a" is also bound under keys.leader`,
 		},
+		{
+			"sequence starting with the leader",
+			func() core.KeysConfig {
+				c := leaderKeys("ctrl+a x", "pr.list")
+				c.LeaderKey = "ctrl+a"
+
+				return c
+			}(),
+			`keys.leader_key: "ctrl+a" is also bound under keys.leader`,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -403,5 +413,17 @@ func TestWhichKeyDelayConfig(t *testing.T) {
 
 	if got := newTestApp(t).keymap.delay.Milliseconds(); got != 300 {
 		t.Errorf("default delay = %dms, want 300", got)
+	}
+}
+
+func TestPrefixRowKeepsItsGroup(t *testing.T) {
+	t.Parallel()
+
+	a := newKeyedApp(t, "catppuccin-mocha", leaderKeys("g z", "tab.new"))
+
+	for _, h := range a.hints() {
+		if h.key == "g" && h.group != "Git" {
+			t.Errorf("g row group = %q, want Git", h.group)
+		}
 	}
 }
