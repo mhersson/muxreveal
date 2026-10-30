@@ -75,7 +75,7 @@ func (a *App) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 	return nil
 }
 
-// handlePaste sends pasted text to the open prompt, overlay or picker, else to the rail's
+// handlePaste sends pasted text to the open prompt, overlay or picker, to the plan's open search prompt, else to the rail's
 // or the drawer's search while one has the keyboard, else to the focused pane; an
 // open confirm or copy mode drops it. A paste ends a pending leader sequence.
 func (a *App) handlePaste(msg tea.PasteMsg) tea.Cmd {
@@ -99,7 +99,13 @@ func (a *App) handlePaste(msg tea.PasteMsg) tea.Cmd {
 		return a.handleComposePaste(msg)
 	}
 
-	if a.checks != nil || a.merge != nil || a.prList != nil || a.plan != nil {
+	if a.plan != nil {
+		a.planPaste(msg.Content)
+
+		return nil
+	}
+
+	if a.checks != nil || a.merge != nil || a.prList != nil {
 		return nil
 	}
 

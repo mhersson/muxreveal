@@ -70,7 +70,7 @@ func planIndicator(lines, rows, top int) string {
 // planHints are the key hints that fit w cells; the least needed drop first and
 // esc always stays.
 func planHints(w int) [][2]string {
-	pairs := [][2]string{{"j/k", "line"}, {"ctrl+d/u", "half page"}, {"]/[", "heading"}, {"enter", "open"}, {"esc", "close"}}
+	pairs := [][2]string{{"j/k", "line"}, {"ctrl+d/u", "half page"}, {"]/[", "heading"}, {"/", "search"}, {"enter", "open"}, {"esc", "close"}}
 	width := func() int {
 		n := planHintGap * (len(pairs) - 1)
 		for _, p := range pairs {
@@ -80,7 +80,7 @@ func planHints(w int) [][2]string {
 		return n
 	}
 
-	for _, drop := range []string{"]/[", "ctrl+d/u", "enter"} {
+	for _, drop := range []string{"/", "]/[", "ctrl+d/u", "enter"} {
 		if width() > w {
 			pairs = slices.DeleteFunc(pairs, func(p [2]string) bool { return p[0] == drop })
 		}
@@ -167,7 +167,7 @@ func (a *App) planLines(lk look, w, h int) []string {
 		out = append(out, row("", 0))
 	}
 
-	for _, l := range v.view.draw(newMDPainter(lk.theme, ui.Panel), true) {
+	for _, l := range v.view.draw(newMDPainter(lk.theme, ui.Panel).withQuery(v.query), true) {
 		out = append(out, row(l, vw))
 	}
 
@@ -187,6 +187,10 @@ func (a *App) planLines(lk look, w, h int) []string {
 func (a *App) planHintRow(ui theme.UI, w int) string {
 	on := func(fg theme.Hex) lipgloss.Style { return lipgloss.NewStyle().Foreground(fg).Background(ui.Panel) }
 
+	if a.plan.searching {
+		return a.planPromptRow(ui, w)
+	}
+
 	var b strings.Builder
 
 	for i, p := range planHints(w) {
@@ -198,6 +202,35 @@ func (a *App) planHintRow(ui theme.UI, w int) string {
 	}
 
 	return ansi.Truncate(b.String(), max(w, 0), "")
+}
+
+// planPromptRow is the search prompt in w cells: the query cut from its start
+// to leave the caret in view, then the prompt's hints when they fit.
+func (a *App) planPromptRow(ui theme.UI, w int) string {
+	on := func(fg theme.Hex) lipgloss.Style { return lipgloss.NewStyle().Foreground(fg).Background(ui.Panel) }
+	gap := on(ui.Fg).Render(strings.Repeat(" ", planHintGap))
+	hints := on(ui.Key).Bold(true).Render("enter") + on(ui.Muted).Render(" find") + gap +
+		on(ui.Key).Bold(true).Render("esc") + on(ui.Muted).Render(" cancel")
+
+	q, _ := cleanText(a.plan.query)
+	room := w - 3 // "/ " and the caret
+
+	if tail := planHintGap + ansi.StringWidth(ansi.Strip(hints)); room-tail >= 8 {
+		room -= tail
+	} else {
+		hints = ""
+	}
+
+	if qw := ansi.StringWidth(q); qw > room {
+		q = ansi.TruncateLeft(q, qw-max(room, 0), "")
+	}
+
+	row := on(ui.Info).Bold(true).Render("/ ") + on(ui.Fg).Render(q+"▏")
+	if hints != "" {
+		row += gap + hints
+	}
+
+	return ansi.Truncate(row, max(w, 0), "")
 }
 
 func planKindWord(k core.PlanKind) string {

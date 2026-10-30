@@ -34,7 +34,7 @@
 │    │                                                                                                            │    │
 │    │                                                                                                            │    │
 │    │                                                                                                            │    │
-│    │    j/k line    ctrl+d/u half page    ]/[ heading    enter open    esc close                                │    │
+│    │    j/k line    ctrl+d/u half page    ]/[ heading    / search    enter open    esc close                    │    │
 │    ╰────────────────────────────────────────────────────────────────────────────────────────────────────── all ─╯    │
 │ j/k move  enter jump  / search  esc back ││                                    ││                                    │
 ╰──────────────────────────────────────────╯╰────────────────────────────────────╯╰────────────────────────────────────╯

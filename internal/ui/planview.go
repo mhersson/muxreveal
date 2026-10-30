@@ -27,6 +27,11 @@ type planView struct {
 	plan       core.Plan
 	root, base string
 	view       mdView
+
+	// searching is the prompt being open, typing into query; last is the query
+	// n and N repeat. query stays painted after enter.
+	searching   bool
+	query, last string
 }
 
 // planReadMsg answers the read and parse of a plan; seq is the serial of the ask.
@@ -172,8 +177,16 @@ func (a *App) handlePlanKey(msg tea.KeyPressMsg) tea.Cmd {
 	a.notice = ""
 	key := bindingKey(msg)
 
+	pv := a.plan
+
 	if key == "esc" {
-		a.closePlan()
+		if !pv.searching {
+			a.closePlan()
+
+			return nil
+		}
+
+		pv.searching, pv.query = false, ""
 
 		return nil
 	}
@@ -182,7 +195,13 @@ func (a *App) handlePlanKey(msg tea.KeyPressMsg) tea.Cmd {
 		return nil
 	}
 
-	v := &a.plan.view
+	if pv.searching {
+		a.planSearchKey(msg)
+
+		return nil
+	}
+
+	v := &pv.view
 
 	switch key {
 	case "j", "down":
@@ -207,7 +226,58 @@ func (a *App) handlePlanKey(msg tea.KeyPressMsg) tea.Cmd {
 		v.heading(-1)
 	case "enter":
 		v.fold()
+	case "/":
+		pv.searching, pv.query = true, ""
+	case "n":
+		a.planFind(pv.last, false)
+	case "N":
+		a.planFind(pv.last, true)
 	}
 
 	return nil
+}
+
+// planSearchKey types into the open search prompt.
+func (a *App) planSearchKey(msg tea.KeyPressMsg) {
+	pv := a.plan
+
+	switch key := msg.String(); {
+	case key == "enter":
+		pv.searching = false
+		a.planFind(cmp.Or(pv.query, pv.last), false)
+	case key == "backspace":
+		if r := []rune(pv.query); len(r) > 0 {
+			pv.query = string(r[:len(r)-1])
+		}
+	case msg.Text != "":
+		pv.query += printable(msg.Text)
+	}
+}
+
+// planPaste extends the search query while the prompt is open; any other paste
+// is dropped.
+func (a *App) planPaste(text string) {
+	if pv := a.plan; pv.searching {
+		pv.query += printable(text)
+	}
+}
+
+// planFind keeps q and moves to its next (or previous) match; a miss says so.
+func (a *App) planFind(q string, back bool) {
+	if q == "" {
+		return
+	}
+
+	pv := a.plan
+
+	pv.last, pv.query = q, q
+
+	find := pv.view.find
+	if back {
+		find = pv.view.findPrev
+	}
+
+	if !find(q) {
+		a.notice = noticeNotFound + q
+	}
 }

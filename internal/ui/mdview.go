@@ -139,6 +139,29 @@ func (v *mdView) find(q string) bool {
 	return false
 }
 
+// findPrev moves to the previous line holding q, ignoring case, from the line
+// before the cursor and wrapping.
+func (v *mdView) findPrev(q string) bool {
+	if q == "" || len(v.layout().Lines) == 0 {
+		return false
+	}
+
+	plain := v.doc.text()
+	q = strings.ToLower(q)
+
+	for k := 1; k <= len(plain); k++ {
+		i := ((v.cursor-k)%len(plain) + len(plain)) % len(plain)
+		if strings.Contains(strings.ToLower(plain[i]), q) {
+			v.cursor = i
+			v.clamp()
+
+			return true
+		}
+	}
+
+	return false
+}
+
 // fold toggles the fold whose head is the cursor's line; false when there is none.
 func (v *mdView) fold() bool {
 	for _, f := range v.layout().Folds {

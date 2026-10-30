@@ -46,6 +46,7 @@ func TestPlanHints(t *testing.T) {
 		line    = "j/k line"
 		half    = "ctrl+d/u half page"
 		heading = "]/[ heading"
+		search  = "/ search"
 		open    = "enter open"
 		closeIt = "esc close"
 	)
@@ -54,7 +55,9 @@ func TestPlanHints(t *testing.T) {
 		width int
 		want  []string
 	}{
-		{100, []string{line, half, heading, open, closeIt}},
+		{100, []string{line, half, heading, search, open, closeIt}},
+		{84, []string{line, half, heading, search, open, closeIt}},
+		{83, []string{line, half, heading, open, closeIt}},
 		{72, []string{line, half, heading, open, closeIt}},
 		{71, []string{line, half, open, closeIt}},
 		{57, []string{line, half, open, closeIt}},
