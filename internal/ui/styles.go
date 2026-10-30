@@ -53,6 +53,8 @@ type styles struct {
 	approveTitle lipgloss.Style
 	// mergeTitle is the merge box's title, in Accent and bold.
 	mergeTitle lipgloss.Style
+	// popupAccent, popupDim and popupWarn are checked boxes, paths and warnings on the panel colour.
+	popupAccent, popupDim, popupWarn lipgloss.Style
 	// runs memoizes rendered border runs; it is shared by copies of the styles.
 	runs *runCache
 }
@@ -116,6 +118,9 @@ func newStyles(t theme.Theme) styles {
 		pushTitle:       onPanel.Foreground(ui.Info).Bold(true),
 		approveTitle:    onPanel.Foreground(ui.Success).Bold(true),
 		mergeTitle:      onPanel.Foreground(ui.Accent).Bold(true),
+		popupAccent:     onPanel.Foreground(ui.Accent),
+		popupDim:        onPanel.Foreground(ui.Dim),
+		popupWarn:       onPanel.Foreground(ui.Warning),
 		runs:            &runCache{},
 	}
 }

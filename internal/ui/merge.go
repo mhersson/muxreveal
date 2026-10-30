@@ -35,6 +35,7 @@ const (
 // drawer's diff loaded. The box draws the poll's later state of the pull
 // request but never sends it.
 type mergeView struct {
+	root   string
 	repo   github.Repo
 	pr     core.PRInfo
 	info   github.RepoInfo
@@ -52,6 +53,8 @@ type mergeKey struct {
 // mergedMsg answers a merge.
 type mergedMsg struct {
 	key    mergeKey
+	root   string
+	sha    string
 	method github.MergeMethod
 	branch string
 	res    github.Merged
@@ -215,9 +218,9 @@ func (a *App) mergeCommand() tea.Cmd {
 	return a.openWithPR(tab.Focus, nil, thenMerge)
 }
 
-// openMerge opens the merge box on the pull request the drawer has loaded, or
-// says why it cannot.
-func (a *App) openMerge(repoKey string, number int, sha string) {
+// openMerge opens the merge box on the pull request the drawer has loaded from
+// the worktree root, or says why it cannot.
+func (a *App) openMerge(repoKey string, number int, sha, root string) {
 	if a.modalOpen() {
 		return
 	}
@@ -258,7 +261,7 @@ func (a *App) openMerge(repoKey string, number int, sha string) {
 		DefaultBranch: rp.DefaultBranch, Methods: allowedMethods(rp.Methods), DeleteBranchOnMerge: rp.DeleteBranchOnMerge,
 	}
 
-	v := &mergeView{repo: repo, pr: pr, info: info, sha: sha, method: defaultMethod(rp.Methods)}
+	v := &mergeView{root: root, repo: repo, pr: pr, info: info, sha: sha, method: defaultMethod(rp.Methods)}
 	if !v.allows(v.method) {
 		v.method = info.Methods[0]
 	}
@@ -320,6 +323,7 @@ func (a *App) mergeRun(v *mergeView) tea.Cmd {
 		opts    = github.MergeOptions{Method: v.method, SHA: v.sha, DeleteBranch: v.del && v.deleteShown()}
 		repo    = v.repo
 		info    = v.info
+		root    = v.root
 	)
 
 	return func() tea.Msg {
@@ -328,13 +332,14 @@ func (a *App) mergeRun(v *mergeView) tea.Cmd {
 
 		res, err := actions.Merge(ctx, repo, pr, info, opts)
 
-		return mergedMsg{key: key, method: opts.Method, branch: pr.HeadBranch, res: res, err: err}
+		return mergedMsg{key: key, root: root, sha: opts.SHA, method: opts.Method, branch: pr.HeadBranch, res: res, err: err}
 	}
 }
 
-// onMerged says what a merge did and asks the poller for the repository. A
-// merge cut short by the app closing says nothing.
-func (a *App) onMerged(msg mergedMsg) {
+// onMerged says what a merge did, asks the poller for the repository and starts
+// the check for a worktree to clean up. A merge cut short by the app closing
+// says nothing.
+func (a *App) onMerged(msg mergedMsg) tea.Cmd {
 	delete(a.merging, msg.key)
 
 	n := msg.key.number
@@ -344,19 +349,19 @@ func (a *App) onMerged(msg mergedMsg) {
 
 	switch {
 	case errors.Is(msg.err, context.Canceled):
-		return
+		return nil
 	case errors.Is(msg.err, context.DeadlineExceeded):
 		a.toast(levelError, fmt.Sprintf("merge #%d: timed out", n))
 
-		return
+		return nil
 	case errors.Is(msg.err, github.ErrHeadMoved):
 		a.toast(levelError, fmt.Sprintf("merge #%d: the PR moved since you reviewed it; nothing merged", n))
 
-		return
+		return nil
 	case msg.err != nil:
 		a.toast(levelError, fmt.Sprintf("merge #%d: %s", n, gitReason(msg.err)))
 
-		return
+		return nil
 	}
 
 	text := fmt.Sprintf("merged #%d (%s)", n, msg.method)
@@ -374,6 +379,30 @@ func (a *App) onMerged(msg mergedMsg) {
 	if a.prs.src != nil {
 		a.prs.src.Refresh(msg.key.repo)
 	}
+
+	return a.cleanupAfterMerge(msg)
+}
+
+// cleanupAfterMerge starts the check for a worktree that has the merged branch.
+// A pull request from another repository, or from the default branch, has
+// nothing here to clean up: its branch name may belong to other work.
+func (a *App) cleanupAfterMerge(msg mergedMsg) tea.Cmd {
+	repo := msg.key.repo
+
+	pr, ok := prInfoByNumber(a.store.State(), repo.String(), msg.key.number)
+	if !ok {
+		pr = core.PRInfo{Number: msg.key.number, HeadBranch: msg.branch}
+	}
+
+	if pr.HeadBranch == "" {
+		pr.HeadBranch = msg.branch
+	}
+
+	if msg.root == "" || msg.sha == "" || pr.CrossRepo || pr.HeadBranch == a.store.State().PRs[repo.String()].DefaultBranch {
+		return nil
+	}
+
+	return a.cleanupCheck(fromMerge, repo, pr, msg.root, msg.sha)
 }
 
 // recordMerged puts the merged pull request in the state at once, so the drawer

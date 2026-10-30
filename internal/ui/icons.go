@@ -67,6 +67,7 @@ const (
 	iconApproved = "\U000F0513" // nf-md-thumb_up
 	iconChanges  = "\U000F03EB" // nf-md-pencil
 	iconPush     = "\uF403"     // nf-oct-repo_push
+	iconCleanup  = "\U000F00E2" // nf-md-broom
 )
 
 // Powerline edges and dividers.

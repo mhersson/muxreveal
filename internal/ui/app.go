@@ -101,6 +101,8 @@ type App struct {
 	marked  toastMark // the level the toast text was raised at
 	pushSeq int       // push request counter; an answer for another request is stale
 
+	cleanupSeq int // cleanup check counter; an answer for an older check is stale
+
 	pushing map[string]string // worktree root -> the branch being pushed there
 
 	// theme, styles and sample follow store.State().Theme; only sync updates them.
@@ -625,7 +627,11 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case approvedMsg:
 		a.onApproved(msg)
 	case mergedMsg:
-		a.onMerged(msg)
+		return a, a.onMerged(msg)
+	case cleanupFoundMsg:
+		return a, a.onCleanupFound(msg)
+	case cleanedMsg:
+		a.onCleaned(msg)
 	case reviewSnappedMsg:
 		return a, a.reviewRefresh(msg.pane)
 	case reviewFullMsg:

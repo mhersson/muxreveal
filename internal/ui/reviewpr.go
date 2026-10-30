@@ -580,7 +580,7 @@ func (a *App) prThenRun(then prThen) tea.Cmd {
 	case thenApprove:
 		a.openApprove(v.pr.Repo, v.pr.Number, v.res.Head)
 	case thenMerge:
-		a.openMerge(v.pr.Repo, v.pr.Number, v.res.Head)
+		a.openMerge(v.pr.Repo, v.pr.Number, v.res.Head, v.pr.Root)
 	case thenNothing:
 	}
 

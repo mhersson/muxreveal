@@ -28,6 +28,9 @@ type confirm struct {
 	// approve, when set, makes this the approve confirm: it draws approveBox and
 	// takes only enter and esc.
 	approve *approveTarget
+	// cleanup, when set, makes this the cleanup confirm: it draws cleanupBox and takes
+	// w, b, enter and esc.
+	cleanup *cleanupTarget
 }
 
 // openConfirm shows c and ends a pending leader sequence.
@@ -41,7 +44,12 @@ func (a *App) handleConfirmKey(msg tea.KeyPressMsg) tea.Cmd {
 	c := a.confirm
 
 	key := msg.String()
-	if (c.push != nil || c.approve != nil) && key != "enter" && key != "esc" {
+
+	if c.cleanup != nil && c.cleanup.toggle(key) {
+		return nil
+	}
+
+	if (c.push != nil || c.approve != nil || c.cleanup != nil) && key != "enter" && key != "esc" {
 		return nil
 	}
 
@@ -122,6 +130,8 @@ func overlayConfirm(base string, width, height int, c confirm, icons bool, st st
 		maxW = maxPushWidth
 	case c.approve != nil:
 		maxW = maxApproveWidth
+	case c.cleanup != nil:
+		maxW = maxCleanupWidth
 	}
 
 	w := min(maxW, width-2)
@@ -136,6 +146,10 @@ func overlayConfirm(base string, width, height int, c confirm, icons bool, st st
 		lines = pushBox(*c.push, w, icons, st)
 	case c.approve != nil:
 		lines = approveBox(*c.approve, w, icons, st)
+	case c.cleanup != nil:
+		top := max(1, height/3)
+
+		return overlayLines(base, width, height, top, cleanupBox(*c.cleanup, w, max(height-1-top, 0), icons, st), w)
 	default:
 		lines = confirmBox(c, w, icons, st)
 	}
