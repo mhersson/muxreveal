@@ -143,6 +143,32 @@ func TestEncodeMarks(t *testing.T) {
 	}
 }
 
+func TestMarkFilesLoadBadFile(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	common := filepath.Join(dir, "r", ".git")
+	path := MarksPath(dir, common)
+	writeMarks(t, path, "not json")
+
+	got, err := NewMarkFiles(dir, nil).Load(common, marksNow)
+	if err == nil {
+		t.Error("want an error for a file that does not decode")
+	}
+
+	if len(got) != 0 {
+		t.Errorf("marks = %v, want none", got)
+	}
+
+	if _, serr := os.Stat(path + ".bad"); serr != nil {
+		t.Errorf("bad file not kept at .bad: %v", serr)
+	}
+
+	if _, serr := os.Stat(path); serr == nil {
+		t.Error("bad file still at its path")
+	}
+}
+
 func TestMarkFiles(t *testing.T) {
 	t.Parallel()
 

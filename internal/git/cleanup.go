@@ -20,7 +20,7 @@ var (
 
 // ManagedWorktree reports whether path sits directly under one of the
 // repository's worktree roots, inside or sibling, with symlinks resolved.
-// The main checkout is not one.
+// The main checkout is not one, and neither is a path whose parent is missing.
 func ManagedWorktree(r Repo, path string) bool {
 	parent, err := filepath.EvalSymlinks(filepath.Dir(filepath.Clean(path)))
 	if err != nil {

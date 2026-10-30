@@ -58,6 +58,7 @@ func TestManagedWorktree(t *testing.T) {
 		{"nested below the root", r, filepath.Join(dir, ".worktrees", "a", "b"), false},
 		{"elsewhere", r, filepath.Join(dir, "..", "elsewhere"), false},
 		{"root reached through a symlink", lr, filepath.Join(linkedRepo, ".worktrees", "x"), true},
+		{"parent directory missing", r, filepath.Join(dir, ".worktrees", "gone", "x"), false},
 		{"sibling reached through a symlinked parent", r, filepath.Join(link, filepath.Base(dir)+".worktrees", "x"), true},
 	}
 
@@ -130,12 +131,11 @@ func TestRemoveWorktree(t *testing.T) {
 		name    string
 		setup   func(t *testing.T, path string)
 		wantErr error
-		anyErr  bool
 		removed bool
 	}{
 		{name: "clean", setup: func(*testing.T, string) {}, removed: true},
-		{"modified", func(t *testing.T, path string) { writeFile(t, path, "a.txt", "changed\n") }, ErrWorktreeDirty, true, false},
-		{"untracked", func(t *testing.T, path string) { writeFile(t, path, "new.txt", "n\n") }, ErrWorktreeDirty, true, false},
+		{name: "modified", setup: func(t *testing.T, path string) { writeFile(t, path, "a.txt", "changed\n") }, wantErr: ErrWorktreeDirty},
+		{name: "untracked", setup: func(t *testing.T, path string) { writeFile(t, path, "new.txt", "n\n") }, wantErr: ErrWorktreeDirty},
 	}
 
 	for _, tt := range tests {
