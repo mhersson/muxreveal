@@ -277,7 +277,7 @@ func (a *App) onMDPage(msg mdPageMsg) {
 	}
 
 	// The operator moved on during the read: a page must not take the keyboard back.
-	if a.modalOpen() || !a.drawer.focused {
+	if !active || a.modalOpen() || !a.drawer.focused {
 		return
 	}
 

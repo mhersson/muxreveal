@@ -213,7 +213,7 @@ func insideResolved(ctx context.Context, root, path string) error {
 
 // onLinkEdit opens the editor on a followed file that resolved inside the root,
 // or says why not. An answer for a drawer that closed, retargeted or has a new
-// source since is dropped.
+// source since, or one that a modal opened over, is dropped.
 func (a *App) onLinkEdit(msg linkEditMsg) tea.Cmd {
 	tab := a.store.State().Tab()
 	if tab.ID != msg.tab || (tab.Review == nil) != (msg.pane == "") || (tab.Review != nil && tab.Review.Pane != msg.pane) {
@@ -224,7 +224,7 @@ func (a *App) onLinkEdit(msg linkEditMsg) tea.Cmd {
 		return nil
 	}
 
-	if errors.Is(msg.err, context.Canceled) {
+	if a.modalOpen() || errors.Is(msg.err, context.Canceled) {
 		return nil
 	}
 

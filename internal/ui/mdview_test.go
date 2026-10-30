@@ -492,8 +492,14 @@ func TestMDViewDrawText(t *testing.T) {
 		t.Run(fmt.Sprintf("icons=%v", icons), func(t *testing.T) {
 			t.Parallel()
 
-			v, p := drawTestView(t, icons)
-			golden.RequireEqual(t, []byte(ansi.Strip(strings.Join(v.draw(p, true), "\n"))))
+			// An alert and an image carry icons, so the two goldens differ.
+			src := "# Title\n\n> [!NOTE]\n> alert body\n\n![logo](logo.png)\n\n<details>\n<summary>First</summary>\n\nbody\n\n</details>\n"
+			v := newTestView(src, 40, 14)
+			v.size(40, 14, icons)
+			v.move(lineOf(v.layout(), "First"))
+
+			th := mochaTheme(t)
+			golden.RequireEqual(t, []byte(ansi.Strip(strings.Join(v.draw(newMDPainter(th, th.UI.Bg), true), "\n"))))
 		})
 	}
 }

@@ -527,23 +527,57 @@ func TestLinkChooserCloses(t *testing.T) {
 }
 
 // A file that resolves after the drawer closed opens nothing.
-func TestFollowTargetLate(t *testing.T) {
+func TestFollowMarkdownSymlinkOutside(t *testing.T) {
 	t.Parallel()
 
 	m := newLinkRig(t)
-	cmd := m.followTarget(m.root, mdTarget{Path: filepath.Join(m.root, "docs", "code.go")}, nil)
+	outside := filepath.Join(t.TempDir(), "outside.md")
+	write(t, outside, "outside\n")
 
-	msg, ok := cmd().(linkEditMsg)
-	if !ok {
-		t.Fatal("following a file asked no resolution")
+	if err := os.Symlink(outside, filepath.Join(m.root, "docs", "out.md")); err != nil {
+		t.Skipf("no symlinks: %v", err)
 	}
 
-	openIn(t, m.App, core.CloseReview{})
-	m.settle()
-	m.run(m.step(msg))
+	m.notice = ""
+	m.flow(m.openMarkdownPage(m.tabID(), filepath.Join(m.root, "docs", "out.md"), true), nil)
 
-	if m.st.count() != 0 {
-		t.Errorf("%d editors started after the drawer closed, want none", m.st.count())
+	const want = "not opening docs/out.md: path escapes from parent"
+	if m.notice != want || len(m.v.pages) != 0 {
+		t.Errorf("notice = %q, pages %d, want %q and none", m.notice, len(m.v.pages), want)
+	}
+}
+
+func TestFollowTargetLate(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		do   func(m *linkRig)
+	}{
+		{"the drawer closed", func(m *linkRig) { openIn(t, m.App, core.CloseReview{}) }},
+		{"a palette opened", func(m *linkRig) { m.openCommandPalette() }},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			m := newLinkRig(t)
+			cmd := m.followTarget(m.root, mdTarget{Path: filepath.Join(m.root, "docs", "code.go")}, nil)
+
+			msg, ok := cmd().(linkEditMsg)
+			if !ok {
+				t.Fatal("following a file asked no resolution")
+			}
+
+			tt.do(m)
+			m.settle()
+			m.run(m.step(msg))
+
+			if m.st.count() != 0 {
+				t.Errorf("%d editors started after the answer went stale, want none", m.st.count())
+			}
+		})
 	}
 }
 

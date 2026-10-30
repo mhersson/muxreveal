@@ -1060,9 +1060,10 @@ func (a *App) onBodyRead(msg bodyReadMsg) tea.Cmd {
 	v.body = newTextArea(msg.text, maxComposeBody)
 	v.body.Start()
 	v.preview.top, v.preview.anchor = 0, 1
-	a.composePreviewSettle(v)
 
 	cmd := a.bodyChanged(v)
+	a.composePreviewSettle(v)
+
 	if v.preview.on {
 		return tea.Batch(cmd, a.renderBody(v))
 	}

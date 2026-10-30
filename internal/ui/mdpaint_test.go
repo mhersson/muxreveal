@@ -264,19 +264,29 @@ func TestMDPainterHostileLinks(t *testing.T) {
 func TestLinkSafe(t *testing.T) {
 	t.Parallel()
 
-	for url, want := range map[string]bool{
-		"https://example.com/a b?c=d#e": true,
-		"HTTP://example.com":            true,
-		"mailto:me@example.com":         true,
-		"https://e.x/é中":                true,
-		"ftp://example.com":             false,
-		"https://e.x/\x00":              false,
-		"https://e.x/\ufeff":            false,
-		"https://e.x/\ufe0f":            false,
-	} {
-		if got := linkSafe(url); got != want {
-			t.Errorf("linkSafe(%q) = %v, want %v", url, got, want)
-		}
+	tests := []struct {
+		name string
+		url  string
+		want bool
+	}{
+		{"https with space query and fragment", "https://example.com/a b?c=d#e", true},
+		{"scheme in capitals", "HTTP://example.com", true},
+		{"mailto", "mailto:me@example.com", true},
+		{"non-ascii path", "https://e.x/é中", true},
+		{"ftp scheme", "ftp://example.com", false},
+		{"nul byte", "https://e.x/\x00", false},
+		{"zero width no-break space", "https://e.x/\ufeff", false},
+		{"variation selector", "https://e.x/\ufe0f", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			if got := linkSafe(tt.url); got != tt.want {
+				t.Errorf("linkSafe(%q) = %v, want %v", tt.url, got, tt.want)
+			}
+		})
 	}
 }
 
@@ -320,6 +330,36 @@ func TestMDPainterWidth(t *testing.T) {
 
 		if g := newMDPainter(th, th.UI.Bg).withGround(th.UI.Panel).line(md.Line{{Text: "ab", Link: -1}}, nil, 6); g != want {
 			t.Errorf("withGround painted %q, want %q", g, want)
+		}
+	})
+
+	t.Run("cut at a wide character", func(t *testing.T) {
+		t.Parallel()
+
+		tests := []struct {
+			width int
+			want  string
+		}{
+			{4, "ab\u2026 "},
+			{5, "ab\u4e2d\u2026"},
+		}
+
+		p := newMDPainter(th, th.UI.Bg)
+
+		for _, tt := range tests {
+			got := p.line(md.Line{{Text: "ab\u4e2d\u6587", Link: -1}}, nil, tt.width)
+
+			if w := ansi.StringWidth(got); w != tt.width {
+				t.Errorf("width %d: painted %d cells: %q", tt.width, w, got)
+			}
+
+			if plain := ansi.Strip(got); plain != tt.want {
+				t.Errorf("width %d: text %q, want %q", tt.width, plain, tt.want)
+			}
+
+			if !endsClean(got) {
+				t.Errorf("width %d does not end clean: %q", tt.width, got)
+			}
 		}
 	})
 

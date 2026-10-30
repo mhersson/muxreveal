@@ -522,6 +522,13 @@ func TestMarkdownOpenLate(t *testing.T) {
 	}{
 		{"a page read after the compose box opened", func(m *pageRig) { m.compose = &composeView{} }, func(m *pageRig) { m.compose = nil }, true},
 		{"a page read after esc to the panes", func(m *pageRig) { m.drawerRelease() }, nil, false},
+		{"a page read after another tab opened", func(m *pageRig) {
+			if err := m.dispatch(core.NewTab{Kind: core.KindShell, Cwd: "/w/c"}); err != nil {
+				t.Fatal(err)
+			}
+			// A focused drawer on the new tab must not make the old tab's answer count.
+			m.drawer.focused = true
+		}, nil, false},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()

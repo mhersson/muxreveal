@@ -518,7 +518,26 @@ func TestComposePreviewEditorReturnScroll(t *testing.T) {
 
 	r.ctrlE(t)
 	r.edit(t, listBody(80))
-	r.exit(t)
+
+	// Right after the read the old doc is still the one parsed: its revision is
+	// no longer the body's, so the anchor must wait for the new doc.
+	queue := flatten(r.step(paneExitedMsg{id: "p3", p: r.panes["p3"]}))
+
+	for len(queue) > 0 {
+		m := queue[0]
+		queue = queue[1:]
+
+		if m == nil {
+			continue
+		}
+
+		_, read := m.(bodyReadMsg)
+		queue = append(queue, flatten(r.step(m))...)
+
+		if read && r.v.preview.anchor == 0 {
+			t.Error("the anchor settled on the old doc, before the new body was parsed")
+		}
+	}
 
 	p := r.v.preview
 	if p.top != 0 || p.anchor != 0 || p.parsed != r.v.bodyRev {
