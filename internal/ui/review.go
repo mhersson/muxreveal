@@ -62,6 +62,15 @@ type reviewView struct {
 	mdW     int
 	mdIcons bool
 
+	// The markdown pages shown over the diff column, the last one on top, and
+	// the serials of the asks to read one (a new page, and a page read again)
+	// whose answers are still wanted. UI state, not saved.
+	pages        []*mdPage
+	pageSeq      int
+	pagePush     bool // the ask in flight adds a page rather than replacing the stack
+	reloadSeq    int
+	reloadNotice bool // a failed re-read of the shown page says why
+
 	res         git.Result
 	gen         int // bumps whenever res is replaced; the caches follow it
 	rows        []reviewRow
@@ -143,6 +152,8 @@ type drawerState struct {
 	scans         int             // searches of the visible rows for chunks to tokenise; tests read it
 	renders       int             // drawers drawn rather than reused; tests read it
 	fallbacks     int             // frames whose drawer the compositor drew because the splice declined; tests and benches read it
+	mdSeq         int             // the last markdown list wanted; an answer for another is stale
+	mdWant        *mdWant         // an md.open waiting for its drawer
 }
 
 // reviewViewOf returns the tab's view, creating it.

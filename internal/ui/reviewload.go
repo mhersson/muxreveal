@@ -289,6 +289,7 @@ func (a *App) reviewRetarget(tab core.TabID, v *reviewView, turn int) tea.Cmd {
 	v.epoch = a.drawer.nextEpoch()
 	v.queued, v.after, v.then = nil, nil, thenNothing
 	v.stopReads()
+	a.dropPages(v)
 
 	return a.reviewStart(tab, v, nil, false)
 }
@@ -778,7 +779,16 @@ func (a *App) reviewBatch(root string, b git.Batch) tea.Cmd {
 	var cmds []tea.Cmd
 
 	for id, v := range a.drawer.views {
-		if v.root != root || v.pr != (core.ReviewPR{}) {
+		if v.root != root {
+			continue
+		}
+
+		// A page is a file of the root, whatever the drawer shows, pull request mode included.
+		if c := a.pageBatch(id, v, b); c != nil {
+			cmds = append(cmds, c)
+		}
+
+		if v.pr != (core.ReviewPR{}) {
 			continue
 		}
 

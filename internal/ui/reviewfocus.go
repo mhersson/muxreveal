@@ -109,10 +109,17 @@ func (a *App) onSlideOpen(msg slideOpenMsg) tea.Cmd {
 // panes, sliding out when slide is set.
 func (a *App) closeDrawer(slide bool) tea.Cmd {
 	a.drawer.prNext = nil
+	a.drawer.mdSeq++
+	a.drawer.mdWant = nil
 	a.drawerRelease()
 
 	if _, shown := a.drawerFull(a.store.State()); slide && shown {
 		return a.startSlide(true)
+	}
+
+	// The pages stay while the drawer slides out, so it does not change as it goes.
+	if v := a.drawer.views[a.store.State().Tab().ID]; v != nil {
+		a.dropPages(v)
 	}
 
 	// dispatch logs its own failures.

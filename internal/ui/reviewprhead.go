@@ -61,6 +61,10 @@ func (a *App) prHeaderH(v *reviewView, innerH int) int {
 
 // diffColumn is row y of the diff column: the header's rows, then the diff.
 func (d *drawCtx) diffColumn(y int) string {
+	if p := d.v.page(); p != nil {
+		return d.pageRow(p, y)
+	}
+
 	if y < d.lay.headH {
 		return d.headerRow(y)
 	}

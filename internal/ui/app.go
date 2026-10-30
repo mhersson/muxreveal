@@ -418,6 +418,10 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.later = append(a.later, c)
 	}
 
+	if c := a.mdListAfterSync(); c != nil {
+		a.later = append(a.later, c)
+	}
+
 	a.worktreesSync()
 
 	if c := a.drawerAfterUpdate(); c != nil {
@@ -625,6 +629,10 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, a.onReviewFull(msg)
 	case reviewMDMsg:
 		return a, a.onReviewMD(msg)
+	case mdPageMsg:
+		a.onMDPage(msg)
+	case mdListMsg:
+		a.onMDList(msg)
 	case reviewFlashMsg:
 		a.onReviewFlash(msg)
 	case wtOpenMsg:

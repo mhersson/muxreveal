@@ -3,7 +3,6 @@ package ui
 import (
 	"path/filepath"
 	"slices"
-	"strconv"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -74,7 +73,13 @@ func reviewCommands() []command {
 	}
 	line := func(d int) func(*App) tea.Cmd { return func(a *App) tea.Cmd { return a.reviewLine(d) } }
 	hunk := func(d int) func(*App) tea.Cmd {
-		return func(a *App) tea.Cmd { return a.reviewJump((*reviewView).blockStarts, d) }
+		return func(a *App) tea.Cmd {
+			if a.onPage(func(_ *reviewView, p *mdPage) { p.view.heading(d) }) {
+				return nil
+			}
+
+			return a.reviewJump((*reviewView).blockStarts, d)
+		}
 	}
 	file := func(d int) func(*App) tea.Cmd {
 		return func(a *App) tea.Cmd { return a.reviewJump((*reviewView).fileStarts, d) }
@@ -83,7 +88,7 @@ func reviewCommands() []command {
 	mode := func(m core.ReviewMode) func(*App) tea.Cmd { return func(a *App) tea.Cmd { return a.setReviewMode(m) } }
 	turn := func(d int) func(*App) tea.Cmd { return func(a *App) tea.Cmd { return a.stepReviewTurn(d) } }
 
-	return []command{
+	cmds := []command{
 		cmd("review.toggle", "Review drawer", (*App).reviewToggle),
 		cmd("review.line.next", "Review: next line", line(1)),
 		cmd("review.line.prev", "Review: previous line", line(-1)),
@@ -115,6 +120,24 @@ func reviewCommands() []command {
 		cmd("review.refresh", "Review: refresh", (*App).reviewReload),
 		cmd("review.back", "Review: back to the panes", (*App).reviewBack),
 	}
+
+	// A markdown page answers only its own keys; the others are dropped.
+	for i, c := range cmds {
+		if c.id == "review.toggle" || pageCommand(c.id) {
+			continue
+		}
+
+		run := c.run
+		cmds[i].run = func(a *App) tea.Cmd {
+			if a.pageShown() {
+				return nil
+			}
+
+			return run(a)
+		}
+	}
+
+	return cmds
 }
 
 // ---- keyboard ----
@@ -193,6 +216,16 @@ func (a *App) reviewFind(v *reviewView) {
 
 	v.last = q
 
+	if _, p := a.activePage(); p != nil {
+		if !p.view.find(q) {
+			a.notice = noticeNotFound + q
+		}
+
+		p.rev++
+
+		return
+	}
+
 	i, ok := searchRows(v.res, v.rows, v.cursor, q)
 	if !ok {
 		a.notice = noticeNotFound + q
@@ -230,6 +263,8 @@ func (a *App) reviewBack() tea.Cmd {
 	switch {
 	case v.search != nil:
 		v.search = nil
+	case v.page() != nil:
+		return a.popPage(a.store.State().Tab().ID, v)
 	case a.drawer.tree:
 		a.reviewLeaveTree(v, false)
 	default:
@@ -265,6 +300,10 @@ func (a *App) reviewGo(v *reviewView, row int) {
 
 // reviewLine moves the cursor a row; in the tree it moves the selected file.
 func (a *App) reviewLine(delta int) tea.Cmd {
+	if a.onPage(func(_ *reviewView, p *mdPage) { p.view.move(delta) }) {
+		return nil
+	}
+
 	_, v, ok := a.reviewActive()
 	if !ok {
 		return nil
@@ -287,6 +326,10 @@ func (a *App) reviewLine(delta int) tea.Cmd {
 }
 
 func (a *App) reviewPage(dir int) tea.Cmd {
+	if a.onPage(func(_ *reviewView, p *mdPage) { p.view.page(dir) }) {
+		return nil
+	}
+
 	_, v, ok := a.reviewActive()
 	if !ok {
 		return nil
@@ -298,6 +341,10 @@ func (a *App) reviewPage(dir int) tea.Cmd {
 }
 
 func (a *App) reviewEnd(bottom bool) tea.Cmd {
+	if a.onPage(func(_ *reviewView, p *mdPage) { p.view.end(bottom) }) {
+		return nil
+	}
+
 	_, v, ok := a.reviewActive()
 	if !ok {
 		return nil
@@ -401,6 +448,10 @@ func (v *reviewView) fileStarts() []int {
 // reviewFold folds the ghost block under the cursor into one row, or shows it
 // again from that row; in the tree it jumps to the selected file.
 func (a *App) reviewFold() tea.Cmd {
+	if a.onPage(func(_ *reviewView, p *mdPage) { p.view.fold() }) {
+		return nil
+	}
+
 	_, v, ok := a.reviewActive()
 	if !ok {
 		return nil
@@ -600,6 +651,10 @@ func editLine(f git.FileDiff, r reviewRow) int {
 // reviewEdit opens the file at the cursor line in the editor, in a new shell
 // pane beside the drawer's pane, and closes the drawer so the pane shows.
 func (a *App) reviewEdit() tea.Cmd {
+	if v, p := a.activePage(); p != nil {
+		return a.openEditor(a.store.State().Tab(), v, p.path, p.view.sourceLine())
+	}
+
 	tab, v, ok := a.reviewActive()
 	if !ok || v.cursor < 0 || v.cursor >= len(v.rows) {
 		return nil
@@ -616,14 +671,5 @@ func (a *App) reviewEdit() tea.Cmd {
 
 	// An editor reads +{command} and a leading dash as options, and the pane
 	// starts elsewhere when the root is gone; the absolute path is neither.
-	path := filepath.Join(v.root, f.Path)
-
-	run := &paneRun{program: reviewEditor(a.getenv), args: []string{"+" + strconv.Itoa(editLine(f, r)), path}}
-
-	cmd, opened := a.openPaneAt(core.KindShell, core.SplitVertical, tab.Review.Pane, v.root, run)
-	if opened {
-		a.closeDrawer(false)
-	}
-
-	return cmd
+	return a.openEditor(tab, v, filepath.Join(v.root, f.Path), editLine(f, r))
 }

@@ -55,6 +55,7 @@ type layoutKey struct {
 	modeShortW int // and its width without " in this worktree"
 	headH      int // rows of the pull request header the diff column starts with
 	fullDigits int // digits of the longest file shown whole
+	page       bool
 }
 
 // fullDigits is the digits of the highest line number among the files shown whole.
@@ -77,8 +78,17 @@ func fullDigits(v *reviewView) int {
 func (a *App) drawerLayoutOf(box core.Rect, v *reviewView, tree bool) drawerLayout {
 	c := v.derived()
 	full, short := modeWidth(v, a.icons, false), modeWidth(v, a.icons, true)
-	headH := a.prHeaderH(v, max(box.H-2, 0))
-	key := layoutKey{box: box, tree: tree, split: v.split, modeW: full, modeShortW: short, headH: headH, fullDigits: fullDigits(v)}
+	page := v.page() != nil
+	headH := 0
+
+	// A page takes the whole column: no tree, no pull request header.
+	if page {
+		tree = false
+	} else {
+		headH = a.prHeaderH(v, max(box.H-2, 0))
+	}
+
+	key := layoutKey{box: box, tree: tree, split: v.split, modeW: full, modeShortW: short, headH: headH, fullDigits: fullDigits(v), page: page}
 
 	if c.layOK && c.layKey == key {
 		return c.lay
@@ -154,7 +164,8 @@ type drawCtx struct {
 	query string
 	top   int
 
-	mdp *mdPainter // paints rendered rows; made on first use
+	mdp      *mdPainter // paints rendered rows; made on first use
+	pageRows []string   // the shown page's rows, drawn on first use
 
 	pr     core.PRInfo // the pull request the header shows; zero when headH is 0
 	pinned bool        // the drawer is held on its root
@@ -212,6 +223,8 @@ type drawKey struct {
 	list                 wtKey
 	err                  string
 	hasErr               bool
+	page                 *mdPage
+	pageRev              int
 
 	pr       core.PRInfo
 	unpushed int
@@ -240,6 +253,10 @@ func (d *drawCtx) key(r core.Rect, name string) drawKey {
 
 	if v.err != nil {
 		k.err, k.hasErr = v.err.Error(), true
+	}
+
+	if p := v.page(); p != nil {
+		k.page, k.pageRev = p, p.rev
 	}
 
 	if len(v.fresh) > 0 && d.now.Before(v.flashUntil) {
@@ -528,6 +545,10 @@ func (v *reviewView) showsTurn() bool {
 
 // modeTag is the text of the mode tag.
 func (d *drawCtx) modeTag() string {
+	if p := d.v.page(); p != nil {
+		return d.withIcon(iconMarkdown, printable(p.rel))
+	}
+
 	if src, ok := d.v.src.(git.PRSource); ok {
 		return d.withIcon(iconPR, prNumberText(src.Number))
 	}
@@ -571,6 +592,10 @@ func (d *drawCtx) bottomBorder() string {
 // hintRuns are the key hints that fit cw cells; pairs that do not are dropped
 // from the end.
 func (d *drawCtx) hintRuns(cw int) []railRun {
+	if d.v.page() != nil {
+		return d.fitHints([][2]string{{"j/k", "line"}, {"]/[", "heading"}, {"enter", "open"}, {"/", "search"}, {"esc", "back"}}, cw)
+	}
+
 	cur := d.cursorFile()
 	render := cur != nil && md.IsMarkdown(cur.Path) && !cur.Binary && cur.Status != git.Deleted
 
@@ -610,6 +635,11 @@ func (d *drawCtx) hintRuns(cw int) []railRun {
 		pairs = [][2]string{{"j/k", "file"}, {"enter", "jump"}, {"tab", "hide"}, {"esc", "back"}}
 	}
 
+	return d.fitHints(pairs, cw)
+}
+
+// fitHints draws the key and label pairs that fit cw cells.
+func (d *drawCtx) fitHints(pairs [][2]string, cw int) []railRun {
 	var out []railRun
 
 	used := 0
@@ -955,4 +985,18 @@ func (d *drawCtx) mdPainter() mdPainter {
 	}
 
 	return *d.mdp
+}
+
+// pageRow is row y of the shown markdown page, which fills the diff column.
+func (d *drawCtx) pageRow(p *mdPage, y int) string {
+	if d.pageRows == nil {
+		p.resize(d.lay.diffW, d.lay.diffH, d.icons)
+		d.pageRows = p.view.draw(d.mdPainter(), d.diffKeys())
+	}
+
+	if y >= len(d.pageRows) {
+		return railPainter{bg: d.ui.Bg}.line(nil, d.lay.diffW)
+	}
+
+	return d.exact(d.pageRows[y], d.lay.diffW)
 }
