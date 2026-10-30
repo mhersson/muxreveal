@@ -1,6 +1,9 @@
 package core
 
-import "testing"
+import (
+	"reflect"
+	"testing"
+)
 
 const repoKey = "github.com/o/r"
 
@@ -231,6 +234,41 @@ func TestOpenPRForReadsOnlyThePollsOpenList(t *testing.T) {
 			pr, ok := prState(t, tt.acts...).OpenPRFor(repoKey, "feat")
 			if ok != (tt.want != 0) || pr.Number != tt.want {
 				t.Errorf("OpenPRFor = #%d, %v, want #%d", pr.Number, ok, tt.want)
+			}
+		})
+	}
+}
+
+func TestSetRepoPRsDetails(t *testing.T) {
+	t.Parallel()
+
+	focused := &PRChecks{Number: 7, HeadOID: "abc", Checks: []CheckInfo{{Name: "ci", State: "success"}}}
+	good := SetRepoPRs{
+		Repo: repoKey, DefaultBranch: "main",
+		Methods: []string{"merge", "squash"}, DeleteBranchOnMerge: true, Focused: focused,
+	}
+
+	tests := []struct {
+		name        string
+		next        SetRepoPRs
+		wantMethods []string
+		wantDelete  bool
+		wantFocus   *PRChecks
+	}{
+		{"error keeps them", SetRepoPRs{Repo: repoKey, Err: "boom", Methods: []string{"merge", "squash"}, DeleteBranchOnMerge: true, Focused: focused}, []string{"merge", "squash"}, true, focused},
+		{"good poll replaces them", SetRepoPRs{Repo: repoKey, Methods: []string{"rebase"}}, []string{"rebase"}, false, nil},
+		{"nil focus clears it", SetRepoPRs{Repo: repoKey, Methods: []string{"merge", "squash"}, DeleteBranchOnMerge: true}, []string{"merge", "squash"}, true, nil},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			s := dispatch(t, prState(t, good), tt.next)
+			got := s.PRs[repoKey]
+
+			if !reflect.DeepEqual(got.Methods, tt.wantMethods) || got.DeleteBranchOnMerge != tt.wantDelete || !reflect.DeepEqual(got.Focused, tt.wantFocus) {
+				t.Errorf("repo = %+v, want methods %v, delete %v, focused %+v", got, tt.wantMethods, tt.wantDelete, tt.wantFocus)
 			}
 		})
 	}

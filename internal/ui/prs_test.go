@@ -921,3 +921,40 @@ func TestNoSourceMeansNoPRWork(t *testing.T) {
 		t.Errorf("resolutions = %v, want none", r.prs.panes)
 	}
 }
+
+func TestSnapshotKeepsTheRepositoryDetails(t *testing.T) {
+	p := newPRApp(t)
+	done := time.Date(2026, 10, 29, 12, 0, 0, 0, time.UTC)
+
+	snap := snapshotOf(github.PR{Number: 12, HeadBranch: "feat", State: "OPEN", ViewerAuthored: true})
+	snap.Info.Methods = []github.MergeMethod{github.MergeCommit, github.Rebase}
+	snap.Info.DeleteBranchOnMerge = true
+	snap.Focused = &github.FocusedChecks{Number: 12, HeadOID: "abc", Checks: []github.Check{
+		{Name: "ci", URL: "https://x/1", State: github.CheckFailure, CompletedAt: done},
+	}}
+
+	p.step(snap)
+
+	want := core.RepoPRs{
+		DefaultBranch:       "main",
+		Open:                []core.PRInfo{{Number: 12, HeadBranch: "feat", State: "OPEN", ViewerAuthored: true}},
+		Methods:             []string{"merge", "rebase"},
+		DeleteBranchOnMerge: true,
+		Focused: &core.PRChecks{Number: 12, HeadOID: "abc", Checks: []core.CheckInfo{
+			{Name: "ci", URL: "https://x/1", State: "failure", CompletedAt: done},
+		}},
+	}
+
+	if got := p.store.State().PRs[prRepoKey]; !reflect.DeepEqual(got, want) {
+		t.Errorf("PRs = %+v, want %+v", got, want)
+	}
+
+	failed := snapshotOf()
+	failed.Err = errors.New("boom")
+	p.step(failed)
+
+	got := p.store.State().PRs[prRepoKey]
+	if !reflect.DeepEqual(got.Methods, want.Methods) || !got.DeleteBranchOnMerge || !reflect.DeepEqual(got.Focused, want.Focused) {
+		t.Errorf("a failed poll lost the details: %+v", got)
+	}
+}

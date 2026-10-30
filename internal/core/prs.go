@@ -16,28 +16,53 @@ type PRInfo struct {
 	HeadBranch, HeadOID, BaseBranch string
 	ReviewDecision, MergeState      string // GitHub's enums as given; "" when null
 	Draft, CrossRepo                bool
+	ViewerAuthored                  bool // the signed-in user opened it
 	ChecksTotal, ChecksDone         int
 	ChecksFailed                    int
 	UpdatedAt                       time.Time
+}
+
+// CheckInfo is one check of a pull request. State is pending, success, failure
+// or skipped.
+type CheckInfo struct {
+	Name, URL, State       string
+	StartedAt, CompletedAt time.Time
+}
+
+// PRChecks is the checks of one pull request at one head commit.
+type PRChecks struct {
+	Number  int
+	HeadOID string
+	Checks  []CheckInfo
 }
 
 // RepoPRs is what is known of one repository's pull requests. State copies
 // share it, so an action replaces a RepoPRs and never edits one in place.
 type RepoPRs struct {
 	DefaultBranch string
-	Open          []PRInfo          // the last successful poll, newest update first
-	Err           string            // the last poll's failure; "" after a success
-	Branch        map[string]PRInfo // per branch, the pull request a lookup found
+	Open          []PRInfo // the last successful poll, newest update first
+	Err           string   // the last poll's failure; "" after a success
+	// Methods are the merge methods the repository allows, in the order merge,
+	// squash, rebase.
+	Methods             []string
+	DeleteBranchOnMerge bool
+	Focused             *PRChecks         // the focused pane's PR with its checks, when there is one
+	Branch              map[string]PRInfo // per branch, the pull request a lookup found
 }
 
 // SetRepoPRs records a poll of the repository keyed "host/owner/name": its
-// default branch, its open pull requests and the poll's error, replacing all
-// three. The branch lookups stay.
+// default branch, its open pull requests, merge methods, delete-branch setting,
+// focused pull request's checks and the poll's error, replacing all of them.
+// The branch lookups stay.
 type SetRepoPRs struct {
 	Repo          string
 	DefaultBranch string
 	Open          []PRInfo
 	Err           string
+
+	Methods             []string
+	DeleteBranchOnMerge bool
+	Focused             *PRChecks
 }
 
 func (a SetRepoPRs) apply(s *State) error {
@@ -48,11 +73,26 @@ func (a SetRepoPRs) apply(s *State) error {
 	s.setRepoPRs(a.Repo, RepoPRs{
 		DefaultBranch: a.DefaultBranch,
 		Open:          slices.Clone(a.Open),
-		Err:           a.Err,
-		Branch:        s.PRs[a.Repo].Branch,
+
+		Methods:             slices.Clone(a.Methods),
+		DeleteBranchOnMerge: a.DeleteBranchOnMerge,
+		Focused:             clonePRChecks(a.Focused),
+		Err:                 a.Err,
+		Branch:              s.PRs[a.Repo].Branch,
 	})
 
 	return nil
+}
+
+func clonePRChecks(c *PRChecks) *PRChecks {
+	if c == nil {
+		return nil
+	}
+
+	cp := *c
+	cp.Checks = slices.Clone(c.Checks)
+
+	return &cp
 }
 
 // SetBranchPR records the pull request a lookup found for a branch of the
