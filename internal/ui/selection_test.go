@@ -278,3 +278,33 @@ func TestCharClass(t *testing.T) {
 		}
 	}
 }
+
+func TestSelectionBelow(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		sel  selection
+		row  int
+		want selection
+		ok   bool
+	}{
+		{"stream start above", selection{selStream, point{2, 5}, point{6, 3}}, 4, selection{selStream, point{4, 0}, point{6, 3}}, true},
+		{"stream reversed", selection{selStream, point{6, 3}, point{2, 5}}, 4, selection{selStream, point{4, 0}, point{6, 3}}, true},
+		{"stream all below", selection{selStream, point{2, 5}, point{6, 3}}, 1, selection{selStream, point{2, 5}, point{6, 3}}, true},
+		{"stream ends above", selection{selStream, point{2, 5}, point{6, 3}}, 7, selection{}, false},
+		{"block keeps its column", selection{selBlock, point{2, 5}, point{6, 1}}, 4, selection{selBlock, point{4, 5}, point{6, 1}}, true},
+		{"line", selection{selLine, point{2, 0}, point{6, 9}}, 4, selection{selLine, point{4, 0}, point{6, 9}}, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got, ok := tt.sel.below(tt.row)
+			if ok != tt.ok || got != tt.want {
+				t.Errorf("below(%d) = %+v, %v; want %+v, %v", tt.row, got, ok, tt.want, tt.ok)
+			}
+		})
+	}
+}
