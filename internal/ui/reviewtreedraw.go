@@ -143,8 +143,9 @@ func (d *drawCtx) treeRow(y int) string {
 }
 
 // modeParts are the pieces of the mode row: the icon (empty with icons off),
-// the bold word and the rest. All are empty before the view has a source.
-func modeParts(v *reviewView, icons bool) (icon, word, rest string) {
+// the bold word and the rest. All are empty before the view has a source. A
+// short row leaves out " in this worktree".
+func modeParts(v *reviewView, icons, short bool) (icon, word, rest string) {
 	switch src := v.src.(type) {
 	case git.BranchSource:
 		base := v.base
@@ -161,7 +162,10 @@ func modeParts(v *reviewView, icons bool) (icon, word, rest string) {
 	case git.TurnSource:
 		n, m := v.shownTurn(), v.turns
 
-		icon, word, rest = iconTurn, "turn "+strconv.Itoa(n), " of "+strconv.Itoa(m)+" in this worktree"
+		icon, word, rest = iconTurn, "turn "+strconv.Itoa(n), " of "+strconv.Itoa(m)
+		if !short {
+			rest += " in this worktree"
+		}
 
 		switch {
 		case v.noSnapshot:
@@ -181,8 +185,8 @@ func modeParts(v *reviewView, icons bool) (icon, word, rest string) {
 }
 
 // modeWidth is the width of the mode row with its margins.
-func modeWidth(v *reviewView, icons bool) int {
-	icon, word, rest := modeParts(v, icons)
+func modeWidth(v *reviewView, icons, short bool) int {
+	icon, word, rest := modeParts(v, icons, short)
 	w := treePad + len(word) + ansi.StringWidth(rest)
 
 	if icon != "" {
@@ -194,7 +198,7 @@ func modeWidth(v *reviewView, icons bool) int {
 
 // modeRuns is the mode row of the tree column.
 func (d *drawCtx) modeRuns() []railRun {
-	icon, word, rest := modeParts(d.v, d.icons)
+	icon, word, rest := modeParts(d.v, d.icons, d.lay.modeShort)
 	if word == "" {
 		return nil
 	}

@@ -185,7 +185,7 @@ func TestTurnStartRefreshesTheDrawer(t *testing.T) {
 		r.until(t, "turn 4", r.viewHolds(func(v *reviewView) bool { return v.turns == 4 && v.res.Turn == 4 && !v.loading }))
 
 		got := r.drawn(t)
-		for _, want := range []string{"turn 4 of 4 in this worktree", "four.txt"} {
+		for _, want := range []string{"turn 4 of 4, live", "four.txt"} {
 			if !strings.Contains(got, want) {
 				t.Errorf("the drawer lacks %q:\n%s", want, got)
 			}
@@ -773,7 +773,7 @@ func newTwoTurnRig(t *testing.T, opts ...func(*Options)) *followRig {
 
 // modeRow is the mode row's text for the view as it loaded.
 func modeRow(v *reviewView) string {
-	_, word, rest := modeParts(v, false)
+	_, word, rest := modeParts(v, false, false)
 
 	return word + rest
 }
@@ -809,7 +809,7 @@ func TestTurnModeInAFollowedWorktree(t *testing.T) {
 
 	r.showTree(t)
 
-	if got := r.drawn(t); !strings.Contains(got, "turn 1/1") || !strings.Contains(got, "turn 1 of 1 in this worktree") {
+	if got := r.drawn(t); !strings.Contains(got, "turn 1/1") || !strings.Contains(got, "turn 1 of 1, live") {
 		t.Errorf("b's drawer does not read turn 1/1, live:\n%s", got)
 	}
 }

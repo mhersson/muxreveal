@@ -230,7 +230,7 @@ func TestTurnStepping(t *testing.T) {
 	}
 
 	got := r.drawn(t)
-	for _, want := range []string{"turn 4 of 4 in this", "turn 4 has no snapshot", ", and . step through the turns; b shows the branch"} {
+	for _, want := range []string{"turn 4 of 4, no snapshot", "turn 4 has no snapshot", ", and . step through the turns; b shows the branch"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("the drawer lacks %q:\n%s", want, got)
 		}

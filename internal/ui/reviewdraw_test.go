@@ -561,14 +561,19 @@ func TestModeRowOfATurn(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name string
-		v    reviewView
-		want string
+		name  string
+		v     reviewView
+		short bool
+		want  string
 	}{
-		{"latest", reviewView{turns: 3, res: git.Result{Turn: 3, Live: true}}, "turn 3 of 3 in this worktree, live"},
-		{"latest but closed", reviewView{turns: 1, res: git.Result{Turn: 1}}, "turn 1 of 1 in this worktree"},
-		{"past", reviewView{turns: 3, res: git.Result{Turn: 2}}, "turn 2 of 3 in this worktree"},
-		{"no snapshot", reviewView{turns: 3, res: git.Result{Turn: 1}, noSnapshot: true}, "turn 1 of 3 in this worktree, no snapshot"},
+		{"latest", reviewView{turns: 3, res: git.Result{Turn: 3, Live: true}}, false, "turn 3 of 3 in this worktree, live"},
+		{"latest, short", reviewView{turns: 3, res: git.Result{Turn: 3, Live: true}}, true, "turn 3 of 3, live"},
+		{"latest but closed", reviewView{turns: 1, res: git.Result{Turn: 1}}, false, "turn 1 of 1 in this worktree"},
+		{"latest but closed, short", reviewView{turns: 1, res: git.Result{Turn: 1}}, true, "turn 1 of 1"},
+		{"past", reviewView{turns: 3, res: git.Result{Turn: 2}}, false, "turn 2 of 3 in this worktree"},
+		{"past, short", reviewView{turns: 3, res: git.Result{Turn: 2}}, true, "turn 2 of 3"},
+		{"no snapshot", reviewView{turns: 3, res: git.Result{Turn: 1}, noSnapshot: true}, false, "turn 1 of 3 in this worktree, no snapshot"},
+		{"no snapshot, short", reviewView{turns: 3, res: git.Result{Turn: 1}, noSnapshot: true}, true, "turn 1 of 3, no snapshot"},
 	}
 
 	for _, tt := range tests {
@@ -577,9 +582,54 @@ func TestModeRowOfATurn(t *testing.T) {
 
 			tt.v.src = git.TurnSource{Worktree: "/w", Session: "s", Turn: tt.v.res.Turn}
 
-			_, word, rest := modeParts(&tt.v, false)
+			_, word, rest := modeParts(&tt.v, false, tt.short)
 			if got := word + rest; got != tt.want {
 				t.Errorf("mode row = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+// The mode row drops " in this worktree" when the tree cannot grow to hold it,
+// and is cut only when even the short form does not fit.
+func TestModeRowForms(t *testing.T) {
+	t.Parallel()
+
+	const full, short = " in this worktree", ""
+
+	tests := []struct {
+		name  string
+		w     int
+		scene func(s *reviewScene)
+		row   string // the row as drawn, up to the tree's right edge
+	}{
+		{"live fits whole", 300, func(s *reviewScene) {}, "turn 4 of 4" + full + ", live"},
+		{"live drops", 200, func(s *reviewScene) {}, "turn 4 of 4" + short + ", live"},
+		{"past fits whole", 300, func(s *reviewScene) { s.turn, s.res.Live = 2, false }, "turn 2 of 4" + full},
+		{"past drops", 160, func(s *reviewScene) { s.turn, s.res.Live = 2, false }, "turn 2 of 4" + short},
+		{"no snapshot fits whole", 300, func(s *reviewScene) { s.res, s.turn, s.noSnap = git.Result{}, 1, true }, "turn 1 of 4" + full + ", no snapshot"},
+		{"no snapshot drops", 200, func(s *reviewScene) { s.res, s.turn, s.noSnap = git.Result{}, 1, true }, "turn 1 of 4" + short + ", no snapshot"},
+		{"even the short form is cut", 120, func(s *reviewScene) { s.res, s.turn, s.noSnap = git.Result{}, 1, true }, "turn 1 of 4, no sn…"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			s := reviewScene{theme: "catppuccin-mocha", w: tt.w, h: 52, res: turn4Result(), turn: 4, turns: 4, focused: true, tree: true}
+			tt.scene(&s)
+
+			text := ansi.Strip(s.build(t).View().Content)
+			if !strings.Contains(text, " "+tt.row) {
+				t.Errorf("the frame lacks the mode row %q:\n%s", tt.row, text)
+			}
+
+			if !strings.Contains(tt.row, ", live") && strings.Contains(text, ", live") {
+				t.Errorf("the frame marks the turn live, want %q:\n%s", tt.row, text)
+			}
+
+			if !strings.Contains(tt.row, "in this worktree") && strings.Contains(text, "in th") {
+				t.Errorf("the frame holds the long form, want %q:\n%s", tt.row, text)
 			}
 		})
 	}
@@ -597,8 +647,8 @@ func TestDrawerTitleAndTags(t *testing.T) {
 	}{
 		{"turn tag", false, func(s *reviewScene) {}, []string{"╭─ muxreveal · feat/review-pane ", " turn 4/4 ─╮"}, []string{" split ─"}},
 		{"icons", true, func(s *reviewScene) {}, []string{"\U000F02DA turn 4/4 ", "\uF4D2 muxreveal"}, nil},
-		{"past turn", false, func(s *reviewScene) { s.turn = 2 }, []string{" turn 2/4 ─╮", "turn 2 of 4 in this worktree"}, []string{", live"}},
-		{"latest turn", false, func(s *reviewScene) {}, []string{"turn 4 of 4 in this worktree"}, nil},
+		{"past turn", false, func(s *reviewScene) { s.turn, s.res.Live = 2, false }, []string{" turn 2/4 ─╮", "turn 2 of 4 in this worktree"}, []string{", live"}},
+		{"latest turn", false, func(s *reviewScene) {}, []string{"turn 4 of 4, live"}, []string{"in this worktree"}},
 		{"branch", false, func(s *reviewScene) { s.branch = true }, []string{" branch ─╮", "branch vs origin/main"}, []string{"turn 4/4"}},
 		{"branch icon", true, func(s *reviewScene) { s.branch = true }, []string{"\U000F062C branch ", "\U000F062C branch vs origin/main"}, nil},
 		{"split tag", false, func(s *reviewScene) {
@@ -607,7 +657,7 @@ func TestDrawerTitleAndTags(t *testing.T) {
 		{"split tag icon", true, func(s *reviewScene) {
 			s.tune = func(t *testing.T, a *App, v *reviewView) { v.split = true }
 		}, []string{"\U000F08DF split ─ \U000F02DA turn 4/4"}, nil},
-		{"no snapshot", false, func(s *reviewScene) { s.res, s.turn, s.noSnap = git.Result{}, 1, true }, []string{"turn 1 of 4 in this worktree", "turn 1 has no snapshot", ", and . step through the turns; b shows the branch"}, nil},
+		{"no snapshot", false, func(s *reviewScene) { s.res, s.turn, s.noSnap = git.Result{}, 1, true }, []string{"turn 1 of 4, no snapshot", "turn 1 has no snapshot", ", and . step through the turns; b shows the branch"}, nil},
 		{"empty branch", false, func(s *reviewScene) { s.res, s.branch = git.Result{}, true }, []string{"no changes against origin/main", "0 files"}, nil},
 		{"empty turn", false, func(s *reviewScene) { s.res, s.turn = git.Result{Turn: 3}, 3 }, []string{"turn 3 changed nothing"}, nil},
 		{"totals", false, func(s *reviewScene) {}, []string{"4 files  +25 -4"}, nil},
@@ -649,7 +699,7 @@ func TestDrawerModeShowsOnlyInTheTagWithoutTheTree(t *testing.T) {
 		}
 	}
 
-	for _, not := range []string{"turn 4 of 4 in this worktree", "4 files"} {
+	for _, not := range []string{"turn 4 of 4", "4 files"} {
 		if strings.Contains(text, not) {
 			t.Errorf("the frame holds %q although the tree is hidden:\n%s", not, text)
 		}
