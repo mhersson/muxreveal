@@ -217,7 +217,7 @@ func TestPlaceCacheDropsTheOldest(t *testing.T) {
 // joinCtx is a context whose Done is first asked for by a caller that parks on
 // a lookup in flight, which Place does only inside its join; waiting closes then.
 type joinCtx struct {
-	context.Context
+	context.Context //nolint:containedctx // wraps a parent to observe Done
 
 	once    sync.Once
 	waiting chan struct{}
