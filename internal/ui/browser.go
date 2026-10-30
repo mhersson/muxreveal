@@ -25,7 +25,7 @@ type urlOpener func(ctx context.Context, url string) error
 type browserDoneMsg struct{ err error }
 
 // openBrowser runs the platform's opener on raw: no shell, no stdio, its own
-// session. A browser that outlives the timeout is left running.
+// session. At the timeout the opener process is killed and its detached children survive.
 func openBrowser(ctx context.Context, raw string) error {
 	argv, err := browserArgv(raw)
 	if err != nil {
@@ -37,8 +37,11 @@ func openBrowser(ctx context.Context, raw string) error {
 
 	err = startDetached(cmd)
 
-	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+	switch ctxErr := ctx.Err(); {
+	case errors.Is(ctxErr, context.DeadlineExceeded):
 		return nil
+	case ctxErr != nil:
+		return ctxErr
 	}
 
 	return err

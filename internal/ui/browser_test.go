@@ -184,3 +184,18 @@ func TestOpenURLUsesTheAppContext(t *testing.T) {
 		t.Fatal("the opener did not return after the app closed")
 	}
 }
+
+func TestOpenBrowserReportsACancelledContext(t *testing.T) {
+	t.Parallel()
+
+	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
+		t.Skip("no opener on this platform")
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	if err := openBrowser(ctx, "https://github.com/o/r"); !errors.Is(err, context.Canceled) {
+		t.Errorf("openBrowser on a cancelled context = %v, want context.Canceled", err)
+	}
+}
