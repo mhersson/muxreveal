@@ -511,6 +511,42 @@ func TestResolveDrawer(t *testing.T) {
 			name: "no such command", cfg: drawerKeys("x", "review.x"),
 			wantErr: `keys.drawer: "x" = "review.x": no such command`,
 		},
+		{
+			name: "the leader key in the drawer", cfg: drawerKeys("ctrl+space", "review.line.next"),
+			wantErr: `keys.drawer: "ctrl+space" is the leader key`,
+		},
+		{
+			name: "a remapped leader key in the drawer",
+			cfg: func() core.KeysConfig {
+				c := drawerKeys("ctrl+a", "review.line.next")
+				c.LeaderKey = "ctrl+a"
+
+				return c
+			}(),
+			wantErr: `keys.drawer: "ctrl+a" is the leader key`,
+		},
+		{
+			name: "the leader key in the rail",
+			cfg: core.KeysConfig{
+				Rail:  map[string]string{"ctrl+space": "rail.next"},
+				Order: map[string][]string{"rail": {"ctrl+space"}},
+			},
+			wantErr: `keys.rail: "ctrl+space" is the leader key`,
+		},
+		{
+			name: "the old leader key is free once it is remapped",
+			cfg: func() core.KeysConfig {
+				c := drawerKeys("ctrl+space", "review.line.next")
+				c.LeaderKey = "ctrl+a"
+
+				return c
+			}(),
+			check: func(t *testing.T, tb keyTable) {
+				if got, _ := tb.lookup("ctrl+space"); got != "review.line.next" {
+					t.Errorf("lookup(ctrl+space) = %q, want review.line.next", got)
+				}
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

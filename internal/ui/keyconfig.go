@@ -137,6 +137,15 @@ func resolveKeys(cfg core.KeysConfig, reg *registry) (keymap, keyTables, error) 
 	}
 
 	for _, c := range contexts {
+		// The leader is routed before the drawer and the rail, so a key of theirs equal to it never runs.
+		if c.context == "drawer" || c.context == "rail" {
+			for _, b := range cfg.Binds(c.context) {
+				if b.Key == km.leader {
+					return keymap{}, keyTables{}, fmt.Errorf("keys.%s: %q is the leader key", c.context, b.Key)
+				}
+			}
+		}
+
 		t, err := resolveTable(c.context, c.noun, c.defaults, cfg, c.accept, reg)
 		if err != nil {
 			return keymap{}, keyTables{}, err
