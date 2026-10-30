@@ -130,9 +130,24 @@ func (a *App) mouseBlocked() bool {
 	}
 
 	a.releaseForwarded()
-	a.mouse.press = nil
+	a.endPress()
 
 	return true
+}
+
+// endPress ends a held press without a release and runs the redraw check the
+// press was deferring.
+func (a *App) endPress() {
+	pr := a.mouse.press
+	a.mouse.press = nil
+
+	if pr == nil {
+		return
+	}
+
+	if p := a.panes[pr.pane]; p != nil {
+		a.dropRedrawnSelection(p)
+	}
 }
 
 // focusPane focuses id unless it already is.
@@ -168,7 +183,7 @@ func (a *App) handleClick(msg tea.MouseClickMsg) tea.Cmd {
 	h := a.hit(m.X, m.Y)
 
 	a.releaseForwarded()
-	a.mouse.press = nil
+	a.endPress()
 
 	if a.inRail(m.X, m.Y) {
 		if m.Button != tea.MouseLeft {
@@ -219,7 +234,8 @@ func (a *App) handleClick(msg tea.MouseClickMsg) tea.Cmd {
 }
 
 // otherPress handles the middle and right buttons: they focus the pane and go
-// to a guest that tracks the mouse, and never select.
+// to a guest that tracks the mouse, and never select. Otherwise a middle press
+// pastes.
 func (a *App) otherPress(h hitResult, m tea.Mouse) tea.Cmd {
 	cmd := a.focusPane(h.pane)
 
@@ -231,6 +247,12 @@ func (a *App) otherPress(h hitResult, m tea.Mouse) tea.Cmd {
 	if tracking, _ := p.inputModes(); tracking {
 		p.sendMouse(uv.MouseClickEvent(uv.Mouse{X: h.local.col, Y: h.local.row, Button: m.Button, Mod: m.Mod}))
 		a.mouse.fwd = &forwarded{pane: h.pane, button: m.Button, col: h.local.col, row: h.local.row}
+
+		return cmd
+	}
+
+	if m.Button == tea.MouseMiddle {
+		return tea.Batch(cmd, a.middlePaste(p))
 	}
 
 	return cmd
@@ -266,6 +288,10 @@ func (a *App) contentPress(h hitResult, m tea.Mouse) tea.Cmd {
 			a.sel = newPaneSelection(h.pane, wordAt(g, at), trimmed)
 		case 3:
 			a.sel = newPaneSelection(h.pane, lineAt(g, at), trimmed)
+		}
+
+		if a.sel != nil {
+			a.sel.watch(g, trimmed)
 		}
 	})
 
@@ -331,10 +357,17 @@ func (a *App) handleRelease(msg tea.MouseReleaseMsg) tea.Cmd {
 
 	if pr.dragging || pr.multi {
 		if a.copyOnSelect {
-			return a.copySelection()
+			cmd := a.copySelection()
+			a.sel = nil
+
+			return cmd
 		}
 
-		return nil
+		if p := a.panes[pr.pane]; p != nil {
+			a.dropRedrawnSelection(p)
+		}
+
+		return a.clip.copyPrimary(a.selectedText())
 	}
 
 	if !pr.tracking {
@@ -390,6 +423,7 @@ func (a *App) dragTo(pr *heldPress, x, y int) {
 	p.withView(func(g grid, top int, trimmed uint64) {
 		head := clampPoint(g, point{top + row, col})
 		a.sel = &paneSelection{pane: pr.pane, mode: mode, anchor: pr.anchor, head: stable(head, trimmed)}
+		a.sel.watch(g, trimmed)
 	})
 }
 

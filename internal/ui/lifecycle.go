@@ -376,6 +376,10 @@ func (a *App) renderPane(p *pane) tea.Cmd {
 		a.endCopyOf(p.id)
 	}
 
+	if held.IsZero() {
+		a.dropRedrawnSelection(p)
+	}
+
 	if held.IsZero() || p.holdArmed {
 		return nil
 	}

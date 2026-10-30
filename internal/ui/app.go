@@ -546,6 +546,8 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.sendToFocused(func(p *pane) { p.sendFocus(false) })
 	case paneDirtyMsg:
 		return a, a.onPaneDirty(msg)
+	case middlePasteMsg:
+		a.onMiddlePaste(msg)
 	case holdExpiredMsg:
 		return a, a.onHoldExpired(msg)
 	case paneExitedMsg:

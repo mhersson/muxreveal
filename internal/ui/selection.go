@@ -75,6 +75,27 @@ func (s selection) ordered() (start, end point) {
 	return a, h
 }
 
+// below returns the part of s on rows at or after row, in reading order. A start
+// above row moves to row, at column 0 unless s is a block. It reports false when
+// s ends above row.
+func (s selection) below(row int) (selection, bool) {
+	start, end := s.ordered()
+	if end.row < row {
+		return selection{}, false
+	}
+
+	if start.row < row {
+		col := 0
+		if s.mode == selBlock {
+			col = start.col
+		}
+
+		start = point{row, col}
+	}
+
+	return selection{mode: s.mode, anchor: start, head: end}, true
+}
+
 // rowBounds returns the first and last selected row.
 func (s selection) rowBounds() (first, last int) {
 	return min(s.anchor.row, s.head.row), max(s.anchor.row, s.head.row)

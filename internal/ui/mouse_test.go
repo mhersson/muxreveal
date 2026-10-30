@@ -2,7 +2,9 @@ package ui
 
 import (
 	"encoding/base64"
+	"fmt"
 	"image/color"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -25,16 +27,52 @@ func fakeClip(a *App) *fakeRun {
 	return f
 }
 
-// copiedText is the text of the first native write, "" when none happened.
-func copiedText(f *fakeRun) string {
+// isPrimaryOnly reports whether argv writes the primary selection alone.
+func isPrimaryOnly(argv []string) bool {
+	return slices.Equal(argv, []string{"wl-copy", "--primary"}) ||
+		slices.Equal(argv, []string{"xclip", "-selection", "primary"})
+}
+
+// clipboardWrites are the stdins of the native writes to the clipboard, in order.
+func clipboardWrites(f *fakeRun) []string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	if len(f.calls) == 0 {
-		return ""
+	var out []string
+
+	for _, c := range f.calls {
+		if !isPrimaryOnly(c.argv) {
+			out = append(out, c.stdin)
+		}
 	}
 
-	return f.calls[0].stdin
+	return out
+}
+
+// primaryWrites are the stdins of the primary-only native writes, in order.
+func primaryWrites(f *fakeRun) []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	var out []string
+
+	for _, c := range f.calls {
+		if isPrimaryOnly(c.argv) {
+			out = append(out, c.stdin)
+		}
+	}
+
+	return out
+}
+
+// copiedText is the text of the first native clipboard write (primary-only
+// writes skipped), "" when none happened.
+func copiedText(f *fakeRun) string {
+	if w := clipboardWrites(f); len(w) > 0 {
+		return w[0]
+	}
+
+	return ""
 }
 
 func mdown(a *App, x, y int, b tea.MouseButton, mod tea.KeyMod) {
@@ -964,5 +1002,160 @@ func TestMultiClickInTrackingPaneSelectsAndForwardsOnlyTheFirstClick(t *testing.
 				t.Errorf("guest got %q, want exactly the first click %q", got, one)
 			}
 		})
+	}
+}
+
+func TestSelectionClearsWhenItsTextIsRedrawn(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		pane core.PaneID
+		out  string
+		kept bool
+	}{
+		{"rewrite inside", "p1", "\x1b[1;1Hjello", false},
+		{"same text in bold", "p1", "\x1b[1;1H\x1b[1mhello\x1b[0m", true},
+		{"rest of the row", "p1", "\x1b[1;7HWORLD", true},
+		{"another row", "p1", "\x1b[3;1HTHIRD", true},
+		{"another pane", "p2", "\x1b[1;1Hjello", true},
+		{"output scrolls", "p1", "\r\n" + manyLines(20), true},
+		{"clear and reprint", "p1", "\x1b[2J\x1b[3J\x1b[H" + manyLines(30), false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			a, procs, f := shellsWith(t, sampleText, "RIGHT")
+			c := contentRectOf(a, "p1")
+
+			drag(a, c.X, c.Y, c.X+4, c.Y, 0)
+			feedAndWait(t, a.panes[tt.pane], procs[tt.pane], tt.out)
+			a.Update(paneDirtyMsg{id: tt.pane, p: a.panes[tt.pane]})
+
+			if !tt.kept {
+				if a.sel != nil {
+					t.Error("selection kept, want cleared")
+				}
+
+				return
+			}
+
+			if a.sel == nil {
+				t.Fatal("selection cleared, want kept")
+			}
+
+			if got := copyNow(a, f); got != "hello" {
+				t.Errorf("copied %q, want hello", got)
+			}
+		})
+	}
+}
+
+func TestSelectionAcrossHistoryAndScreen(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		out  func(endRow int) string
+		kept bool
+	}{
+		{"output scrolls", func(int) string { return "\r\n" + manyLines(5) }, true},
+		{"live part rewritten", func(endRow int) string { return fmt.Sprintf("\x1b[%d;1HXXXXX", endRow) }, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			a, fp, f := copyApp(t)
+			c := contentRectOf(a, "p1")
+			p := a.panes["p1"]
+
+			wheelAt(a, c.X, c.Y, tea.MouseWheelUp)
+			drag(a, c.X, c.Y, c.X+4, c.Y+c.H-1, 0)
+
+			want := copyNow(a, f)
+
+			// The drag ends on a live-screen row; CUP rows are 1-based.
+			endRow := int(a.sel.head.row-a.sel.watchFrom) + 1
+
+			feedAndWait(t, p, fp, tt.out(endRow))
+			a.Update(paneDirtyMsg{id: "p1", p: p})
+
+			if kept := a.sel != nil; kept != tt.kept {
+				t.Fatalf("selection kept = %v, want %v", kept, tt.kept)
+			}
+
+			if !tt.kept {
+				return
+			}
+
+			f.mu.Lock()
+			f.calls = nil
+			f.mu.Unlock()
+
+			if got := copyNow(a, f); got != want {
+				t.Errorf("after output copied %q, want %q", got, want)
+			}
+		})
+	}
+}
+
+func TestSelectionClearsWhenItsScreenIsReprintedUnchanged(t *testing.T) {
+	t.Parallel()
+	a, fp, f := copyApp(t)
+	c := contentRectOf(a, "p1")
+	y := c.Y + c.H/2
+
+	drag(a, c.X, y, c.X+5, y, 0)
+
+	if got := copyNow(a, f); !strings.HasPrefix(got, "L000") {
+		t.Fatalf("copied %q, want a row's L000xx text", got)
+	}
+
+	f.mu.Lock()
+	f.calls = nil
+	f.mu.Unlock()
+
+	before, _ := a.panes["p1"].linesAt()
+	before = append([]string(nil), before...)
+
+	feedAndWait(t, a.panes["p1"], fp, "\x1b[2J\x1b[3J\x1b[H"+manyLines(30)+"abcdef")
+	a.Update(paneDirtyMsg{id: "p1", p: a.panes["p1"]})
+
+	after, _ := a.panes["p1"].linesAt()
+	if !slices.Equal(before, after) {
+		t.Fatalf("rows changed by the reprint:\n%q\nwant\n%q", after, before)
+	}
+
+	if a.sel != nil {
+		t.Error("selection kept after its screen was reprinted, want cleared")
+	}
+}
+
+func TestSelectionInHistorySurvivesOutput(t *testing.T) {
+	t.Parallel()
+	a, fp, f := copyApp(t)
+	c := contentRectOf(a, "p1")
+
+	wheelAt(a, c.X, c.Y, tea.MouseWheelUp)
+	wheelAt(a, c.X, c.Y, tea.MouseWheelUp)
+	drag(a, c.X, c.Y, c.X+4, c.Y, 0)
+
+	want := copyNow(a, f)
+
+	feedAndWait(t, a.panes["p1"], fp, "\x1b[2J\x1b[Hnew screen")
+	a.Update(paneDirtyMsg{id: "p1", p: a.panes["p1"]})
+
+	if a.sel == nil {
+		t.Fatal("selection cleared, want kept")
+	}
+
+	f.mu.Lock()
+	f.calls = nil
+	f.mu.Unlock()
+
+	if got := copyNow(a, f); got != want {
+		t.Errorf("after output copied %q, want %q", got, want)
 	}
 }

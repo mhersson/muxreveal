@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -27,16 +28,14 @@ func clickRun(a *App, x, y int) {
 	release(a, x, y)
 }
 
-// lastCopied is the text of the latest native write, "" when none happened.
+// lastCopied is the text of the latest native clipboard write (primary-only
+// writes skipped), "" when none happened.
 func lastCopied(f *fakeRun) string {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
-	if len(f.calls) == 0 {
-		return ""
+	if w := clipboardWrites(f); len(w) > 0 {
+		return w[len(w)-1]
 	}
 
-	return f.calls[len(f.calls)-1].stdin
+	return ""
 }
 
 func hover(a *App, x, y int) {
@@ -231,6 +230,250 @@ func TestCopyOnSelect(t *testing.T) {
 				t.Errorf("copied %q, want %q", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestRedrawDuringAGestureWaitsForRelease(t *testing.T) {
+	t.Parallel()
+
+	// hold leaves the button down; relX is where it is released.
+	drag := func(a *App, c core.Rect) int {
+		mdown(a, c.X, c.Y, tea.MouseLeft, 0)
+		mmove(a, c.X+4, c.Y, tea.MouseLeft)
+
+		return c.X + 4
+	}
+	double := func(a *App, c core.Rect) int {
+		clickRun(a, c.X+1, c.Y)
+		mdown(a, c.X+1, c.Y, tea.MouseLeft, 0)
+
+		return c.X + 1
+	}
+
+	tests := []struct {
+		name       string
+		option     bool
+		hold       func(a *App, c core.Rect) int
+		wantCopied string
+	}{
+		{"drag, copy on", true, drag, "jello"},
+		{"double click, copy on", true, double, "jello"},
+		{"drag, copy off", false, drag, ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			a, procs, f := shellsWith(t, sampleText, "RIGHT")
+			a.copyOnSelect = tt.option
+			c := contentRectOf(a, "p1")
+
+			relX := tt.hold(a, c)
+
+			feedAndWait(t, a.panes["p1"], procs["p1"], "\x1b[1;1Hjello")
+			a.Update(paneDirtyMsg{id: "p1", p: a.panes["p1"]})
+
+			if a.sel == nil {
+				t.Fatal("selection cleared while the button is down, want kept")
+			}
+
+			release(a, relX, c.Y)
+
+			if got := lastCopied(f); got != tt.wantCopied {
+				t.Errorf("copied %q, want %q", got, tt.wantCopied)
+			}
+
+			if a.sel != nil {
+				t.Error("selection kept after the release, want cleared")
+			}
+		})
+	}
+}
+
+func TestRedrawDuringAGestureIsCheckedWhenItIsCutShort(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		cut  func(a *App)
+	}{
+		{"leader opens", func(a *App) {
+			press(a, keyLeader)
+			mmove(a, 0, 0, tea.MouseLeft)
+		}},
+		{"middle press elsewhere", func(a *App) {
+			c := contentRectOf(a, "p2")
+			middleRun(a, c.X, c.Y, 0)
+		}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			a, procs, _ := shellsWith(t, sampleText, "RIGHT")
+			a.copyOnSelect = false
+			c := contentRectOf(a, "p1")
+
+			mdown(a, c.X, c.Y, tea.MouseLeft, 0)
+			mmove(a, c.X+4, c.Y, tea.MouseLeft)
+
+			feedAndWait(t, a.panes["p1"], procs["p1"], "\x1b[1;1Hjello")
+			a.Update(paneDirtyMsg{id: "p1", p: a.panes["p1"]})
+
+			if a.sel == nil {
+				t.Fatal("selection cleared while the button is down, want kept")
+			}
+
+			tt.cut(a)
+
+			if a.sel != nil {
+				t.Error("selection kept after the gesture was cut short, want cleared")
+			}
+		})
+	}
+}
+
+func TestSelectingWritesThePrimary(t *testing.T) {
+	t.Parallel()
+
+	drag := func(a *App, c core.Rect) { dragRun(a, c.X, c.Y, c.X+4, c.Y, 0) }
+	double := func(a *App, c core.Rect) {
+		clickRun(a, c.X+1, c.Y)
+		clickRun(a, c.X+1, c.Y)
+	}
+	triple := func(a *App, c core.Rect) {
+		double(a, c)
+		clickRun(a, c.X+1, c.Y)
+	}
+	click := func(a *App, c core.Rect) { clickRun(a, c.X+1, c.Y) }
+
+	tests := []struct {
+		name          string
+		option        bool
+		gesture       func(a *App, c core.Rect)
+		wantPrimary   []string
+		wantClipboard string
+		wantSel       bool
+	}{
+		{"drag, off", false, drag, []string{"hello"}, "", true},
+		{"double click, off", false, double, []string{"hello"}, "", true},
+		{"triple click, off", false, triple, []string{"hello", "hello world"}, "", true},
+		{"plain click, off", false, click, nil, "", false},
+		{"drag, on", true, drag, []string{"hello"}, "hello", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			a, _, f := shellsWith(t, sampleText, "RIGHT")
+			a.copyOnSelect = tt.option
+
+			tt.gesture(a, contentRectOf(a, "p1"))
+
+			if got := primaryWrites(f); !slices.Equal(got, tt.wantPrimary) {
+				t.Errorf("primary writes %q, want %q", got, tt.wantPrimary)
+			}
+
+			if got := lastCopied(f); got != tt.wantClipboard {
+				t.Errorf("clipboard %q, want %q", got, tt.wantClipboard)
+			}
+
+			if got := a.sel != nil; got != tt.wantSel {
+				t.Errorf("selection present = %v, want %v", got, tt.wantSel)
+			}
+		})
+	}
+}
+
+func TestSelectionRedrawnDuringTheHoldWritesNothing(t *testing.T) {
+	t.Parallel()
+	a, procs, f := shellsWith(t, sampleText, "RIGHT")
+	a.copyOnSelect = false
+	c := contentRectOf(a, "p1")
+
+	mdown(a, c.X, c.Y, tea.MouseLeft, 0)
+	mmove(a, c.X+4, c.Y, tea.MouseLeft)
+
+	feedAndWait(t, a.panes["p1"], procs["p1"], "\x1b[1;1Hjello")
+	a.Update(paneDirtyMsg{id: "p1", p: a.panes["p1"]})
+	release(a, c.X+4, c.Y)
+
+	f.mu.Lock()
+	n := len(f.calls)
+	f.mu.Unlock()
+
+	if n != 0 {
+		t.Errorf("%d native writes, want none", n)
+	}
+
+	if a.sel != nil {
+		t.Error("selection kept after the release, want cleared")
+	}
+}
+
+func TestCopyOnSelectClearsOnRelease(t *testing.T) {
+	t.Parallel()
+
+	drag := func(a *App, c core.Rect) { dragRun(a, c.X, c.Y, c.X+4, c.Y, 0) }
+	double := func(a *App, c core.Rect) {
+		clickRun(a, c.X+1, c.Y)
+		clickRun(a, c.X+1, c.Y)
+	}
+	triple := func(a *App, c core.Rect) {
+		double(a, c)
+		clickRun(a, c.X+1, c.Y)
+	}
+
+	tests := []struct {
+		name       string
+		option     bool
+		gesture    func(a *App, c core.Rect)
+		wantSel    bool
+		wantCopied string
+	}{
+		{"drag on", true, drag, false, "hello"},
+		{"double click on", true, double, false, "hello"},
+		{"triple click on", true, triple, false, "hello world"},
+		{"drag off", false, drag, true, ""},
+		{"double click off", false, double, true, ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			a, _, f := shellsWith(t, sampleText, "RIGHT")
+			a.copyOnSelect = tt.option
+
+			tt.gesture(a, contentRectOf(a, "p1"))
+
+			if got := a.sel != nil; got != tt.wantSel {
+				t.Errorf("selection present = %v, want %v", got, tt.wantSel)
+			}
+
+			if got := lastCopied(f); got != tt.wantCopied {
+				t.Errorf("copied %q, want %q", got, tt.wantCopied)
+			}
+		})
+	}
+}
+
+func TestCopyOnSelectShowsTheSelectionUntilRelease(t *testing.T) {
+	t.Parallel()
+	a, _, _ := shellsWith(t, sampleText, "RIGHT")
+	a.copyOnSelect = true
+	c := contentRectOf(a, "p1")
+
+	mdown(a, c.X, c.Y, tea.MouseLeft, 0)
+	mmove(a, c.X+4, c.Y, tea.MouseLeft)
+
+	if !selBgAt(a, c.X, c.Y) {
+		t.Error("selection not drawn while dragging")
+	}
+
+	release(a, c.X+4, c.Y)
+
+	if selBgAt(a, c.X, c.Y) {
+		t.Error("selection still drawn after release")
 	}
 }
 
