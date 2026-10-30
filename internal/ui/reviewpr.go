@@ -225,8 +225,13 @@ func (a *App) reviewReload() tea.Cmd {
 		return nil
 	}
 
+	// A drawer still opening for a pull request shows it but no longer acts on it.
+	if n := a.drawer.prNext; n != nil {
+		n.then = thenNothing
+	}
+
 	if v.pr == (core.ReviewPR{}) {
-		// A pull request asked for before r is dropped with its action, as a newer ask drops it.
+		// r overtakes a pending pull request ask, as a newer ask does.
 		a.drawer.prSeq++
 
 		return a.refreshViews(tab.Review.Pane, nil)

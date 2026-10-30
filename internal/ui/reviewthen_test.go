@@ -162,6 +162,28 @@ func TestAfterLoadActionDroppedByANewerAsk(t *testing.T) {
 		})
 	}
 
+	t.Run("r while the drawer opens on another pane for it", func(t *testing.T) {
+		t.Parallel()
+
+		r := newPRDrawer(t)
+		r.actions = &fakeActions{}
+
+		r.poll()
+		r.opened(t)
+
+		// The drawer stays on the first pane, with the keyboard, until the open answers.
+		open := r.openWithPR(r.shell(t, r.dir), &prWant{repo: prRepoKey, number: 7, root: r.root}, thenApprove)
+
+		r.typed("r")
+		r.run(open)
+		r.until(t, "PR mode", r.inPRMode(7))
+		r.quiet(t, 0)
+
+		if r.confirm != nil {
+			t.Errorf("an r while the drawer opened left a confirm open: %+v", *r.confirm)
+		}
+	})
+
 	t.Run("r while the pull request's diff loads", func(t *testing.T) {
 		t.Parallel()
 
