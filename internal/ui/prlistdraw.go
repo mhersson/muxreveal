@@ -222,7 +222,16 @@ func (a *App) prListBox(lk look, w, room int) []string {
 	}
 
 	hint := func(key, label string) string { return st.popupKey.Render(key) + st.popupMuted.Render(" "+label) }
-	pairs := [][2]string{{"enter", "diff"}, {"c", "checks"}, {"a", "approve"}, {"M", "merge"}, {"O", "browser"}, {"r", "refresh"}, {"esc", "close"}}
+	kt := a.keys.prList
+	pairs := hintPairs([][2]string{
+		{kt.hint("prlist.show"), "diff"},
+		{kt.hint("prlist.checks"), "checks"},
+		{kt.hint("prlist.approve"), "approve"},
+		{kt.hint("prlist.merge"), "merge"},
+		{kt.hint("prlist.browser"), "browser"},
+		{kt.hint("prlist.refresh"), "refresh"},
+		{kt.hint("prlist.close"), "close"},
+	})
 	hints, used := "", 0
 
 	for i, kv := range pairs {

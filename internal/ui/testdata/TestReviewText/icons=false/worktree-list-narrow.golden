@@ -1,6 +1,6 @@
  1 p1               layout master-stack 
 ────────────────────────────────────────
-╭─ muxreveal · feat/revie… ─ turn 4/4 ─╮
+╭─ muxreveal · fe… ─ ✓ 0/4 ─ turn 4/4 ─╮
 │▎ M internal/core/state.go      +9 -1 │
 │  @@ -22,5 +22,13 @@ type Pane struct │
 │ ╭─ Worktrees ──────────────────────╮ │

@@ -501,11 +501,12 @@ func TestPRModeHints(t *testing.T) {
 	t.Parallel()
 
 	r := newPRDrawer(t)
+	sized(t, r.App, 300, 40)
 	r.poll()
 	r.opened(t)
 
 	branch := r.drawn(t)
-	if !strings.Contains(branch, "j/k line   ]/[ hunk   }/{ file   tab tree") || !strings.Contains(branch, "e edit") {
+	if !strings.Contains(branch, "j/k line   ]/[ hunk   }/{ file   tab tree") {
 		t.Errorf("branch mode hints changed:\n%s", branch)
 	}
 
@@ -513,8 +514,8 @@ func TestPRModeHints(t *testing.T) {
 	r.until(t, "PR mode", r.inPRMode(7))
 
 	text := r.drawn(t)
-	if !strings.Contains(text, "j/k line   ]/[ hunk   c checks   a approve   M merge   O browser   b/t mode") {
-		t.Errorf("PR mode hints missing j/k line, ]/[ hunk, c checks, a approve, M merge, O browser, b/t mode:\n%s", text)
+	if !strings.Contains(text, "j/k line   ]/[ hunk   c checks   a approve   M merge   O browser   space reviewed   R show reviewed   b/t mode") {
+		t.Errorf("PR mode hints missing j/k line, ]/[ hunk, the mark pairs, c checks, a approve, M merge, O browser, b/t mode:\n%s", text)
 	}
 
 	for _, gone := range []string{"}/{ file", "w worktree", "e edit", "/ search", "tab tree"} {
@@ -731,7 +732,7 @@ func TestPRHeader(t *testing.T) {
 		},
 		{
 			name: "unpushed commits", icons: true, rows: 4, unpushed: 2,
-			want: []string{"↑2 not pushed: the PR shows the pushed head; leader g p pushes"},
+			want: []string{"↑2 not pushed: the PR shows the pushed head; ctrl+space g p pushes"},
 		},
 		{
 			name: "the poll's head differs", icons: true, rows: 4, unpushed: 2,

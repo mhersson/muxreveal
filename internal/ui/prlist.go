@@ -161,68 +161,7 @@ func (a *App) prListCommand() tea.Cmd {
 
 // handlePRListKey answers the open list; any other key is swallowed.
 func (a *App) handlePRListKey(msg tea.KeyPressMsg) tea.Cmd {
-	v := a.prList
-	rows := a.prListRows(a.store.State())
-	i := v.selected(rows)
-
-	key := msg.String()
-
-	switch key {
-	case "esc":
-		a.prList = nil
-	case "j", "down":
-		v.move(rows, 1)
-	case "k", "up":
-		v.move(rows, -1)
-	case "r":
-		a.prListRefresh(rows)
-	}
-
-	if i < 0 {
-		return nil
-	}
-
-	row := rows[i]
-
-	switch key {
-	case "enter":
-		a.prList = nil
-
-		return a.prListOpen(row, thenNothing)
-	case "c":
-		// The checks stack over the list, which stays under them.
-		return a.openChecks(row.key.repo, row.key.number)
-	case "O":
-		return a.openURL(a.prLink(core.ReviewPR{Repo: row.key.repo, Number: row.key.number}))
-	case "a":
-		if a.actions == nil {
-			a.notice = noticePRsOff
-
-			return nil
-		}
-
-		if row.pr.ViewerAuthored {
-			a.notice = noticeApproveOwn
-
-			return nil
-		}
-
-		a.prList = nil
-
-		return a.prListOpen(row, thenApprove)
-	case "M":
-		if a.actions == nil {
-			a.notice = noticePRsOff
-
-			return nil
-		}
-
-		a.prList = nil
-
-		return a.prListOpen(row, thenMerge)
-	}
-
-	return nil
+	return a.runKey(a.keys.prList, bindingKey(msg))
 }
 
 // prListRefresh asks the poller for each listed repository.

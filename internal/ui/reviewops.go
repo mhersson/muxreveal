@@ -565,8 +565,10 @@ func (a *App) reviewMDParse(tab core.TabID, v *reviewView) tea.Cmd {
 		src := []byte(strings.Join(text.new, "\n") + "\n")
 		base := filepath.Join(v.root, filepath.Dir(path))
 
+		fold := a.foldKey()
+
 		cmds = append(cmds, parseCmd(src, base, a.drawer.hl.HighlightLang, func(d *mdDoc) tea.Msg {
-			return reviewMDMsg{tab: tab, gen: epoch, path: path, ids: ids, file: &mdFile{doc: d, text: text, ids: ids}}
+			return reviewMDMsg{tab: tab, gen: epoch, path: path, ids: ids, file: &mdFile{doc: d.withFoldKey(fold), text: text, ids: ids}}
 		}))
 	}
 

@@ -744,3 +744,48 @@ func linksScene(th string, icons bool) reviewScene {
 		},
 	}
 }
+
+// A closed fold names the key bound to review.fold, in a page and in rendered
+// rows, and no key when that command has none.
+func TestFoldHintFollowsBinding(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		cfg  core.KeysConfig
+		want string
+		not  string
+	}{
+		{"default", core.KeysConfig{}, "More https://example.com/f   enter opens", ""},
+		{"moved", drawerKeys("o", "review.fold", "enter", "none"), "More https://example.com/f   o opens", "enter opens"},
+		{"unbound", drawerKeys("enter", "none"), "More https://example.com/f", "opens"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			m := &linkRig{pageRig: newPageRig(t, map[string]string{"docs/a.md": linkDoc}, func(o *Options) { o.Keys = tt.cfg })}
+
+			check := func(where string) {
+				t.Helper()
+
+				got := ansi.Strip(m.drawn(t))
+				if !strings.Contains(got, tt.want) {
+					t.Errorf("%s lacks %q:\n%s", where, tt.want, got)
+				}
+
+				if tt.not != "" && strings.Contains(got, tt.not) {
+					t.Errorf("%s holds %q:\n%s", where, tt.not, got)
+				}
+			}
+
+			m.render(t, "More https://example.com")
+			check("the rendered rows")
+
+			m.press(keyRune('m'))
+			m.openPage(t, "docs/a.md", false)
+			check("the page")
+		})
+	}
+}

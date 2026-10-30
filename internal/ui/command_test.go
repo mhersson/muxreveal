@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"slices"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
@@ -61,7 +62,8 @@ func TestRegistry(t *testing.T) {
 func TestDefaultCommands(t *testing.T) {
 	t.Parallel()
 
-	cmds := defaultCommands()
+	// The scoped commands have their own test.
+	cmds := slices.DeleteFunc(defaultCommands(), func(c command) bool { return c.scope != "" })
 
 	type want struct{ id, title, icon string }
 
@@ -138,6 +140,8 @@ func TestDefaultCommands(t *testing.T) {
 		want{"review.markdown", "Review: rendered or source", iconReview},
 		want{"review.split", "Review: unified or side by side", iconReview},
 		want{"review.fold", "Review: fold or show removed lines", iconReview},
+		want{"review.mark", "Review: mark the hunk reviewed", iconReview},
+		want{"review.show.reviewed", "Review: show reviewed hunks too", iconReview},
 		want{"review.mode.branch", "Review: branch mode", iconReview},
 		want{"review.mode.turn", "Review: turn mode", iconReview},
 		want{"review.mode.pr", "Review: pull request", iconReview},
@@ -157,6 +161,7 @@ func TestDefaultCommands(t *testing.T) {
 		want{"git.push", "Push branch", iconPush},
 		want{"pr.open", "Open a pull request", iconPR},
 		want{"pr.merge", "Merge pull request", iconMerge},
+		want{"worktree.cleanup", "Clean up a merged worktree", iconCleanup},
 		want{"app.quit", "Quit MuxReveal", iconQuit},
 	)
 	if len(cmds) != len(fixed)+len(theme.All()) {

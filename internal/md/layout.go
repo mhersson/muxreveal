@@ -73,6 +73,7 @@ type Span struct {
 // LayoutOptions configures Layout.
 type LayoutOptions struct {
 	Width     int          // cells; at most 100 are used
+	FoldKey   *string      // the key a closed fold names; "" names none, nil is "enter"
 	Open      map[int]bool // by Fold.ID; a present key overrides the fold's default
 	Icons     bool
 	Highlight Highlighter
@@ -144,6 +145,7 @@ type layouter struct {
 	open      map[int]bool
 	icons     bool
 	highlight Highlighter
+	foldKey   string
 	out       Layout
 }
 
@@ -171,7 +173,10 @@ type frag struct {
 
 // Layout wraps the document to o.Width cells (at most 100, at least 1).
 func (d *Doc) Layout(o LayoutOptions) Layout {
-	l := &layouter{d: d, width: min(max(o.Width, 1), maxWidth), open: o.Open, icons: o.Icons, highlight: o.Highlight}
+	l := &layouter{d: d, width: min(max(o.Width, 1), maxWidth), open: o.Open, icons: o.Icons, highlight: o.Highlight, foldKey: "enter"}
+	if o.FoldKey != nil {
+		l.foldKey = *o.FoldKey
+	}
 
 	var f frag
 

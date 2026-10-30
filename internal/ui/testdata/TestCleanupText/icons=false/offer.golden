@@ -1,0 +1,40 @@
+ 1 p1                                                                                               layout master-stack 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+╭─ shell ───────────────────────────────────────────────────╭─ muxreveal · feat/review-pane ────────────── ✓ 0/4 ─ #7 ─╮
+│$ claude                                                   │ #7 Show the pull request over its diff                   │
+│reviewing the diff of the last turn                        │ feat/review-pane → main   ci 4/4   approved   @mhersson …│
+│                                                           │──────────────────────────────────────────────────────────│
+│                                                           │  M internal/core/state.go                          +9 -1 │
+│                                                           │  @@ -22,5 +22,13 @@ type Pane struct                     │
+│                                                           │  22  22       ID    PaneID                               │
+│                                                           │  23  23       Kind  PaneKind                             │
+│                                                           │  24  24       Cwd   string                               │
+│                                                           │  25     -     Title string                               │
+│                                                           │      25 +     Title  string                              │
+│                    ╭─ Clean up after #7 ────────────────────────────────────────────────────────╮                    │
+│                    │                                                                            │                    │
+│                    │  #7 Show the pull request over its diff                                    │                    │
+│                    │  is merged at a1b2c3d. Clean up its worktree?                              │t a review pane fol…│
+│                    │                                                                            │                    │
+│                    │  [x] remove the worktree  .worktrees/feat-review-pane                      │                    │
+│                    │      clean; closes muxr-worker-2 (idle) and 1 shell                        │                    │
+│                    │  [x] delete the local branch  feat/review-pane                             │atest               │
+│                    │      at a1b2c3d, the merged head                                           │                    │
+│                    │                                                                            │              +4 -3 │
+│                    │  enter clean up    w worktree    b branch    esc keep                      │t() tea.Cmd         │
+│                    ╰────────────────────────────────────────────────────────────────────────────╯                    │
+│                                                           │  41  41   // openReview opens a review pane beside an ag…│
+│                                                           │  42  42   func (a *App) openReview(ctx context.Context, …│
+│                                                           │  43     -     if a.store.Pane(agent).Kind != core.KindAg…│
+│                                                           │  44     -         return nil                             │
+│                                                           │  45     -     }                                          │
+│                                                           │      43 +     p, ok := a.store.Pane(agent)               │
+│                                                           │      44 +     if !ok || p.Kind != core.KindAgent {       │
+│                                                           │▎     45 +         return a.notify("a review pane needs a…│
+│                                                           │      46 +     }                                          │
+│                                                           │  46  47                                                  │
+│                                                           │  47  48       if r, ok := a.reviews[agent]; ok {         │
+│                                                           │  48  49           return a.focus(r.pane)                 │
+│                                                           │  R internal/ui/keys.go → internal/ui/keymap.go     +1 -0 │
+│                                                           │ j/k line   ]/[ hunk   c checks   a approve   M merge     │
+╰───────────────────────────────────────────────────────────╰──────────────────────────────────────────────────────────╯

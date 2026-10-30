@@ -41,6 +41,10 @@ const (
 //     block's first, else the previous block's last, else 1) and other is -1;
 //     text is its plain text; mark is its change mark.
 //
+// On a rowFile, read says every hunk of the file is reviewed; on a rowHunk, that
+// the hunk is. On the rowInfo that ends the rows once every hunk is reviewed,
+// block holds the number of hunks.
+//
 // A ghost or fold row also holds edit, the line of the new file an editor
 // opens at for it: the first new line after its block, or the last line when
 // the block ends the file. The old numbers of removed lines mean nothing there.
@@ -51,6 +55,7 @@ type reviewRow struct {
 	block                   int
 	edit                    int
 	mark                    changeMark
+	read                    bool
 }
 
 // rowOpts selects how buildRows lays the result out.
@@ -66,6 +71,13 @@ type rowOpts struct {
 	// an entry takes ghostsStartFolded.
 	folded            map[string]bool
 	ghostsStartFolded bool
+	// ids holds the hunk ids per file and hunk and isRead says whether one is
+	// reviewed. A reviewed hunk is left out, or with showRead folded to its
+	// header unless readOpen holds its id.
+	ids      [][]string
+	isRead   func(id string) bool
+	showRead bool
+	readOpen map[string]bool
 }
 
 // fullText is both sides of a file, or the error that kept them from loading.
@@ -84,6 +96,9 @@ const (
 	infoBinary    = "binary file, not shown"
 	infoTruncated = "too large, press f for the full file"
 	infoRendering = "rendering…"
+	// infoAllRead marks the note that ends the rows once every hunk is reviewed;
+	// the drawing words it with the bound key.
+	infoAllRead = "all hunks reviewed"
 )
 
 func newRow(kind reviewRowKind, file int) reviewRow {
@@ -102,8 +117,11 @@ func infoRow(file int, text string) reviewRow {
 func buildRows(res git.Result, o rowOpts) []reviewRow {
 	var rows []reviewRow
 
+	unread, hunks := 0, 0
+
 	for i, f := range res.Files {
 		rows = append(rows, newRow(rowFile, i))
+		fileRow := len(rows) - 1
 
 		ft, have := o.full[f.Path]
 		whole := have && o.whole[f.Path]
@@ -127,8 +145,20 @@ func buildRows(res git.Result, o rowOpts) []reviewRow {
 		case len(f.Hunks) == 0 && f.Status == git.ModeChanged:
 			rows = append(rows, infoRow(i, "mode "+f.OldMode+" → "+f.NewMode))
 		default:
-			rows = appendHunks(rows, i, f, o.split)
+			var u, n int
+
+			rows, u, n = appendHunks(rows, i, f, o)
+			unread, hunks = unread+u, hunks+n
+
+			rows[fileRow].read = n > 0 && u == 0
 		}
+	}
+
+	if hunks > 0 && unread == 0 && !o.showRead {
+		last := len(res.Files) - 1
+		note := infoRow(last, infoAllRead)
+		note.block = hunks
+		rows = append(rows, infoRow(last, ""), note)
 	}
 
 	return rows
@@ -156,13 +186,30 @@ func appendMD(rows []reviewRow, file int, mr *mdRows) []reviewRow {
 	return rows
 }
 
-func appendHunks(rows []reviewRow, file int, f git.FileDiff, split bool) []reviewRow {
+// appendHunks adds a file's hunks and reports how many are unread and how many
+// there are.
+func appendHunks(rows []reviewRow, file int, f git.FileDiff, o rowOpts) (_ []reviewRow, unread, hunks int) {
 	for hi, h := range f.Hunks {
+		hunks++
+
+		read, id := o.reviewed(file, hi)
+		if !read {
+			unread++
+		}
+
+		if read && !o.showRead {
+			continue
+		}
+
 		hr := newRow(rowHunk, file)
-		hr.hunk = hi
+		hr.hunk, hr.read = hi, read
 		rows = append(rows, hr)
 
-		if !split {
+		if read && !o.readOpen[id] {
+			continue
+		}
+
+		if !o.split {
 			for li := range h.Lines {
 				r := newRow(rowLine, file)
 				r.hunk, r.line = hi, li
@@ -194,7 +241,18 @@ func appendHunks(rows []reviewRow, file int, f git.FileDiff, split bool) []revie
 		}
 	}
 
-	return rows
+	return rows, unread, hunks
+}
+
+// reviewed reports whether hunk h of file f is reviewed, with its id.
+func (o rowOpts) reviewed(f, h int) (bool, string) {
+	if o.isRead == nil || f >= len(o.ids) || h >= len(o.ids[f]) {
+		return false, ""
+	}
+
+	id := o.ids[f][h]
+
+	return o.isRead(id), id
 }
 
 // lineOps diffs two texts line by line: the lines both start with, the lines

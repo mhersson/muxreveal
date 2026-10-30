@@ -1,0 +1,309 @@
+package ui
+
+import (
+	"fmt"
+	"slices"
+	"strings"
+
+	"github.com/mhersson/muxreveal/internal/core"
+)
+
+// CheckKeys reports the first mistake in the [keys] config that the UI can
+// find: a command that does not exist or does not belong to its context, or a
+// key that is both a key and the start of a sequence. main calls it before the TUI starts.
+func CheckKeys(cfg core.KeysConfig) error {
+	reg, err := newRegistry(defaultCommands())
+	if err != nil {
+		return fmt.Errorf("build command registry: %w", err)
+	}
+
+	_, _, err = resolveKeys(cfg, reg)
+
+	return err
+}
+
+// resolveLeader lays the config over the built-in leader keymap. A config key
+// replaces a default binding of the same key, and goes right before its
+// command's first remaining default binding, else at the end of the command's
+// group, so the command's first key is the first the config lists.
+func resolveLeader(cfg core.KeysConfig, reg *registry) (keymap, error) {
+	defaults := defaultKeymap()
+	km := defaults
+	km.leader = cfg.LeaderName()
+	km.delay = cfg.Delay()
+
+	binds := cfg.Binds("leader")
+
+	for _, b := range binds {
+		if first, _, _ := strings.Cut(b.Key, " "); first == km.leader {
+			return keymap{}, fmt.Errorf("keys.leader_key: %q is also bound under keys.leader", km.leader)
+		}
+
+		if b.Command == core.KeyNone {
+			continue
+		}
+
+		c, ok := reg.get(b.Command)
+		if !ok {
+			return keymap{}, fmt.Errorf("keys.leader: %q = %q: no such command", b.Key, b.Command)
+		}
+
+		if c.scope != "" {
+			return keymap{}, fmt.Errorf("keys.leader: %q = %q: a %s command", b.Key, b.Command, scopeNoun(c.scope))
+		}
+	}
+
+	km.bindings = layBinds(defaults.bindings, binds, func(id string) string { return groupFor(defaults, id) })
+
+	for _, b := range km.bindings {
+		first, _, ok := strings.Cut(b.key, " ")
+		if !ok {
+			continue
+		}
+
+		if _, bound := km.lookup(first); bound {
+			return keymap{}, fmt.Errorf("keys.leader: %q is bound and starts %q", first, b.key)
+		}
+	}
+
+	return km, nil
+}
+
+// keyTable is a context's resolved keys, in order: the first key of a command
+// is the one its hints show.
+type keyTable struct{ binds []reviewKey }
+
+// keyTables holds the resolved tables of the contexts other than the leader.
+type keyTables struct {
+	drawer keyTable
+	rail   keyTable
+	prList keyTable
+	checks keyTable
+}
+
+// lookup is the command a key runs.
+func (t keyTable) lookup(key string) (string, bool) {
+	if i := slices.IndexFunc(t.binds, func(b reviewKey) bool { return b.key == key }); i >= 0 {
+		return t.binds[i].command, true
+	}
+
+	return "", false
+}
+
+// first is the first key bound to a command.
+func (t keyTable) first(id string) (string, bool) {
+	if i := slices.IndexFunc(t.binds, func(b reviewKey) bool { return b.command == id }); i >= 0 {
+		return t.binds[i].key, true
+	}
+
+	return "", false
+}
+
+// hint joins the first keys of the commands with "/"; it is "" when one has no key.
+func (t keyTable) hint(ids ...string) string {
+	keys := make([]string, len(ids))
+
+	for i, id := range ids {
+		k, ok := t.first(id)
+		if !ok {
+			return ""
+		}
+
+		keys[i] = k
+	}
+
+	return strings.Join(keys, "/")
+}
+
+// resolveKeys lays the config over the leader keymap and the context tables.
+func resolveKeys(cfg core.KeysConfig, reg *registry) (keymap, keyTables, error) {
+	km, err := resolveLeader(cfg, reg)
+	if err != nil {
+		return keymap{}, keyTables{}, err
+	}
+
+	var tables keyTables
+
+	contexts := []struct {
+		context, noun string
+		defaults      []reviewKey
+		accept        func(id string) bool
+		into          *keyTable
+	}{
+		{"drawer", "drawer", reviewKeys, func(id string) bool { return strings.HasPrefix(id, "review.") }, &tables.drawer},
+		{"rail", "rail", railKeys, scopedTo(reg, "rail"), &tables.rail},
+		{"pr_list", "PR list", prListKeys, scopedTo(reg, "pr_list"), &tables.prList},
+		{"checks", "checks", checksKeys, scopedTo(reg, "checks"), &tables.checks},
+	}
+
+	for _, c := range contexts {
+		// The leader is routed before the drawer and the rail, so a key of theirs equal to it never runs.
+		if c.context == "drawer" || c.context == "rail" {
+			for _, b := range cfg.Binds(c.context) {
+				if b.Key == km.leader {
+					return keymap{}, keyTables{}, fmt.Errorf("keys.%s: %q is the leader key", c.context, b.Key)
+				}
+			}
+		}
+
+		t, err := resolveTable(c.context, c.noun, c.defaults, cfg, c.accept, reg)
+		if err != nil {
+			return keymap{}, keyTables{}, err
+		}
+
+		*c.into = t
+	}
+
+	return km, tables, nil
+}
+
+// scopedTo accepts the commands of one view.
+func scopedTo(reg *registry, scope string) func(id string) bool {
+	return func(id string) bool {
+		c, ok := reg.get(id)
+
+		return ok && c.scope == scope
+	}
+}
+
+// resolveTable lays a context's config over its default keys; accept says
+// which commands the context takes.
+func resolveTable(context, noun string, defaults []reviewKey, cfg core.KeysConfig, accept func(id string) bool, reg *registry) (keyTable, error) {
+	binds := cfg.Binds(context)
+
+	for _, b := range binds {
+		if b.Command == core.KeyNone {
+			continue
+		}
+
+		if _, ok := reg.get(b.Command); !ok {
+			return keyTable{}, fmt.Errorf("keys.%s: %q = %q: no such command", context, b.Key, b.Command)
+		}
+
+		if !accept(b.Command) {
+			return keyTable{}, fmt.Errorf("keys.%s: %q = %q: not a %s command", context, b.Key, b.Command, noun)
+		}
+	}
+
+	base := make([]binding, len(defaults))
+	for i, d := range defaults {
+		base[i] = binding{key: d.key, command: d.command}
+	}
+
+	laid := layBinds(base, binds, func(string) string { return "" })
+	out := make([]reviewKey, len(laid))
+
+	for i, b := range laid {
+		out[i] = reviewKey{b.key, b.command}
+	}
+
+	return keyTable{binds: out}, nil
+}
+
+// layBinds lays config entries over base: an entry replaces a base binding of
+// the same key, and goes right before its command's first remaining base
+// binding, else at the end of the command's group.
+func layBinds(base []binding, binds []core.KeyBind, group func(id string) string) []binding {
+	out := slices.DeleteFunc(slices.Clone(base), func(d binding) bool {
+		return slices.ContainsFunc(binds, func(b core.KeyBind) bool { return b.Key == d.key })
+	})
+	added := make([]bool, len(out))
+
+	for _, b := range binds {
+		if b.Command == core.KeyNone {
+			continue
+		}
+
+		nb := binding{key: b.Key, command: b.Command, group: group(b.Command)}
+		at := insertAt(out, added, nb)
+		out = slices.Insert(out, at, nb)
+		added = slices.Insert(added, at, true)
+	}
+
+	return out
+}
+
+// insertAt is where a config binding goes in bindings; added marks the config's
+// own entries. It goes before the command's first default binding, else after
+// the config's earlier keys for the command, else after its group.
+func insertAt(bindings []binding, added []bool, nb binding) int {
+	for i, b := range bindings {
+		if !added[i] && b.command == nb.command {
+			return i
+		}
+	}
+
+	if i := slices.IndexFunc(bindings, func(b binding) bool { return b.command == nb.command }); i >= 0 {
+		for i < len(bindings) && bindings[i].command == nb.command {
+			i++
+		}
+
+		return i
+	}
+
+	for i := len(bindings) - 1; i >= 0; i-- {
+		if bindings[i].group == nb.group {
+			return i + 1
+		}
+	}
+
+	return len(bindings)
+}
+
+// groupFor is the which-key group of a command: the group of its binding in
+// km, else the group its id prefix names.
+func groupFor(km keymap, id string) string {
+	if g := km.groupOf(id); g != "" {
+		return g
+	}
+
+	switch {
+	case strings.HasPrefix(id, "layout."):
+		return "Layout"
+	case strings.HasPrefix(id, "tab."):
+		return "Tabs"
+	case strings.HasPrefix(id, "pr."), strings.HasPrefix(id, "git."), strings.HasPrefix(id, "worktree."):
+		return "Git"
+	}
+
+	for _, p := range []string{"pane.", "agent.", "copy.", "rail.", "review.", "md.", "plan."} {
+		if strings.HasPrefix(id, p) {
+			return "Panes"
+		}
+	}
+
+	return "App"
+}
+
+// keysOf returns every key a command is bound to after the leader, in order.
+func (k keymap) keysOf(id string) []string {
+	var keys []string
+
+	for _, b := range k.bindings {
+		if b.command == id {
+			keys = append(keys, b.key)
+		}
+	}
+
+	return keys
+}
+
+// preselectPrefix reports whether key opens a sequence of preselect commands,
+// which work only in a BSP tab.
+func (k keymap) preselectPrefix(key string) bool {
+	found := false
+
+	for _, b := range k.bindings {
+		if !strings.HasPrefix(b.key, key+" ") {
+			continue
+		}
+
+		if !strings.HasPrefix(b.command, "pane.preselect.") {
+			return false
+		}
+
+		found = true
+	}
+
+	return found
+}

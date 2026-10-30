@@ -238,7 +238,7 @@ func (a *App) openMarkdownPage(tab core.TabID, path string, push bool) tea.Cmd {
 // readPageCmd reads path (absolute) under the view's root and parses it. With
 // known set, a file whose bytes hash to it is not parsed.
 func (a *App) readPageCmd(tab core.TabID, v *reviewView, path string, seq int, reload bool, known *[sha256.Size]byte) tea.Cmd {
-	root, epoch, parent, tok := v.root, v.epoch, a.ctx, a.drawer.hl.HighlightLang
+	root, epoch, parent, tok, fold := v.root, v.epoch, a.ctx, a.drawer.hl.HighlightLang, a.foldKey()
 
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(parent, mdReadTimeout)
@@ -260,7 +260,7 @@ func (a *App) readPageCmd(tab core.TabID, v *reviewView, path string, seq int, r
 			return msg
 		}
 
-		msg.doc = parseMarkdown(src, filepath.Dir(path), tok)
+		msg.doc = parseMarkdown(src, filepath.Dir(path), tok).withFoldKey(fold)
 
 		return msg
 	}
@@ -646,4 +646,12 @@ func (a *App) pickMarkdown(pick *mdPick, rel string) tea.Cmd {
 	a.drawerTake()
 
 	return a.openMarkdownPage(tab.ID, filepath.Join(v.root, filepath.FromSlash(rel)), false)
+}
+
+// foldKey is the key a closed fold names in the drawer's markdown: the first
+// one bound to review.fold, "" when it has none.
+func (a *App) foldKey() *string {
+	key, _ := a.keys.drawer.first("review.fold")
+
+	return &key
 }

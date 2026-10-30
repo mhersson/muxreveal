@@ -71,6 +71,16 @@ type reviewView struct {
 	reloadSeq    int
 	reloadNotice bool // a failed re-read of the shown page says why
 
+	// The reviewed hunks: the repository's common dir (for the root commonRoot),
+	// the id of every hunk of res, and the marks and their Rev the rows were
+	// built from. showRead and readOpen are UI state, kept across reloads.
+	common, commonRoot string
+	ids                [][]string
+	marks              map[string]string
+	marksRev           uint64
+	showRead           bool
+	readOpen           map[string]bool
+
 	res         git.Result
 	gen         int // bumps whenever res is replaced; the caches follow it
 	rows        []reviewRow
@@ -241,7 +251,7 @@ func (v *reviewView) rebuildFor(res git.Result, split bool) {
 	v.res = res
 	v.rowsSplit = split
 	v.rowsRev++
-	v.rows = buildRows(res, rowOpts{split: split, full: v.full, whole: v.fullOn, folded: v.folded, md: v.mdRowsOf()})
+	v.rows = buildRows(res, v.rowOpts(split))
 	v.cursor = restoreAnchor(res, v.rows, anchor)
 }
 

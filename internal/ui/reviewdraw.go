@@ -28,7 +28,8 @@ const (
 	tintGhostNr = 0.05
 
 	markGlyph    = "▎" // ▎ at the first cell of the row under the cursor
-	tagDigitsMin = 4   // the least hex digits of a hidden-character tag
+	markReviewed = "✓ reviewed"
+	tagDigitsMin = 4 // the least hex digits of a hidden-character tag
 	minNumW      = 3
 )
 
@@ -167,11 +168,13 @@ type drawCtx struct {
 	mdp      *mdPainter // paints rendered rows; made on first use
 	pageRows []string   // the shown page's rows, drawn on first use
 
-	pr     core.PRInfo  // the pull request the header shows; zero when headH is 0
-	pinned bool         // the drawer is held on its root
-	home   string       // shortens the paths it names
-	list   *wtList      // the open worktree list, drawn over the drawer
-	links  *linkChooser // the open link chooser, drawn over the drawer
+	pr      core.PRInfo  // the pull request the header shows; zero when headH is 0
+	pinned  bool         // the drawer is held on its root
+	home    string       // shortens the paths it names
+	list    *wtList      // the open worktree list, drawn over the drawer
+	links   *linkChooser // the open link chooser, drawn over the drawer
+	bind    keyTable     // the drawer's keys, as the hint row shows them
+	pushKey string       // the leader sequence of git.push, "" when unbound
 }
 
 // diffKeys reports whether the diff, not the tree, has the keyboard.
@@ -334,8 +337,9 @@ func (a *App) drawCtxFor(st core.State) (d *drawCtx, name string, ok bool) {
 
 	d = &drawCtx{
 		ui: lk.theme.UI, th: lk.theme, icons: a.icons, v: v, c: v.derived(), now: a.clock.Now(), keys: a.drawer.focused, tree: a.drawer.focused && a.drawer.tree,
-		pinned: tab.Review != nil && pinnedTo(tab, tab.Review.Pane), home: a.getenv("HOME"), list: a.listFor(tab), links: a.linksFor(tab),
+		pinned: tab.Review != nil && pinnedTo(tab, tab.Review.Pane), home: a.getenv("HOME"), list: a.listFor(tab), links: a.linksFor(tab), bind: a.keys.drawer,
 	}
+	d.pushKey, _ = a.keymap.keyFor("git.push")
 	d.lay = a.drawerLayoutOf(box, v, drawerTree(st))
 
 	if d.lay.headH > 0 {
@@ -448,19 +452,24 @@ func (d *drawCtx) topBorder() string {
 	}
 
 	// Tags sit on the right, the mode tag last. When the title would be left no
-	// room, the split tag drops first, then the pinned tag.
+	// room, the split tag drops first, then the pinned tag, then the counter.
 	split, pin := d.lay.split && v.rowsSplit, d.pinned
-	tags := d.tagRuns(split, pin)
+	count, haveCount := d.counterTag()
+	tags := d.tagRuns(split, pin, count, haveCount)
 
 	// The corner and dash take two cells on each side, and a dash parts the title from the tags.
 	room := func() int { return d.lay.box.W - 4 - runsWidth(tags) - 1 }
 
 	if room() < titleRoomMin+2 && split {
-		tags = d.tagRuns(false, pin)
+		tags = d.tagRuns(false, pin, count, haveCount)
 	}
 
 	if room() < titleRoomMin+2 && pin {
-		tags = d.tagRuns(false, false)
+		tags = d.tagRuns(false, false, count, haveCount)
+	}
+
+	if room() < titleRoomMin+2 && haveCount {
+		tags = d.tagRuns(false, false, count, false)
 	}
 
 	var title []railRun
@@ -480,9 +489,34 @@ func (d *drawCtx) topBorder() string {
 	return d.borderLine("╭", "╮", title, tags)
 }
 
+// counterTag is the reviewed counter, ok false where marks do not count: with
+// no hunks, over a markdown page and on a rendered file.
+func (d *drawCtx) counterTag() (railRun, bool) {
+	v := d.v
+	if v.page() != nil {
+		return railRun{}, false
+	}
+
+	if cur := d.cursorFile(); cur != nil && v.mdOn[cur.Path] {
+		return railRun{}, false
+	}
+
+	read, all := v.countHunks(v.hunkRead)
+	if all == 0 {
+		return railRun{}, false
+	}
+
+	fg := d.ui.Accent
+	if read == all {
+		fg = d.ui.Success
+	}
+
+	return railRun{text: " ✓ " + strconv.Itoa(read) + "/" + strconv.Itoa(all) + " ", fg: fg, bold: true}, true
+}
+
 // tagRuns are the tags on the right of the top border, left to right: split,
-// pinned, then the mode tag, each followed by a dash but the last.
-func (d *drawCtx) tagRuns(split, pinned bool) []railRun {
+// pinned, the counter, then the mode tag, each followed by a dash but the last.
+func (d *drawCtx) tagRuns(split, pinned bool, counter railRun, haveCounter bool) []railRun {
 	ui := d.ui
 	tag := func(text string) railRun { return railRun{text: " " + text + " ", fg: ui.Accent, bold: true} }
 	dash := railRun{text: "─", fg: d.edge()}
@@ -495,6 +529,10 @@ func (d *drawCtx) tagRuns(split, pinned bool) []railRun {
 
 	if pinned {
 		tags = append(tags, tag(d.withIcon(iconPin, "pinned")), dash)
+	}
+
+	if haveCounter {
+		tags = append(tags, counter, dash)
 	}
 
 	return append(tags, tag(d.modeTag()))
@@ -595,54 +633,86 @@ func (d *drawCtx) bottomBorder() string {
 // hintRuns are the key hints that fit cw cells; pairs that do not are dropped
 // from the end.
 func (d *drawCtx) hintRuns(cw int) []railRun {
+	pair := func(label string, ids ...string) [2]string { return [2]string{d.bind.hint(ids...), label} }
+	next, prev := "review.line.next", "review.line.prev"
+
 	if d.v.page() != nil {
-		return d.fitHints([][2]string{{"j/k", "line"}, {"]/[", "heading"}, {"enter", "open"}, {"/", "search"}, {"esc", "back"}}, cw)
+		return d.fitHints([][2]string{
+			pair("line", next, prev), pair("heading", "review.hunk.next", "review.hunk.prev"),
+			pair("open", "review.fold"), pair("search", "review.search"), pair("back", "review.back"),
+		}, cw)
 	}
 
 	cur := d.cursorFile()
 	render := cur != nil && md.IsMarkdown(cur.Path) && !cur.Binary && cur.Status != git.Deleted
 
 	pairs := [][2]string{
-		{"j/k", "line"},
-		{"]/[", "hunk"},
-		{"}/{", "file"},
-		{"tab", "tree"},
-		{"w", "worktree"},
+		pair("line", next, prev),
+		pair("hunk", "review.hunk.next", "review.hunk.prev"),
+		pair("file", "review.file.next", "review.file.prev"),
+		pair("tree", "review.tree"),
+		pair("worktree", "review.worktrees"),
 	}
 
 	if render {
-		pairs = append(pairs, [2]string{"m", "render"})
+		pairs = append(pairs, pair("render", "review.markdown"))
 	}
 
 	pairs = append(pairs,
-		[2]string{"f", "full"},
-		[2]string{"u", "split"},
-		[2]string{"b/t", "mode"},
+		pair("full", "review.full"),
+		pair("split", "review.split"),
+		pair("edit", "review.edit"), pair("search", "review.search"),
 	)
 
-	if d.v.showsTurn() {
-		pairs = append(pairs, [2]string{",/.", "turn"})
+	// space marks hunks, so it does nothing in a file that does not show them.
+	if cur != nil && d.v.hunksShown(*cur) {
+		pairs = append(pairs, pair("reviewed", "review.mark"), d.showReadPair(pair))
 	}
 
-	pairs = append(pairs, [2]string{"e", "edit"}, [2]string{"/", "search"})
+	pairs = append(pairs, pair("mode", "review.mode.branch", "review.mode.turn"))
+
+	if d.v.showsTurn() {
+		pairs = append(pairs, pair("turn", "review.turn.prev", "review.turn.next"))
+	}
 
 	if _, ok := d.v.src.(git.PRSource); ok {
-		pairs = [][2]string{{"j/k", "line"}, {"]/[", "hunk"}, {"c", "checks"}, {"a", "approve"}, {"M", "merge"}, {"O", "browser"}, {"b/t", "mode"}}
+		pairs = [][2]string{
+			pair("line", next, prev), pair("hunk", "review.hunk.next", "review.hunk.prev"),
+			pair("checks", "review.checks"), pair("approve", "review.approve"), pair("merge", "review.merge"),
+			pair("browser", "review.browser"),
+			pair("reviewed", "review.mark"), d.showReadPair(pair),
+			pair("mode", "review.mode.branch", "review.mode.turn"),
+		}
 	}
 
 	if cur != nil && d.v.mdOn[cur.Path] {
-		pairs = [][2]string{{"j/k", "line"}, {"]/[", "change"}, {"enter", "open"}, {"m", "source"}, {"f", "full"}, {"/", "search"}}
+		pairs = [][2]string{
+			pair("line", next, prev), pair("change", "review.hunk.next", "review.hunk.prev"), pair("open", "review.fold"),
+			pair("source", "review.markdown"), pair("full", "review.full"), pair("search", "review.search"),
+		}
 	}
 
 	if d.tree {
-		pairs = [][2]string{{"j/k", "file"}, {"enter", "jump"}, {"tab", "hide"}, {"esc", "back"}}
+		pairs = [][2]string{pair("file", next, prev), pair("jump", "review.fold"), pair("hide", "review.tree"), pair("back", "review.back")}
 	}
 
 	return d.fitHints(pairs, cw)
 }
 
-// fitHints draws the key and label pairs that fit cw cells.
+// showReadPair is the hint for the switch that shows reviewed hunks.
+func (d *drawCtx) showReadPair(pair func(string, ...string) [2]string) [2]string {
+	if d.v.showRead {
+		return pair("unread only", "review.show.reviewed")
+	}
+
+	return pair("show reviewed", "review.show.reviewed")
+}
+
+// fitHints draws the key and label pairs that fit cw cells; a pair with no
+// key, its command unbound, is left out.
 func (d *drawCtx) fitHints(pairs [][2]string, cw int) []railRun {
+	pairs = slices.DeleteFunc(pairs, func(kv [2]string) bool { return kv[0] == "" })
+
 	var out []railRun
 
 	used := 0
@@ -764,7 +834,7 @@ func (d *drawCtx) emptyRuns(y int) []railRun {
 	case git.TurnSource:
 		n := strconv.Itoa(v.shownTurn())
 		if v.noSnapshot {
-			lines = []string{"turn " + n + " has no snapshot", ", and . step through the turns; b shows the branch"}
+			lines = append([]string{"turn " + n + " has no snapshot"}, d.noSnapshotHint()...)
 		} else {
 			lines = []string{"turn " + n + " changed nothing"}
 		}
@@ -790,6 +860,56 @@ func (d *drawCtx) emptyRuns(y int) []railRun {
 	return []railRun{{text: "    "}, {text: text, fg: fg}}
 }
 
+// infoText is an info row's text with the key it names taken from the table,
+// and the clause dropped when the command has no key.
+func (d *drawCtx) infoText(r reviewRow) string {
+	switch r.text {
+	case infoTruncated:
+		if key, ok := d.bind.first("review.full"); ok {
+			return "too large, press " + key + " for the full file"
+		}
+
+		return "too large"
+	case infoAllRead:
+		key, bound := d.bind.first("review.show.reviewed")
+
+		switch {
+		case r.block == 1 && bound:
+			return "the one hunk is reviewed; " + key + " shows it"
+		case r.block == 1:
+			return "the one hunk is reviewed"
+		case bound:
+			return "all " + strconv.Itoa(r.block) + " hunks reviewed; " + key + " shows them"
+		}
+
+		return "all " + strconv.Itoa(r.block) + " hunks reviewed"
+	}
+
+	return r.text
+}
+
+// noSnapshotHint is the second line of an empty turn without a snapshot: the
+// bound keys that step through the turns and show the branch.
+func (d *drawCtx) noSnapshotHint() []string {
+	var parts []string
+
+	if prev, ok := d.bind.first("review.turn.prev"); ok {
+		if next, ok := d.bind.first("review.turn.next"); ok {
+			parts = append(parts, prev+" and "+next+" step through the turns")
+		}
+	}
+
+	if key, ok := d.bind.first("review.mode.branch"); ok {
+		parts = append(parts, key+" shows the branch")
+	}
+
+	if len(parts) == 0 {
+		return nil
+	}
+
+	return []string{strings.Join(parts, "; ")}
+}
+
 // markRun is the first cell of a row: the cursor mark or a blank.
 func (d *drawCtx) markRun(cursor bool) railRun {
 	if cursor {
@@ -809,10 +929,10 @@ func (d *drawCtx) rowCells(i int, cursor bool) string {
 
 	switch r.kind {
 	case rowFile:
-		return d.fileRow(r.file, cursor)
+		return d.fileRow(r.file, r.read, cursor)
 	case rowInfo:
 		bg := d.cursorGround(ui.Bg, cursor)
-		text, _ := cleanText(r.text)
+		text, _ := cleanText(d.infoText(r))
 
 		return railPainter{bg: bg}.line([]railRun{d.markRun(cursor), {text: "   "}, {text: text, fg: ui.Subtle}}, w)
 	case rowHunk:
@@ -823,6 +943,11 @@ func (d *drawCtx) rowCells(i int, cursor bool) string {
 		runs := []railRun{d.markRun(cursor), {text: " " + hunkHeader(h), fg: ui.Info}}
 		if section != "" {
 			runs = append(runs, railRun{text: " " + section, fg: ui.Muted})
+		}
+
+		if r.read {
+			gap := max(w-runsWidth(runs)-ansi.StringWidth(markReviewed)-1, 1)
+			runs = append(runs, railRun{text: strings.Repeat(" ", gap)}, railRun{text: markReviewed, fg: ui.Success})
 		}
 
 		return railPainter{bg: bg}.line(runs, w)
@@ -853,7 +978,7 @@ func (d *drawCtx) cursorGround(bg theme.Hex, cursor bool) theme.Hex {
 }
 
 // fileRow is a file's header: status, path, flags and counts.
-func (d *drawCtx) fileRow(fi int, cursor bool) string {
+func (d *drawCtx) fileRow(fi int, read, cursor bool) string {
 	f := d.v.res.Files[fi]
 	ui, w := d.ui, d.lay.diffW
 	bg := d.cursorGround(ui.Surface, cursor)
@@ -879,9 +1004,12 @@ func (d *drawCtx) fileRow(fi int, cursor bool) string {
 		right = append(right, railRun{text: d.withIcon(iconFull, "full"), fg: ui.Accent, bold: true}, railRun{text: "  "})
 	}
 
-	if f.Binary {
+	switch {
+	case read:
+		right = append(right, railRun{text: markReviewed, fg: ui.Success})
+	case f.Binary:
 		right = append(right, railRun{text: "bin", fg: ui.Subtle})
-	} else {
+	default:
 		right = append(right, railRun{text: "+" + strconv.Itoa(f.Added), fg: ui.Success}, railRun{text: " -" + strconv.Itoa(f.Removed), fg: ui.Error})
 	}
 

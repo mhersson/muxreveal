@@ -69,6 +69,9 @@ type Options struct {
 	Worktrees core.WorktreesConfig
 	// Save is called with the state after every successful dispatch; nil saves nothing.
 	Save func(core.State)
+	// Marks loads and saves the reviewed-hunk marks; nil keeps them for the
+	// session only.
+	Marks markFiles
 	// PRs polls the pull requests of the repositories the agents work in; nil
 	// turns every pull request feature off.
 	PRs prSource
@@ -80,6 +83,15 @@ type Options struct {
 	// PRActions makes the GitHub writes (approve, merge, open a pull request);
 	// nil turns them off.
 	PRActions prActions
+	// Keys is the [keys] config laid over the built-in leader keys.
+	Keys core.KeysConfig
+}
+
+// markFiles is the persistence of the reviewed-hunk marks, one file per
+// repository. Load reads (and may block on disk); Save returns at once.
+type markFiles interface {
+	Load(commonDir string, now time.Time) (map[string]string, error)
+	Save(commonDir string, days map[string]string)
 }
 
 // App is the root Bubble Tea model.
@@ -90,6 +102,7 @@ type App struct {
 
 	reg     *registry
 	keymap  keymap
+	keys    keyTables
 	pending bool      // leader pressed, awaiting a key
 	prefix  string    // first key of a two-key sequence while pending; "" before it
 	popup   bool      // which-key popup visible; only while pending with no prefix
@@ -97,6 +110,8 @@ type App struct {
 	notice  string    // toast message until the next key press
 	marked  toastMark // the level the toast text was raised at
 	pushSeq int       // push request counter; an answer for another request is stale
+
+	cleanupSeq int // cleanup check counter; an answer for an older check is stale
 
 	pushing map[string]string // worktree root -> the branch being pushed there
 
@@ -142,6 +157,7 @@ type App struct {
 	prs       prState
 	edits     editState
 	storeVer  uint64        // counts the dispatches the store accepted
+	marks     markFiles     // the reviewed-hunk files; nil keeps marks for the session only
 	engine    *git.Engine   // nil when the rail's diff stats and the review drawer's diffs are off
 	probeSem  chan struct{} // its capacity bounds the head, stats and name probes running at once
 	clip      *clipboard
@@ -207,7 +223,11 @@ func New(opts Options) (*App, error) {
 		return nil, fmt.Errorf("build command registry: %w", err)
 	}
 
-	km := defaultKeymap()
+	km, tables, err := resolveKeys(opts.Keys, reg)
+	if err != nil {
+		return nil, err
+	}
+
 	for _, b := range km.bindings {
 		if _, ok := reg.get(b.command); !ok {
 			return nil, fmt.Errorf("ui: binding %q names unknown command %q", b.key, b.command)
@@ -226,8 +246,8 @@ func New(opts Options) (*App, error) {
 
 	a := &App{
 		harness: h, tick: tea.Tick, hookSettings: opts.HookSettings, hookSock: opts.HookSock,
-		events: opts.Events, notice: opts.Notice, save: opts.Save,
-		log: opts.Logger, store: opts.Store, reg: reg, keymap: km,
+		events: opts.Events, notice: opts.Notice, save: opts.Save, marks: opts.Marks,
+		log: opts.Logger, store: opts.Store, reg: reg, keymap: km, keys: tables,
 		panes: map[core.PaneID]*pane{}, outerFocused: true,
 		watches: watchState{set: opts.Watches, open: git.Open, panes: map[core.PaneID]*paneWatch{}, pins: map[core.TabID]*pinWatch{}, failed: map[string]bool{}},
 		getenv:  getenv, cwd: cwd, recordDir: opts.RecordDir, icons: opts.Icons, clock: realClock{}, start: termStart,
@@ -634,7 +654,13 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case approvedMsg:
 		a.onApproved(msg)
 	case mergedMsg:
-		a.onMerged(msg)
+		return a, a.onMerged(msg)
+	case cleanupPlaceMsg:
+		return a, a.onCleanupPlace(msg)
+	case cleanupFoundMsg:
+		return a, a.onCleanupFound(msg)
+	case cleanedMsg:
+		a.onCleaned(msg)
 	case reviewSnappedMsg:
 		return a, a.reviewRefresh(msg.pane)
 	case reviewFullMsg:
@@ -720,7 +746,7 @@ func (a *App) runLeader(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 
 	prefix := a.prefix
 	if prefix == "" && a.keymap.isPrefix(key) {
-		if key == ";" && !a.tabIsBSP() {
+		if a.keymap.preselectPrefix(key) && !a.tabIsBSP() {
 			a.notice = noticePreselectBSP
 			a.endLeader()
 
@@ -781,7 +807,7 @@ func (a *App) View() tea.View {
 
 	content = overlayToast(content, a.width, a.height, a.notice, a.noticeLevel(), a.icons, lk.styles)
 	if a.sequenceOpen() {
-		content = overlayCorner(content, a.width, a.height, sequencePopup(a.keymap.leader, a.prefix, a.icons, lk.styles))
+		content = overlayCorner(content, a.width, a.height, sequencePopup(a.keymap.leader, a.prefix, a.sequenceRows(a.prefix), a.icons, lk.styles))
 	}
 
 	if a.popup {

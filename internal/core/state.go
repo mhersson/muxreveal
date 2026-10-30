@@ -21,6 +21,11 @@ type State struct {
 	// It is not saved. Copies of the state share it, so actions replace the map
 	// and its values and never edit them in place.
 	PRs map[string]RepoPRs
+
+	// Marks holds each repository's reviewed-hunk marks, keyed by its common
+	// dir. It is not saved in state.json (the marks have their own files) and
+	// copies share it, so actions replace the map and its values.
+	Marks map[string]RepoMarks
 }
 
 // InitialState returns the state of a fresh session: one empty tab.

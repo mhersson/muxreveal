@@ -277,6 +277,7 @@ type reviewScene struct {
 	tree    bool // the drawer's file tree is open
 	pinned  bool // the drawer is held on its root
 	tune    func(t *testing.T, a *App, v *reviewView)
+	keys    core.KeysConfig
 }
 
 func (s reviewScene) build(t *testing.T) *App {
@@ -286,7 +287,7 @@ func (s reviewScene) build(t *testing.T) *App {
 		s.res.Turn = s.turn
 	}
 
-	a := newThemedApp(t, s.theme)
+	a := newKeyedApp(t, s.theme, s.keys)
 	a.icons = s.icons
 	a.clock = &fakeClock{t: t0}
 

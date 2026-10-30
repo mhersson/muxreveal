@@ -179,7 +179,7 @@ func (a *App) railLines(st core.State, lk look, v railView) []string {
 	a.railListRows(st, ui, p, v, cw, set)
 
 	if y := v.geom.hintY; y >= 0 {
-		set(y, p.line(append([]railRun{{text: " "}}, railHints(ui, cw)...), box.W-2))
+		set(y, p.line(append([]railRun{{text: " "}}, railHints(ui, cw, a.keys.rail)...), box.W-2))
 	}
 
 	for _, s := range inner {
@@ -304,8 +304,13 @@ func (a *App) railSearchRow(ui theme.UI, p railPainter, inner, cw int) string {
 }
 
 // railHints are the key hints that fit cw cells; pairs that do not are dropped from the end.
-func railHints(ui theme.UI, cw int) []railRun {
-	pairs := [...][2]string{{"j/k", "move"}, {"enter", "jump"}, {"/", "search"}, {"esc", "back"}}
+func railHints(ui theme.UI, cw int, t keyTable) []railRun {
+	pairs := hintPairs([][2]string{
+		{t.hint("rail.next", "rail.prev"), "move"},
+		{t.hint("rail.jump"), "jump"},
+		{t.hint("rail.search"), "search"},
+		{t.hint("rail.back"), "back"},
+	})
 
 	var out []railRun
 

@@ -15,6 +15,8 @@ import (
 // the command palette reach it the same way.
 type command struct {
 	id, title, icon string
+	short           string // title in a sequence popup, where the group names the rest; "" means title
+	scope           string // "", or the view whose keys run it: "rail", "pr_list" or "checks"
 	run             func(a *App) tea.Cmd
 }
 
@@ -203,6 +205,7 @@ func defaultCommands() []command {
 		id:    "git.push",
 		icon:  iconPush,
 		title: "Push branch",
+		short: "Push",
 		run:   (*App).push,
 	}, command{
 		id:    "pr.open",
@@ -214,6 +217,11 @@ func defaultCommands() []command {
 		icon:  iconMerge,
 		title: "Merge pull request",
 		run:   (*App).mergeCommand,
+	}, command{
+		id:    "worktree.cleanup",
+		icon:  iconCleanup,
+		title: "Clean up a merged worktree",
+		run:   (*App).cleanupCommand,
 	}, command{
 		id:    "app.quit",
 		icon:  iconQuit,
@@ -234,5 +242,8 @@ func defaultCommands() []command {
 		})
 	}
 
-	return cmds
+	cmds = append(cmds, railCommands()...)
+	cmds = append(cmds, prListCommands()...)
+
+	return append(cmds, checksCommands()...)
 }

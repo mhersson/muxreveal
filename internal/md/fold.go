@@ -63,8 +63,8 @@ func (l *layouter) foldHead(out *frag, n *foldNode, width int) bool {
 		out.lines = append(out.lines, ln)
 	}
 
-	if !open {
-		const hint = "   enter opens"
+	if !open && l.foldKey != "" {
+		hint := "   " + l.foldKey + " opens"
 
 		last := len(out.lines) - 1
 		if lineWidth(out.lines[last])+len(hint) <= width {
