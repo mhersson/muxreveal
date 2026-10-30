@@ -26,5 +26,5 @@
 │    main                                 ││                          ││                          │
 │   waiting for a prompt                   ││                          ││                          │
 │                                          ││                          ││         ╭───────────────╮│
-│ j/k move  enter jump  / search  esc back ││                          ││         │ 󰀪 layout: bsp ││
+│ j/k move  enter jump  p plan  / search   ││                          ││         │ 󰀪 layout: bsp ││
 ╰──────────────────────────────────── 3 ↓ ─╯╰──────────────────────────╯╰─────────╰───────────────╯╯

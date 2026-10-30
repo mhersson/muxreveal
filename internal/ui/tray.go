@@ -311,7 +311,7 @@ func prModule(pr core.PRInfo, icons bool, ui theme.UI) trayModule {
 	runs := []trayRun{{text: " ", fg: ui.Fg}}
 
 	for _, r := range prTextOf(pr, icons, ui).runs(prStage{counts: true, glyph: true}) {
-		runs = append(runs, trayRun(r))
+		runs = append(runs, trayRun{text: r.text, fg: r.fg, bold: r.bold})
 	}
 
 	return surfaceModule(modPR, ui, append(runs, trayRun{text: " ", fg: ui.Fg})...)

@@ -18,6 +18,7 @@ var (
 		{"up", "rail.prev"},
 		{"/", "rail.search"},
 		{"enter", "rail.jump"},
+		{"p", "rail.plan"},
 		{"esc", "rail.back"},
 	}
 	prListKeys = []reviewKey{
@@ -111,6 +112,7 @@ func railCommands() []command {
 			return nil
 		}),
 		cmd("rail.jump", "jump to the agent", func(a *App) tea.Cmd { return a.railJump(a.rail.sel) }),
+		cmd("rail.plan", "open the agent's plan", func(a *App) tea.Cmd { return a.openPlan(a.rail.sel) }),
 		cmd("rail.back", "end the search or go back to the panes", func(a *App) tea.Cmd {
 			if a.rail.query != "" {
 				a.railSetSearch(false, "")

@@ -44,5 +44,5 @@
 │                                          ││                                                       │                    │  A …al/ui/review_test.go  󰀦  +11 -0 │
 │                                          ││                                                       │                    │  @@ -0,0 +1,11 @@                   │
 │                                          ││                                                       │                    │       1 + package ui                │
-│ j/k move  enter jump  / search  esc back ││                                                       │ j/k file   enter jump   tab hide   esc back              │
+│ j/k move  enter jump  p plan  / search   ││                                                       │ j/k file   enter jump   tab hide   esc back              │
 ╰──────────────────────────────────────────╯╰───────────────────────────────────────────────────────╰──────────────────────────────────────────────────────────╯

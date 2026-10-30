@@ -127,6 +127,13 @@ func (a *App) railClick(x, y int) tea.Cmd {
 		return nil
 	}
 
+	if id, onMark := v.markAt(x, y); onMark {
+		a.mouse.click = clickState{}
+		a.railSelect(id)
+
+		return a.openPlan(id)
+	}
+
 	i, onCard := v.cardAt(x, y)
 	if !onCard {
 		a.mouse.click = clickState{}

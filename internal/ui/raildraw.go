@@ -25,6 +25,7 @@ type railRun struct {
 	text string
 	fg   theme.Hex
 	bold bool
+	mark bool // the plan mark, the cell a click opens the plan from
 }
 
 func runsWidth(runs []railRun) int {
@@ -308,6 +309,7 @@ func railHints(ui theme.UI, cw int, t keyTable) []railRun {
 	pairs := hintPairs([][2]string{
 		{t.hint("rail.next", "rail.prev"), "move"},
 		{t.hint("rail.jump"), "jump"},
+		{t.hint("rail.plan"), "plan"},
 		{t.hint("rail.search"), "search"},
 		{t.hint("rail.back"), "back"},
 	})
@@ -521,9 +523,9 @@ func railBranchLine(ui theme.UI, lead []railRun, c railCard, hits []railHit, cw 
 }
 
 // railTitleLine is a card's first line: state glyph, the session's name or else
-// the project and the model, then the context meter, age and the unseen dot. When
-// short of room the meter goes first, then the model, then the name is cut; the
-// age and the dot stay.
+// the project and the model, then the context meter, the plan mark, the age and
+// the unseen dot. When short of room the meter goes first, then the model, then
+// the name is cut; the mark, the age and the dot stay.
 func (a *App) railTitleLine(ui theme.UI, c railCard, hits []railHit, cw int) []railRun {
 	glyph := railRun{text: " ", fg: ui.Fg}
 	spin := spinFrame(a.spin)
@@ -547,7 +549,20 @@ func (a *App) railTitleLine(ui theme.UI, c railCard, hits []railHit, cw int) []r
 
 	var tail []railRun
 
+	if c.plan {
+		mark := "plan"
+		if a.icons {
+			mark = iconPlan
+		}
+
+		tail = append(tail, railRun{text: mark, fg: ui.Info, mark: true})
+	}
+
 	if age := railAge(c.active, a.clock.Now()); age != "" {
+		if len(tail) > 0 {
+			tail = append(tail, railRun{text: "  ", fg: ui.Fg})
+		}
+
 		tail = append(tail, railRun{text: age, fg: ui.Subtle})
 	}
 

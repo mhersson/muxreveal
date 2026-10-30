@@ -4,6 +4,8 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/charmbracelet/x/ansi"
+
 	"github.com/mhersson/muxreveal/internal/core"
 )
 
@@ -239,9 +241,14 @@ type railView struct {
 	groups []railGroup
 	shown  []railCard
 	rows   []railRow
-	top    int // clamped
-	sel    int // the selected card's index in shown, -1 for none
+	top    int        // clamped
+	sel    int        // the selected card's index in shown, -1 for none
+	marks  []markSpan // per shown card; w is 0 without a plan mark
 }
+
+// markSpan is the plan mark's place on a card's first line: x from the
+// content's left edge, w cells.
+type markSpan struct{ x, w int }
 
 // railViewOf lays the list out for the current state; ok is false while the
 // rail is hidden.
@@ -269,6 +276,7 @@ func (a *App) railViewOf(st core.State) (railView, bool) {
 		}
 	}
 
+	v.marks = a.railMarks(v.shown, max(box.W-4, 0))
 	v.rows = railLayout(v.groups)
 	v.top = railClampTop(v.rows, v.geom.list.H, a.rail.top, v.sel)
 
@@ -343,4 +351,57 @@ func railHidden(rows []railRow, h, top int) (above, below int) {
 	}
 
 	return above, below
+}
+
+// railMarks finds the plan mark of each card that shows one.
+func (a *App) railMarks(shown []railCard, cw int) []markSpan {
+	marks := make([]markSpan, len(shown))
+	ui := a.current().theme.UI
+
+	for i, c := range shown {
+		if !c.plan {
+			continue
+		}
+
+		x := 0
+
+		for _, r := range a.railTitleLine(ui, c, nil, cw) {
+			w := ansi.StringWidth(r.text)
+			if r.mark {
+				marks[i] = markSpan{x: x, w: w}
+
+				break
+			}
+
+			x += w
+		}
+	}
+
+	return marks
+}
+
+// markAt is the agent whose plan mark covers the cell (x, y).
+func (v railView) markAt(x, y int) (core.PaneID, bool) {
+	l := v.geom.list
+	if y < l.Y || y >= l.Y+l.H {
+		return "", false
+	}
+
+	i := v.top + y - l.Y
+	if i < 0 || i >= len(v.rows) {
+		return "", false
+	}
+
+	r := v.rows[i]
+	if r.kind != railRowCard || r.line != 0 {
+		return "", false
+	}
+
+	m := v.marks[r.card]
+	// The content starts after the box's border and the edge column.
+	if left := v.geom.box.X + 2 + m.x; m.w == 0 || x < left || x >= left+m.w {
+		return "", false
+	}
+
+	return v.shown[r.card].pane, true
 }
