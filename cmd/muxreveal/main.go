@@ -202,6 +202,7 @@ func run(ctx context.Context, env core.Env, configPath, recordDir string, fresh 
 		Places:       places,
 		PRs:          prs.poller,
 		PRLookup:     prs.lookup,
+		PRActions:    prs.actions(),
 		Notice:       strings.Join(notices, "; "),
 		Save:         save,
 	})

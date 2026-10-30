@@ -813,3 +813,24 @@ func TestPinNotSaved(t *testing.T) {
 
 	eq(t, got, roundTripped())
 }
+
+// The drawer's PR mode is never saved.
+func TestReviewPRModeIsNotSaved(t *testing.T) {
+	t.Parallel()
+
+	plain := fixedState()
+	plain.Tabs[0].Review = &core.Review{Pane: "p2", Mode: core.ReviewBranch}
+
+	withPR := fixedState()
+	withPR.Tabs[0].Review = &core.Review{Pane: "p2", Mode: core.ReviewBranch, PR: &core.ReviewPR{Repo: "github.com/o/r", Number: 3, Root: "/w"}}
+
+	a, err := Encode(plain)
+	noErr(t, err)
+
+	b, err := Encode(withPR)
+	noErr(t, err)
+
+	if string(a) != string(b) {
+		t.Errorf("PR mode changes the encoding:\n%s\nvs\n%s", a, b)
+	}
+}

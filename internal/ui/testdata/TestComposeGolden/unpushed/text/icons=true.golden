@@ -1,0 +1,29 @@
+
+       ╭─  Open a pull request ──────────────────────────────────────────────────────────────────────╮
+       │                                                                                              │
+       │  o/r   feat/x → main   2 commits                                                            │
+       │  ↑2 not pushed yet: creating the PR pushes feat/x to origin first                            │
+       │                                                                                              │
+       │  ❯ title   Feat/x                                                                            │
+       │                                                                                              │
+       │    base    main   ←/→ to change                                                              │
+       │                                                                                              │
+       │    draft   [ ] open as a draft                                                               │
+       │                                                                                              │
+       │    body                                                                                      │
+       │  ╭───────────────────────────────────────────────────────────────────── from the commits ─╮  │
+       │  │ - add the lexer                                                                        │  │
+       │  │ - fix the parser                                                                       │  │
+       │  │                                                                                        │  │
+       │  │                                                                                        │  │
+       │  │                                                                                        │  │
+       │  │                                                                                        │  │
+       │  │                                                                                        │  │
+       │  │                                                                                        │  │
+       │  │                                                                                        │  │
+       │  │                                                                                        │  │
+       │  ╰────────────────────────────────────────────────────────────────────────────────────────╯  │
+       │                                                                                              │
+       │                                                                                              │
+       │  tab next field    ctrl+e body in $EDITOR    ctrl+s create    esc cancel                     │
+       ╰──────────────────────────────────────────────────────────────────────────────────────────────╯

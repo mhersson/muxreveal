@@ -42,11 +42,17 @@ var reviewKeys = []reviewKey{
 	{"enter", "review.fold"},
 	{"b", "review.mode.branch"},
 	{"t", "review.mode.turn"},
+	{"p", "review.mode.pr"},
+	{"c", "review.checks"},
+	{"a", "review.approve"},
+	{"M", "review.merge"},
+	{"O", "review.browser"},
 	{",", "review.turn.prev"},
 	{".", "review.turn.next"},
 	{"/", "review.search"},
 	{"w", "review.worktrees"},
 	{"e", "review.edit"},
+	{"r", "review.refresh"},
 	{"esc", "review.back"},
 }
 
@@ -94,11 +100,17 @@ func reviewCommands() []command {
 		cmd("review.fold", "Review: fold or show removed lines", (*App).reviewFold),
 		cmd("review.mode.branch", "Review: branch mode", mode(core.ReviewBranch)),
 		cmd("review.mode.turn", "Review: turn mode", mode(core.ReviewTurn)),
+		cmd("review.mode.pr", "Review: pull request", (*App).reviewPR),
+		cmd("review.checks", "Review: checks", func(a *App) tea.Cmd { return a.prAct(thenChecks) }),
+		cmd("review.approve", "Review: approve", (*App).reviewApprove),
+		cmd("review.merge", "Review: merge", (*App).reviewMerge),
+		cmd("review.browser", "Review: open in browser", func(a *App) tea.Cmd { return a.prAct(thenBrowser) }),
 		cmd("review.turn.prev", "Review: previous turn", turn(-1)),
 		cmd("review.turn.next", "Review: next turn", turn(1)),
 		cmd("review.search", "Review: search", (*App).reviewSearch),
 		cmd("review.worktrees", "Review: worktrees", (*App).openWorktrees),
 		cmd("review.edit", "Review: open in the editor", (*App).reviewEdit),
+		cmd("review.refresh", "Review: refresh", (*App).reviewReload),
 		cmd("review.back", "Review: back to the panes", (*App).reviewBack),
 	}
 }
@@ -236,7 +248,7 @@ func (a *App) reviewBodyH(v *reviewView) int {
 		return 0
 	}
 
-	return a.drawerLayoutOf(box, v, drawerTree(st)).bodyH
+	return a.drawerLayoutOf(box, v, drawerTree(st)).diffH
 }
 
 // reviewGo puts the cursor on a row and scrolls only as far as it needs.

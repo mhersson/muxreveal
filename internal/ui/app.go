@@ -75,6 +75,11 @@ type Options struct {
 	// PRLookup finds the merged or closed pull request of a branch whose open one
 	// is gone; nil means no lookups.
 	PRLookup PRLookup
+	// OpenURL opens a link in the browser; nil means the platform's opener.
+	OpenURL urlOpener
+	// PRActions makes the GitHub writes (approve, merge, open a pull request);
+	// nil turns them off.
+	PRActions prActions
 }
 
 // App is the root Bubble Tea model.
@@ -104,8 +109,18 @@ type App struct {
 	preview *look // theme picker preview; nil unless previewing
 	// reportedFg and reportedBg are the colours last given to the panes.
 	reportedFg, reportedBg theme.Hex
-	confirm                *confirm // yes/no question; owns every key while open
-	prompt                 *prompt  // text input; owns every key and paste while open
+	confirm                *confirm     // yes/no question; owns every key while open
+	prompt                 *prompt      // text input; owns every key and paste while open
+	checks                 *checksView  // a pull request's checks; owns every key while open
+	merge                  *mergeView   // the merge box; owns every key while open
+	prList                 *prListView  // the agents' pull requests; owns every key while open
+	compose                *composeView // the compose box; owns every key while open
+	composeSeq             int          // compose request counter; an answer for another request is stale
+	runDir                 string       // the state run dir; empty with agent hooks off
+	editing                map[core.PaneID]*bodyEdit
+	merging                map[mergeKey]bool
+	openLink               urlOpener
+	actions                prActions // GitHub writes; nil means they are off
 
 	panes        map[core.PaneID]*pane // runtime panes, keyed like State.Panes
 	later        []tea.Cmd             // commands raised outside the update's return path; Update batches them
@@ -151,6 +166,9 @@ type App struct {
 	ctx     context.Context
 	cancel  context.CancelFunc
 	closing sync.WaitGroup // pane closes running off the update loop
+
+	// bodyFiles tracks editor files written but not yet handed to the update loop.
+	bodyFiles bodyFileSet
 }
 
 // New returns the root model. It fails when the store's theme is unknown.
@@ -220,6 +238,13 @@ func New(opts Options) (*App, error) {
 		clip: newClipboard(clipboardConfig{OSC52: !opts.NoOSC52, Native: !opts.NoNativeClipboard}, getenv, runtime.GOOS, opts.Logger),
 	}
 
+	a.actions = opts.PRActions
+
+	a.openLink = opts.OpenURL
+	if a.openLink == nil {
+		a.openLink = openBrowser
+	}
+
 	if opts.PRs != nil {
 		a.prs = newPRState(opts.PRs, opts.PRLookup)
 	}
@@ -227,6 +252,8 @@ func New(opts Options) (*App, error) {
 	a.drawer.cfg = opts.Diff
 	a.picker.cfg = opts.Worktrees
 	a.drawersOpen = anyReview(opts.Store.State())
+
+	a.runDir = opts.GitTempDir
 
 	if opts.GitTempDir != "" {
 		a.engine = git.NewEngine(git.EngineOptions{
@@ -387,6 +414,10 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.later = append(a.later, c)
 	}
 
+	if c := a.prNextAfterSync(); c != nil {
+		a.later = append(a.later, c)
+	}
+
 	a.worktreesSync()
 
 	if c := a.drawerAfterUpdate(); c != nil {
@@ -535,6 +566,18 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.onPushResolved(msg)
 	case pushedMsg:
 		return a, a.onPushed(msg)
+	case composeResolvedMsg:
+		return a, a.onComposeResolved(msg)
+	case composeLogMsg:
+		a.onComposeLog(msg)
+	case composePushedMsg:
+		return a, a.onComposePushed(msg)
+	case composeCreatedMsg:
+		a.onComposeCreated(msg)
+	case bodyWrittenMsg:
+		return a, a.onBodyWritten(msg)
+	case bodyReadMsg:
+		a.onBodyRead(msg)
 	case watchAcquiredMsg:
 		a.onWatchAcquired(msg)
 	case pinAcquiredMsg:
@@ -566,6 +609,16 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, a.onDrawerSlide()
 	case reviewLoadedMsg:
 		return a, a.onReviewLoaded(msg)
+	case prPlaceMsg:
+		return a, a.onPRPlace(msg)
+	case prFetchedMsg:
+		return a, a.onPRFetched(msg)
+	case browserDoneMsg:
+		a.onBrowserDone(msg)
+	case approvedMsg:
+		a.onApproved(msg)
+	case mergedMsg:
+		a.onMerged(msg)
 	case reviewSnappedMsg:
 		return a, a.reviewRefresh(msg.pane)
 	case reviewFullMsg:
@@ -717,6 +770,22 @@ func (a *App) View() tea.View {
 
 	if a.picker.open != nil {
 		content = a.overlayPicker(content, lk)
+	}
+
+	if a.prList != nil {
+		content = a.overlayPRList(content, lk)
+	}
+
+	if a.checks != nil {
+		content = a.overlayChecks(content, lk)
+	}
+
+	if a.merge != nil {
+		content = a.overlayMerge(content, lk)
+	}
+
+	if a.composeShown() {
+		content = a.overlayCompose(content, lk)
 	}
 
 	if a.confirm != nil {

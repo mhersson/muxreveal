@@ -38,6 +38,7 @@ func newThemedApp(t *testing.T, name string) *App {
 	}
 	// A copy must never reach the operator's real clipboard tools.
 	app.clip.run = (&fakeRun{}).run
+	app.openLink = (&fakeOpen{}).open
 
 	return app
 }

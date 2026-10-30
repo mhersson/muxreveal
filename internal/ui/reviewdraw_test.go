@@ -120,6 +120,17 @@ func reviewCases() []reviewCase {
 				showList(a, rows, "other · feature/follow-the-agents-edits", 3)
 			}
 		})},
+		{"pr", with(func(s *reviewScene) {
+			s.branch, s.tune = true, prScene
+		})},
+		{"pr-unpushed", with(func(s *reviewScene) {
+			s.branch, s.tune = true, prSceneWith(func(p *core.PRInfo) {
+				p.ChecksDone, p.ReviewDecision = 2, "CHANGES_REQUESTED"
+			}, 2)
+		})},
+		{"pr-tree", with(func(s *reviewScene) {
+			s.branch, s.tree, s.tune = true, true, prScene
+		})},
 		{"unfocused", with(func(s *reviewScene) {
 			s.focused = false
 			s.tune = func(t *testing.T, a *App, v *reviewView) { v.cursor = rowWith(t, v, "review.toggle") }
@@ -1005,5 +1016,39 @@ func TestLineEndingCR(t *testing.T) {
 				t.Errorf("fileHidden = %v, want %v", got, tt.flagged)
 			}
 		})
+	}
+}
+
+// prHeadOID is the head the scene's diff was loaded at.
+const prHeadOID = "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678"
+
+// prScene puts the scene's drawer in PR mode on pull request 7, as the sync
+// after a fetch leaves it.
+func prScene(t *testing.T, a *App, v *reviewView) { prSceneWith(nil, 0)(t, a, v) }
+
+// prSceneWith is prScene with the poll's pull request changed by tune and the
+// worktree's unpushed commits given.
+func prSceneWith(tune func(*core.PRInfo), unpushed int) func(t *testing.T, a *App, v *reviewView) {
+	return func(t *testing.T, a *App, v *reviewView) {
+		t.Helper()
+
+		pr := core.ReviewPR{Repo: prRepoKey, Number: 7, Root: "/w/p1"}
+		openIn(t, a, core.ShowReviewPR(pr))
+
+		v.pr, v.base, v.unpushed = pr, "main", unpushed
+		v.res.Head = prHeadOID
+		v.src = git.PRSource{Worktree: pr.Root, Number: pr.Number}
+		v.cursor = rowWith(t, v, "a review pane needs an agent pane")
+
+		info := core.PRInfo{
+			Number: 7, Title: "Show the pull request over its diff", Author: "mhersson", State: prOpenState,
+			HeadBranch: "feat/review-pane", HeadOID: prHeadOID, BaseBranch: "main",
+			ChecksTotal: 4, ChecksDone: 4, ReviewDecision: "APPROVED", UpdatedAt: t0.Add(-3 * time.Hour),
+		}
+		if tune != nil {
+			tune(&info)
+		}
+
+		openIn(t, a, core.SetRepoPRs{Repo: prRepoKey, DefaultBranch: "main", Open: []core.PRInfo{info}})
 	}
 }

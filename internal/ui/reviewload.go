@@ -169,6 +169,13 @@ func (a *App) reviewSync() tea.Cmd {
 		root, resolved = tab.Pin.Root, true
 	}
 
+	// A drawer in PR mode holds the root its pull request was opened from.
+	var shownPR core.ReviewPR
+
+	if rv.PR != nil {
+		shownPR, root, resolved = *rv.PR, rv.PR.Root, true
+	}
+
 	switch {
 	case !resolved:
 		// A pane that is in no repository, or left its repository, shows the error once.
@@ -189,9 +196,13 @@ func (a *App) reviewSync() tea.Cmd {
 		v.root, need = root, true
 	}
 
+	if shownPR != v.pr {
+		v.pr, need = shownPR, true
+	}
+
 	if session := paneSession(st, rv.Pane); session != v.session {
 		v.session, v.after = session, nil
-		need = need || rv.Mode == core.ReviewTurn
+		need = need || rv.Mode == core.ReviewTurn && rv.PR == nil
 	}
 
 	if rv.Mode != v.mode {
@@ -200,7 +211,7 @@ func (a *App) reviewSync() tea.Cmd {
 
 	// A turn drawer that showed the branch because its worktree had no turns
 	// shows the worktree's latest turn as soon as there is one.
-	if _, isTurn := v.src.(git.TurnSource); rv.Mode == core.ReviewTurn && !isTurn && v.loaded && v.session != "" &&
+	if _, isTurn := v.src.(git.TurnSource); rv.Mode == core.ReviewTurn && rv.PR == nil && !isTurn && v.loaded && v.session != "" &&
 		v.turnsFor == v.session && v.turns > 0 {
 		need = true
 	}
@@ -230,7 +241,8 @@ func tabByID(st core.State, id core.TabID) (core.Tab, bool) {
 // reviewReset replaces the tab's view by an empty one for pane, ending the
 // work of the old one.
 func (a *App) reviewReset(tab core.TabID, pane core.PaneID) *reviewView {
-	if old := a.drawer.views[tab]; old != nil {
+	old := a.drawer.views[tab]
+	if old != nil {
 		old.stop()
 	}
 
@@ -238,6 +250,10 @@ func (a *App) reviewReset(tab core.TabID, pane core.PaneID) *reviewView {
 
 	v := a.reviewViewOf(tab)
 	v.pane, v.split = pane, a.drawer.cfg.Split()
+
+	if old != nil {
+		v.prBase, v.unpushed = old.prBase, old.unpushed
+	}
 
 	return v
 }
@@ -250,14 +266,17 @@ func (a *App) reviewRetarget(tab core.TabID, v *reviewView, turn int) tea.Cmd {
 		return nil
 	}
 
-	if v.mode == core.ReviewTurn && v.session != "" {
+	switch {
+	case v.pr != (core.ReviewPR{}):
+		v.src = git.PRSource{Worktree: v.root, Number: v.pr.Number}
+	case v.mode == core.ReviewTurn && v.session != "":
 		v.src = git.TurnSource{Worktree: v.root, Session: v.session, Turn: turn}
-	} else {
+	default:
 		v.src = git.BranchSource{Worktree: v.root}
 	}
 
 	v.epoch = a.drawer.nextEpoch()
-	v.queued, v.after = nil, nil
+	v.queued, v.after, v.then = nil, nil, thenNothing
 	v.stopReads()
 
 	return a.reviewStart(tab, v, nil, false)
@@ -274,6 +293,7 @@ type reviewJob struct {
 	own      string     // the pane's own directory, which decides the no-turns notice
 	batch    *git.Batch // nil: a full diff of src
 	infoOnly bool       // skip the diff: refresh only what describe finds
+	prBase   string     // the base of the pull request src shows
 	prev     git.Result // the result batch updates
 	keep     reviewInfo // what a load that skips a probe keeps
 	eng      *git.Engine
@@ -299,7 +319,7 @@ func (a *App) reviewStart(tab core.TabID, v *reviewView, b *git.Batch, infoOnly 
 	v.own = a.store.State().Panes[v.pane].WorkDir()
 
 	job := reviewJob{
-		tab: tab, epoch: v.epoch, src: v.src, root: v.root, session: v.session, own: v.own, batch: b, infoOnly: infoOnly, prev: v.res,
+		tab: tab, epoch: v.epoch, src: v.src, root: v.root, session: v.session, own: v.own, batch: b, infoOnly: infoOnly, prev: v.res, prBase: v.prBase,
 		keep: keep, eng: a.engine, log: a.log,
 	}
 
@@ -501,8 +521,12 @@ func (j reviewJob) describe(ctx context.Context, info *reviewInfo) {
 		}
 
 		base := ""
-		if s, ok := j.src.(git.BranchSource); ok {
+
+		switch s := j.src.(type) {
+		case git.BranchSource:
 			base = s.Base
+		case git.PRSource:
+			base = j.prBase
 		}
 
 		if base == "" {
@@ -579,10 +603,18 @@ func (a *App) reviewResume(active bool, v *reviewView) tea.Cmd {
 	return resume()
 }
 
-// reviewApply replaces the view's result. A new source starts at the top with
+// reviewApply replaces the view's result and runs what was asked of a pull
+// request whose diff this is.
+func (a *App) reviewApply(v *reviewView, msg reviewLoadedMsg) tea.Cmd {
+	flash := a.reviewReplace(v, msg)
+
+	return tea.Batch(flash, a.reviewThen(v, msg))
+}
+
+// reviewReplace replaces the view's result. A new source starts at the top with
 // no full-file view; a live update keeps the cursor on its hunk and flashes
 // the rows it added.
-func (a *App) reviewApply(v *reviewView, msg reviewLoadedMsg) tea.Cmd {
+func (a *App) reviewReplace(v *reviewView, msg reviewLoadedMsg) tea.Cmd {
 	in := msg.info
 	live := msg.live && msg.src == nil && v.loaded && v.err == nil && msg.err == nil
 	prev := v.res
@@ -719,7 +751,7 @@ func (a *App) reviewBatch(root string, b git.Batch) tea.Cmd {
 	var cmds []tea.Cmd
 
 	for id, v := range a.drawer.views {
-		if v.root != root {
+		if v.root != root || v.pr != (core.ReviewPR{}) {
 			continue
 		}
 
@@ -776,7 +808,7 @@ func (a *App) refreshViews(pane core.PaneID, pick func(v *reviewView) bool) tea.
 	var cmds []tea.Cmd
 
 	for id, v := range a.drawer.views {
-		if v.pane != pane || v.root == "" || pick != nil && !pick(v) {
+		if v.pane != pane || v.root == "" || v.pr != (core.ReviewPR{}) || pick != nil && !pick(v) {
 			continue
 		}
 

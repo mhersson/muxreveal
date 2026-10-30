@@ -47,12 +47,23 @@ func EditorCommand(env func(string) string, dir, editor string, args, extraEnv [
 	return runThenShell(env, dir, editor, args, extraEnv)
 }
 
+// EditorOnlyCommand is EditorCommand without the trailing shell: the command
+// ends when the editor does.
+func EditorOnlyCommand(env func(string) string, dir, editor string, args, extraEnv []string) Command {
+	return runIn(env, dir, editor, args, extraEnv, "")
+}
+
 // runThenShell runs program, or args[0] when program is empty, with args in an
 // interactive login shell, then replaces that shell with a login shell. The
 // script holds only fixed text and the operator's program; args are never part
 // of it, because no quoting is safe in every shell (fish reads a backslash in
 // single quotes as an escape).
 func runThenShell(env func(string) string, dir, program string, args, extraEnv []string) Command {
+	return runIn(env, dir, program, args, extraEnv, `; exec "$SHELL" -l`)
+}
+
+// runIn is runThenShell with the script's tail given.
+func runIn(env func(string) string, dir, program string, args, extraEnv []string, tail string) Command {
 	sh := shellPath(env)
 	isFish := filepath.Base(sh) == "fish"
 
@@ -61,7 +72,7 @@ func runThenShell(env func(string) string, dir, program string, args, extraEnv [
 		positional = "$argv"
 	}
 
-	script := strings.TrimSpace(program+" "+positional) + `; exec "$SHELL" -l`
+	script := strings.TrimSpace(program+" "+positional) + tail
 	if isFish {
 		// fish -c runs commands without job control, so the program would not
 		// lead the terminal's foreground group.

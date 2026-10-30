@@ -1,0 +1,24 @@
+ 1 api   2 api   3 web   4 zeta   5 muxreveal     layout bsp │ #112 ci 2 failed 
+────────────────────────────────────────────────────────────────────────────────
+╭─ Agents 8 ───── blocked 1 ⠋1 idle 6 ─╮╭─ claude ────────────────────── idle ─╮
+│ Blocked ────────────────────────── 1 ││                                      │
+│                                      ││                                      │
+│▎  web                             0s ││                                      │
+│   feat/b╭─ Pull requests ──────────────────────────────────────────╮         │
+│         │   Agents 5   Review requested  All open                  │         │
+│         │                                                          │         │
+│         │  acme/api ─────────────────────────────────────────── 2  │         │
+│ Working │   #8 Retry on timeout  feat/c  ci 3/5  no review yet  4m │         │
+│         │   #5 Add the a endpoint  feat/a     ci 5/5  approved  3h │         │
+│ ⠋ api   │                                                          │         │
+│   feat/a│  acme/muxreveal ───────────────────────────────────── 1  │         │
+│         │  ▎#112 A pull requ…  feat/a-b…  ci 2 failed  changes  1d │         │
+│         │                                                          │         │
+│         │  acme/web ─────────────────────────────────────────── 1  │         │
+│ Idle ───│   #9 Login form  feat/b           ci 2 failed  draft  8s │         │
+│         │                                                          │         │
+│   api   │  acme/zeta ────────────────────────────────────────── 1  │         │
+│   feat/a│   #1 Zeta change  feat/z                     changes  2d │         │
+│         ╰──────────────────────────────────────────────────────────╯         │
+│ j/k move  enter jump  / search       ││                                      │
+╰──────────────────────────────── 6 ↓ ─╯╰──────────────────────────────────────╯

@@ -33,6 +33,7 @@
             "reviewDecision": null,
             "mergeStateStatus": "DRAFT",
             "author": {"login": "octocat"},
+            "viewerDidAuthor": true,
             "commits": {
               "nodes": [
                 {

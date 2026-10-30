@@ -8,7 +8,7 @@ import (
 )
 
 // handleKey routes a key press: an open confirm first, then an open prompt, then
-// copy mode, then the open overlay or worktree picker, then the leader state
+// copy mode, then the open overlay, checks or worktree picker, then the leader state
 // machine, then the rail while it has the keyboard, then the review drawer while
 // it has it, then the focused pane.
 func (a *App) handleKey(msg tea.KeyPressMsg) tea.Cmd {
@@ -26,6 +26,22 @@ func (a *App) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 
 	if a.overlay != nil {
 		return a.updateOverlay(msg)
+	}
+
+	if a.composeShown() {
+		return a.handleComposeKey(msg)
+	}
+
+	if a.merge != nil {
+		return a.handleMergeKey(msg)
+	}
+
+	if a.checks != nil {
+		return a.handleChecksKey(msg)
+	}
+
+	if a.prList != nil {
+		return a.handlePRListKey(msg)
 	}
 
 	if a.picker.open != nil {
@@ -68,6 +84,14 @@ func (a *App) handlePaste(msg tea.PasteMsg) tea.Cmd {
 
 	if a.overlay != nil {
 		return a.updateOverlay(msg)
+	}
+
+	if a.composeShown() {
+		return a.handleComposePaste(msg)
+	}
+
+	if a.checks != nil || a.merge != nil || a.prList != nil {
+		return nil
 	}
 
 	if a.picker.open != nil {
@@ -128,4 +152,16 @@ func (a *App) reportFocusChange(from, to core.PaneID) {
 	if p, ok := a.panes[to]; ok {
 		p.sendFocus(true)
 	}
+}
+
+// modalOpen reports whether any modal owns the keyboard: a confirm, prompt,
+// copy mode, the palette or another overlay, the compose box, the merge box,
+// the checks, the pull request list, the worktree picker or the drawer's
+// worktree list.
+func (a *App) modalOpen() bool { return a.composeShown() || a.otherModalOpen() }
+
+// otherModalOpen is modalOpen without the compose box.
+func (a *App) otherModalOpen() bool {
+	return a.confirm != nil || a.prompt != nil || a.copy != nil || a.overlay != nil || a.merge != nil ||
+		a.checks != nil || a.prList != nil || a.picker.open != nil || a.drawer.list != nil
 }

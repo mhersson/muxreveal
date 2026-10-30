@@ -190,10 +190,25 @@ func defaultCommands() []command {
 	cmds = append(cmds, reviewCommands()...)
 
 	cmds = append(cmds, command{
+		id:    "pr.list",
+		icon:  iconPR,
+		title: "Pull requests",
+		run:   (*App).prListCommand,
+	}, command{
 		id:    "git.push",
 		icon:  iconPush,
 		title: "Push branch",
 		run:   (*App).push,
+	}, command{
+		id:    "pr.open",
+		icon:  iconPR,
+		title: "Open a pull request",
+		run:   (*App).composeCommand,
+	}, command{
+		id:    "pr.merge",
+		icon:  iconMerge,
+		title: "Merge pull request",
+		run:   (*App).mergeCommand,
 	}, command{
 		id:    "app.quit",
 		icon:  iconQuit,

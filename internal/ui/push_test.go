@@ -150,14 +150,16 @@ func (r *pushRig) splitURLs(t *testing.T, fetch string) {
 	gitIn(t, r.real, r.dir, "config", "remote.origin.pushurl", pushRemoteURL)
 }
 
-// leaderP presses leader p and returns the command it raised.
+// leaderP presses leader g p and returns the command it raised.
 func (r *pushRig) leaderP() tea.Cmd {
 	press(r.App, keyLeader)
+
+	press(r.App, keyRune('g'))
 
 	return press(r.App, keyRune('p'))
 }
 
-// ask presses leader p and answers what follows.
+// ask presses leader g p and answers what follows.
 func (r *pushRig) ask(t *testing.T) []tea.Msg {
 	t.Helper()
 
@@ -171,7 +173,7 @@ func (r *pushRig) askOpen(t *testing.T) {
 	r.ask(t)
 
 	if r.confirm == nil || r.confirm.push == nil {
-		t.Fatalf("no push confirm after leader p; notice = %q", r.notice)
+		t.Fatalf("no push confirm after leader g p; notice = %q", r.notice)
 	}
 }
 
@@ -577,6 +579,9 @@ func TestPushTargetsTheDrawer(t *testing.T) {
 		{"pinned to another worktree", func(t *testing.T, r *pushRig, b string) {
 			openIn(t, r.App, core.PinReview{Root: b})
 		}, "feat/b"},
+		{"pull request mode held on another worktree", func(t *testing.T, r *pushRig, b string) {
+			openIn(t, r.App, core.ShowReviewPR{Repo: "github.com/o/r", Number: 7, Root: b})
+		}, "feat/b"},
 		{"open and following the agent", func(*testing.T, *pushRig, string) {}, "feat/c"},
 		{"open on an agent that is not focused", func(t *testing.T, r *pushRig, _ string) {
 			r.addAgent(t, false, r.dir)
@@ -934,7 +939,7 @@ func TestPushRunsOffTheLoop(t *testing.T) {
 	cmd := r.leaderP()
 
 	if got := r.gitCalls(); got != calls {
-		t.Fatalf("leader p ran git %d times on the update loop", got-calls)
+		t.Fatalf("leader g p ran git %d times on the update loop", got-calls)
 	}
 
 	msgs := flatten(cmd)
@@ -1063,8 +1068,8 @@ func TestPushCommand(t *testing.T) {
 		t.Fatalf("git.push = %+v, %v; want Push branch with the push icon", c, ok)
 	}
 
-	if key, _ := a.keymap.keyOf("git.push"); key != "p" || a.keymap.groupOf("git.push") != "Git" {
-		t.Errorf("git.push bound to %q in group %q, want p in Git", key, a.keymap.groupOf("git.push"))
+	if key, _ := a.keymap.keyOf("git.push"); key != "g p" || a.keymap.groupOf("git.push") != "Git" {
+		t.Errorf("git.push bound to %q in group %q, want g p in Git", key, a.keymap.groupOf("git.push"))
 	}
 
 	if iconPush != "\uF403" {

@@ -106,6 +106,7 @@ func lifeApp(t *testing.T) (*App, *starts) {
 
 	// A copy must never reach the operator's real clipboard tools.
 	a.clip.run = (&fakeRun{}).run
+	a.openLink = (&fakeOpen{}).open
 
 	st := &starts{}
 	a.start = st.start
@@ -894,6 +895,7 @@ func newRealApp(t *testing.T, scripts ...string) *realApp {
 
 	// A copy must never reach the operator's real clipboard tools.
 	a.clip.run = (&fakeRun{}).run
+	a.openLink = (&fakeOpen{}).open
 	a.tick = cancellableTick(a.ctx)
 
 	r := &realApp{App: a}

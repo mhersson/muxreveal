@@ -1,6 +1,9 @@
 package core
 
-import "testing"
+import (
+	"reflect"
+	"testing"
+)
 
 const repoKey = "github.com/o/r"
 
@@ -128,18 +131,19 @@ func TestPRFor(t *testing.T) {
 		acts   []Action
 		repo   string
 		branch string
-		want   int // 0 for none
+		want   int    // 0 for none
+		state  string // the state wanted, when the case checks it
 	}{
-		{"nothing known", nil, repoKey, "feat", 0},
+		{"nothing known", nil, repoKey, "feat", 0, ""},
 		{
 			"an open PR for the branch",
 			[]Action{SetRepoPRs{Repo: repoKey, Open: []PRInfo{{Number: 1, HeadBranch: "other"}, {Number: 2, HeadBranch: "feat"}}}},
-			repoKey, "feat", 2,
+			repoKey, "feat", 2, "",
 		},
 		{
 			"the newest of several open PRs, whatever their order",
 			[]Action{SetRepoPRs{Repo: repoKey, Open: []PRInfo{{Number: 5, HeadBranch: "feat"}, {Number: 8, HeadBranch: "feat"}, {Number: 6, HeadBranch: "feat"}}}},
-			repoKey, "feat", 8,
+			repoKey, "feat", 8, "",
 		},
 		{
 			"an open PR beats the lookup",
@@ -147,7 +151,23 @@ func TestPRFor(t *testing.T) {
 				SetBranchPR{Repo: repoKey, Branch: "feat", PR: lookup, Found: true},
 				SetRepoPRs{Repo: repoKey, Open: []PRInfo{{Number: 4, HeadBranch: "feat"}}},
 			},
-			repoKey, "feat", 4,
+			repoKey, "feat", 4, "",
+		},
+		{
+			"a merged lookup of the same PR beats a poll that still lists it open",
+			[]Action{
+				SetRepoPRs{Repo: repoKey, Open: []PRInfo{{Number: 3, HeadBranch: "feat", State: "OPEN"}}},
+				SetBranchPR{Repo: repoKey, Branch: "feat", PR: lookup, Found: true},
+			},
+			repoKey, "feat", 3, "MERGED",
+		},
+		{
+			"an open PR reusing the branch beats an older merged record",
+			[]Action{
+				SetBranchPR{Repo: repoKey, Branch: "feat", PR: lookup, Found: true},
+				SetRepoPRs{Repo: repoKey, Open: []PRInfo{{Number: 9, HeadBranch: "feat", State: "OPEN"}}},
+			},
+			repoKey, "feat", 9, "OPEN",
 		},
 		{
 			"the lookup when no open PR matches",
@@ -155,12 +175,12 @@ func TestPRFor(t *testing.T) {
 				SetRepoPRs{Repo: repoKey, Open: []PRInfo{{Number: 1, HeadBranch: "other"}}},
 				SetBranchPR{Repo: repoKey, Branch: "feat", PR: lookup, Found: true},
 			},
-			repoKey, "feat", 3,
+			repoKey, "feat", 3, "",
 		},
 		{
 			"a cross-repository open PR never matches",
 			[]Action{SetRepoPRs{Repo: repoKey, Open: []PRInfo{fork}}},
-			repoKey, "feat", 0,
+			repoKey, "feat", 0, "",
 		},
 		{
 			"a cross-repository PR does not hide the lookup",
@@ -168,17 +188,17 @@ func TestPRFor(t *testing.T) {
 				SetRepoPRs{Repo: repoKey, Open: []PRInfo{fork}},
 				SetBranchPR{Repo: repoKey, Branch: "feat", PR: lookup, Found: true},
 			},
-			repoKey, "feat", 3,
+			repoKey, "feat", 3, "",
 		},
 		{
 			"a cross-repository lookup never matches",
 			[]Action{SetBranchPR{Repo: repoKey, Branch: "feat", PR: fork, Found: true}},
-			repoKey, "feat", 0,
+			repoKey, "feat", 0, "",
 		},
 		{
 			"another repository's PRs do not match",
 			[]Action{SetRepoPRs{Repo: "github.com/o/other", Open: []PRInfo{{Number: 1, HeadBranch: "feat"}}}},
-			repoKey, "feat", 0,
+			repoKey, "feat", 0, "",
 		},
 	}
 
@@ -187,8 +207,8 @@ func TestPRFor(t *testing.T) {
 			s := prState(t, tt.acts...)
 
 			pr, ok := s.PRFor(tt.repo, tt.branch)
-			if ok != (tt.want != 0) || pr.Number != tt.want {
-				t.Errorf("PRFor(%q, %q) = #%d, %v, want #%d", tt.repo, tt.branch, pr.Number, ok, tt.want)
+			if ok != (tt.want != 0) || pr.Number != tt.want || (tt.state != "" && pr.State != tt.state) {
+				t.Errorf("PRFor(%q, %q) = #%d, %v, want #%d %s", tt.repo, tt.branch, pr.Number, ok, tt.want, tt.state)
 			}
 		})
 	}
@@ -231,6 +251,41 @@ func TestOpenPRForReadsOnlyThePollsOpenList(t *testing.T) {
 			pr, ok := prState(t, tt.acts...).OpenPRFor(repoKey, "feat")
 			if ok != (tt.want != 0) || pr.Number != tt.want {
 				t.Errorf("OpenPRFor = #%d, %v, want #%d", pr.Number, ok, tt.want)
+			}
+		})
+	}
+}
+
+func TestSetRepoPRsDetails(t *testing.T) {
+	t.Parallel()
+
+	focused := &PRChecks{Number: 7, HeadOID: "abc", Checks: []CheckInfo{{Name: "ci", State: "success"}}}
+	good := SetRepoPRs{
+		Repo: repoKey, DefaultBranch: "main",
+		Methods: []string{"merge", "squash"}, DeleteBranchOnMerge: true, Focused: focused,
+	}
+
+	tests := []struct {
+		name        string
+		next        SetRepoPRs
+		wantMethods []string
+		wantDelete  bool
+		wantFocus   *PRChecks
+	}{
+		{"error keeps them", SetRepoPRs{Repo: repoKey, Err: "boom", Methods: []string{"merge", "squash"}, DeleteBranchOnMerge: true, Focused: focused}, []string{"merge", "squash"}, true, focused},
+		{"good poll replaces them", SetRepoPRs{Repo: repoKey, Methods: []string{"rebase"}}, []string{"rebase"}, false, nil},
+		{"nil focus clears it", SetRepoPRs{Repo: repoKey, Methods: []string{"merge", "squash"}, DeleteBranchOnMerge: true}, []string{"merge", "squash"}, true, nil},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			s := dispatch(t, prState(t, good), tt.next)
+			got := s.PRs[repoKey]
+
+			if !reflect.DeepEqual(got.Methods, tt.wantMethods) || got.DeleteBranchOnMerge != tt.wantDelete || !reflect.DeepEqual(got.Focused, tt.wantFocus) {
+				t.Errorf("repo = %+v, want methods %v, delete %v, focused %+v", got, tt.wantMethods, tt.wantDelete, tt.wantFocus)
 			}
 		})
 	}

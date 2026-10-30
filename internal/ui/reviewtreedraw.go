@@ -159,6 +159,9 @@ func modeParts(v *reviewView, icons, short bool) (icon, word, rest string) {
 
 		base, _ = cleanText(base)
 		icon, word, rest = iconBranchMode, "branch", " vs "+base
+	case git.PRSource:
+		base, _ := cleanText(prBaseText(v))
+		icon, word, rest = iconPR, prNumberText(src.Number), " vs "+base
 	case git.TurnSource:
 		n, m := v.shownTurn(), v.turns
 

@@ -113,6 +113,7 @@ func TestShellFlow(t *testing.T) {
 
 	// A copy must never reach the operator's real clipboard tools.
 	app.clip.run = (&fakeRun{}).run
+	app.openLink = (&fakeOpen{}).open
 
 	var mu sync.Mutex
 
@@ -196,6 +197,7 @@ func TestTabFlow(t *testing.T) {
 
 	// A copy must never reach the operator's real clipboard tools.
 	app.clip.run = (&fakeRun{}).run
+	app.openLink = (&fakeOpen{}).open
 
 	var mu sync.Mutex
 

@@ -2,6 +2,7 @@ package ui
 
 import (
 	"bytes"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -401,6 +402,7 @@ func TestSequencePopup(t *testing.T) {
 		{'>', []string{"1-9  Move pane to tab N", "esc  Cancel"}},
 		{'.', []string{"1-9  Send pane to tab N", "esc  Cancel"}},
 		{';', []string{"h j k l  Preselect side", "esc      Clear preselection"}},
+		{'g', []string{"l    Pull requests", "p    Push", "o    Open a pull request", "m    Merge pull request", "esc  Cancel"}},
 	}
 
 	for _, tt := range tests {
@@ -654,5 +656,30 @@ func TestToastLevelBelongsToItsText(t *testing.T) {
 
 	if a.notice != "" || a.noticeLevel() != levelNotice {
 		t.Errorf("notice = %q at level %v after a key, want none at the notice level", a.notice, a.noticeLevel())
+	}
+}
+
+func TestGitSequencePopupGolden(t *testing.T) {
+	t.Parallel()
+	a, _ := splitApp(t)
+
+	press(a, keyLeader, keyRune('g'))
+
+	golden.RequireEqual(t, []byte(a.View().Content))
+}
+
+func TestGitSequencePopupText(t *testing.T) {
+	t.Parallel()
+
+	for _, icons := range []bool{true, false} {
+		t.Run(fmt.Sprintf("icons=%v", icons), func(t *testing.T) {
+			t.Parallel()
+			a, _ := splitApp(t)
+			a.icons = icons
+
+			press(a, keyLeader, keyRune('g'))
+
+			golden.RequireEqual(t, []byte(ansi.Strip(a.View().Content)))
+		})
 	}
 }

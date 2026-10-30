@@ -101,13 +101,13 @@ func (a *App) drawerAfterUpdate() tea.Cmd {
 // ones need and no cache holds, up to highlightCap lines. It reports whether
 // chunks were left for a later pass.
 func (a *App) highlightRows(v *reviewView, lay drawerLayout) (more bool) {
-	if len(v.rows) == 0 || lay.bodyH <= 0 {
+	if len(v.rows) == 0 || lay.diffH <= 0 {
 		return false
 	}
 
 	c := v.derived()
-	top := v.viewTop(lay.bodyH)
-	key := scanKey{rev: v.rowsRev, top: top, bodyH: lay.bodyH}
+	top := v.viewTop(lay.diffH)
+	key := scanKey{rev: v.rowsRev, top: top, bodyH: lay.diffH}
 
 	if c.scanned && c.scan == key {
 		return false
@@ -117,7 +117,7 @@ func (a *App) highlightRows(v *reviewView, lay drawerLayout) (more bool) {
 
 	budget := highlightCap
 
-	for i := max(top-lay.bodyH, 0); i < min(top+2*lay.bodyH, len(v.rows)); i++ {
+	for i := max(top-lay.diffH, 0); i < min(top+2*lay.diffH, len(v.rows)); i++ {
 		for _, ref := range v.rowSpans(i) {
 			if _, done := c.spans[ref.key]; done {
 				continue

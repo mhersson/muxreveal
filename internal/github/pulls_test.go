@@ -92,7 +92,7 @@ func TestPullRequestsDecodes(t *testing.T) {
 	want := []PR{
 		{
 			Number: 12, Title: "Add the poller", URL: "https://github.com/octo/repo/pull/12", Author: "octocat",
-			State: "OPEN", HeadBranch: "feat/poller", BaseBranch: "main",
+			State: "OPEN", ViewerAuthored: true, HeadBranch: "feat/poller", BaseBranch: "main",
 			HeadOID:        "1111111111111111111111111111111111111111",
 			ReviewDecision: "APPROVED", MergeState: "BLOCKED",
 			Checks:    Checks{State: CheckFailure, Total: 5, Done: 4, Failed: 1},
@@ -179,7 +179,7 @@ func TestPullRequestsQueryShape(t *testing.T) {
 		"defaultBranchRef{name}", "mergeCommitAllowed", "squashMergeAllowed", "rebaseMergeAllowed",
 		"deleteBranchOnMerge", "states:OPEN", "first:100", "orderBy:{field:UPDATED_AT,direction:DESC}",
 		"number", "title", "url", "isDraft", "state", "isCrossRepository", "headRefName", "headRefOid",
-		"baseRefName", "updatedAt", "reviewDecision", "mergeStateStatus", "author{login}",
+		"baseRefName", "updatedAt", "reviewDecision", "mergeStateStatus", "author{login}", "viewerDidAuthor",
 		"commits(last:1)", "statusCheckRollup{state", "checkRunCount", "checkRunCountsByState{state,count}",
 		"statusContextCount", "statusContextCountsByState{state,count}", "rateLimit{remaining,resetAt}",
 		`"owner":"octo"`, `"name":"repo"`, "$owner:String!", "$name:String!",
@@ -227,6 +227,10 @@ func TestPRForBranchPrefersOpen(t *testing.T) {
 		t.Errorf("pr = %+v, want the open #25", pr)
 	}
 
+	if !pr.ViewerAuthored {
+		t.Errorf("ViewerAuthored = false, want true for #25")
+	}
+
 	if pr.Checks != (Checks{State: CheckPending, Total: 1}) {
 		t.Errorf("checks = %+v", pr.Checks)
 	}
@@ -239,7 +243,7 @@ func TestPRForBranchPrefersOpen(t *testing.T) {
 	body := strings.Join(strings.Fields(reqs[0]), "")
 	for _, want := range []string{
 		"headRefName:$branch", "first:10", "orderBy:{field:CREATED_AT,direction:DESC}",
-		"states:[OPEN,MERGED,CLOSED]", `"branch":"feat/x"`, "$branch:String!",
+		"states:[OPEN,MERGED,CLOSED]", "viewerDidAuthor", `"branch":"feat/x"`, "$branch:String!",
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("query lacks %q\n%s", want, body)
@@ -260,6 +264,10 @@ func TestPRForBranchFallsBackToNewest(t *testing.T) {
 
 	if pr.Number != 30 {
 		t.Errorf("number = %d, want the newest, 30", pr.Number)
+	}
+
+	if pr.ViewerAuthored {
+		t.Errorf("ViewerAuthored = true, want false when the node omits it")
 	}
 }
 

@@ -33,6 +33,7 @@ func kindApp(t *testing.T, opts ...func(*Options)) (*App, *starts, *fakeClock) {
 	}
 
 	a.clip.run = (&fakeRun{}).run
+	a.openLink = (&fakeOpen{}).open
 
 	st := &starts{}
 	a.start = st.start

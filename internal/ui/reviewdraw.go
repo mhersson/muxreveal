@@ -37,6 +37,8 @@ type drawerLayout struct {
 	innerW, innerH int
 	treeW, diffW   int  // treeW 0 hides the tree
 	bodyH          int  // rows of the tree and diff columns
+	headH          int  // rows at the top of the diff column that hold the pull request header
+	diffH          int  // rows of the diff column under the header
 	modeShort      bool // the mode row drops " in this worktree" for lack of room
 	hints          bool // the last inner row holds the key hints
 	split          bool // side by side fits the diff column
@@ -50,6 +52,7 @@ type layoutKey struct {
 	split      bool
 	modeW      int // the mode row's width
 	modeShortW int // and its width without " in this worktree"
+	headH      int // rows of the pull request header the diff column starts with
 	fullDigits int // digits of the longest file shown whole
 }
 
@@ -71,7 +74,8 @@ func fullDigits(v *reviewView) int {
 func (a *App) drawerLayoutOf(box core.Rect, v *reviewView, tree bool) drawerLayout {
 	c := v.derived()
 	full, short := modeWidth(v, a.icons, false), modeWidth(v, a.icons, true)
-	key := layoutKey{box: box, tree: tree, split: v.split, modeW: full, modeShortW: short, fullDigits: fullDigits(v)}
+	headH := a.prHeaderH(v, max(box.H-2, 0))
+	key := layoutKey{box: box, tree: tree, split: v.split, modeW: full, modeShortW: short, headH: headH, fullDigits: fullDigits(v)}
 
 	if c.layOK && c.layKey == key {
 		return c.lay
@@ -87,6 +91,7 @@ func (a *App) drawerLayoutOf(box core.Rect, v *reviewView, tree bool) drawerLayo
 		l.bodyH--
 	}
 
+	l.headH, l.diffH = headH, l.bodyH-headH
 	l.diffW = l.innerW
 
 	if tree {
@@ -145,9 +150,10 @@ type drawCtx struct {
 	query string
 	top   int
 
-	pinned bool    // the drawer is held on its root
-	home   string  // shortens the paths it names
-	list   *wtList // the open worktree list, drawn over the drawer
+	pr     core.PRInfo // the pull request the header shows; zero when headH is 0
+	pinned bool        // the drawer is held on its root
+	home   string      // shortens the paths it names
+	list   *wtList     // the open worktree list, drawn over the drawer
 }
 
 // diffKeys reports whether the diff, not the tree, has the keyboard.
@@ -200,6 +206,11 @@ type drawKey struct {
 	list                 wtKey
 	err                  string
 	hasErr               bool
+
+	pr       core.PRInfo
+	unpushed int
+	age      string
+	head     string // the loaded diff's head, which the header compares with the poll's
 }
 
 // key is the drawKey of d drawn into r, for the theme called name.
@@ -214,6 +225,11 @@ func (d *drawCtx) key(r core.Rect, name string) drawKey {
 		src: v.src, project: v.project, branch: v.branch, base: v.base,
 		turns: v.turns, resTurn: v.res.Turn, noSnapshot: v.noSnapshot, pinned: d.pinned,
 		list: d.listKey(),
+		pr:   d.pr, unpushed: v.unpushed, head: v.res.Head,
+	}
+
+	if d.lay.headH > 0 {
+		k.age = railAge(d.pr.UpdatedAt, d.now)
 	}
 
 	if v.err != nil {
@@ -231,7 +247,7 @@ func (d *drawCtx) key(r core.Rect, name string) drawKey {
 func (d *drawCtx) freshInView() string {
 	var rows []byte
 
-	for i := d.top; i < min(d.top+d.lay.bodyH, len(d.v.rows)); i++ {
+	for i := d.top; i < min(d.top+d.lay.diffH, len(d.v.rows)); i++ {
 		if d.v.fresh[i] {
 			rows = binary.AppendVarint(rows, int64(i))
 		}
@@ -296,8 +312,13 @@ func (a *App) drawCtxFor(st core.State) (d *drawCtx, name string, ok bool) {
 		pinned: tab.Review != nil && pinnedTo(tab, tab.Review.Pane), home: a.getenv("HOME"), list: a.listFor(tab),
 	}
 	d.lay = a.drawerLayoutOf(box, v, drawerTree(st))
+
+	if d.lay.headH > 0 {
+		d.pr, _ = a.prHeaderInfo(v)
+	}
+
 	d.dv, d.flash = a.diffThemes(lk)
-	d.top = v.viewTop(d.lay.bodyH)
+	d.top = v.viewTop(d.lay.diffH)
 
 	switch {
 	case v.search != nil:
@@ -356,7 +377,7 @@ func (d *drawCtx) render() []string {
 			row += d.treeRow(y) + rule
 		}
 
-		lines = append(lines, row+d.diffRow(y)+side)
+		lines = append(lines, row+d.diffColumn(y)+side)
 	}
 
 	if lay.hints {
@@ -501,6 +522,10 @@ func (v *reviewView) showsTurn() bool {
 
 // modeTag is the text of the mode tag.
 func (d *drawCtx) modeTag() string {
+	if src, ok := d.v.src.(git.PRSource); ok {
+		return d.withIcon(iconPR, prNumberText(src.Number))
+	}
+
 	if d.v.showsTurn() {
 		return d.withIcon(iconTurn, "turn "+strconv.Itoa(d.v.shownTurn())+"/"+strconv.Itoa(d.v.turns))
 	}
@@ -556,6 +581,10 @@ func (d *drawCtx) hintRuns(cw int) []railRun {
 	}
 
 	pairs = append(pairs, [2]string{"e", "edit"}, [2]string{"/", "search"})
+
+	if _, ok := d.v.src.(git.PRSource); ok {
+		pairs = [][2]string{{"j/k", "line"}, {"]/[", "hunk"}, {"c", "checks"}, {"a", "approve"}, {"M", "merge"}, {"O", "browser"}, {"b/t", "mode"}}
+	}
 
 	if d.tree {
 		pairs = [][2]string{{"j/k", "file"}, {"enter", "jump"}, {"tab", "hide"}, {"esc", "back"}}
@@ -667,6 +696,8 @@ func (d *drawCtx) emptyRuns(y int) []railRun {
 		}
 
 		lines = []string{"no changes against " + base}
+	case git.PRSource:
+		lines = []string{"no changes against " + prBaseText(v)}
 	case git.TurnSource:
 		n := strconv.Itoa(v.shownTurn())
 		if v.noSnapshot {

@@ -30,6 +30,7 @@ type PR struct {
 	Title, URL, Author              string
 	State                           string // OPEN, MERGED, CLOSED
 	Draft, CrossRepo                bool
+	ViewerAuthored                  bool // the token's user wrote it; REST answers leave it false
 	HeadBranch, HeadOID, BaseBranch string
 	ReviewDecision, MergeState      string // GitHub's enums as given; "" when null
 	Checks                          Checks
@@ -87,6 +88,7 @@ type pullNode struct {
 	ReviewDecision    string
 	MergeStateStatus  string
 	Author            *struct{ Login string }
+	ViewerDidAuthor   bool
 	Commits           struct {
 		Nodes []struct {
 			Commit struct {
@@ -196,7 +198,7 @@ func (n pullNode) pr() PR {
 		State: n.State, Draft: n.IsDraft, CrossRepo: n.IsCrossRepository,
 		HeadBranch: n.HeadRefName, HeadOID: n.HeadRefOid, BaseBranch: n.BaseRefName,
 		ReviewDecision: n.ReviewDecision, MergeState: n.MergeStateStatus,
-		UpdatedAt: n.UpdatedAt,
+		UpdatedAt: n.UpdatedAt, ViewerAuthored: n.ViewerDidAuthor,
 	}
 
 	if n.Author != nil && n.Author.Login != "" {

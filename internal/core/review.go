@@ -24,6 +24,15 @@ type Review struct {
 	Pane PaneID
 	Mode ReviewMode
 	Tree bool
+	PR   *ReviewPR // the pull request the drawer shows instead of a diff; never saved
+}
+
+// ReviewPR is the pull request a drawer in PR mode shows: its repository keyed
+// "host/owner/name", its number and the worktree root it was opened from.
+type ReviewPR struct {
+	Repo   string
+	Number int
+	Root   string
 }
 
 // Pin holds a tab's drawer on one worktree while it reviews Pane; not persisted.
@@ -99,6 +108,29 @@ func (a SetReviewMode) apply(s *State) error {
 	}
 
 	t.Review.Mode = a.Mode
+	t.Review.PR = nil
+
+	return nil
+}
+
+// ShowReviewPR puts the open drawer in PR mode on a pull request.
+type ShowReviewPR struct {
+	Repo   string
+	Number int
+	Root   string
+}
+
+func (a ShowReviewPR) apply(s *State) error {
+	t := s.cur()
+	if t.Review == nil {
+		return errNoReview
+	}
+
+	if a.Repo == "" || a.Root == "" || a.Number < 1 {
+		return errors.New("core: ShowReviewPR needs a repository, a root and a pull request number")
+	}
+
+	t.Review.PR = &ReviewPR{Repo: a.Repo, Number: a.Number, Root: a.Root}
 
 	return nil
 }
@@ -128,6 +160,8 @@ func (a PinReview) apply(s *State) error {
 	if t.Review == nil {
 		return errNoReview
 	}
+
+	t.Review.PR = nil
 
 	t.Pin = nil
 	if a.Root != "" {

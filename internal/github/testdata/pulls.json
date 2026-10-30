@@ -22,6 +22,7 @@
             "reviewDecision": "APPROVED",
             "mergeStateStatus": "BLOCKED",
             "author": {"login": "octocat"},
+            "viewerDidAuthor": true,
             "commits": {
               "nodes": [
                 {
@@ -59,6 +60,7 @@
             "reviewDecision": null,
             "mergeStateStatus": "CLEAN",
             "author": null,
+            "viewerDidAuthor": false,
             "commits": {
               "nodes": [
                 {

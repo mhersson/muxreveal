@@ -377,3 +377,70 @@ func TestPinReview(t *testing.T) {
 		}
 	})
 }
+
+func TestShowReviewPR(t *testing.T) {
+	t.Parallel()
+
+	open := dispatch(t, reviewState(t), OpenReview{Pane: "p1", Mode: ReviewTurn})
+
+	tests := []struct {
+		name    string
+		s       State
+		act     ShowReviewPR
+		wantErr bool
+	}{
+		{"no drawer", reviewState(t), ShowReviewPR{Repo: repoKey, Number: 3, Root: "/w"}, true},
+		{"empty repo", open, ShowReviewPR{Number: 3, Root: "/w"}, true},
+		{"empty root", open, ShowReviewPR{Repo: repoKey, Number: 3}, true},
+		{"number zero", open, ShowReviewPR{Repo: repoKey, Root: "/w"}, true},
+		{"ok", open, ShowReviewPR{Repo: repoKey, Number: 3, Root: "/w"}, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			st := NewStore(tt.s)
+
+			err := st.Dispatch(tt.act)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("error = %v, want error %v", err, tt.wantErr)
+			}
+
+			if tt.wantErr {
+				return
+			}
+
+			want := &ReviewPR{Repo: repoKey, Number: 3, Root: "/w"}
+			if got := st.State().Tabs[0].Review.PR; !reflect.DeepEqual(got, want) {
+				t.Errorf("PR = %+v, want %+v", got, want)
+			}
+		})
+	}
+}
+
+func TestReviewPRLeavesWithModeChangesAndPins(t *testing.T) {
+	t.Parallel()
+
+	shown := dispatch(t, reviewState(t), OpenReview{Pane: "p1", Mode: ReviewTurn})
+	shown = dispatch(t, shown, ShowReviewPR{Repo: repoKey, Number: 3, Root: "/w"})
+
+	tests := []struct {
+		name string
+		act  Action
+	}{
+		{"SetReviewMode", SetReviewMode{Mode: ReviewBranch}},
+		{"PinReview", PinReview{Root: "/w"}},
+		{"OpenReview", OpenReview{Pane: "p1", Mode: ReviewTurn}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			if got := dispatch(t, shown, tt.act).Tabs[0].Review.PR; got != nil {
+				t.Errorf("PR = %+v, want nil", got)
+			}
+		})
+	}
+}

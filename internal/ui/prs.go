@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"reflect"
 	"slices"
 	"strings"
 	"sync"
@@ -267,9 +268,12 @@ func (a *App) prSync() tea.Cmd {
 }
 
 // prWatches is every watched agent's repository and the focused pane's, with
-// the open pull request of each pane's branch visible.
+// the open pull request of each pane's branch visible, and the repository of the
+// pull request the active tab's drawer shows, with that pull request visible and
+// focused.
 func (a *App) prWatches(st core.State) []github.Watch {
 	visible := map[github.Repo][]int{}
+	focused := map[github.Repo]int{}
 
 	for _, pp := range a.prs.panes {
 		if !pp.ok {
@@ -284,11 +288,32 @@ func (a *App) prWatches(st core.State) []github.Watch {
 		visible[pp.repo] = nums
 	}
 
+	if rv := st.Tab().Review; rv != nil && rv.PR != nil {
+		if repo, ok := repoOfKey(rv.PR.Repo); ok {
+			visible[repo] = append(visible[repo], rv.PR.Number)
+			focused[repo] = rv.PR.Number
+		}
+	}
+
+	// The merge box's pull request is the one whose checks it warns with.
+	if m := a.merge; m != nil {
+		visible[m.repo] = append(visible[m.repo], m.pr.Number)
+		focused[m.repo] = m.pr.Number
+	}
+
+	// The open checks overlay's pull request is the one whose checks are read.
+	if c := a.checks; c != nil {
+		if repo, ok := repoOfKey(c.repo); ok {
+			visible[repo] = append(visible[repo], c.number)
+			focused[repo] = c.number
+		}
+	}
+
 	ws := make([]github.Watch, 0, len(visible))
 
 	for repo, nums := range visible {
 		slices.Sort(nums)
-		ws = append(ws, github.Watch{Repo: repo, Visible: slices.Compact(nums)})
+		ws = append(ws, github.Watch{Repo: repo, Visible: slices.Compact(nums), Focused: focused[repo]})
 	}
 
 	slices.SortFunc(ws, func(x, y github.Watch) int { return strings.Compare(x.Repo.String(), y.Repo.String()) })
@@ -378,7 +403,10 @@ func (a *App) onPRSnapshot(s github.Snapshot) tea.Cmd {
 
 		// The last good poll stays on show while the repository fails.
 		reason := prReason(s.Err)
-		a.setRepoPRs(cur, key, cur.DefaultBranch, cur.Open, reason)
+		a.setRepoPRs(cur, core.SetRepoPRs{
+			Repo: key, DefaultBranch: cur.DefaultBranch, Open: cur.Open, Err: reason,
+			Methods: cur.Methods, DeleteBranchOnMerge: cur.DeleteBranchOnMerge, Focused: cur.Focused,
+		})
 
 		if a.prs.shown[key] != reason {
 			a.prs.shown[key] = reason
@@ -393,7 +421,15 @@ func (a *App) onPRSnapshot(s github.Snapshot) tea.Cmd {
 		open[i] = prInfoOf(pr)
 	}
 
-	a.setRepoPRs(cur, key, s.Info.DefaultBranch, open, "")
+	var methods []string
+	for _, m := range s.Info.Methods {
+		methods = append(methods, string(m))
+	}
+
+	a.setRepoPRs(cur, core.SetRepoPRs{
+		Repo: key, DefaultBranch: s.Info.DefaultBranch, Open: open,
+		Methods: methods, DeleteBranchOnMerge: s.Info.DeleteBranchOnMerge, Focused: focusedChecksOf(s.Focused),
+	})
 	delete(a.prs.shown, key)
 	a.prs.polled[s.Repo] = true
 
@@ -418,12 +454,31 @@ func (a *App) onPRSnapshot(s github.Snapshot) tea.Cmd {
 }
 
 // setRepoPRs dispatches a poll's result unless the store holds it already.
-func (a *App) setRepoPRs(cur core.RepoPRs, repo, defaultBranch string, open []core.PRInfo, errText string) {
-	if cur.DefaultBranch == defaultBranch && cur.Err == errText && slices.Equal(cur.Open, open) {
+func (a *App) setRepoPRs(cur core.RepoPRs, set core.SetRepoPRs) {
+	if cur.DefaultBranch == set.DefaultBranch && cur.Err == set.Err && slices.Equal(cur.Open, set.Open) &&
+		slices.Equal(cur.Methods, set.Methods) && cur.DeleteBranchOnMerge == set.DeleteBranchOnMerge &&
+		reflect.DeepEqual(cur.Focused, set.Focused) {
 		return
 	}
 
-	_ = a.dispatch(core.SetRepoPRs{Repo: repo, DefaultBranch: defaultBranch, Open: open, Err: errText})
+	_ = a.dispatch(set)
+}
+
+// focusedChecksOf maps the poll's checks of the focused pull request.
+func focusedChecksOf(f *github.FocusedChecks) *core.PRChecks {
+	if f == nil {
+		return nil
+	}
+
+	checks := make([]core.CheckInfo, len(f.Checks))
+	for i, c := range f.Checks {
+		checks[i] = core.CheckInfo{
+			Name: c.Name, URL: c.URL, State: string(c.State),
+			StartedAt: c.StartedAt, CompletedAt: c.CompletedAt,
+		}
+	}
+
+	return &core.PRChecks{Number: f.Number, HeadOID: f.HeadOID, Checks: checks}
 }
 
 // prLookupCmd looks up the pull request of a branch that the poll in st lists no
@@ -502,7 +557,7 @@ func prInfoOf(pr github.PR) core.PRInfo {
 		Number: pr.Number, Title: pr.Title, URL: pr.URL, Author: pr.Author, State: pr.State,
 		HeadBranch: pr.HeadBranch, HeadOID: pr.HeadOID, BaseBranch: pr.BaseBranch,
 		ReviewDecision: pr.ReviewDecision, MergeState: pr.MergeState,
-		Draft: pr.Draft, CrossRepo: pr.CrossRepo,
+		Draft: pr.Draft, CrossRepo: pr.CrossRepo, ViewerAuthored: pr.ViewerAuthored,
 		ChecksTotal: pr.Checks.Total, ChecksDone: pr.Checks.Done, ChecksFailed: pr.Checks.Failed,
 		UpdatedAt: pr.UpdatedAt,
 	}

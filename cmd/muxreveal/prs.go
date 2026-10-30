@@ -76,6 +76,9 @@ func startPRs(clients clientFactory) *prRuntime {
 	return &prRuntime{poller: github.NewPoller(github.PollerOptions{Client: cache.client}), clients: cache}
 }
 
+// actions is the GitHub writes, on the same client cache.
+func (p *prRuntime) actions() ghActions { return ghActions{clients: p.clients} }
+
 // lookup finds the pull request of a branch with the cached client of its host.
 func (p *prRuntime) lookup(ctx context.Context, r github.Repo, branch string) (github.PR, error) {
 	c, err := p.clients.client(ctx, r.Host)
@@ -84,6 +87,49 @@ func (p *prRuntime) lookup(ctx context.Context, r github.Repo, branch string) (g
 	}
 
 	return c.PRForBranch(ctx, r, branch)
+}
+
+// ghActions makes the GitHub writes of the app, each with the cached client of
+// the repository's host.
+type ghActions struct{ clients *clientCache }
+
+func (g ghActions) client(ctx context.Context, r github.Repo) (*github.Client, error) {
+	c, err := g.clients.client(ctx, r.Host)
+	if err != nil {
+		return nil, fmt.Errorf("client for %s: %w", r.Host, err)
+	}
+
+	return c, nil
+}
+
+// CreatePR opens a pull request.
+func (g ghActions) CreatePR(ctx context.Context, r github.Repo, n github.NewPR) (github.PR, error) {
+	c, err := g.client(ctx, r)
+	if err != nil {
+		return github.PR{}, err
+	}
+
+	return c.CreatePR(ctx, r, n)
+}
+
+// Approve approves a pull request at the commit sha.
+func (g ghActions) Approve(ctx context.Context, r github.Repo, number int, sha string) error {
+	c, err := g.client(ctx, r)
+	if err != nil {
+		return err
+	}
+
+	return c.Approve(ctx, r, number, sha)
+}
+
+// Merge merges a pull request at the commit m.SHA.
+func (g ghActions) Merge(ctx context.Context, r github.Repo, pr github.PR, info github.RepoInfo, m github.MergeOptions) (github.Merged, error) {
+	c, err := g.client(ctx, r)
+	if err != nil {
+		return github.Merged{}, err
+	}
+
+	return c.Merge(ctx, r, pr, info, m)
 }
 
 // Close stops the poller: its requests are cancelled, its goroutines end and
