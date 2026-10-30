@@ -2,6 +2,7 @@ package git
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -19,8 +20,9 @@ const maxMarkdownFiles = 5000
 // It skips .git, node_modules, vendor and every folder below root that holds a
 // .git entry (a nested checkout or worktree), and does not follow symlinked
 // folders. At the cap the walk stops: the files found so far (the first in walk
-// order) come back, sorted, without an error. An unreadable folder below root is
-// skipped; an unreadable root and a cancelled ctx are errors.
+// order) come back, sorted, without an error. So do the files found when ctx's
+// deadline passes mid-walk. An unreadable folder below root is skipped; an
+// unreadable root, a cancelled ctx and a deadline before any file are errors.
 func MarkdownFiles(ctx context.Context, root string) ([]string, error) {
 	var files []string
 
@@ -79,8 +81,11 @@ func MarkdownFiles(ctx context.Context, root string) ([]string, error) {
 
 		return nil
 	})
+	// A deadline that cuts the walk short keeps what it found, as the cap does.
 	if err != nil {
-		return nil, fmt.Errorf("list markdown files in %s: %w", root, err)
+		if !errors.Is(err, context.DeadlineExceeded) || len(files) == 0 {
+			return nil, fmt.Errorf("list %s: %w", root, err)
+		}
 	}
 
 	slices.Sort(files)

@@ -167,6 +167,42 @@ func TestMarkdownFilesCap(t *testing.T) {
 	}
 }
 
+// expiresAfter is a context whose deadline passes at its n+1th check.
+type expiresAfter struct {
+	context.Context //nolint:containedctx // a test double that overrides Err
+	left            int
+}
+
+func (c *expiresAfter) Err() error {
+	if c.left <= 0 {
+		return context.DeadlineExceeded
+	}
+
+	c.left--
+
+	return nil
+}
+
+func TestMarkdownFilesDeadline(t *testing.T) {
+	t.Parallel()
+
+	root := buildMDTree(t, []mdEntry{{path: "a/x.md"}, {path: "b/y.md"}, {path: "c/z.md"}})
+
+	// The walk checks the root and then each folder it enters.
+	got, err := MarkdownFiles(&expiresAfter{Context: context.Background(), left: 3}, root)
+	if err != nil {
+		t.Fatalf("a deadline after some files is not an error: %v", err)
+	}
+
+	if want := []string{"a/x.md", "b/y.md"}; !slices.Equal(got, want) {
+		t.Errorf("got %v, want the files found before the deadline %v", got, want)
+	}
+
+	if _, err := MarkdownFiles(&expiresAfter{Context: context.Background()}, root); !errors.Is(err, context.DeadlineExceeded) {
+		t.Errorf("a deadline before any file: err = %v, want context.DeadlineExceeded", err)
+	}
+}
+
 func TestMarkdownFilesErrors(t *testing.T) {
 	t.Parallel()
 
