@@ -450,19 +450,24 @@ func (d *drawCtx) topBorder() string {
 	}
 
 	// Tags sit on the right, the mode tag last. When the title would be left no
-	// room, the split tag drops first, then the pinned tag.
+	// room, the split tag drops first, then the pinned tag, then the counter.
 	split, pin := d.lay.split && v.rowsSplit, d.pinned
-	tags := d.tagRuns(split, pin)
+	count, haveCount := d.counterTag()
+	tags := d.tagRuns(split, pin, count, haveCount)
 
 	// The corner and dash take two cells on each side, and a dash parts the title from the tags.
 	room := func() int { return d.lay.box.W - 4 - runsWidth(tags) - 1 }
 
 	if room() < titleRoomMin+2 && split {
-		tags = d.tagRuns(false, pin)
+		tags = d.tagRuns(false, pin, count, haveCount)
 	}
 
 	if room() < titleRoomMin+2 && pin {
-		tags = d.tagRuns(false, false)
+		tags = d.tagRuns(false, false, count, haveCount)
+	}
+
+	if room() < titleRoomMin+2 && haveCount {
+		tags = d.tagRuns(false, false, count, false)
 	}
 
 	var title []railRun
@@ -482,9 +487,34 @@ func (d *drawCtx) topBorder() string {
 	return d.borderLine("╭", "╮", title, tags)
 }
 
+// counterTag is the reviewed counter, ok false where marks do not count: with
+// no hunks, over a markdown page and on a rendered file.
+func (d *drawCtx) counterTag() (railRun, bool) {
+	v := d.v
+	if v.page() != nil {
+		return railRun{}, false
+	}
+
+	if cur := d.cursorFile(); cur != nil && v.mdOn[cur.Path] {
+		return railRun{}, false
+	}
+
+	read, all := v.countHunks(v.hunkRead)
+	if all == 0 {
+		return railRun{}, false
+	}
+
+	fg := d.ui.Accent
+	if read == all {
+		fg = d.ui.Success
+	}
+
+	return railRun{text: " ✓ " + strconv.Itoa(read) + "/" + strconv.Itoa(all) + " ", fg: fg, bold: true}, true
+}
+
 // tagRuns are the tags on the right of the top border, left to right: split,
-// pinned, then the mode tag, each followed by a dash but the last.
-func (d *drawCtx) tagRuns(split, pinned bool) []railRun {
+// pinned, the counter, then the mode tag, each followed by a dash but the last.
+func (d *drawCtx) tagRuns(split, pinned bool, counter railRun, haveCounter bool) []railRun {
 	ui := d.ui
 	tag := func(text string) railRun { return railRun{text: " " + text + " ", fg: ui.Accent, bold: true} }
 	dash := railRun{text: "─", fg: d.edge()}
@@ -497,6 +527,10 @@ func (d *drawCtx) tagRuns(split, pinned bool) []railRun {
 
 	if pinned {
 		tags = append(tags, tag(d.withIcon(iconPin, "pinned")), dash)
+	}
+
+	if haveCounter {
+		tags = append(tags, counter, dash)
 	}
 
 	return append(tags, tag(d.modeTag()))
@@ -613,6 +647,7 @@ func (d *drawCtx) hintRuns(cw int) []railRun {
 	pairs := [][2]string{
 		pair("line", next, prev),
 		pair("hunk", "review.hunk.next", "review.hunk.prev"),
+		pair("reviewed", "review.mark"), d.showReadPair(pair),
 		pair("file", "review.file.next", "review.file.prev"),
 		pair("tree", "review.tree"),
 		pair("worktree", "review.worktrees"),
@@ -637,6 +672,7 @@ func (d *drawCtx) hintRuns(cw int) []railRun {
 	if _, ok := d.v.src.(git.PRSource); ok {
 		pairs = [][2]string{
 			pair("line", next, prev), pair("hunk", "review.hunk.next", "review.hunk.prev"),
+			pair("reviewed", "review.mark"), d.showReadPair(pair),
 			pair("checks", "review.checks"), pair("approve", "review.approve"), pair("merge", "review.merge"),
 			pair("browser", "review.browser"), pair("mode", "review.mode.branch", "review.mode.turn"),
 		}
@@ -654,6 +690,15 @@ func (d *drawCtx) hintRuns(cw int) []railRun {
 	}
 
 	return d.fitHints(pairs, cw)
+}
+
+// showReadPair is the hint for the switch that shows reviewed hunks.
+func (d *drawCtx) showReadPair(pair func(string, ...string) [2]string) [2]string {
+	if d.v.showRead {
+		return pair("unread only", "review.show.reviewed")
+	}
+
+	return pair("show reviewed", "review.show.reviewed")
 }
 
 // fitHints draws the key and label pairs that fit cw cells; a pair with no

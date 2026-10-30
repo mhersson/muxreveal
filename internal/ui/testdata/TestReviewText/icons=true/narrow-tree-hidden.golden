@@ -1,6 +1,6 @@
  1  p1                                                                                                                                        󰛽 master-stack 
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-╭─ 󱙺 Agents 0 ─────────────────────────────╮╭─  shell ─────────────────────────────────────────────╭─  muxreveal · feat/review-pane ──────────── 󰋚 turn 4/4 ─╮
+╭─ 󱙺 Agents 0 ─────────────────────────────╮╭─  shell ─────────────────────────────────────────────╭─  muxreveal · feat/review-pane ──── ✓ 0/4 ─ 󰋚 turn 4/4 ─╮
 │ no running agents                        ││$ claude                                               │▎ M internal/core/state.go                          +9 -1 │
 │                                          ││reviewing the diff of the last turn                    │  @@ -22,5 +22,13 @@ type Pane struct                     │
 │                                          ││                                                       │  22  22       ID    PaneID                               │
@@ -44,5 +44,5 @@
 │                                          ││                                                       │  A internal/ui/review_test.go                  󰀦  +11 -0 │
 │                                          ││                                                       │  @@ -0,0 +1,11 @@                                        │
 │                                          ││                                                       │       1 + package ui                                     │
-│ j/k move  enter jump  / search  esc back ││                                                       │ j/k line   ]/[ hunk   }/{ file   tab tree   w worktree   │
+│ j/k move  enter jump  / search  esc back ││                                                       │ j/k line   ]/[ hunk   space reviewed   R show reviewed   │
 ╰──────────────────────────────────────────╯╰───────────────────────────────────────────────────────╰──────────────────────────────────────────────────────────╯

@@ -1,6 +1,6 @@
  1  p1                                                        󰛽 master-stack 
 ────────────────────────────────────────────────────────────────────────────────
-╭─  shell ─────────╭─  muxreveal · feat/review-pane ──────────────────  #7 ─╮
+╭─  shell ─────────╭─  muxreveal · feat/review-pane ────────── ✓ 0/4 ─  #7 ─╮
 │$ claude           │ #7 Show the pull request over its diff                   │
 │reviewing the diff │  feat/review-pane → main    4/4   approved   @mhersson…│
 │                   │──────────────────────────────────────────────────────────│
@@ -20,5 +20,5 @@
 ││                                                                            ││
 ││  s/m/r method    d delete branch    enter merge    esc cancel              ││
 │╰────────────────────────────────────────────────────────────────────────────╯│
-│                   │ j/k line   ]/[ hunk   c checks   a approve   M merge     │
+│                   │ j/k line   ]/[ hunk   space reviewed   R show reviewed   │
 ╰───────────────────╰──────────────────────────────────────────────────────────╯

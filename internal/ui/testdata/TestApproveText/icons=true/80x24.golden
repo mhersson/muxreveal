@@ -1,6 +1,6 @@
  1  p1                                                        󰛽 master-stack 
 ────────────────────────────────────────────────────────────────────────────────
-╭─  shell ─────────╭─  muxreveal · feat/review-pane ──────────────────  #7 ─╮
+╭─  shell ─────────╭─  muxreveal · feat/review-pane ────────── ✓ 0/4 ─  #7 ─╮
 │$ claude           │ #7 Show the pull request over its diff                   │
 │reviewing the diff │  feat/review-pane → main    4/4   approved   @mhersson…│
 │                   │──────────────────────────────────────────────────────────│
@@ -20,5 +20,5 @@
 │                   │      43 +     p, ok := a.store.Pane(agent)               │
 │                   │      44 +     if !ok || p.Kind != core.KindAgent {       │
 │                   │▎     45 +         return a.notify("a review pane needs a…│
-│                   │ j/k line   ]/[ hunk   c checks   a approve   M merge     │
+│                   │ j/k line   ]/[ hunk   space reviewed   R show reviewed   │
 ╰───────────────────╰──────────────────────────────────────────────────────────╯

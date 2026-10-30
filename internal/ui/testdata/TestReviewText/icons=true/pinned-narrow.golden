@@ -1,6 +1,6 @@
  1  p1                󰛽 master-stack 
 ────────────────────────────────────────
-╭─  muxreve… ─ 󰐃 pinned ─ 󰋚 turn 4/4 ─╮
+╭─  muxreveal … ─ ✓ 0/4 ─ 󰋚 turn 4/4 ─╮
 │▎ M internal/core/state.go      +9 -1 │
 │  @@ -22,5 +22,13 @@ type Pane struct │
 │  22  22       ID    PaneID           │
@@ -36,5 +36,5 @@
 │  @@ -3,6 +3,7 @@                     │
 │   3   3   // defaultLeader maps the …│
 │   4   4   var defaultLeader = map[st…│
-│ j/k line   ]/[ hunk   }/{ file       │
+│ j/k line   ]/[ hunk   space reviewed │
 ╰──────────────────────────────────────╯

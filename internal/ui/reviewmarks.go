@@ -185,9 +185,34 @@ func (v *reviewView) hunkRead(f, h int) bool {
 	return ok
 }
 
+// fileRead reports whether file f is shown as hunks and every hunk is reviewed.
+func (v *reviewView) fileRead(f int) bool {
+	if f < 0 || f >= len(v.res.Files) || !v.hunksShown(v.res.Files[f]) {
+		return false
+	}
+
+	for h := range v.res.Files[f].Hunks {
+		if !v.hunkRead(f, h) {
+			return false
+		}
+	}
+
+	return true
+}
+
 // reviewCounts are the hunks reviewed and all the hunks of the files shown as
 // hunks.
 func reviewCounts(v *reviewView, st core.State) (read, all int) {
+	return v.countHunks(func(fi, hi int) bool {
+		id := v.hunkID(fi, hi)
+
+		return id != "" && st.Reviewed(v.common, id)
+	})
+}
+
+// countHunks counts the hunks of the files shown as hunks and those read
+// reports reviewed.
+func (v *reviewView) countHunks(read func(file, hunk int) bool) (n, all int) {
 	for fi, f := range v.res.Files {
 		if !v.hunksShown(f) {
 			continue
@@ -196,13 +221,13 @@ func reviewCounts(v *reviewView, st core.State) (read, all int) {
 		for hi := range f.Hunks {
 			all++
 
-			if id := v.hunkID(fi, hi); id != "" && st.Reviewed(v.common, id) {
-				read++
+			if read(fi, hi) {
+				n++
 			}
 		}
 	}
 
-	return read, all
+	return n, all
 }
 
 // markTarget is the file and the hunks the row at the cursor stands for, with

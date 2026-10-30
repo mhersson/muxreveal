@@ -1,6 +1,6 @@
  1  p1                                                        󰛽 master-stack 
 ────────────────────────────────────────────────────────────────────────────────
-╭─  shell ─────────╭─  muxreveal · feat/review-pane ──────────────────  #7 ─╮
+╭─  shell ─────────╭─  muxreveal · feat/review-pane ────────── ✓ 0/4 ─  #7 ─╮
 │$ claude           │ #7 Show the pull request over its diff                   │
 │reviewing the diff │  feat/review-pane → main    1 failed   no review yet  …│
 │                   │──────────────────────────────────────────────────────────│

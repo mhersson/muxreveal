@@ -641,9 +641,9 @@ func TestDrawerHintsFollowBindings(t *testing.T) {
 	t.Parallel()
 
 	const (
-		diffHints = "j/k line   ]/[ hunk   }/{ file   tab tree   w worktree   f full   u split   b/t mode   ,/. turn   e edit   / search"
+		diffHints = "j/k line   ]/[ hunk   space reviewed   R show reviewed   }/{ file   tab tree   w worktree   f full   u split"
 		treeHints = "j/k file   enter jump   tab hide   esc back"
-		prHints   = "j/k line   ]/[ hunk   c checks   a approve   M merge   O browser   b/t mode"
+		prHints   = "j/k line   ]/[ hunk   space reviewed   R show reviewed   c checks   a approve   M merge   O browser   b/t mode"
 	)
 
 	tests := []struct {

@@ -365,6 +365,10 @@ func titlePart(top string) string {
 		top = top[:i]
 	}
 
+	if i := strings.Index(top, " ✓ "); i >= 0 {
+		top = top[:i]
+	}
+
 	return strings.TrimRight(top, "─ ")
 }
 
