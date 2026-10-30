@@ -26,7 +26,7 @@ Terminal emulation comes from `tuios.dev/vt`, the emulator TUIOS publishes as a 
 
 ## Functional requirements
 
-IDs are referenced by milestones and plans; commits and PRs do not carry them. Priority: **P0** blocks v1, **P1** ships in v1 if possible, **P2** is v1.x.
+IDs are referenced by milestones and plans; commits and PRs do not carry them. Priority: **P0** blocks v1, **P1** ships in v1 if possible, **P2** is v1.x, **v2** is in the v2 backlog.
 
 ### Agents and panes
 
@@ -37,7 +37,7 @@ IDs are referenced by milestones and plans; commits and PRs do not carry them. P
 | AG-3 | Full-fidelity terminal: truecolor, alt screen, mouse, bracketed paste, synchronized output, Kitty keyboard protocol, OSC 8 and 52, wide chars | P0 |
 | AG-4 | Scrollback and copy mode with vim motions | P0 |
 | AG-5 | Per-pane state badge (working, blocked, idle) from Claude Code hooks | P0 |
-| AG-6 | Desktop notification when an agent becomes blocked or finishes | P1 |
+| AG-6 | Desktop notification when an agent becomes blocked or finishes | v2 |
 | AG-7 | Plain shell panes (non-agent), the default for splits; running `claude` in one makes it an agent pane, and an agent pane whose Claude exits becomes a shell again; the kind comes from the terminal's foreground process | P0 |
 | AG-8 | Harness adapter interface so other agents (Codex, opencode) can be added | P0 (interface), P2 (adapters) |
 | AG-9 | Tabs: each with its own split layout, focus and zoom; new, rename, close, jump and cycle; the tabs shown in the workspace bar | P0 |
@@ -152,7 +152,7 @@ flowchart TB
   subgraph proc["muxreveal process (single binary, no daemon in v1)"]
     ui["UI and compositor<br/>Bubble Tea v2, input router, keymap, themes, image placement, diffview"]
     core["App core<br/>event bus, state store, actions: push, open PR, approve, merge"]
-    store["Persistence<br/>state.json: layout, sessions<br/>SQLite: turns, reviews"]
+    store["Persistence<br/>state.json: layout, sessions<br/>reviews/*.json: reviewed hunks"]
     panes["Panes<br/>creack/pty, tuios.dev/vt, scrollback"]
     hooks["Hook server<br/>Unix socket: session ids, turns, badges"]
     git["Git and diff<br/>worktrees, snapshots, watcher, go-gitdiff, linediff"]
@@ -192,7 +192,7 @@ One Go module, `github.com/mhersson/muxreveal`.
 | `internal/git` | Worktrees, turn snapshots, watcher and watch set, diff engine; `linediff` and `invisible` (ported from tuios) |
 | `internal/github` | Auth via `gh`, GraphQL and REST client, poller, PR actions |
 | `internal/md` | Markdown to width-wrapped lines of styled runs, with link targets, image references and folds; no UI imports |
-| `internal/store` | `state.json` and SQLite persistence |
+| `internal/store` | `state.json` and reviewed-hunk persistence |
 
 ```go
 type Harness interface {
@@ -251,9 +251,8 @@ Go 1.27 (`tuios.dev/vt` needs 1.26 or later). The reason for Rust was a proven V
 | File watching | `fsnotify` with our own directory walk | Maintained; the walk skips `.git` internals, `.worktrees` and ignored directories; `rjeczalik/notify` is unmaintained since 2023 and uses FSEvents on macOS only with cgo |
 | GitHub | `cli/go-gh/v2` for hosts, tokens and the REST and GraphQL clients (GraphQL queries as tagged Go structs); ETags through our own transport under its clients | Same login and host routing as `gh`; no schema file or codegen; conditional requests do not count against the rate limit |
 | Fuzzy finder | `sahilm/fuzzy` | Palette and pickers |
-| Config and state | `pelletier/go-toml/v2`; `encoding/json`; `modernc.org/sqlite` | TOML config, JSON layout state, pure Go SQLite (no cgo) for turns, reviewed hunks and caches |
+| Config and state | `pelletier/go-toml/v2`; `encoding/json` | TOML config, JSON layout state and reviewed-hunk files |
 | Clipboard | OSC 52 plus direct exec of `wl-copy`, `xclip` or `pbcopy` with explicit arguments | No cgo and no shell; `atotto/clipboard` is not used because its primary-selection switch is global state and it drops the clipboard arguments |
-| Notifications | Terminal escapes (OSC 99 for Kitty, OSC 9 or 777 for Ghostty); fallback `gen2brain/beeep` | No extra daemon; native to both terminals |
 | CLI | `spf13/cobra` | `muxreveal`, `muxreveal hook claude-code`, `muxreveal statusline`, future subcommands |
 | Diagnostics | `log/slog` to a file | Structured logs, never to the screen |
 
@@ -1105,7 +1104,15 @@ State lives in the platform state dir (`$XDG_STATE_HOME/muxreveal` on Linux, `~/
 - `rail` is `true` while the agents rail is open and omitted when it is closed; a file without it opens closed, and the format stays version 2.
 - An agent pane without a harness is saved as a shell pane (its cwd kept), so the file always passes validation.
 - The layout's JSON form is read and written by one pair of functions in `internal/store/layout.go`; the JSON types are unexported and `core` has no JSON tags, so a layout change edits that file and the version only.
-- Saved: the version, the active tab, whether the agents rail is open, per tab its id, name, focused pane, zoom, review drawer and whether its file tree is open, mode, pane ids and the mode's layout (ratios and widths rounded to 0.01), and per pane its kind and cwd and, for agents, the harness, session id and transcript path. Not saved: the theme (the config decides), the drawer's keyboard, cursor, scroll, folds, full-file set, split layout and the turn being stepped through (a restore shows the latest turn), agent states, the directory an agent's hooks reported, the places an agent edited this session, the worktree a drawer is pinned to (a restored drawer follows its pane again), the model and context an agent's status line reported, the drawer's PR mode (a restored drawer shows a diff), each repository's pull requests (the open ones, the merge details, the focused checks, the default branch, the poll error and the branch lookups), scrollback, and what a shell was running.
+- Saved: the version, the active tab, whether the agents rail is open, per tab its id, name, focused pane, zoom, review drawer and whether its file tree is open, mode, pane ids and the mode's layout (ratios and widths rounded to 0.01), and per pane its kind and cwd and, for agents, the harness, session id and transcript path. Not saved: the theme (the config decides), the drawer's keyboard, cursor, scroll, folds, full-file set, split layout and the turn being stepped through (a restore shows the latest turn), agent states, the directory an agent's hooks reported, the places an agent edited this session, the worktree a drawer is pinned to (a restored drawer follows its pane again), the model and context an agent's status line reported, the drawer's PR mode (a restored drawer shows a diff), each repository's pull requests (the open ones, the merge details, the focused checks, the default branch, the poll error and the branch lookups), scrollback, what a shell was running, and the reviewed-hunk marks (their own files, see Reviewed hunks).
+
+**Reviewed hunks**
+
+- Each repository has `<state dir>/reviews/<hex of the first 16 bytes of SHA-256 of its common dir>.json` (mode 0600, `reviews/` 0700), where the common dir is `git.Repo.CommonDir` with symlinks resolved. The shape is `{"version": 1, "repo": "<common dir>", "marks": {"<id>": "2026-10-30"}}` with sorted keys. A mark's day is the UTC date it was last set or last matched a shown hunk.
+- The id is `git.HunkID(path, hunk)`: the hex of the first 16 bytes of SHA-256 over the path, a NUL, then for each added or removed line its kind byte, its text, a `\` when it has no newline at the end, and `\n`. Context lines, line numbers and a rename's old path are left out.
+- At load a mark whose day is more than 90 days before today's UTC date is dropped, as is one whose day does not parse. `core.TouchMarks` sets today on marks that a shown hunk matches, and the new marks are saved, so a mark the operator keeps seeing never expires.
+- A `MarkFiles` goroutine writes the files with `WriteAtomicNoSync` (marks need not survive a crash); the latest marks per file win and `Close` writes what is pending. A second instance that does not save has none.
+- A file that does not decode, has another version or names another `repo` is renamed to `<name>.bad` (replacing an older one), logged, and the marks start empty.
 
 **Writing**
 
@@ -1263,7 +1270,7 @@ v1 ships in six milestones, preceded by a VT spike. Each ends on a gate you can 
     - Gate: a saved file shows in the open drawer within 300 ms, and turn mode isolates the last turn's changes.
 4. **M3 GitHub loop.** Agent PRs, PR diff, CI status, push, PR compose, approve and merge on github.com and GHE. Covers GH-1 (agents), GH-2, GH-4 (status), GH-5 to GH-7, GA-1 to GA-3, GA-5.
     - Gate: agent change → push → PR → green CI → approve → merge, without opening a browser.
-5. **M4 Markdown and polish.** Rendered markdown with images, PR conversation, compose preview, reviewed hunks, notifications, other PR tabs, CI log tail, remapping, worktree cleanup. Covers MD-1, MD-2, GH-1 (others), GH-3, GH-4 (logs), GA-4, DF-7, AG-6, UX-3, WT-3. M4 ships as two plans:
+5. **M4 Markdown and polish.** Rendered markdown with images, PR conversation, compose preview, reviewed hunks, other PR tabs, CI log tail, remapping, worktree cleanup. Covers MD-1, MD-2, GH-1 (others), GH-3, GH-4 (logs), GA-4, DF-7, UX-3, WT-3. M4 ships as two plans:
     - **M4a Markdown layout:** headless, in `internal/md`; MD-1's layout.
     - **M4b:** the rest of M4, including MD-2.
     - Gate: rendered markdown with images, the polish items and the requirements above work in Ghostty and Kitty on macOS and Linux.
@@ -1280,6 +1287,7 @@ v1 ships in six milestones, preceded by a VT spike. Each ends on a gate you can 
 - Image passthrough from agent panes
 - Sixel fallback
 - Follow terminal light and dark mode (TH-3)
+- Desktop notifications when an agent becomes blocked or finishes (AG-6): OSC 99 for Kitty, OSC 9 or 777 for Ghostty, `gen2brain/beeep` else
 
 ## Risks
 

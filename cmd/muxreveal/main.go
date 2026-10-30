@@ -153,6 +153,12 @@ func run(ctx context.Context, env core.Env, configPath, recordDir string, fresh 
 		}
 	}()
 
+	// A second instance that does not save keeps no mark files either.
+	var marks *store.MarkFiles
+	if saver != nil {
+		marks = store.NewMarkFiles(stateDir, logger)
+	}
+
 	// The saver is closed before any pane is, so agents dying on quit are not saved as shells.
 	closeSaver := sync.OnceFunc(func() {
 		if saver == nil {
@@ -164,6 +170,10 @@ func run(ctx context.Context, env core.Env, configPath, recordDir string, fresh 
 
 		if cerr := saver.Close(closeCtx); cerr != nil {
 			logger.Error("close saver", "err", cerr)
+		}
+
+		if cerr := marks.Close(closeCtx); cerr != nil {
+			logger.Error("close mark files", "err", cerr)
 		}
 	})
 	defer closeSaver()
@@ -214,6 +224,7 @@ func run(ctx context.Context, env core.Env, configPath, recordDir string, fresh 
 		PRActions:    prs.actions(),
 		Notice:       strings.Join(notices, "; "),
 		Save:         save,
+		Marks:        markFilesOf(marks),
 	})
 	if err != nil {
 		_ = prs.Close()
@@ -270,4 +281,17 @@ func openState(logger *slog.Logger, stateDir string, cfg core.Config, fresh bool
 	notices = append(notices, resume...)
 
 	return st, store.NewSaver(statePath, logger), notices, unlock, nil
+}
+
+// markFilesOf returns m as the UI's interface, or nil (not a typed nil) when
+// this instance does not save.
+func markFilesOf(m *store.MarkFiles) interface {
+	Load(commonDir string, now time.Time) (map[string]string, error)
+	Save(commonDir string, days map[string]string)
+} {
+	if m == nil {
+		return nil
+	}
+
+	return m
 }

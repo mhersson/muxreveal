@@ -69,6 +69,9 @@ type Options struct {
 	Worktrees core.WorktreesConfig
 	// Save is called with the state after every successful dispatch; nil saves nothing.
 	Save func(core.State)
+	// Marks loads and saves the reviewed-hunk marks; nil keeps them for the
+	// session only.
+	Marks markFiles
 	// PRs polls the pull requests of the repositories the agents work in; nil
 	// turns every pull request feature off.
 	PRs prSource
@@ -82,6 +85,13 @@ type Options struct {
 	PRActions prActions
 	// Keys is the [keys] config laid over the built-in leader keys.
 	Keys core.KeysConfig
+}
+
+// markFiles is the persistence of the reviewed-hunk marks, one file per
+// repository. Load reads (and may block on disk); Save returns at once.
+type markFiles interface {
+	Load(commonDir string, now time.Time) (map[string]string, error)
+	Save(commonDir string, days map[string]string)
 }
 
 // App is the root Bubble Tea model.

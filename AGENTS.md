@@ -64,7 +64,7 @@ make install      # go install into $GOBIN, else $GOPATH/bin
 | `internal/git`     | Worktrees, turn snapshots, watcher, diff engine                   |
 | `internal/github`  | Auth via `go-gh`, GraphQL and REST client, poller, PR actions     |
 | `internal/md`      | Markdown to styled cells plus image references                    |
-| `internal/store`   | `state.json` and SQLite persistence                               |
+| `internal/store`   | `state.json` and reviewed-hunk persistence                        |
 | `spikes/`          | Throwaway experiments; nothing outside `spikes/` imports them     |
 | `scripts/`         | POSIX shell helpers for the Makefile                              |
 
