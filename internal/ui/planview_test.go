@@ -17,10 +17,12 @@ import (
 // planRig is a sized app with an agent in p2 (a shell is p1), a temporary home
 // and a temporary worktree.
 type planRig struct {
-	a    *App
-	clk  *fakeClock
-	home string
-	wt   string
+	a      *App
+	clk    *fakeClock
+	home   string
+	wt     string
+	st     *starts
+	opener *fakeOpen
 }
 
 func realTemp(t *testing.T) string {
@@ -46,12 +48,14 @@ func newPlanRig(t *testing.T, w, h int) *planRig {
 		return testGetenv(k)
 	}
 
-	a, _, clk := kindApp(t, func(o *Options) { o.Getenv = getenv })
+	a, st, clk := kindApp(t, func(o *Options) { o.Getenv = getenv })
+	f := &fakeOpen{}
+	a.openLink = f.open
 	chord(a, 'n')
 	sized(t, a, w, h)
 	a.railEntry("p2").probe = railProbe{known: true, project: "work"}
 
-	return &planRig{a: a, clk: clk, home: home, wt: realTemp(t)}
+	return &planRig{a: a, clk: clk, home: home, wt: realTemp(t), st: st, opener: f}
 }
 
 // notePlan records plan for p2, arrived at t0 and unread, and moves the clock

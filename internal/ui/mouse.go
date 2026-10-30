@@ -473,9 +473,9 @@ func (a *App) planWheel(msg tea.MouseWheelMsg) bool {
 
 	switch m.Button {
 	case tea.MouseWheelDown:
-		a.plan.view.scroll(scrollStep)
+		a.plan.shown().scroll(scrollStep)
 	case tea.MouseWheelUp:
-		a.plan.view.scroll(-scrollStep)
+		a.plan.shown().scroll(-scrollStep)
 	}
 
 	return true

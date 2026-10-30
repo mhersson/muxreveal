@@ -186,6 +186,7 @@ type linkEditMsg struct {
 	epoch      int
 	root, path string
 	err        error
+	plan       *planView // the plan overlay it was followed from, if any
 }
 
 // insideResolved follows the symlinks of root and path and reports errOutsideWorktree
@@ -225,6 +226,10 @@ func insideResolved(ctx context.Context, root, path string) error {
 // or says why not. An answer for a drawer that closed, retargeted, lost the
 // keyboard or has a new source since, or one that a modal opened over, is dropped.
 func (a *App) onLinkEdit(msg linkEditMsg) tea.Cmd {
+	if msg.plan != nil {
+		return a.onPlanLinkEdit(msg)
+	}
+
 	tab := a.store.State().Tab()
 	if tab.ID != msg.tab || (tab.Review == nil) != (msg.pane == "") || (tab.Review != nil && tab.Review.Pane != msg.pane) {
 		return nil

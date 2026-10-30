@@ -657,6 +657,8 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.onMDList(msg)
 	case planReadMsg:
 		a.onPlanRead(msg)
+	case planPageMsg:
+		a.onPlanPage(msg)
 	case reviewFlashMsg:
 		a.onReviewFlash(msg)
 	case wtOpenMsg:

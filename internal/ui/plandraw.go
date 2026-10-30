@@ -147,7 +147,12 @@ func (a *App) planLines(lk look, w, h int) []string {
 
 	tag += " "
 
-	title, tag := planTop(lead, shortPath(v.plan.Path, v.root, a.getenv("HOME")), tag, w)
+	path := v.plan.Path
+	if n := len(v.pages); n > 0 {
+		path, tag = v.pages[n-1].path, ""
+	}
+
+	title, tag := planTop(lead, shortPath(path, v.root, a.getenv("HOME")), tag, w)
 	top := border.Render("╭─") + on(ui.Info).Bold(true).Render(title)
 
 	if tag != "" {
@@ -158,8 +163,8 @@ func (a *App) planLines(lk look, w, h int) []string {
 
 	a.sizePlan()
 
-	lay := v.view.layout()
-	ind := planIndicator(len(lay.Lines), rows, v.view.top)
+	shown := v.shown()
+	ind := planIndicator(len(shown.layout().Lines), rows, shown.top)
 	bottom := border.Render("╰"+strings.Repeat("─", w-3-ansi.StringWidth(ind))) + on(ui.Accent).Bold(true).Render(ind) + border.Render("─╯")
 
 	out := []string{top}
@@ -167,7 +172,7 @@ func (a *App) planLines(lk look, w, h int) []string {
 		out = append(out, row("", 0))
 	}
 
-	for _, l := range v.view.draw(newMDPainter(lk.theme, ui.Panel).withQuery(v.query), true) {
+	for _, l := range shown.draw(newMDPainter(lk.theme, ui.Panel).withQuery(v.query), true) {
 		out = append(out, row(l, vw))
 	}
 
@@ -180,7 +185,30 @@ func (a *App) planLines(lk look, w, h int) []string {
 		out = append(out, row(pad(2)+hints, 2+ansi.StringWidth(hints)))
 	}
 
-	return append(out, bottom)
+	out = append(out, bottom)
+
+	if v.chooser != nil {
+		a.planChooserLines(ui, out)
+	}
+
+	return out
+}
+
+// planChooserLines draws the link chooser over the box's rows, two cells in from
+// each side from the fourth row; a box without a row for it draws nothing.
+func (a *App) planChooserLines(ui theme.UI, lines []string) {
+	box := a.plan.chooser.lines(ui, ansi.StringWidth(lines[0])-2*wtInsetX, len(lines)-1-wtTopY, a.icons, a.getenv("HOME"))
+	if box == nil {
+		return
+	}
+
+	gap := lipgloss.NewStyle().Background(ui.Panel).Render(" ")
+	side := lipgloss.NewStyle().Foreground(ui.BorderFocus).Background(ui.Panel).Render("│")
+
+	for i, l := range box {
+		y := wtTopY + i
+		lines[y] = cutRow(lines[y], wtInsetX) + l + gap + side
+	}
 }
 
 // planHintRow is the hints that fit w cells, a gap apart.

@@ -28,6 +28,12 @@ type planView struct {
 	root, base string
 	view       mdView
 
+	// pages are the markdown files followed from the plan, the last one shown;
+	// pageSeq is the serial of the newest page ask.
+	pages   []*planPage
+	pageSeq int
+	chooser *linkChooser
+
 	// searching is the prompt being open, typing into query; last is the query
 	// n and N repeat. query stays painted after enter.
 	searching   bool
@@ -160,15 +166,22 @@ func (a *App) sizePlan() {
 	rows, _, _ := planRows(h)
 	vw := min(w-4, planMaxView)
 
-	if v.view.w != 0 && (v.view.w != vw || v.view.icons != a.icons) {
-		line := v.view.sourceLine()
-		v.view.size(vw, rows, a.icons)
-		v.view.goSource(line)
-
-		return
+	views := []*mdView{&v.view}
+	for _, p := range v.pages {
+		views = append(views, &p.view)
 	}
 
-	v.view.size(vw, rows, a.icons)
+	for _, mv := range views {
+		if mv.w != 0 && (mv.w != vw || mv.icons != a.icons) {
+			line := mv.sourceLine()
+			mv.size(vw, rows, a.icons)
+			mv.goSource(line)
+
+			continue
+		}
+
+		mv.size(vw, rows, a.icons)
+	}
 }
 
 // handlePlanKey answers the open plan overlay; any other key is dropped. A box
@@ -180,13 +193,16 @@ func (a *App) handlePlanKey(msg tea.KeyPressMsg) tea.Cmd {
 	pv := a.plan
 
 	if key == "esc" {
-		if !pv.searching {
+		switch {
+		case pv.chooser != nil:
+			pv.chooser = nil
+		case pv.searching:
+			pv.searching, pv.query = false, ""
+		case len(pv.pages) > 0:
+			a.planPop()
+		default:
 			a.closePlan()
-
-			return nil
 		}
-
-		pv.searching, pv.query = false, ""
 
 		return nil
 	}
@@ -195,13 +211,17 @@ func (a *App) handlePlanKey(msg tea.KeyPressMsg) tea.Cmd {
 		return nil
 	}
 
+	if pv.chooser != nil {
+		return a.planChooserKey(msg)
+	}
+
 	if pv.searching {
 		a.planSearchKey(msg)
 
 		return nil
 	}
 
-	v := &pv.view
+	v := pv.shown()
 
 	switch key {
 	case "j", "down":
@@ -225,7 +245,7 @@ func (a *App) handlePlanKey(msg tea.KeyPressMsg) tea.Cmd {
 	case "[":
 		v.heading(-1)
 	case "enter":
-		v.fold()
+		return a.planEnter()
 	case "/":
 		pv.searching, pv.query = true, ""
 	case "n":
@@ -272,9 +292,11 @@ func (a *App) planFind(q string, back bool) {
 
 	pv.last, pv.query = q, q
 
-	find := pv.view.find
+	v := pv.shown()
+
+	find := v.find
 	if back {
-		find = pv.view.findPrev
+		find = v.findPrev
 	}
 
 	if !find(q) {
