@@ -932,7 +932,10 @@ func (r *realApp) pidList() []int {
 	return slices.Clone(r.pids)
 }
 
-// gone reports whether nothing is left in the process group of pid.
+// gone reports whether nothing is left in the process group of pid. Wait for it
+// after Close: kill(2) still finds killed members until they are reaped, an
+// orphan by init and, on macOS, the shadow proc an exec leaves with the
+// leader's pid and group.
 func gone(pid int) bool {
 	return errors.Is(syscall.Kill(-pid, 0), syscall.ESRCH) && errors.Is(syscall.Kill(pid, 0), syscall.ESRCH)
 }
@@ -1136,7 +1139,9 @@ func (p *pump) step(a *App, deadline time.Time) bool {
 }
 
 func TestFloodingPaneQuits(t *testing.T) {
-	r := newRealApp(t, `while :; do echo xxxxxxxxxxxxxxxx; done`, `cat`)
+	// The sleep ignores SIGHUP, so only Close's last SIGKILL reaches it, just
+	// before Close returns.
+	r := newRealApp(t, `(trap "" HUP; exec sleep 30) & while :; do echo xxxxxxxxxxxxxxxx; done`, `cat`)
 	pm := newPump(t)
 
 	_, cmd := r.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
@@ -1193,9 +1198,7 @@ func TestFloodingPaneQuits(t *testing.T) {
 	}
 
 	for _, pid := range r.pidList() {
-		if !gone(pid) {
-			t.Errorf("process group %d survived Close", pid)
-		}
+		eventually(t, fmt.Sprintf("process group %d to be gone after Close", pid), func() bool { return gone(pid) })
 	}
 }
 

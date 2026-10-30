@@ -156,6 +156,12 @@ what to do about it. Skim it before your first commit each session.
   highlighted colours (the drawer's code spans, the welcome card's sample)
   skips `t.Parallel()`; one that compares only text, counts or widths can run
   in parallel.
+- `kill(2)` still finds a killed process, and its process group, until the
+  process is reaped, and that can come after `Close` has returned: init reaps
+  orphans, and on macOS an exec leaves the old proc behind as a shadow, with
+  the same pid and group, until it finishes exiting. A test that checks that a
+  pane's processes are gone after `Close` waits for them to go, as the `gone`
+  checks in internal/ui do, rather than checking at once.
 - A flaky test, or one that fails only on macOS, has a cause to find. Never
   give it a longer timeout, skip it or re-run it until it passes.
 - The nightly workflow runs the race suite at `-count=2`, so every test must
