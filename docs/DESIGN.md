@@ -506,6 +506,7 @@ Existing roles keep their colours. New roles:
 | `Load` | Teal | load icon and sparkline |
 | `Review` | Teal | the review drawer's border while it has the keyboard, and its title icon |
 | `Working`, `Blocked`, `Idle` | Peach, Red, Green | agent state badges, tab icons, and the rail's state glyphs, counts and group headers |
+| `Code` | Peach | inline code in rendered markdown, on `Surface` |
 
 The pull request on cards and in the tray uses existing roles only: `Info` for its icon, `Fg` for its number, `Warning`, `Success` and `Error` for the checks and the review, `Muted` for a draft or closed pull request and `Accent` for a merged one.
 
@@ -894,7 +895,7 @@ func (e *Engine) FileText(ctx context.Context, worktree string, f FileDiff) (old
 - **Footnotes.** A reference is `[n]`, numbered as goldmark numbers it. At the end of the document come a 16-cell `─` rule, then `n. text` for each footnote referenced from the body or from a footnote listed, in number order. A label with several definitions shows the first.
 - **Headings.** Bold; `#` is followed by a full-width rule. Thematic breaks are a full-width rule.
 
-Roles and their theme colours, which M4b maps. `Code` is a theme role M4b adds: Peach for `RoleCode`'s text and Surface for its ground (Peach is a palette colour only today). The other roles named exist in `internal/ui/theme`.
+The UI maps roles to theme colours by the table below (`mdPainter`), then adds the run's own attributes. `RoleCode` is `Code` text on `Surface`, its pads included, so inline code reads as a pill. `RoleCodeText` takes its class's syntax colour from the review palette, and code blocks sit on the view's ground. A link goes out as OSC 8 only when its URL is http, https or mailto with no control or invisible character; a `Path` run is underlined `Info` text with no OSC 8.
 
 | Role | Theme role | Attributes | Used for |
 | --- | --- | --- | --- |
@@ -903,7 +904,7 @@ Roles and their theme colours, which M4b maps. `Code` is a theme role M4b adds: 
 | `RoleHeading2` | `Accent` | bold | `##` headings |
 | `RoleHeading3` | `Fg` | bold | `###` to `######` headings |
 | `RoleRule` | `Border` | | the rule under `#`, thematic breaks |
-| `RoleCode` | `Code` (new) | | inline code, on the `Code` ground |
+| `RoleCode` | `Code` | | inline code, on `Surface` |
 | `RoleLink` | `Info` | underline | link text, and unlinked targets |
 | `RoleKey` | `Key` | bold | `<kbd>` text |
 | `RoleBullet` | `Accent` | | bullets and ordered numbers |

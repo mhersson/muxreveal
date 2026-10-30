@@ -13,7 +13,7 @@ import (
 type UI struct {
 	Bg, Fg, Muted, Subtle, Panel, Surface, Border, BorderFocus, Accent, OnAccent,
 	Key, Selection, Match, Error, Warning, Success, Info,
-	Agent, Shell, Bar, Dim, Clock, Git, Load, Working, Blocked, Idle, Review Hex
+	Agent, Shell, Bar, Dim, Clock, Git, Load, Working, Blocked, Idle, Review, Code Hex
 }
 
 // Theme is one Catppuccin flavor.
@@ -95,5 +95,6 @@ func uiRoles(p Palette) UI {
 		Blocked:     p.Red,
 		Idle:        p.Green,
 		Review:      p.Teal,
+		Code:        p.Peach,
 	}
 }
