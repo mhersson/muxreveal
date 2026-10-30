@@ -126,11 +126,8 @@ func reviewCases() []reviewCase {
 // TestReviewGolden draws each case once in colour, in the default theme with icons.
 // TestReviewText covers icons off and TestScreensTakeTheirColoursFromTheTheme the other theme.
 func TestReviewGolden(t *testing.T) {
-	t.Parallel()
-
 	for _, c := range reviewCases() {
 		t.Run("catppuccin-mocha/icons=true/"+c.name, func(t *testing.T) {
-			t.Parallel()
 			a := c.scene("catppuccin-mocha", true).build(t)
 			golden.RequireEqual(t, []byte(a.View().Content))
 		})
