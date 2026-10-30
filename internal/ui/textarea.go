@@ -96,6 +96,12 @@ func (t *textArea) Key(msg tea.KeyPressMsg) bool {
 	row, col, n := t.row, t.col, t.size()
 	changed := false
 
+	if txt := []rune(msg.Text); len(txt) > 0 && txt[0] >= 0x20 && txt[0] != 0x7f && msg.Mod&(tea.ModCtrl|tea.ModAlt) == 0 {
+		t.Paste(msg.Text)
+
+		return t.size() != n
+	}
+
 	switch msg.String() {
 	case "enter":
 		changed = t.insert('\n')
@@ -129,13 +135,6 @@ func (t *textArea) Key(msg tea.KeyPressMsg) bool {
 		t.col = 0
 	case "end":
 		t.col = len(t.lines[t.row])
-	default:
-		if msg.Text != "" && msg.Mod&(tea.ModCtrl|tea.ModAlt) == 0 {
-			before := t.size()
-			t.Paste(msg.Text)
-
-			return t.size() != before
-		}
 	}
 
 	return changed || t.row != row || t.col != col || t.size() != n
@@ -209,14 +208,20 @@ func (t *textArea) View(w, h int, st lipgloss.Style) (lines []string, curRow, cu
 
 		runes := []rune(printable(string(t.lines[i])))
 		pos := min(len([]rune(printable(string(t.lines[i][:t.col])))), len(runes))
-		start := 0
+		start := pos
 
-		for start < pos && drawnWidth(string(runes[start:pos])) >= w {
-			start++
+		// Walk back from the cursor until a cell is left for it.
+		for acc := 0; start > 0; start-- {
+			rw := ansi.StringWidth(string(runes[start-1]))
+			if acc+rw >= w {
+				break
+			}
+
+			acc += rw
 		}
 
 		curCol = drawnWidth(string(runes[start:pos]))
-		lines = append(lines, st.Render(ansi.Truncate(string(runes[start:]), w, "…")))
+		lines = append(lines, st.Render(ansi.Truncate(string(runes[start:]), w, "")))
 	}
 
 	return lines, t.row - t.top, curCol

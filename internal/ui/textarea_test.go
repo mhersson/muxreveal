@@ -66,6 +66,7 @@ func TestTextAreaKeys(t *testing.T) {
 		{"up at top", "abc", []string{"up"}, "abc", 0, 3, false},
 		{"pgup", strings.Repeat("x\n", 25) + "x", []string{"pgup"}, strings.Repeat("x\n", 25) + "x", 15, 1, true},
 		{"pgdown stops at the end", "x\ny\nz", []string{"up", "up", "pgdown"}, "x\ny\nz", 2, 1, true},
+		{"text that names a key is text", "", []string{"text:end"}, "end", 0, 3, true},
 		{"unknown key", "ab", []string{"ctrl"}, "ab", 0, 2, false},
 	}
 
@@ -78,6 +79,9 @@ func TestTextAreaKeys(t *testing.T) {
 
 			for _, k := range tc.keys {
 				msg := taKey(k)
+				if k == "text:end" {
+					msg = tea.KeyPressMsg{Code: 'e', Text: "end"}
+				}
 				if k == "ctrl" {
 					msg = tea.KeyPressMsg{Code: 'a', Mod: tea.ModCtrl}
 				}
@@ -209,6 +213,17 @@ func TestTextAreaView(t *testing.T) {
 
 		if col != 4 {
 			t.Errorf("col = %d, want 4 (a, b, the wide one)", col)
+		}
+	})
+
+	t.Run("a very long line keeps the cursor at its end", func(t *testing.T) {
+		t.Parallel()
+
+		ta := newTextArea(strings.Repeat("x", 65536), 65536)
+		lines, row, col := ta.View(10, 1, plain)
+
+		if row != 0 || col != 9 || ansi.Strip(lines[0]) != strings.Repeat("x", 9) {
+			t.Errorf("row, col, line = %d, %d, %q; want 0, 9, nine x", row, col, ansi.Strip(lines[0]))
 		}
 	})
 }
