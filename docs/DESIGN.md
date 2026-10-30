@@ -945,6 +945,7 @@ The config file is `$XDG_CONFIG_HOME/muxreveal/config.toml` when `XDG_CONFIG_HOM
 - `[layout]` has `default_mode`, `auto_scheme`, `master_ratio`, `master_position`, `master_count`, `master_grid` and `column_width` (see the example for the values; the meanings are tuios's `tiling_scheme`, `master_*` and `scroll_column_width`). A value out of range or an unknown name is an error that names the key. `auto_scheme` applies to the auto splits of new BSP tabs; a tab does not keep its own scheme.
 - `[diff]` has `layout` (`unified` or `split`, the layout a drawer starts in), `mode` (`turn` or `branch`: what a new review drawer opens in) and the engine's limits `max_files`, `max_bytes` and `max_lines` (positive integers, defaulting to 400, 2097152 and 5000). An unknown name or a non-positive limit is an error that names the key.
 - `[worktrees]` has `root`, `inside` (default) or `sibling`: where a new worktree goes (see Worktrees). An unknown name is an error that names the key.
+- `[keys]` has `leader_key` (default `ctrl+space`) and `which_key_delay` (milliseconds, 0-5000, default 300), and one table per context: `[keys.leader]` (the keys after the leader), `[keys.drawer]`, `[keys.rail]`, `[keys.pr_list]` and `[keys.checks]`. An entry is `"<key>" = "<command>"`, and `"none"` unbinds the key. A key is a Bubble Tea key string: modifiers in the order `ctrl+`, `alt+`, `shift+`, `meta+`, `hyper+`, `super+`, then a printable character or a name such as `enter`, `space`, `pgup` or `f1` to `f63`. `shift+` before a character is an error (write `"H"`). Only `[keys.leader]` takes two-key sequences, such as `"g l"`. `leader_key` needs a modifier other than `shift` alone, or must be a function key. A mistake in the section is an error that names the key and stops the start.
 - `[mouse]` has `focus_follows_mouse` and `copy_on_select`, both `false` by default (see Mouse and clipboard).
 - `[clipboard]` has `osc52` and `native`, both `true` by default. `osc52 = false` stops copies from being sent to the outer terminal as OSC 52; `native = false` stops the native tool writes on a local session. Programs' own OSC 52 writes follow the same switches. Unknown keys in either section are errors.
 - `--fresh` starts with one shell for this run, ignoring the saved layout; the first change replaces the saved state (see Persisted state).
@@ -981,6 +982,16 @@ max_lines = 5000
 
 [worktrees]
 root = "inside"      # inside | sibling: where a new worktree goes
+
+[keys]
+leader_key = "ctrl+space"
+which_key_delay = 300    # milliseconds, 0-5000
+
+[keys.leader]            # keys after the leader; "none" unbinds
+# "w" = "pr.list"
+
+[keys.drawer]            # also [keys.rail], [keys.pr_list], [keys.checks]
+# "o" = "review.browser"
 ```
 
 ### Persisted state
