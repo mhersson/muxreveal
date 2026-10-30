@@ -2,6 +2,7 @@ package ui
 
 import (
 	"encoding/base64"
+	"fmt"
 	"image/color"
 	"strings"
 	"testing"
@@ -1009,6 +1010,55 @@ func TestSelectionClearsWhenItsTextIsRedrawn(t *testing.T) {
 
 			if got := copyNow(a, f); got != "hello" {
 				t.Errorf("copied %q, want hello", got)
+			}
+		})
+	}
+}
+
+func TestSelectionAcrossHistoryAndScreen(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		out  func(endRow int) string
+		kept bool
+	}{
+		{"output scrolls", func(int) string { return "\r\n" + manyLines(5) }, true},
+		{"live part rewritten", func(endRow int) string { return fmt.Sprintf("\x1b[%d;1HXXXXX", endRow) }, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			a, fp, f := copyApp(t)
+			c := contentRectOf(a, "p1")
+			p := a.panes["p1"]
+
+			wheelAt(a, c.X, c.Y, tea.MouseWheelUp)
+			drag(a, c.X, c.Y, c.X+4, c.Y+c.H-1, 0)
+
+			want := copyNow(a, f)
+
+			// The drag ends on a live-screen row; CUP rows are 1-based.
+			endRow := int(a.sel.head.row-a.sel.watchFrom) + 1
+
+			feedAndWait(t, p, fp, tt.out(endRow))
+			a.Update(paneDirtyMsg{id: "p1", p: p})
+
+			if kept := a.sel != nil; kept != tt.kept {
+				t.Fatalf("selection kept = %v, want %v", kept, tt.kept)
+			}
+
+			if !tt.kept {
+				return
+			}
+
+			f.mu.Lock()
+			f.calls = nil
+			f.mu.Unlock()
+
+			if got := copyNow(a, f); got != want {
+				t.Errorf("after output copied %q, want %q", got, want)
 			}
 		})
 	}

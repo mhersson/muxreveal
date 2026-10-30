@@ -196,8 +196,9 @@ func pasteCommand(getenv func(string) string, goos string) []string {
 	return nil
 }
 
-// runNative writes pass a nil stdout so a forked selection server cannot hold
-// a pipe open past the context; reads pass a buffer, and their tools do not fork.
+// runNative runs argv. Writes pass a nil stdout so a forked selection server
+// cannot hold a pipe open past the context; reads pass a buffer, and their
+// tools do not fork.
 func runNative(ctx context.Context, argv []string, stdin string, stdout io.Writer) error {
 	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
 	cmd.Stdin = strings.NewReader(stdin)

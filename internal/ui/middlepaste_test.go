@@ -85,8 +85,6 @@ func TestMiddleClickPastesIntoThePaneUnderThePointer(t *testing.T) {
 				t.Fatalf("focus = %q, want p1", a.store.State().Tab().Focus)
 			}
 
-			eventually(t, "paste", func() bool { return strings.Contains(procs["p1"].sent(), tt.want) })
-
 			if got, want := sentAfterMark(t, p1, procs["p1"]), tt.want+markOf(p1); !strings.Contains(got, want) {
 				t.Fatalf("p1 got %q, want it to contain %q", got, want)
 			}
