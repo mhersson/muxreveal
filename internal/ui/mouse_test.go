@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"image/color"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -1061,6 +1062,38 @@ func TestSelectionAcrossHistoryAndScreen(t *testing.T) {
 				t.Errorf("after output copied %q, want %q", got, want)
 			}
 		})
+	}
+}
+
+func TestSelectionClearsWhenItsScreenIsReprintedUnchanged(t *testing.T) {
+	t.Parallel()
+	a, fp, f := copyApp(t)
+	c := contentRectOf(a, "p1")
+	y := c.Y + c.H/2
+
+	drag(a, c.X, y, c.X+5, y, 0)
+
+	if got := copyNow(a, f); !strings.HasPrefix(got, "L000") {
+		t.Fatalf("copied %q, want a row's L000xx text", got)
+	}
+
+	f.mu.Lock()
+	f.calls = nil
+	f.mu.Unlock()
+
+	before, _ := a.panes["p1"].linesAt()
+	before = append([]string(nil), before...)
+
+	feedAndWait(t, a.panes["p1"], fp, "\x1b[2J\x1b[3J\x1b[H"+manyLines(30)+"abcdef")
+	a.Update(paneDirtyMsg{id: "p1", p: a.panes["p1"]})
+
+	after, _ := a.panes["p1"].linesAt()
+	if !slices.Equal(before, after) {
+		t.Fatalf("rows changed by the reprint:\n%q\nwant\n%q", after, before)
+	}
+
+	if a.sel != nil {
+		t.Error("selection kept after its screen was reprinted, want cleared")
 	}
 }
 

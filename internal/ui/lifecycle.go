@@ -369,14 +369,14 @@ func (a *App) renderPane(p *pane) tea.Cmd {
 		return nil
 	}
 
-	changed, held := p.render()
+	_, held := p.render()
 
 	if p.takeAltSwitch() {
 		a.clearSelectionOf(p.id)
 		a.endCopyOf(p.id)
 	}
 
-	if changed {
+	if held.IsZero() {
 		a.dropRedrawnSelection(p)
 	}
 
