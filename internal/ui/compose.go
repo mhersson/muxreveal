@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -37,6 +38,7 @@ const (
 	noticeEditorNoRunDir = "the editor needs the run directory, which is off with agent hooks"
 	noticeEditorOpen     = "the PR body is open in an editor"
 	statusEditorRead     = "could not read the edited body: "
+	statusEditorNoPane   = "could not open the editor pane"
 
 	// maxEditedBody is the most of the edited file that is read back.
 	maxEditedBody = 64 << 10
@@ -452,6 +454,7 @@ func (a *App) onComposeLog(msg composeLogMsg) {
 	v.title.SetValue(d.Title)
 	v.title.CursorEnd()
 	v.body = newTextArea(d.Body, maxComposeBody)
+	v.body.Start()
 	v.commits = len(msg.commits)
 
 	if msg.err != nil {
@@ -824,7 +827,7 @@ func (a *App) onBodyWritten(msg bodyWrittenMsg) tea.Cmd {
 
 	cmd, opened := a.openPaneAt(core.KindShell, core.SplitVertical, anchor, v.t.root, run)
 	if !opened {
-		fail("")
+		fail(cmp.Or(a.notice, statusEditorNoPane))
 
 		return nil
 	}
@@ -897,6 +900,7 @@ func (a *App) onBodyRead(msg bodyReadMsg) {
 	}
 
 	v.body = newTextArea(msg.text, maxComposeBody)
+	v.body.Start()
 }
 
 // bodyFileSet is the editor files written by a command and not yet handed to

@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+
+	"github.com/mhersson/muxreveal/internal/core"
 )
 
 var keyCtrlE = tea.KeyPressMsg{Code: 'e', Mod: tea.ModCtrl}
@@ -102,6 +104,10 @@ func TestComposeEditorRoundTrip(t *testing.T) {
 
 	if !r.composeShown() || r.compose.field != composeBody || r.compose.body.Value() != "new body\nline two" {
 		t.Errorf("shown = %v, field = %v, body = %q", r.composeShown(), r.compose.field, r.compose.body.Value())
+	}
+
+	if b := r.compose.body; b.row != 0 || b.col != 0 {
+		t.Errorf("cursor = (%d, %d) after the editor, want the start of the text", b.row, b.col)
 	}
 
 	if _, err := os.Stat(file); !os.IsNotExist(err) {
@@ -234,5 +240,20 @@ func TestComposeOpensFromTheLeaderKeys(t *testing.T) {
 
 	if r.compose == nil {
 		t.Fatalf("leader g o opened no box; notice %q", r.notice)
+	}
+}
+
+func TestComposeEditorSaysWhyThereIsNoPane(t *testing.T) {
+	r := newEditorRig(t)
+
+	for len(r.store.State().Panes) < core.MaxPanes {
+		openIn(t, r.App, core.OpenPane{Kind: core.KindShell, Cwd: r.dir, Split: core.SplitVertical})
+	}
+
+	// The key's own commands include the layout's; the write is what matters.
+	r.step(r.composeEditor()())
+
+	if !r.composeShown() || r.compose.status == "" || !r.compose.statusErr {
+		t.Errorf("shown = %v, status = %q (error %v), want the reason", r.composeShown(), r.compose.status, r.compose.statusErr)
 	}
 }

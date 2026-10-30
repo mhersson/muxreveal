@@ -206,7 +206,7 @@ func (a *App) reviewPR() tea.Cmd {
 		return nil
 	}
 
-	return a.showPR(tab.ID, nil, thenNothing)
+	return a.showPR(tab.ID, thenNothing)
 }
 
 // reviewReload is `r`: in PR mode it fetches the pull request again and asks
@@ -228,11 +228,10 @@ func (a *App) reviewReload() tea.Cmd {
 	return a.askPR(tab.ID, &prWant{repo: v.pr.Repo, number: v.pr.Number, root: v.pr.Root}, v.prBase, thenNothing)
 }
 
-// showPR shows a pull request in the active tab's drawer and runs then once its
-// diff has loaded. With want nil it is the pull request of the drawer's place;
-// with want it is that one, read from want.root.
-func (a *App) showPR(tab core.TabID, want *prWant, then prThen) tea.Cmd {
-	return a.askPR(tab, want, "", then)
+// showPR shows the pull request of the active tab's drawer place in its drawer
+// and runs then once its diff has loaded.
+func (a *App) showPR(tab core.TabID, then prThen) tea.Cmd {
+	return a.askPR(tab, nil, "", then)
 }
 
 // askPR is showPR with the base branch given when the caller knows it.
@@ -598,12 +597,11 @@ func (a *App) prAct(then prThen) tea.Cmd {
 
 	// The held pull request is asked for again as itself: resolving the worktree's
 	// branch could pick another.
-	var want *prWant
 	if v.pr != (core.ReviewPR{}) && v.root != "" {
-		want = &prWant{repo: v.pr.Repo, number: v.pr.Number, root: v.root}
+		return a.askPR(tab.ID, &prWant{repo: v.pr.Repo, number: v.pr.Number, root: v.root}, v.prBase, then)
 	}
 
-	return a.showPR(tab.ID, want, then)
+	return a.showPR(tab.ID, then)
 }
 
 // openWithPR opens or retargets the active tab's drawer on pane, as leader d

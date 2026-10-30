@@ -252,7 +252,7 @@ func (a *App) reviewReset(tab core.TabID, pane core.PaneID) *reviewView {
 	v.pane, v.split = pane, a.drawer.cfg.Split()
 
 	if old != nil {
-		v.prBase = old.prBase
+		v.prBase, v.unpushed = old.prBase, old.unpushed
 	}
 
 	return v

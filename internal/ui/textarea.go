@@ -29,6 +29,9 @@ func newTextArea(text string, limit int) textArea {
 	return t
 }
 
+// Start puts the cursor at the first character of the first line.
+func (t *textArea) Start() { t.row, t.col, t.top = 0, 0, 0 }
+
 // Value is the text, lines joined by line feeds.
 func (t *textArea) Value() string {
 	parts := make([]string, len(t.lines))

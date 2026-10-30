@@ -116,6 +116,19 @@ func TestComposeTargetsThePRModeWorktree(t *testing.T) {
 	}
 }
 
+func TestComposeBodyOpensAtItsStart(t *testing.T) {
+	r := newComposeRig(t)
+	r.mustOpen(t)
+
+	if r.compose.body.Value() == "" {
+		t.Fatal("the body starts empty")
+	}
+
+	if b := r.compose.body; b.row != 0 || b.col != 0 || b.top != 0 {
+		t.Errorf("cursor = (%d, %d), top %d: want the first line's start", b.row, b.col, b.top)
+	}
+}
+
 func TestComposePrefill(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -262,14 +275,14 @@ func TestComposeFields(t *testing.T) {
 	r.keys(t, keyEnter)
 	r.typed(t, "q")
 
-	if got := v.body.Value(); !strings.HasSuffix(got, "xyz\nq") {
-		t.Errorf("body = %q, want it to end with the typed text", got)
+	if got := v.body.Value(); !strings.HasPrefix(got, "xyz\nq") {
+		t.Errorf("body = %q, want the typed text at the start", got)
 	}
 
 	// Typed text survives a change of base.
 	r.keys(t, keyShiftTab, keyShiftTab, keyRight)
 
-	if !strings.HasSuffix(v.body.Value(), "xyz\nq") {
+	if !strings.HasPrefix(v.body.Value(), "xyz\nq") {
 		t.Errorf("a change of base lost the typed body: %q", v.body.Value())
 	}
 

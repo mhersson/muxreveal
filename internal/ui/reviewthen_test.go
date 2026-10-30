@@ -4,6 +4,8 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+
+	"github.com/mhersson/muxreveal/internal/core"
 )
 
 func TestAfterLoadActionNeedsTheKeyboard(t *testing.T) {
@@ -106,4 +108,89 @@ func TestAfterLoadActionNeedsTheKeyboard(t *testing.T) {
 			t.Error("the merge left the keyboard off the drawer")
 		}
 	})
+}
+
+func TestAfterLoadActionDroppedByANewerAsk(t *testing.T) {
+	t.Parallel()
+
+	t.Run("r before the first load lands", func(t *testing.T) {
+		t.Parallel()
+
+		r := newPRDrawer(t)
+		r.actions = &fakeActions{}
+
+		r.poll()
+		r.opened(t)
+		r.typed("a")
+		r.typed("r")
+		r.settle()
+		r.quiet(t, 0)
+
+		if r.confirm != nil {
+			t.Errorf("a r before the load left a confirm open: %+v", *r.confirm)
+		}
+	})
+
+	t.Run("r while the pull request's diff loads", func(t *testing.T) {
+		t.Parallel()
+
+		r := newPRDrawer(t)
+		r.actions = &fakeActions{}
+
+		r.poll()
+		r.opened(t)
+		r.run(r.showPR(r.store.State().Tab().ID, thenApprove))
+		r.until(t, "the wait", func() bool { return r.review().PR != nil && r.view().then == thenApprove })
+
+		r.typed("r")
+		r.settle()
+		r.quiet(t, 0)
+
+		if r.confirm != nil {
+			t.Errorf("an r while loading left a confirm open: %+v", *r.confirm)
+		}
+	})
+}
+
+func TestPinnedDrawerKeepsTheUnpushedCountInPRMode(t *testing.T) {
+	t.Parallel()
+
+	r := newPRDrawer(t)
+	r.poll()
+	r.opened(t)
+
+	openIn(t, r.App, core.PinReview{Root: newRepoDir(t)})
+	r.settle()
+
+	r.run(r.openWithPR(r.focus(), &prWant{repo: prRepoKey, number: 7, root: r.root}, thenNothing))
+	r.until(t, "PR mode", r.inPRMode(7))
+
+	// The worktree has two commits that origin's branches lack.
+	if got := r.view().unpushed; got != 2 {
+		t.Errorf("unpushed = %d, want 2", got)
+	}
+}
+
+func TestActOnAHeldPRAsksForThatPR(t *testing.T) {
+	t.Parallel()
+
+	r := newPRDrawer(t)
+	r.actions = &fakeActions{}
+
+	r.poll()
+	r.opened(t)
+	r.typed("p")
+	r.until(t, "PR mode", r.inPRMode(7))
+
+	r.view().err = errNotRepo
+
+	cmd := r.prAct(thenNothing)
+	if cmd == nil {
+		t.Fatalf("prAct asked for nothing; notice = %q", r.notice)
+	}
+
+	msg, ok := cmd().(prPlaceMsg)
+	if !ok || msg.want == nil || msg.want.number != 7 || msg.want.root != r.root {
+		t.Errorf("ask = %+v, want the held pull request 7 at %s", msg.want, r.root)
+	}
 }

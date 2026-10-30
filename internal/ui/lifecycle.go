@@ -98,8 +98,8 @@ type paneRun struct {
 
 // openPaneAt starts a pane of kind in cwd next to anchor, a pane of the active
 // tab, and focuses it. A shell pane with run set starts that command line in
-// place of the plain shell and keeps a shell after it. It reports whether the
-// pane opened; when it did not, nothing changed.
+// place of the plain shell and, unless run.once is set, keeps a shell after it.
+// It reports whether the pane opened; when it did not, nothing changed.
 func (a *App) openPaneAt(kind core.PaneKind, split core.Split, anchor core.PaneID, cwd string, run *paneRun) (tea.Cmd, bool) {
 	// Without a size there is no rect to start at.
 	if !a.started {

@@ -546,7 +546,7 @@ func TestPRThenIsConsumedWhenTheResultLands(t *testing.T) {
 	r.poll()
 	r.opened(t)
 
-	r.run(r.showPR(r.store.State().Tab().ID, nil, thenChecks))
+	r.run(r.showPR(r.store.State().Tab().ID, thenChecks))
 	r.until(t, "PR mode", func() bool { return r.review().PR != nil && r.view().then == thenChecks })
 	r.until(t, "the result", r.inPRMode(7))
 
