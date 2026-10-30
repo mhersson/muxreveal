@@ -168,12 +168,13 @@ type drawCtx struct {
 	mdp      *mdPainter // paints rendered rows; made on first use
 	pageRows []string   // the shown page's rows, drawn on first use
 
-	pr     core.PRInfo  // the pull request the header shows; zero when headH is 0
-	pinned bool         // the drawer is held on its root
-	home   string       // shortens the paths it names
-	list   *wtList      // the open worktree list, drawn over the drawer
-	links  *linkChooser // the open link chooser, drawn over the drawer
-	bind   keyTable     // the drawer's keys, as the hint row shows them
+	pr      core.PRInfo  // the pull request the header shows; zero when headH is 0
+	pinned  bool         // the drawer is held on its root
+	home    string       // shortens the paths it names
+	list    *wtList      // the open worktree list, drawn over the drawer
+	links   *linkChooser // the open link chooser, drawn over the drawer
+	bind    keyTable     // the drawer's keys, as the hint row shows them
+	pushKey string       // the leader sequence of git.push, "" when unbound
 }
 
 // diffKeys reports whether the diff, not the tree, has the keyboard.
@@ -338,6 +339,7 @@ func (a *App) drawCtxFor(st core.State) (d *drawCtx, name string, ok bool) {
 		ui: lk.theme.UI, th: lk.theme, icons: a.icons, v: v, c: v.derived(), now: a.clock.Now(), keys: a.drawer.focused, tree: a.drawer.focused && a.drawer.tree,
 		pinned: tab.Review != nil && pinnedTo(tab, tab.Review.Pane), home: a.getenv("HOME"), list: a.listFor(tab), links: a.linksFor(tab), bind: a.keys.drawer,
 	}
+	d.pushKey, _ = a.keymap.keyFor("git.push")
 	d.lay = a.drawerLayoutOf(box, v, drawerTree(st))
 
 	if d.lay.headH > 0 {

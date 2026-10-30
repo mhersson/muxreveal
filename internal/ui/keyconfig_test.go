@@ -807,3 +807,43 @@ func truncatedScene(s *reviewScene) {
 }
 
 func noSnapScene(s *reviewScene) { s.res, s.turn, s.noSnap = git.Result{}, 1, true }
+
+func TestPRHeaderFollowsBindings(t *testing.T) {
+	t.Parallel()
+
+	moved := func(p *core.PRInfo) { p.HeadOID = "bbbbbbb0000000000000000000000000000000bb" }
+
+	tests := []struct {
+		name string
+		cfg  core.KeysConfig
+		tune func(*core.PRInfo)
+		want string
+		not  string
+	}{
+		{"refresh default", core.KeysConfig{}, moved, "since this diff; r fetches it", ""},
+		{"refresh moved", drawerKeys("x", "review.refresh", "r", "none"), moved, "since this diff; x fetches it", "r fetches it"},
+		{"refresh unbound", drawerKeys("r", "none"), moved, "the PR moved to bbbbbbb since this diff", "fetches it"},
+		{"push default", core.KeysConfig{}, nil, "the PR shows the pushed head; ctrl+space g p pushes", ""},
+		{"push moved", leaderKeys("g p", "none", "g u", "git.push"), nil, "pushed head; ctrl+space g u pushes", "g p pushes"},
+		{"push unbound", leaderKeys("g p", "none"), nil, "↑2 not pushed: the PR shows the pushed head", "pushes"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			s := reviewScene{
+				theme: "catppuccin-mocha", w: 200, h: 52, res: turn4Result(), turn: 4, turns: 4, focused: true, branch: true, keys: tt.cfg,
+				tune: func(t *testing.T, a *App, v *reviewView) { prSceneWith(tt.tune, 2)(t, a, v) },
+			}
+
+			text := strings.Join(prHeaderLines(t, s.build(t)), "\n")
+			if !strings.Contains(text, tt.want) {
+				t.Errorf("drawer lacks %q:\n%s", tt.want, text)
+			}
+
+			if tt.not != "" && strings.Contains(text, tt.not) {
+				t.Errorf("drawer holds %q:\n%s", tt.not, text)
+			}
+		})
+	}
+}
