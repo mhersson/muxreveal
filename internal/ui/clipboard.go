@@ -178,9 +178,8 @@ func nativeCommands(getenv func(string) string, goos string) [][]string {
 	return nil
 }
 
-// pasteCommand returns the tool to read the primary selection (the clipboard on
-// macOS) with; nil on an SSH
-// session or when no display is known.
+// pasteCommand returns the tool to read the primary selection (the clipboard
+// on macOS) with; nil on an SSH session or when no display is known.
 func pasteCommand(getenv func(string) string, goos string) []string {
 	if getenv("SSH_CONNECTION") != "" || getenv("SSH_TTY") != "" {
 		return nil
