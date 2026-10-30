@@ -233,6 +233,18 @@ func (c *joinCtx) Done() <-chan struct{} {
 	return c.Context.Done()
 }
 
+// waitForJoin returns once the lookup asking with c has parked on the one in
+// flight. The bound only stops a hang when the join is missing.
+func waitForJoin(t *testing.T, c *joinCtx) {
+	t.Helper()
+
+	select {
+	case <-c.waiting:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the second lookup never joined the lookup in flight")
+	}
+}
+
 func TestPlaceCacheJoinsInFlight(t *testing.T) {
 	t.Parallel()
 
@@ -269,7 +281,7 @@ func TestPlaceCacheJoinsInFlight(t *testing.T) {
 	second := newJoinCtx(context.Background())
 
 	ask(second)
-	<-second.waiting
+	waitForJoin(t, second)
 	close(release)
 
 	for range 2 {
@@ -328,7 +340,7 @@ func TestPlaceCacheResolvesAfterTheLeaderIsCancelled(t *testing.T) {
 		waiter <- p
 	}()
 
-	<-second.waiting
+	waitForJoin(t, second)
 	cancel()
 
 	if err := <-leaderDone; !errors.Is(err, context.Canceled) {
