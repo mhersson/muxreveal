@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/mhersson/muxreveal/internal/core"
@@ -133,6 +134,10 @@ func (m *seqMemory) set(k seqKey, v uint64, ok bool) {
 type startedRoot struct {
 	done   chan struct{}
 	marker bool
+	// start is the context of the start being taken, and cancel ends it, which
+	// turns it into a marker; both are nil for a worktree that gets no snapshot.
+	start  context.Context //nolint:containedctx // the lifetime of this one start
+	cancel context.CancelFunc
 }
 
 // paneTurn is what the gate remembers of a pane's last turn: the worktrees it
@@ -205,7 +210,7 @@ func (p *paneTurns) get(pane core.PaneID) (paneTurn, bool) {
 
 	roots := make(map[string]*startedRoot, len(v.roots))
 	for r, e := range v.roots {
-		roots[r] = &startedRoot{done: e.done, marker: e.marker}
+		roots[r] = &startedRoot{done: e.done, marker: e.marker, start: e.start, cancel: e.cancel}
 	}
 
 	v.roots = roots
@@ -263,24 +268,28 @@ func (p *paneTurns) seal(ctx context.Context, pane core.PaneID) (paneTurn, bool)
 // says the caller started it and must close done; marker says it gets no
 // snapshot, because the turn is unsure or marker asks for it. ok is false when
 // the pane has moved on to another turn or sealed this one without root.
-func (p *paneTurns) claim(pane core.PaneID, turn int, root string, marker bool) (done chan struct{}, mine, noSnapshot, ok bool) {
+func (p *paneTurns) claim(ctx context.Context, pane core.PaneID, turn int, root string, marker bool) (e *startedRoot, mine, ok bool) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
 	cur, found := p.last[pane]
 	if !found || cur.turn != turn {
-		return nil, false, false, false
+		return nil, false, false
 	}
 
 	if e, has := cur.roots[root]; has {
-		return e.done, false, e.marker, true
+		return e, false, true
 	}
 
 	if cur.sealed {
-		return nil, false, false, false
+		return nil, false, false
 	}
 
-	e := &startedRoot{done: make(chan struct{}), marker: marker || cur.unsure}
+	e = &startedRoot{done: make(chan struct{}), marker: marker || cur.unsure}
+	if !e.marker {
+		e.start, e.cancel = context.WithCancel(ctx)
+	}
+
 	if cur.roots == nil {
 		cur.roots = map[string]*startedRoot{}
 		p.last[pane] = cur
@@ -288,7 +297,32 @@ func (p *paneTurns) claim(pane core.PaneID, turn int, root string, marker bool) 
 
 	cur.roots[root] = e
 
-	return e.done, true, e.marker, true
+	return e, true, true
+}
+
+// cancelPending ends the starts of the pane's turn still being taken, in root or,
+// for an empty root, in every worktree, so each becomes a marker, and returns
+// their done channels.
+func (p *paneTurns) cancelPending(pane core.PaneID, turn int, root string) []<-chan struct{} {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	cur, ok := p.last[pane]
+	if !ok || cur.turn != turn {
+		return nil
+	}
+
+	var dones []<-chan struct{}
+
+	for r, e := range cur.roots {
+		if (root == "" || r == root) && e.cancel != nil && !closed(e.done) {
+			e.cancel()
+
+			dones = append(dones, e.done)
+		}
+	}
+
+	return dones
 }
 
 // failStart turns a claimed start into a marker after its snapshot failed.
@@ -711,13 +745,26 @@ type placeAnswer struct {
 
 // edit answers an edit tool's before-event once the worktree of its file has a
 // start for the turn, taking it when this is the first edit there. The answer
-// goes out at the deadline whatever happens; a lookup or snapshot that runs
-// later still records, as a marker.
+// goes out at the deadline, but never while a start in the edit's worktree is
+// still being taken: that start is cancelled first and becomes a marker. A
+// lookup or snapshot that runs later still records, as a marker.
 func (g *gate) edit(parent context.Context, deadline time.Time, cur paneCurrent, ev harness.Event) {
 	ctx, cancel := context.WithDeadline(parent, deadline)
 	defer cancel()
 
-	stop := context.AfterFunc(ctx, func() { release(ev) })
+	// The worktree is known once its lookup is; until then, any start of the
+	// turn could hold this edit's file.
+	var resolved atomic.Pointer[string]
+
+	stop := context.AfterFunc(ctx, func() {
+		root := ""
+		if r := resolved.Load(); r != nil {
+			root = *r
+		}
+
+		g.cancelAndWait(parent, ev.Pane, cur.turn, root)
+		release(ev)
+	})
 	defer stop()
 	defer release(ev)
 
@@ -740,8 +787,9 @@ func (g *gate) edit(parent context.Context, deadline time.Time, cur paneCurrent,
 	}
 
 	root := answers[0].place.Root
+	resolved.Store(&root)
 
-	done, mine, noSnapshot, ok := g.panes.claim(ev.Pane, cur.turn, root, ctx.Err() != nil)
+	e, mine, ok := g.panes.claim(ctx, ev.Pane, cur.turn, root, ctx.Err() != nil)
 	if !ok {
 		// The next prompt took over: the turn still lists the worktree.
 		release(ev)
@@ -752,32 +800,46 @@ func (g *gate) edit(parent context.Context, deadline time.Time, cur paneCurrent,
 
 	if !mine {
 		select {
-		case <-done:
+		case <-e.done:
 		case <-ctx.Done():
+			g.cancelAndWait(parent, ev.Pane, cur.turn, root)
 		}
 
 		return
 	}
 
-	if noSnapshot {
-		close(done)
+	if e.cancel == nil {
+		close(e.done)
 		release(ev)
 		g.markStart(parent, root, cur)
 
 		return
 	}
 
-	err := g.startRoot(ctx, ev.Pane, root, cur)
+	defer e.cancel()
+
+	err := g.startRoot(e.start, ev.Pane, root, cur)
 	if err != nil {
 		g.panes.failStart(ev.Pane, cur.turn, root)
 	}
 
-	close(done)
+	close(e.done)
 	release(ev)
 
 	if err != nil {
 		g.log.Warn("before-picture failed", "session", cur.session, "root", root, "err", err)
 		g.markStart(parent, root, cur)
+	}
+}
+
+// cancelAndWait ends the starts of the pane's turn that an edit answered now
+// would race, and waits for them to finish.
+func (g *gate) cancelAndWait(parent context.Context, pane core.PaneID, turn int, root string) {
+	for _, done := range g.panes.cancelPending(pane, turn, root) {
+		select {
+		case <-done:
+		case <-parent.Done():
+		}
 	}
 }
 
@@ -817,7 +879,7 @@ func (g *gate) changed(parent context.Context, cur paneCurrent, ev harness.Event
 			continue
 		}
 
-		done, mine, _, ok := g.panes.claim(ev.Pane, cur.turn, a.place.Root, true)
+		e, mine, ok := g.panes.claim(parent, ev.Pane, cur.turn, a.place.Root, true)
 		if !ok {
 			g.markStart(parent, a.place.Root, cur)
 
@@ -825,7 +887,7 @@ func (g *gate) changed(parent context.Context, cur paneCurrent, ev harness.Event
 		}
 
 		if mine {
-			close(done)
+			close(e.done)
 			g.markStart(parent, a.place.Root, cur)
 		}
 	}

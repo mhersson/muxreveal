@@ -1784,6 +1784,15 @@ func TestGateParallelFirstEditsShareOneStart(t *testing.T) {
 
 	// Both holds are open before the start returns: wait for the second lookup.
 	waitUntil(t, "both lookups did not finish", func() bool { return places.calls.Load() == 2 })
+
+	for i, released := range []<-chan struct{}{released1, released2} {
+		select {
+		case <-released:
+			t.Errorf("edit %d was answered while the shared start was still being taken", i+1)
+		default:
+		}
+	}
+
 	close(blocked.unblock)
 	within(t, released1, time.Second, "Done of the first edit")
 	within(t, released2, time.Second, "Done of the second edit")
@@ -1796,6 +1805,62 @@ func TestGateParallelFirstEditsShareOneStart(t *testing.T) {
 
 	if got := callsIn(w.starts(), "root/b"); len(got) != 1 {
 		t.Errorf("starts in root/b = %+v, want one", got)
+	}
+}
+
+func TestGateWaiterCancelsTheStartItWouldOutrun(t *testing.T) {
+	t.Parallel()
+
+	blocked := newBlockedStart("root/b")
+	w := &recordingWriter{onStart: blocked.onStart}
+	slow := make(chan struct{})
+	place := func(ctx context.Context, path string) (git.Place, error) {
+		if strings.HasSuffix(path, "slow.go") {
+			select {
+			case <-slow:
+			case <-ctx.Done():
+				return git.Place{}, ctx.Err()
+			}
+		}
+
+		return git.Place{Root: rootOf(path)}, nil
+	}
+
+	r := startedTurn(t, w, place)
+	turn := w.starts()[0].turn
+
+	// The waiter's deadline comes long before the claimer's.
+	var answeredAfterStart atomic.Bool
+
+	waiter, releasedWaiter := editEvent(gateSession, "/b/slow.go", &blocked.returned, &answeredAfterStart)
+	waiter.Deadline = time.Now().Add(300 * time.Millisecond)
+	claimer, _ := editEvent(gateSession, "/b/fast.go", nil, nil)
+
+	r.in <- waiter
+
+	r.in <- claimer
+
+	within(t, blocked.entered, time.Second, "the claimer's start")
+	close(slow)
+
+	within(t, releasedWaiter, 5*time.Second, "Done of the waiter")
+
+	if !answeredAfterStart.Load() {
+		t.Error("the waiter was answered while the start in its worktree was still running")
+	}
+
+	waitUntil(t, "the start marker in root/b was not written", func() bool {
+		return len(callsIn(w.all(), "root/b")) == 2
+	})
+	drain(t, r)
+
+	want := []recordedStart{
+		{dir: "root/b", session: gateSession, turn: turn},
+		{dir: "root/b", session: gateSession, turn: turn, mark: true},
+	}
+
+	if got := callsIn(w.all(), "root/b"); !slices.Equal(got, want) {
+		t.Errorf("calls in root/b = %+v, want the cancelled start, then its start marker", got)
 	}
 }
 
