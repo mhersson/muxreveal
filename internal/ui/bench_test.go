@@ -212,8 +212,8 @@ func TestBench(t *testing.T) {
 			fmtMS(r.Frames.P50), fmtMS(r.Frames.P95), fmtMS(r.Frames.P99), fmtMS(r.Frames.Max), r.CPUPercent,
 			r.BytesFed)
 
-		fmt.Fprintf(&sb, "  per-component p99 (they do not sum to the frame p99): feed %s, update+view %s, present %s; GCs %d, GC pause %s\n",
-			fmtMS(r.Feed.P99), fmtMS(r.Render.P99), fmtMS(r.Present.P99), r.GCs, fmtMS(r.GCPause))
+		fmt.Fprintf(&sb, "  per-component p99 (they do not sum to the frame p99): feed %s, update+view %s, present %s; GCs %d, GC pause %s, highlight batches %d\n",
+			fmtMS(r.Feed.P99), fmtMS(r.Render.P99), fmtMS(r.Present.P99), r.GCs, fmtMS(r.GCPause), r.Batches)
 
 		fidelity(&sb, n, all, paths, r.PaneSizes, start, length, stagger)
 

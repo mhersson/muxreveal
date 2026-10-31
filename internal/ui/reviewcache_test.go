@@ -22,7 +22,7 @@ func TestDrawerIdleUpdatesDoNoWork(t *testing.T) {
 	layouts, scans := a.drawer.layouts, a.drawer.scans
 
 	for range 3 {
-		a.Update(drawerPaintMsg{})
+		a.Update(struct{}{})
 		a.Update(tea.WindowSizeMsg{Width: 200, Height: 52})
 	}
 

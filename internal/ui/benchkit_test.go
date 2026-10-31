@@ -454,6 +454,14 @@ func TestBenchKitServesReviewAnswers(t *testing.T) {
 	if on.Fallbacks != 0 {
 		t.Errorf("the compositor drew the drawer in %d frames, want the splice", on.Fallbacks)
 	}
+
+	if off.Batches != 0 {
+		t.Errorf("without the drawer: %d highlight batches, want 0", off.Batches)
+	}
+
+	if on.Batches == 0 || on.Answers != on.Batches {
+		t.Errorf("highlight batches = %d, answers = %d; want some, and every batch started answered", on.Batches, on.Answers)
+	}
 }
 
 func TestBenchAppOpensTheRail(t *testing.T) {
@@ -536,5 +544,54 @@ func TestBenchAppFillsTheCards(t *testing.T) {
 	// Without the rail no card is drawn, so none is filled.
 	if got := len(build(false).prs.panes); got != 0 {
 		t.Errorf("the bench without the rail resolved %d panes' repositories, want none", got)
+	}
+}
+
+func TestHLRunnerStartsOneBatchAndStopsWithTheApp(t *testing.T) {
+	t.Parallel()
+
+	app, _, err := newBenchApp(benchConfig{Panes: 1, Width: 240, Height: 64, Review: true}, &fakeClock{t: time.Unix(1_000_000, 0)})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	t.Cleanup(func() { _ = app.Close(context.Background()) })
+
+	app.drawerAfterUpdate()
+
+	// The command sees the ended context and answers nil; the drawer keeps its job.
+	app.cancel()
+
+	r := newHLRunner(app)
+	r.start()
+	r.start()
+
+	if app.drawer.hlJob == nil || r.batches != 1 {
+		t.Fatalf("job %v, batches %d; want a job and one batch from two starts", app.drawer.hlJob != nil, r.batches)
+	}
+
+	if n := r.settle(); n != 0 || r.answers != 0 {
+		t.Errorf("settle fed %d answers after the app ended, want none", n)
+	}
+
+	done := make(chan struct{})
+
+	go func() {
+		defer close(done)
+
+		r.settle()
+		r.start()
+		r.settle()
+		r.deliver()
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the runner blocked after the app ended")
+	}
+
+	if r.batches != 1 {
+		t.Errorf("batches = %d after the app ended, want the one", r.batches)
 	}
 }

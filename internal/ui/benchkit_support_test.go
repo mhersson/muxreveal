@@ -187,6 +187,85 @@ type benchResult struct {
 	Fallbacks             int // frames whose drawer the compositor drew because the splice declined
 	GCs                   uint32
 	GCPause               time.Duration
+	Batches               int // drawer highlight batches started
+	Answers               int // their answers fed to the app, the final settle's included
+}
+
+// hlRunner runs the drawer's highlight batches on their own goroutine, as
+// Bubble Tea runs a command, and feeds their answers back to the app.
+type hlRunner struct {
+	app     *App
+	started *hlJob
+	done    chan tea.Msg // holds the one running batch's answer, so its send never blocks
+	batches int
+	answers int
+	closed  bool // a nil answer came: the app's context ended, so nothing starts or waits again
+}
+
+func newHLRunner(app *App) *hlRunner {
+	return &hlRunner{app: app, done: make(chan tea.Msg, 1)}
+}
+
+// start runs the batch the drawer waits on, if the runner has not started it.
+// Call it after every Update.
+func (r *hlRunner) start() {
+	j := r.app.drawer.hlJob
+	if r.closed || j == nil || j == r.started {
+		return
+	}
+
+	r.started = j
+	r.batches++
+
+	ctx, hl := r.app.ctx, &r.app.drawer.hl
+
+	go func() { r.done <- j.run(ctx, hl) }()
+}
+
+// deliver feeds an answer that has arrived to the app without blocking, then
+// starts the next batch. It returns 1 for an answer fed, else 0.
+func (r *hlRunner) deliver() int {
+	if r.closed {
+		return 0
+	}
+
+	select {
+	case msg := <-r.done:
+		return r.feed(msg)
+	default:
+		return 0
+	}
+}
+
+// settle feeds answers, waiting for each, until no batch waits or an answer is
+// nil (the app's context ended). It returns how many it fed.
+func (r *hlRunner) settle() int {
+	n := 0
+
+	for r.start(); !r.closed && r.app.drawer.hlJob != nil && r.app.drawer.hlJob == r.started; {
+		k := r.feed(<-r.done)
+		if k == 0 {
+			break
+		}
+
+		n += k
+	}
+
+	return n
+}
+
+func (r *hlRunner) feed(msg tea.Msg) int {
+	if msg == nil {
+		r.closed = true
+
+		return 0
+	}
+
+	r.app.Update(msg)
+	r.answers++
+	r.start()
+
+	return 1
 }
 
 // replayFeed walks one pane's records; they are sorted by At.
@@ -593,6 +672,9 @@ func runBench(cfg benchConfig) (benchResult, error) {
 		_ = app.Close(ctx)
 	}()
 
+	hl := newHLRunner(app)
+	hl.start()
+
 	feeds := make([]*replayFeed, cfg.Panes)
 	res := benchResult{Panes: cfg.Panes, Width: cfg.Width, Height: cfg.Height}
 	tab := app.store.State().Tab().ID
@@ -609,6 +691,7 @@ func runBench(cfg benchConfig) (benchResult, error) {
 	armed := map[core.PaneID]time.Time{}
 	send := func(id core.PaneID, msg tea.Msg) {
 		app.Update(msg)
+		hl.start()
 
 		if p := app.panes[id]; p != nil && p.holdArmed {
 			if _, ok := armed[id]; !ok {
@@ -626,6 +709,8 @@ func runBench(cfg benchConfig) (benchResult, error) {
 	if cfg.Selection {
 		selectWholePane(app, ids[0])
 	}
+
+	hl.settle()
 
 	pr := newPresenter(cfg.Width, cfg.Height)
 	last := app.View().Content
@@ -675,7 +760,7 @@ func runBench(cfg benchConfig) (benchResult, error) {
 		total += feedD
 
 		t = time.Now()
-		updates := 0
+		updates := hl.deliver()
 
 		for i, id := range ids {
 			if fed[i] {
@@ -701,6 +786,7 @@ func runBench(cfg benchConfig) (benchResult, error) {
 
 		if answer != nil {
 			app.Update(*answer)
+			hl.start()
 
 			res.Reviews++
 			updates++
@@ -710,6 +796,7 @@ func runBench(cfg benchConfig) (benchResult, error) {
 		if cfg.Review {
 			if v := app.drawer.views[tab]; v != nil && !v.flashUntil.IsZero() && !now.Before(v.flashUntil) {
 				app.Update(reviewFlashMsg{tab: tab})
+				hl.start()
 
 				updates++
 			}
@@ -749,7 +836,9 @@ func runBench(cfg benchConfig) (benchResult, error) {
 	}
 
 	runtime.ReadMemStats(&mem1)
+	hl.settle()
 
+	res.Batches, res.Answers = hl.batches, hl.answers
 	res.GCs, res.GCPause = mem1.NumGC-mem0.NumGC, time.Duration(mem1.PauseTotalNs-mem0.PauseTotalNs)
 	res.Fallbacks = app.drawer.fallbacks
 	res.Frames, res.Feed, res.Render, res.Present = frames.summary(), feedS.summary(), renderS.summary(), presentS.summary()

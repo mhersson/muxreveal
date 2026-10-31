@@ -25,7 +25,7 @@ func TestDrawerIdleFramesReuseTheirLines(t *testing.T) {
 	renders := a.drawer.renders
 
 	for range 3 {
-		a.Update(drawerPaintMsg{})
+		a.Update(struct{}{})
 		a.Update(tea.WindowSizeMsg{Width: 200, Height: 52})
 		a.View()
 	}
@@ -134,12 +134,14 @@ func TestDrawerLinesFollowTheirInputs(t *testing.T) {
 		{name: "a flash ends", scene: func(s *reviewScene) {
 			s.tune = func(t *testing.T, a *App, v *reviewView) { flashRow(t, v, "review.toggle") }
 		}, change: func(t *testing.T, a *App, v *reviewView) { advanceClock(a, 600*time.Millisecond) }, differs: true},
-		{name: "a highlight pass adds spans", scene: small, setup: func(t *testing.T, a *App, v *reviewView) {
+		{name: "a highlight answer adds spans", scene: small, setup: func(t *testing.T, a *App, v *reviewView) {
 			v.gen++
 			v.rebuild(v.split)
 		}, change: func(t *testing.T, a *App, v *reviewView) {
-			if a.drawerAfterUpdate() != nil {
-				t.Fatal("the pass left chunks for later")
+			a.drawerAfterUpdate()
+
+			if !runHighlight(t, a) {
+				t.Fatal("no batch was started")
 			}
 		}, differs: true},
 		{name: "a live result arrives", scene: small, change: func(t *testing.T, a *App, v *reviewView) {
