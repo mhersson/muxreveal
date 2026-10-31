@@ -748,9 +748,10 @@ func (a *App) renameTab() tea.Cmd {
 }
 
 // Close closes every pane, concurrently, and waits for closes already running.
-// ctx bounds the wait, for the picture loader's workers too; when it ends first Close cancels the app context, and
-// exec's context watcher then SIGKILLs each remaining child's process group and
-// its terminal's foreground group, asynchronously after Close returns.
+// ctx bounds the wait, for the picture loader's workers too; when it ends first
+// Close cancels the app context, and exec's context watcher then SIGKILLs each
+// remaining child's process group and its terminal's foreground group,
+// asynchronously after Close returns.
 // It is safe to call twice, and only after the program stopped running Update.
 func (a *App) Close(ctx context.Context) error {
 	a.endSlide()

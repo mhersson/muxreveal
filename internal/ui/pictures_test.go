@@ -355,7 +355,6 @@ func TestPictureRetry(t *testing.T) {
 	}
 }
 
-// known sizes src and answers its info, returning the size it then has.
 func TestPictureEvictSkipsShown(t *testing.T) {
 	t.Parallel()
 
@@ -414,6 +413,7 @@ func TestPictureEvictSkipsShown(t *testing.T) {
 	}
 }
 
+// known sizes src and answers its info, returning the size it then has.
 func known(t *testing.T, p *pictures, jobs *recJobs, dp docPictures, src string, maxCols int) md.PictureSize {
 	t.Helper()
 
