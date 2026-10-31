@@ -28,7 +28,7 @@ func TestWrapLine(t *testing.T) {
 		{"ending tag wraps alone", "", lineUnits("abcdefghij", true), 10, [][2]int{{0, 10}, {10, 18}}},
 		{"ending tag skips the reach space", "", lineUnits("foo barxyz", true), 10, [][2]int{{0, 10}, {10, 18}}},
 		{"budget ellipsis wraps alone", "", lineUnits(strings.Repeat("a", 1500), false), 1024, [][2]int{{0, 1024}, {1024, 1025}}},
-		{"budget ellipsis skips the reach space", "", lineUnits(strings.Repeat("a", 1023)+" "+strings.Repeat("b", 100), false), 1024, [][2]int{{0, 1024}, {1024, 1025}}},
+		{"budget ellipsis skips the reach space", "", lineUnits(strings.Repeat("a", 1010)+" "+strings.Repeat("b", 100), false), 1024, [][2]int{{0, 1024}, {1024, 1025}}},
 		{"no width", "abc def", nil, 0, [][2]int{{0, 7}}},
 	}
 

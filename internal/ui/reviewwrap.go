@@ -33,7 +33,8 @@ func lineUnits(raw string, tagCR bool) []diffUnit {
 
 // wrapLine splits units into rows of at most width cells, ending a row after
 // a space within the last wrapReach cells when a unit does not fit. A unit
-// wider than width takes a row alone. It returns at least one part.
+// wider than width takes a row alone, as does a tail unit that does not fit.
+// It returns at least one part.
 func wrapLine(units []diffUnit, width int) []wrapPart {
 	if width <= 0 {
 		total := 0
@@ -67,6 +68,7 @@ func wrapLine(units []diffUnit, width int) []wrapPart {
 		case i == start.u0:
 			end = i + 1
 		case units[i].tail:
+			// The ending tag and budget ellipsis wrap alone, never at a reach space.
 		default:
 			for j := i - 1; j >= start.u0 && ends[j+1] > start.c0+width-wrapReach; j-- {
 				if units[j].text == " " {
