@@ -366,7 +366,7 @@ func TestMergeWithoutActions(t *testing.T) {
 		t.Errorf("box %v, notice %q, want no box and %q", r.merge, r.notice, noticePRsOff)
 	}
 
-	r.keys(keyEsc)
+	r.leader('h')
 	r.leader('g')
 	r.typed("m")
 

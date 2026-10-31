@@ -217,7 +217,7 @@ func TestLeaderHLeavesToTheNearestVisiblePane(t *testing.T) {
 			r.drawer.focused, r.store.State().Tab().Review != nil)
 	}
 
-	// esc leaves the same way.
+	// leader h leaves the same way.
 	r.leader('l')
 
 	if !r.drawer.focused {
@@ -232,7 +232,7 @@ func TestLeaderHLeavesToTheNearestVisiblePane(t *testing.T) {
 	}
 }
 
-func TestEscReturnsTheKeyboard(t *testing.T) {
+func TestEscStepsBackThenLeaderHReturnsTheKeyboard(t *testing.T) {
 	t.Parallel()
 	t.Run("search then drawer", func(t *testing.T) {
 		r := newKeysRig(t, keysRepo(t))
