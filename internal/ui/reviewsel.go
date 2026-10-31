@@ -342,9 +342,19 @@ func (v *reviewView) selectedText() string {
 	return textCopy(g.lines, s, g.cols)
 }
 
-// unitText is the text of the unit lineAt takes at row i.
+// unitText is the text of the unit lineAt takes at row i. A side by side row
+// gives its left side, or its right when the left is blank.
 func (v *reviewView) unitText(lay drawerLayout, i int) string {
-	g := v.gridIn(lay, 0)
+	side := 0
+
+	if i >= 0 && i < len(v.rows) && v.rows[i].kind == rowPair {
+		r := v.rows[i]
+		if left, _ := pairSides(v.res.Files[r.file].Hunks[r.hunk], r); left < 0 {
+			side = 1
+		}
+	}
+
+	g := v.gridIn(lay, side)
 	if g.rows == 0 {
 		return ""
 	}

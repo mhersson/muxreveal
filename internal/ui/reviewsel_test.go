@@ -1086,6 +1086,54 @@ func insertedRepo(t *testing.T) string {
 	return dir
 }
 
+// rightHalfOffset is how far into the right side's code a drag ends to be "in
+// the right half"; it is past the left side's columns, so the drag clamps.
+const rightHalfOffset = 3
+
+// removedRepo is a file with two lines removed between two kept ones, so the
+// two side by side rows of the removed lines have a blank right side.
+func removedRepo(t *testing.T) string {
+	t.Helper()
+
+	dir := newRepoDir(t)
+
+	write(t, filepath.Join(dir, "f.txt"), "alpha\nbravo\nold one\nold two\ncharlie\ndelta\n")
+	commitEverything(t, dir, "init")
+	write(t, filepath.Join(dir, "f.txt"), "alpha\nbravo\ncharlie\ndelta\n")
+
+	return dir
+}
+
+func TestSplitCopyKey(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name string
+		repo func(*testing.T) string
+		row  string
+		want string
+	}{
+		{"context row", insertedRepo, "bravo", "bravo"},
+		{"added-only row", insertedRepo, "new one", "new one"},
+		{"removed-only row", removedRepo, "old one", "old one"},
+	}
+
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			d := newSplitSel(t, tt.repo(t))
+			d.v.cursor = rowWith(t, d.v, tt.row)
+			d.drawerTake()
+			run(d.App, press(d.App, keyRune('y')))
+
+			if got := clipboardWrites(d.clip); !slices.Equal(got, []string{tt.want}) {
+				t.Errorf("y wrote %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestSplitSelectionSide(t *testing.T) {
 	t.Parallel()
 
@@ -1103,7 +1151,7 @@ func TestSplitSelectionSide(t *testing.T) {
 			name: "left code to the right half of the next row",
 			repo: keysRepo, row0: "line 3", row1: "line 4",
 			col0: func(l, _, _ int) int { return l },
-			col1: func(_, sep, r int) int { return r + 3 },
+			col1: func(_, _, r int) int { return r + rightHalfOffset },
 			want: "line 3\nline 4", wantSide: 0,
 		},
 		{
