@@ -277,8 +277,8 @@ func cellOf(t *testing.T, rows []string, needle string) (x, y int) {
 	t.Helper()
 
 	for y, row := range rows {
-		if i := strings.Index(row, needle); i >= 0 {
-			return lipgloss.Width(row[:i]), y
+		if before, _, ok := strings.Cut(row, needle); ok {
+			return lipgloss.Width(before), y
 		}
 	}
 

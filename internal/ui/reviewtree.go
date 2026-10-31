@@ -63,17 +63,19 @@ func treeItems(files []git.FileDiff) []treeItem {
 func appendTree(out []treeItem, n *treeNode, depth int) []treeItem {
 	for _, name := range slices.Sorted(maps.Keys(n.dirs)) {
 		c := n.dirs[name]
-		joined := c.name
+
+		var joined strings.Builder
+		joined.WriteString(c.name)
 
 		for len(c.files) == 0 && len(c.dirs) == 1 {
 			for _, only := range c.dirs {
 				c = only
 			}
 
-			joined += "/" + c.name
+			joined.WriteString("/" + c.name)
 		}
 
-		out = append(out, treeItem{dir: true, name: joined, depth: depth, file: -1})
+		out = append(out, treeItem{dir: true, name: joined.String(), depth: depth, file: -1})
 		out = appendTree(out, c, depth+1)
 	}
 

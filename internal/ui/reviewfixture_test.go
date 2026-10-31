@@ -415,5 +415,3 @@ func rowWith(t *testing.T, v *reviewView, sub string) int {
 
 	return 0
 }
-
-func ptr[T any](v T) *T { return &v }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"sync"
 	"time"
 )
@@ -357,13 +358,7 @@ func (p *Poller) poll(ctx context.Context, rp *repoPoller) (snap Snapshot, pendi
 func checksPending(c Checks) bool { return c.State == CheckPending || c.Done < c.Total }
 
 func containsInt(s []int, v int) bool {
-	for _, x := range s {
-		if x == v {
-			return true
-		}
-	}
-
-	return false
+	return slices.Contains(s, v)
 }
 
 // client returns the kept client for host, or builds one. The lock is not

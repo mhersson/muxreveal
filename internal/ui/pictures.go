@@ -394,12 +394,14 @@ func (p *pictures) done(msg pictureDoneMsg) tea.Cmd {
 	s.ready, s.pending = true, false
 	p.onTerm[j.id] = struct{}{}
 
-	out := msg.seq
+	var out strings.Builder
+	out.WriteString(msg.seq)
+
 	for _, id := range p.evict(s) {
-		out += kitty.Delete(id)
+		out.WriteString(kitty.Delete(id))
 	}
 
-	return tea.Raw(out)
+	return tea.Raw(out.String())
 }
 
 func (p *pictures) doneInfo(e *pictureEntry, msg pictureDoneMsg) tea.Cmd {

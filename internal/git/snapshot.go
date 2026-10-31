@@ -499,7 +499,7 @@ func parseTurnRef(ref string) (turnRecord, bool) {
 			return turnRecord{}, false
 		}
 
-		return turnRecord{Turn: Turn{N: n}, ref: ref, session: m[1], key: m[2], end: m[4] == "end"}, true
+		return turnRecord{N: n, ref: ref, session: m[1], key: m[2], end: m[4] == "end"}, true
 	}
 
 	if m := legacyRefRE.FindStringSubmatch(ref); m != nil {
@@ -508,7 +508,7 @@ func parseTurnRef(ref string) (turnRecord, bool) {
 			return turnRecord{}, false
 		}
 
-		return turnRecord{Turn: Turn{N: n}, ref: ref, session: m[1]}, true
+		return turnRecord{N: n, ref: ref, session: m[1]}, true
 	}
 
 	return turnRecord{}, false

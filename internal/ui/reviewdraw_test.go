@@ -82,7 +82,7 @@ func reviewCases() []reviewCase {
 		})},
 		{"search-prompt", with(func(s *reviewScene) {
 			s.tune = func(t *testing.T, a *App, v *reviewView) {
-				v.search = ptr("review")
+				v.search = new("review")
 				v.cursor = rowWith(t, v, "review.toggle")
 			}
 		})},
@@ -409,7 +409,7 @@ func rowWidthVariants() []rowWidthVariant {
 			openIn(t, a, core.SetReviewTree{Open: true})
 			a.drawer.tree = true
 		}},
-		{"search", func(t *testing.T, a *App, v *reviewView, long longLines) { v.search = ptr("e\x1bv") }},
+		{"search", func(t *testing.T, a *App, v *reviewView, long longLines) { v.search = new("e\x1bv") }},
 	}
 }
 
@@ -979,8 +979,8 @@ func TestDrawerGhostLinesCarryNoNumber(t *testing.T) {
 		var found []string
 
 		for _, l := range lines {
-			if i := strings.Index(l, code); i >= 0 {
-				found = append(found, l[:i])
+			if before, _, ok := strings.Cut(l, code); ok {
+				found = append(found, before)
 			}
 		}
 

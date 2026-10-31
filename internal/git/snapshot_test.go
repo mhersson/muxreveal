@@ -1042,7 +1042,7 @@ func legacyRefs(t *testing.T, dir string) []string {
 
 	var out []string
 
-	for _, ref := range strings.Fields(gitOut(t, dir, "for-each-ref", "--format=%(refname)", "refs/muxreveal")) {
+	for ref := range strings.FieldsSeq(gitOut(t, dir, "for-each-ref", "--format=%(refname)", "refs/muxreveal")) {
 		if legacyRefRE.MatchString(ref) {
 			out = append(out, ref)
 		}

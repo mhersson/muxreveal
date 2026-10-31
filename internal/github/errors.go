@@ -59,13 +59,11 @@ func classifyAt(err error, now, gqlReset time.Time) error {
 		return nil
 	}
 
-	var rl *RateLimitError
-	if errors.As(err, &rl) {
+	if _, ok := errors.AsType[*RateLimitError](err); ok {
 		return err
 	}
 
-	var he *api.HTTPError
-	if errors.As(err, &he) {
+	if he, ok := errors.AsType[*api.HTTPError](err); ok {
 		if reset, ok := httpRateLimitReset(he, now); ok {
 			return &RateLimitError{Reset: reset, cause: err}
 		}
@@ -73,8 +71,7 @@ func classifyAt(err error, now, gqlReset time.Time) error {
 		return err
 	}
 
-	var ge *api.GraphQLError
-	if errors.As(err, &ge) {
+	if ge, ok := errors.AsType[*api.GraphQLError](err); ok {
 		for _, item := range ge.Errors {
 			if item.Type == "RATE_LIMITED" {
 				reset := gqlReset

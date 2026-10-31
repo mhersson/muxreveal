@@ -98,17 +98,13 @@ func TestClassify(t *testing.T) {
 				t.Error("errors.Is ErrRateLimited for a non-rate-limit")
 			}
 
-			var he *api.HTTPError
-
-			var ge *api.GraphQLError
-
 			switch tc.err.(type) { //nolint:errorlint // the table holds bare API errors
 			case *api.HTTPError:
-				if !errors.As(got, &he) {
+				if _, ok := errors.AsType[*api.HTTPError](got); !ok {
 					t.Error("original *api.HTTPError lost")
 				}
 			case *api.GraphQLError:
-				if !errors.As(got, &ge) {
+				if _, ok := errors.AsType[*api.GraphQLError](got); !ok {
 					t.Error("original *api.GraphQLError lost")
 				}
 			}

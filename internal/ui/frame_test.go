@@ -225,10 +225,10 @@ func modelFrameCases() []struct {
 		build func(t *testing.T, th string, icons bool) *App
 	}{
 		{"agent-model", func(t *testing.T, th string, icons bool) *App {
-			return started(t, th, icons, 40, func(a *App) { agent(t, a, "p1", core.AgentWorking, "Opus 5.5", pct(62)) })
+			return started(t, th, icons, 40, func(a *App) { agent(t, a, "p1", core.AgentWorking, "Opus 5.5", new(62)) })
 		}},
 		{"agent-model-hot", func(t *testing.T, th string, icons bool) *App {
-			return started(t, th, icons, 40, func(a *App) { agent(t, a, "p1", core.AgentBlocked, "Opus 5.5", pct(95)) })
+			return started(t, th, icons, 40, func(a *App) { agent(t, a, "p1", core.AgentBlocked, "Opus 5.5", new(95)) })
 		}},
 		{"agent-model-only", func(t *testing.T, th string, icons bool) *App {
 			return started(t, th, icons, 40, func(a *App) { agent(t, a, "p1", core.AgentIdle, "Opus 5.5", nil) })
@@ -236,21 +236,21 @@ func modelFrameCases() []struct {
 		{"zoomed-model", func(t *testing.T, th string, icons bool) *App {
 			return started(t, th, icons, 40, func(a *App) {
 				openIn(t, a, core.OpenPane{Kind: core.KindShell, Cwd: "/home/u/other", Split: core.SplitVertical})
-				agent(t, a, "p2", core.AgentWorking, "Opus 5.5", pct(78))
+				agent(t, a, "p2", core.AgentWorking, "Opus 5.5", new(78))
 				openIn(t, a, core.ToggleZoom{})
 			})
 		}},
 		{"zoomed-model-wide", func(t *testing.T, th string, icons bool) *App {
 			return started(t, th, icons, 50, func(a *App) {
 				openIn(t, a, core.OpenPane{Kind: core.KindShell, Cwd: "/home/u/other", Split: core.SplitVertical})
-				agent(t, a, "p2", core.AgentWorking, "Opus 5.5", pct(78))
+				agent(t, a, "p2", core.AgentWorking, "Opus 5.5", new(78))
 				openIn(t, a, core.ToggleZoom{})
 			})
 		}},
 		{"split-model-dropped", func(t *testing.T, th string, icons bool) *App {
 			return started(t, th, icons, 40, func(a *App) {
 				openIn(t, a, core.OpenPane{Kind: core.KindShell, Cwd: "/home/u/other", Split: core.SplitVertical})
-				agent(t, a, "p2", core.AgentWorking, "Opus 5.5", pct(62))
+				agent(t, a, "p2", core.AgentWorking, "Opus 5.5", new(62))
 			})
 		}},
 	}

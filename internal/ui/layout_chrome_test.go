@@ -229,12 +229,12 @@ func TestPreselectTagColour(t *testing.T) {
 	vt := lineVT(t, row, a.width)
 	plain := ansi.Strip(row)
 
-	i := strings.Index(plain, "next")
-	if i < 0 {
+	before, _, ok := strings.Cut(plain, "next")
+	if !ok {
 		t.Fatalf("row has no next tag: %q", plain)
 	}
 
-	x := ansi.StringWidth(plain[:i])
+	x := ansi.StringWidth(before)
 
 	assertColours(t, vt, x, 0, "n", ui.Accent, ui.Bg, true)
 }
@@ -479,11 +479,11 @@ func layoutTrayCases() []layoutTrayCase {
 		{"wide", 110, nil},
 		{"narrow", 58, nil},
 		{"layout-gone", 42, nil},
-		{"pr-wide", 110, ptr(prInfo("OPEN", checksRunning))},
-		{"pr-failed", 110, ptr(prInfo("OPEN", checksFailing))},
-		{"pr-no-load", 70, ptr(prInfo("OPEN", checksPassed))},
-		{"pr-gone", 48, ptr(prInfo("OPEN", checksRunning))},
-		{"pr-layout-gone", 36, ptr(prInfo("OPEN", checksRunning))},
+		{"pr-wide", 110, new(prInfo("OPEN", checksRunning))},
+		{"pr-failed", 110, new(prInfo("OPEN", checksFailing))},
+		{"pr-no-load", 70, new(prInfo("OPEN", checksPassed))},
+		{"pr-gone", 48, new(prInfo("OPEN", checksRunning))},
+		{"pr-layout-gone", 36, new(prInfo("OPEN", checksRunning))},
 	}
 
 	var cases []layoutTrayCase

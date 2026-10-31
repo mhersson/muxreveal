@@ -278,16 +278,12 @@ func TestSendParallel(t *testing.T) {
 	errs := make(chan error, 2)
 
 	for _, name := range []string{"a", "b"} {
-		wg.Add(1)
-
-		go func() {
-			defer wg.Done()
-
+		wg.Go(func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 			defer cancel()
 
 			errs <- Send(ctx, s.path, Event{Pane: "p", Name: name})
-		}()
+		})
 	}
 
 	wg.Wait()

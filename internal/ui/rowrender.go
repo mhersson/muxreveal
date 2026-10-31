@@ -33,7 +33,7 @@ func renderCells(at func(x int) *uv.Cell, w int, hl []spanPaint) string {
 		cells int
 	)
 
-	for x := 0; x < w; x++ {
+	for x := range w {
 		c := at(x)
 		if c == nil {
 			c = &uv.Cell{Content: " ", Width: 1}

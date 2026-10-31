@@ -703,8 +703,8 @@ func TestConvDocLineTextShiftsPieces(t *testing.T) {
 	}
 
 	plain := lay.Plain()[line]
-	if i := strings.Index(plain, "Tab"); utf8.RuneCountInString(plain[:i]) != 4 {
-		t.Errorf("the comment is drawn at cell %d, want 4", utf8.RuneCountInString(plain[:i]))
+	if before, _, _ := strings.Cut(plain, "Tab"); utf8.RuneCountInString(before) != 4 {
+		t.Errorf("the comment is drawn at cell %d, want 4", utf8.RuneCountInString(before))
 	}
 }
 

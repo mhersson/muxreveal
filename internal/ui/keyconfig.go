@@ -241,8 +241,8 @@ func insertAt(bindings []binding, added []bool, nb binding) int {
 		return i
 	}
 
-	for i := len(bindings) - 1; i >= 0; i-- {
-		if bindings[i].group == nb.group {
+	for i, binding := range slices.Backward(bindings) {
+		if binding.group == nb.group {
 			return i + 1
 		}
 	}

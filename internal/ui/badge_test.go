@@ -337,7 +337,7 @@ func TestFrameModelTag(t *testing.T) {
 	t.Parallel()
 	t.Run("left of the badge", func(t *testing.T) {
 		for _, icons := range []bool{true, false} {
-			a := modelApp(t, 50, "Opus 5.5", pct(62), icons)
+			a := modelApp(t, 50, "Opus 5.5", new(62), icons)
 
 			if row, want := topRow(a), " Opus 5.5 62% ─ ⠋ working ─╮"; !strings.HasSuffix(row, want) {
 				t.Errorf("icons=%v: top border = %q, want it to end with %q", icons, row, want)
@@ -363,7 +363,7 @@ func TestFrameModelTag(t *testing.T) {
 	})
 
 	t.Run("without a badge", func(t *testing.T) {
-		a := modelApp(t, 50, "Opus 5.5", pct(62), true)
+		a := modelApp(t, 50, "Opus 5.5", new(62), true)
 		openIn(t, a, core.SetAgentState{ID: "p1", State: core.AgentUnknown})
 
 		if row, want := topRow(a), " Opus 5.5 62% ─╮"; !strings.HasSuffix(row, want) {
@@ -449,7 +449,7 @@ func TestFrameModelTag(t *testing.T) {
 
 	t.Run("no model shows nothing", func(t *testing.T) {
 		for name, a := range map[string]*App{
-			"a meter without a model": modelApp(t, 50, "", pct(62), true),
+			"a meter without a model": modelApp(t, 50, "", new(62), true),
 			"no status":               badgeApp(t, 50, core.AgentWorking, true),
 		} {
 			if row := topRow(a); strings.Contains(row, "%") || strings.Contains(row, "Opus") || !strings.HasSuffix(row, " ⠋ working ─╮") {
@@ -487,7 +487,7 @@ func TestFrameModelTagColours(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(strconv.Itoa(tt.pct), func(t *testing.T) {
-			a := modelApp(t, 50, "Opus 5.5", pct(tt.pct), true)
+			a := modelApp(t, 50, "Opus 5.5", new(tt.pct), true)
 			vt := viewVT(t, a)
 			row := topRow(a)
 

@@ -395,7 +395,7 @@ func hunkTail(rc github.ReviewComment, hl func(string, []string) [][]diffview.Sp
 
 	oldN, newN := 0, 0
 
-	for _, l := range strings.Split(strings.TrimSuffix(rc.Hunk, "\n"), "\n") {
+	for l := range strings.SplitSeq(strings.TrimSuffix(rc.Hunk, "\n"), "\n") {
 		if m := hunkHead.FindStringSubmatch(l); m != nil {
 			oldN, _ = strconv.Atoi(m[1])
 			newN, _ = strconv.Atoi(m[2])

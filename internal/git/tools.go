@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"syscall"
 )
@@ -76,13 +77,7 @@ type detector struct {
 }
 
 func (d detector) has(name string) bool {
-	for _, n := range d.names {
-		if n == name {
-			return true
-		}
-	}
-
-	return false
+	return slices.Contains(d.names, name)
 }
 
 // match returns the first root entry whose name matches the glob pattern.
@@ -121,10 +116,8 @@ func hasLine(content, line string) bool {
 }
 
 func (d detector) jetbrains() (*Tool, error) {
-	for _, n := range d.dirs {
-		if n == ".idea" {
-			return &Tool{"JetBrains", ".idea", `mark ".worktrees" as excluded in the project structure`}, nil
-		}
+	if slices.Contains(d.dirs, ".idea") {
+		return &Tool{"JetBrains", ".idea", `mark ".worktrees" as excluded in the project structure`}, nil
 	}
 
 	return nil, nil

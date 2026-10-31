@@ -94,12 +94,12 @@ func (r *hookEditRig) changed(paths ...string) harness.Event {
 func (r *hookEditRig) levels(text string) []string {
 	var levels []string
 
-	for _, line := range strings.Split(r.log.String(), "\n") {
+	for line := range strings.SplitSeq(r.log.String(), "\n") {
 		if !strings.Contains(line, text) {
 			continue
 		}
 
-		for _, f := range strings.Fields(line) {
+		for f := range strings.FieldsSeq(line) {
 			if l, ok := strings.CutPrefix(f, "level="); ok {
 				levels = append(levels, l)
 			}

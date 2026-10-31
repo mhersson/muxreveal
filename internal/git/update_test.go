@@ -66,7 +66,7 @@ func listingCalls(t *testing.T, logPath string) (restricted, full int) {
 		return 0, 0
 	}
 
-	for _, line := range strings.Split(string(data), "\n") {
+	for line := range strings.SplitSeq(string(data), "\n") {
 		if !strings.Contains(line, " --raw ") {
 			continue
 		}
@@ -105,7 +105,7 @@ func TestUpdateTouchedFileEqualsFullDiff(t *testing.T) {
 		t.Errorf("hunk passes = %d, want 1", got)
 	}
 
-	for _, line := range strings.Split(string(data), "\n") {
+	for line := range strings.SplitSeq(string(data), "\n") {
 		if strings.Contains(line, " -U3 ") && (strings.Contains(line, "(literal)a.txt") || !strings.Contains(line, "(literal)b.txt")) {
 			t.Errorf("hunk pass is not limited to b.txt: %s", line)
 		}

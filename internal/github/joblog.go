@@ -303,7 +303,7 @@ func logEscape(b []byte, i int) (int, []byte, bool) {
 // applySGR applies the parameters of one SGR sequence to the colour and bold.
 func applySGR(params []byte, color int8, bold bool) (int8, bool) {
 	var nums []int
-	for _, p := range bytes.Split(params, []byte{';'}) {
+	for p := range bytes.SplitSeq(params, []byte{';'}) {
 		nums = append(nums, sgrNumber(p))
 	}
 

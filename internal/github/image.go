@@ -166,8 +166,7 @@ func (f *ImageFetcher) Fetch(ctx context.Context, rawURL, docHost string, limit 
 
 	resp, err := client.Do(req)
 	if err != nil {
-		var ue *url.Error
-		if errors.As(err, &ue) {
+		if ue, ok := errors.AsType[*url.Error](err); ok {
 			err = ue.Err // url.Error would print the URL, which may be signed
 		}
 

@@ -3,6 +3,7 @@ package core
 import (
 	"cmp"
 	"fmt"
+	"maps"
 	"math"
 	"path"
 	"reflect"
@@ -13,9 +14,7 @@ import (
 
 func agentState(panes map[PaneID]Pane, layout *Node, focus PaneID) State {
 	s := stateOf(layout, focus)
-	for id, p := range panes {
-		s.Panes[id] = p
-	}
+	maps.Copy(s.Panes, panes)
 
 	return s
 }

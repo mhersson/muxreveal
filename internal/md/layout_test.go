@@ -796,7 +796,7 @@ func TestNestedFoldsStopIndenting(t *testing.T) {
 	b.WriteString("deep\n\n" + strings.Repeat("</details>\n\n", n))
 
 	open := map[int]bool{}
-	for i := 0; i < n; i++ {
+	for i := range n {
 		open[i] = true
 	}
 

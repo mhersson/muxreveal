@@ -50,7 +50,7 @@ func (r *railApp) gitBatch(t *testing.T, id core.PaneID, dir string, b git.Batch
 	root := rootOf(t, dir)
 	r.watches.panes[id] = &paneWatch{want: root, root: root}
 
-	return r.deliver(r.onWatch(watchMsg{RootBatch: git.RootBatch{Root: root, Batch: b}}))
+	return r.deliver(r.onWatch(watchMsg{Root: root, Batch: b}))
 }
 
 func TestHeadProbeRunsWithTheRailClosed(t *testing.T) {

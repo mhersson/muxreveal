@@ -370,7 +370,7 @@ func (r *drawerRig) watching(t *testing.T, id core.PaneID, root string) {
 
 // batch hands the app a watcher batch as the set would.
 func (r *drawerRig) batch(root string, b git.Batch) tea.Cmd {
-	return r.onWatch(watchMsg{RootBatch: git.RootBatch{Root: root, Batch: b}})
+	return r.onWatch(watchMsg{Root: root, Batch: b})
 }
 
 func rootOf(t *testing.T, dir string) string {

@@ -532,13 +532,9 @@ func runAll(cmds ...tea.Cmd) <-chan tea.Msg {
 	var wg sync.WaitGroup
 
 	for _, c := range leaves {
-		wg.Add(1)
-
-		go func() {
-			defer wg.Done()
-
+		wg.Go(func() {
 			out <- c()
-		}()
+		})
 	}
 
 	go func() {

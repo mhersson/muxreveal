@@ -162,7 +162,7 @@ func sameOrigin(a, b *url.URL) bool {
 
 // nextLink returns the rel="next" target of a Link header, or "".
 func nextLink(header string) string {
-	for _, part := range strings.Split(header, ",") {
+	for part := range strings.SplitSeq(header, ",") {
 		target, params, ok := strings.Cut(part, ";")
 		if !ok {
 			continue
@@ -173,7 +173,7 @@ func nextLink(header string) string {
 			continue
 		}
 
-		for _, p := range strings.Split(params, ";") {
+		for p := range strings.SplitSeq(params, ";") {
 			if strings.ReplaceAll(strings.TrimSpace(p), " ", "") == `rel="next"` {
 				return target[1 : len(target)-1]
 			}

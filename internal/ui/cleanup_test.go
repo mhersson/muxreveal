@@ -54,7 +54,7 @@ func newCleanupRig(t *testing.T) *cleanupRig {
 	openIn(t, r.App, core.FocusPane{ID: r.shellID})
 
 	info := github.RepoInfo{DefaultBranch: "main", Methods: allMethods, DeleteBranchOnMerge: false}
-	r.run(r.step(prSnapshotMsg{Snapshot: github.Snapshot{Repo: prRepo, Info: info, PRs: []github.PR{prSeven()}}}))
+	r.run(r.step(prSnapshotMsg{Repo: prRepo, Info: info, PRs: []github.PR{prSeven()}}))
 	r.opened(t)
 	r.typed("p")
 	r.until(t, "PR mode", r.inPRMode(7))

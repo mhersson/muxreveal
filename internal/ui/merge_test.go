@@ -35,7 +35,7 @@ func inMergeDrawer(t *testing.T, info github.RepoInfo, tune func(*github.PR)) (*
 		info.DefaultBranch = "main"
 	}
 
-	r.run(r.step(prSnapshotMsg{Snapshot: github.Snapshot{Repo: prRepo, Info: info, PRs: []github.PR{pr}}}))
+	r.run(r.step(prSnapshotMsg{Repo: prRepo, Info: info, PRs: []github.PR{pr}}))
 	r.opened(t)
 	r.typed("p")
 	r.until(t, "PR mode", r.inPRMode(7))
@@ -519,9 +519,9 @@ func TestMergeTargetIsFrozen(t *testing.T) {
 	moved.HeadOID = strings.Repeat("e", 40)
 	moved.HeadBranch = "other"
 
-	r.run(r.step(prSnapshotMsg{Snapshot: github.Snapshot{
+	r.run(r.step(prSnapshotMsg{
 		Repo: prRepo, Info: github.RepoInfo{DefaultBranch: "main", Methods: []github.MergeMethod{github.Rebase}}, PRs: []github.PR{moved},
-	}}))
+	}))
 
 	r.keys(keyEnter)
 	r.until(t, "the merge", func() bool { return len(f.merged()) == 1 })
@@ -733,7 +733,7 @@ func TestMergeDeleteHintDropsWhole(t *testing.T) {
 
 			var row string
 
-			for _, l := range strings.Split(ansi.Strip(a.View().Content), "\n") {
+			for l := range strings.SplitSeq(ansi.Strip(a.View().Content), "\n") {
 				if strings.Contains(l, "after merging") || strings.Contains(l, "(the") {
 					row = l
 				}

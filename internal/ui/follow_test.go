@@ -560,8 +560,8 @@ func TestAlternatingEditsEndOnLatest(t *testing.T) {
 			t.Fatal("no load for a root the drawer left was in flight")
 		}
 
-		for i := len(r.parked) - 1; i >= 0; i-- {
-			r.feed(t, r.parked[i])
+		for _, v := range slices.Backward(r.parked) {
+			r.feed(t, v)
 		}
 
 		v := r.view()

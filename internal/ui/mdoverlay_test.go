@@ -3,6 +3,7 @@ package ui
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -28,9 +29,7 @@ func newMDOpenRig(t *testing.T, extra map[string]string, opts ...func(*Options))
 	t.Helper()
 
 	files := map[string]string{"docs/a.md": pageDoc + mdLinks}
-	for k, v := range extra {
-		files[k] = v
-	}
+	maps.Copy(files, extra)
 
 	return bareRig(t, pageRepo(t, files), opts...)
 }
@@ -715,8 +714,8 @@ func TestMDOverlayMouse(t *testing.T) {
 	var y, x0, x1 int
 
 	for row, line := range m.screen() {
-		if i := strings.Index(line, "beta gamma"); i >= 0 {
-			y, x0 = row, len([]rune(line[:i]))
+		if before, _, ok := strings.Cut(line, "beta gamma"); ok {
+			y, x0 = row, len([]rune(before))
 			x1 = x0 + len("beta gamma") - 1
 
 			break
@@ -1092,8 +1091,8 @@ func TestMDOverlayLive(t *testing.T) {
 		var y, x0, x1 int
 
 		for row, line := range m.screen() {
-			if i := strings.Index(line, "last words"); i >= 0 {
-				y, x0 = row, len([]rune(line[:i]))
+			if before, _, ok := strings.Cut(line, "last words"); ok {
+				y, x0 = row, len([]rune(before))
 				x1 = x0 + len("last") - 1
 
 				break

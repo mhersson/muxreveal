@@ -69,13 +69,13 @@ func assertToggle(t *testing.T, r *previewRig, scene, word string, shown bool) {
 
 	for y, l := range lines {
 		plain := ansi.Strip(l)
-		i := strings.Index(plain, "Write │ Preview")
+		before, _, ok := strings.Cut(plain, "Write │ Preview")
 
-		if i < 0 {
+		if !ok {
 			continue
 		}
 
-		x := ansi.StringWidth(plain[:i])
+		x := ansi.StringWidth(before)
 		if word == "Preview" {
 			x += ansi.StringWidth("Write │ ")
 		}

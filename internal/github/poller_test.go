@@ -493,8 +493,7 @@ func TestPollerRefreshWaitsOutRateLimit(t *testing.T) {
 
 	s := col.waitFor(5*time.Second, "rate limited snapshot", anySnap)
 
-	var rl *RateLimitError
-	if !errors.As(s.Err, &rl) {
+	if _, ok := errors.AsType[*RateLimitError](s.Err); !ok {
 		t.Fatalf("Err = %v, want a rate limit", s.Err)
 	}
 
@@ -743,7 +742,7 @@ func newUnpooledClient(t *testing.T, h http.Handler) *Client {
 func settledGoroutines() int {
 	prev := -1
 
-	for i := 0; i < 200; i++ {
+	for range 200 {
 		n := runtime.NumGoroutine()
 		if n == prev {
 			return n
@@ -843,7 +842,7 @@ func TestPollerCloseWithoutConsumer(t *testing.T) {
 
 	p.Set([]Watch{{Repo: repoA}, {Repo: repoB}})
 
-	for i := 0; i < 40; i++ {
+	for range 40 {
 		p.Refresh(repoA)
 		p.Refresh(repoB)
 		time.Sleep(2 * time.Millisecond)
@@ -876,7 +875,7 @@ func TestPollerCloseWithoutConsumer(t *testing.T) {
 func TestPollerRaceSetRefreshClose(t *testing.T) {
 	repos := []Repo{repoA, repoB, {Host: "github.com", Owner: "octo", Name: "c"}}
 
-	for round := 0; round < 20; round++ {
+	for range 20 {
 		p := NewPoller(PollerOptions{
 			Client: func(context.Context, string) (*Client, error) { return nil, ErrNoToken },
 			Fast:   time.Millisecond, Slow: time.Millisecond,
@@ -899,12 +898,8 @@ func TestPollerRaceSetRefreshClose(t *testing.T) {
 			stop    = make(chan struct{})
 		)
 
-		for g := 0; g < 4; g++ {
-			workers.Add(1)
-
-			go func() {
-				defer workers.Done()
-
+		for g := range 4 {
+			workers.Go(func() {
 				<-start
 
 				for i := 0; ; i++ {
@@ -923,7 +918,7 @@ func TestPollerRaceSetRefreshClose(t *testing.T) {
 						p.Set(nil)
 					}
 				}
-			}()
+			})
 		}
 
 		closeDone := make(chan struct{})

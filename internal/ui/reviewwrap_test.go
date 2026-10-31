@@ -814,7 +814,7 @@ func TestWrappedMatchAcrossRows(t *testing.T) {
 	t.Parallel()
 
 	text := dtext(70) // "1415" runs over the cut at cell 30
-	s := newDrawnScene(t, padded(0, " "+text), 100, 30, codeWidths{line: 30}, false, func(v *reviewView) { v.search = ptr("1415") })
+	s := newDrawnScene(t, padded(0, " "+text), 100, 30, codeWidths{line: 30}, false, func(v *reviewView) { v.search = new("1415") })
 	codeX := 1 + markW + 2*s.lay.gw + diffview.SignWidth
 	first, second := s.lines[s.find(t, text[:30])], s.lines[s.find(t, text[30:60])]
 

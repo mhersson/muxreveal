@@ -4,6 +4,7 @@ package github
 
 import (
 	"context"
+	"maps"
 	"net/http"
 	"os"
 	"reflect"
@@ -37,9 +38,7 @@ func (c *statusCounter) snapshot() map[int]int {
 	defer c.mu.Unlock()
 
 	out := make(map[int]int, len(c.counts))
-	for k, v := range c.counts {
-		out[k] = v
-	}
+	maps.Copy(out, c.counts)
 
 	return out
 }
