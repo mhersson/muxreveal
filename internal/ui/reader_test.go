@@ -2,7 +2,10 @@ package ui
 
 import (
 	"slices"
+	"strings"
 	"testing"
+
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/mhersson/muxreveal/internal/core"
 )
@@ -224,5 +227,40 @@ func TestDefaultOverlayKeys(t *testing.T) {
 
 	if !slices.Equal(tables.reader.binds, readerKeys) {
 		t.Errorf("reader keys = %v, want %v", tables.reader.binds, readerKeys)
+	}
+}
+
+func TestReaderHintsFollowBindings(t *testing.T) {
+	t.Parallel()
+
+	cfg := contextKeys("reader", "n", "reader.line.next", "p", "reader.line.prev", "q", "reader.close", "esc", "none")
+
+	for _, h := range readerHosts() {
+		t.Run(h.name, func(t *testing.T) {
+			t.Parallel()
+
+			a := h.open(t, 120, 40)
+			remapTables(t, a, cfg)
+
+			rows := strings.Split(ansi.Strip(a.View().Content), "\n")
+			border := slices.IndexFunc(rows, func(r string) bool { return strings.Contains(r, "╰─") && strings.HasSuffix(r, "─╯    │") })
+
+			if border < 1 {
+				t.Fatal("no bottom border")
+			}
+
+			row := rows[border-1]
+			for _, want := range []string{"n/p line", "q close"} {
+				if !strings.Contains(row, want) {
+					t.Errorf("hint row %q lacks %q", row, want)
+				}
+			}
+
+			for _, bad := range []string{"j/k", "esc close"} {
+				if strings.Contains(row, bad) {
+					t.Errorf("hint row %q holds %q", row, bad)
+				}
+			}
+		})
 	}
 }

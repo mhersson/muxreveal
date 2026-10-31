@@ -100,7 +100,23 @@ func (t keyTable) first(id string) (string, bool) {
 	return "", false
 }
 
+// keyMods splits key into its modifier prefix ("ctrl+alt+") and the rest, leaving
+// at least one character in base.
+func keyMods(key string) (mods, base string) {
+	base = key
+
+	for _, m := range []string{"ctrl+", "alt+", "shift+", "meta+", "hyper+", "super+"} {
+		if rest, ok := strings.CutPrefix(base, m); ok && rest != "" {
+			base = rest
+		}
+	}
+
+	return key[:len(key)-len(base)], base
+}
+
 // hint joins the first keys of the commands with "/"; it is "" when one has no key.
+// Keys that all carry the same modifiers share them (ctrl+d/u), and a key without
+// modifiers after one with them follows a comma (ctrl+d, u).
 func (t keyTable) hint(ids ...string) string {
 	keys := make([]string, len(ids))
 
@@ -113,7 +129,40 @@ func (t keyTable) hint(ids ...string) string {
 		keys[i] = k
 	}
 
-	return strings.Join(keys, "/")
+	shared := true
+	firstMods, _ := keyMods(keys[0])
+
+	for _, k := range keys {
+		if m, _ := keyMods(k); m == "" || m != firstMods {
+			shared = false
+		}
+	}
+
+	var b strings.Builder
+
+	prev := ""
+
+	for i, k := range keys {
+		mods, base := keyMods(k)
+
+		if i > 0 {
+			if prev != "" && mods == "" {
+				b.WriteString(", ")
+			} else {
+				b.WriteString("/")
+			}
+
+			if shared {
+				k = base
+			}
+		}
+
+		b.WriteString(k)
+
+		prev = mods
+	}
+
+	return b.String()
 }
 
 // resolveKeys lays the config over the leader keymap and the context tables.

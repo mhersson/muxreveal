@@ -606,7 +606,19 @@ func TestDefaultDrawerKeysUnchanged(t *testing.T) {
 func TestKeyTableHint(t *testing.T) {
 	t.Parallel()
 
-	tb := keyTable{binds: []reviewKey{{"j", "a"}, {"k", "b"}}}
+	tb := keyTable{binds: []reviewKey{
+		{"j", "a"},
+		{"k", "b"},
+		{"ctrl+d", "cd"},
+		{"ctrl+u", "cu"},
+		{"alt+j", "aj"},
+		{"alt+k", "ak"},
+		{"u", "u"},
+		{"ctrl+k", "ck"},
+		{"ctrl+alt+d", "cad"},
+		{"ctrl++", "cplus"},
+		{"ctrl+-", "cminus"},
+	}}
 
 	tests := []struct {
 		name string
@@ -616,6 +628,12 @@ func TestKeyTableHint(t *testing.T) {
 		{"two commands", []string{"a", "b"}, "j/k"},
 		{"one command", []string{"a"}, "j"},
 		{"one unbound", []string{"a", "missing"}, ""},
+		{"shared ctrl", []string{"cd", "cu"}, "ctrl+d/u"},
+		{"shared alt", []string{"aj", "ak"}, "alt+j/k"},
+		{"bare after mods", []string{"cd", "u"}, "ctrl+d, u"},
+		{"mods after bare", []string{"a", "ck"}, "j/ctrl+k"},
+		{"different mods", []string{"cad", "cu"}, "ctrl+alt+d/ctrl+u"},
+		{"plus and minus", []string{"cplus", "cminus"}, "ctrl++/-"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
