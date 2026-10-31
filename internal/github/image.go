@@ -82,7 +82,7 @@ func NewImageFetcher(o ImageOptions) *ImageFetcher {
 }
 
 // hostToken is host's token, or "" when there is none; a failed lookup counts
-// as none and is not retried.
+// as none and is not retried, unless ctx ended it.
 func (f *ImageFetcher) hostToken(ctx context.Context, host string) string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -93,6 +93,10 @@ func (f *ImageFetcher) hostToken(ctx context.Context, host string) string {
 
 	t, err := f.token(ctx, host)
 	if err != nil {
+		if ctx.Err() != nil {
+			return "" // a cancelled lookup says nothing about the host
+		}
+
 		t = ""
 	}
 

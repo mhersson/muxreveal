@@ -183,6 +183,45 @@ func TestFetchRedirect(t *testing.T) {
 		}
 	})
 
+	t.Run("to a subdomain", func(t *testing.T) {
+		t.Parallel()
+
+		r := newImgRig(t, "github.com", "assets.github.com")
+		r.handler["github.com"] = redirectTo("https://assets.github.com/x")
+
+		if _, err := r.fetcher().Fetch(t.Context(), "https://github.com/a.png", "github.com", imgLimit); err != nil {
+			t.Fatal(err)
+		}
+
+		if got := r.seen("assets.github.com"); len(got) != 1 || got[0].auth != "" {
+			t.Errorf("subdomain saw %+v", got)
+		}
+	})
+
+	t.Run("to another port", func(t *testing.T) {
+		t.Parallel()
+
+		r := newImgRig(t, "github.com")
+		r.handler["github.com"] = func(w http.ResponseWriter, q *http.Request) {
+			if q.URL.Path == "/a.png" {
+				http.Redirect(w, q, "https://github.com:8443/b.png", http.StatusFound)
+
+				return
+			}
+
+			_, _ = w.Write([]byte("png"))
+		}
+
+		if _, err := r.fetcher().Fetch(t.Context(), "https://github.com/a.png", "github.com", imgLimit); err != nil {
+			t.Fatal(err)
+		}
+
+		hits := r.seen("github.com")
+		if len(hits) != 2 || hits[0].auth == "" || hits[1].auth != "" {
+			t.Errorf("hits %+v", hits)
+		}
+	})
+
 	t.Run("same host", func(t *testing.T) {
 		t.Parallel()
 
@@ -339,6 +378,36 @@ func TestFetchLimits(t *testing.T) {
 
 func TestFetchTokenSafe(t *testing.T) {
 	t.Parallel()
+
+	t.Run("cancelled lookup is not cached", func(t *testing.T) {
+		t.Parallel()
+
+		r := newImgRig(t, "github.com")
+		f := NewImageFetcher(ImageOptions{
+			Transport: r.tr,
+			Token: func(ctx context.Context, _ string) (string, error) {
+				if err := ctx.Err(); err != nil {
+					return "", err
+				}
+
+				return imgToken, nil
+			},
+		})
+
+		ctx, cancel := context.WithCancel(t.Context())
+		cancel()
+
+		_, _ = f.Fetch(ctx, "https://github.com/a.png", "github.com", imgLimit)
+
+		if _, err := f.Fetch(t.Context(), "https://github.com/a.png", "github.com", imgLimit); err != nil {
+			t.Fatal(err)
+		}
+
+		hits := r.seen("github.com")
+		if len(hits) != 1 || hits[0].auth != "token "+imgToken {
+			t.Errorf("hits %+v", hits)
+		}
+	})
 
 	t.Run("server error", func(t *testing.T) {
 		t.Parallel()
