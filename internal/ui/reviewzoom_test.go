@@ -530,6 +530,23 @@ func TestUncoverFocusLeavesNoSlide(t *testing.T) {
 	}
 }
 
+func TestCloseDrawerDuringCloseSlideEndsIt(t *testing.T) {
+	t.Parallel()
+
+	r := zoomRig(t)
+	r.leader('d')
+
+	if !r.drawer.closing {
+		t.Fatal("setup: no close slide")
+	}
+
+	r.closeDrawer(false)
+
+	if r.drawer.closing || !r.drawer.slideFrom.IsZero() || r.drawer.resizeFrom != 0 {
+		t.Errorf("closing %v, slide from %v, resize from %v, want no slide state", r.drawer.closing, r.drawer.slideFrom, r.drawer.resizeFrom)
+	}
+}
+
 func TestReviewZoomClosingRailClick(t *testing.T) {
 	t.Parallel()
 

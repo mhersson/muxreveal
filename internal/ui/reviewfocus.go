@@ -187,9 +187,8 @@ func (a *App) closeDrawer(slide bool) tea.Cmd {
 		return a.startSlide(true)
 	}
 
-	if !a.drawer.closing {
-		a.drawer.slideFrom, a.drawer.resizeFrom = time.Time{}, 0 // an un-zoom slide dies with the drawer
-	}
+	// The drawer closes at once, so any slide, an un-zoom or a close, ends with it.
+	a.drawer.slideFrom, a.drawer.closing, a.drawer.resizeFrom = time.Time{}, false, 0
 
 	// The pages stay while the drawer slides out, so it does not change as it goes.
 	if v := a.drawer.views[a.store.State().Tab().ID]; v != nil {
