@@ -31,7 +31,13 @@ for s in '//go:build !bench' '//go:build benchmark'; do
 done
 
 list=$(mktemp "${TMPDIR:-/tmp}/scan-wall-clock.XXXXXX") || exit 1
-trap 'rm -f "$list"' EXIT
+probe=$(mktemp "${TMPDIR:-/tmp}/scan-wall-clock.XXXXXX") || { rm -f "$list"; exit 1; }
+trap 'rm -f "$list" "$probe"' EXIT
+
+# Prove the file pipeline finds a bound too: xargs and grep differ by platform.
+printf '%s\n' '_ = time.Since(start)' > "$probe" || exit 1
+found=$(printf '%s\0' "$probe" | xargs -0 grep -lE "$bound" /dev/null) || :
+[ "$found" = "$probe" ] || { echo "scan-wall-clock: the file pipeline cannot find a bound"; exit 1; }
 
 # From git, so a new file is caught before it is added; through a temp file,
 # so a failing git fails the scan. /dev/null keeps grep off stdin.
