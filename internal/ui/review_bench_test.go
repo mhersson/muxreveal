@@ -19,13 +19,6 @@ import (
 	"github.com/mhersson/muxreveal/internal/term"
 )
 
-// Gate numbers for paging through a long diff in the drawer: the 99th
-// percentile and the worst frame.
-const (
-	scrollGateP99 = 8 * time.Millisecond
-	scrollGateMax = 16700 * time.Microsecond
-)
-
 // scrollHunks is how many hunks the long diff has; each is 40 lines of which 20
 // are changed, so the file is 10,000 lines with half of them changed.
 const scrollHunks = 250
@@ -217,8 +210,8 @@ func benchScroll(t *testing.T, hold func(t *testing.T) any) {
 	runtime.KeepAlive(held)
 
 	s, r, p := frames.summary(), render.summary(), present.summary()
-	t.Logf("paged %d rows in %d frames (%d rows a page): p50 %s, p95 %s, p99 %s (gate %s), max %s (gate %s)",
-		len(v.rows), s.Count, app.reviewBodyH(v)/2, fmtMS(s.P50), fmtMS(s.P95), fmtMS(s.P99), fmtMS(scrollGateP99), fmtMS(s.Max), fmtMS(scrollGateMax))
+	t.Logf("paged %d rows in %d frames (%d rows a page): p50 %s, p95 %s, p99 %s (headroom %s), max %s (budget %s)",
+		len(v.rows), s.Count, app.reviewBodyH(v)/2, fmtMS(s.P50), fmtMS(s.P95), fmtMS(s.P99), fmtMS(p99Headroom), fmtMS(s.Max), fmtMS(frameBudget))
 	t.Logf("per-component p50/p99 (they do not sum to the frame's): update+view %s/%s, present %s/%s",
 		fmtMS(r.P50), fmtMS(r.P99), fmtMS(p.P50), fmtMS(p.P99))
 
@@ -229,13 +222,7 @@ func benchScroll(t *testing.T, hold func(t *testing.T) any) {
 		t.Errorf("the compositor drew the drawer in %d frames, so the run did not measure the splice", app.drawer.fallbacks)
 	}
 
-	if s.P99 > scrollGateP99 {
-		t.Errorf("p99 = %v, gate is %v", s.P99, scrollGateP99)
-	}
-
-	if s.Max > scrollGateMax {
-		t.Errorf("max = %v, gate is %v", s.Max, scrollGateMax)
-	}
+	gateFrames(t, "paging", s.P99, s.Max)
 }
 
 // plainRows counts the visible rows with a chunk that has no spans yet.

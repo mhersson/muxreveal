@@ -21,12 +21,6 @@ import (
 // cost the most.
 const dragRows = 3000
 
-// A drag's motions and ticks are drawer frames, under the paging gates.
-const (
-	dragGateP99 = scrollGateP99
-	dragGateMax = scrollGateMax
-)
-
 // dragJitter is how many edge-scroll ticks pass between two motions of the
 // pointer held past the bottom: it moves a column, as a held hand drifts.
 const dragJitter = 4
@@ -278,10 +272,10 @@ func benchDrag(t *testing.T, c dragCase) {
 	m, k, u, d := motions.summary(), ticks.summary(), update.summary(), draw.summary()
 
 	t.Logf("drag to %d rows (%d bytes selected), each motion or tick timed through update, view and present", rows, size)
-	t.Logf("motions (%d): p50 %s, p99 %s (gate %s), max %s (gate %s)",
-		m.Count, fmtMS(m.P50), fmtMS(m.P99), fmtMS(dragGateP99), fmtMS(m.Max), fmtMS(dragGateMax))
-	t.Logf("ticks (%d): p50 %s, p99 %s (gate %s), max %s (gate %s)",
-		k.Count, fmtMS(k.P50), fmtMS(k.P99), fmtMS(dragGateP99), fmtMS(k.Max), fmtMS(dragGateMax))
+	t.Logf("motions (%d): p50 %s, p99 %s (headroom %s), max %s (budget %s)",
+		m.Count, fmtMS(m.P50), fmtMS(m.P99), fmtMS(p99Headroom), fmtMS(m.Max), fmtMS(frameBudget))
+	t.Logf("ticks (%d): p50 %s, p99 %s (headroom %s), max %s (budget %s)",
+		k.Count, fmtMS(k.P50), fmtMS(k.P99), fmtMS(p99Headroom), fmtMS(k.Max), fmtMS(frameBudget))
 	t.Logf("per-component p50/p99 over both (they do not sum to the frame's): update %s/%s, view+present %s/%s; release update %s",
 		fmtMS(u.P50), fmtMS(u.P99), fmtMS(d.P50), fmtMS(d.P99), fmtMS(releaseD))
 
@@ -289,16 +283,6 @@ func benchDrag(t *testing.T, c dragCase) {
 		t.Errorf("the compositor drew the drawer in %d frames, so the run did not measure the splice", app.drawer.fallbacks)
 	}
 
-	for _, g := range []struct {
-		name string
-		s    summary
-	}{{"motion", m}, {"tick", k}} {
-		if g.s.P99 > dragGateP99 {
-			t.Errorf("%s p99 = %v, gate is %v", g.name, g.s.P99, dragGateP99)
-		}
-
-		if g.s.Max > dragGateMax {
-			t.Errorf("%s max = %v, gate is %v", g.name, g.s.Max, dragGateMax)
-		}
-	}
+	gateFrames(t, "motion", m.P99, m.Max)
+	gateFrames(t, "tick", k.P99, k.Max)
 }

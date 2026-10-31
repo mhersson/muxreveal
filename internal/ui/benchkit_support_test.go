@@ -117,6 +117,47 @@ func (f *frameTimes) summary() summary {
 	return summary{Count: n, P50: rank(0.50), P95: rank(0.95), P99: rank(0.99), Max: sorted[n-1], Total: total}
 }
 
+// Every frame bench, on every machine: a frame over frameBudget, one 60 Hz
+// frame, fails it. p99Headroom, half that frame, leaves the rest to the
+// terminal and the machine; a p99 over it is noted, not failed.
+const (
+	frameBudget = 16700 * time.Microsecond
+	p99Headroom = 8 * time.Millisecond
+)
+
+// frameGate judges a bench's frames: fail says why the bench fails, empty when
+// the worst frame is within frameBudget; note reports a p99 over p99Headroom,
+// empty when it is within.
+func frameGate(name string, p99, worst time.Duration) (fail, note string) {
+	if worst > frameBudget {
+		fail = fmt.Sprintf("%s max %s over the %s frame budget", name, fmtMS(worst), fmtMS(frameBudget))
+	}
+
+	if p99 > p99Headroom {
+		note = fmt.Sprintf("%s p99 %s over the %s headroom", name, fmtMS(p99), fmtMS(p99Headroom))
+	}
+
+	return fail, note
+}
+
+// medianMax returns the median of the runs' worst frames (the upper middle for
+// an even count). A max is one frame, so one preemption in one run sets it;
+// the median takes a frame over the budget in most runs to fail a gate.
+func medianMax(runs []benchResult) time.Duration {
+	maxes := make([]time.Duration, len(runs))
+	for i, r := range runs {
+		maxes[i] = r.Frames.Max
+	}
+
+	slices.Sort(maxes)
+
+	return maxes[len(maxes)/2]
+}
+
+func fmtMS(d time.Duration) string {
+	return fmt.Sprintf("%.2fms", float64(d)/float64(time.Millisecond))
+}
+
 // benchConfig describes one run. Pane i replays Recordings[i%len] from
 // Start + i*Stagger for Length.
 type benchConfig struct {

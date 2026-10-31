@@ -168,6 +168,75 @@ func TestSummaryNearestRank(t *testing.T) {
 	}
 }
 
+// A frame bench fails only on a frame over the budget; a p99 over the
+// headroom is noted and never fails it.
+func TestFrameGate(t *testing.T) {
+	t.Parallel()
+
+	us := func(n int) time.Duration { return time.Duration(n) * time.Microsecond }
+
+	tests := []struct {
+		name       string
+		p99, worst time.Duration
+		fail, note bool
+	}{
+		{"both within", ms(6), ms(12), false, false},
+		{"p99 at the headroom, max at the budget", ms(8), us(16700), false, false},
+		{"p99 over the headroom", us(8001), ms(14), false, true},
+		{"p99 far over the headroom", us(13460), us(14400), false, true},
+		{"max over the budget", ms(7), us(16701), true, false},
+		{"both over", ms(13), ms(20), true, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			fail, note := frameGate("frames", tt.p99, tt.worst)
+			if (fail != "") != tt.fail || (note != "") != tt.note {
+				t.Fatalf("frameGate(p99 %v, max %v) = fail %q, note %q; want a failure %v, a note %v",
+					tt.p99, tt.worst, fail, note, tt.fail, tt.note)
+			}
+		})
+	}
+}
+
+// The six-pane bench gates the median of its runs' worst frames, so one run's
+// spike does not decide it.
+func TestMedianMax(t *testing.T) {
+	t.Parallel()
+
+	runs := func(maxes ...int) []benchResult {
+		rs := make([]benchResult, len(maxes))
+		for i, m := range maxes {
+			rs[i].Frames.Max = ms(m)
+		}
+
+		return rs
+	}
+
+	tests := []struct {
+		name string
+		runs []benchResult
+		want time.Duration
+	}{
+		{"one run", runs(14), ms(14)},
+		{"one spike of three", runs(12, 30, 13), ms(13)},
+		{"two over of three", runs(20, 13, 18), ms(18)},
+		{"even count takes the upper middle", runs(15, 11, 12, 14), ms(14)},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			if got := medianMax(tt.runs); got != tt.want {
+				t.Fatalf("medianMax = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestBenchSelectionHighlightsEveryRowOfOnePane(t *testing.T) {
 	t.Parallel()
 

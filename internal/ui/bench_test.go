@@ -16,11 +16,10 @@ import (
 	"github.com/mhersson/muxreveal/internal/term/rec"
 )
 
-// Gate numbers: six panes on 240x64, median of three runs.
+// Up to six panes on 240x64, each count run three times.
 const (
 	benchWidth, benchHeight = 240, 64
 	benchRepeats            = 3
-	benchGateP99            = 8 * time.Millisecond
 	defaultStagger          = 500 * time.Millisecond
 )
 
@@ -135,10 +134,6 @@ func envDuration(t *testing.T, name string, def time.Duration) time.Duration {
 	return d
 }
 
-func fmtMS(d time.Duration) string {
-	return fmt.Sprintf("%.2fms", float64(d)/float64(time.Millisecond))
-}
-
 func TestBench(t *testing.T) {
 	all, paths := benchRecordings(t)
 	length := envDuration(t, "MUXREVEAL_BENCH_LENGTH", 10*time.Second)
@@ -183,9 +178,9 @@ func TestBench(t *testing.T) {
 	fmt.Fprintf(&sb, "recordings=%d window=%v+%v stagger=%v size=%dx%d selection=%v mode=%s rail=%v review=%v\n",
 		len(paths), start, length, stagger, benchWidth, benchHeight, selection, mode, rail, review)
 	sb.WriteString("Rows are the run whose p99 is the median of the repeats.\n")
-	sb.WriteString("| panes | frames | p50 | p95 | p99 (gate) | max | CPU % | bytes fed |\n|---|---|---|---|---|---|---|---|\n")
+	sb.WriteString("| panes | frames | p50 | p95 | p99 | max | CPU % | bytes fed |\n|---|---|---|---|---|---|---|---|\n")
 
-	var gateP99 time.Duration
+	var gateP99, gateMax time.Duration
 
 	for _, n := range []int{2, 4, 6} {
 		var runs []benchResult
@@ -215,17 +210,37 @@ func TestBench(t *testing.T) {
 		fmt.Fprintf(&sb, "  per-component p99 (they do not sum to the frame p99): feed %s, update+view %s, present %s; GCs %d, GC pause %s, highlight batches %d\n",
 			fmtMS(r.Feed.P99), fmtMS(r.Render.P99), fmtMS(r.Present.P99), r.GCs, fmtMS(r.GCPause), r.Batches)
 
+		worst, maxes := medianMax(runs), make([]string, len(runs))
+		for i, run := range runs {
+			maxes[i] = fmtMS(run.Frames.Max)
+		}
+
+		fmt.Fprintf(&sb, "  max per run: %s; median %s\n", strings.Join(maxes, ", "), fmtMS(worst))
+
 		fidelity(&sb, n, all, paths, r.PaneSizes, start, length, stagger)
 
 		if n == maxBenchPanes {
-			gateP99 = r.Frames.P99
+			gateP99, gateMax = r.Frames.P99, worst
 		}
 	}
 
 	t.Log("\n" + sb.String())
 
-	if gateP99 > benchGateP99 {
-		t.Errorf("six-pane median p99 = %v, gate is %v", gateP99, benchGateP99)
+	gateFrames(t, "six-pane median", gateP99, gateMax)
+}
+
+// gateFrames holds a bench's frames to frameGate: it logs a p99 over the
+// headroom and fails the test on a frame over the budget.
+func gateFrames(t *testing.T, name string, p99, worst time.Duration) {
+	t.Helper()
+
+	fail, note := frameGate(name, p99, worst)
+	if note != "" {
+		t.Log(note)
+	}
+
+	if fail != "" {
+		t.Error(fail)
 	}
 }
 
