@@ -315,7 +315,7 @@ func (a *App) logLines(lk look, w, h int) (out []string, pics []picRow) {
 
 	if hints {
 		kt := a.keys.checks
-		out = append(out, row(a.logHints(st, kt, w-5, false)))
+		out = append(out, row(a.logHints(st, kt, w-5, false, p.loaded)))
 	}
 
 	return append(out, bottom), nil
@@ -371,7 +371,7 @@ func (a *App) summaryLines(lk look, w, h int, top string, row func(string) strin
 	}
 
 	if hints {
-		out = append(out, row(a.logHints(lk.styles, a.keys.checks, w-5, true)))
+		out = append(out, row(a.logHints(lk.styles, a.keys.checks, w-5, true, p.summary != nil)))
 	}
 
 	out = append(out, bottom)
@@ -393,11 +393,16 @@ func sideBorders(ui theme.UI, content string) string {
 }
 
 // logHints is the page's hint row in cw cells: the close pair always stays and
-// the others drop from the end before it does.
-func (a *App) logHints(st styles, kt keyTable, cw int, summary bool) string {
+// the others drop from the end before it does. Until the content has loaded only
+// the browser pair precedes it.
+func (a *App) logHints(st styles, kt keyTable, cw int, summary, loaded bool) string {
 	pairs := logPairs(kt)
 	if summary {
 		pairs = summaryPairs(kt)
+	}
+
+	if !loaded {
+		pairs = pairs[len(pairs)-1:] // the browser pair is last
 	}
 
 	lead := hintPairs(pairs)

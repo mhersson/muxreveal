@@ -136,3 +136,86 @@ func TestReadErrorKeepsWhatFits(t *testing.T) {
 		t.Errorf("the last kept row has no ellipsis:\n%s", text)
 	}
 }
+
+func TestPageHintsWaitForTheContent(t *testing.T) {
+	t.Parallel()
+
+	const full, short = "j/k line", "O browser    esc checks"
+
+	hintRow := func(t *testing.T, a *App) string {
+		t.Helper()
+
+		for _, l := range strings.Split(shownText(a), "\n") {
+			if strings.Contains(l, "esc checks") {
+				return l
+			}
+		}
+
+		t.Fatalf("no hint row:\n%s", shownText(a))
+
+		return ""
+	}
+
+	tests := []struct {
+		name string
+		page func(t *testing.T) *App
+	}{
+		{"log loading", func(t *testing.T) *App {
+			a, _, _ := ciApp(t, true, 160, 48)
+			press(a, keyRune('l'))
+
+			return a
+		}},
+		{"log failed", func(t *testing.T) *App {
+			a, reads, _ := ciApp(t, true, 160, 48)
+			reads.logErr = errors.New("boom")
+
+			ciDeliver(a, press(a, keyRune('l')))
+
+			return a
+		}},
+		{"summary loading", func(t *testing.T) *App {
+			a, _, _ := sumApp(t, true, 160, 48, codeqlSummary)
+			press(a, keyRune('l'))
+
+			return a
+		}},
+		{"summary failed", func(t *testing.T) *App {
+			a, reads, _ := sumApp(t, true, 160, 48, codeqlSummary)
+			reads.runErr = errors.New("boom")
+
+			ciDeliver(a, press(a, keyRune('l')))
+
+			return a
+		}},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			row := hintRow(t, tc.page(t))
+			if strings.Contains(row, full) || !strings.Contains(row, short) {
+				t.Errorf("hint row = %q, want only %q", row, short)
+			}
+		})
+	}
+
+	t.Run("loaded pages offer their keys", func(t *testing.T) {
+		t.Parallel()
+
+		a, _, _ := ciApp(t, true, 160, 48)
+		ciPage(t, a)
+
+		if row := hintRow(t, a); !strings.Contains(row, full) || !strings.Contains(row, "enter group") {
+			t.Errorf("log hint row = %q", row)
+		}
+
+		b, _, _ := sumApp(t, true, 160, 48, codeqlSummary)
+		sumPage(t, b)
+
+		if row := hintRow(t, b); !strings.Contains(row, full) {
+			t.Errorf("summary hint row = %q", row)
+		}
+	})
+}
