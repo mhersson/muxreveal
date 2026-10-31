@@ -1446,3 +1446,54 @@ func TestWindowResizeThroughTinyAndBack(t *testing.T) {
 		}
 	}
 }
+
+// blockFetcher holds every fetch until release closes, ignoring its context.
+type blockFetcher struct {
+	started chan struct{}
+	release chan struct{}
+}
+
+func (f *blockFetcher) Fetch(context.Context, string, string, int64) ([]byte, error) {
+	f.started <- struct{}{}
+	<-f.release
+
+	return nil, errors.New("released")
+}
+
+func TestCloseBoundsLoaderWait(t *testing.T) {
+	t.Parallel()
+
+	f := &blockFetcher{started: make(chan struct{}, 1), release: make(chan struct{})}
+
+	a, err := New(Options{
+		Logger:   testLogger(),
+		Store:    core.NewStore(core.InitialState(core.Config{Theme: "catppuccin-mocha"})),
+		Getenv:   testGetenv,
+		Cwd:      testCwd,
+		Pictures: f,
+	})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	t.Cleanup(func() { close(f.release) })
+
+	a.loader.add(pictureJob{key: pictureKey{src: "https://github.com/a.png"}})
+	<-f.started
+
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	res := make(chan error, 1)
+
+	go func() { res <- a.Close(ctx) }()
+
+	select {
+	case err := <-res:
+		if !errors.Is(err, context.DeadlineExceeded) {
+			t.Errorf("Close() error = %v, want the context's", err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("Close did not return while a loader worker was stuck")
+	}
+}
