@@ -176,6 +176,7 @@ func unsetEnv(t *testing.T, keys ...string) {
 func TestSnapshotRoundTrip(t *testing.T) {
 	dir := seedRepo(t)
 	ctx := context.Background()
+	before := time.Now().Truncate(time.Second)
 
 	var turns []Turn
 
@@ -205,6 +206,8 @@ func TestSnapshotRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	after := time.Now()
+
 	if len(got) != 3 {
 		t.Fatalf("Turns = %+v, want 3", got)
 	}
@@ -220,8 +223,8 @@ func TestSnapshotRoundTrip(t *testing.T) {
 			t.Errorf("turn %d parent = %s, want HEAD %s", g.N, p, head)
 		}
 
-		if d := time.Since(g.Time); d < 0 || d > time.Minute {
-			t.Errorf("turn %d time %v is not recent", g.N, g.Time)
+		if g.Time.Before(before) || g.Time.After(after) {
+			t.Errorf("turn %d time %v is outside the test's run, %v to %v", g.N, g.Time, before, after)
 		}
 	}
 

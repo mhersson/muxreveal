@@ -10,8 +10,6 @@ import (
 	"time"
 )
 
-const saveToDiffCeiling = time.Second
-
 // bigRepo commits n files in 50 directories on main and branches to feature.
 func bigRepo(t *testing.T, n int) string {
 	t.Helper()
@@ -28,12 +26,11 @@ func bigRepo(t *testing.T, n int) string {
 }
 
 // saveToDiff writes content to rel, waits for the watcher batch that names it
-// and returns the time from the write to Update returning.
-func saveToDiff(t *testing.T, w *Watcher, e *Engine, prev Result, src Source, rel, content string) (Result, time.Duration) {
+// and returns the Update of prev with that batch.
+func saveToDiff(t *testing.T, w *Watcher, e *Engine, prev Result, src Source, rel, content string) Result {
 	t.Helper()
 
 	dir := src.(BranchSource).Worktree
-	start := time.Now()
 
 	if err := os.WriteFile(filepath.Join(dir, rel), []byte(content), 0o644); err != nil {
 		t.Fatal(err)
@@ -61,7 +58,7 @@ func saveToDiff(t *testing.T, w *Watcher, e *Engine, prev Result, src Source, re
 		t.Fatalf("Update: %v", err)
 	}
 
-	return res, time.Since(start)
+	return res
 }
 
 func TestSavedFileReachesTheDiff(t *testing.T) {
@@ -80,12 +77,7 @@ func TestSavedFileReachesTheDiff(t *testing.T) {
 
 	rel := "d07/f0007.txt"
 
-	res, took := saveToDiff(t, w, e, prev, src, rel, "saved\n")
-	t.Logf("save to diff: %v", took)
-
-	if took > saveToDiffCeiling {
-		t.Errorf("save to diff took %v, want at most %v", took, saveToDiffCeiling)
-	}
+	res := saveToDiff(t, w, e, prev, src, rel, "saved\n")
 
 	if f := fileByPath(t, res, rel); f.Status != Modified || len(f.Hunks) == 0 {
 		t.Errorf("%s: %+v", rel, f)

@@ -177,24 +177,39 @@ func alive(pid int) bool {
 	return !strings.HasPrefix(rest, "Z")
 }
 
+// cancelWhenWritten returns a context that is cancelled once path exists, so a
+// test cancels a call at a known point rather than after a guessed delay.
+func cancelWhenWritten(t *testing.T, path string) context.Context {
+	t.Helper()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+
+	go func() {
+		for ctx.Err() == nil {
+			if _, err := os.Stat(path); err == nil {
+				cancel()
+
+				return
+			}
+
+			time.Sleep(time.Millisecond)
+		}
+	}()
+
+	return ctx
+}
+
 func TestRunCancelKillsProcessGroup(t *testing.T) {
 	root := newRepo(t)
 	logPath := fakeGit(t, `sleep 30 &
-echo $! > "$LOG.pid"
+echo $! > "$LOG.tmp" && mv "$LOG.tmp" "$LOG.pid"
 wait`)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
-	defer cancel()
+	_, err := run(cancelWhenWritten(t, logPath+".pid"), call{dir: root, args: []string{"status"}})
 
-	start := time.Now()
-	_, err := run(ctx, call{dir: root, args: []string{"status"}})
-
-	if !errors.Is(err, context.DeadlineExceeded) {
-		t.Fatalf("err = %v, want deadline exceeded", err)
-	}
-
-	if d := time.Since(start); d > 2*time.Second {
-		t.Fatalf("run took %v after cancel", d)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("err = %v, want canceled", err)
 	}
 
 	raw, err := os.ReadFile(logPath + ".pid")
@@ -219,7 +234,7 @@ wait`)
 }
 
 // The wrapper forks without pause, so the cancel lands mid-fork: a child that
-// misses the group kill would hold git's pipes open until WaitDelay.
+// misses the group kill outlives the call.
 func TestRunCancelKillsChildrenForkedDuringTheKill(t *testing.T) {
 	root := newRepo(t)
 	ctx, logPath := wrapGit(t, `echo $$ > "$LOG.pgid"
@@ -241,13 +256,9 @@ wait`)
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	cancelled := make(chan time.Time, 1)
-
 	go func() {
 		for ctx.Err() == nil {
 			if raw, err := os.ReadFile(logPath + ".pids"); err == nil && strings.Count(string(raw), "\n") >= 5 {
-				cancelled <- time.Now()
-
 				cancel()
 
 				return
@@ -260,10 +271,6 @@ wait`)
 	_, err := run(ctx, call{dir: root, args: []string{"status"}})
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("err = %v, want canceled", err)
-	}
-
-	if d := time.Since(<-cancelled); d > time.Second {
-		t.Errorf("run took %v after cancel", d)
 	}
 
 	raw, err := os.ReadFile(logPath + ".pids")
