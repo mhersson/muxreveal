@@ -3,6 +3,7 @@ package ui
 import (
 	"cmp"
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"path/filepath"
@@ -34,6 +35,9 @@ type planView struct {
 	root, base string
 	view       mdView
 
+	// sum is the hash of the bytes view.doc was parsed from.
+	sum [sha256.Size]byte
+
 	// pages are the markdown files followed from the plan, the last one shown;
 	// pageSeq is the serial of the newest page ask.
 	pages   []*planPage
@@ -57,6 +61,8 @@ type planReadMsg struct {
 	seq        int
 	reload     bool
 	again      bool // a read the operator asked for, not a rewrite
+	known, sum [sha256.Size]byte
+	same       bool // an asked read found the bytes of known
 	view       *planView
 	pane       core.PaneID
 	plan       core.Plan
@@ -125,6 +131,13 @@ func (a *App) readPlanCmd(msg planReadMsg) tea.Cmd {
 			return msg
 		}
 
+		msg.sum = sha256.Sum256(src)
+		if msg.again && msg.sum == msg.known {
+			msg.same = true
+
+			return msg
+		}
+
 		msg.doc = parseMarkdown(src, msg.base, tok)
 
 		return msg
@@ -158,7 +171,7 @@ func (a *App) onPlanRead(msg planReadMsg) {
 	a.endLeader()
 	a.plan = &planView{
 		pane: msg.pane, agent: printable(a.cardName(a.store.State(), msg.pane)),
-		plan: msg.plan, root: msg.root, base: msg.base, view: mdView{doc: msg.doc},
+		plan: msg.plan, root: msg.root, base: msg.base, view: mdView{doc: msg.doc}, sum: msg.sum,
 	}
 	a.sizePlan()
 
@@ -183,7 +196,7 @@ func (a *App) reloadPlan(p core.Plan, again bool) tea.Cmd {
 
 	a.pictures.retry(docPictures{reg: a.pictures, root: pv.root}, pv.view.layout())
 
-	return a.readPlanCmd(planReadMsg{seq: pv.reloadSeq, reload: true, again: again, view: pv, pane: pv.pane, plan: p, root: pv.root, base: pv.base})
+	return a.readPlanCmd(planReadMsg{seq: pv.reloadSeq, reload: true, again: again, known: pv.sum, view: pv, pane: pv.pane, plan: p, root: pv.root, base: pv.base})
 }
 
 // onPlanReload swaps in a rewritten plan, keeping the view's place. An answer
@@ -203,13 +216,17 @@ func (a *App) onPlanReload(msg planReadMsg) {
 		return
 	}
 
+	if msg.same {
+		return
+	}
+
 	msg.doc.withPictures(docPictures{reg: a.pictures, root: pv.root})
 
 	v := &pv.view
 	old := v.layout() // keeps the cursor in range, so top and cursor are read after it
 	v.top, v.cursor = keepPlace(old, msg.doc.layout(v.textWidth(), v.icons), v.top, v.cursor)
 	v.doc = msg.doc
-	pv.plan = msg.plan
+	pv.plan, pv.sum = msg.plan, msg.sum
 	pv.rewritten = pv.rewritten || !msg.again
 
 	a.sizePlan()

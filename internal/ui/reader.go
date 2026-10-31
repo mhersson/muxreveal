@@ -118,7 +118,7 @@ func (a *App) planEdit() tea.Cmd {
 	return cmd
 }
 
-// planRefresh reads the shown file again, quietly.
+// planRefresh reads the shown file again, quietly; a page or file keeps its own sum, so mdCheck skips an unchanged parse.
 func (a *App) planRefresh() tea.Cmd {
 	pv := a.plan
 	if len(pv.pages) > 0 || pv.file != nil {

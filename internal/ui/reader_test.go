@@ -517,6 +517,37 @@ func TestReaderRefresh(t *testing.T) {
 		}
 	})
 
+	for _, mode := range []bool{false, true} {
+		name := "unchanged plan file"
+		if mode {
+			name = "unchanged plan mode"
+		}
+
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			r := newPlanRig(t, 120, 40)
+
+			if mode {
+				path := filepath.Join(r.home, ".claude", "plans", "demo.md")
+				write(t, path, gammaDoc)
+				openIn(t, r.a, core.SetAgentCwd{ID: "p2", Cwd: r.wt})
+				r.notePlan(t, core.Plan{Path: path, Kind: core.PlanMode})
+			} else {
+				r.filePlan(t, "docs/p.md", gammaDoc)
+			}
+
+			r.open(t)
+
+			before := r.a.readerView().doc
+			pressRun(r.a, keyRune('r'))
+
+			if r.a.readerView().doc != before {
+				t.Error("r parsed an unchanged plan again")
+			}
+		})
+	}
+
 	t.Run("removed", func(t *testing.T) {
 		t.Parallel()
 

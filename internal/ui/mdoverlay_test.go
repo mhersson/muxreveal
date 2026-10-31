@@ -592,9 +592,7 @@ func TestMDOverlayKeys(t *testing.T) {
 
 	cursor := v.cursor
 
-	for _, k := range []tea.KeyPressMsg{keyRune('z')} {
-		m.press(k)
-	}
+	m.press(keyRune('z'))
 
 	m.press(keyLeader, keyRune('d'))
 
