@@ -287,6 +287,51 @@ func TestConversationKeys(t *testing.T) {
 		}
 	})
 
+	t.Run("] and [ show the item from its top", func(t *testing.T) {
+		t.Parallel()
+
+		a, _ := convApp(t, true, 80, 24)
+		convOpen(t, a)
+
+		d, v := a.conv.doc, &a.conv.view
+		n := len(v.layout().Lines)
+
+		first, ok := d.itemLine(0, 1)
+		if !ok {
+			t.Fatal("the conversation has no second item")
+		}
+
+		press(a, keyRune(']'))
+
+		if v.cursor != first || v.top != min(first, n-v.h) {
+			t.Fatalf("] left cursor %d top %d, want both at %d", v.cursor, v.top, first)
+		}
+
+		press(a, keyRune('['))
+
+		if v.cursor != 0 || v.top != 0 {
+			t.Errorf("[ left cursor %d top %d, want 0 and 0", v.cursor, v.top)
+		}
+
+		for {
+			before := v.cursor
+
+			press(a, keyRune(']'))
+
+			if v.cursor == before {
+				break
+			}
+
+			if v.top != min(v.cursor, n-v.h) {
+				t.Fatalf("] to %d left top %d, want %d", v.cursor, v.top, min(v.cursor, n-v.h))
+			}
+		}
+
+		if v.top > n-v.h {
+			t.Errorf("the top %d passes the last page %d", v.top, n-v.h)
+		}
+	})
+
 	t.Run("enter opens the bot row", func(t *testing.T) {
 		t.Parallel()
 

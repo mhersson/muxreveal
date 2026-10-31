@@ -457,7 +457,7 @@ func (a *App) convFind(q string, back bool) {
 }
 
 // convItem puts the cursor on the first line of the next (dir 1) or the current
-// item or the previous one (dir -1).
+// item or the previous one (dir -1) and scrolls it to the top of the view.
 func (a *App) convItem(dir int) {
 	v := a.conv
 	if v.doc == nil {
@@ -468,7 +468,7 @@ func (a *App) convItem(dir int) {
 	mv.layout()
 
 	if line, ok := v.doc.itemLine(mv.cursor, dir); ok {
-		mv.cursor = line
+		mv.cursor, mv.top = line, line
 		mv.clamp()
 	}
 }
