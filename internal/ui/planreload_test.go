@@ -416,3 +416,66 @@ func TestPlanReloadLate(t *testing.T) {
 		})
 	}
 }
+
+func TestPlanRewriteShownNotLatest(t *testing.T) {
+	t.Parallel()
+
+	t.Run("plan file", func(t *testing.T) {
+		t.Parallel()
+
+		r, path := openPlanRig(t, demoPlan(t))
+		other := filepath.Join(r.wt, "docs/superpowers/specs/q.md")
+
+		if msgs := r.rewrite(t, "p2", other, "# Q\n"); len(msgs) != 0 {
+			t.Fatalf("another plan raised %d reads", len(msgs))
+		}
+
+		msgs := r.rewrite(t, "p2", path, "# Title\n\nFresh words here.\n")
+		if len(msgs) != 1 || !msgs[0].reload {
+			t.Fatalf("the edit raised %+v, want one reload", msgs)
+		}
+
+		r.a.Update(msgs[0])
+
+		if !strings.Contains(strings.Join(r.a.plan.view.doc.text(), "\n"), "Fresh words here.") {
+			t.Error("the new text did not replace the old")
+		}
+
+		if got := r.a.store.State().Panes["p2"].Plan; got.Path != path || got.Unread {
+			t.Errorf("plan = %+v, want %s recorded read", got, path)
+		}
+	})
+
+	t.Run("plan mode", func(t *testing.T) {
+		t.Parallel()
+
+		r := newPlanRig(t, 120, 40)
+		r.a.plans = core.DefaultConfig().Plans
+		mode := filepath.Join(r.wt, "mode", "x.md")
+		write(t, mode, "# Mode\n")
+		r.notePlan(t, core.Plan{Path: mode, Kind: core.PlanMode})
+		chord(r.a, 'a')
+		r.open(t)
+
+		if r.a.plan == nil {
+			t.Fatal("the overlay did not open")
+		}
+
+		newer := r.filePlan(t, "docs/superpowers/plans/n.md", "# N\n")
+
+		msgs := r.rewrite(t, "p2", mode, "# Mode\n\nFresh words here.\n")
+		if len(msgs) != 1 || !msgs[0].reload {
+			t.Fatalf("the edit raised %+v, want one reload", msgs)
+		}
+
+		r.a.Update(msgs[0])
+
+		if !strings.Contains(strings.Join(r.a.plan.view.doc.text(), "\n"), "Fresh words here.") {
+			t.Error("the new text did not replace the old")
+		}
+
+		if got := r.a.store.State().Panes["p2"].Plan.Path; got != newer {
+			t.Errorf("latest plan = %s, want %s", got, newer)
+		}
+	})
+}

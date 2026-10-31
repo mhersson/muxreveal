@@ -43,8 +43,9 @@ func planFileRoot(paths []string, path string) (root string, ok bool) {
 }
 
 // notePlans records the plans an event reports, in event order so the last is
-// the latest. A path equal to the latest plan's own is a rewrite of it; one the
-// overlay shows is recorded read and reloaded, which the returned command does.
+// the latest. A path equal to the latest plan's own is a rewrite of it. An edit
+// of the plan the overlay shows reloads it, which the returned command does,
+// and is recorded read when it is recorded at all.
 func (a *App) notePlans(m core.Pane, id core.PaneID, ev harness.Event) tea.Cmd {
 	cur := m.Plan
 
@@ -52,7 +53,7 @@ func (a *App) notePlans(m core.Pane, id core.PaneID, ev harness.Event) tea.Cmd {
 
 	note := func(p core.Plan) {
 		p.At = a.clock.Now()
-		shown := p.Path == cur.Path && a.planShowing(id, p.Path)
+		shown := a.planShowing(id, p.Path)
 		p.Unread = !shown
 
 		if a.dispatch(core.NotePlan{ID: id, Plan: p}) != nil {
@@ -80,6 +81,11 @@ func (a *App) notePlans(m core.Pane, id core.PaneID, ev harness.Event) tea.Cmd {
 			note(core.Plan{Path: p, Root: cur.Root, Kind: cur.Kind})
 		} else if root, ok := planFileRoot(a.plans.Paths, p); ok {
 			note(core.Plan{Path: p, Root: root, Kind: core.PlanFile})
+		} else if a.planShowing(id, p) {
+			// The shown plan is no longer the latest, so the edit is not recorded.
+			shown := a.plan.plan
+			shown.At = a.clock.Now()
+			reloads = append(reloads, a.reloadPlan(shown))
 		}
 	}
 
