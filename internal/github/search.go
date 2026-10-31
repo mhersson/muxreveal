@@ -2,13 +2,14 @@ package github
 
 import (
 	"context"
+	"time"
 
 	graphql "github.com/cli/shurcooL-graphql"
 )
 
 const (
-	requestedSearch = "is:open is:pr review-requested:@me"
-	authoredSearch  = "is:open is:pr author:@me"
+	requestedSearch = "is:open is:pr archived:false review-requested:@me"
+	authoredSearch  = "is:open is:pr archived:false author:@me"
 )
 
 // SearchPR is a pull request found by a search, with the repository it is in.
@@ -43,12 +44,19 @@ type myPRsQuery struct {
 }
 
 // MyPRs searches the host for the open pull requests that ask for the
-// viewer's review and the ones the viewer opened, at most 100 of each.
-func (c *Client) MyPRs(ctx context.Context) (MyPRs, error) {
+// viewer's review and the ones the viewer opened, at most 100 of each, in
+// repositories that are not archived. A since that is not zero limits the
+// review requests to pull requests updated on or after its UTC date.
+func (c *Client) MyPRs(ctx context.Context, since time.Time) (MyPRs, error) {
 	var q myPRsQuery
 
+	requested := requestedSearch
+	if !since.IsZero() {
+		requested += " updated:>=" + since.UTC().Format(time.DateOnly)
+	}
+
 	vars := map[string]any{
-		"requested": graphql.String(requestedSearch),
+		"requested": graphql.String(requested),
 		"authored":  graphql.String(authoredSearch),
 	}
 	if err := c.query(ctx, "MyPRs", &q, vars); err != nil {

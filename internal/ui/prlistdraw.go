@@ -12,10 +12,10 @@ import (
 	"github.com/mhersson/muxreveal/internal/ui/theme"
 )
 
-// prListWidth is the list's width: the body less 40 cells, at least 60 where
-// the body allows it.
+// prListWidth is the list's width: the conversation box's (planBox), so a
+// conversation drawn over the list hides its columns.
 func prListWidth(width int) int {
-	return min(max(width-40, min(60, width-4)), width)
+	return min(planMaxBox, width-4)
 }
 
 // prListReview is the review column of a row: its words and colour.
@@ -380,7 +380,7 @@ func (a *App) prListNotes(tab prListTab, rows int) []string {
 	})
 
 	if rows == 0 && answered {
-		none := noticePRListNoneAsked
+		none := prListNoneAsked(a.pullRequests.ReviewRequestedDays)
 		if tab == prTabAll {
 			none = noticePRListNoneMine
 		}
@@ -389,6 +389,19 @@ func (a *App) prListNotes(tab prListTab, rows int) []string {
 	}
 
 	return notes
+}
+
+// prListNoneAsked is the empty Review requested tab's text; it names the age
+// limit when there is one, as RequestedSince reads the days.
+func prListNoneAsked(days int) string {
+	switch {
+	case days <= 0:
+		return noticePRListNoneAsked
+	case days == 1:
+		return "no open pull requests updated in the last 1 day ask for your review"
+	default:
+		return "no open pull requests updated in the last " + strconv.Itoa(days) + " days ask for your review"
+	}
 }
 
 // prListTabRow is the tab row cw cells wide: the tabs at the left, the shown

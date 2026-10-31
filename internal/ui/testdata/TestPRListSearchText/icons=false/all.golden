@@ -8,15 +8,15 @@
 │                                          ││                                                                          │
 │                                          ││                                                                          │
 │                                          ││                                                                          │
-│ Working ──────────╭─ Pull requests ──────────────────────────────────────────────────────────────╮                   │
-│                   │                                                                              │                   │
-│ ⠋ api             │   Agents 4   Review requested 3   All open 1          tab next tab  1-3 jump │                   │
-│   feat/a          │                                                                              │                   │
-│                   │  mhersson/muxreveal ───────────────────────────────────────────────────── 1  │                   │
-│                   │  ▎#24 The PR list tabs  branch-24  ci 1 failed  no review yet  @mhersson  1h │                   │
-│                   │                                                                              │                   │
-│ Idle ─────────────│  enter diff    i conversation    c checks    a approve    esc close          │                   │
-│                   ╰──────────────────────────────────────────────────────────────────────────────╯                   │
+│ Wor╭─ Pull requests ────────────────────────────────────────────────────────────────────────────────────────────╮    │
+│    │                                                                                                            │    │
+│ ⠋ a│   Agents 4   Review requested 3   All open 1                                        tab next tab  1-3 jump │    │
+│   f│                                                                                                            │    │
+│    │  mhersson/muxreveal ─────────────────────────────────────────────────────────────────────────────────── 1  │    │
+│    │  ▎#24 The PR list tabs  branch-24                                ci 1 failed  no review yet  @mhersson  1h │    │
+│    │                                                                                                            │    │
+│ Idl│  enter diff    i conversation    c checks    a approve    M merge    O browser    r refresh    esc close   │    │
+│    ╰────────────────────────────────────────────────────────────────────────────────────────────────────────────╯    │
 │   api                                 0s ││                                                                          │
 │   feat/a              #5 ci 5/5 approved ││                                                                          │
 │   waiting for a prompt                   ││                                                                          │

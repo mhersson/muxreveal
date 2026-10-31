@@ -8,14 +8,14 @@
 │                                          ││                                                                          │
 │                                          ││                                                                          │
 │                                          ││                                                                          │
-│ Working ──────────╭─  Pull requests ────────────────────────────────────────────────────────────╮                   │
-│                   │                                                                              │                   │
-│ ⠋ api             │   Agents 4   Review requested   All open              tab next tab  1-3 jump │                   │
-│    feat/a        │                                                                              │                   │
-│                   │  loading pull requests…                                                      │                   │
-│                   │                                                                              │                   │
-│                   │  enter diff    i conversation    c checks    a approve    esc close          │                   │
-│ Idle ─────────────╰──────────────────────────────────────────────────────────────────────────────╯                   │
+│ Wor╭─  Pull requests ──────────────────────────────────────────────────────────────────────────────────────────╮    │
+│    │                                                                                                            │    │
+│ ⠋ a│   Agents 4   Review requested   All open                                            tab next tab  1-3 jump │    │
+│   │                                                                                                            │    │
+│    │  loading pull requests…                                                                                    │    │
+│    │                                                                                                            │    │
+│    │  enter diff    i conversation    c checks    a approve    M merge    O browser    r refresh    esc close   │    │
+│ Idl╰────────────────────────────────────────────────────────────────────────────────────────────────────────────╯    │
 │                                          ││                                                                          │
 │ 󰗡 api                                 0s ││                                                                          │
 │    feat/a                   #5  5/5 󰔓 ││                                                                          │

@@ -174,6 +174,44 @@ func TestRootRejectsBadWorktreesConfig(t *testing.T) {
 	}
 }
 
+func TestRootRejectsBadPullRequestsConfig(t *testing.T) {
+	for _, content := range []string{
+		"[pull_requests]\nreview_requested_days = -1\n",
+		"[pull_requests]\nreview_requested_days = 3651\n",
+	} {
+		t.Run(strings.TrimSpace(content), func(t *testing.T) {
+			t.Setenv("HOME", shortDir(t))
+			t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+			t.Setenv("XDG_CACHE_HOME", t.TempDir())
+			stateHome := shortDir(t)
+			t.Setenv("XDG_STATE_HOME", stateHome)
+
+			path := filepath.Join(t.TempDir(), "config.toml")
+			if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+				t.Fatal(err)
+			}
+
+			cmd := newRootCmd()
+			cmd.SetArgs([]string{"--config", path})
+			cmd.SetOut(io.Discard)
+			cmd.SetErr(io.Discard)
+
+			ctx, cancel := context.WithCancel(t.Context())
+			cancel()
+
+			err := cmd.ExecuteContext(ctx)
+
+			if err == nil || !strings.Contains(err.Error(), path) || !strings.Contains(err.Error(), "pull_requests.review_requested_days") {
+				t.Fatalf("Execute() error = %v, want one naming %s and the pull_requests key", err, path)
+			}
+
+			if entries, _ := os.ReadDir(stateHome); len(entries) != 0 {
+				t.Errorf("state dir has %d entries, want none", len(entries))
+			}
+		})
+	}
+}
+
 func TestRootRejectsUnknownTheme(t *testing.T) {
 	t.Setenv("HOME", shortDir(t))
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())

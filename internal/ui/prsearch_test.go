@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -14,15 +15,17 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	"github.com/charmbracelet/x/exp/golden"
 
+	"github.com/mhersson/muxreveal/internal/core"
 	"github.com/mhersson/muxreveal/internal/github"
 )
 
 // fakeReads answers MyPRs per host and records the calls.
 type fakeReads struct {
-	mu    sync.Mutex
-	calls []string
-	mine  map[string]github.MyPRs
-	fail  map[string]error
+	mu     sync.Mutex
+	calls  []string
+	sinces []time.Time // each MyPRs call's since, in call order
+	mine   map[string]github.MyPRs
+	fail   map[string]error
 
 	logData  []byte // what JobLog returns
 	logCut   bool
@@ -105,17 +108,25 @@ func (f *fakeReads) logReads() []jobLogCall {
 	return slices.Clone(f.logCalls)
 }
 
-func (f *fakeReads) MyPRs(_ context.Context, host string) (github.MyPRs, error) {
+func (f *fakeReads) MyPRs(_ context.Context, host string, since time.Time) (github.MyPRs, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
 	f.calls = append(f.calls, host)
+	f.sinces = append(f.sinces, since)
 
 	if err := f.fail[host]; err != nil {
 		return github.MyPRs{}, err
 	}
 
 	return f.mine[host], nil
+}
+
+func (f *fakeReads) since() []time.Time {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	return slices.Clone(f.sinces)
 }
 
 func (f *fakeReads) called() []string {
@@ -405,6 +416,41 @@ func TestPRListSearchWhen(t *testing.T) {
 	}
 }
 
+// The Review requested search goes back the configured days from the app's
+// clock at each ask.
+func TestPRListSearchSince(t *testing.T) {
+	t.Parallel()
+
+	week := 7 * 24 * time.Hour
+
+	tests := []struct {
+		days int
+		want []time.Time
+	}{
+		{days: 0, want: []time.Time{{}, {}}},
+		{days: 7, want: []time.Time{t0.Add(-week), t0.Add(time.Hour - week)}},
+	}
+	for _, tt := range tests {
+		t.Run(strconv.Itoa(tt.days), func(t *testing.T) {
+			t.Parallel()
+
+			a, reads, _ := searchApp(t, listAgents(), 120, 40, nil, "github.com/acme/web")
+			clk := &fakeClock{t: t0}
+			a.clock, a.pullRequests = clk, core.PullRequestsConfig{ReviewRequestedDays: tt.days}
+
+			openList(a)
+			clk.Advance(time.Hour)
+
+			_, cmd := a.Update(prSearchTickMsg{open: a.search.open})
+			answered(a, cmd)
+
+			if got := reads.since(); !slices.EqualFunc(got, tt.want, time.Time.Equal) {
+				t.Errorf("since = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestPRListSearchStale(t *testing.T) {
 	t.Parallel()
 
@@ -511,23 +557,34 @@ func TestPRListSearchTexts(t *testing.T) {
 		}
 	})
 
-	t.Run("no rows", func(t *testing.T) {
-		t.Parallel()
+	// The empty Review requested tab names the age limit; All open has none.
+	for _, tt := range []struct {
+		days int
+		want string
+	}{
+		{days: 0, want: "no open pull requests ask for your review"},
+		{days: 1, want: "no open pull requests updated in the last 1 day ask for your review"},
+		{days: 7, want: "no open pull requests updated in the last 7 days ask for your review"},
+	} {
+		t.Run(fmt.Sprintf("no rows, %d days", tt.days), func(t *testing.T) {
+			t.Parallel()
 
-		a, _, _ := searchApp(t, listAgents(), 120, 40, nil, "github.com/acme/web")
-		openList(a)
-		typedList(a, "2")
+			a, _, _ := searchApp(t, listAgents(), 120, 40, nil, "github.com/acme/web")
+			a.pullRequests = core.PullRequestsConfig{ReviewRequestedDays: tt.days}
+			openList(a)
+			typedList(a, "2")
 
-		if text := ansi.Strip(a.View().Content); !strings.Contains(text, noticePRListNoneAsked) || !strings.Contains(text, " Review requested 0 ") {
-			t.Errorf("no empty text:\n%s", text)
-		}
+			if text := ansi.Strip(a.View().Content); !strings.Contains(text, tt.want) || !strings.Contains(text, " Review requested 0 ") {
+				t.Errorf("no empty text %q:\n%s", tt.want, text)
+			}
 
-		typedList(a, "3")
+			typedList(a, "3")
 
-		if text := ansi.Strip(a.View().Content); !strings.Contains(text, noticePRListNoneMine) {
-			t.Errorf("no empty text:\n%s", text)
-		}
-	})
+			if text := ansi.Strip(a.View().Content); !strings.Contains(text, noticePRListNoneMine) {
+				t.Errorf("no empty text:\n%s", text)
+			}
+		})
+	}
 
 	t.Run("a failed host", func(t *testing.T) {
 		t.Parallel()
@@ -672,11 +729,15 @@ func tabScenes(t *testing.T, icons bool) map[string]*App {
 	fail := map[string]error{"ghe.example.com": errors.New("HTTP 502 Bad Gateway")}
 	both := []string{"github.com/acme/web", "ghe.example.com/team/svc"}
 
+	// The empty tab under the default age limit.
+	none := tabScene(t, icons, 120, 40, prTabRequested, true, nil, nil, "github.com/acme/web")
+	none.pullRequests = core.DefaultConfig().PullRequests
+
 	return map[string]*App{
 		"requested":         tabScene(t, icons, 120, 40, prTabRequested, true, full, nil, "github.com/acme/web"),
 		"all":               tabScene(t, icons, 120, 40, prTabAll, true, full, nil, "github.com/acme/web"),
 		"requested-loading": tabScene(t, icons, 120, 40, prTabRequested, false, full, nil, "github.com/acme/web"),
-		"requested-none":    tabScene(t, icons, 120, 40, prTabRequested, true, nil, nil, "github.com/acme/web"),
+		"requested-none":    none,
 		"requested-failed":  tabScene(t, icons, 120, 40, prTabRequested, true, full, fail, both...),
 		"requested-80x24":   tabScene(t, icons, 80, 24, prTabRequested, true, full, nil, "github.com/acme/web"),
 	}

@@ -230,7 +230,7 @@ func (l meterLevel) colour(ui theme.UI) (fg theme.Hex, bold bool) {
 		return ui.Warning, false
 	}
 
-	return ui.Subtle, false
+	return ui.Meter, false
 }
 
 // cleanModel is a model's display name as the status line sent it, without

@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"sync"
+	"time"
 
 	"github.com/mhersson/muxreveal/internal/github"
 )
@@ -140,13 +141,13 @@ func (g ghActions) Merge(ctx context.Context, r github.Repo, pr github.PR, info 
 type ghReads struct{ clients *clientCache }
 
 // MyPRs searches the host for the viewer's open pull requests.
-func (g ghReads) MyPRs(ctx context.Context, host string) (github.MyPRs, error) {
+func (g ghReads) MyPRs(ctx context.Context, host string, since time.Time) (github.MyPRs, error) {
 	c, err := g.clients.client(ctx, host)
 	if err != nil {
 		return github.MyPRs{}, fmt.Errorf("client for %s: %w", host, err)
 	}
 
-	return c.MyPRs(ctx)
+	return c.MyPRs(ctx, since)
 }
 
 // JobLog reads the tail of an Actions job's log.

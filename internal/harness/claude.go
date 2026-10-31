@@ -369,6 +369,9 @@ func (Claude) ParseEvent(payload []byte) (Event, error) {
 		ev.ActionSet = true
 
 		ev.Start = p.SessionID != ""
+		// A missing or unknown source cannot tell a resume from a new conversation.
+		ev.NewConversation = p.Source == "clear" || p.Source == "startup"
+
 		if p.Source != "compact" {
 			ev.State = core.AgentIdle
 		}

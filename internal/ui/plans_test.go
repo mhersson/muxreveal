@@ -1,7 +1,9 @@
 package ui
 
 import (
+	"fmt"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -119,5 +121,95 @@ func TestHookNotesPlans(t *testing.T) {
 				t.Errorf("plan = %+v, want %+v", got, tt.want)
 			}
 		})
+	}
+}
+
+// sessionStart is the SessionStart hook of pane p2 for session; an empty
+// session is a payload without one.
+func sessionStart(session core.SessionID, newConversation bool) harness.Event {
+	return harness.Event{
+		Pane: "p2", Name: "SessionStart", Session: session, State: core.AgentIdle,
+		Start: session != "", NewConversation: newConversation,
+	}
+}
+
+func TestNewConversationDropsPlan(t *testing.T) {
+	t.Parallel()
+
+	plan := core.Plan{Path: "/home/u/.claude/plans/x.md", Kind: core.PlanMode, At: t0, Unread: true}
+
+	tests := []struct {
+		name string
+		ev   harness.Event
+		want core.Plan
+	}{
+		{"clear", sessionStart("s2", true), core.Plan{}},
+		{"resume", sessionStart("s1", false), plan},
+		{"fork", sessionStart("s2", false), plan},
+		{"no session", sessionStart("", true), plan},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			a, _, _ := agentApp(t)
+			hook(a, sessionStart("s1", false))
+			openIn(t, a, core.NotePlan{ID: "p2", Plan: plan})
+
+			var saved core.State
+
+			a.save = func(st core.State) { saved = st }
+
+			hook(a, tt.ev)
+
+			if got := a.store.State().Panes["p2"].Plan; got != tt.want {
+				t.Fatalf("plan = %+v, want %+v", got, tt.want)
+			}
+
+			if tt.want.Path != "" {
+				return
+			}
+
+			if p, ok := saved.Panes["p2"]; !ok || p.Plan != (core.Plan{}) {
+				t.Errorf("saved pane = %+v, %v; want it saved with no plan", p, ok)
+			}
+
+			press(a, keyLeader, keyRune('p'))
+
+			if want := fmt.Sprintf(noticeNoPlan, a.cardName(a.store.State(), "p2")); a.notice != want {
+				t.Errorf("notice = %q, want %q", a.notice, want)
+			}
+		})
+	}
+}
+
+// TestNewConversationKeepsOverlay: the open overlay keeps showing what it read
+// when a new conversation drops its plan.
+func TestNewConversationKeepsOverlay(t *testing.T) {
+	t.Parallel()
+
+	r, _ := openPlanRig(t, "# Keep the plan\n\nThe agent was cleared.\n")
+	shown := r.a.plan.plan
+
+	hook(r.a, sessionStart("s2", true))
+
+	if got := r.a.store.State().Panes["p2"].Plan; got != (core.Plan{}) {
+		t.Fatalf("plan = %+v, want none", got)
+	}
+
+	if r.a.plan == nil || r.a.plan.plan != shown {
+		t.Fatalf("overlay = %+v, want it open on %+v", r.a.plan, shown)
+	}
+
+	for _, want := range []string{"docs/superpowers/plans/p.md", "plan file · 4m", "Keep the plan", "The agent was cleared."} {
+		if !strings.Contains(r.shown(t), want) {
+			t.Errorf("the overlay no longer shows %q", want)
+		}
+	}
+
+	r.keys("esc")
+
+	if msgs := planMsgs(r.ask()); len(msgs) != 0 || r.a.plan != nil {
+		t.Errorf("leader p after the clear raised %d reads, overlay open %v", len(msgs), r.a.plan != nil)
 	}
 }

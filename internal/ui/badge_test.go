@@ -479,9 +479,10 @@ func TestFrameModelTagColours(t *testing.T) {
 		fg   theme.Hex
 		bold bool
 	}{
-		{62, ui.Subtle, false},
-		{75, ui.Warning, false},
-		{95, ui.Error, true},
+		{0, ui.Meter, false},
+		{69, ui.Meter, false},
+		{70, ui.Warning, false},
+		{90, ui.Error, true},
 	}
 
 	for _, tt := range tests {

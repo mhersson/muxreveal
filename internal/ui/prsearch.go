@@ -82,7 +82,8 @@ func (a *App) prSearchHosts() []string {
 }
 
 // prSearchCmd asks every host for the viewer's pull requests, each on its own
-// command, off the update loop and under the app's context.
+// command, off the update loop and under the app's context. The review
+// requests go back the configured days from now.
 func (a *App) prSearchCmd() tea.Cmd {
 	if a.reads == nil {
 		return nil
@@ -91,6 +92,7 @@ func (a *App) prSearchCmd() tea.Cmd {
 	a.search.seq++
 
 	seq, parent, reads := a.search.seq, a.ctx, a.reads
+	since := a.pullRequests.RequestedSince(a.clock.Now())
 
 	var cmds []tea.Cmd
 
@@ -99,7 +101,7 @@ func (a *App) prSearchCmd() tea.Cmd {
 			ctx, cancel := context.WithTimeout(parent, prSearchTimeout)
 			defer cancel()
 
-			mine, err := reads.MyPRs(ctx, host)
+			mine, err := reads.MyPRs(ctx, host, since)
 
 			return prSearchMsg{seq: seq, host: host, mine: mine, err: err}
 		})
