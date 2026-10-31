@@ -731,7 +731,7 @@ func TestComposeRemappedKeys(t *testing.T) {
 	}
 
 	hints := r.text()
-	for _, want := range []string{"ctrl+o create", "ctrl+q cancel", "write"} {
+	for _, want := range []string{"ctrl+o create", "ctrl+q cancel", "ctrl+k write"} {
 		if !strings.Contains(hints, want) {
 			t.Errorf("the hints lack %q:\n%s", want, hints)
 		}

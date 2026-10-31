@@ -35,7 +35,7 @@ type planView struct {
 	root, base string
 	view       mdView
 
-	// sum is the hash of the bytes view.doc was parsed from.
+	// sum is the hash of pv.plan's bytes, whichever page view.doc shows.
 	sum [sha256.Size]byte
 
 	// pages are the markdown files followed from the plan, the last one shown;

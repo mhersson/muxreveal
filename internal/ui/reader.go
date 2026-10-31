@@ -88,6 +88,10 @@ func (a *App) readerKey(key string) tea.Cmd {
 		return nil
 	}
 
+	return a.readerRun(id, key)
+}
+
+func (a *App) readerRun(id, key string) tea.Cmd {
 	if id != "reader.copy" && a.readerActs(id) {
 		a.clearTextSel()
 	}
@@ -98,7 +102,7 @@ func (a *App) readerKey(key string) tea.Cmd {
 // readerClose answers a key in a box too small to draw: only reader.close runs.
 func (a *App) readerClose(key string) tea.Cmd {
 	if id, ok := a.keys.reader.lookup(key); ok && id == "reader.close" {
-		return a.readerKey(key)
+		return a.readerRun(id, key)
 	}
 
 	return nil

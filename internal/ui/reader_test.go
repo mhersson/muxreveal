@@ -255,13 +255,13 @@ func TestReaderHintsFollowBindings(t *testing.T) {
 			remapTables(t, a, cfg)
 
 			rows := strings.Split(ansi.Strip(a.View().Content), "\n")
-			border := slices.IndexFunc(rows, func(r string) bool { return strings.Contains(r, "╰─") && strings.HasSuffix(r, "─╯    │") })
+			hint := slices.IndexFunc(rows, func(r string) bool { return strings.Contains(r, "n/p line") })
 
-			if border < 1 {
-				t.Fatal("no bottom border")
+			if hint < 0 || hint+1 >= len(rows) || !strings.Contains(rows[hint+1], "╰─") {
+				t.Fatal("no hint row above the bottom border")
 			}
 
-			row := rows[border-1]
+			row := rows[hint]
 			for _, want := range []string{"n/p line", "q close"} {
 				if !strings.Contains(row, want) {
 					t.Errorf("hint row %q lacks %q", row, want)

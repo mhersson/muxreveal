@@ -142,7 +142,7 @@ func (a *App) convLines(lk look, w, h int) (out []string, pics []picRow) {
 // pairs that do not fit drop from the end, and close always stays. A pair with no key
 // is left out.
 func convHints(st styles, kt keyTable, cw int) string {
-	var lead, closing [][2]string
+	var lead [][2]string
 
 	for _, d := range []struct {
 		label string
@@ -159,8 +159,8 @@ func convHints(st styles, kt keyTable, cw int) string {
 		}
 	}
 
-	closeKey, _ := kt.first("reader.close")
-	closing = append(closing, [2]string{closeKey, "close"})
+	closeKey := kt.hint("reader.close")
+	closing := [][2]string{{closeKey, "close"}}
 
 	const gap = 4
 

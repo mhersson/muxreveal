@@ -95,6 +95,13 @@ func (t keyTable) lookup(key string) (string, bool) {
 	return "", false
 }
 
+// has reports whether key is bound in the table.
+func (t keyTable) has(key string) bool {
+	_, ok := t.lookup(key)
+
+	return ok
+}
+
 // first is the first key bound to a command.
 func (t keyTable) first(id string) (string, bool) {
 	if i := slices.IndexFunc(t.binds, func(b reviewKey) bool { return b.command == id }); i >= 0 {
@@ -234,8 +241,10 @@ func resolveKeys(cfg core.KeysConfig, reg *registry) (keymap, keyTables, error) 
 			}
 		}
 
-		if _, ok := t.first(c.close); c.close != "" && !ok {
-			return keymap{}, keyTables{}, fmt.Errorf("keys.%s: nothing is bound to %s, so the %s could not close", c.context, c.close, c.closeNoun)
+		if c.close != "" {
+			if _, ok := t.first(c.close); !ok {
+				return keymap{}, keyTables{}, fmt.Errorf("keys.%s: nothing is bound to %s, so the %s could not close", c.context, c.close, c.closeNoun)
+			}
 		}
 
 		*c.into = t
@@ -393,11 +402,4 @@ func (k keymap) preselectPrefix(key string) bool {
 	}
 
 	return found
-}
-
-// has reports whether key is bound in the table.
-func (t keyTable) has(key string) bool {
-	_, ok := t.lookup(key)
-
-	return ok
 }
