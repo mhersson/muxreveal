@@ -275,6 +275,12 @@ func checksCommands() []command {
 	return scoped("checks", []command{
 		cmd("checks.next", "next check or line", func(a *App, v *checksView, rows []checkRow) tea.Cmd {
 			if p := v.page; p != nil {
+				if p.sum {
+					p.moveSummary(1)
+
+					return nil
+				}
+
 				p.move(p.cursor+1, a.logPageRows())
 
 				return nil
@@ -286,6 +292,12 @@ func checksCommands() []command {
 		}),
 		cmd("checks.prev", "previous check or line", func(a *App, v *checksView, _ []checkRow) tea.Cmd {
 			if p := v.page; p != nil {
+				if p.sum {
+					p.moveSummary(-1)
+
+					return nil
+				}
+
 				p.move(p.cursor-1, a.logPageRows())
 
 				return nil
@@ -322,11 +334,53 @@ func checksCommands() []command {
 
 			return a.openURL(c.url)
 		}),
-		page("checks.fold", "open or close the group", func(p *checkPage, _ int) { p.fold() }),
-		page("checks.page.down", "half a page down", func(p *checkPage, n int) { p.move(p.cursor+max(n/2, 1), n) }),
-		page("checks.page.up", "half a page up", func(p *checkPage, n int) { p.move(p.cursor-max(n/2, 1), n) }),
-		page("checks.top", "first line", func(p *checkPage, n int) { p.move(0, n) }),
-		page("checks.bottom", "last line", func(p *checkPage, n int) { p.move(len(p.rows())-1, n) }),
+		cmd("checks.fold", "open or close the group, or open the link", func(a *App, v *checksView, _ []checkRow) tea.Cmd {
+			switch p := v.page; {
+			case p == nil:
+			case p.sum:
+				return a.summaryEnter(p)
+			default:
+				p.fold()
+			}
+
+			return nil
+		}),
+		page("checks.page.down", "half a page down", func(p *checkPage, n int) {
+			if p.sum {
+				p.pageSummary(1)
+
+				return
+			}
+
+			p.move(p.cursor+max(n/2, 1), n)
+		}),
+		page("checks.page.up", "half a page up", func(p *checkPage, n int) {
+			if p.sum {
+				p.pageSummary(-1)
+
+				return
+			}
+
+			p.move(p.cursor-max(n/2, 1), n)
+		}),
+		page("checks.top", "first line", func(p *checkPage, n int) {
+			if p.sum {
+				p.endSummary(false)
+
+				return
+			}
+
+			p.move(0, n)
+		}),
+		page("checks.bottom", "last line", func(p *checkPage, n int) {
+			if p.sum {
+				p.endSummary(true)
+
+				return
+			}
+
+			p.move(len(p.rows())-1, n)
+		}),
 		page("checks.error.next", "next error", func(p *checkPage, n int) {
 			if i, ok := p.errorRow(1); ok {
 				p.move(i, n)
@@ -339,6 +393,10 @@ func checksCommands() []command {
 		}),
 		cmd("checks.refresh", "refresh", func(a *App, v *checksView, _ []checkRow) tea.Cmd {
 			if v.page != nil {
+				if v.page.sum {
+					return a.readCheckRun(v)
+				}
+
 				return a.readJobLog(v)
 			}
 

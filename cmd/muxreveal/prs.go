@@ -159,6 +159,16 @@ func (g ghReads) JobLog(ctx context.Context, r github.Repo, jobID int64) (data [
 	return c.JobLog(ctx, r, jobID)
 }
 
+// CheckRun reads the output of a check run that is not an Actions job.
+func (g ghReads) CheckRun(ctx context.Context, r github.Repo, id int64) (github.CheckRunOutput, error) {
+	c, err := g.clients.client(ctx, r.Host)
+	if err != nil {
+		return github.CheckRunOutput{}, fmt.Errorf("client for %s: %w", r.Host, err)
+	}
+
+	return c.CheckRun(ctx, r, id)
+}
+
 // Close stops the poller: its requests are cancelled, its goroutines end and
 // its updates close. It is safe to repeat.
 func (p *prRuntime) Close() error { return p.poller.Close() }

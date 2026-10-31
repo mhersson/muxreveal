@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"image"
 	"strconv"
 	"strings"
 
@@ -251,18 +252,27 @@ func (a *App) logText(p *checkPage, i int, ui theme.UI, pal theme.Palette, on fu
 
 // logLines draws the box w x h: the title in the top border, the status row,
 // the log rows and the hints.
-func (a *App) logLines(lk look, w, h int) []string {
+func (a *App) logLines(lk look, w, h int) (out []string, pics []picRow) {
 	ui, st := lk.theme.UI, lk.styles
 	p := a.checks.page
 	on := func(fg theme.Hex) lipgloss.Style { return lipgloss.NewStyle().Background(ui.Panel).Foreground(fg) }
 
-	title := " #" + strconv.Itoa(a.checks.number) + " " + printable(p.check.name) + " log "
+	word := "log"
+	if p.sum {
+		word = "summary"
+	}
+
+	title := " #" + strconv.Itoa(a.checks.number) + " " + printable(p.check.name) + " " + word + " "
 	if a.icons {
 		title = " " + iconLog + title
 	}
 
 	top, row, bottom := boxFrame(w, title, boxStyle{border: st.popupBorder, title: st.pushTitle, cut: "…"}, st)
 	n, blanks, status, hints := logSplit(h)
+
+	if p.sum {
+		return a.summaryLines(lk, w, h, top, row, bottom)
+	}
 
 	rows := p.rows()
 	p.fit(len(rows), n)
@@ -284,7 +294,7 @@ func (a *App) logLines(lk look, w, h int) []string {
 		body = append(body, row(""))
 	}
 
-	out := []string{top}
+	out = []string{top}
 	if status {
 		out = append(out, row(a.logStatus(p, on, ui)))
 	}
@@ -301,21 +311,103 @@ func (a *App) logLines(lk look, w, h int) []string {
 
 	if hints {
 		kt := a.keys.checks
-		out = append(out, row(a.logHints(st, kt, w-5)))
+		out = append(out, row(a.logHints(st, kt, w-5, false)))
 	}
 
-	return append(out, bottom)
+	return append(out, bottom), nil
+}
+
+// summaryLines draws the summary page's box w x h under its top border: the
+// blank rows, the summary as a markdown view, the chooser if one is open, and
+// the hints. The page keeps the log page's box and rows.
+func (a *App) summaryLines(lk look, w, h int, top string, row func(string) string, bottom string) (out []string, pics []picRow) {
+	ui := lk.theme.UI
+	p := a.checks.page
+	on := func(fg theme.Hex) lipgloss.Style { return lipgloss.NewStyle().Background(ui.Panel).Foreground(fg) }
+	n, blanks, status, hints := logSplit(h)
+
+	if status {
+		n++
+	}
+
+	out = []string{top}
+
+	if blanks {
+		out = append(out, row(""))
+	}
+
+	first := len(out)
+
+	switch {
+	case p.err != "":
+		out = append(out, row(on(ui.Muted).Render(fmt.Sprintf(summaryReadFailed, p.err))))
+	case p.summary == nil:
+		out = append(out, row(on(ui.Muted).Render(summaryLoading)))
+	default:
+		a.sizeSummary(p)
+
+		var drawn []string
+
+		drawn, pics = p.summary.drawPictures(newMDPainter(lk.theme, ui.Panel), true)
+		for _, l := range drawn {
+			out = append(out, sideBorders(ui, l))
+		}
+
+		for i := range pics {
+			pics[i].X++
+			pics[i].Y += first
+		}
+	}
+
+	for len(out)-first < n {
+		out = append(out, row(""))
+	}
+
+	if blanks {
+		out = append(out, row(""))
+	}
+
+	if hints {
+		out = append(out, row(a.logHints(lk.styles, a.keys.checks, w-5, true)))
+	}
+
+	out = append(out, bottom)
+
+	if p.chooser != nil {
+		if covered := a.chooserLines(p.chooser, ui, out); covered.Dx() > 0 {
+			pics = dropCovered(pics, []image.Rectangle{covered})
+		}
+	}
+
+	return out, pics
+}
+
+// sideBorders wraps a full-width content row in the box's side borders.
+func sideBorders(ui theme.UI, content string) string {
+	b := lipgloss.NewStyle().Background(ui.Panel).Foreground(ui.BorderFocus).Render("│")
+
+	return b + content + b
 }
 
 // logHints is the page's hint row in cw cells: the close pair always stays and
 // the others drop from the end before it does.
-func (a *App) logHints(st styles, kt keyTable, cw int) string {
-	lead := hintPairs([][2]string{
+func (a *App) logHints(st styles, kt keyTable, cw int, summary bool) string {
+	pairs := [][2]string{
 		{kt.hint("checks.next", "checks.prev"), "line"},
 		{kt.hint("checks.error.next", "checks.error.prev"), "error"},
 		{kt.hint("checks.fold"), "group"},
 		{kt.hint("checks.browser"), "browser"},
-	})
+	}
+
+	if summary {
+		pairs = [][2]string{
+			{kt.hint("checks.next", "checks.prev"), "line"},
+			{kt.hint("checks.fold"), "open"},
+			{kt.hint("checks.browser"), "browser"},
+		}
+	}
+
+	lead := hintPairs(pairs)
 
 	closing := hintPairs([][2]string{{kt.hint("checks.close"), "checks"}})
 	if len(closing) == 0 {
@@ -342,5 +434,7 @@ func (a *App) overlayCILog(f *frameLayers, base string, lk look) string {
 		return base
 	}
 
-	return overlayAt(f, base, a.width, a.height, x, y, a.logLines(lk, w, h), nil)
+	lines, pics := a.logLines(lk, w, h)
+
+	return overlayAt(f, base, a.width, a.height, x, y, lines, pics)
 }

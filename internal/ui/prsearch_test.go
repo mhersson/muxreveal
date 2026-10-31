@@ -28,6 +28,10 @@ type fakeReads struct {
 	logCut   bool
 	logErr   error
 	logCalls []jobLogCall
+
+	runOut   github.CheckRunOutput // what CheckRun returns
+	runErr   error
+	runCalls []jobLogCall
 }
 
 // jobLogCall is one JobLog read.
@@ -43,6 +47,22 @@ func (f *fakeReads) JobLog(_ context.Context, r github.Repo, id int64) (data []b
 	f.logCalls = append(f.logCalls, jobLogCall{repo: r, id: id})
 
 	return f.logData, f.logCut, f.logErr
+}
+
+func (f *fakeReads) CheckRun(_ context.Context, r github.Repo, id int64) (github.CheckRunOutput, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	f.runCalls = append(f.runCalls, jobLogCall{repo: r, id: id})
+
+	return f.runOut, f.runErr
+}
+
+func (f *fakeReads) runReads() []jobLogCall {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	return slices.Clone(f.runCalls)
 }
 
 func (f *fakeReads) logReads() []jobLogCall {

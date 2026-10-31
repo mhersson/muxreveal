@@ -720,6 +720,8 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.onPRSearch(msg)
 	case checkLogMsg:
 		a.onCheckLog(msg)
+	case checkSummaryMsg:
+		a.onCheckSummary(msg)
 	case prSearchTickMsg:
 		return a, a.onPRSearchTick(msg)
 	case planPageMsg:

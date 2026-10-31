@@ -238,7 +238,7 @@ func (a *App) planLines(lk look, w, h int) (out []string, pics []picRow) {
 	out = append(out, bottom)
 
 	if v.chooser != nil {
-		if covered := a.planChooserLines(ui, out); covered.Dx() > 0 {
+		if covered := a.chooserLines(v.chooser, ui, out); covered.Dx() > 0 {
 			pics = dropCovered(pics, []image.Rectangle{covered})
 		}
 	}
@@ -246,11 +246,11 @@ func (a *App) planLines(lk look, w, h int) (out []string, pics []picRow) {
 	return out, pics
 }
 
-// planChooserLines draws the link chooser over the box's rows, two cells in from
+// chooserLines draws the link chooser c over the box's rows, two cells in from
 // each side from the fourth row; a box without a row for it draws nothing. It
 // returns the cells the box covers.
-func (a *App) planChooserLines(ui theme.UI, lines []string) image.Rectangle {
-	box := a.plan.chooser.lines(ui, ansi.StringWidth(lines[0])-2*wtInsetX, len(lines)-1-wtTopY, a.icons, a.getenv("HOME"))
+func (a *App) chooserLines(c *linkChooser, ui theme.UI, lines []string) image.Rectangle {
+	box := c.lines(ui, ansi.StringWidth(lines[0])-2*wtInsetX, len(lines)-1-wtTopY, a.icons, a.getenv("HOME"))
 	if box == nil {
 		return image.Rectangle{}
 	}

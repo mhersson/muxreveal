@@ -3,6 +3,8 @@ package ui
 import (
 	"context"
 	"fmt"
+	"slices"
+	"strings"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -26,6 +28,9 @@ const (
 	logLoading       = "loading the log…"
 	logReadFailed    = "could not read the log: %s"
 	logEarlier       = "earlier lines not loaded"
+
+	summaryLoading    = "loading the summary…"
+	summaryReadFailed = "could not read the summary: %s"
 )
 
 // checkPage is a job's log shown in the checks overlay. check is the row as it
@@ -40,6 +45,12 @@ type checkPage struct {
 	open    map[int]bool // groups the user opened or closed, by index
 	cursor  int          // a row of logRows
 	top     int
+
+	// A run that is not an Actions job shows its summary: sum is set, summary
+	// is nil until the read answers, and chooser holds a line's several links.
+	sum     bool
+	summary *mdView
+	chooser *linkChooser
 }
 
 // checkLogMsg answers one read of a job's log.
@@ -48,6 +59,16 @@ type checkLogMsg struct {
 	seq  int
 	log  github.JobLog
 	err  error
+}
+
+// checkSummaryMsg answers one read of a check run's summary. doc is the parsed
+// summary; empty says the run wrote none.
+type checkSummaryMsg struct {
+	view  *checksView
+	seq   int
+	doc   *mdDoc
+	empty bool
+	err   error
 }
 
 // logRow is one shown row of the log page: a line of the log, or -1 for the
@@ -189,14 +210,177 @@ func (a *App) checksLog(v *checksView, r checkRow) tea.Cmd {
 
 		return nil
 	case r.app != actionsApp:
-		a.notice = fmt.Sprintf(noticeNoLog, printable(r.name))
+		v.page = &checkPage{check: r, sum: true}
 
-		return nil
+		return a.readCheckRun(v)
 	}
 
 	v.page = &checkPage{check: r, open: map[int]bool{}}
 
 	return a.readJobLog(v)
+}
+
+// readCheckRun reads the summary of the page's run and parses it off the update
+// loop, under the timeout and the app's context.
+func (a *App) readCheckRun(v *checksView) tea.Cmd {
+	p := v.page
+	a.logSeq++
+	p.seq, p.loading, p.err = a.logSeq, true, ""
+
+	repo, ok := repoOfKey(v.repo)
+	if !ok || a.reads == nil {
+		p.loading, p.err = false, "not available"
+
+		return nil
+	}
+
+	seq, id, parent, reads, tok := p.seq, p.check.id, a.ctx, a.reads, a.drawer.hl.HighlightLang
+
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(parent, checkLogTimeout)
+		defer cancel()
+
+		out, err := reads.CheckRun(ctx, repo, id)
+		if err != nil {
+			return checkSummaryMsg{view: v, seq: seq, err: err}
+		}
+
+		if strings.TrimSpace(out.Summary) == "" {
+			return checkSummaryMsg{view: v, seq: seq, empty: true}
+		}
+
+		return checkSummaryMsg{view: v, seq: seq, doc: parseMarkdown([]byte(out.Summary), "", tok)}
+	}
+}
+
+// onCheckSummary keeps a summary's answer, dropping one for a page that closed,
+// an overlay that closed or a read a newer one superseded. An empty summary
+// goes back to the list with a notice.
+func (a *App) onCheckSummary(msg checkSummaryMsg) {
+	v := msg.view
+	if a.checks != v || v == nil || v.page == nil || !v.page.sum || v.page.seq != msg.seq {
+		return
+	}
+
+	p := v.page
+	p.loading = false
+
+	switch {
+	case msg.err != nil:
+		p.err = printable(msg.err.Error())
+	case msg.empty:
+		a.notice = fmt.Sprintf(noticeNoLog, printable(p.check.name))
+		v.page = nil
+	default:
+		host := ""
+		if r, ok := repoOfKey(v.repo); ok {
+			host = r.Host
+		}
+
+		p.err, p.loaded, p.chooser = "", true, nil
+
+		msg.doc.withPictures(docPictures{reg: a.pictures, host: host})
+
+		old := p.summary
+		p.summary = &mdView{doc: msg.doc}
+
+		if old != nil {
+			p.summary.top, p.summary.cursor = old.top, old.cursor
+		}
+
+		a.sizeSummary(p)
+		p.summary.clamp()
+	}
+}
+
+// moveSummary, pageSummary and endSummary move the summary's cursor; they do
+// nothing while it is loading.
+func (p *checkPage) moveSummary(d int) {
+	if p.summary != nil {
+		p.summary.move(d)
+	}
+}
+
+func (p *checkPage) pageSummary(dir int) {
+	if p.summary != nil {
+		p.summary.page(dir)
+	}
+}
+
+func (p *checkPage) endSummary(bottom bool) {
+	if p.summary != nil {
+		p.summary.end(bottom)
+	}
+}
+
+// summaryRows is how many summary rows the page shows: its box has no status
+// row, so the log's status row goes to the summary.
+func summaryRows(h int) int {
+	rows, _, status, _ := logSplit(h)
+	if status {
+		rows++
+	}
+
+	return rows
+}
+
+// sizeSummary sets the cells the summary draws in, keeping the cursor on its
+// source line when the width changes. A box too small to draw leaves it alone.
+func (a *App) sizeSummary(p *checkPage) {
+	_, _, w, h, ok := logBox(a.width, a.height)
+	if !ok || p.summary == nil {
+		return
+	}
+
+	v, rows := p.summary, summaryRows(h)
+	if v.w != 0 && (v.w != w-2 || v.icons != a.icons) {
+		line := v.sourceLine()
+		v.size(w-2, rows, a.icons)
+		v.goSource(line)
+
+		return
+	}
+
+	v.size(w-2, rows, a.icons)
+}
+
+// summaryEnter is enter on the summary: a fold head toggles, one link opens,
+// several open the chooser. Only web links are targets; a summary has no base
+// to resolve a path against.
+func (a *App) summaryEnter(p *checkPage) tea.Cmd {
+	v := p.summary
+	if v == nil || v.fold() {
+		return nil
+	}
+
+	targets := slices.DeleteFunc(v.targets(), func(t mdTarget) bool { return t.Path != "" || t.URL == "" })
+
+	switch len(targets) {
+	case 0:
+		return nil
+	case 1:
+		return a.openURL(targets[0].URL)
+	}
+
+	p.chooser = &linkChooser{targets: targets}
+
+	return nil
+}
+
+// summaryChooserKey runs a key while the page's link chooser has the keyboard.
+func (a *App) summaryChooserKey(p *checkPage, key string) tea.Cmd {
+	pick, done := p.chooser.key(key)
+	if !done {
+		return nil
+	}
+
+	p.chooser = nil
+
+	if pick == nil {
+		return nil
+	}
+
+	return a.openURL(pick.URL)
 }
 
 // readJobLog reads the log of the page's job off the update loop, under the
@@ -264,6 +448,20 @@ func (a *App) logWheel(msg tea.MouseWheelMsg) bool {
 	}
 
 	p := a.checks.page
+
+	if p.sum {
+		if p.summary != nil && p.chooser == nil {
+			switch m.Button {
+			case tea.MouseWheelDown:
+				p.summary.scroll(scrollStep)
+			case tea.MouseWheelUp:
+				p.summary.scroll(-scrollStep)
+			}
+		}
+
+		return true
+	}
+
 	n, _, _, _ := logSplit(h)
 	total := len(p.rows())
 

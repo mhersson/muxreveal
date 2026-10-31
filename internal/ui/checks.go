@@ -145,5 +145,9 @@ func (a *App) checksOf(st core.State, v *checksView) *core.PRChecks {
 
 // handleChecksKey answers the open checks overlay; any other key is swallowed.
 func (a *App) handleChecksKey(msg tea.KeyPressMsg) tea.Cmd {
+	if p := a.checks.page; p != nil && p.chooser != nil {
+		return a.summaryChooserKey(p, bindingKey(msg))
+	}
+
 	return a.runKey(a.keys.checks, bindingKey(msg))
 }
