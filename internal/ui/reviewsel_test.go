@@ -884,10 +884,7 @@ func TestDiffSelectionReload(t *testing.T) {
 			}
 
 			if tt.held {
-				if d.text == nil || v.sel == nil {
-					t.Fatal("the selection went before the button came up")
-				}
-
+				mmove(d.App, x1, y1, tea.MouseLeft)
 				release(d.App, x1, y1)
 			}
 
@@ -1552,5 +1549,57 @@ func TestEdgeScrollUpPastStickyHeader(t *testing.T) {
 
 	if got := textSelHead(t, d.App).row; got != h.top || h.top != 7 {
 		t.Errorf("head row = %d, top = %d, want the head on the new first row 7", got, h.top)
+	}
+}
+
+func TestDiffDragThroughReload(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		path string
+		body string
+	}{
+		{"another file reloads while the drag is held", "z.txt", editedLines(40, 3, 30, 12)},
+		{"rows above shift while the drag is held", "a.txt", editedLines(40, 3, 5, 30)},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			d := newDiffSel(t)
+			v := d.v
+			from := rowWith(t, v, "line 28")
+			x0, y0 := rowCell(t, d.drawerRig, from, d.code(t, from))
+			xm, ym := rowCell(t, d.drawerRig, from, d.code(t, from)+len("line 28")-1)
+
+			mdown(d.App, x0, y0, tea.MouseLeft, 0)
+			mmove(d.App, xm, ym, tea.MouseLeft)
+
+			gen := v.gen
+
+			write(t, filepath.Join(d.dir, tt.path), tt.body)
+			d.run(d.batch(d.root, git.Batch{Paths: []string{tt.path}}))
+			d.until(t, "the drawer to reload", func() bool { return v.gen > gen && !v.loading && v.queued == nil })
+
+			if tt.path == "a.txt" && rowWith(t, v, "line 28") == from {
+				t.Fatal("setup: the rows did not shift")
+			}
+
+			if d.text == nil || v.sel == nil {
+				t.Fatal("the selection went on a reload that left its text alone")
+			}
+
+			to := rowWith(t, v, "line 29")
+			x1, y1 := rowCell(t, d.drawerRig, to, d.code(t, to)+len("line 29")-1)
+
+			mmove(d.App, x1, y1, tea.MouseLeft)
+			release(d.App, x1, y1)
+
+			if got := primaryWrites(d.clip); !slices.Equal(got, []string{"line 28\nline 29"}) {
+				t.Errorf("primary writes %q, want the lines from line 28 to line 29", got)
+			}
+		})
 	}
 }

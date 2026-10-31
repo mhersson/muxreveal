@@ -418,6 +418,75 @@ func TestPlanRewriteSelection(t *testing.T) {
 	}
 }
 
+func TestPlanDragThroughRewrite(t *testing.T) {
+	t.Parallel()
+
+	r := newSelRig(t)
+	b0, _, y := r.word(t, "Alpha", "beta")
+	_, g1, _ := r.word(t, "Alpha", "gamma")
+	_, d1, _ := r.word(t, "Alpha", "delta")
+
+	mdown(r.a, b0, y, tea.MouseLeft, 0)
+	mmove(r.a, g1, y, tea.MouseLeft)
+	write(t, r.path, strings.Replace(selPlan, "second item", "second thing", 1))
+
+	for _, m := range planMsgs(r.a.reloadPlan(r.pv.plan)) {
+		r.a.Update(m)
+	}
+
+	mmove(r.a, d1, y, tea.MouseLeft)
+	release(r.a, d1, y)
+
+	if !r.selected() {
+		t.Error("a rewrite of another line during the drag dropped the selection")
+	}
+
+	if got := len(primaryWrites(r.clip)); got != 1 {
+		t.Errorf("%d primary writes, want 1", got)
+	}
+}
+
+func TestPlanClearedMidDrag(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		act  func(*selRig)
+	}{
+		{"resize", func(r *selRig) { r.a.Update(tea.WindowSizeMsg{Width: 70, Height: 40}) }},
+		{"acting key", func(r *selRig) { r.key(keyRune('j')) }},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			r := newSelRig(t)
+			b0, _, y := r.word(t, "Alpha", "beta")
+			_, d1, _ := r.word(t, "Alpha", "delta")
+
+			mdown(r.a, b0, y, tea.MouseLeft, 0)
+			mmove(r.a, d1, y, tea.MouseLeft)
+
+			if !r.selected() {
+				t.Fatal("setup: no selection")
+			}
+
+			tt.act(r)
+			mmove(r.a, d1, y, tea.MouseLeft)
+			release(r.a, d1, y)
+
+			if r.selected() {
+				t.Error("the held drag brought the selection back")
+			}
+
+			if got := primaryWrites(r.clip); len(got) != 0 {
+				t.Errorf("the release wrote %q, want nothing", got)
+			}
+		})
+	}
+}
+
 func TestPlanCloseClears(t *testing.T) {
 	t.Parallel()
 

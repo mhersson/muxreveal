@@ -424,15 +424,8 @@ func (a *App) extendTextSel(pr *textPress, h textHost, x, y int) bool {
 
 	ts.side = h.side
 
-	// The text read at the press stays the one the release compares with when
-	// the doc changed under the drag.
-	same := a.revOf(ts) == ts.rev
-
 	ts.setSel(s, h.lay)
-
-	if same {
-		ts.shown = ts.text()
-	}
+	ts.shown = ts.text()
 
 	return true
 }

@@ -224,6 +224,18 @@ func (ts *textSelection) drop() {
 	}
 }
 
+// selection is the holder's selection, nil when none.
+func (ts *textSelection) selection() *selection {
+	switch {
+	case ts.view != nil:
+		return ts.view.sel
+	case ts.rows != nil:
+		return ts.rows.sel
+	}
+
+	return nil
+}
+
 // has reports whether the holder still holds a selection.
 func (ts *textSelection) has() bool {
 	return (ts.view != nil && ts.view.sel != nil) || (ts.rows != nil && ts.rows.sel != nil)
@@ -245,10 +257,15 @@ func (a *App) rowsLayout(tab core.TabID, v *reviewView) (drawerLayout, bool) {
 	return a.drawerLayoutOf(box, v, drawerTree(st)), true
 }
 
-// setTextSel makes s ts's holder's selection, the app's only one.
+// setTextSel makes s ts's holder's selection, the app's only one. The press
+// that is making it stays held.
 func (a *App) setTextSel(ts *textSelection, s selection) {
+	held := a.mouse.text
+
 	a.sel = nil
 	a.clearTextSel()
+
+	a.mouse.text = held
 
 	ts.setSel(s, ts.lay)
 	ts.shown = ts.text()
@@ -256,7 +273,8 @@ func (a *App) setTextSel(ts *textSelection, s selection) {
 	a.text = ts
 }
 
-// clearTextSel drops the text selection and its holder's.
+// clearTextSel drops the text selection and its holder's. A press still held
+// on it ends, so a later motion or release cannot bring it back.
 func (a *App) clearTextSel() {
 	ts := a.text
 	if ts == nil {
@@ -266,6 +284,7 @@ func (a *App) clearTextSel() {
 	ts.drop()
 
 	a.text = nil
+	a.mouse.text = nil
 }
 
 // clearSelections drops the pane's selection and the text one.
@@ -293,7 +312,8 @@ func (a *App) textHolds(ts *textSelection) bool {
 
 		return v != nil && v.page() != nil && &v.page().view == ts.view
 	case ts.rows != nil:
-		return a.drawer.views[ts.tab] == ts.rows
+		// A page pushed over the rows clears it, whichever way it was opened.
+		return a.drawer.views[ts.tab] == ts.rows && ts.rows.page() == nil
 	}
 
 	return false
@@ -301,10 +321,11 @@ func (a *App) textHolds(ts *textSelection) bool {
 
 // textSelAfterUpdate drops the text selection when its holder is gone or its
 // width changed, and when a new document or layout changed the selected text.
-// It waits for the release of the press that is making the selection.
+// It runs during a held drag too: a redraw that leaves the text alone lets the
+// gesture go on, and one that changes it ends the gesture.
 func (a *App) textSelAfterUpdate() {
 	ts := a.text
-	if ts == nil || a.mouse.text != nil {
+	if ts == nil {
 		return
 	}
 
@@ -338,5 +359,11 @@ func (a *App) textSelAfterUpdate() {
 		return
 	}
 
-	ts.rev = a.revOf(ts)
+	ts.rev = cur
+
+	// A reload moves the selection's ends with their rows: the drag goes on
+	// from where its anchor is now.
+	if pr := a.mouse.text; pr != nil && pr.dragging {
+		pr.anchor = ts.selection().anchor
+	}
 }
