@@ -113,6 +113,7 @@ func TestUIRoles(t *testing.T) {
 			{"Blocked", th.UI.Blocked, p.Red},
 			{"Idle", th.UI.Idle, p.Green},
 			{"Code", th.UI.Code, p.Peach},
+			{"Meter", th.UI.Meter, p.Teal},
 		} {
 			if r.got != r.want || r.got == "" {
 				t.Errorf("%s UI.%s = %q, want %q", th.Name, r.role, r.got, r.want)

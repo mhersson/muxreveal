@@ -47,8 +47,8 @@ func TestRailMeterColours(t *testing.T) {
 		fg   theme.Hex
 		bold bool
 	}{
-		{0, ui.Subtle, false},
-		{69, ui.Subtle, false},
+		{0, ui.Meter, false},
+		{69, ui.Meter, false},
 		{70, ui.Warning, false},
 		{89, ui.Warning, false},
 		{90, ui.Error, true},
