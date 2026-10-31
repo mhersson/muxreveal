@@ -5,6 +5,7 @@
 package diffview
 
 import (
+	"image/color"
 	"strconv"
 	"strings"
 
@@ -35,6 +36,31 @@ func (t *Theme) CodeRanges(text string, spans []Span, changed []Range, kind Kind
 	}
 	c := b2i(cursor)
 	codes := &t.code[kind][c]
+	styled := styleText(codes, text, spans, changed)
+	plain := codes[0][Plain]
+	left := ansi.StringWidth(text) - xOff
+	if xOff > 0 && left > 0 {
+		styled = ansi.TruncateLeft(styled, xOff, "")
+	}
+	ell := Ellipsis()
+	ellW := ansi.StringWidth(ell)
+	switch {
+	case left <= 0:
+		styled = ""
+	case left > width && width > ellW:
+		styled = ansi.Truncate(styled, width-ellW, "") + plain + ell
+	case left > width:
+		styled = ansi.Truncate(styled, width, "")
+	}
+	if w := ansi.StringWidth(styled); w < width {
+		styled += plain + strings.Repeat(" ", width-w)
+	}
+	return styled + reset
+}
+
+// styleText is text with each span's class and each changed range's word
+// ground written into it, in bytes of text.
+func styleText(codes *[2][NumClasses]string, text string, spans []Span, changed []Range) string {
 	var b strings.Builder
 	b.Grow(len(text) + 32*(len(spans)+2))
 	si, ri := 0, 0
@@ -67,26 +93,28 @@ func (t *Theme) CodeRanges(text string, spans []Span, changed []Range, kind Kind
 		b.WriteString(text[i:next])
 		i = next
 	}
-	plain := codes[0][Plain]
-	styled := b.String()
-	left := ansi.StringWidth(text) - xOff
-	if xOff > 0 && left > 0 {
-		styled = ansi.TruncateLeft(styled, xOff, "")
+	return b.String()
+}
+
+// CodePart draws the cells [from, to) of text as Code styles them, padded on
+// the code ground to width cells and never ending in an ellipsis. A part
+// wider than width is cut at the edge.
+func (t *Theme) CodePart(text string, spans []Span, changed []Range, kind Kind, cursor bool, from, to, width int) string {
+	if width <= 0 {
+		return ""
 	}
-	ell := Ellipsis()
-	ellW := ansi.StringWidth(ell)
-	switch {
-	case left <= 0:
-		styled = ""
-	case left > width && width > ellW:
-		styled = ansi.Truncate(styled, width-ellW, "") + plain + ell
-	case left > width:
-		styled = ansi.Truncate(styled, width, "")
-	}
+	codes := &t.code[kind][b2i(cursor)]
+	to = min(to, from+width)
+	styled := ansi.Cut(styleText(codes, text, spans, changed), from, to)
 	if w := ansi.StringWidth(styled); w < width {
-		styled += plain + strings.Repeat(" ", width-w)
+		styled += codes[0][Plain] + strings.Repeat(" ", width-w)
 	}
 	return styled + reset
+}
+
+// CodeBg is the ground of a line's code, without the word tint.
+func (t *Theme) CodeBg(kind Kind, cursor bool) color.Color {
+	return t.Bg(kind, cursor, false)
 }
 
 // Gutter draws a line number right-aligned in width cells, with a space on

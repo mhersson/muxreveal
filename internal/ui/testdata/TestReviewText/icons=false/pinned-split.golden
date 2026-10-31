@@ -10,7 +10,8 @@
 │                                                                                                   │                                                 │ 26 +     Review *ReviewSource                  │
 │                                                                                                   │  26   }                                         │ 27   }                                         │
 │                                                                                                   │                                                 │ 28 +                                           │
-│                                                                                                   │                                                 │ 29 + // ReviewSource is the agent a review pan…│
+│                                                                                                   │                                                 │ 29 + // ReviewSource is the agent a review     │
+│                                                                                                   │                                                 │    ↪ pane follows and how it diffs it.         │
 │                                                                                                   │                                                 │ 30 + type ReviewSource struct {                │
 │                                                                                                   │                                                 │ 31 +     Agent PaneID                          │
 │                                                                                                   │                                                 │ 32 +     Mode  ReviewMode                      │
@@ -19,18 +20,24 @@
 │                                                                                                   │  M internal/ui/app.go                                                                      +4 -3 │
 │                                                                                                   │  @@ -40,9 +40,10 @@ func (a *App) Init() tea.Cmd                                                 │
 │                                                                                                   │  40                                             │ 40                                             │
-│                                                                                                   │  41   // openReview opens a review pane beside …│ 41   // openReview opens a review pane beside …│
-│                                                                                                   │  42   func (a *App) openReview(ctx context.Cont…│ 42   func (a *App) openReview(ctx context.Cont…│
-│                                                                                                   │  43 -     if a.store.Pane(agent).Kind != core.K…│ 43 +     p, ok := a.store.Pane(agent)          │
+│                                                                                                   │  41   // openReview opens a review pane beside  │ 41   // openReview opens a review pane beside  │
+│                                                                                                   │     ↪ an agent, or focuses the open one.        │    ↪ an agent, or focuses the open one.        │
+│                                                                                                   │  42   func (a *App) openReview(ctx              │ 42   func (a *App) openReview(ctx              │
+│                                                                                                   │     ↪ context.Context, agent core.PaneID)       │    ↪ context.Context, agent core.PaneID)       │
+│                                                                                                   │     ↪ tea.Cmd {                                 │    ↪ tea.Cmd {                                 │
+│                                                                                                   │  43 -     if a.store.Pane(agent).Kind !=        │ 43 +     p, ok := a.store.Pane(agent)          │
+│                                                                                                   │     ↪ core.KindAgent {                          │                                                │
 │                                                                                                   │  44 -         return nil                        │ 44 +     if !ok || p.Kind != core.KindAgent {  │
-│                                                                                                   │  45 -     }                                     │ 45 +         return a.notify("a review pane ne…│
+│                                                                                                   │  45 -     }                                     │ 45 +         return a.notify("a review pane    │
+│                                                                                                   │                                                 │    ↪ needs an agent pane")                     │
 │                                                                                                   │                                                 │ 46 +     }                                     │
 │                                                                                                   │  46                                             │ 47                                             │
 │                                                                                                   │  47       if r, ok := a.reviews[agent]; ok {    │ 48       if r, ok := a.reviews[agent]; ok {    │
 │                                                                                                   │  48           return a.focus(r.pane)            │ 49           return a.focus(r.pane)            │
 │                                                                                                   │  R internal/ui/keys.go → internal/ui/keymap.go                                             +1 -0 │
 │                                                                                                   │  @@ -3,6 +3,7 @@                                                                                 │
-│                                                                                                   │   3   // defaultLeader maps the keys after the …│  3   // defaultLeader maps the keys after the …│
+│                                                                                                   │   3   // defaultLeader maps the keys after the  │  3   // defaultLeader maps the keys after the  │
+│                                                                                                   │     ↪ leader to commands.                       │    ↪ leader to commands.                       │
 │                                                                                                   │   4   var defaultLeader = map[string]string{    │  4   var defaultLeader = map[string]string{    │
 │                                                                                                   │   5       "a": "rail.toggle",                   │  5       "a": "rail.toggle",                   │
 │                                                                                                   │                                                 │  6 +     "d": "review.toggle",                 │
@@ -41,12 +48,5 @@
 │                                                                                                   │  @@ -0,0 +1,11 @@                                                                                │
 │                                                                                                   │                                                 │  1 + package ui                                │
 │                                                                                                   │                                                 │  2 +                                           │
-│                                                                                                   │                                                 │  3 + import "testing"                          │
-│                                                                                                   │                                                 │  4 +                                           │
-│                                                                                                   │                                                 │  5 + func TestReviewTitle(t *testing.T) {      │
-│                                                                                                   │                                                 │  6 +     want := "muxreveal⟨U+200B⟩ · feat/rev…│
-│                                                                                                   │                                                 │  7 +     // the title reads left to right: ⟨U+…│
-│                                                                                                   │                                                 │  8 +     if got := reviewTitle(); got != want {│
-│                                                                                                   │                                                 │  9 +         t.Fatalf("title = %q, want %q", g…│
 │                                                                                                   │ j/k line   ]/[ hunk   }/{ file   tab tree   w worktree   f full   u split   e edit   / search    │
 ╰───────────────────────────────────────────────────────────────────────────────────────────────────╰──────────────────────────────────────────────────────────────────────────────────────────────────╯

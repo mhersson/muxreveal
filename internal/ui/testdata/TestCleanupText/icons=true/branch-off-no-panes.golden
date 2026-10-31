@@ -14,27 +14,27 @@
 │                    ╭─ 󰃢 Clean up after #7 ──────────────────────────────────────────────────────╮                    │
 │                    │                                                                            │                    │
 │                    │  #7 Show the pull request over its diff                                    │                    │
-│                    │  is merged at a1b2c3d. Clean up its worktree?                              │t a review pane fol…│
-│                    │                                                                            │                    │
+│                    │  is merged at a1b2c3d. Clean up its worktree?                              │t a review pane     │
+│                    │                                                                            │.                   │
 │                    │  [x] remove the worktree  .worktrees/feat-review-pane                      │                    │
 │                    │      clean                                                                 │                    │
-│                    │  [ ] delete the local branch  feat/review-pane                             │atest               │
-│                    │      at a1b2c3d, the merged head                                           │                    │
-│                    │                                                                            │              +4 -3 │
-│                    │  enter clean up    w worktree    b branch    esc keep                      │t() tea.Cmd         │
-│                    ╰────────────────────────────────────────────────────────────────────────────╯                    │
-│                                                           │  41  41   // openReview opens a review pane beside an ag…│
-│                                                           │  42  42   func (a *App) openReview(ctx context.Context, …│
-│                                                           │  43     -     if a.store.Pane(agent).Kind != core.KindAg…│
+│                    │  [ ] delete the local branch  feat/review-pane                             │                    │
+│                    │      at a1b2c3d, the merged head                                           │atest               │
+│                    │                                                                            │                    │
+│                    │  enter clean up    w worktree    b branch    esc keep                      │              +4 -3 │
+│                    ╰────────────────────────────────────────────────────────────────────────────╯t() tea.Cmd         │
+│                                                           │  40  40                                                  │
+│                                                           │  41  41   // openReview opens a review pane beside an    │
+│                                                           │         ↪ agent, or focuses the open one.                │
+│                                                           │  42  42   func (a *App) openReview(ctx context.Context,  │
+│                                                           │         ↪ agent core.PaneID) tea.Cmd {                   │
+│                                                           │  43     -     if a.store.Pane(agent).Kind !=             │
+│                                                           │         ↪ core.KindAgent {                               │
 │                                                           │  44     -         return nil                             │
 │                                                           │  45     -     }                                          │
 │                                                           │      43 +     p, ok := a.store.Pane(agent)               │
 │                                                           │      44 +     if !ok || p.Kind != core.KindAgent {       │
-│                                                           │▎     45 +         return a.notify("a review pane needs a…│
-│                                                           │      46 +     }                                          │
-│                                                           │  46  47                                                  │
-│                                                           │  47  48       if r, ok := a.reviews[agent]; ok {         │
-│                                                           │  48  49           return a.focus(r.pane)                 │
-│                                                           │  R internal/ui/keys.go → internal/ui/keymap.go     +1 -0 │
+│                                                           │▎     45 +         return a.notify("a review pane needs   │
+│                                                           │▎        ↪ an agent pane")                                │
 │                                                           │ j/k line   ]/[ hunk   c checks   a approve   M merge     │
 ╰───────────────────────────────────────────────────────────╰──────────────────────────────────────────────────────────╯

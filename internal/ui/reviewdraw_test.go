@@ -147,6 +147,22 @@ func reviewCases() []reviewCase {
 			s.res, s.tree = markedResult(), true
 			s.tune = withMarked(hunksUpTo(6), nil)
 		})},
+		{"wrapped", with(func(s *reviewScene) {
+			s.res = wrappedResult()
+			s.tune = func(t *testing.T, a *App, v *reviewView) { v.cursor = rowWith(t, v, "ansi.Truncate") }
+		})},
+		{"wrapped-split", with(func(s *reviewScene) {
+			s.res = wrappedResult()
+			s.tune = func(t *testing.T, a *App, v *reviewView) {
+				v.split = true
+				v.rebuild(true)
+				v.cursor = rowWith(t, v, "ansi.Truncate")
+			}
+		})},
+		{"wrapped-80x24", with(func(s *reviewScene) {
+			s.res, s.w, s.h = wrappedResult(), 80, 24
+			s.tune = func(t *testing.T, a *App, v *reviewView) { v.cursor = rowWith(t, v, "ansi.Truncate") }
+		})},
 		{"unfocused", with(func(s *reviewScene) {
 			s.focused = false
 			s.tune = func(t *testing.T, a *App, v *reviewView) { v.cursor = rowWith(t, v, "review.toggle") }
@@ -1070,4 +1086,24 @@ func prSceneWith(tune func(*core.PRInfo), unpushed int) func(t *testing.T, a *Ap
 
 		openIn(t, a, core.SetRepoPRs{Repo: prRepoKey, DefaultBranch: "main", Open: []core.PRInfo{info}})
 	}
+}
+
+// wrappedResult is turn4Result and a file of long Go lines: a call that wraps
+// at a space, a word past the reach, a tab indented line and one with a
+// hidden character.
+func wrappedResult() git.Result {
+	res := turn4Result()
+	f := fileSpec("internal/ui/wrapdemo.go", git.Added, hunkSpec(0, 1, "",
+		"+package ui",
+		"+",
+		"+func wrapDemo(s string, width int) string {",
+		"+\treturn ansi.Truncate(strings.TrimSpace(strings.ReplaceAll(s, \"\\n\", \" \")), width-len(ellipsis)-padding, ellipsis) + strings.Repeat(\" \", max(width-ansi.StringWidth(s), 0))",
+		"+\t// averyveryveryverylongcommentwordwithoutanyspacesatallsothatitcannotbebrokenatawordboundaryandwrapsattheedgeofthecolumnwhereverthatis",
+		"+\tconst hidden = \"zero\u200bwidth \u202eand a bidi mark, then enough plain text after them to pass the column and wrap onto a second row\"",
+		"+\treturn s",
+		"+}",
+	))
+	res.Files = append(res.Files, f)
+
+	return res
 }

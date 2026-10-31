@@ -106,10 +106,14 @@ func (a *App) drawerAfterUpdate() tea.Cmd {
 
 	pics := v.picturesMoved()
 
+	wrap := lay.codeWidths()
+	rewrap := v.wrapW != wrap
+	v.wrapW = wrap
+
 	switch {
 	case pics:
 		v.rebuildPictures(lay.split)
-	case v.rowsSplit != lay.split || (moved && len(v.mdFiles) > 0) || stale:
+	case v.rowsSplit != lay.split || rewrap || (moved && len(v.mdFiles) > 0) || stale:
 		v.rebuild(lay.split)
 	}
 

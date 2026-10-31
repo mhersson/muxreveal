@@ -29,6 +29,7 @@ const (
 	tintGhostNr = 0.05
 
 	markGlyph    = "▎" // ▎ at the first cell of the row under the cursor
+	wrapGlyph    = "↪" // ↪ in the sign column of a line's continuation rows
 	markReviewed = "✓ reviewed"
 	tagDigitsMin = 4 // the least hex digits of a hidden-character tag
 	minNumW      = 3
@@ -142,6 +143,15 @@ const markW = 1
 // unifiedCode is the code columns of a unified row, with n number columns.
 func (l drawerLayout) unifiedCode(n int) int {
 	return l.diffW - markW - n*l.gw - diffview.SignWidth
+}
+
+// codeWidths are the columns the rows wrap at, as the drawer draws them.
+func (l drawerLayout) codeWidths() codeWidths {
+	if l.split {
+		return codeWidths{left: l.splitCode(), right: l.splitRightCode()}
+	}
+
+	return codeWidths{line: l.unifiedCode(2), full: l.unifiedCode(1)}
 }
 
 // splitCode is the code columns of the left side of a side by side row, the
@@ -922,7 +932,7 @@ func (d *drawCtx) diffRow(y int) string {
 		return p.line(nil, w)
 	}
 
-	cursor := d.diffKeys() && i == d.v.cursor
+	cursor := d.onCursor(i)
 	row := d.exact(d.rowCells(i, cursor), w)
 	d.notePicture(i, d.lay.headH+y, cursor)
 
@@ -931,6 +941,18 @@ func (d *drawCtx) diffRow(y int) string {
 	}
 
 	return row
+}
+
+// onCursor reports whether row i is a row of the cursor's line while the diff
+// has the keyboard.
+func (d *drawCtx) onCursor(i int) bool {
+	v := d.v
+
+	if !d.diffKeys() || v.cursor < 0 || v.cursor >= len(v.rows) {
+		return false
+	}
+
+	return i >= v.lineStart(v.cursor) && i < v.lineEnd(v.cursor)
 }
 
 // exact makes s w cells: cut, or padded on the ground.

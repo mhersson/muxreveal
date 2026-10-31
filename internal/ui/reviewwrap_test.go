@@ -9,8 +9,12 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	uv "github.com/charmbracelet/ultraviolet"
+	"github.com/charmbracelet/x/ansi"
 
+	"github.com/mhersson/muxreveal/internal/core"
 	"github.com/mhersson/muxreveal/internal/git"
+	"github.com/mhersson/muxreveal/internal/ui/diffview"
 )
 
 func TestWrapLine(t *testing.T) {
@@ -244,20 +248,34 @@ func TestWrappedFullRows(t *testing.T) {
 	}
 }
 
-// wrapScene is a scene over res whose rows wrap at w.
+// wrapScene is a scene over res whose unified rows wrap at w.line, at the
+// window width that gives the drawer that code column.
 func wrapScene(t *testing.T, res git.Result, w codeWidths, h int) (*App, *reviewView) {
 	t.Helper()
 
-	s := reviewScene{
-		theme: "catppuccin-mocha", w: 100, h: h, res: res, turn: 1, turns: 1, focused: true,
-		tune: func(_ *testing.T, _ *App, v *reviewView) {
-			v.wrapW = w
-			v.rebuild(false)
-		},
-	}
-	a := s.build(t)
+	build := func(win int) (*App, *reviewView) {
+		s := reviewScene{
+			theme: "catppuccin-mocha", w: win, h: h, res: res, turn: 1, turns: 1, focused: true,
+			tune: func(_ *testing.T, _ *App, v *reviewView) {
+				v.wrapW = codeWidths{line: w.line}
+				v.rebuild(false)
+			},
+		}
+		a := s.build(t)
 
-	return a, a.drawer.views[a.store.State().Tab().ID]
+		return a, a.drawer.views[a.store.State().Tab().ID]
+	}
+
+	const probe = 50 // under 60, so the drawer takes the whole window
+
+	a, v := build(probe)
+	r, _ := a.drawerRect(a.store.State())
+
+	if d := w.line - a.drawerLayoutOf(r, v, false).unifiedCode(2); d != 0 {
+		a, v = build(probe + d)
+	}
+
+	return a, v
 }
 
 // padded is a file of n short context lines, then lines built from the rest.
@@ -600,5 +618,400 @@ func TestWrappedRestoreFallbackFirstRow(t *testing.T) {
 
 	if got := restoreAnchor(res, rows, gone); got != 2 {
 		t.Errorf("restored row %d, want 2 (the long line's first row)", got)
+	}
+}
+
+// altText is 70 cells of text no two 30-cell windows of which are alike, and
+// none like dtext's.
+const altText = "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ!@#$%^&*"
+
+// dtext is n cells of text no two 30-cell windows of which are alike.
+func dtext(n int) string {
+	var b strings.Builder
+	for i := 0; b.Len() < n; i++ {
+		fmt.Fprintf(&b, "%02d", i)
+	}
+
+	return b.String()[:n]
+}
+
+// drawnScene draws a scene over res in a window of win columns, the rows
+// wrapped at wrap and laid out side by side or not, and hands back what the
+// frame needs to be read.
+type drawnScene struct {
+	a     *App
+	v     *reviewView
+	d     *drawCtx
+	lay   drawerLayout
+	lines []string
+}
+
+func newDrawnScene(t *testing.T, res git.Result, win, h int, wrap codeWidths, split bool, tune func(*reviewView)) drawnScene {
+	t.Helper()
+
+	s := reviewScene{
+		theme: "catppuccin-mocha", w: win, h: h, res: res, turn: 1, turns: 1, focused: true,
+		tune: func(_ *testing.T, _ *App, v *reviewView) {
+			v.split = split
+
+			if tune != nil {
+				tune(v)
+			}
+
+			v.rebuild(split)
+		},
+	}
+	a := s.build(t)
+	st := a.store.State()
+
+	// The drawer wraps at its own widths once it settles; the test wraps at its own.
+	a.drawer.views[st.Tab().ID].wrapW = wrap
+	a.drawer.views[st.Tab().ID].rebuild(split)
+
+	r, _ := a.drawerRect(st)
+	d, _, ok := a.drawCtxFor(st)
+
+	if !ok {
+		t.Fatal("no drawer context")
+	}
+
+	v := a.drawer.views[st.Tab().ID]
+
+	return drawnScene{a: a, v: v, d: d, lay: d.lay, lines: a.drawerLines(st, r)}
+}
+
+// find is the index of the one drawn line whose text holds sub.
+func (s drawnScene) find(t *testing.T, sub string) int {
+	t.Helper()
+
+	at := -1
+
+	for i, l := range s.lines {
+		if strings.Contains(ansi.Strip(l), sub) {
+			if at >= 0 {
+				t.Fatalf("%q is on lines %d and %d", sub, at, i)
+			}
+
+			at = i
+		}
+	}
+
+	if at < 0 {
+		t.Fatalf("no line holds %q", sub)
+	}
+
+	return at
+}
+
+func styleAt(line string, x int) uv.Style {
+	buf := uv.NewScreenBuffer(ansi.StringWidth(line), 1)
+	uv.NewStyledString(line).Draw(buf, buf.Bounds())
+
+	return buf.CellAt(x, 0).Style
+}
+
+func TestWrappedRowLook(t *testing.T) {
+	t.Parallel()
+
+	texts := []string{dtext(70), altText}
+	res := padded(0, " "+texts[0], "+"+texts[1])
+	kinds := []diffview.Kind{diffview.Context, diffview.Add}
+
+	for li, kind := range kinds {
+		text := texts[li]
+		parts := []string{text[:30], text[30:60], text[60:]}
+
+		for _, cursor := range []bool{false, true} {
+			t.Run(fmt.Sprintf("line %d cursor %v", li, cursor), func(t *testing.T) {
+				t.Parallel()
+
+				s := newDrawnScene(t, res, 100, 30, codeWidths{line: 30}, false, nil)
+				s.v.cursor = 2 + 3*li
+
+				if !cursor {
+					s.v.cursor = 0
+				}
+
+				st := s.a.store.State()
+				r, _ := s.a.drawerRect(st)
+				s.lines = s.a.drawerLines(st, r)
+				s.d, _, _ = s.a.drawCtxFor(st)
+
+				gw, ui, th := s.lay.gw, s.d.ui, s.d.dv
+				codeX := 1 + markW + 2*gw + diffview.SignWidth
+
+				for k, part := range parts {
+					line := s.lines[s.find(t, part)]
+					plain := ansi.Strip(line)
+
+					if got := ansi.Cut(plain, 1, 2); got != map[bool]string{false: " ", true: markGlyph}[cursor] {
+						t.Errorf("part %d: cell 0 = %q, cursor %v", k, got, cursor)
+					}
+
+					if got := ansi.Cut(plain, codeX, codeX+len(part)); got != part {
+						t.Errorf("part %d: code = %q, want %q", k, got, part)
+					}
+
+					if strings.Contains(plain, "…") {
+						t.Errorf("part %d ends in a cut marker: %q", k, plain)
+					}
+
+					if bg := styleAt(line, 2).Bg; bg == nil || !sameColor(bg, th.GutterBg(kind, cursor)) {
+						t.Errorf("part %d: number cell ground %v, want %v", k, bg, th.GutterBg(kind, cursor))
+					}
+
+					if k == 0 {
+						continue
+					}
+
+					if got := ansi.Cut(plain, 2, 2+2*gw); strings.TrimSpace(got) != "" {
+						t.Errorf("part %d: number cells %q, want blank", k, got)
+					}
+
+					if got := ansi.Cut(plain, codeX-diffview.SignWidth, codeX); got != wrapGlyph+" " {
+						t.Errorf("part %d: sign = %q, want %q", k, got, wrapGlyph+" ")
+					}
+
+					st := styleAt(line, codeX-diffview.SignWidth)
+					if st.Fg == nil || !sameColor(st.Fg, ui.Subtle) || st.Bg == nil || !sameColor(st.Bg, th.CodeBg(kind, cursor)) {
+						t.Errorf("part %d: %s fg %v bg %v, want Subtle on the code ground", k, wrapGlyph, st.Fg, st.Bg)
+					}
+				}
+			})
+		}
+	}
+}
+
+func TestWrappedBudgetLine(t *testing.T) {
+	t.Parallel()
+
+	s := newDrawnScene(t, padded(0, " "+strings.Repeat("a", 1500)), 100, 60, codeWidths{line: 40}, false, nil)
+
+	var rows []string
+
+	for _, l := range s.lines {
+		if p := ansi.Strip(l); strings.Contains(p, "aaaaaaaa") {
+			rows = append(rows, diffEnd(p))
+		}
+	}
+
+	if want := (lineBudget + 1 + 39) / 40; len(rows) != want {
+		t.Fatalf("%d rows, want %d", len(rows), want)
+	}
+
+	for i, r := range rows {
+		if got := strings.HasSuffix(r, "…"); got != (i == len(rows)-1) {
+			t.Errorf("row %d ends in a cut marker = %v: %q", i, got, r)
+		}
+	}
+}
+
+func TestWrappedMatchAcrossRows(t *testing.T) {
+	t.Parallel()
+
+	text := dtext(70) // "1415" runs over the cut at cell 30
+	s := newDrawnScene(t, padded(0, " "+text), 100, 30, codeWidths{line: 30}, false, func(v *reviewView) { v.search = ptr("1415") })
+	codeX := 1 + markW + 2*s.lay.gw + diffview.SignWidth
+	first, second := s.lines[s.find(t, text[:30])], s.lines[s.find(t, text[30:60])]
+
+	for _, tt := range []struct {
+		line string
+		off  int
+		want bool
+	}{
+		{first, 27, false},
+		{first, 28, true},
+		{first, 29, true},
+		{second, 0, true},
+		{second, 1, true},
+		{second, 2, false},
+	} {
+		st := styleAt(tt.line, codeX+tt.off)
+		// A number's own colour is Match's, so the bold tells a match.
+		if got := st.Fg != nil && sameColor(st.Fg, s.d.ui.Match) && st.Attrs&uv.AttrBold != 0; got != tt.want {
+			t.Errorf("cell %d of %q: Match = %v, want %v", tt.off, ansi.Strip(tt.line)[codeX:codeX+30], got, tt.want)
+		}
+	}
+}
+
+func TestWrappedSplitSides(t *testing.T) {
+	t.Parallel()
+
+	right := dtext(70)
+	lone := altText
+	res := git.Result{Turn: 1, Files: []git.FileDiff{fileSpec(wrapPath, git.Modified, hunkSpec(1, 1, "",
+		"-"+strings.Repeat("L", 65), "+"+right, "+"+lone))}}
+	s := newDrawnScene(t, res, 160, 30, codeWidths{left: 80, right: 30}, true, nil)
+
+	if !s.lay.split {
+		t.Fatal("the drawer is not side by side")
+	}
+
+	th := s.d.dv
+	sep := 1 + s.lay.splitSep()
+	rcode, _ := s.lay.splitCodeAt(1)
+	lcode, lw := s.lay.splitCodeAt(0)
+	rsign := 1 + rcode - diffview.SignWidth
+
+	tests := []struct {
+		name    string
+		text    string
+		missing bool
+	}{{"paired", right, false}, {"left missing", lone, true}}
+
+	for _, tt := range tests {
+		for k := range 3 {
+			part := tt.text[30*k : min(30*k+30, 70)]
+			line := s.lines[s.find(t, part)]
+			plain := ansi.Strip(line)
+			left := ansi.Cut(plain, 1, sep)
+			kind, lkind := diffview.Add, diffview.Delete
+
+			if tt.missing {
+				lkind = diffview.Missing
+			}
+
+			if k == 0 {
+				continue
+			}
+
+			if strings.Contains(left, wrapGlyph) {
+				t.Errorf("%s part %d: the left side shows %s", tt.name, k, wrapGlyph)
+			}
+
+			if strings.TrimSpace(ansi.Cut(left, 1, ansi.StringWidth(left))) != "" {
+				t.Errorf("%s part %d: the left side is not blank: %q", tt.name, k, left)
+			}
+
+			if got := strings.Count(plain, wrapGlyph); got != 1 || ansi.Cut(plain, rsign, rsign+1) != wrapGlyph {
+				t.Errorf("%s part %d: %d %s, the right one at %d: %q", tt.name, k, got, wrapGlyph, rsign, plain)
+			}
+
+			if bg := styleAt(line, 2).Bg; bg == nil || !sameColor(bg, th.GutterBg(lkind, false)) {
+				t.Errorf("%s part %d: left number ground %v, want %v", tt.name, k, bg, th.GutterBg(lkind, false))
+			}
+
+			for _, x := range []int{1 + lcode, 1 + lcode + lw - 1} {
+				if bg := styleAt(line, x).Bg; bg == nil || !sameColor(bg, th.CodeBg(lkind, false)) {
+					t.Errorf("%s part %d: left code ground at %d is %v, want %v", tt.name, k, x, bg, th.CodeBg(lkind, false))
+				}
+			}
+
+			if fg := styleAt(line, rsign).Fg; fg == nil || !sameColor(fg, s.d.ui.Subtle) {
+				t.Errorf("%s part %d: %s fg %v, want Subtle", tt.name, k, wrapGlyph, fg)
+			}
+
+			if bg := styleAt(line, rsign).Bg; bg == nil || !sameColor(bg, th.CodeBg(kind, false)) {
+				t.Errorf("%s part %d: %s ground %v, want the added ground", tt.name, k, wrapGlyph, bg)
+			}
+		}
+	}
+}
+
+func TestWrappedGhostRows(t *testing.T) {
+	t.Parallel()
+
+	ghost := dtext(70)
+	ft := fullText{old: []string{"a", ghost, "b"}, new: []string{"a", "b"}}
+	s := newDrawnScene(t, wrapResult(), 100, 30, codeWidths{full: 30}, false, func(v *reviewView) {
+		v.full = map[string]fullText{wrapPath: ft}
+		v.fullOn = allWhole(v.full)
+	})
+	codeX := 1 + markW + s.lay.gw + diffview.SignWidth
+
+	for k := range 3 {
+		part := ghost[30*k : min(30*k+30, 70)]
+		line := s.lines[s.find(t, part)]
+		plain := ansi.Strip(line)
+
+		want := wrapGlyph + " "
+		if k == 0 {
+			want = "- "
+		}
+
+		if got := ansi.Cut(plain, codeX-diffview.SignWidth, codeX); got != want {
+			t.Errorf("part %d: sign %q, want %q", k, got, want)
+		}
+
+		if k > 0 {
+			if fg := styleAt(line, codeX-diffview.SignWidth).Fg; fg == nil || !sameColor(fg, s.d.ui.Subtle) {
+				t.Errorf("part %d: %s fg %v, want Subtle", k, wrapGlyph, fg)
+			}
+		}
+
+		if fg := styleAt(line, codeX).Fg; fg == nil || !sameColor(fg, s.d.ui.Muted) {
+			t.Errorf("part %d: text fg %v, want Muted", k, fg)
+		}
+
+		if strings.Contains(plain, "…") {
+			t.Errorf("part %d ends in a cut marker", k)
+		}
+	}
+}
+
+func TestWrappedRowsFollowWidth(t *testing.T) {
+	t.Parallel()
+
+	s := reviewScene{theme: "catppuccin-mocha", w: 200, h: 52, res: padded(1, " "+dtext(70)), turn: 1, turns: 1, focused: true}
+	a := s.build(t)
+	v := a.drawer.views[a.store.State().Tab().ID]
+
+	sized(t, a, 200, 52)
+
+	if v.wrapW.line < 70 {
+		t.Fatalf("wrapW %+v at 200 columns wraps a 70-cell line", v.wrapW)
+	}
+
+	v.cursor = 3 // rows: file, hunk, pad, the long line
+
+	rev, wide := v.rowsRev, v.wrapW
+
+	sized(t, a, 200, 52)
+
+	if v.rowsRev != rev {
+		t.Errorf("a same-size resize rebuilt the rows")
+	}
+
+	sized(t, a, 120, 52)
+
+	if v.wrapW == wide || v.rowsRev == rev {
+		t.Fatalf("a narrower window kept wrapW %+v and rowsRev %d", v.wrapW, v.rowsRev)
+	}
+
+	if parts := len(lineParts(dtext(70), false, v.wrapW.line)); parts < 2 {
+		t.Fatalf("the narrow column %d does not wrap the line", v.wrapW.line)
+	}
+
+	if v.cursor != 3 || v.rows[v.cursor].part != 0 {
+		t.Errorf("cursor %d part %d, want the line's first row 3", v.cursor, v.rows[v.cursor].part)
+	}
+
+	if want := v.lineEnd(3) - 3; want < 2 {
+		t.Errorf("the line takes %d rows after narrowing", want)
+	}
+
+	rev, narrow := v.rowsRev, v.wrapW
+
+	openIn(t, a, core.SetReviewTree{Open: true})
+	sized(t, a, 120, 52)
+
+	if v.wrapW == narrow || v.rowsRev == rev {
+		t.Errorf("opening the tree kept wrapW %+v and rowsRev %d", v.wrapW, v.rowsRev)
+	}
+}
+
+func TestCodeWidths(t *testing.T) {
+	t.Parallel()
+
+	l := drawerLayout{diffW: 100, gw: 4}
+
+	if got, want := l.codeWidths(), (codeWidths{line: l.unifiedCode(2), full: l.unifiedCode(1)}); got != want {
+		t.Errorf("unified widths %+v, want %+v", got, want)
+	}
+
+	l.split = true
+
+	if got, want := l.codeWidths(), (codeWidths{left: l.splitCode(), right: l.splitRightCode()}); got != want {
+		t.Errorf("split widths %+v, want %+v", got, want)
 	}
 }

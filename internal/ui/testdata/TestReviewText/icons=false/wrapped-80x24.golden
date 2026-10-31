@@ -1,0 +1,24 @@
+ 1 p1                                                       layout master-stack 
+────────────────────────────────────────────────────────────────────────────────
+╭─ shell ───────────╭─ muxreveal · feat/review-pane ──────── ✓ 0/5 ─ turn 4/4 ─╮
+│$ claude           │  A internal/ui/review_test.go                  !  +11 -0 │
+│reviewing the diff │       6 +     want := "muxreveal⟨U+200B⟩ ·               │
+│                   │         ↪ feat/review-pane"                              │
+│                   │       7 +     // the title reads left to right:          │
+│                   │         ↪ ⟨U+202E⟩enap-weiver⟨U+202C⟩                    │
+│                   │       8 +     if got := reviewTitle(); got != want {     │
+│                   │       9 +         t.Fatalf("title = %q, want %q", got,   │
+│                   │         ↪ want)                                          │
+│                   │      10 +     }                                          │
+│                   │      11 + }                                              │
+│                   │  A internal/ui/wrapdemo.go                      !  +8 -0 │
+│                   │  @@ -0,0 +1,8 @@                                         │
+│                   │       1 + package ui                                     │
+│                   │       2 +                                                │
+│                   │       3 + func wrapDemo(s string, width int) string {    │
+│                   │▎      4 +     return ansi.Truncate(strings.TrimSpace(stri│
+│                   │▎        ↪ ngs.ReplaceAll(s, "\n", " ")), width-len(ellips│
+│                   │▎        ↪ is)-padding, ellipsis) + strings.Repeat(" ",   │
+│                   │▎        ↪ max(width-ansi.StringWidth(s), 0))             │
+│                   │ j/k line   ]/[ hunk   }/{ file   tab tree   w worktree   │
+╰───────────────────╰──────────────────────────────────────────────────────────╯

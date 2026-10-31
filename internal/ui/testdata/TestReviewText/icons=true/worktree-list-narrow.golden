@@ -15,26 +15,26 @@
 │ │                                  │ │
 │ │ j/k move   enter show   esc close│ │
 │ ╰──────────────────────────────────╯ │
-│      33 +     Turn  int // 0 is the …│
+│      30 + type ReviewSource struct { │
+│      31 +     Agent PaneID           │
+│      32 +     Mode  ReviewMode       │
+│      33 +     Turn  int // 0 is the  │
+│         ↪ latest                     │
 │      34 + }                          │
 │  M internal/ui/app.go          +4 -3 │
 │  @@ -40,9 +40,10 @@ func (a *App) In…│
 │  40  40                              │
-│  41  41   // openReview opens a revi…│
-│  42  42   func (a *App) openReview(c…│
-│  43     -     if a.store.Pane(agent)…│
+│  41  41   // openReview opens a      │
+│         ↪ review pane beside an      │
+│         ↪ agent, or focuses the open │
+│         ↪ one.                       │
+│  42  42   func (a *App)              │
+│         ↪ openReview(ctx             │
+│         ↪ context.Context, agent     │
+│         ↪ core.PaneID) tea.Cmd {     │
+│  43     -     if a.store.Pane(agent).│
+│         ↪ Kind != core.KindAgent {   │
 │  44     -         return nil         │
 │  45     -     }                      │
-│      43 +     p, ok := a.store.Pane(…│
-│      44 +     if !ok || p.Kind != co…│
-│      45 +         return a.notify("a…│
-│      46 +     }                      │
-│  46  47                              │
-│  47  48       if r, ok := a.reviews[…│
-│  48  49           return a.focus(r.p…│
-│  R …o → internal/ui/keymap.go  +1 -0 │
-│  @@ -3,6 +3,7 @@                     │
-│   3   3   // defaultLeader maps the …│
-│   4   4   var defaultLeader = map[st…│
 │ j/k line   ]/[ hunk   }/{ file       │
 ╰──────────────────────────────────────╯

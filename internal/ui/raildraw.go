@@ -74,6 +74,27 @@ func cutRuns(runs []railRun, w int) []railRun {
 	return out
 }
 
+// sliceRuns is the cells [from, to) of runs, each run keeping its look.
+func sliceRuns(runs []railRun, from, to int) []railRun {
+	var out []railRun
+
+	pos := 0
+
+	for _, r := range runs {
+		w := ansi.StringWidth(r.text)
+		lo, hi := max(from-pos, 0), min(to-pos, w)
+
+		if lo < hi {
+			r.text = ansi.Cut(r.text, lo, hi)
+			out = append(out, r)
+		}
+
+		pos += w
+	}
+
+	return out
+}
+
 // hiRuns splits text into runs, the matched rune ranges in Match bold.
 func hiRuns(text string, hits []railHit, fg, match theme.Hex, bold bool) []railRun {
 	if len(hits) == 0 {
