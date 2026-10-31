@@ -20,11 +20,10 @@ const (
 	// hlBatch bounds the lines one highlighting batch tokenises; a chunk is at
 	// most hlChunk lines, so each fits a batch on its own.
 	hlBatch = 512
-)
-
-const (
-	hlAhead  = 2 // screens tokenised ahead of the view, the way it last moved
-	hlBehind = 1 // screens tokenised behind it
+	// hlAhead and hlBehind are the screens tokenised ahead of the view, the way
+	// its top last moved, and behind it.
+	hlAhead  = 2
+	hlBehind = 1
 )
 
 // hlWindow is the rows to search for chunks, in order: the visible rows top to

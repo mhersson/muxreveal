@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -285,11 +286,27 @@ func TestHighlightWindowOrder(t *testing.T) {
 	}
 }
 
+// manyHunks is one added Go file of n small hunks, each a chunk of its own and
+// shorter than a screen, so a batch holds many chunks and their order shows.
+func manyHunks(n int) git.Result {
+	hunks := make([]git.Hunk, n)
+
+	for i := range hunks {
+		specs := make([]string, 6)
+		for j := range specs {
+			specs[j] = fmt.Sprintf("+func f%d_%d() int { return %d } // chunk %d", i, j, i*j, i)
+		}
+
+		hunks[i] = hunkSpec(0, i*100+1, "", specs...)
+	}
+
+	return git.Result{Turn: 1, Files: []git.FileDiff{fileSpec("many.go", git.Added, hunks...)}}
+}
+
 func TestHighlightVisibleFirst(t *testing.T) {
 	t.Parallel()
 
-	res, _ := bigResult(5000)
-	s := reviewScene{theme: "catppuccin-mocha", icons: true, w: 200, h: 52, res: res, turn: 1, turns: 1, focused: true}
+	s := reviewScene{theme: "catppuccin-mocha", icons: true, w: 200, h: 52, res: manyHunks(400), turn: 1, turns: 1, focused: true}
 	a := s.build(t)
 	v := a.reviewViewOf(a.store.State().Tab().ID)
 	h := a.reviewBodyH(v)
@@ -305,25 +322,54 @@ func TestHighlightVisibleFirst(t *testing.T) {
 
 		return out
 	}
-	inJob := func(j *hlJob) map[spanKey]bool {
-		out := map[spanKey]bool{}
+	jobKeys := func(j *hlJob) []spanKey {
+		var out []spanKey
 
 		for _, tx := range j.texts {
-			for _, k := range tx.keys {
-				out[k] = true
-			}
+			out = append(out, tx.keys...)
 		}
 
 		return out
 	}
+	// ahead checks that job holds every key of want that held lacks, before any key outside want.
+	ahead := func(t *testing.T, what string, job *hlJob, want, held map[spanKey]bool) {
+		t.Helper()
 
-	// Two screens ahead of the view reach into the next chunk of the file.
+		if job == nil {
+			t.Fatalf("%s: no batch was started", what)
+		}
+
+		got := map[spanKey]bool{}
+		other := false
+
+		for _, k := range jobKeys(job) {
+			got[k] = true
+
+			switch {
+			case want[k] && other:
+				t.Errorf("%s: chunk %v comes after one outside the expected rows", what, k)
+			case !want[k]:
+				other = true
+			}
+		}
+
+		for k := range want {
+			if !held[k] && !got[k] {
+				t.Errorf("%s: chunk %v of the expected rows is missing", what, k)
+			}
+		}
+	}
+
+	if len(v.rows) < 12*h {
+		t.Fatalf("%d rows for a screen of %d: too few to look ahead in", len(v.rows), h)
+	}
+
 	at := func(row int) {
 		v.top, v.cursor = row, row
 		v.cache, v.carry = reviewCache{}, nil
 	}
 
-	at(5*hlChunk - 2*h)
+	at(len(v.rows) / 2)
 
 	top := v.viewTop(h)
 
@@ -335,9 +381,11 @@ func TestHighlightVisibleFirst(t *testing.T) {
 	}
 
 	vis := keysOf(top, top+h)
-	firstKeys := inJob(first)
+	firstKeys := map[spanKey]bool{}
 
-	for k := range firstKeys {
+	for _, k := range jobKeys(first) {
+		firstKeys[k] = true
+
 		if !vis[k] {
 			t.Errorf("the first batch holds %v, which no visible row reads", k)
 		}
@@ -345,31 +393,7 @@ func TestHighlightVisibleFirst(t *testing.T) {
 
 	runHighlight(t, a)
 	a.drawerAfterUpdate()
-
-	next := a.drawer.hlJob
-	if next == nil {
-		t.Fatal("no second batch was started")
-	}
-
-	// Chunks of the screens ahead that the first batch lacked come before others.
-	ahead := keysOf(top+h, top+3*h)
-	seenOther := false
-
-	for _, tx := range next.texts {
-		for _, k := range tx.keys {
-			if firstKeys[k] || vis[k] && !ahead[k] {
-				continue
-			}
-
-			if ahead[k] && seenOther {
-				t.Errorf("chunk %v of the screens ahead comes after another outside them", k)
-			}
-
-			if !ahead[k] {
-				seenOther = true
-			}
-		}
-	}
+	ahead(t, "down", a.drawer.hlJob, keysOf(top+h, top+3*h), firstKeys)
 
 	settleDrawer(t, a)
 
@@ -386,37 +410,23 @@ func TestHighlightVisibleFirst(t *testing.T) {
 		}
 	}
 
-	// Moving up four screens makes up the direction: the screens above come first.
-	// The screens above reach into the chunk before the one in view.
-	at(4*hlChunk + 3*h/2)
-
+	// A move up by more than the window is wide: nothing it needs is held.
+	v.top, v.cursor = top-4*h, top-4*h
 	newTop := v.viewTop(h)
 
 	a.drawerAfterUpdate()
-	runHighlight(t, a)
-	a.drawerAfterUpdate()
 
-	up := a.drawer.hlJob
-	if up == nil {
+	visible := a.drawer.hlJob
+	if visible == nil {
 		t.Fatal("no batch after moving up")
 	}
 
-	want := keysOf(newTop-2*h, newTop)
-	seenOther = false
-
-	for _, tx := range up.texts {
-		for _, k := range tx.keys {
-			if want[k] {
-				if seenOther {
-					t.Errorf("chunk %v above the view comes after another outside it", k)
-				}
-			} else {
-				seenOther = true
-			}
-		}
+	held := map[spanKey]bool{}
+	for _, k := range jobKeys(visible) {
+		held[k] = true
 	}
 
-	if len(up.texts) == 0 || !want[up.texts[0].keys[0]] {
-		t.Errorf("the batch after moving up does not start with the screens above")
-	}
+	runHighlight(t, a)
+	a.drawerAfterUpdate()
+	ahead(t, "up", a.drawer.hlJob, keysOf(newTop-2*h, newTop), held)
 }
