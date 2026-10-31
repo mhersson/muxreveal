@@ -14,7 +14,7 @@ help:
 	@echo "  fmt          format the code with golangci-lint fmt"
 	@echo "  fmt-check    fail and show the diff if formatting is needed"
 	@echo "  tidy-check   fail if go mod tidy would change go.mod or go.sum"
-	@echo "  scan         fail on private-use glyphs in Go source and em-dashes in Go and Markdown files"
+	@echo "  scan         fail on private-use glyphs in Go source, em-dashes in Go and Markdown files and wall-clock bounds in tests"
 	@echo "  scan-commits fail on IDs, trailers, em-dashes and big blobs in SCAN_BASE..SCAN_HEAD (origin/main..HEAD)"
 	@echo "  check-fast   the per-commit check: build, fmt-check, vet, lint, test-changed, scan"
 	@echo "  check        the Linux go-checks gates of CI: build, build-darwin, fmt-check, vet, lint, test-race, tidy-check, scan"
@@ -92,6 +92,7 @@ scan:
 		printf '%s\n' "$$bad"; \
 		fail=1; \
 	fi; \
+	sh scripts/scan-wall-clock.sh || fail=1; \
 	[ -z "$$fail" ]
 
 scan-commits:

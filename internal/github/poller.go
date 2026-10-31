@@ -46,6 +46,10 @@ type PollerOptions struct {
 	// Client returns the client for a host; a success is kept per host.
 	Client                 func(ctx context.Context, host string) (*Client, error)
 	Fast, Slow, MaxBackoff time.Duration // 0 = 10 s, 60 s, 5 min
+
+	// now and after are the clock the waits run on; nil is the real one.
+	now   func() time.Time
+	after func(time.Duration) <-chan time.Time
 }
 
 // Poller polls the open pull requests of every watched repository, one
@@ -86,6 +90,14 @@ func NewPoller(o PollerOptions) *Poller {
 
 	if o.MaxBackoff <= 0 {
 		o.MaxBackoff = defaultMaxBackoff
+	}
+
+	if o.now == nil {
+		o.now = time.Now
+	}
+
+	if o.after == nil {
+		o.after = time.After
 	}
 
 	return &Poller{
@@ -212,20 +224,14 @@ func (p *Poller) run(ctx context.Context, rp *repoPoller) {
 	)
 
 	for {
-		timer := time.NewTimer(wait)
-
 		select {
 		case <-ctx.Done():
-			timer.Stop()
-
 			return
 		case <-rp.wake:
-			timer.Stop()
-
-			if !sleepUntil(ctx, notBefore) {
+			if !p.sleepUntil(ctx, notBefore) {
 				return
 			}
-		case <-timer.C:
+		case <-p.opts.after(wait):
 		}
 
 		snap, pending := p.poll(ctx, rp)
@@ -233,7 +239,7 @@ func (p *Poller) run(ctx context.Context, rp *repoPoller) {
 			return
 		}
 
-		now := time.Now()
+		now := p.opts.now()
 		wait = p.nextWait(snap, pending, &failures, now)
 
 		if errors.Is(snap.Err, ErrRateLimited) {
@@ -255,19 +261,16 @@ func (p *Poller) run(ctx context.Context, rp *repoPoller) {
 }
 
 // sleepUntil waits for t; false means ctx ended first.
-func sleepUntil(ctx context.Context, t time.Time) bool {
-	d := time.Until(t)
+func (p *Poller) sleepUntil(ctx context.Context, t time.Time) bool {
+	d := t.Sub(p.opts.now())
 	if d <= 0 {
 		return true
 	}
 
-	timer := time.NewTimer(d)
-	defer timer.Stop()
-
 	select {
 	case <-ctx.Done():
 		return false
-	case <-timer.C:
+	case <-p.opts.after(d):
 		return true
 	}
 }

@@ -1125,15 +1125,15 @@ func (p *pump) run(cmd tea.Cmd) {
 	})
 }
 
-// step feeds the next queued message to Update, or reports false at the deadline.
-func (p *pump) step(a *App, deadline time.Time) bool {
+// step feeds the next queued message to Update, or reports false once ctx ends.
+func (p *pump) step(ctx context.Context, a *App) bool {
 	select {
 	case m := <-p.msgs:
 		_, cmd := a.Update(m)
 		p.run(cmd)
 
 		return true
-	case <-time.After(time.Until(deadline)):
+	case <-ctx.Done():
 		return false
 	}
 }
@@ -1149,12 +1149,14 @@ func TestFloodingPaneQuits(t *testing.T) {
 	pm.run(chord(r.App, 'v'))
 	// p2 (cat) is focused; the flood runs in p1.
 
-	deadline := time.Now().Add(5 * time.Second)
+	pumped, stop := context.WithTimeout(context.Background(), 5*time.Second)
+	defer stop()
+
 	floods := 0
 
 	// Let the flood run through Update before the key arrives.
 	for floods < 50 {
-		if !pm.step(r.App, deadline) {
+		if !pm.step(pumped, r.App) {
 			t.Fatal("the flood produced no messages")
 		}
 
@@ -1168,7 +1170,7 @@ func TestFloodingPaneQuits(t *testing.T) {
 	}
 
 	for after := 0; !typed(); after++ {
-		if !pm.step(r.App, deadline) {
+		if !pm.step(pumped, r.App) {
 			t.Fatal("the key did not reach the second pane while the first flooded")
 		}
 
@@ -1179,22 +1181,16 @@ func TestFloodingPaneQuits(t *testing.T) {
 
 	// The flood is still going.
 	for range 20 {
-		if !pm.step(r.App, deadline) {
+		if !pm.step(pumped, r.App) {
 			t.Fatal("the flood stopped")
 		}
 	}
-
-	start := time.Now()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	if err := r.Close(ctx); err != nil {
 		t.Fatalf("Close() error = %v", err)
-	}
-
-	if d := time.Since(start); d > 2*time.Second {
-		t.Errorf("Close took %v, want under 2s", d)
 	}
 
 	for _, pid := range r.pidList() {

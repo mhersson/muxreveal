@@ -45,7 +45,7 @@ make test-changed # the tests of the changed packages; TEST_PKGS=... overrides
 make test-race    # go test -race ./...
 make lint         # golangci-lint run
 make fmt          # golangci-lint fmt
-make scan         # the glyph and em-dash scan
+make scan         # the glyph, em-dash and wall-clock scan
 make scan-commits # IDs, trailers, em-dashes and big blobs in the branch's commits
 make check-fast   # the per-commit check
 make check        # CI's Linux go-checks gates, for a local run
@@ -119,8 +119,10 @@ Dependency rules:
   goldens are behavior.
 - New tests call `t.Parallel()` unless they use `t.Setenv` or change the
   process's working directory.
-- New tests don't assert on wall-clock durations: inject a clock or wait for
-  the event. A real-time budget belongs in a test behind the `bench` tag.
+- Tests don't assert on wall-clock durations: inject a clock or wait for the
+  event. A real-time budget belongs in a test behind the `bench` tag.
+  `make scan` fails on `time.Since`, `time.Until` and `time.Now().Sub` in a
+  test without that tag.
 - Rendering: golden files under `testdata/` (`-update` flag to regenerate);
   `teatest` for Bubble Tea flows.
 - Diff engine: golden-file tests for hunks, word spans and full-file view.
@@ -134,12 +136,13 @@ Dependency rules:
 ## Commit discipline
 
 Run `make check-fast` before every commit; it must be clean. It runs the format
-check, lint, the glyph and em-dash scan and the tests of the packages the change
-touches (`make check-fast TEST_PKGS=./...` runs them all), and it builds and
-vets the whole module, so a change that stops another package or its tests from
-compiling fails it. Whether the other packages still behave is CI's to check. A
-change to goroutines, channels or locks also runs the race detector on the tests
-it adds or changes: `go test -race -run '<those tests>' ./<package>`.
+check, lint, the glyph, em-dash and wall-clock scan and the tests of the
+packages the change touches (`make check-fast TEST_PKGS=./...` runs them all),
+and it builds and vets the whole module, so a change that stops another package
+or its tests from compiling fails it. Whether the other packages still behave
+is CI's to check. A change to goroutines, channels or locks also runs the race
+detector on the tests it adds or changes:
+`go test -race -run '<those tests>' ./<package>`.
 
 CI runs the full gates on every pull request that changes Go code (every test
 under the race detector, the darwin build, `go mod tidy` and the native macOS

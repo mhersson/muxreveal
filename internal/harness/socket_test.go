@@ -43,10 +43,55 @@ func socketPath(t *testing.T) string {
 
 type served struct {
 	srv  *Server
+	clk  *fakeClock
 	out  chan Event
 	path string
 	done chan error
 }
+
+// fakeClock is a server clock that stands still: each wait the server asks for
+// arrives on asks and ends only when the test ends it, so an answer that comes
+// with no wait ended was not held. Every event asks for one wait, and a test
+// that leaves more than asks holds unread blocks the server.
+type fakeClock struct {
+	at   time.Time
+	asks chan ask
+}
+
+type ask struct {
+	d    time.Duration
+	fire chan time.Time
+}
+
+// runOnFakeClock puts srv on a fake clock; call it before Serve.
+func runOnFakeClock(srv *Server) *fakeClock {
+	c := &fakeClock{at: time.Date(2026, 10, 27, 9, 0, 0, 0, time.UTC), asks: make(chan ask, 64)}
+	srv.now = func() time.Time { return c.at }
+	srv.after = func(d time.Duration) <-chan time.Time {
+		a := ask{d: d, fire: make(chan time.Time, 1)}
+		c.asks <- a
+
+		return a.fire
+	}
+
+	return c
+}
+
+// next returns the next wait the server asks for.
+func (c *fakeClock) next(t *testing.T) ask {
+	t.Helper()
+
+	select {
+	case a := <-c.asks:
+		return a
+	case <-time.After(3 * time.Second):
+		t.Fatal("the server asked for no wait")
+	}
+
+	return ask{}
+}
+
+func (a ask) end() { a.fire <- time.Time{} }
 
 func startServer(t *testing.T, buf int, log *slog.Logger) *served {
 	t.Helper()
@@ -59,7 +104,7 @@ func startServer(t *testing.T, buf int, log *slog.Logger) *served {
 	}
 
 	srv.Log = log
-	s := &served{srv: srv, out: make(chan Event, buf), path: path, done: make(chan error, 1)}
+	s := &served{srv: srv, clk: runOnFakeClock(srv), out: make(chan Event, buf), path: path, done: make(chan error, 1)}
 	ctx, cancel := context.WithCancel(context.Background())
 
 	go func() { s.done <- srv.Serve(ctx, s.out) }()
@@ -342,18 +387,17 @@ func TestBadJSONDropped(t *testing.T) {
 
 func TestFullChannelDropsAfterOneSecond(t *testing.T) {
 	s := startServer(t, 0, nil)
+	res := sendAsync(s.path, Event{Pane: "p", Name: "x"})
 
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
-
-	start := time.Now()
-
-	if err := Send(ctx, s.path, Event{Pane: "p", Name: "x"}); err == nil {
-		t.Fatal("Send() error = nil, want one for a dropped event")
+	a := s.clk.next(t)
+	if a.d != time.Second {
+		t.Fatalf("a full channel holds the event for %v, want 1s", a.d)
 	}
 
-	if d := time.Since(start); d < 900*time.Millisecond || d > 2*time.Second {
-		t.Fatalf("drop took %v, want about 1s", d)
+	a.end()
+
+	if err := <-res; err == nil {
+		t.Fatal("Send() error = nil, want one for a dropped event")
 	}
 }
 
@@ -412,20 +456,15 @@ func TestServeEndsWithContext(t *testing.T) {
 	_ = srv.Close()
 }
 
-func TestSendMissingPathFailsFast(t *testing.T) {
-	start := time.Now()
-
+// Without a deadline, a Send that waited on a missing socket would hang.
+func TestSendMissingPathFails(t *testing.T) {
 	err := Send(context.Background(), filepath.Join(shortDir(t), "none.sock"), Event{})
 	if err == nil {
 		t.Fatal("Send() error = nil, want one")
 	}
-
-	if d := time.Since(start); d > time.Second {
-		t.Fatalf("Send took %v, want under 1s", d)
-	}
 }
 
-func TestSendSilentServerHonoursDeadline(t *testing.T) {
+func TestSendSilentServerHonoursCancel(t *testing.T) {
 	path := socketPath(t)
 
 	ln, err := net.Listen("unix", path)
@@ -437,6 +476,11 @@ func TestSendSilentServerHonoursDeadline(t *testing.T) {
 
 	var mu sync.Mutex
 
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// The cancel comes once the server holds the connection, so Send is
+	// waiting for an answer that never comes.
 	go func() {
 		for {
 			c, err := ln.Accept()
@@ -448,6 +492,7 @@ func TestSendSilentServerHonoursDeadline(t *testing.T) {
 
 			accepted = append(accepted, c)
 			mu.Unlock()
+			cancel()
 		}
 	}()
 
@@ -462,17 +507,8 @@ func TestSendSilentServerHonoursDeadline(t *testing.T) {
 		}
 	})
 
-	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
-	defer cancel()
-
-	start := time.Now()
-
 	if err := Send(ctx, path, Event{Pane: "p"}); err == nil {
 		t.Fatal("Send() error = nil, want one")
-	}
-
-	if d := time.Since(start); d > time.Second {
-		t.Fatalf("Send took %v, want about 300ms", d)
 	}
 }
 
@@ -511,7 +547,7 @@ func startBudgetServer(t *testing.T, hold, budget time.Duration) *served {
 
 	srv.Hold = hold
 	srv.Budget = budget
-	s := &served{srv: srv, out: make(chan Event, 4), path: path, done: make(chan error, 1)}
+	s := &served{srv: srv, clk: runOnFakeClock(srv), out: make(chan Event, 4), path: path, done: make(chan error, 1)}
 	ctx, cancel := context.WithCancel(context.Background())
 
 	go func() { s.done <- srv.Serve(ctx, s.out) }()
@@ -529,26 +565,27 @@ func startBudgetServer(t *testing.T, hold, budget time.Duration) *served {
 	return s
 }
 
-// sendAsync sends ev and reports the Send error and how long it took.
-func sendAsync(path string, ev Event) <-chan sendResult {
-	res := make(chan sendResult, 1)
+// sendAsync sends ev and reports the Send error.
+func sendAsync(path string, ev Event) <-chan error {
+	res := make(chan error, 1)
 
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 
-		start := time.Now()
-
-		err := Send(ctx, path, ev)
-		res <- sendResult{err: err, took: time.Since(start)}
+		res <- Send(ctx, path, ev)
 	}()
 
 	return res
 }
 
-type sendResult struct {
-	err  error
-	took time.Duration
+// awaitHold returns the hold the server asks for once ev is on the channel.
+func awaitHold(t *testing.T, s *served) ask {
+	t.Helper()
+
+	s.clk.next(t) // the full channel's wait, which a buffered channel never needs
+
+	return s.clk.next(t)
 }
 
 func TestTurnStartAnsweredAfterDone(t *testing.T) {
@@ -560,18 +597,21 @@ func TestTurnStartAnsweredAfterDone(t *testing.T) {
 		t.Fatal("held event has no Done")
 	}
 
+	if a := awaitHold(t, s); a.d != 300*time.Millisecond {
+		t.Fatalf("holds for %v, want the 300ms Hold", a.d)
+	}
+
 	select {
-	case r := <-res:
-		t.Fatalf("answered before Done: %+v", r)
-	case <-time.After(100 * time.Millisecond):
+	case err := <-res:
+		t.Fatalf("answered before Done: %v", err)
+	default:
 	}
 
 	ev.Done()
 	ev.Done() // more than once is fine
 
-	r := <-res
-	if r.err != nil || r.took > 250*time.Millisecond {
-		t.Errorf("Send() = %v after %v, want ok well under the hold", r.err, r.took)
+	if err := <-res; err != nil {
+		t.Errorf("Send() = %v, want ok", err)
 	}
 }
 
@@ -580,9 +620,15 @@ func TestTurnStartAnsweredAfterHold(t *testing.T) {
 	res := sendAsync(s.path, Event{Pane: "p", Name: "UserPromptSubmit", TurnStart: true})
 	_ = recv(t, s.out)
 
-	r := <-res
-	if r.err != nil || r.took < 250*time.Millisecond || r.took > time.Second {
-		t.Errorf("Send() = %v after %v, want ok at about 300ms", r.err, r.took)
+	a := awaitHold(t, s)
+	if a.d != 300*time.Millisecond {
+		t.Fatalf("holds for %v, want the 300ms Hold", a.d)
+	}
+
+	a.end()
+
+	if err := <-res; err != nil {
+		t.Errorf("Send() = %v, want ok once the hold ends", err)
 	}
 }
 
@@ -594,8 +640,8 @@ func TestNonTurnEventAnsweredAtOnce(t *testing.T) {
 		t.Error("non-turn event has Done")
 	}
 
-	if r := <-res; r.err != nil || r.took > 200*time.Millisecond {
-		t.Errorf("Send() = %v after %v, want ok at once", r.err, r.took)
+	if err := <-res; err != nil {
+		t.Errorf("Send() = %v, want ok with no hold", err)
 	}
 }
 
@@ -607,8 +653,8 @@ func TestZeroHoldAnswersAtOnce(t *testing.T) {
 		t.Error("event has Done without a hold")
 	}
 
-	if r := <-res; r.err != nil || r.took > 200*time.Millisecond {
-		t.Errorf("Send() = %v after %v, want ok at once", r.err, r.took)
+	if err := <-res; err != nil {
+		t.Errorf("Send() = %v, want ok with no hold", err)
 	}
 }
 
@@ -616,18 +662,13 @@ func TestCloseDuringHoldDoesNotWait(t *testing.T) {
 	s := startHeldServer(t, 5*time.Second)
 	res := sendAsync(s.path, Event{Pane: "p", Name: "UserPromptSubmit", TurnStart: true})
 	_ = recv(t, s.out)
-
-	start := time.Now()
+	_ = awaitHold(t, s)
 
 	if err := s.srv.Close(); err != nil {
 		t.Fatal(err)
 	}
 
-	if d := time.Since(start); d > time.Second {
-		t.Errorf("Close() took %v during a hold", d)
-	}
-
-	if r := <-res; r.err == nil {
+	if err := <-res; err == nil {
 		t.Error("Send() succeeded though the server closed mid-hold")
 	}
 }
@@ -637,16 +678,17 @@ func TestServerStampsTheTurnDeadline(t *testing.T) {
 
 	s := startBudgetServer(t, 300*time.Millisecond, budget)
 
-	before := time.Now()
 	res := sendAsync(s.path, Event{Pane: "p", Name: "UserPromptSubmit", TurnStart: true})
 	turn := recv(t, s.out)
-	after := time.Now()
 
 	turn.Done()
-	<-res
 
-	if turn.Deadline.Before(before.Add(budget)) || turn.Deadline.After(after.Add(budget+50*time.Millisecond)) {
-		t.Errorf("turn Deadline = %v, want read time + %v (between %v and %v)", turn.Deadline, budget, before.Add(budget), after.Add(budget))
+	if err := <-res; err != nil {
+		t.Errorf("Send() = %v, want ok", err)
+	}
+
+	if want := s.clk.at.Add(budget); !turn.Deadline.Equal(want) {
+		t.Errorf("turn Deadline = %v, want the read time + %v, %v", turn.Deadline, budget, want)
 	}
 
 	res = sendAsync(s.path, Event{Pane: "p", Name: "Stop"})
@@ -654,7 +696,9 @@ func TestServerStampsTheTurnDeadline(t *testing.T) {
 		t.Errorf("non-turn Deadline = %v, want zero", stop.Deadline)
 	}
 
-	<-res
+	if err := <-res; err != nil {
+		t.Errorf("Send() = %v, want ok", err)
+	}
 }
 
 func TestServerHoldsAnEditBeforeItsTool(t *testing.T) {
@@ -671,19 +715,19 @@ func TestServerHoldsAnEditBeforeItsTool(t *testing.T) {
 		t.Fatalf("held edit has Done %v and Deadline %v", ev.Done != nil, ev.Deadline)
 	}
 
-	// The hold is far longer than the test, so an answer now would not be the hold's.
+	// The fake clock never ends the hold, so an answer now would not be the hold's.
 	select {
-	case r := <-res:
-		t.Fatalf("answered before Done: %+v", r)
+	case err := <-res:
+		t.Fatalf("answered before Done: %v", err)
 	default:
 	}
 
 	ev.Done()
 
 	select {
-	case r := <-res:
-		if r.err != nil {
-			t.Errorf("Send() = %v, want ok", r.err)
+	case err := <-res:
+		if err != nil {
+			t.Errorf("Send() = %v, want ok", err)
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("no answer after Done")
@@ -695,9 +739,9 @@ func TestServerHoldsAnEditBeforeItsTool(t *testing.T) {
 	}
 
 	select {
-	case r := <-res:
-		if r.err != nil {
-			t.Errorf("Send() = %v, want ok", r.err)
+	case err := <-res:
+		if err != nil {
+			t.Errorf("Send() = %v, want ok", err)
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("PostToolUse edit was held")

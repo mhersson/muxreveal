@@ -288,11 +288,15 @@ func TestRailSlowGitIsCancelledAndKeepsTheLastResult(t *testing.T) {
 	write(t, r.slow, "")
 	r.clk.Advance(6 * time.Second)
 
-	start := time.Now()
 	msgs := flatten(hook(r.App, idleHook(id)))
 
-	if took := time.Since(start); took < railProbeTimeout || took > railProbeTimeout+3*time.Second {
-		t.Errorf("slow probe took %v, want about %v", took, railProbeTimeout)
+	// The slow git marks its end only if the timeout failed to kill it.
+	if _, err := os.Stat(r.slow + ".started"); err != nil {
+		t.Error("the probe never ran the slow git")
+	}
+
+	if _, err := os.Stat(r.slow + ".finished"); err == nil {
+		t.Error("the probe waited for the slow git to finish")
 	}
 
 	if len(msgs) != 1 {

@@ -62,11 +62,10 @@ func TestBenchSaveToDiff(t *testing.T) {
 
 	for i := range 20 {
 		rel := fmt.Sprintf("d%02d/f%04d.txt", i, i)
+		start := time.Now()
+		prev = saveToDiff(t, w, e, prev, src, rel, fmt.Sprintf("save %d\n", i))
 
-		var took time.Duration
-
-		prev, took = saveToDiff(t, w, e, prev, src, rel, fmt.Sprintf("save %d\n", i))
-		times = append(times, took)
+		times = append(times, time.Since(start))
 	}
 
 	t.Logf("save to diff over %d saves: median %v, p95 %v, all %v", len(times), median(times), p95(times), times)
@@ -88,10 +87,10 @@ func TestBenchSaveToDiff(t *testing.T) {
 	times = nil
 
 	for i := range 20 {
-		var took time.Duration
+		start := time.Now()
+		prev = saveToDiff(t, w, e, prev, src, fmt.Sprintf("new%02d.txt", i), "a new file\n")
 
-		prev, took = saveToDiff(t, w, e, prev, src, fmt.Sprintf("new%02d.txt", i), "a new file\n")
-		times = append(times, took)
+		times = append(times, time.Since(start))
 	}
 
 	t.Logf("save of a new file beside 5 modified files over %d saves: median %v, p95 %v, all %v", len(times), median(times), p95(times), times)
