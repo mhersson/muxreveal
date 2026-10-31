@@ -279,27 +279,60 @@ func (a *App) closeMerge() {
 	a.prs.dirty = true
 }
 
-// handleMergeKey answers the open merge box; any other key is swallowed.
-func (a *App) handleMergeKey(msg tea.KeyPressMsg) tea.Cmd {
-	v := a.merge
+// mergeKeys are the default keys of the merge box. [keys.merge] is laid over them.
+var mergeKeys = []reviewKey{
+	{"s", "merge.method.squash"},
+	{"m", "merge.method.merge"},
+	{"r", "merge.method.rebase"},
+	{"d", "merge.delete"},
+	{"enter", "merge.run"},
+	{"esc", "merge.cancel"},
+}
 
-	switch key := msg.String(); key {
-	case "esc":
-		a.closeMerge()
-	case "s", "m", "r":
-		m := map[string]github.MergeMethod{"s": github.Squash, "m": github.MergeCommit, "r": github.Rebase}[key]
-		if v.allows(m) {
-			v.method = m
-		}
-	case "d":
-		if v.deleteShown() {
-			v.del = !v.del
-		}
-	case "enter":
-		return a.mergeRun(v)
+func mergeCommands() []command {
+	cmd := func(id, title string, run func(a *App, v *mergeView) tea.Cmd) command {
+		return command{id: id, title: "Merge: " + title, run: func(a *App) tea.Cmd {
+			if a.merge == nil {
+				return nil
+			}
+
+			return run(a, a.merge)
+		}}
 	}
 
-	return nil
+	method := func(id, title string, m github.MergeMethod) command {
+		return cmd(id, title, func(_ *App, v *mergeView) tea.Cmd {
+			if v.allows(m) {
+				v.method = m
+			}
+
+			return nil
+		})
+	}
+
+	return scoped("merge", []command{
+		method("merge.method.squash", "squash", github.Squash),
+		method("merge.method.merge", "merge commit", github.MergeCommit),
+		method("merge.method.rebase", "rebase", github.Rebase),
+		cmd("merge.delete", "delete the branch or keep it", func(_ *App, v *mergeView) tea.Cmd {
+			if v.deleteShown() {
+				v.del = !v.del
+			}
+
+			return nil
+		}),
+		cmd("merge.run", "merge", func(a *App, v *mergeView) tea.Cmd { return a.mergeRun(v) }),
+		cmd("merge.cancel", "cancel", func(a *App, _ *mergeView) tea.Cmd {
+			a.closeMerge()
+
+			return nil
+		}),
+	})
+}
+
+// handleMergeKey answers the open merge box; any other key is swallowed.
+func (a *App) handleMergeKey(msg tea.KeyPressMsg) tea.Cmd {
+	return a.runKey(a.keys.merge, bindingKey(msg))
 }
 
 // mergeRun merges exactly what v froze off the update loop, under a timeout

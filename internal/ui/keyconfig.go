@@ -80,6 +80,7 @@ type keyTables struct {
 	prList keyTable
 	checks keyTable
 	reader keyTable
+	merge  keyTable
 }
 
 // lookup is the command a key runs.
@@ -187,6 +188,7 @@ func resolveKeys(cfg core.KeysConfig, reg *registry) (keymap, keyTables, error) 
 		{"pr_list", "PR list", prListKeys, scopedTo(reg, "pr_list"), &tables.prList, "prlist.close", "PR list"},
 		{"checks", "checks", checksKeys, scopedTo(reg, "checks"), &tables.checks, "checks.close", "checks overlay"},
 		{"reader", "reader", readerKeys, scopedTo(reg, "reader"), &tables.reader, "reader.close", "overlay"},
+		{"merge", "merge", mergeKeys, scopedTo(reg, "merge"), &tables.merge, "merge.cancel", "merge box"},
 	}
 
 	for _, c := range contexts {

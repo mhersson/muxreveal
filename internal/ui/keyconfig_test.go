@@ -163,6 +163,11 @@ func TestCheckKeysErrors(t *testing.T) {
 			"reader without close", contextKeys("reader", "esc", "none"),
 			"keys.reader: nothing is bound to reader.close, so the overlay could not close",
 		},
+		{
+			"merge without cancel", contextKeys("merge", "esc", "none"),
+			"keys.merge: nothing is bound to merge.cancel, so the merge box could not close",
+		},
+		{"merge takes the leader key", contextKeys("merge", "ctrl+space", "merge.run"), ""},
 		{"reader takes the leader key", contextKeys("reader", "ctrl+space", "reader.top"), ""},
 		{"pr list close moved", contextKeys("pr_list", "esc", "none", "q", "prlist.close"), ""},
 		{"rail needs no close", contextKeys("rail", "esc", "none"), ""},

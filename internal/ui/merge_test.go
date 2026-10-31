@@ -601,6 +601,44 @@ func mergeScene(t *testing.T, icons bool, w, h int, warn bool) *App {
 	return s.build(t)
 }
 
+func TestMergeRemappedKeys(t *testing.T) {
+	t.Parallel()
+
+	r, f := inMergeDrawer(t, everyMethod, nil)
+	r.typed("M")
+	remapTables(t, r.App, contextKeys("merge", "1", "merge.method.squash", "s", "none", "q", "merge.cancel"))
+
+	r.typed("1")
+
+	if r.merge.method != github.Squash {
+		t.Fatalf("1 chose %q, want squash", r.merge.method)
+	}
+
+	r.typed("m")
+	r.typed("s")
+
+	if r.merge.method != github.MergeCommit {
+		t.Errorf("s moved the method to %q", r.merge.method)
+	}
+
+	if got := ansi.Strip(r.View().Content); !strings.Contains(got, "1/m/r method") {
+		t.Errorf("the hints do not show 1/m/r:\n%s", got)
+	}
+
+	r.typed("q")
+
+	if r.merge != nil || len(f.merged()) != 0 {
+		t.Fatalf("q left the box %+v open or merged %v", r.merge, f.merged())
+	}
+
+	r.typed("M")
+	r.keys(keyEsc)
+
+	if r.merge != nil {
+		t.Error("esc did not close the reopened box")
+	}
+}
+
 // TestMergeGolden draws the box once in colour; it compares highlighted
 // colours, so it runs serially.
 func TestMergeGolden(t *testing.T) {

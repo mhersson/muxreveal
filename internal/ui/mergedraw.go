@@ -102,7 +102,7 @@ func (a *App) mergeBox(lk look, w, room int) []string {
 		lines = append(lines, mergeLine{blank: true}, mergeLine{text: a.mergeDelete(v, lk, cw)})
 	}
 
-	hints := mergeHints(v, cw, lk)
+	hints := mergeHints(v, a.keys.merge, cw, lk)
 	if hints != "" {
 		lines = append(lines, mergeLine{blank: true}, mergeLine{text: hints, hint: true})
 	}
@@ -200,16 +200,16 @@ func (a *App) mergeDelete(v *mergeView, lk look, cw int) string {
 
 // mergeHints are the key hints that fit cw cells; ones that do not are dropped
 // from the end, and none that fit leaves "".
-func mergeHints(v *mergeView, cw int, lk look) string {
-	pairs := [][2]string{{"s/m/r", "method"}}
+func mergeHints(v *mergeView, kt keyTable, cw int, lk look) string {
+	pairs := [][2]string{{kt.hint("merge.method.squash", "merge.method.merge", "merge.method.rebase"), "method"}}
 
 	if v.deleteShown() {
-		pairs = append(pairs, [2]string{"d", "delete branch"})
+		pairs = append(pairs, [2]string{kt.hint("merge.delete"), "delete branch"})
 	}
 
-	pairs = append(pairs, [2]string{"enter", "merge"}, [2]string{"esc", "cancel"})
+	pairs = append(pairs, [2]string{kt.hint("merge.run"), "merge"}, [2]string{kt.hint("merge.cancel"), "cancel"})
 
-	return hintLine(pairs, cw, lk.styles)
+	return hintLine(hintPairs(pairs), cw, lk.styles)
 }
 
 // hintLine draws key and label pairs four cells apart; pairs that do not fit

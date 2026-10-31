@@ -29,6 +29,8 @@ func contextKeys(context string, pairs ...string) core.KeysConfig {
 		cfg.Checks = table
 	case "reader":
 		cfg.Reader = table
+	case "merge":
+		cfg.Merge = table
 	}
 
 	return cfg
@@ -53,7 +55,7 @@ func TestScopedCommands(t *testing.T) {
 
 	var scoped []command
 
-	for _, fn := range []func() []command{railCommands, prListCommands, checksCommands, readerCommands} {
+	for _, fn := range []func() []command{railCommands, prListCommands, checksCommands, readerCommands, mergeCommands} {
 		scoped = append(scoped, fn()...)
 	}
 
@@ -92,6 +94,8 @@ func TestScopedCommands(t *testing.T) {
 		{"PR list command under the leader", leaderKeys("x", "prlist.approve"), `keys.leader: "x" = "prlist.approve": a PR list command`},
 		{"checks command under the leader", leaderKeys("x", "checks.next"), `keys.leader: "x" = "checks.next": a checks command`},
 		{"reader command under the leader", leaderKeys("x", "reader.top"), `keys.leader: "x" = "reader.top": a reader command`},
+		{"merge command under the leader", leaderKeys("x", "merge.run"), `keys.leader: "x" = "merge.run": a merge command`},
+		{"reader command in the merge box", contextKeys("merge", "x", "reader.top"), `keys.merge: "x" = "reader.top": not a merge command`},
 		{"PR list command in the rail", contextKeys("rail", "x", "prlist.next"), `keys.rail: "x" = "prlist.next": not a rail command`},
 		{"rail command in the PR list", contextKeys("pr_list", "x", "rail.next"), `keys.pr_list: "x" = "rail.next": not a PR list command`},
 		{"rail command in the checks", contextKeys("checks", "x", "rail.next"), `keys.checks: "x" = "rail.next": not a checks command`},
