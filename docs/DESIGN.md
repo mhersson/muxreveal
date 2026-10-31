@@ -44,7 +44,7 @@ IDs are referenced by milestones and plans; commits and PRs do not carry them. P
 | AG-10 | Move the focused pane to tab N, either following it there or staying on the current tab. N one past the last tab creates a new tab | P0 |
 | AG-11 | Break pane: move the focused pane into a new tab of its own, and follow it | P0 |
 | AG-12 | Tiling layouts per tab: BSP with auto-split and preselection, master-stack, scrolling columns; rotate, equalize, promote to master | P0 |
-| AG-13 | An agents rail lists every agent in every tab with its state, session name or project, branch, current action and diff stats; it stays open until closed, takes the keyboard on a key, a click or, with `focus_follows_mouse`, hover, searches, and jumps to any agent | P0 |
+| AG-13 | An agents rail lists every agent in every tab with its state, session name or project, branch, current action and diff stats; it stays open until closed, takes the keyboard on a key, searches, and jumps to any agent | P0 |
 
 ### Persistence and resume
 

@@ -160,8 +160,13 @@ func TestHoverFocus(t *testing.T) {
 				t.Fatal("setup: no close slide")
 			}
 
+			zoom := r.view().zoom
 			at(r, c.drawer)
 			wantHolder(t, r, "pane")
+
+			if !r.drawer.closing || r.view().zoom != zoom {
+				t.Errorf("closing = %v, zoom = %v, want closing and zoom %v", r.drawer.closing, r.view().zoom, zoom)
+			}
 		}},
 		{"modal", 270, 75, func(t *testing.T, r *drawerRig, c hoverCells) {
 			r.openCommandPalette()
