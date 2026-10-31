@@ -162,3 +162,21 @@ func TestDiffPastTheCap(t *testing.T) {
 		t.Errorf("diff past the cap = %v, want %v", got, replaced)
 	}
 }
+
+// Not parallel: AllocsPerRun counts the process's allocations.
+func TestDiffPastTheCapAllocatesOnlyTheScript(t *testing.T) {
+	// The middles differ by 999 lines, so the edit distance is at least 999 and
+	// the cap is passed before any search.
+	a := []string{"s", "x", "e"}
+
+	b := []string{"s"}
+	for i := range 1000 {
+		b = append(b, fmt.Sprint(i))
+	}
+
+	b = append(b, "e")
+
+	if n := testing.AllocsPerRun(10, func() { diff(a, b, 1000) }); n > 1 {
+		t.Errorf("diff past the cap made %v allocations, want only the script's", n)
+	}
+}

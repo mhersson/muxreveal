@@ -33,12 +33,7 @@ func diff(a, b []string, work int) []Op {
 		ops = append(ops, Op{' ', l})
 	}
 
-	midA, midB := a[pre:len(a)-suf], b[pre:len(b)-suf]
-	if mid, ok := myers(midA, midB, work); ok {
-		ops = append(ops, mid...)
-	} else {
-		ops = append(ops, Replace(midA, midB)...)
-	}
+	ops = myers(ops, a[pre:len(a)-suf], b[pre:len(b)-suf], work)
 
 	for _, l := range a[len(a)-suf:] {
 		ops = append(ops, Op{' ', l})
@@ -49,12 +44,15 @@ func diff(a, b []string, work int) []Op {
 	return ops
 }
 
-// myers is the script from a to b, or false when its edit distance d has
-// (len(a)+len(b))*d over work. The first and the last lines of a and b differ.
-func myers(a, b []string, work int) ([]Op, bool) {
+// myers appends the script from a to b to ops: a shortest one while its edit
+// distance d keeps (len(a)+len(b))*d at most work, else Replace's. The first
+// and the last lines of a and b differ.
+func myers(ops []Op, a, b []string, work int) []Op {
 	n, m := len(a), len(b)
-	if n == 0 || m == 0 {
-		return Replace(a, b), true
+
+	// The edit distance is at least the difference in length.
+	if n == 0 || m == 0 || (n+m)*max(n-m, m-n) > work {
+		return appendReplace(ops, a, b)
 	}
 
 	ids := make(map[string]int, n+m)
@@ -74,17 +72,29 @@ func myers(a, b []string, work int) ([]Op, bool) {
 	}
 
 	size := n + m + 4
-	d := &differ{a: number(a), b: number(b), la: a, lb: b, vf: make([]int, size), vb: make([]int, size)}
-	d.ops = make([]Op, 0, n+m)
+	d := &differ{a: number(a), b: number(b), la: a, lb: b, ops: ops, vf: make([]int, size), vb: make([]int, size)}
 
 	x, y, ok := d.split(0, n, 0, m, work/(n+m))
 	if !ok {
-		return nil, false
+		return appendReplace(ops, a, b)
 	}
 
 	d.halves(0, n, 0, m, x, y)
 
-	return d.ops, true
+	return d.ops
+}
+
+// appendReplace appends Replace's script from a to b to ops.
+func appendReplace(ops []Op, a, b []string) []Op {
+	for _, l := range a {
+		ops = append(ops, Op{'-', l})
+	}
+
+	for _, l := range b {
+		ops = append(ops, Op{'+', l})
+	}
+
+	return ops
 }
 
 // differ holds both texts as line ids, the script so far and the scratch
@@ -137,13 +147,7 @@ func (d *differ) halves(a0, a1, b0, b1, x, y int) {
 }
 
 func (d *differ) replace(a0, a1, b0, b1 int) {
-	for _, l := range d.la[a0:a1] {
-		d.ops = append(d.ops, Op{'-', l})
-	}
-
-	for _, l := range d.lb[b0:b1] {
-		d.ops = append(d.ops, Op{'+', l})
-	}
+	d.ops = appendReplace(d.ops, d.la[a0:a1], d.lb[b0:b1])
 }
 
 // split finds x, y on a shortest path from a[a0:a1] to b[b0:b1], with each
