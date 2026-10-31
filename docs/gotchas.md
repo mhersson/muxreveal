@@ -3,7 +3,7 @@
 Platform and tooling quirks that contributors trip over in this repo, each with
 what to do about it. Skim it before your first commit each session.
 
-## Glyphs, em-dashes and the scan
+## Glyphs, em-dashes, wall-clock bounds and the scan
 
 - AI file tools drop or alter raw private-use characters, so write Nerd Font
   glyphs in Go source as `\u` or `\U` escapes.
@@ -11,6 +11,13 @@ what to do about it. Skim it before your first commit each session.
   `make check`. It fails on private-use glyphs in Go files and on em-dashes in
   Go and Markdown files (`docs/superpowers` aside), untracked files included.
   It first proves grep can match its patterns, so a pass means something.
+- The scan's `scripts/scan-wall-clock.sh` fails on `time.Since`, `time.Until`
+  and `time.Now().Sub` in a `_test.go` file without the `bench` build tag. A
+  test waits for the event or runs on an injected clock, as the poller and
+  the hook socket server allow through their unexported `now` and `after`. A
+  hang guard (`time.After`, a deadline from `time.Now().Add`) passes, and so
+  does a line that measures without asserting when it ends with
+  `// wall-clock: <why>`, as the bench kit's timings do.
 - Never scan with `grep -P`. BSD grep on macOS has no `-P` and exits 2, which a
   script that only tests grep's status reads as "no match", so the scan passes.
   Use `LC_ALL=C` byte patterns, as `make scan` does.
@@ -144,8 +151,8 @@ what to do about it. Skim it before your first commit each session.
   sooner, and a late batch then reloads the drawer after the test read its
   `epoch` or `gen`. The rig's `reportedAll` waits for the paths written.
 - `t.Setenv` and `t.Chdir` panic in a parallel test. That is why tests that
-  use them, tests that assert on wall-clock time, and tests that count or scan
-  the process's goroutines skip `t.Parallel()`.
+  use them, and tests that count or scan the process's goroutines, skip
+  `t.Parallel()`.
 - Writing an executable and then running it while parallel tests fork can
   fail with `ETXTBSY`: a concurrent fork inherits the still-open write
   descriptor (go.dev/issue/22315). Hold `syscall.ForkLock.RLock()` around the
