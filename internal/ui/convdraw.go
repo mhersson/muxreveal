@@ -92,7 +92,9 @@ func (a *App) convLines(lk look, w, h int) (out []string, pics []picRow) {
 
 	switch {
 	case v.err != "" && v.doc == nil:
-		out = append(out, text(on(ui.Muted).Render(ansi.Truncate(fmt.Sprintf(convReadFailed, v.err), max(tw, 0), "…"))))
+		for _, l := range wrapRows(fmt.Sprintf(convReadFailed, v.err), tw, rows) {
+			out = append(out, text(on(ui.Muted).Render(l)))
+		}
 	case v.doc == nil:
 		out = append(out, text(on(ui.Muted).Render(convLoading)))
 	default:

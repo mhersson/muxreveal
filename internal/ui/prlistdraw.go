@@ -226,8 +226,19 @@ func (a *App) prListBox(lk look, w, room int) []string {
 		}
 	}
 
+	// cut maps a note row that continues on the next row to its text, so a
+	// window that ends there can show an ellipsis.
+	cut := map[int]string{}
+
 	for _, t := range a.prListNotes(v.tab, len(rows)) {
-		body = append(body, row(on(ui.Subtle).Render(ansi.Truncate(t, cw, "…"))))
+		lines := strings.Split(ansi.Wrap(t, max(cw, 1), ""), "\n")
+		for i, l := range lines {
+			if i < len(lines)-1 {
+				cut[len(body)] = l
+			}
+
+			body = append(body, row(on(ui.Subtle).Render(l)))
+		}
 	}
 
 	pairs := hintPairs([][2]string{
@@ -303,6 +314,10 @@ func (a *App) prListBox(lk look, w, room int) []string {
 
 	if win := max(room-overhead(pick), 1); len(body) > win {
 		start := min(max(selLine-win/2, 0), len(body)-win)
+		if t, ok := cut[start+win-1]; ok {
+			body[start+win-1] = row(on(ui.Subtle).Render(ellipsize(t, cw)))
+		}
+
 		body = body[start : start+win]
 	}
 

@@ -283,7 +283,9 @@ func (a *App) logLines(lk look, w, h int) (out []string, pics []picRow) {
 
 	switch {
 	case p.err != "":
-		body = append(body, row(on(ui.Muted).Render(fmt.Sprintf(logReadFailed, p.err))))
+		for _, l := range wrapRows(fmt.Sprintf(logReadFailed, p.err), w-4, n) {
+			body = append(body, row(on(ui.Muted).Render(l)))
+		}
 	case p.loading && !p.loaded:
 		body = append(body, row(on(ui.Muted).Render(logLoading)))
 	default:
@@ -338,7 +340,9 @@ func (a *App) summaryLines(lk look, w, h int, top string, row func(string) strin
 
 	switch {
 	case p.err != "":
-		out = append(out, row(on(ui.Muted).Render(fmt.Sprintf(summaryReadFailed, p.err))))
+		for _, l := range wrapRows(fmt.Sprintf(summaryReadFailed, p.err), w-4, n) {
+			out = append(out, row(on(ui.Muted).Render(l)))
+		}
 	case p.summary == nil:
 		out = append(out, row(on(ui.Muted).Render(summaryLoading)))
 	default:
