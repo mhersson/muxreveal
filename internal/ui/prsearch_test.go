@@ -438,7 +438,7 @@ func TestPRListSearchTexts(t *testing.T) {
 
 		mine := map[string]github.MyPRs{"github.com": {Requested: []github.SearchPR{searched("github.com/acme/web", 311, "Fix", "kari-dev", time.Hour)}}}
 		a, reads, _ := searchApp(t, listAgents(), 120, 40, mine, "github.com/acme/web", "ghe.example.com/team/svc")
-		reads.fail["ghe.example.com"] = errors.New("HTTP 502\x1b[31m")
+		reads.fail["ghe.example.com"] = errors.New("HTTP 502\x1b]0;pwned\x07 Bad\u200b Gateway")
 
 		openList(a)
 		typedList(a, "2")
@@ -448,8 +448,11 @@ func TestPRListSearchTexts(t *testing.T) {
 			t.Errorf("the failure row or the other host's rows are missing:\n%s", text)
 		}
 
-		if strings.Contains(a.View().Content, "\x1b[31m\n") && strings.Contains(text, "502\x1b") {
-			t.Error("the failure text carried an escape")
+		view := a.View().Content
+		for _, bad := range []string{"\x07", "\u200b", "pwned\x07", "\x1b]0;"} {
+			if strings.Contains(view, bad) {
+				t.Errorf("the screen holds %q", bad)
+			}
 		}
 	})
 }
