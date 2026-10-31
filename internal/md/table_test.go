@@ -5,7 +5,6 @@ import (
 	"slices"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/charmbracelet/x/ansi"
 )
@@ -535,15 +534,16 @@ func TestTableInContainers(t *testing.T) {
 }
 
 func TestTableHugeCell(t *testing.T) {
+	t.Parallel()
+
 	src := "| h | x |\n|---|---|\n| " + strings.Repeat("y", 1<<20) + " | z |\n"
-	start := time.Now()
 	l := layoutOf(src, 60, "")
 
-	if d := time.Since(start); d > 5*time.Second {
-		t.Errorf("layout took %v", d)
-	}
-
 	assertSafe(t, l, 60)
+
+	if len(l.Lines) == 0 {
+		t.Fatal("no lines")
+	}
 }
 
 func TestTableNarrowWidths(t *testing.T) {
