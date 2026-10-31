@@ -370,7 +370,7 @@ func (v *reviewView) mdRowsOf() map[string]*mdRows {
 		if f := v.mdFiles[path]; f != nil {
 			lay := f.doc.layout(max(v.mdW, 1), v.mdIcons)
 			f.rowsGen = f.doc.picGen
-			out[path] = &mdRows{lay: lay, marks: changeMarks(lay.Source, f.text.old, f.text.new)}
+			out[path] = &mdRows{lay: lay, marks: changeMarks(lay.Source, f.text)}
 		}
 	}
 

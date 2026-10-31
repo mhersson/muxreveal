@@ -85,17 +85,100 @@ type rowOpts struct {
 	readOpen map[string]bool
 }
 
-// fullText is both sides of a file, or the error that kept them from loading.
+// fullText is both sides of a file and the edit script from old to new, or the
+// error that kept them from loading.
 type fullText struct {
 	old, new []string
+	ops      []linediff.Op
 	err      error
+}
+
+// newFullText holds both sides of a file with their edit script: the hunks'
+// when they turn old into nw, so the full view marks what unified marks, else
+// linediff.Diff's. Call it off the update loop: Diff can run long on a big
+// file.
+func newFullText(old, nw []string, hunks []git.Hunk) fullText {
+	ops, ok := hunkOps(old, nw, hunks)
+	if !ok {
+		ops = linediff.Diff(old, nw)
+	}
+
+	return fullText{old: old, new: nw, ops: ops}
+}
+
+// hunkOps is the edit script from old to nw that the hunks give, the lines
+// between them kept; false when the hunks do not turn old into nw.
+func hunkOps(old, nw []string, hunks []git.Hunk) ([]linediff.Op, bool) {
+	// A type change is two patches: one removes the old file, the next adds the new.
+	if len(hunks) == 2 && hunks[0].NewStart == 0 && hunks[0].NewLines == 0 && hunks[1].OldStart == 0 && hunks[1].OldLines == 0 {
+		gone, okGone := hunkOps(old, nil, hunks[:1])
+		added, okAdded := hunkOps(nil, nw, hunks[1:])
+
+		if okGone && okAdded {
+			return append(gone, added...), true
+		}
+	}
+
+	ops := make([]linediff.Op, 0, max(len(old), len(nw)))
+	oi, ni := 0, 0
+
+	keep := func(to int) bool {
+		for ; oi < to; oi, ni = oi+1, ni+1 {
+			if ni >= len(nw) || old[oi] != nw[ni] {
+				return false
+			}
+
+			ops = append(ops, linediff.Op{Op: ' ', Line: nw[ni]})
+		}
+
+		return true
+	}
+
+	for _, h := range hunks {
+		oldAt, newAt := hunkStart(h.OldStart, h.OldLines), hunkStart(h.NewStart, h.NewLines)
+		if oldAt < oi || oldAt > len(old) || newAt-ni != oldAt-oi || !keep(oldAt) {
+			return nil, false
+		}
+
+		for _, l := range h.Lines {
+			oldOK := oi < len(old) && old[oi] == l.Text
+			newOK := ni < len(nw) && nw[ni] == l.Text
+
+			switch {
+			case l.Kind == git.Context && oldOK && newOK:
+				ops = append(ops, linediff.Op{Op: ' ', Line: l.Text})
+				oi, ni = oi+1, ni+1
+			case l.Kind == git.Del && oldOK:
+				ops = append(ops, linediff.Op{Op: '-', Line: l.Text})
+				oi++
+			case l.Kind == git.Add && newOK:
+				ops = append(ops, linediff.Op{Op: '+', Line: l.Text})
+				ni++
+			default:
+				return nil, false
+			}
+		}
+	}
+
+	if len(old)-oi != len(nw)-ni || !keep(len(old)) {
+		return nil, false
+	}
+
+	return ops, true
+}
+
+// hunkStart is the index of a hunk range's first line. A range of no lines
+// names the line before it.
+func hunkStart(start, lines int) int {
+	if lines == 0 {
+		return start
+	}
+
+	return start - 1
 }
 
 // foldKey names ghost block n of the file at path.
 func foldKey(path string, n int) string { return path + "\x00" + strconv.Itoa(n) }
-
-// lcsCells bounds the table linediff.LCS builds for the middle of a file.
-const lcsCells = 4 << 20
 
 const (
 	infoBinary    = "binary file, not shown"
@@ -260,29 +343,10 @@ func (o rowOpts) reviewed(f, h int) (bool, string) {
 	return o.isRead(id), id
 }
 
-// lineOps diffs two texts line by line: the lines both start with, the lines
-// both end with and the operations on what lies between.
-func lineOps(old, nw []string) (pre, suf int, ops []linediff.Op) {
-	for pre < len(old) && pre < len(nw) && old[pre] == nw[pre] {
-		pre++
-	}
-
-	for suf < len(old)-pre && suf < len(nw)-pre && old[len(old)-1-suf] == nw[len(nw)-1-suf] {
-		suf++
-	}
-
-	midOld, midNew := old[pre:len(old)-suf], nw[pre:len(nw)-suf]
-
-	if len(midOld)*len(midNew) <= lcsCells {
-		return pre, suf, linediff.LCS(midOld, midNew)
-	}
-
-	return pre, suf, linediff.Replace(midOld, midNew)
-}
-
+// appendFull adds a file's new lines in order, its removed lines as ghost
+// blocks where its edit script puts them.
 func appendFull(rows []reviewRow, file int, path string, ft fullText, o rowOpts) []reviewRow {
-	old, nw := ft.old, ft.new
-	pre, suf, ops := lineOps(old, nw)
+	old, nw, ops := ft.old, ft.new, ft.ops
 
 	kept := func(oi, ni int) reviewRow {
 		r := newRow(rowFull, file)
@@ -296,10 +360,6 @@ func appendFull(rows []reviewRow, file int, path string, ft fullText, o rowOpts)
 	}
 
 	oi, ni, block := 0, 0, 0
-
-	for ; oi < pre; oi, ni = oi+1, ni+1 {
-		rows = add(rows, kept(oi, ni))
-	}
 
 	for i := 0; i < len(ops); {
 		switch ops[i].Op {
@@ -342,12 +402,6 @@ func appendFull(rows []reviewRow, file int, path string, ft fullText, o rowOpts)
 			i += n
 			block++
 		}
-	}
-
-	for range suf {
-		rows = add(rows, kept(oi, ni))
-		oi++
-		ni++
 	}
 
 	return rows

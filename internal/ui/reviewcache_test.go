@@ -45,9 +45,8 @@ func TestDrawerIdleUpdatesDoNoWork(t *testing.T) {
 func TestDrawerLayoutFollowsItsInputs(t *testing.T) {
 	t.Parallel()
 
-	longFull := appGoFull()
-	longFull.old = append(longFull.old, make([]string, 20000)...)
-	longFull.new = append(longFull.new, make([]string, 20000)...)
+	app := appGoFull()
+	longFull := newFullText(append(app.old, make([]string, 20000)...), append(app.new, make([]string, 20000)...), nil)
 
 	tests := []struct {
 		name   string

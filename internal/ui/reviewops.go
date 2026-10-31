@@ -463,8 +463,8 @@ func (a *App) reviewFullSync(tab core.TabID, v *reviewView) tea.Cmd {
 	return tea.Batch(append(cmds, a.reviewMDParse(tab, v))...)
 }
 
-// reviewFullCmd reads both sides of f. The view ends the read when it is
-// replaced, closed or turned away from the file.
+// reviewFullCmd reads both sides of f and their edit script. The view ends the
+// read when it is replaced, closed or turned away from the file.
 func (a *App) reviewFullCmd(tab core.TabID, v *reviewView, f git.FileDiff, ids blobIDs, read int) tea.Cmd {
 	eng, root, epoch := a.engine, v.root, v.epoch
 
@@ -484,8 +484,17 @@ func (a *App) reviewFullCmd(tab core.TabID, v *reviewView, f git.FileDiff, ids b
 		defer cancel()
 
 		old, nw, err := eng.FileText(ctx, root, f)
+		if err == nil {
+			// The diff can run long, so a read the view has ended skips it.
+			err = ctx.Err()
+		}
 
-		return reviewFullMsg{tab: tab, gen: epoch, path: f.Path, ids: ids, read: read, text: fullText{old: old, new: nw, err: err}}
+		text := fullText{err: err}
+		if err == nil {
+			text = newFullText(old, nw, f.Hunks)
+		}
+
+		return reviewFullMsg{tab: tab, gen: epoch, path: f.Path, ids: ids, read: read, text: text}
 	}
 }
 

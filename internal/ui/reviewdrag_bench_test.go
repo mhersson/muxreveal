@@ -103,7 +103,7 @@ func renderDragMD(src []string) func(*testing.T, *App, *reviewView) {
 
 		app.Update(reviewMDMsg{
 			tab: app.store.State().Tab().ID, gen: v.epoch, path: dragMDPath, ids: ids,
-			file: &mdFile{doc: doc, text: fullText{new: src}, ids: ids},
+			file: &mdFile{doc: doc, text: newFullText(nil, src, nil), ids: ids},
 		})
 
 		if v.mdFiles[dragMDPath] == nil || len(v.rows) < 2 || v.rows[1].kind != rowMD {
