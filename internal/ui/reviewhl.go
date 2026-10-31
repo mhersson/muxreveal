@@ -209,10 +209,20 @@ type spanRef struct {
 }
 
 // viewTop is the first visible row for a view h rows tall: the stored top,
-// moved so the cursor's line shows and clamped to the rows. A line that fits
-// shows whole; a taller one keeps at least a row in view, and starts at the top
-// when it was out of view.
+// clamped to the rows. It moves only when no row of the cursor's line shows,
+// and then shows the line whole when it fits, else from its first row. A line
+// that is partly in view stays where it is, so a scroll can move past it.
 func (v *reviewView) viewTop(h int) int {
+	return v.topFor(h, false)
+}
+
+// revealTop is viewTop for a key move: a line that fits shows whole, and a
+// taller one keeps a row in view, starting at the top when it was out of view.
+func (v *reviewView) revealTop(h int) int {
+	return v.topFor(h, true)
+}
+
+func (v *reviewView) topFor(h int, whole bool) int {
 	if h <= 0 {
 		return 0
 	}
@@ -223,16 +233,19 @@ func (v *reviewView) viewTop(h int) int {
 	}
 
 	start, end := v.lineStart(v.cursor), v.lineEnd(v.cursor)
+	out := end <= top || start >= top+h
 
 	switch {
 	case end-start > h:
-		if end <= top || start >= top+h {
+		if out {
 			top = start
 		}
-	case start < top:
-		top = start
-	case end > top+h:
-		top = end - h
+	case out || whole:
+		if start < top {
+			top = start
+		} else if end > top+h {
+			top = end - h
+		}
 	}
 
 	return max(top, 0)

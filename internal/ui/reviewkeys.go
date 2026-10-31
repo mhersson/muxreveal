@@ -355,7 +355,7 @@ func (a *App) reviewGo(v *reviewView, row int) {
 	}
 
 	v.cursor = v.lineStart(min(max(row, 0), len(v.rows)-1))
-	v.top = v.viewTop(a.reviewBodyH(v))
+	v.top = v.revealTop(a.reviewBodyH(v))
 }
 
 // reviewLine moves the cursor a row; in the tree it moves the selected file.
@@ -713,7 +713,7 @@ func (a *App) reviewJumpFile(v *reviewView, file int) {
 	}
 
 	v.cursor, v.top = i, i
-	v.top = v.viewTop(a.reviewBodyH(v))
+	v.top = v.revealTop(a.reviewBodyH(v))
 }
 
 // ---- editor ----

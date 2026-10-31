@@ -1023,3 +1023,170 @@ func TestCodeWidths(t *testing.T) {
 		t.Errorf("split widths %+v, want %+v", got, want)
 	}
 }
+
+// fitScene is a wrapScene whose diff column is 20 rows tall and 40 cells wide.
+func fitScene(t *testing.T, res git.Result) (*App, *reviewView) {
+	t.Helper()
+
+	for sh := 20; sh <= 40; sh++ {
+		a, v := wrapScene(t, res, codeWidths{line: 40}, sh)
+		if a.reviewBodyH(v) == 20 {
+			return a, v
+		}
+	}
+
+	t.Fatal("no scene height gives a diff column of 20 rows")
+
+	return nil, nil
+}
+
+// wheelWalk turns the wheel until the drawn top stops at an end. Every notch
+// moves the drawn top by 3 rows (less at an end) and leaves the cursor on a
+// line with a row in view.
+func wheelWalk(t *testing.T, a *App, v *reviewView, dir int) {
+	t.Helper()
+
+	x, y := wheelCell(t, a)
+	btn := tea.MouseWheelDown
+	end := max(len(v.rows)-a.reviewBodyH(v), 0)
+
+	if dir < 0 {
+		btn, end = tea.MouseWheelUp, 0
+	}
+
+	h := a.reviewBodyH(v)
+
+	for n := 0; v.viewTop(h) != end; n++ {
+		if n > len(v.rows) {
+			t.Fatalf("the drawn top stuck at %d, want %d", v.viewTop(h), end)
+		}
+
+		prev := v.viewTop(h)
+		want := min(max(prev+dir*wheelRows, 0), max(len(v.rows)-h, 0))
+
+		wheelAt(a, x, y, btn)
+
+		if got := v.viewTop(h); got != want {
+			t.Fatalf("notch %d from %d: drawn top %d, want %d", n, prev, got, want)
+		}
+
+		top := v.viewTop(h)
+		if v.lineEnd(v.cursor) <= top || v.lineStart(v.cursor) >= top+h {
+			t.Fatalf("notch %d: cursor %d has no row in view (top %d)", n, v.cursor, top)
+		}
+	}
+}
+
+func repeated(n, width int) []string {
+	out := make([]string, n)
+	for i := range out {
+		out[i] = " " + strings.Repeat(string(rune('a'+i%26)), width)
+	}
+
+	return out
+}
+
+func TestWrappedWheelPastFittingLines(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name  string
+		width int
+		toEnd bool
+	}{
+		{"4 rows", 130, false},
+		{"5 rows", 190, false},
+		{"4 rows after G", 130, true},
+		{"5 rows after G", 190, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			a, v := fitScene(t, padded(0, repeated(12, tc.width)...))
+
+			if tc.toEnd {
+				press(a, keyRune('G'))
+			} else {
+				wheelWalk(t, a, v, 1)
+			}
+
+			wheelWalk(t, a, v, -1)
+
+			if tc.toEnd {
+				wheelWalk(t, a, v, 1)
+			}
+		})
+	}
+}
+
+func TestWrappedEdgeScrollSteps(t *testing.T) {
+	t.Parallel()
+
+	a, v := fitScene(t, padded(0, repeated(20, 70)...))
+	h := a.reviewBodyH(v)
+	maxTop := len(v.rows) - h
+
+	for _, dir := range []int{1, -1} {
+		if dir < 0 {
+			a.scrollRows(v, maxTop)
+		}
+
+		goal := map[int]int{1: maxTop, -1: 0}[dir]
+
+		for n := 0; v.viewTop(h) != goal; n++ {
+			if n > 2*len(v.rows) {
+				t.Fatalf("step %d: drawn top stuck at %d, want %d", dir, v.viewTop(h), goal)
+			}
+
+			prev := v.viewTop(h)
+
+			a.scrollRows(v, dir)
+
+			if got := v.viewTop(h); got != prev+dir {
+				t.Fatalf("step %d from %d: drawn top %d", dir, prev, got)
+			}
+		}
+	}
+}
+
+func TestWrappedKeyMoveShowsWholeLine(t *testing.T) {
+	t.Parallel()
+
+	a, v := fitScene(t, padded(0, repeated(12, 130)...))
+	h := a.reviewBodyH(v)
+
+	for v.lineEnd(v.cursor) < len(v.rows) {
+		press(a, keyRune('j'))
+
+		top := v.viewTop(h)
+		if v.lineStart(v.cursor) < top || v.lineEnd(v.cursor) > top+h {
+			t.Fatalf("j to %d: line %d-%d not whole in view (top %d)",
+				v.cursor, v.lineStart(v.cursor), v.lineEnd(v.cursor), top)
+		}
+	}
+}
+
+func TestWrappedWheelOverTallLine(t *testing.T) {
+	t.Parallel()
+
+	tall := " " + strings.Repeat("t", 1024)
+
+	for _, tc := range []struct {
+		name string
+		rows []string
+	}{
+		{"in the middle", append(append(manyPads(3), tall), manyShort(25)...)},
+		{"last line", append(manyPads(3), tall)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			a, v := fitScene(t, padded(0, tc.rows...))
+
+			press(a, keyRune('G'))
+			wheelWalk(t, a, v, -1)
+			wheelWalk(t, a, v, 1)
+			wheelWalk(t, a, v, -1)
+		})
+	}
+}
