@@ -89,6 +89,9 @@ type SetAgentSession struct {
 	ID         PaneID
 	Session    SessionID
 	Transcript string
+	// NewConversation drops the plan: the session does not go on with the old
+	// conversation.
+	NewConversation bool
 }
 
 func (a SetAgentSession) apply(s *State) error {
@@ -103,6 +106,10 @@ func (a SetAgentSession) apply(s *State) error {
 
 	if a.Session == "" || a.Session != p.Session {
 		p.Edits = nil
+	}
+
+	if a.NewConversation {
+		p.Plan = Plan{}
 	}
 
 	p.Session, p.Transcript = a.Session, a.Transcript

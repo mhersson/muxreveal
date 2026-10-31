@@ -38,6 +38,10 @@ type Event struct {
 	End        bool            `json:"end,omitempty"`   // the session ended
 	Cwd        string          `json:"cwd,omitempty"`   // the agent's working directory
 
+	// NewConversation marks a session start that begins a new conversation, a
+	// /clear or a fresh start, rather than going on with one.
+	NewConversation bool `json:"new_conversation,omitempty"`
+
 	// Action is the agent's current action, short and printable. ActionSet true
 	// replaces the pane's action with it (empty clears it); false leaves it.
 	Action    string `json:"action,omitempty"`
