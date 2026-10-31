@@ -66,7 +66,7 @@ func TestChangeMarks(t *testing.T) {
 			t.Parallel()
 
 			lay := md.Parse([]byte(tc.new), md.ParseOptions{}).Layout(md.LayoutOptions{Width: 12})
-			marks := changeMarks(lay.Source, splitLines(tc.old), splitLines(tc.new))
+			marks := changeMarks(lay.Source, newFullText(splitLines(tc.old), splitLines(tc.new), nil))
 
 			if len(marks) != len(lay.Lines) {
 				t.Fatalf("%d marks for %d layout lines", len(marks), len(lay.Lines))

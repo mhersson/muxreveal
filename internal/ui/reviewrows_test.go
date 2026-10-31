@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/mhersson/muxreveal/internal/git"
+	"github.com/mhersson/muxreveal/internal/git/linediff"
 )
 
 func ln(k git.LineKind, old, nw int, text string) git.Line {
@@ -155,10 +156,7 @@ func TestBuildRowsFullFileGhosts(t *testing.T) {
 		{Path: "img.png", Status: git.Modified, Binary: true},
 	}}
 	full := map[string]fullText{
-		"a.go": {
-			old: []string{"a", "b", "c", "d", "e"},
-			new: []string{"a", "c", "X", "e", "f"},
-		},
+		"a.go": newFullText([]string{"a", "b", "c", "d", "e"}, []string{"a", "c", "X", "e", "f"}, res.Files[0].Hunks),
 	}
 	// old b removed (ghost), c kept, d removed + X added (ghost then added), e kept, f added.
 	type want struct {
@@ -266,10 +264,124 @@ func TestBuildRowsFullFileLongRewrite(t *testing.T) {
 	}
 
 	res := git.Result{Files: []git.FileDiff{{Path: "a", Status: git.Modified}}}
-	rows := buildRows(res, rowOpts{full: map[string]fullText{"a": {old: old, new: nw}}, whole: map[string]bool{"a": true}})
+	rows := buildRows(res, rowOpts{full: map[string]fullText{"a": newFullText(old, nw, nil)}, whole: map[string]bool{"a": true}})
 
 	if got, want := len(rows), 1+3000+3000; got != want {
 		t.Fatalf("got %d rows, want %d", got, want)
+	}
+}
+
+func TestNewFullTextFollowsTheHunks(t *testing.T) {
+	t.Parallel()
+
+	type op = linediff.Op
+
+	tests := []struct {
+		name     string
+		old, new []string
+		hunks    []git.Hunk
+		want     []op
+	}{
+		{
+			"a repeated line removed where git says",
+			[]string{"a", "a"},
+			[]string{"a"},
+			[]git.Hunk{hunkOf(1, 1, ln(git.Del, 1, 0, "a"), ln(git.Context, 2, 1, "a"))},
+			[]op{{Op: '-', Line: "a"}, {Op: ' ', Line: "a"}},
+		},
+		{
+			"a repeated line added at the top",
+			[]string{"a"},
+			[]string{"a", "a"},
+			[]git.Hunk{hunkOf(0, 1, ln(git.Add, 0, 1, "a"))},
+			[]op{{Op: '+', Line: "a"}, {Op: ' ', Line: "a"}},
+		},
+		{
+			"a line removed at the end",
+			[]string{"a", "b"},
+			[]string{"a"},
+			[]git.Hunk{hunkOf(2, 1, ln(git.Del, 2, 0, "b"))},
+			[]op{{Op: ' ', Line: "a"}, {Op: '-', Line: "b"}},
+		},
+		{
+			"a file deleted",
+			[]string{"a"},
+			nil,
+			[]git.Hunk{hunkOf(1, 0, ln(git.Del, 1, 0, "a"))},
+			[]op{{Op: '-', Line: "a"}},
+		},
+		{
+			"a last line that gained its newline",
+			[]string{"a", "b"},
+			[]string{"a", "b"},
+			[]git.Hunk{hunkOf(1, 1, ln(git.Context, 1, 1, "a"), git.Line{Kind: git.Del, Old: 2, Text: "b", NoNewline: true}, ln(git.Add, 0, 2, "b"))},
+			[]op{{Op: ' ', Line: "a"}, {Op: '-', Line: "b"}, {Op: '+', Line: "b"}},
+		},
+		{
+			"hunks that do not fit the text",
+			[]string{"a", "b"},
+			[]string{"a", "c"},
+			[]git.Hunk{hunkOf(2, 2, ln(git.Del, 2, 0, "x"), ln(git.Add, 0, 2, "c"))},
+			[]op{{Op: ' ', Line: "a"}, {Op: '-', Line: "b"}, {Op: '+', Line: "c"}},
+		},
+		{
+			"hunks out of order",
+			[]string{"x"},
+			[]string{"y"},
+			[]git.Hunk{hunkOf(1, 0, ln(git.Del, 1, 0, "x")), hunkOf(0, 1, ln(git.Add, 0, 1, "y"))},
+			[]op{{Op: '-', Line: "x"}, {Op: '+', Line: "y"}},
+		},
+		{
+			"no hunks, as past the diff caps",
+			[]string{"a", "b", "c"},
+			[]string{"a", "x", "c"},
+			nil,
+			[]op{{Op: ' ', Line: "a"}, {Op: '-', Line: "b"}, {Op: '+', Line: "x"}, {Op: ' ', Line: "c"}},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			if got := newFullText(tt.old, tt.new, tt.hunks).ops; !slices.Equal(got, tt.want) {
+				t.Errorf("ops = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestBuildRowsFullFileOfABigFile(t *testing.T) {
+	t.Parallel()
+
+	oldText, editedText := bigTwoEnded()
+	old, nw := linediff.Split(oldText), linediff.Split(editedText)
+
+	// Past the diff caps the file has no hunks; the full view diffs it whole.
+	res := git.Result{Files: []git.FileDiff{{Path: "big.txt", Status: git.Modified, Truncated: true}}}
+	full := map[string]fullText{"big.txt": newFullText(old, nw, nil)}
+	v := &reviewView{res: res, rows: buildRows(res, rowOpts{full: full, whole: allWhole(full)})}
+
+	added, ghosts := fullChanges(v, 0)
+	if want := []string{"two edited", "inserted", "end edited"}; !slices.Equal(added, want) {
+		t.Errorf("added rows = %s, want %q", brief(added), want)
+	}
+
+	if want := []string{"line 2", "line 2990", "line 2999"}; !slices.Equal(ghosts, want) {
+		t.Errorf("ghost rows = %s, want %q", brief(ghosts), want)
+	}
+
+	// The ghost blocks are three, each opening the editor at the new line after it.
+	var edits []int
+
+	for _, r := range v.rows {
+		if r.kind == rowGhost {
+			edits = append(edits, r.edit)
+		}
+	}
+
+	if want := []int{2, 2991, 2999}; !slices.Equal(edits, want) {
+		t.Errorf("ghost rows open the editor at %v, want %v", edits, want)
 	}
 }
 
@@ -470,10 +582,7 @@ func TestFreshRows(t *testing.T) {
 func fullFixture() (git.Result, map[string]fullText) {
 	res := git.Result{Files: []git.FileDiff{{Path: "a.go", Status: git.Modified}}}
 
-	return res, map[string]fullText{"a.go": {
-		old: []string{"a", "b", "c"},
-		new: []string{"a", "c", "Added"},
-	}}
+	return res, map[string]fullText{"a.go": newFullText([]string{"a", "b", "c"}, []string{"a", "c", "Added"}, nil)}
 }
 
 func TestRestoreAnchorFullFile(t *testing.T) {
@@ -490,14 +599,14 @@ func TestRestoreAnchorFullFile(t *testing.T) {
 		want int
 	}{
 		{"a line inserted above keeps the row", 3, func(f map[string]fullText) map[string]fullText {
-			f["a.go"] = fullText{old: f["a.go"].old, new: append([]string{"top"}, f["a.go"].new...)}
+			f["a.go"] = newFullText(f["a.go"].old, append([]string{"top"}, f["a.go"].new...), nil)
 
 			return f
 		}, 4},
 		{"a ghost line keeps its row", 2, func(f map[string]fullText) map[string]fullText { return f }, 2},
 		{"an added line keeps its row", 4, func(f map[string]fullText) map[string]fullText { return f }, 4},
 		{"the line gone falls back to the file header", 4, func(f map[string]fullText) map[string]fullText {
-			f["a.go"] = fullText{old: f["a.go"].old, new: []string{"a", "c"}}
+			f["a.go"] = newFullText(f["a.go"].old, []string{"a", "c"}, nil)
 
 			return f
 		}, 0},
@@ -553,10 +662,7 @@ func TestRestoreAnchorFold(t *testing.T) {
 	t.Parallel()
 
 	res := git.Result{Files: []git.FileDiff{{Path: "a.go", Status: git.Modified}}}
-	full := map[string]fullText{"a.go": {
-		old: []string{"a", "b", "c", "d", "e"},
-		new: []string{"a", "c", "e"},
-	}}
+	full := map[string]fullText{"a.go": newFullText([]string{"a", "b", "c", "d", "e"}, []string{"a", "c", "e"}, nil)}
 	folded := map[string]bool{foldKey("a.go", 0): true, foldKey("a.go", 1): true}
 	rows := buildRows(res, rowOpts{full: full, whole: allWhole(full), folded: folded})
 	// 0 file, 1 a, 2 fold(b), 3 c, 4 fold(d), 5 e
@@ -565,7 +671,7 @@ func TestRestoreAnchorFold(t *testing.T) {
 		t.Fatalf("anchor row = %d", a.row)
 	}
 
-	moved := map[string]fullText{"a.go": {old: full["a.go"].old, new: []string{"top", "a", "c", "e"}}}
+	moved := map[string]fullText{"a.go": newFullText(full["a.go"].old, []string{"top", "a", "c", "e"}, nil)}
 	nrows := buildRows(res, rowOpts{full: moved, whole: allWhole(moved), folded: folded})
 
 	if got := restoreAnchor(res, nrows, a); got != 5 {

@@ -18,7 +18,7 @@ MuxReveal includes material copied from the projects below, each under the MIT L
 
 - Source: https://github.com/Gaurav-Gosain/tuios (`internal/linediff/linediff.go`, `internal/invisible/invisible.go`, `internal/invisible/invisible_test.go`) at commit aaaa128cd35b38ba8aa08a5f69e688f01385ec3e
 - Copyright (c) 2025 Gaurav Gosain
-- Used in `internal/git/linediff/linediff.go`, `internal/git/invisible/invisible.go` and `internal/git/invisible/invisible_test.go`: the line edit script by longest common subsequence and the invisible-character checks.
+- Used in `internal/git/linediff/linediff.go`, `internal/git/invisible/invisible.go` and `internal/git/invisible/invisible_test.go`: the line edit script type, line splitting, the remove-all-then-add-all script and the invisible-character checks.
 
 ## tuios tiling layouts
 

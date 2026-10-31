@@ -335,7 +335,7 @@ func TestEditLine(t *testing.T) {
 		},
 	}}}
 	res := git.Result{Files: []git.FileDiff{file}}
-	whole := fullText{old: []string{"keep", "gone1", "gone2", "tail"}, new: []string{"keep", "new", "tail"}}
+	whole := newFullText([]string{"keep", "gone1", "gone2", "tail"}, []string{"keep", "new", "tail"}, nil)
 
 	unified := buildRows(res, rowOpts{})
 	split := buildRows(res, rowOpts{split: true})
@@ -373,10 +373,10 @@ func TestEditLine(t *testing.T) {
 		{Path: "none.go", Status: git.Modified},
 	}}
 	ghostText := map[string]fullText{
-		"mid.go":   {old: []string{"x", "g0", "k1", "k2", "g1", "g2", "k3"}, new: []string{"x", "k1", "k2", "k3"}},
-		"end.go":   {old: []string{"x", "k1", "g1", "g2"}, new: []string{"x", "k1"}},
-		"start.go": {old: []string{"g1", "g2", "k1"}, new: []string{"k1"}},
-		"none.go":  {old: []string{"g1", "g2"}, new: nil},
+		"mid.go":   newFullText([]string{"x", "g0", "k1", "k2", "g1", "g2", "k3"}, []string{"x", "k1", "k2", "k3"}, nil),
+		"end.go":   newFullText([]string{"x", "k1", "g1", "g2"}, []string{"x", "k1"}, nil),
+		"start.go": newFullText([]string{"g1", "g2", "k1"}, []string{"k1"}, nil),
+		"none.go":  newFullText([]string{"g1", "g2"}, nil, nil),
 	}
 	ghostShown := buildRows(ghosts, rowOpts{full: ghostText, whole: allWhole(ghostText)})
 	ghostFolded := buildRows(ghosts, rowOpts{full: ghostText, whole: allWhole(ghostText), ghostsStartFolded: true})

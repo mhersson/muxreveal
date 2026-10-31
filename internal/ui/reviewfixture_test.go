@@ -164,7 +164,7 @@ func appGoFull() fullText {
 		"}",
 	}
 
-	return fullText{old: old, new: nw}
+	return newFullText(old, nw, nil)
 }
 
 // longPlain is a 1 MiB line of one printable character; longTags is a 1 MiB
@@ -222,10 +222,11 @@ func hostileResultOf(long longLines) git.Result {
 }
 
 func hostileFullOf(long longLines) fullText {
-	return fullText{
-		old: []string{"a\x1b[2J", "gone\u202e", "same", long.tags},
-		new: []string{"a\x1b[2J", "new\u200b", "same", "tab\there\x07", long.plain},
-	}
+	return newFullText(
+		[]string{"a\x1b[2J", "gone\u202e", "same", long.tags},
+		[]string{"a\x1b[2J", "new\u200b", "same", "tab\there\x07", long.plain},
+		nil,
+	)
 }
 
 // edgeResult has a binary file, a truncated one, a mode change and a small edit.
@@ -258,7 +259,7 @@ func bigResult(n int) (git.Result, fullText) {
 
 	f := fileSpec("big.go", git.Added, hunkSpec(0, 1, "", specs...))
 
-	return git.Result{Turn: 1, Files: []git.FileDiff{f}}, fullText{new: text}
+	return git.Result{Turn: 1, Files: []git.FileDiff{f}}, newFullText(nil, text, nil)
 }
 
 // reviewScene is a master with two workers under an open drawer on the master,

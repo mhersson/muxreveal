@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -369,6 +370,37 @@ func TestReviewMarkdownBlockJumps(t *testing.T) {
 	}
 }
 
+func TestReviewMarkdownBigFileMarksOnlyItsChanges(t *testing.T) {
+	t.Parallel()
+
+	// 1500 paragraphs, 2999 lines; the second and the second to last are edited.
+	var committed, edited strings.Builder
+
+	for i := 1; i <= 1500; i++ {
+		if i > 1 {
+			committed.WriteString("\n")
+			edited.WriteString("\n")
+		}
+
+		fmt.Fprintf(&committed, "para %d\n", i)
+
+		if i == 2 || i == 1499 {
+			fmt.Fprintf(&edited, "para %d edited\n", i)
+		} else {
+			fmt.Fprintf(&edited, "para %d\n", i)
+		}
+	}
+
+	m := newMDRigOf(t, committed.String(), edited.String())
+
+	m.onFile(t, planPath)
+	m.press(keyRune('m'))
+
+	if got, want := marked(m.v, planPath), []string{"para 2 edited", "para 1499 edited"}; !slices.Equal(got, want) {
+		t.Errorf("marked rows = %s, want %q", brief(got), want)
+	}
+}
+
 func TestReviewMarkdownWidth(t *testing.T) {
 	t.Parallel()
 
@@ -731,7 +763,7 @@ func mdScene(narrow bool) func(th string, icons bool) reviewScene {
 			f := v.res.Files[0]
 
 			v.mdOn = map[string]bool{planPath: true}
-			v.mdFiles = map[string]*mdFile{planPath: {doc: doc, text: fullText{old: old, new: nw}, ids: blobIDs{f.OldOID, f.NewOID}}}
+			v.mdFiles = map[string]*mdFile{planPath: {doc: doc, text: newFullText(old, nw, nil), ids: blobIDs{f.OldOID, f.NewOID}}}
 			v.mdW, v.mdIcons = 100, icons
 			v.rebuild(false)
 			v.cursor = rowWith(t, v, "Remember the milestone.")

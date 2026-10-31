@@ -210,7 +210,7 @@ func TestWrappedFullRows(t *testing.T) {
 
 	res := wrapResult()
 	ghost, added := strings.Repeat("g", 70), strings.Repeat("n", 70)
-	ft := fullText{old: []string{"a", ghost, "b"}, new: []string{"a", added, "b"}}
+	ft := newFullText([]string{"a", ghost, "b"}, []string{"a", added, "b"}, nil)
 
 	for _, folded := range []bool{false, true} {
 		rows := buildRows(res, rowOpts{
@@ -920,7 +920,7 @@ func TestWrappedGhostRows(t *testing.T) {
 	t.Parallel()
 
 	ghost := dtext(70)
-	ft := fullText{old: []string{"a", ghost, "b"}, new: []string{"a", "b"}}
+	ft := newFullText([]string{"a", ghost, "b"}, []string{"a", "b"}, nil)
 	s := newDrawnScene(t, wrapResult(), 100, 30, codeWidths{full: 30}, false, func(v *reviewView) {
 		v.full = map[string]fullText{wrapPath: ft}
 		v.fullOn = allWhole(v.full)

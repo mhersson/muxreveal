@@ -35,16 +35,16 @@ type mdFile struct {
 	rowsGen uint64 // the picture generation the rows were last laid out at
 }
 
-// changeMarks marks the lines of a layout whose source ranges are src, by what
-// changed from old to nw. A block is a run of consecutive lines with one
-// non-zero range. A block holding an added line is marked on every line; else a
-// block that removed lines sit before, after the previous block's last line up
-// to its own, is marked on its first line. Lines removed after the last block
-// and removed blank lines between blocks mark nothing.
-func changeMarks(src []md.SourceRange, old, nw []string) []changeMark {
+// changeMarks marks the lines of a layout whose source ranges are src, by the
+// edit script of ft, whose new side the layout was made from. A block is a run
+// of consecutive lines with one non-zero range. A block holding an added line
+// is marked on every line; else a block that removed lines sit before, after
+// the previous block's last line up to its own, is marked on its first line.
+// Lines removed after the last block and removed blank lines between blocks
+// mark nothing.
+func changeMarks(src []md.SourceRange, ft fullText) []changeMark {
 	out := make([]changeMark, len(src))
-
-	pre, _, ops := lineOps(old, nw)
+	nw, ops := ft.new, ft.ops
 
 	// added[n] counts the added lines among new lines 1..n.
 	added := make([]int, len(nw)+1)
@@ -56,7 +56,7 @@ func changeMarks(src []md.SourceRange, old, nw []string) []changeMark {
 	// blocks they change nothing drawn; inside one they can.
 	var blankBefore []int
 
-	ni := pre
+	ni := 0
 
 	for i := 0; i < len(ops); {
 		switch ops[i].Op {

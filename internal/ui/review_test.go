@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -819,6 +820,106 @@ func TestFullFileLoadsOnF(t *testing.T) {
 
 	if want := "a binary file has no full view"; r.notice != want {
 		t.Errorf("notice = %q, want %q", r.notice, want)
+	}
+}
+
+// bigTwoEnded is a 3000-line file and its edit with changes near both ends:
+// line 2 and line 2999 edited, a line inserted after line 10 and line 2990
+// removed.
+func bigTwoEnded() (old, edited string) {
+	var b strings.Builder
+
+	for i := 1; i <= 3000; i++ {
+		switch i {
+		case 2:
+			b.WriteString("two edited\n")
+		case 2990:
+		case 2999:
+			b.WriteString("end edited\n")
+		default:
+			fmt.Fprintf(&b, "line %d\n", i)
+		}
+
+		if i == 10 {
+			b.WriteString("inserted\n")
+		}
+	}
+
+	return numberedLines("line", 3000), b.String()
+}
+
+// fullChanges are the texts of the added and the ghost rows of file fi.
+func fullChanges(v *reviewView, fi int) (added, ghosts []string) {
+	for _, row := range v.rows {
+		switch {
+		case row.file != fi || row.part > 0:
+		case row.kind == rowFull && row.other < 0:
+			added = append(added, row.text)
+		case row.kind == rowGhost:
+			ghosts = append(ghosts, row.text)
+		}
+	}
+
+	return added, ghosts
+}
+
+// brief is ss for a failure message: its length and at most its first five.
+func brief(ss []string) string {
+	return fmt.Sprintf("%d lines %q", len(ss), ss[:min(len(ss), 5)])
+}
+
+// hunkChanges are the texts of the added and the removed lines of f's hunks.
+func hunkChanges(f git.FileDiff) (added, removed []string) {
+	for _, h := range f.Hunks {
+		for _, l := range h.Lines {
+			switch l.Kind {
+			case git.Add:
+				added = append(added, l.Text)
+			case git.Del:
+				removed = append(removed, l.Text)
+			}
+		}
+	}
+
+	return added, removed
+}
+
+func TestFullFileOfABigFileMarksOnlyItsChanges(t *testing.T) {
+	t.Parallel()
+	r := newDrawerRig(t)
+	dir := newRepoDir(t)
+	old, edited := bigTwoEnded()
+	write(t, filepath.Join(dir, "big.txt"), old)
+	commitEverything(t, dir, "init")
+	write(t, filepath.Join(dir, "big.txt"), edited)
+	id := r.shell(t, dir)
+
+	v := r.open(t, id)
+	r.watching(t, id, rootOf(t, dir))
+
+	v.cursor = rowWith(t, v, "big.txt")
+
+	r.run(r.toggleReviewFull())
+	r.until(t, "the full text", func() bool { return len(v.full) == 1 })
+
+	fi := v.rows[rowWith(t, v, "big.txt")].file
+	added, ghosts := fullChanges(v, fi)
+
+	if want := []string{"two edited", "inserted", "end edited"}; !slices.Equal(added, want) {
+		t.Errorf("added rows = %s, want %q", brief(added), want)
+	}
+
+	if want := []string{"line 2", "line 2990", "line 2999"}; !slices.Equal(ghosts, want) {
+		t.Errorf("ghost rows = %s, want %q", brief(ghosts), want)
+	}
+
+	hunkAdded, hunkRemoved := hunkChanges(v.res.Files[fi])
+	if !slices.Equal(added, hunkAdded) || !slices.Equal(ghosts, hunkRemoved) {
+		t.Errorf("the full view marks +%s -%s, unified +%s -%s", brief(added), brief(ghosts), brief(hunkAdded), brief(hunkRemoved))
+	}
+
+	if n := countRows(v, rowFull) - len(added); n != 2997 {
+		t.Errorf("%d kept rows, want the 2997 unchanged lines", n)
 	}
 }
 

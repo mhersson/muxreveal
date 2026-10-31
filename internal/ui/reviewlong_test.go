@@ -31,10 +31,11 @@ func longLinesResult() git.Result {
 }
 
 func longLinesFull() fullText {
-	return fullText{
-		old: []string{"head", "Q" + marks(5000), "tail"},
-		new: []string{"head", "Z" + marks(5000), "K" + marks(lineBudget-2), strings.Repeat("w", 300), strings.Repeat("c", 1500), "tail"},
-	}
+	return newFullText(
+		[]string{"head", "Q" + marks(5000), "tail"},
+		[]string{"head", "Z" + marks(5000), "K" + marks(lineBudget-2), strings.Repeat("w", 300), strings.Repeat("c", 1500), "tail"},
+		nil,
+	)
 }
 
 // diffEnd is a drawn row without the drawer's right border and the padding.
