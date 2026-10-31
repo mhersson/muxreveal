@@ -34,6 +34,10 @@ linters:
       branch-max-lines: 2
   exclusions:
     generated: lax
+    # The fsnotify copy keeps upstream's code and style, so a fixed release can replace it whole.
+    paths:
+    - internal/git/fsnotify/(backend_inotify|backend_kqueue|fsnotify|shared|system_darwin)\.go$
+    - internal/git/fsnotify/internal/
     presets:
     - common-false-positives
     - std-error-handling
@@ -155,3 +159,5 @@ formatters:
     - internal/git/invisible/
     - internal/ui/diffview/(diffview|highlight|pair|render|theme)\.go$
     - internal/ui/diffview/lexers/
+    - internal/git/fsnotify/(backend_inotify|backend_kqueue|fsnotify|shared|system_darwin)\.go$
+    - internal/git/fsnotify/internal/

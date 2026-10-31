@@ -38,6 +38,12 @@ MuxReveal includes material copied from the projects below, each under the MIT L
 - Copyright (c) 2017 Alec Thomas
 - Used in `internal/ui/diffview/lexers/`: the gzipped `.xml.gz` definitions and `coded.go`.
 
+## fsnotify
+
+- Source: https://github.com/fsnotify/fsnotify at v1.10.1: `fsnotify.go`, `shared.go`, `backend_inotify.go`, `backend_kqueue.go`, `system_darwin.go`, and from `internal/` the files `internal.go`, `darwin.go`, `debug_darwin.go`, `debug_kqueue.go`, `debug_linux.go`, `unix.go` and `unix2.go`
+- Copyright (c) 2012 The Go Authors and the fsnotify Authors, under the BSD-3-Clause License; the text is in `internal/git/fsnotify/LICENSE`
+- Used in `internal/git/fsnotify/`: the file watcher behind `git.Watch`, as upstream wrote it apart from the import path of its `internal` package. It is a copy rather than a module requirement so that it can carry a fix upstream has not released yet; a `go.mod` replace would break `go install ...@latest`.
+
 ## Go WebP test image
 
 - Source: https://cs.opensource.google/go/x/image (`testdata/gopher-doc.1bpp.lossless.webp`, v0.47.0)

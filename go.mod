@@ -16,7 +16,6 @@ require (
 	github.com/cli/go-gh/v2 v2.17.0
 	github.com/cli/shurcooL-graphql v0.0.4
 	github.com/creack/pty v1.1.24
-	github.com/fsnotify/fsnotify v1.10.1
 	github.com/pelletier/go-toml/v2 v2.4.3
 	github.com/sahilm/fuzzy v0.1.3
 	github.com/spf13/cobra v1.10.2
