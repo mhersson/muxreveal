@@ -93,6 +93,12 @@ what to do about it. Skim it before your first commit each session.
   its entries change, and Chmod-only events. The watcher keeps them from
   counting as changes (see Watch set in `docs/DESIGN.md`); a change to its
   event filter needs its tests to pass on macOS as well as Linux.
+- `fsnotify` is a copy in `internal/git/fsnotify` because v1.10.1's kqueue
+  backend can close a watch descriptor twice while a watcher closes. The
+  second close shuts whatever took the number, such as another git call's
+  pipe, which then holds a stranger's output. Keep the copy until a release
+  fixes https://github.com/fsnotify/fsnotify/issues/788, then swap it whole
+  for the module. Its kqueue tests run only on macOS.
 
 ## Platform-specific code
 
@@ -151,8 +157,8 @@ what to do about it. Skim it before your first commit each session.
   sooner, and a late batch then reloads the drawer after the test read its
   `epoch` or `gen`. The rig's `reportedAll` waits for the paths written.
 - `t.Setenv` and `t.Chdir` panic in a parallel test. That is why tests that
-  use them, and tests that count or scan the process's goroutines, skip
-  `t.Parallel()`.
+  use them, and tests that count or scan the process's goroutines or open
+  descriptors, skip `t.Parallel()`.
 - Writing an executable and then running it while parallel tests fork can
   fail with `ETXTBSY`: a concurrent fork inherits the still-open write
   descriptor (go.dev/issue/22315). Hold `syscall.ForkLock.RLock()` around the

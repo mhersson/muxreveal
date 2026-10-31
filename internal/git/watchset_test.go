@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/fsnotify/fsnotify"
+	"github.com/mhersson/muxreveal/internal/git/fsnotify"
 )
 
 func newWatchSet(t *testing.T) *WatchSet {

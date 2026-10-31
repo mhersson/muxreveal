@@ -200,7 +200,7 @@ One Go module, `github.com/mhersson/muxreveal`.
 | `internal/ui` | Compositor, widgets, keymap, themes, syntax highlighting, image placement |
 | `internal/term` | PTY plus the `VT` interface; `tuios.dev/vt` adapter (fallback `charmbracelet/x/vt`) |
 | `internal/harness` | `Harness` interface; Claude Code adapter (launch args, hook settings, resume, a session's custom name from its transcript) |
-| `internal/git` | Worktrees, turn snapshots, watcher and watch set, diff engine; `linediff` and `invisible` (ported from tuios) |
+| `internal/git` | Worktrees, turn snapshots, watcher and watch set, diff engine; `linediff` and `invisible` (ported from tuios); `fsnotify` (a copy of fsnotify v1.10.1) |
 | `internal/github` | Auth via `gh`, GraphQL and REST client, poller, PR actions, image fetch |
 | `internal/md` | Markdown to width-wrapped lines of styled runs, with link targets, image references and folds; no UI imports |
 | `internal/store` | `state.json` and reviewed-hunk persistence |
@@ -260,7 +260,7 @@ Go 1.27 (`tuios.dev/vt` needs 1.26 or later). The reason for Rust was a proven V
 | Syntax | Chroma v2 | Ships Catppuccin styles; wide language coverage |
 | Markdown | goldmark v2 with GFM and footnotes, plus our own layout in `internal/md` | Full control of layout and image placement; Glamour has no images |
 | Images | `image/png`, `image/jpeg`, `image/gif` and `golang.org/x/image` (`webp`, `draw`) decode and scale; PNG goes to the terminal | The escapes are ours, built on `x/ansi`'s `KittyGraphics` and placeholder table |
-| File watching | `fsnotify` with our own directory walk | Maintained; the walk skips `.git` internals, `.worktrees` and ignored directories; `rjeczalik/notify` is unmaintained since 2023 and uses FSEvents on macOS only with cgo |
+| File watching | `fsnotify` v1.10.1, copied into `internal/git/fsnotify` with a fix to its kqueue backend, with our own directory walk | Maintained; v1.10.1's kqueue `Close` can close a watch descriptor twice, the second time after another file took its number, and the copy carries the fix until a release has it, where a `go.mod` replace would break `go install ...@latest`; the walk skips `.git` internals, `.worktrees` and ignored directories; `rjeczalik/notify` is unmaintained since 2023 and uses FSEvents on macOS only with cgo |
 | GitHub | `cli/go-gh/v2` for hosts, tokens and the REST and GraphQL clients (GraphQL queries as tagged Go structs); ETags through our own transport under its clients | Same login and host routing as `gh`; no schema file or codegen; conditional requests do not count against the rate limit |
 | Fuzzy finder | `sahilm/fuzzy` | Palette and pickers |
 | Config and state | `pelletier/go-toml/v2`; `encoding/json` | TOML config, JSON layout state and reviewed-hunk files |
