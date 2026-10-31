@@ -47,6 +47,8 @@ type reviewView struct {
 	queued   *git.Batch                     // changes seen since the last load started
 	hiddenIn []bool                         // per file of res: handed over with it, so derived scans no text
 	carry    map[chunkSum][][]diffview.Span // the last generation's spans by chunk text, for the next to take
+	hlTop    int                            // the top of the last highlighting scan
+	hlUp     bool                           // the view last moved up
 
 	// The files the operator wants shown whole, the blobs res names for them
 	// that full holds, and the blobs being read.

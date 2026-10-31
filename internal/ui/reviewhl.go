@@ -22,6 +22,41 @@ const (
 	hlBatch = 512
 )
 
+const (
+	hlAhead  = 2 // screens tokenised ahead of the view, the way it last moved
+	hlBehind = 1 // screens tokenised behind it
+)
+
+// hlWindow is the rows to search for chunks, in order: the visible rows top to
+// bottom, then the rest nearest first, the screens ahead before the one behind.
+func hlWindow(top, h, n int, up bool) (visible, rest []int) {
+	end := min(top+h, n)
+	for i := top; i < end; i++ {
+		visible = append(visible, i)
+	}
+
+	below := func(screens int) {
+		for i := end; i < min(end+screens*h, n); i++ {
+			rest = append(rest, i)
+		}
+	}
+	above := func(screens int) {
+		for i := top - 1; i >= max(top-screens*h, 0); i-- {
+			rest = append(rest, i)
+		}
+	}
+
+	if up {
+		above(hlAhead)
+		below(hlBehind)
+	} else {
+		below(hlAhead)
+		above(hlBehind)
+	}
+
+	return visible, rest
+}
+
 // Sides of a hunk that are tokenised on their own.
 const (
 	sideOld uint8 = iota
@@ -182,17 +217,22 @@ func (a *App) settleDrawerRows() tea.Cmd {
 	return func() tea.Msg { return j.run(ctx, hl) }
 }
 
-// highlightRows gathers the chunks the rows within one screen of the visible
-// ones need and no cache holds into a job of at most hlBatch lines. It returns
-// nil while a job runs, and when nothing is left to tokenise; chunks past the
-// batch wait for the next one.
+// highlightRows gathers the chunks no cache holds into a job of at most hlBatch
+// lines: those of the visible rows, and only when they have all got spans those
+// of the screens ahead and behind. It returns nil while a job runs, and when
+// nothing is left to tokenise; chunks past the batch wait for the next one.
 func (a *App) highlightRows(tab core.TabID, v *reviewView, lay drawerLayout) *hlJob {
 	if a.drawer.hlJob != nil || len(v.rows) == 0 || lay.diffH <= 0 {
 		return nil
 	}
 
 	c := v.derived()
+
 	top := v.viewTop(lay.diffH)
+	if top != v.hlTop {
+		v.hlUp, v.hlTop = top < v.hlTop, top
+	}
+
 	key := scanKey{rev: v.rowsRev, top: top, bodyH: lay.diffH}
 
 	if c.scanned && c.scan == key {
@@ -208,43 +248,53 @@ func (a *App) highlightRows(tab core.TabID, v *reviewView, lay drawerLayout) *hl
 		budget = hlBatch
 	)
 
-	for i := max(top-lay.diffH, 0); i < min(top+2*lay.diffH, len(v.rows)); i++ {
-		for _, ref := range v.rowSpans(i) {
-			if _, done := c.spans[ref.key]; done || queued[ref.key] {
-				continue
-			}
+	walk := func(rows []int) {
+		for _, i := range rows {
+			for _, ref := range v.rowSpans(i) {
+				if _, done := c.spans[ref.key]; done || queued[ref.key] {
+					continue
+				}
 
-			path, lines := v.chunkLines(ref.key)
-			sum := sumOf(path, lines)
+				path, lines := v.chunkLines(ref.key)
+				sum := sumOf(path, lines)
 
-			spans, known := v.carry[sum]
-			if !known {
-				spans, known = c.bySum[sum]
-			}
+				spans, known := v.carry[sum]
+				if !known {
+					spans, known = c.bySum[sum]
+				}
 
-			if known {
-				c.spans[ref.key], c.bySum[sum] = spans, spans
-				c.spansRev++
+				if known {
+					c.spans[ref.key], c.bySum[sum] = spans, spans
+					c.spansRev++
 
-				continue
-			}
+					continue
+				}
 
-			if at, ok := bySum[sum]; ok {
-				texts[at].keys = append(texts[at].keys, ref.key)
+				if at, ok := bySum[sum]; ok {
+					texts[at].keys = append(texts[at].keys, ref.key)
+					queued[ref.key] = true
+
+					continue
+				}
+
+				if len(lines) > budget {
+					continue
+				}
+
+				budget -= len(lines)
+				bySum[sum] = len(texts)
 				queued[ref.key] = true
-
-				continue
+				texts = append(texts, hlText{keys: []spanKey{ref.key}, sum: sum, path: path, lines: lines})
 			}
-
-			if len(lines) > budget {
-				continue
-			}
-
-			budget -= len(lines)
-			bySum[sum] = len(texts)
-			queued[ref.key] = true
-			texts = append(texts, hlText{keys: []spanKey{ref.key}, sum: sum, path: path, lines: lines})
 		}
+	}
+
+	visible, rest := hlWindow(top, lay.diffH, len(v.rows), v.hlUp)
+
+	walk(visible)
+
+	if len(texts) == 0 {
+		walk(rest)
 	}
 
 	c.scan = key

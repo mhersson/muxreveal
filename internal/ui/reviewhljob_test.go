@@ -241,3 +241,182 @@ func TestHighlightJobRace(t *testing.T) {
 		}
 	}
 }
+
+func TestHighlightWindowOrder(t *testing.T) {
+	t.Parallel()
+
+	span := func(from, to int) []int {
+		var out []int
+
+		step := 1
+		if to < from {
+			step = -1
+		}
+
+		for i := from; i != to+step; i += step {
+			out = append(out, i)
+		}
+
+		return out
+	}
+
+	tests := []struct {
+		name         string
+		top, h, n    int
+		up           bool
+		visible, rst []int
+	}{
+		{"down", 100, 10, 1000, false, span(100, 109), append(span(110, 129), span(99, 90)...)},
+		{"up", 100, 10, 1000, true, span(100, 109), append(span(99, 80), span(110, 119)...)},
+		{"at the top", 0, 10, 25, false, span(0, 9), span(10, 24)},
+		{"at the end", 20, 10, 25, false, span(20, 24), span(19, 10)},
+		{"short rows", 0, 50, 20, false, span(0, 19), nil},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			visible, rest := hlWindow(tt.top, tt.h, tt.n, tt.up)
+			if !reflect.DeepEqual(visible, tt.visible) || !reflect.DeepEqual(rest, tt.rst) {
+				t.Errorf("hlWindow(%d, %d, %d, %v) = %v, %v; want %v, %v", tt.top, tt.h, tt.n, tt.up, visible, rest, tt.visible, tt.rst)
+			}
+		})
+	}
+}
+
+func TestHighlightVisibleFirst(t *testing.T) {
+	t.Parallel()
+
+	res, _ := bigResult(5000)
+	s := reviewScene{theme: "catppuccin-mocha", icons: true, w: 200, h: 52, res: res, turn: 1, turns: 1, focused: true}
+	a := s.build(t)
+	v := a.reviewViewOf(a.store.State().Tab().ID)
+	h := a.reviewBodyH(v)
+
+	keysOf := func(from, to int) map[spanKey]bool {
+		out := map[spanKey]bool{}
+
+		for i := max(from, 0); i < min(to, len(v.rows)); i++ {
+			for _, r := range v.rowSpans(i) {
+				out[r.key] = true
+			}
+		}
+
+		return out
+	}
+	inJob := func(j *hlJob) map[spanKey]bool {
+		out := map[spanKey]bool{}
+
+		for _, tx := range j.texts {
+			for _, k := range tx.keys {
+				out[k] = true
+			}
+		}
+
+		return out
+	}
+
+	// Two screens ahead of the view reach into the next chunk of the file.
+	at := func(row int) {
+		v.top, v.cursor = row, row
+		v.cache, v.carry = reviewCache{}, nil
+	}
+
+	at(5*hlChunk - 2*h)
+
+	top := v.viewTop(h)
+
+	a.drawerAfterUpdate()
+
+	first := a.drawer.hlJob
+	if first == nil {
+		t.Fatal("no batch was started")
+	}
+
+	vis := keysOf(top, top+h)
+	firstKeys := inJob(first)
+
+	for k := range firstKeys {
+		if !vis[k] {
+			t.Errorf("the first batch holds %v, which no visible row reads", k)
+		}
+	}
+
+	runHighlight(t, a)
+	a.drawerAfterUpdate()
+
+	next := a.drawer.hlJob
+	if next == nil {
+		t.Fatal("no second batch was started")
+	}
+
+	// Chunks of the screens ahead that the first batch lacked come before others.
+	ahead := keysOf(top+h, top+3*h)
+	seenOther := false
+
+	for _, tx := range next.texts {
+		for _, k := range tx.keys {
+			if firstKeys[k] || vis[k] && !ahead[k] {
+				continue
+			}
+
+			if ahead[k] && seenOther {
+				t.Errorf("chunk %v of the screens ahead comes after another outside them", k)
+			}
+
+			if !ahead[k] {
+				seenOther = true
+			}
+		}
+	}
+
+	settleDrawer(t, a)
+
+	inside := keysOf(top-h, top+3*h)
+	for k := range inside {
+		if _, ok := v.derived().spans[k]; !ok {
+			t.Errorf("chunk %v inside the window holds no spans", k)
+		}
+	}
+
+	for k := range v.derived().spans {
+		if !inside[k] {
+			t.Errorf("chunk %v outside the window holds spans", k)
+		}
+	}
+
+	// Moving up four screens makes up the direction: the screens above come first.
+	// The screens above reach into the chunk before the one in view.
+	at(4*hlChunk + 3*h/2)
+
+	newTop := v.viewTop(h)
+
+	a.drawerAfterUpdate()
+	runHighlight(t, a)
+	a.drawerAfterUpdate()
+
+	up := a.drawer.hlJob
+	if up == nil {
+		t.Fatal("no batch after moving up")
+	}
+
+	want := keysOf(newTop-2*h, newTop)
+	seenOther = false
+
+	for _, tx := range up.texts {
+		for _, k := range tx.keys {
+			if want[k] {
+				if seenOther {
+					t.Errorf("chunk %v above the view comes after another outside it", k)
+				}
+			} else {
+				seenOther = true
+			}
+		}
+	}
+
+	if len(up.texts) == 0 || !want[up.texts[0].keys[0]] {
+		t.Errorf("the batch after moving up does not start with the screens above")
+	}
+}
