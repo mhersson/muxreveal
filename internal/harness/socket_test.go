@@ -51,7 +51,8 @@ type served struct {
 
 // fakeClock is a server clock that stands still: each wait the server asks for
 // arrives on asks and ends only when the test ends it, so an answer that comes
-// with no wait ended was not held.
+// with no wait ended was not held. Every event asks for one wait, and a test
+// that leaves more than asks holds unread blocks the server.
 type fakeClock struct {
 	at   time.Time
 	asks chan ask
@@ -456,14 +457,14 @@ func TestServeEndsWithContext(t *testing.T) {
 }
 
 // Without a deadline, a Send that waited on a missing socket would hang.
-func TestSendMissingPathFailsFast(t *testing.T) {
+func TestSendMissingPathFails(t *testing.T) {
 	err := Send(context.Background(), filepath.Join(shortDir(t), "none.sock"), Event{})
 	if err == nil {
 		t.Fatal("Send() error = nil, want one")
 	}
 }
 
-func TestSendSilentServerHonoursDeadline(t *testing.T) {
+func TestSendSilentServerHonoursCancel(t *testing.T) {
 	path := socketPath(t)
 
 	ln, err := net.Listen("unix", path)
@@ -714,7 +715,7 @@ func TestServerHoldsAnEditBeforeItsTool(t *testing.T) {
 		t.Fatalf("held edit has Done %v and Deadline %v", ev.Done != nil, ev.Deadline)
 	}
 
-	// The hold is far longer than the test, so an answer now would not be the hold's.
+	// The fake clock never ends the hold, so an answer now would not be the hold's.
 	select {
 	case err := <-res:
 		t.Fatalf("answered before Done: %v", err)
