@@ -515,6 +515,33 @@ func TestReviewZoomKeepsWidthWhileClosing(t *testing.T) {
 	}
 }
 
+func TestReviewZoomClosingRailClick(t *testing.T) {
+	t.Parallel()
+
+	r := zoomRig(t)
+	body := r.bodyAreaIn(r.store.State().Rail)
+
+	r.keys(keyRune('z'))
+	r.finishSlide()
+	r.leader('d')
+	r.clk.Advance(30 * time.Millisecond)
+	r.fireSlide()
+
+	before, _ := r.drawerRect(r.store.State())
+
+	rail := r.railRect()
+	clickRun(r.App, rail.X+1, rail.Y+1)
+
+	after, ok := r.drawerRect(r.store.State())
+	if !ok || !r.zoomed() || !r.drawer.closing || after.W < before.W-1 || after.W > body.W {
+		t.Errorf("rect %v after %v, zoomed %v, closing %v, want the close slide to go on from the body's width", after, before, r.zoomed(), r.drawer.closing)
+	}
+
+	if full, _ := r.drawerFull(r.store.State()); full != body {
+		t.Errorf("closing drawer measures %v, want the body %v", full, body)
+	}
+}
+
 func TestReviewZoomWithoutDrawer(t *testing.T) {
 	t.Parallel()
 
@@ -794,6 +821,10 @@ func TestZoomSlideEnds(t *testing.T) {
 			full, ok := r.drawerFull(st)
 			if ok != tt.shown {
 				t.Fatalf("drawer shown %v, want %v", ok, tt.shown)
+			}
+
+			if tt.name == "tab switch" && first.zoom {
+				t.Error("the drawer left by the tab switch is still zoomed")
 			}
 
 			if !ok || tt.closing {

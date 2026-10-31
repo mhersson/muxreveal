@@ -51,14 +51,14 @@ func (a *App) unzoom() {
 	active := st.Tab().ID
 
 	for id, v := range a.drawer.views {
-		if !v.zoom {
+		if !v.zoom || (id == active && a.drawer.closing) {
 			continue
 		}
 
 		// Only the active tab's drawer shows. A slide running ends at once and the
 		// drawer takes its width with no slide; a closing one keeps its width.
 		full, shown := a.drawerFull(st)
-		slide := id == active && shown && !a.drawer.closing
+		slide := id == active && shown
 
 		if slide && !a.drawer.slideFrom.IsZero() {
 			a.endSlide()
@@ -200,7 +200,7 @@ func (a *App) closeDrawer(slide bool) tea.Cmd {
 
 // startSlide begins a slide in, or out when closing, and asks for its frames.
 func (a *App) startSlide(closing bool) tea.Cmd {
-	a.drawer.slideFrom, a.drawer.closing = a.clock.Now(), closing
+	a.drawer.slideFrom, a.drawer.closing, a.drawer.resizeFrom = a.clock.Now(), closing, 0
 
 	return a.slideFrameCmd()
 }
