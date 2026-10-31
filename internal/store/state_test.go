@@ -1,6 +1,7 @@
 package store
 
 import (
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -8,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/mhersson/muxreveal/internal/core"
 )
@@ -833,6 +835,171 @@ func TestReviewPRModeIsNotSaved(t *testing.T) {
 	if string(a) != string(b) {
 		t.Errorf("PR mode changes the encoding:\n%s\nvs\n%s", a, b)
 	}
+}
+
+var planAt = time.Date(2026, 10, 30, 9, 0, 0, 0, time.UTC)
+
+func planPane(plan core.Plan) core.State {
+	st := fixedState()
+	p := st.Panes["p1"]
+	p.Plan = plan
+	st.Panes["p1"] = p
+
+	return st
+}
+
+func TestEncodePlan(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		plan core.Plan
+		want string
+	}{
+		{
+			"file plan",
+			core.Plan{Path: "/r/docs/superpowers/plans/a.md", Root: "/r", Kind: core.PlanFile, At: planAt, Unread: true},
+			`"plan": {"path": "/r/docs/superpowers/plans/a.md", "root": "/r", "kind": "file", "at": "2026-10-30T09:00:00Z", "unread": true}`,
+		},
+		{
+			"mode plan, read",
+			core.Plan{Path: "/h/.claude/plans/x.md", Kind: core.PlanMode, At: planAt},
+			`"plan": {"path": "/h/.claude/plans/x.md", "kind": "mode", "at": "2026-10-30T09:00:00Z"}`,
+		},
+		{"no plan", core.Plan{}, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			data, err := Encode(planPane(tt.plan))
+			noErr(t, err)
+
+			var m struct {
+				Panes map[string]map[string]json.RawMessage `json:"panes"`
+			}
+			noErr(t, json.Unmarshal(data, &m))
+
+			for id, pane := range m.Panes {
+				raw, has := pane["plan"]
+				if id != "p1" || tt.want == "" {
+					if has {
+						t.Errorf("pane %s writes a plan: %s", id, raw)
+					}
+
+					continue
+				}
+
+				var got, want map[string]any
+
+				noErr(t, json.Unmarshal(raw, &got))
+				noErr(t, json.Unmarshal([]byte("{"+tt.want+"}"), &want))
+				eq(t, map[string]any{"plan": got}, want)
+			}
+		})
+	}
+
+	t.Run("a shell writes none", func(t *testing.T) {
+		t.Parallel()
+
+		st := fixedState()
+		p := st.Panes["p2"]
+		p.Plan = core.Plan{Path: "/a/b.md", Kind: core.PlanMode, At: planAt}
+		st.Panes["p2"] = p
+
+		data, err := Encode(st)
+		noErr(t, err)
+
+		if strings.Contains(string(data), `"plan"`) {
+			t.Errorf("a shell's plan is written:\n%s", data)
+		}
+	})
+
+	t.Run("an invalid plan is not written", func(t *testing.T) {
+		t.Parallel()
+
+		data, err := Encode(planPane(core.Plan{Path: "rel.md", Kind: core.PlanMode, At: planAt}))
+		noErr(t, err)
+
+		if strings.Contains(string(data), `"plan"`) {
+			t.Errorf("an invalid plan is written:\n%s", data)
+		}
+	})
+}
+
+func TestDecodePlan(t *testing.T) {
+	t.Parallel()
+
+	file := core.Plan{Path: "/r/docs/superpowers/plans/a.md", Root: "/r", Kind: core.PlanFile, At: planAt, Unread: true}
+	mode := core.Plan{Path: "/h/.claude/plans/x.md", Kind: core.PlanMode, At: planAt}
+
+	tests := []struct {
+		name string
+		pane string // the pane's "plan" member, or a whole pane when it starts with "{"
+		want core.Plan
+	}{
+		{"file plan", `{"path":"/r/docs/superpowers/plans/a.md","root":"/r","kind":"file","at":"2026-10-30T09:00:00Z","unread":true}`, file},
+		{"mode plan", `{"path":"/h/.claude/plans/x.md","kind":"mode","at":"2026-10-30T09:00:00Z"}`, mode},
+		{"relative path", `{"path":"plans/x.md","kind":"mode","at":"2026-10-30T09:00:00Z"}`, core.Plan{}},
+		{"uncleaned path", `{"path":"/a/../b.md","kind":"mode","at":"2026-10-30T09:00:00Z"}`, core.Plan{}},
+		{"unknown kind", `{"path":"/a/b.md","kind":"x","at":"2026-10-30T09:00:00Z"}`, core.Plan{}},
+		{"root does not hold the path", `{"path":"/a/b.md","root":"/c","kind":"file","at":"2026-10-30T09:00:00Z"}`, core.Plan{}},
+		{"file plan without root", `{"path":"/a/b.md","kind":"file","at":"2026-10-30T09:00:00Z"}`, core.Plan{}},
+		{"mode plan with a root", `{"path":"/a/b.md","root":"/a","kind":"mode","at":"2026-10-30T09:00:00Z"}`, core.Plan{}},
+		{"bad time", `{"path":"/a/b.md","kind":"mode","at":"yesterday"}`, core.Plan{}},
+		{"plan is a string", `"/a/b.md"`, core.Plan{}},
+		{"plan is null", `null`, core.Plan{}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			panes := `"p1":{"kind":"agent","harness":"claude-code","cwd":"/home/me","plan":` + tt.pane + `},` +
+				`"p2":{"kind":"shell","cwd":"/home/me"}`
+			data := doc("2", "0", tabDoc("t1", "p1", `"p1","p2"`, `{"split":"vertical","ratio":0.5,"children":[{"pane":"p1"},{"pane":"p2"}]}`), panes)
+
+			st, rep, err := decodeDefault([]byte(data))
+			noErr(t, err)
+			eq(t, rep, Report{})
+			eq(t, st.Panes["p1"].Plan, tt.want)
+			eq(t, st.Panes["p1"].Cwd, "/home/me")
+			eq(t, st.Panes["p1"].Harness, "claude-code")
+		})
+	}
+
+	t.Run("a shell's plan is dropped", func(t *testing.T) {
+		t.Parallel()
+
+		panes := `"p1":{"kind":"shell","cwd":"/home/me","plan":{"path":"/a/b.md","kind":"mode","at":"2026-10-30T09:00:00Z"}}`
+		data := doc("2", "0", tabDoc("t1", "p1", `"p1"`, `{"pane":"p1"}`), panes)
+
+		st, rep, err := decodeDefault([]byte(data))
+		noErr(t, err)
+		eq(t, rep, Report{})
+		eq(t, st.Panes["p1"], core.Pane{Kind: core.KindShell, Cwd: "/home/me"})
+	})
+
+	t.Run("round trip", func(t *testing.T) {
+		t.Parallel()
+
+		for _, plan := range []core.Plan{file, mode} {
+			data, err := Encode(planPane(plan))
+			noErr(t, err)
+
+			got, _, err := decodeDefault(data)
+			noErr(t, err)
+			eq(t, got, planRoundTripped(plan))
+		}
+	})
+}
+
+func planRoundTripped(plan core.Plan) core.State {
+	st := roundTripped()
+	p := st.Panes["p1"]
+	p.Plan = plan
+	st.Panes["p1"] = p
+
+	return st
 }
 
 func TestEncodeWritesNoMarks(t *testing.T) {

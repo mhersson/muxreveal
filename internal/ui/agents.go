@@ -100,8 +100,10 @@ func (a *App) onHook(ev harness.Event) tea.Cmd {
 		changed = a.noteChanged(m, ev.Pane, ev.Changed)
 	}
 
+	plans := a.notePlans(m, ev.Pane, ev)
+
 	// After the session is recorded: the name probe reads the transcript it reports.
-	probes := tea.Batch(a.railHook(ev.Pane, ev.Start, ev.State == core.AgentIdle), a.reviewHook(ev.Pane, ev.TurnStart, ev.Snapped), edit, changed)
+	probes := tea.Batch(a.railHook(ev.Pane, ev.Start, ev.State == core.AgentIdle), a.reviewHook(ev.Pane, ev.TurnStart, ev.Snapped), edit, changed, plans)
 
 	if ev.State == core.AgentUnknown {
 		return probes

@@ -278,6 +278,53 @@ func TestParseEventEdit(t *testing.T) {
 	}
 }
 
+func TestParseEventPlan(t *testing.T) {
+	t.Parallel()
+
+	const input = `"tool_name":"ExitPlanMode","tool_input":{"planFilePath":"/home/u/.claude/plans/x.md"}`
+
+	tests := []struct {
+		name  string
+		event string
+		rest  string
+		want  string
+	}{
+		{"path", "PreToolUse", input, "/home/u/.claude/plans/x.md"},
+		{"path is cleaned", "PreToolUse", `"tool_name":"ExitPlanMode","tool_input":{"planFilePath":"/home/u/.claude/plans/../plans/x.md"}`, "/home/u/.claude/plans/x.md"},
+		{"relative path", "PreToolUse", `"tool_name":"ExitPlanMode","tool_input":{"planFilePath":"plans/x.md"}`, ""},
+		{"path holds NUL", "PreToolUse", `"tool_name":"ExitPlanMode","tool_input":{"planFilePath":"/p/a\u0000.md"}`, ""},
+		{"path is a number", "PreToolUse", `"tool_name":"ExitPlanMode","tool_input":{"planFilePath":5}`, ""},
+		{"no path", "PreToolUse", `"tool_name":"ExitPlanMode","tool_input":{"plan":"# x"}`, ""},
+		{"tool_input is a string", "PreToolUse", `"tool_name":"ExitPlanMode","tool_input":"/p/x.md"`, ""},
+		{"permission request", "PermissionRequest", input, ""},
+		{"post tool use", "PostToolUse", input, ""},
+		{"other tool", "PreToolUse", `"tool_name":"Write","tool_input":{"planFilePath":"/p/x.md"}`, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			ev, err := Claude{}.ParseEvent(payload(tt.event, tt.rest))
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if ev.Plan != tt.want {
+				t.Errorf("Plan = %q, want %q", ev.Plan, tt.want)
+			}
+		})
+	}
+
+	ev, err := Claude{}.ParseEvent(readFixture(t, "pre_tool_use_exit_plan_mode"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if ev.Plan != "/home/u/.claude/plans/lexical-hugging-muffin.md" || ev.State != core.AgentWorking || ev.Action != "ExitPlanMode" {
+		t.Errorf("fixture event = %+v", ev)
+	}
+}
+
 func TestParseEventBefore(t *testing.T) {
 	t.Parallel()
 

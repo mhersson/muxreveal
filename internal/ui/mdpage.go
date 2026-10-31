@@ -101,11 +101,7 @@ func (p *mdPage) resize(w, h int, icons bool) {
 
 // scroll moves the window n lines; the cursor follows when it would leave it.
 func (p *mdPage) scroll(n int) {
-	v := &p.view
-	lines, h := len(v.layout().Lines), max(v.h, 1)
-
-	v.top = min(max(v.top+n, 0), max(lines-h, 0))
-	v.cursor = min(max(v.cursor, v.top), max(min(v.top+h-1, lines-1), 0))
+	p.view.scroll(n)
 	p.rev++
 }
 

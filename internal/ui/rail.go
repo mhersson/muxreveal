@@ -47,6 +47,7 @@ type railCard struct {
 	ahead      int         // commits past the branch's upstream; 0 with none or no upstream
 	pr         core.PRInfo // the pull request of the card's branch, when hasPR
 	hasPR      bool
+	plan       bool // the agent's latest plan is unread
 }
 
 // railGroup is the cards of one state, in tab and pane order.
@@ -163,6 +164,7 @@ func (a *App) railCards(st core.State) []railGroup {
 		c := railCard{
 			pane: id, tab: ti, state: m.State, action: cardAction(m),
 			model: cleanModel(m.Model), meter: m.Context, meterKnown: m.ContextKnown,
+			plan: m.Plan.Path != "" && m.Plan.Unread,
 		}
 		if ti < len(tabs) {
 			c.tabName = tabs[ti].name

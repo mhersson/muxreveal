@@ -19,6 +19,7 @@ type mdPainter struct {
 	ui     theme.UI
 	syntax [diffview.NumClasses]color.Color
 	ground theme.Hex
+	query  string
 }
 
 func newMDPainter(t theme.Theme, ground theme.Hex) mdPainter {
@@ -28,6 +29,13 @@ func newMDPainter(t theme.Theme, ground theme.Hex) mdPainter {
 // withGround is p painting on another ground, such as a cursor row's.
 func (p mdPainter) withGround(g theme.Hex) mdPainter {
 	p.ground = g
+
+	return p
+}
+
+// withQuery is p painting each occurrence of q, ignoring case, in Match.
+func (p mdPainter) withQuery(q string) mdPainter {
+	p.query = q
 
 	return p
 }
@@ -97,16 +105,22 @@ func (p mdPainter) line(l md.Line, links []md.Link, w int) string {
 		return ""
 	}
 
+	l, hit := splitMatches(l, p.query)
 	l = cutLine(l, w)
 
 	var sb strings.Builder
 
 	used := 0
 
-	for _, r := range l {
+	for i, r := range l {
 		used += ansi.StringWidth(r.Text)
 
-		text := p.style(r).Render(r.Text)
+		st := p.style(r)
+		if i < len(hit) && hit[i] {
+			st = st.Foreground(p.ui.Match).Bold(true)
+		}
+
+		text := st.Render(r.Text)
 
 		if r.Link >= 0 && r.Link < len(links) && linkSafe(links[r.Link].URL) {
 			text = ansi.SetHyperlink(links[r.Link].URL) + text + ansi.ResetHyperlink()
@@ -120,6 +134,62 @@ func (p mdPainter) line(l md.Line, links []md.Link, w int) string {
 	}
 
 	return sb.String()
+}
+
+// splitMatches cuts l's runs at the edges of the occurrences of q in its text
+// and says which of the new runs are occurrences. It returns l when there are none.
+func splitMatches(l md.Line, q string) (md.Line, []bool) {
+	if q == "" {
+		return l, nil
+	}
+
+	var sb strings.Builder
+	for _, r := range l {
+		sb.WriteString(r.Text)
+	}
+
+	ms := matchRanges(sb.String(), q)
+	if len(ms) == 0 {
+		return l, nil
+	}
+
+	var (
+		out    md.Line
+		hit    []bool
+		pos, k int
+	)
+
+	for _, r := range l {
+		end := pos + len(r.Text)
+
+		for at := pos; at < end; {
+			for k < len(ms) && ms[k].End <= at {
+				k++
+			}
+
+			stop, in := end, false
+
+			switch {
+			case k < len(ms) && ms[k].Start <= at:
+				stop, in = min(ms[k].End, end), true
+			case k < len(ms):
+				stop = min(ms[k].Start, end)
+			}
+
+			seg := r
+			seg.Text = r.Text[at-pos : stop-pos]
+			out, hit = append(out, seg), append(hit, in)
+			at = stop
+		}
+
+		if r.Text == "" {
+			out, hit = append(out, r), append(hit, false)
+		}
+
+		pos = end
+	}
+
+	return out, hit
 }
 
 // cutLine is l cut to w cells, ending in … in the last run's style when

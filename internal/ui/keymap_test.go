@@ -190,7 +190,7 @@ func TestGitGroupKeys(t *testing.T) {
 func TestOldGitKeysAreUnbound(t *testing.T) {
 	t.Parallel()
 
-	for _, k := range []string{"p", "o", "m"} {
+	for _, k := range []string{"o", "m"} {
 		a := newTestApp(t)
 		press(a, keyLeader, keyRune(rune(k[0])))
 

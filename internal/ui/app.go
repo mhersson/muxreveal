@@ -67,6 +67,9 @@ type Options struct {
 	// Worktrees is the [worktrees] config: where a new worktree goes. The zero
 	// value means inside the main checkout.
 	Worktrees core.WorktreesConfig
+	// Plans is the [plans] config: the folders whose markdown files count as
+	// plans. Nil Paths records no plan files.
+	Plans core.PlansConfig
 	// Save is called with the state after every successful dispatch; nil saves nothing.
 	Save func(core.State)
 	// Marks loads and saves the reviewed-hunk marks; nil keeps them for the
@@ -101,6 +104,7 @@ type App struct {
 	width, height int
 
 	reg     *registry
+	plans   core.PlansConfig // the [plans] folders; see notePlans
 	keymap  keymap
 	keys    keyTables
 	pending bool      // leader pressed, awaiting a key
@@ -128,6 +132,8 @@ type App struct {
 	prompt                 *prompt      // text input; owns every key and paste while open
 	checks                 *checksView  // a pull request's checks; owns every key while open
 	merge                  *mergeView   // the merge box; owns every key while open
+	plan                   *planView    // an agent's plan; owns every key while open
+	planSeq                int          // plan read counter; an answer for another read is stale
 	prList                 *prListView  // the agents' pull requests; owns every key while open
 	compose                *composeView // the compose box; owns every key while open
 	composeSeq             int          // compose request counter; an answer for another request is stale
@@ -271,6 +277,7 @@ func New(opts Options) (*App, error) {
 
 	a.drawer.cfg = opts.Diff
 	a.picker.cfg = opts.Worktrees
+	a.plans = opts.Plans
 	a.drawersOpen = anyReview(opts.Store.State())
 
 	a.runDir = opts.GitTempDir
@@ -544,6 +551,7 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		cmds = append(cmds, a.relayout())
+		a.sizePlan()
 
 		return a, tea.Batch(cmds...)
 	case tea.KeyPressMsg:
@@ -673,6 +681,10 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.onMDPage(msg)
 	case mdListMsg:
 		a.onMDList(msg)
+	case planReadMsg:
+		a.onPlanRead(msg)
+	case planPageMsg:
+		a.onPlanPage(msg)
 	case reviewFlashMsg:
 		a.onReviewFlash(msg)
 	case wtOpenMsg:
@@ -832,6 +844,10 @@ func (a *App) View() tea.View {
 
 	if a.merge != nil {
 		content = a.overlayMerge(content, lk)
+	}
+
+	if a.plan != nil {
+		content = a.overlayPlan(content, lk)
 	}
 
 	if a.composeShown() {

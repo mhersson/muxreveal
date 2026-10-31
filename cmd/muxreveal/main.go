@@ -107,6 +107,10 @@ func run(ctx context.Context, env core.Env, configPath, recordDir string, fresh 
 		return fmt.Errorf("config %s: %w", configPath, err)
 	}
 
+	if err := cfg.Plans.Validate(); err != nil {
+		return fmt.Errorf("config %s: %w", configPath, err)
+	}
+
 	if err := cfg.Keys.Validate(); err != nil {
 		return fmt.Errorf("config %s: %w", configPath, err)
 	}
@@ -204,6 +208,7 @@ func run(ctx context.Context, env core.Env, configPath, recordDir string, fresh 
 		Keys:   cfg.Keys,
 
 		Worktrees: cfg.Worktrees,
+		Plans:     cfg.Plans,
 
 		FocusFollowsMouse: cfg.Mouse.FocusFollowsMouse,
 		CopyOnSelect:      cfg.Mouse.CopyOnSelect,

@@ -34,6 +34,7 @@ type railAgent struct {
 	meter          *int         // the context percentage its status line reported; nil reports none
 	ahead          int          // the commits its branch has past its upstream
 	pr             *core.PRInfo // the pull request of its branch; its head branch is the agent's
+	plan           bool         // an unread plan file
 }
 
 func pct(n int) *int { return &n }
@@ -86,6 +87,11 @@ func drawApp(t *testing.T, themeName string, icons bool, w, h int, agents []rail
 			transcript := "/w/" + ag.project + "/" + string(id) + ".jsonl"
 			openIn(t, a, core.SetAgentSession{ID: id, Session: core.SessionID("s-" + string(id)), Transcript: transcript})
 			rp.name = railName{text: ag.name, transcript: transcript}
+		}
+
+		if ag.plan {
+			plan := core.Plan{Path: "/w/" + ag.project + "/docs/plans/x.md", Root: "/w/" + ag.project, Kind: core.PlanFile, At: t0, Unread: true}
+			openIn(t, a, core.NotePlan{ID: id, Plan: plan})
 		}
 
 		if ag.model != "" || ag.meter != nil {
@@ -155,6 +161,15 @@ func meteredAgents() []railAgent {
 		{project: "docs", branch: "main", state: core.AgentIdle, age: 26 * time.Hour, stats: &git.Stats{}, model: "Haiku 5.5", meter: pct(0)},
 		{newTab: true, project: "infra", branch: "a1b2c3d", detached: true, state: core.AgentIdle, age: 12 * time.Minute, stats: &git.Stats{Files: 1, Added: 2, Removed: 0}, model: "Opus 5.5"},
 		{project: "scratch", noRepo: true, noHook: true},
+	}
+}
+
+// planAgents is agents with an unread plan, with and without a meter, an age and the dot.
+func planAgents() []railAgent {
+	return []railAgent{
+		{newTab: true, project: "api", branch: "main", state: core.AgentBlocked, action: "Allow Bash rm -rf build/?", age: 8 * time.Second, stats: &git.Stats{}, unseen: true, model: "Opus 5.5", meter: pct(62), plan: true},
+		{project: "web", branch: "feat/login", state: core.AgentWorking, action: "Edit src/login.tsx", age: 4 * time.Minute, stats: &git.Stats{}, model: "Sonnet 5.5", plan: true, name: "t16-implementer-with-a-long-name"},
+		{newTab: true, project: "docs", branch: "main", state: core.AgentIdle, age: 26 * time.Hour, stats: &git.Stats{}, model: "Haiku 5.5", meter: pct(5)},
 	}
 }
 
@@ -261,6 +276,15 @@ func railCases() []railCase {
 		}
 	}
 
+	planned := func(w, h int) func(t *testing.T, th string, icons bool) *App {
+		return func(t *testing.T, th string, icons bool) *App {
+			a := drawApp(t, th, icons, w, h, planAgents())
+			a.rail.sel = "p2"
+
+			return a
+		}
+	}
+
 	withPlace := func(w, h int) func(t *testing.T, th string, icons bool) *App {
 		return func(t *testing.T, th string, icons bool) *App {
 			a := drawApp(t, th, icons, w, h, placeAgents())
@@ -325,6 +349,7 @@ func railCases() []railCase {
 		{"ahead-width-70", ahead(70, 40)},
 		{"ahead-width-64", ahead(64, 40)},
 		{"place", withPlace(100, 30)},
+		{"plan", planned(100, 30)},
 		{"named-search", named(100, 30, func(a *App) {
 			a.rail.focused, a.rail.query = true, "orch"
 			a.railNormalize(a.store.State())

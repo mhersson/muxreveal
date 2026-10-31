@@ -267,8 +267,9 @@ func TestContextHintsFollowBindings(t *testing.T) {
 			cfg       core.KeysConfig
 			want, not string
 		}{
-			{name: "defaults", want: "j/k move  enter jump  / search  esc back"},
+			{name: "defaults", want: "j/k move  enter jump  p plan  / search  esc back"},
 			{name: "jump moved", cfg: contextKeys("rail", "x", "rail.jump"), want: "x jump"},
+			{name: "plan moved", cfg: contextKeys("rail", "o", "rail.plan"), want: "o plan"},
 			{name: "search unbound", cfg: contextKeys("rail", "/", "none"), want: "esc back", not: "search"},
 		}
 		for _, tt := range tests {

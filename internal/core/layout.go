@@ -108,6 +108,8 @@ type Pane struct {
 	StatusSession SessionID // the session the status above belongs to; not persisted
 
 	Edits []Edit // the places of this session's counted edits; not persisted
+
+	Plan Plan // the agent's latest plan; a zero Path means none
 }
 
 // Edit is a worktree an agent made a counted edit in.
