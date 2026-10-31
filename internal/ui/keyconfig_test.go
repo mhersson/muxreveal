@@ -677,9 +677,9 @@ func TestDrawerHintsFollowBindings(t *testing.T) {
 	t.Parallel()
 
 	const (
-		diffHints = "j/k line   ]/[ hunk   }/{ file   tab tree   w worktree   f full   u split   e edit   / search   space reviewed   R show reviewed   b/t mode   ,/. turn"
-		treeHints = "j/k file   enter jump   tab hide   esc back"
-		prHints   = "j/k line   ]/[ hunk   c checks   a approve   M merge   O browser   space reviewed   R show reviewed   b/t mode"
+		diffHints = "j/k line   ]/[ hunk   }/{ file   z zoom   tab tree   w worktree   f full   u split   e edit   / search   space reviewed   R show reviewed   b/t mode   ,/. turn"
+		treeHints = "j/k file   enter jump   z zoom   tab hide   esc back"
+		prHints   = "j/k line   ]/[ hunk   z zoom   c checks   a approve   M merge   O browser   space reviewed   R show reviewed   b/t mode"
 	)
 
 	tests := []struct {
@@ -698,14 +698,14 @@ func TestDrawerHintsFollowBindings(t *testing.T) {
 			want: "tab tree   f full", not: "worktree",
 		},
 		{name: "checks moved", cfg: drawerKeys("x", "review.checks", "c", "none"), pr: true, want: "x checks   a approve"},
-		{name: "tree moved", cfg: drawerKeys("x", "review.tree"), key: true, want: "j/k file   enter jump   x hide   esc back"},
+		{name: "tree moved", cfg: drawerKeys("x", "review.tree"), key: true, want: "j/k file   enter jump   z zoom   x hide   esc back"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
 			s := reviewScene{
-				theme: "catppuccin-mocha", w: 312, h: 52, res: turn4Result(), turn: 4, turns: 4,
+				theme: "catppuccin-mocha", w: 330, h: 52, res: turn4Result(), turn: 4, turns: 4,
 				focused: true, tree: tt.key, keys: tt.cfg,
 			}
 			s.tune = func(t *testing.T, a *App, v *reviewView) {

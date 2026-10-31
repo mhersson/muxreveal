@@ -69,13 +69,31 @@ func drawerPaint() tea.Msg { return drawerPaintMsg{} }
 // drawerAfterUpdate settles the open drawer after an update: it lays the rows
 // out for the width, then tokenises the rows near the view. It returns a
 // command that sends drawerPaintMsg only while rows in range wait for the cap,
-// so nothing runs while the drawer is idle.
+// so nothing runs while the drawer is idle. A slide that runs gets its frames
+// here too, since one may begin inside keyboardCheck's release.
 func (a *App) drawerAfterUpdate() tea.Cmd {
+	var tick tea.Cmd
+	if !a.drawer.slideFrom.IsZero() {
+		tick = a.slideFrameCmd()
+	}
+
+	return tea.Batch(tick, a.settleDrawerRows())
+}
+
+// settleDrawerRows is drawerAfterUpdate's layout and highlighting.
+func (a *App) settleDrawerRows() tea.Cmd {
 	a.drawer.tokenised = 0
 
 	st := a.store.State()
 
-	box, ok := a.drawerFull(st)
+	// A drawer that no longer shows has no zoom to keep, whichever way its tab was left.
+	for id, o := range a.drawer.views {
+		if id != st.Tab().ID {
+			o.zoom = false
+		}
+	}
+
+	box, ok := a.drawerBox(st)
 	if !ok {
 		return nil
 	}
@@ -106,10 +124,14 @@ func (a *App) drawerAfterUpdate() tea.Cmd {
 
 	pics := v.picturesMoved()
 
+	wrap := lay.codeWidths()
+	rewrap := v.wrapW != wrap
+	v.wrapW = wrap
+
 	switch {
 	case pics:
 		v.rebuildPictures(lay.split)
-	case v.rowsSplit != lay.split || (moved && len(v.mdFiles) > 0) || stale:
+	case v.rowsSplit != lay.split || rewrap || (moved && len(v.mdFiles) > 0) || stale:
 		v.rebuild(lay.split)
 	}
 
@@ -187,19 +209,43 @@ type spanRef struct {
 }
 
 // viewTop is the first visible row for a view h rows tall: the stored top,
-// moved so the cursor shows and clamped to the rows.
+// clamped to the rows. It moves only when no row of the cursor's line shows,
+// and then shows the line whole when it fits, else from its first row. A line
+// that is partly in view stays where it is, so a scroll can move past it.
 func (v *reviewView) viewTop(h int) int {
+	return v.topFor(h, false)
+}
+
+// revealTop is viewTop for a key move: a line that fits shows whole, and a
+// taller one keeps a row in view, starting at the top when it was out of view.
+func (v *reviewView) revealTop(h int) int {
+	return v.topFor(h, true)
+}
+
+func (v *reviewView) topFor(h int, whole bool) int {
 	if h <= 0 {
 		return 0
 	}
 
 	top := min(max(v.top, 0), max(len(v.rows)-h, 0))
+	if v.cursor < 0 || v.cursor >= len(v.rows) {
+		return max(top, 0)
+	}
+
+	start, end := v.lineStart(v.cursor), v.lineEnd(v.cursor)
+	out := end <= top || start >= top+h
 
 	switch {
-	case v.cursor < top:
-		top = v.cursor
-	case v.cursor >= top+h:
-		top = v.cursor - h + 1
+	case end-start > h:
+		if out {
+			top = start
+		}
+	case out || whole:
+		if start < top {
+			top = start
+		} else if end > top+h {
+			top = end - h
+		}
 	}
 
 	return max(top, 0)

@@ -4,21 +4,21 @@
 │$ claude           │ #7 Show the pull request over its diff                   │
 │reviewing the diff │ feat/review-pane → main   ci 4/4   approved   @mhersson …│
 │                   │──────────────────────────────────────────────────────────│
-│                   │  M internal/core/state.go                          +9 -1 │
-│                   │      31 +     Agent PaneID                               │
+│                   │      34 + }                                              │
+│                   │  M internal/ui/app.go                              +4 -3 │
 │      ╭─ Approve #7 ───────────────────────────────────────────────────╮      │
 │      │                                                                │      │
-│      │  A very long title that cannot fit in the box at all, not even…│      │
-│      │  at head a1b2c3d, the commit you reviewed                      │+4 -3 │
-│      │                                                                │      │
+│      │  A very long title that cannot fit in the box at all, not even…│an    │
+│      │  at head a1b2c3d, the commit you reviewed                      │      │
+│      │                                                                │ext,  │
 │      │  enter approve    esc cancel                                   │      │
-│      ╰────────────────────────────────────────────────────────────────╯an ag…│
-│                   │  42  42   func (a *App) openReview(ctx context.Context, …│
-│                   │  43     -     if a.store.Pane(agent).Kind != core.KindAg…│
+│      ╰────────────────────────────────────────────────────────────────╯      │
+│                   │         ↪ core.KindAgent {                               │
 │                   │  44     -         return nil                             │
 │                   │  45     -     }                                          │
 │                   │      43 +     p, ok := a.store.Pane(agent)               │
 │                   │      44 +     if !ok || p.Kind != core.KindAgent {       │
-│                   │▎     45 +         return a.notify("a review pane needs a…│
-│                   │ j/k line   ]/[ hunk   c checks   a approve   M merge     │
+│                   │▎     45 +         return a.notify("a review pane needs   │
+│                   │▎        ↪ an agent pane")                                │
+│                   │ j/k line   ]/[ hunk   z zoom   c checks   a approve      │
 ╰───────────────────╰──────────────────────────────────────────────────────────╯

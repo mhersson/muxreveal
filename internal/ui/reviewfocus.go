@@ -38,9 +38,77 @@ func (a *App) drawerTake() {
 	a.drawer.focused, a.drawer.tree = true, false
 }
 
-// drawerRelease takes the keyboard from the drawer and closes its search prompt
-// and the worktree list.
+// drawerRelease takes the keyboard from the drawer and un-zooms it: a zoomed
+// drawer always has the keyboard.
 func (a *App) drawerRelease() {
+	a.releaseKeys()
+	a.unzoom()
+}
+
+// unzoom takes every drawer back to its half.
+func (a *App) unzoom() {
+	st := a.store.State()
+	active := st.Tab().ID
+
+	for id, v := range a.drawer.views {
+		if !v.zoom || (id == active && a.drawer.closing) {
+			continue
+		}
+
+		// Only the active tab's drawer shows. A slide running ends at once and the
+		// drawer takes its width with no slide; a closing one keeps its width.
+		full, shown := a.drawerFull(st)
+		slide := id == active && shown
+
+		if slide && !a.drawer.slideFrom.IsZero() {
+			a.endSlide()
+
+			slide = false
+		}
+
+		v.zoom = false
+
+		if slide {
+			a.startResize(full.W)
+		}
+	}
+}
+
+// reviewZoom is review.zoom: it widens the drawer to the whole body and back,
+// and gives it the keyboard if it lacks it.
+func (a *App) reviewZoom() tea.Cmd {
+	tab, v, ok := a.reviewActive()
+	if !ok {
+		return nil
+	}
+
+	// A slide running ends at once, and the flip takes the new width with no slide.
+	from := 0
+	if full, shown := a.drawerFull(a.store.State()); shown && a.drawer.slideFrom.IsZero() {
+		from = full.W
+	}
+
+	a.endSlide()
+	a.clearDrawerSel(tab.ID)
+
+	v.zoom = !v.zoom
+
+	if !a.drawerHasKeys() {
+		a.drawerTake()
+	}
+
+	a.startResize(from)
+
+	if a.drawer.resizeFrom == 0 {
+		return nil
+	}
+
+	return a.slideFrameCmd()
+}
+
+// releaseKeys takes the keyboard from the drawer and closes its search prompt
+// and the worktree list; a zoom stays.
+func (a *App) releaseKeys() {
 	a.drawer.focused, a.drawer.tree = false, false
 	a.closeWorktrees()
 	a.closeLinks()
@@ -112,12 +180,15 @@ func (a *App) closeDrawer(slide bool) tea.Cmd {
 	a.drawer.prNext = nil
 	a.drawer.mdSeq++
 	a.drawer.mdWant = nil
-	a.drawerRelease()
+	a.releaseKeys()
 	a.clearDrawerSel(a.store.State().Tab().ID)
 
 	if _, shown := a.drawerFull(a.store.State()); slide && shown {
 		return a.startSlide(true)
 	}
+
+	// The drawer closes at once, so any slide, an un-zoom or a close, ends with it.
+	a.drawer.slideFrom, a.drawer.closing, a.drawer.resizeFrom = time.Time{}, false, 0
 
 	// The pages stay while the drawer slides out, so it does not change as it goes.
 	if v := a.drawer.views[a.store.State().Tab().ID]; v != nil {
@@ -132,9 +203,20 @@ func (a *App) closeDrawer(slide bool) tea.Cmd {
 
 // startSlide begins a slide in, or out when closing, and asks for its frames.
 func (a *App) startSlide(closing bool) tea.Cmd {
-	a.drawer.slideFrom, a.drawer.closing = a.clock.Now(), closing
+	a.drawer.slideFrom, a.drawer.closing, a.drawer.resizeFrom = a.clock.Now(), closing, 0
 
 	return a.slideFrameCmd()
+}
+
+// startResize begins a width slide from from columns to the drawer's width. It
+// does nothing with no drawer showing or no change of width.
+func (a *App) startResize(from int) {
+	full, shown := a.drawerFull(a.store.State())
+	if !shown || from <= 0 || from == full.W {
+		return
+	}
+
+	a.drawer.slideFrom, a.drawer.closing, a.drawer.resizeFrom = a.clock.Now(), false, from
 }
 
 // slideFrameCmd asks for the next frame unless one is already on its way; the
@@ -171,7 +253,7 @@ func (a *App) onDrawerSlide() tea.Cmd {
 // change it ends the slide first.
 func (a *App) endSlide() {
 	closing := a.drawer.closing
-	a.drawer.slideFrom, a.drawer.closing = time.Time{}, false
+	a.drawer.slideFrom, a.drawer.closing, a.drawer.resizeFrom = time.Time{}, false, 0
 
 	if closing && a.store.State().Tab().Review != nil {
 		// dispatch logs its own failures.
@@ -190,7 +272,7 @@ func covered(r, box core.Rect) bool {
 func (a *App) focusDir(d core.Dir) tea.Cmd {
 	st := a.store.State()
 
-	box, shown := a.drawerFull(st)
+	box, shown := a.drawerHalf(st)
 	if !shown || a.drawer.closing {
 		return a.act(core.FocusDir{Dir: d, Area: a.bodyArea()})
 	}
@@ -223,7 +305,7 @@ func (a *App) visibleNeighbour(st core.State, d core.Dir, box core.Rect) (core.P
 func (a *App) drawerLeave() tea.Cmd {
 	st := a.store.State()
 
-	box, shown := a.drawerFull(st)
+	box, shown := a.drawerHalf(st)
 	if !shown {
 		return nil
 	}
@@ -258,11 +340,16 @@ func (a *App) drawerLeave() tea.Cmd {
 }
 
 // uncoverFocus closes the active tab's drawer, with no slide, when the focused
-// pane lies under it: the pane an action just focused must show.
+// pane lies under its half: the pane an action just focused must show. A zoomed
+// drawer goes back to its half first.
 func (a *App) uncoverFocus() {
+	if !a.drawer.closing {
+		a.unzoom()
+	}
+
 	st := a.store.State()
 
-	box, shown := a.drawerFull(st)
+	box, shown := a.drawerHalf(st)
 	if !shown || a.drawer.closing {
 		return
 	}

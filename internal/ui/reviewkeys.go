@@ -53,6 +53,7 @@ var reviewKeys = []reviewKey{
 	{".", "review.turn.next"},
 	{"/", "review.search"},
 	{"y", "review.copy"},
+	{"z", "review.zoom"},
 	{"w", "review.worktrees"},
 	{"e", "review.edit"},
 	{"r", "review.refresh"},
@@ -62,7 +63,7 @@ var reviewKeys = []reviewKey{
 // treeCommand reports whether a drawer command works while the tree has the keyboard.
 func treeCommand(id string) bool {
 	switch id {
-	case "review.line.next", "review.line.prev", "review.fold", "review.tree", "review.back":
+	case "review.line.next", "review.line.prev", "review.fold", "review.tree", "review.back", "review.zoom":
 		return true
 	}
 
@@ -121,6 +122,7 @@ func reviewCommands() []command {
 		cmd("review.turn.next", "Review: next turn", turn(1)),
 		cmd("review.search", "Review: search", (*App).reviewSearch),
 		cmd("review.copy", "Review: copy the selection", (*App).reviewCopy),
+		cmd("review.zoom", "Review: zoom", (*App).reviewZoom),
 		cmd("review.worktrees", "Review: worktrees", (*App).openWorktrees),
 		cmd("review.edit", "Review: open in the editor", (*App).reviewEdit),
 		cmd("review.refresh", "Review: refresh", (*App).reviewReload),
@@ -338,7 +340,7 @@ func (a *App) reviewBack() tea.Cmd {
 func (a *App) reviewBodyH(v *reviewView) int {
 	st := a.store.State()
 
-	box, ok := a.drawerFull(st)
+	box, ok := a.drawerBox(st)
 	if !ok {
 		return 0
 	}
@@ -352,8 +354,8 @@ func (a *App) reviewGo(v *reviewView, row int) {
 		return
 	}
 
-	v.cursor = min(max(row, 0), len(v.rows)-1)
-	v.top = v.viewTop(a.reviewBodyH(v))
+	v.cursor = v.lineStart(min(max(row, 0), len(v.rows)-1))
+	v.top = v.revealTop(a.reviewBodyH(v))
 }
 
 // reviewLine moves the cursor a row; in the tree it moves the selected file.
@@ -368,7 +370,7 @@ func (a *App) reviewLine(delta int) tea.Cmd {
 	}
 
 	if !a.drawer.tree {
-		a.reviewGo(v, v.cursor+delta)
+		a.reviewStep(v, delta)
 
 		return nil
 	}
@@ -383,6 +385,30 @@ func (a *App) reviewLine(delta int) tea.Cmd {
 	return nil
 }
 
+// reviewStep moves the cursor delta lines. A line taller than the view starts
+// at the top when the cursor lands on it.
+func (a *App) reviewStep(v *reviewView, delta int) {
+	if len(v.rows) == 0 {
+		return
+	}
+
+	i := v.lineStart(min(max(v.cursor, 0), len(v.rows)-1))
+
+	for ; delta > 0 && v.lineEnd(i) < len(v.rows); delta-- {
+		i = v.lineEnd(i)
+	}
+
+	for ; delta < 0 && i > 0; delta++ {
+		i = v.lineStart(i - 1)
+	}
+
+	a.reviewGo(v, i)
+
+	if h := a.reviewBodyH(v); v.lineEnd(i)-i > h && v.top < i {
+		v.top = i
+	}
+}
+
 func (a *App) reviewPage(dir int) tea.Cmd {
 	if a.onPage(func(_ *reviewView, p *mdPage) { p.view.page(dir) }) {
 		return nil
@@ -393,7 +419,12 @@ func (a *App) reviewPage(dir int) tea.Cmd {
 		return nil
 	}
 
-	a.reviewGo(v, v.cursor+dir*max(a.reviewBodyH(v)/2, 1))
+	to := v.cursor + dir*max(a.reviewBodyH(v)/2, 1)
+	if dir > 0 && v.lineStart(min(to, len(v.rows)-1)) == v.lineStart(v.cursor) {
+		to = v.lineEnd(v.cursor) // a tall line: on to the next line
+	}
+
+	a.reviewGo(v, to)
 
 	return nil
 }
@@ -610,7 +641,7 @@ func (a *App) reviewSplit() tea.Cmd {
 
 	st := a.store.State()
 
-	if box, shown := a.drawerFull(st); v.split && shown && !a.drawerLayoutOf(box, v, drawerTree(st)).split {
+	if box, shown := a.drawerBox(st); v.split && shown && !a.drawerLayoutOf(box, v, drawerTree(st)).split {
 		a.notice = noticeNarrow
 	}
 
@@ -682,7 +713,7 @@ func (a *App) reviewJumpFile(v *reviewView, file int) {
 	}
 
 	v.cursor, v.top = i, i
-	v.top = v.viewTop(a.reviewBodyH(v))
+	v.top = v.revealTop(a.reviewBodyH(v))
 }
 
 // ---- editor ----

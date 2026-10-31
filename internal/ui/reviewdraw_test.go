@@ -147,6 +147,29 @@ func reviewCases() []reviewCase {
 			s.res, s.tree = markedResult(), true
 			s.tune = withMarked(hunksUpTo(6), nil)
 		})},
+		{"wrapped", with(func(s *reviewScene) {
+			s.res = wrappedResult()
+			s.tune = func(t *testing.T, a *App, v *reviewView) { v.cursor = rowWith(t, v, "ansi.Truncate") }
+		})},
+		{"wrapped-split", with(func(s *reviewScene) {
+			s.res = wrappedResult()
+			s.tune = func(t *testing.T, a *App, v *reviewView) {
+				v.split = true
+				v.rebuild(true)
+				v.cursor = rowWith(t, v, "ansi.Truncate")
+			}
+		})},
+		{"wrapped-80x24", with(func(s *reviewScene) {
+			s.res, s.w, s.h = wrappedResult(), 80, 24
+			s.tune = func(t *testing.T, a *App, v *reviewView) { v.cursor = rowWith(t, v, "ansi.Truncate") }
+		})},
+		{"zoomed", with(func(s *reviewScene) {
+			s.res, s.w, s.h, s.rail = wrappedResult(), 270, 75, true
+			s.tune = func(t *testing.T, a *App, v *reviewView) {
+				v.zoom = true
+				v.cursor = rowWith(t, v, "ansi.Truncate")
+			}
+		})},
 		{"unfocused", with(func(s *reviewScene) {
 			s.focused = false
 			s.tune = func(t *testing.T, a *App, v *reviewView) { v.cursor = rowWith(t, v, "review.toggle") }
@@ -738,12 +761,12 @@ func TestDrawerKeyHints(t *testing.T) {
 	t.Parallel()
 
 	const (
-		diffHints = "j/k line   ]/[ hunk   }/{ file   tab tree   w worktree   f full   u split   e edit   / search   space reviewed   R show reviewed   b/t mode   ,/. turn"
-		treeHints = "j/k file   enter jump   tab hide   esc back"
+		diffHints = "j/k line   ]/[ hunk   }/{ file   z zoom   tab tree   w worktree   f full   u split   e edit   / search   space reviewed   R show reviewed   b/t mode   ,/. turn"
+		treeHints = "j/k file   enter jump   z zoom   tab hide   esc back"
 	)
 
 	build := func(h int, tree, keys bool) string {
-		s := reviewScene{theme: "catppuccin-mocha", icons: false, w: 312, h: h, res: turn4Result(), turn: 4, turns: 4, focused: true, tree: tree}
+		s := reviewScene{theme: "catppuccin-mocha", icons: false, w: 330, h: h, res: turn4Result(), turn: 4, turns: 4, focused: true, tree: tree}
 		s.tune = func(t *testing.T, a *App, v *reviewView) { a.drawer.tree = keys }
 
 		return ansi.Strip(s.build(t).View().Content)
@@ -778,10 +801,10 @@ func TestDrawerTurnHintShowsOnlyForTurns(t *testing.T) {
 	t.Parallel()
 
 	const (
-		head     = "j/k line   ]/[ hunk   }/{ file   tab tree   w worktree   f full   u split   e edit   / search   space reviewed   R show reviewed   b/t mode"
+		head     = "j/k line   ]/[ hunk   }/{ file   z zoom   tab tree   w worktree   f full   u split   e edit   / search   space reviewed   R show reviewed   b/t mode"
 		wideTurn = head + "   ,/. turn"
 		wideEdit = head
-		viaTurn  = "w worktree   f full   u split   e edit   / search   space reviewed   R show reviewed"
+		viaTurn  = "w worktree   f full   u split   e edit   / search   space reviewed"
 		viaEdit  = viaTurn
 	)
 
@@ -811,7 +834,7 @@ func TestDrawerTurnHintShowsOnlyForTurns(t *testing.T) {
 		w          int
 		turn, edit string // the end of the row with and without the turn hint
 	}{
-		{"wide", 312, wideTurn, wideEdit},
+		{"wide", 330, wideTurn, wideEdit},
 		{"usual width", 270, viaTurn, viaEdit},
 	}
 
@@ -1070,4 +1093,26 @@ func prSceneWith(tune func(*core.PRInfo), unpushed int) func(t *testing.T, a *Ap
 
 		openIn(t, a, core.SetRepoPRs{Repo: prRepoKey, DefaultBranch: "main", Open: []core.PRInfo{info}})
 	}
+}
+
+// wrappedResult is turn4Result under a file of long Go lines, so the first
+// screen shows them: a call that wraps
+// at a space, a word past the reach, a tab indented line and one with a
+// hidden character.
+func wrappedResult() git.Result {
+	res := turn4Result()
+	f := fileSpec("internal/ui/wrapdemo.go", git.Added, hunkSpec(0, 1, "",
+		"+package ui",
+		"+",
+		"+func wrapDemo(s string, width int) string {",
+		"+\treturn ansi.Truncate(strings.TrimSpace(strings.ReplaceAll(s, \"\\n\", \" \")), width-len(ellipsis)-padding, ellipsis) + strings.Repeat(\" \", max(width-ansi.StringWidth(s), 0))",
+		"+\t// averyveryveryverylongcommentwordwithoutanyspacesatallsothatitcannotbebrokenatawordboundaryandwrapsattheedgeofthecolumnwhereverthatis",
+		"+\tconst hidden = \"zero\u200bwidth \u202eand a bidi mark, then enough plain text after them to pass the column and wrap onto a second row\"",
+		"+\t"+strings.Repeat("budget ", 160),
+		"+\treturn s",
+		"+}",
+	))
+	res.Files = append([]git.FileDiff{f}, res.Files...)
+
+	return res
 }

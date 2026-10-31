@@ -18,35 +18,35 @@
 │                                                                                                   │   6  10   tail                                                                                   │
 │                                                                                                   │  @@ -30,4 +34,4 @@ func tail()                                                                   │
 │                                                                                                   │  30  34   }                                                                                      │
-│                                                                                                   │  31     - xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx…│
-│                                                                                                   │  32     - a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+0…│
-│                                                                                                   │      35 + xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx…│
-│                                                                                                   │      36 + a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+0…│
-│                                                                                                   │  33  37   }                                                                                      │
-│                                                                                                   │  A dir/evil⟨U+000A⟩name⟨U+001B⟩[31m.go                                󰀦 hidden characters  +1 -0 │
-│                                                                                                   │  @@ -0,0 +1 @@                                                                                   │
-│                                                                                                   │       1 + one                                                                                    │
-│                                                                                                   │  R old⟨U+200B⟩name.go → zero⟨U+200B⟩width/⟨U+202E⟩revers.go           󰀦 hidden characters  +1 -1 │
-│                                                                                                   │  @@ -1 +1 @@                                                                                     │
-│                                                                                                   │   1     - a                                                                                      │
-│                                                                                                   │       1 + b                                                                                      │
-│                                                                                                   │                                                                                                  │
-│                                                                                                   │                                                                                                  │
-│                                                                                                   │                                                                                                  │
-│                                                                                                   │                                                                                                  │
-│                                                                                                   │                                                                                                  │
-│                                                                                                   │                                                                                                  │
-│                                                                                                   │                                                                                                  │
-│                                                                                                   │                                                                                                  │
-│                                                                                                   │                                                                                                  │
-│                                                                                                   │                                                                                                  │
-│                                                                                                   │                                                                                                  │
-│                                                                                                   │                                                                                                  │
-│                                                                                                   │                                                                                                  │
-│                                                                                                   │                                                                                                  │
-│                                                                                                   │                                                                                                  │
-│                                                                                                   │                                                                                                  │
-│                                                                                                   │                                                                                                  │
-│                                                                                                   │                                                                                                  │
-│                                                                                                   │ j/k line   ]/[ hunk   }/{ file   tab tree   w worktree   f full   u split   e edit   / search    │
+│                                                                                                   │  31     - xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx│
+│                                                                                                   │         ↪ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx│
+│                                                                                                   │         ↪ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx│
+│                                                                                                   │         ↪ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx│
+│                                                                                                   │         ↪ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx│
+│                                                                                                   │         ↪ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx│
+│                                                                                                   │         ↪ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx│
+│                                                                                                   │         ↪ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx│
+│                                                                                                   │         ↪ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx│
+│                                                                                                   │         ↪ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx│
+│                                                                                                   │         ↪ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx│
+│                                                                                                   │         ↪ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx…                   │
+│                                                                                                   │  32     - a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a     │
+│                                                                                                   │         ↪ ⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a      │
+│                                                                                                   │         ↪ ⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a      │
+│                                                                                                   │         ↪ ⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a      │
+│                                                                                                   │         ↪ ⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a      │
+│                                                                                                   │         ↪ ⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a      │
+│                                                                                                   │         ↪ ⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a      │
+│                                                                                                   │         ↪ ⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a      │
+│                                                                                                   │         ↪ ⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a      │
+│                                                                                                   │         ↪ ⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a      │
+│                                                                                                   │         ↪ ⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a      │
+│                                                                                                   │         ↪ ⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a      │
+│                                                                                                   │         ↪ ⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a      │
+│                                                                                                   │         ↪ ⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a      │
+│                                                                                                   │         ↪ ⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a      │
+│                                                                                                   │         ↪ ⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a      │
+│                                                                                                   │         ↪ ⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a      │
+│                                                                                                   │         ↪ ⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a⟨U+001B⟩a      │
+│                                                                                                   │ j/k line   ]/[ hunk   }/{ file   z zoom   tab tree   w worktree   f full   u split   e edit      │
 ╰───────────────────────────────────────────────────────────────────────────────────────────────────╰──────────────────────────────────────────────────────────────────────────────────────────────────╯

@@ -14,7 +14,8 @@ import (
 func marks(n int) string { return strings.Repeat("\xcc\x81", n) }
 
 // longLinesResult has lines past the budget whose kept part is narrower than
-// any column, and one just inside the budget.
+// any column, one just inside the budget, one wider than a column and one past
+// the budget that is wider than a column too.
 func longLinesResult() git.Result {
 	f := fileSpec("long.txt", git.Modified, hunkSpec(1, 1, "",
 		"+Z"+marks(5000),
@@ -22,6 +23,8 @@ func longLinesResult() git.Result {
 		"-Q"+marks(5000),
 		"+Q"+marks(5000)+"!",
 		"+K"+marks(lineBudget-2),
+		"+"+strings.Repeat("w", 300),
+		"+"+strings.Repeat("c", 1500),
 	))
 
 	return git.Result{Turn: 1, Files: []git.FileDiff{f}}
@@ -30,7 +33,7 @@ func longLinesResult() git.Result {
 func longLinesFull() fullText {
 	return fullText{
 		old: []string{"head", "Q" + marks(5000), "tail"},
-		new: []string{"head", "Z" + marks(5000), "K" + marks(lineBudget-2), "tail"},
+		new: []string{"head", "Z" + marks(5000), "K" + marks(lineBudget-2), strings.Repeat("w", 300), strings.Repeat("c", 1500), "tail"},
 	}
 }
 
@@ -39,9 +42,10 @@ func diffEnd(row string) string {
 	return strings.TrimRight(strings.TrimSuffix(strings.TrimRight(row, " "), "│"), " ")
 }
 
-// A row ends in the cut marker whenever any of its line was dropped, even when
-// the part kept is narrower than the column, and only then.
-func TestDrawnLongLinesEndInTheCutMarker(t *testing.T) {
+// A line past the column wraps and keeps every row but the last free of the cut
+// marker. The marker ends the last row of a line past the budget, even when the
+// part kept is narrower than the column, and ends no other row.
+func TestDrawnLongLinesWrap(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -51,9 +55,9 @@ func TestDrawnLongLinesEndInTheCutMarker(t *testing.T) {
 		// the rows to find, the cut markers each must hold
 		rows map[string]int
 	}{
-		{"unified", false, false, map[string]int{"Z\xcc\x81": 1, "Q\xcc\x81": 1, "K\xcc\x81": 0, "short": 0}},
-		{"split", true, false, map[string]int{"Z\xcc\x81": 1, "Q\xcc\x81": 2, "K\xcc\x81": 0, "short": 0}},
-		{"full file", false, true, map[string]int{"Z\xcc\x81": 1, "Q\xcc\x81": 1, "K\xcc\x81": 0, "tail": 0}},
+		{"unified", false, false, map[string]int{"Z\xcc\x81": 1, "Q\xcc\x81": 1, "K\xcc\x81": 0, "short": 0, "wwwwww": 0}},
+		{"split", true, false, map[string]int{"Z\xcc\x81": 1, "Q\xcc\x81": 2, "K\xcc\x81": 0, "short": 0, "wwwwww": 0}},
+		{"full file", false, true, map[string]int{"Z\xcc\x81": 1, "Q\xcc\x81": 1, "K\xcc\x81": 0, "tail": 0, "wwwwww": 0}},
 	}
 
 	for _, tt := range tests {
@@ -101,6 +105,24 @@ func TestDrawnLongLinesEndInTheCutMarker(t *testing.T) {
 
 				if !found {
 					t.Errorf("no row holds %q", start)
+				}
+			}
+
+			var cut []bool
+
+			for _, row := range rows {
+				if plain := ansi.Strip(row); strings.Contains(plain, "cccccccc") {
+					cut = append(cut, strings.HasSuffix(diffEnd(plain), "…"))
+				}
+			}
+
+			if len(cut) < 2 {
+				t.Fatalf("the line past the budget takes %d rows, want several", len(cut))
+			}
+
+			for i, got := range cut {
+				if want := i == len(cut)-1; got != want {
+					t.Errorf("row %d of %d of the line past the budget: ends in the cut marker = %v, want %v", i, len(cut), got, want)
 				}
 			}
 		})

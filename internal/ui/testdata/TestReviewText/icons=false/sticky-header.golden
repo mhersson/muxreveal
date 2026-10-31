@@ -20,5 +20,5 @@
 │                                                                                                   │      45 +         return a.notify("a review pane needs an agent pane")                           │
 │                                                                                                   │      46 +     }                                                                                  │
 │                                                                                                   │  46  47                                                                                          │
-│                                                                                                   │ j/k line   ]/[ hunk   }/{ file   tab tree   w worktree   f full   u split   e edit   / search    │
+│                                                                                                   │ j/k line   ]/[ hunk   }/{ file   z zoom   tab tree   w worktree   f full   u split   e edit      │
 ╰───────────────────────────────────────────────────────────────────────────────────────────────────╰──────────────────────────────────────────────────────────────────────────────────────────────────╯

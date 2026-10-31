@@ -135,7 +135,7 @@ func (a *App) pageHost() (textHost, bool) {
 		return textHost{}, false
 	}
 
-	box, _ := a.drawerFull(st)
+	box, _ := a.drawerBox(st)
 	lay := a.drawerLayoutOf(box, v, false)
 	w := min(lay.diffW, r.W-2)
 
@@ -173,7 +173,7 @@ func (a *App) rowsHost() (textHost, bool) {
 		return textHost{}, false
 	}
 
-	box, _ := a.drawerFull(st)
+	box, _ := a.drawerBox(st)
 	lay := a.drawerLayoutOf(box, v, drawerTree(st))
 
 	x := r.X + 1

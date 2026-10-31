@@ -56,11 +56,16 @@ type reviewRow struct {
 	edit                    int
 	mark                    changeMark
 	read                    bool
+	// part is 0 on a line's first row and k on its k-th continuation row, which
+	// copies the first row's kind and indexes.
+	part int
 }
 
 // rowOpts selects how buildRows lays the result out.
 type rowOpts struct {
 	split bool
+	// wrap holds the code columns that long lines wrap at.
+	wrap codeWidths
 	// full holds the text of the files read whole, by path; whole says which of
 	// them are shown so.
 	full  map[string]fullText
@@ -213,7 +218,7 @@ func appendHunks(rows []reviewRow, file int, f git.FileDiff, o rowOpts) (_ []rev
 			for li := range h.Lines {
 				r := newRow(rowLine, file)
 				r.hunk, r.line = hi, li
-				rows = append(rows, r)
+				rows = withParts(rows, r, lineRowParts(h.Lines, li, o.wrap.line))
 			}
 
 			continue
@@ -237,7 +242,7 @@ func appendHunks(rows []reviewRow, file int, f git.FileDiff, o rowOpts) (_ []rev
 				r.line, r.other = p.Right, -1
 			}
 
-			rows = append(rows, r)
+			rows = withParts(rows, r, pairRowParts(h, r, o.wrap))
 		}
 	}
 
@@ -286,22 +291,25 @@ func appendFull(rows []reviewRow, file int, path string, ft fullText, o rowOpts)
 		return r
 	}
 
+	add := func(rows []reviewRow, r reviewRow) []reviewRow {
+		return withParts(rows, r, len(lineParts(r.text, false, o.wrap.full)))
+	}
+
 	oi, ni, block := 0, 0, 0
 
 	for ; oi < pre; oi, ni = oi+1, ni+1 {
-		rows = append(rows, kept(oi, ni))
+		rows = add(rows, kept(oi, ni))
 	}
 
 	for i := 0; i < len(ops); {
 		switch ops[i].Op {
 		case ' ':
-			rows = append(rows, kept(oi, ni))
+			rows = add(rows, kept(oi, ni))
 			oi++
 			ni++
 			i++
 		case '+':
-			r := kept(-1, ni)
-			rows = append(rows, r)
+			rows = add(rows, kept(-1, ni))
 			ni++
 			i++
 		default:
@@ -326,7 +334,7 @@ func appendFull(rows []reviewRow, file int, path string, ft fullText, o rowOpts)
 				for k := range n {
 					r := newRow(rowGhost, file)
 					r.line, r.block, r.text, r.edit = oi+k, block, old[oi+k], edit
-					rows = append(rows, r)
+					rows = add(rows, r)
 				}
 			}
 
@@ -337,12 +345,81 @@ func appendFull(rows []reviewRow, file int, path string, ft fullText, o rowOpts)
 	}
 
 	for range suf {
-		rows = append(rows, kept(oi, ni))
+		rows = add(rows, kept(oi, ni))
 		oi++
 		ni++
 	}
 
 	return rows
+}
+
+// lineStart is the first row of row i's line.
+func (v *reviewView) lineStart(i int) int {
+	return min(max(i-v.rows[i].part, 0), i)
+}
+
+// lineEnd is the row after the last row of row i's line.
+func (v *reviewView) lineEnd(i int) int {
+	i++
+	for i < len(v.rows) && v.rows[i].part > 0 {
+		i++
+	}
+
+	return i
+}
+
+// withParts appends r and its n-1 continuation rows.
+func withParts(rows []reviewRow, r reviewRow, n int) []reviewRow {
+	for k := range max(n, 1) {
+		r.part = k
+		rows = append(rows, r)
+	}
+
+	return rows
+}
+
+// lineRowParts is how many rows unified line li takes at a code width.
+func lineRowParts(ls []git.Line, li, width int) int {
+	if width <= 0 {
+		return 1
+	}
+
+	other, p := "", partner(ls, li)
+	if p >= 0 {
+		other = ls[p].Text
+	}
+
+	return len(lineParts(ls[li].Text, tagsCR(ls[li].Text, other, p >= 0), width))
+}
+
+// pairRowParts is how many rows a side by side row takes: the taller side's.
+func pairRowParts(h git.Hunk, r reviewRow, w codeWidths) int {
+	if w.left <= 0 && w.right <= 0 {
+		return 1
+	}
+
+	left, right := pairSides(h, r)
+	paired := left >= 0 && right >= 0 && left != right
+	n := 1
+
+	sides := [2]int{left, right}
+	widths := [2]int{w.left, w.right}
+
+	for side, idx := range sides {
+		if idx < 0 || widths[side] <= 0 {
+			continue
+		}
+
+		o := ""
+		if paired {
+			o = h.Lines[sides[1-side]].Text
+		}
+
+		raw := h.Lines[idx].Text
+		n = max(n, len(lineParts(raw, tagsCR(raw, o, paired), widths[side])))
+	}
+
+	return n
 }
 
 // hunkHeader is git's range line without the section, such as "@@ -43,9 +43,9 @@".
@@ -370,6 +447,7 @@ type rowAnchor struct {
 	index                      int
 	block                      int // a fold row's ghost block
 	first, last                int // a rendered row's source range
+	part                       int // a continuation row's place in its line
 }
 
 // anchorAt describes row i. Rows that hold no hunk keep only the file.
@@ -380,7 +458,7 @@ func anchorAt(res git.Result, rows []reviewRow, i int) rowAnchor {
 	}
 
 	r := rows[i]
-	a.row = r.kind
+	a.row, a.part = r.kind, r.part
 	a.path = res.Files[r.file].Path
 
 	switch r.kind {
@@ -412,7 +490,24 @@ func anchorAt(res git.Result, rows []reviewRow, i int) rowAnchor {
 // line, else the hunk overlapping the old hunk's new-side range, else the
 // file, else the nearest index. A line is kept in a hunk that overlaps the old
 // range or has the old hunk's size, so a hunk that only moved still matches.
+// A row of a wrapped line is found on the anchor's part, or the last one the
+// line has.
 func restoreAnchor(res git.Result, rows []reviewRow, a rowAnchor) int {
+	if len(rows) == 0 {
+		return 0
+	}
+
+	i := restoreLine(res, rows, a)
+	i -= rows[i].part // the nearest-index fallback can land on a continuation row
+
+	for k := 0; k < a.part && i+1 < len(rows) && rows[i+1].part == rows[i].part+1; k++ {
+		i++
+	}
+
+	return i
+}
+
+func restoreLine(res git.Result, rows []reviewRow, a rowAnchor) int {
 	if len(rows) == 0 {
 		return 0
 	}
@@ -426,7 +521,7 @@ func restoreAnchor(res git.Result, rows []reviewRow, a rowAnchor) int {
 
 	for i, r := range rows {
 		f := res.Files[r.file]
-		if f.Path != a.path {
+		if f.Path != a.path || r.part > 0 {
 			continue
 		}
 
@@ -557,6 +652,10 @@ func searchRows(res git.Result, rows []reviewRow, from int, q string) (int, bool
 			i += len(rows)
 		}
 
+		if rows[i].part > 0 {
+			continue
+		}
+
 		for _, s := range rowTexts(res, rows[i]) {
 			if strings.Contains(strings.ToLower(s), q) {
 				return i, true
@@ -567,7 +666,13 @@ func searchRows(res git.Result, rows []reviewRow, from int, q string) (int, bool
 	return 0, false
 }
 
+// rowTexts is the text a row matches a search by; a continuation row has none,
+// as its line matches on its first row.
 func rowTexts(res git.Result, r reviewRow) []string {
+	if r.part > 0 {
+		return nil
+	}
+
 	f := res.Files[r.file]
 
 	switch r.kind {

@@ -137,7 +137,7 @@ func defaultCommands() []command {
 		id:    "pane.zoom",
 		icon:  iconZoom,
 		title: "Zoom pane",
-		run:   func(a *App) tea.Cmd { return a.act(core.ToggleZoom{}) },
+		run:   (*App).zoomPane,
 	}, command{
 		id:    "pane.close",
 		icon:  iconClose,
@@ -251,4 +251,14 @@ func defaultCommands() []command {
 	cmds = append(cmds, prListCommands()...)
 
 	return append(cmds, checksCommands()...)
+}
+
+// zoomPane is pane.zoom: it zooms the focused pane, or the review drawer while
+// the drawer has the keyboard.
+func (a *App) zoomPane() tea.Cmd {
+	if a.drawerHasKeys() {
+		return a.reviewZoom()
+	}
+
+	return a.act(core.ToggleZoom{})
 }

@@ -4,8 +4,8 @@
 │$ claude           │ #7 Show the pull request over its diff                   │
 │reviewing the diff │ feat/review-pane → main   ci 4/4   approved   @mhersson …│
 │                   │──────────────────────────────────────────────────────────│
-│                   │  M internal/core/state.go                          +9 -1 │
-│                   │      31 +     Agent PaneID                               │
+│                   │      34 + }                                              │
+│                   │  M internal/ui/app.go                              +4 -3 │
 │╭─ Merge #7 ─────────────────────────────────────────────────────────────────╮│
 ││                                                                            ││
 ││  Show the pull request over its diff                                       ││
@@ -20,5 +20,5 @@
 ││                                                                            ││
 ││  s/m/r method    d delete branch    enter merge    esc cancel              ││
 │╰────────────────────────────────────────────────────────────────────────────╯│
-│                   │ j/k line   ]/[ hunk   c checks   a approve   M merge     │
+│                   │ j/k line   ]/[ hunk   z zoom   c checks   a approve      │
 ╰───────────────────╰──────────────────────────────────────────────────────────╯

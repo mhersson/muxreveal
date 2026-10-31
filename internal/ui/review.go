@@ -28,6 +28,7 @@ const (
 // the cursor is. Only the update loop touches it.
 type reviewView struct {
 	pane     core.PaneID     // the pane reviewed
+	zoom     bool            // the drawer covers the whole body
 	mode     core.ReviewMode // the mode the view follows, as core holds it
 	pr       core.ReviewPR   // the pull request the view shows, as core holds it; zero for none
 	prBase   string          // the shown pull request's base branch
@@ -108,9 +109,10 @@ type reviewView struct {
 	noSnapshot      bool   // the turn shown has no snapshot
 	foreign         bool   // the shown root is not the root of the agent's own directory
 
-	rowsSplit bool // rows hold side by side pairs
-	rowsRev   int  // bumps whenever rows are replaced; rebuild is the only place that does
-	treeSel   int  // the file selected while the tree has the keyboard
+	wrapW     codeWidths // the code columns the rows wrap at; zero wraps nothing
+	rowsSplit bool       // rows hold side by side pairs
+	rowsRev   int        // bumps whenever rows are replaced; rebuild is the only place that does
+	treeSel   int        // the file selected while the tree has the keyboard
 
 	cache reviewCache
 }
@@ -152,6 +154,7 @@ type drawerState struct {
 	focused, tree bool // the drawer has the keyboard; within it, the tree has
 	slideFrom     time.Time
 	closing       bool
+	resizeFrom    int // the width a zoom or un-zoom slide started from; 0 for an open or close slide
 	views         map[core.TabID]*reviewView
 	list          *wtList      // the open worktree list, over the active tab's drawer
 	listGen       int          // names the list wanted; an answer for another is stale
@@ -254,6 +257,7 @@ func (v *reviewView) rebuild(split bool) { v.rebuildFor(v.res, split) }
 // on what it was on. It is the only place that replaces the rows.
 func (v *reviewView) rebuildFor(res git.Result, split bool) {
 	anchor := anchorAt(v.res, v.rows, v.cursor)
+	anchor.part = 0 // the cursor sits on its line's first row
 
 	var ends [2]rowAnchor
 
@@ -426,10 +430,25 @@ func drawerTree(st core.State) bool {
 	return rv != nil && rv.Tree
 }
 
-// drawerFull is the active tab's drawer once it has slid in: the right half of
-// the body, at least 60 columns, full height. ok is false with no drawer open
-// or a body too small for a frame.
+// drawerFull is the active tab's drawer once it has slid in: the whole body
+// while zoomed, else the half. ok is false with no drawer open or a body too
+// small for a frame.
 func (a *App) drawerFull(st core.State) (core.Rect, bool) {
+	half, ok := a.drawerHalf(st)
+	if !ok {
+		return core.Rect{}, false
+	}
+
+	if v := a.drawer.views[st.Tab().ID]; v != nil && v.zoom {
+		return a.bodyAreaIn(st.Rail), true
+	}
+
+	return half, true
+}
+
+// drawerHalf is the drawer unzoomed: the right half of the body, at least 60
+// columns, full height. The checks for panes it covers measure it.
+func (a *App) drawerHalf(st core.State) (core.Rect, bool) {
 	if st.Tab().Review == nil {
 		return core.Rect{}, false
 	}
@@ -444,12 +463,37 @@ func (a *App) drawerFull(st core.State) (core.Rect, bool) {
 	return core.Rect{X: body.X + body.W - w, Y: body.Y, W: w, H: body.H}, true
 }
 
+// drawerBox is the box the drawer is laid out at: drawerFull, except during a
+// width slide, where it is the wider of the two widths, so the slide lays the
+// drawer out once and shows its left part.
+func (a *App) drawerBox(st core.State) (core.Rect, bool) {
+	box, ok := a.drawerFull(st)
+	if !ok {
+		return core.Rect{}, false
+	}
+
+	if from := a.drawer.resizeFrom; from > box.W {
+		box.X += box.W - from
+		box.W = from
+	}
+
+	return box, true
+}
+
 // drawerRect is the part of the drawer on screen: all of it when it has slid
 // in, and less while it slides, from the right edge.
 func (a *App) drawerRect(st core.State) (core.Rect, bool) {
 	full, ok := a.drawerFull(st)
 	if !ok {
 		return core.Rect{}, false
+	}
+
+	if from := a.drawer.resizeFrom; from > 0 {
+		shown := int(math.Round(float64(from) + float64(full.W-from)*a.slideEase()))
+		full.X += full.W - shown
+		full.W = shown
+
+		return full, true
 	}
 
 	frac := a.slideEase()

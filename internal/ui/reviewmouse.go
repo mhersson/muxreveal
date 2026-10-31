@@ -26,7 +26,7 @@ func (a *App) drawerClick(x, y int) {
 	defer a.drawerTake()
 
 	r, shown := a.drawerRect(st)
-	box, _ := a.drawerFull(st)
+	box, _ := a.drawerBox(st)
 	v := a.drawer.views[st.Tab().ID]
 
 	if !shown || v == nil {
@@ -81,5 +81,28 @@ func (a *App) scrollRows(v *reviewView, n int) {
 	h := a.reviewBodyH(v)
 
 	v.top = min(max(v.viewTop(h)+n, 0), max(len(v.rows)-h, 0))
-	v.cursor = min(max(v.cursor, v.top), max(min(v.top+h-1, len(v.rows)-1), 0))
+
+	// The cursor stays while a row of its line shows. Otherwise it takes the
+	// first line that starts in the view, or the last row's line when it was
+	// below.
+	v.cursor = min(max(v.cursor, 0), len(v.rows)-1)
+	start, end := v.lineStart(v.cursor), v.lineEnd(v.cursor)
+	bottom := min(v.top+h, len(v.rows)) - 1
+
+	switch {
+	case end > v.top && start <= bottom:
+	case start > bottom:
+		v.cursor = v.lineStart(max(bottom, 0))
+	default:
+		first := v.top
+		if v.rows[first].part > 0 {
+			first = v.lineEnd(first)
+		}
+
+		if first > bottom {
+			first = v.lineStart(v.top)
+		}
+
+		v.cursor = first
+	}
 }

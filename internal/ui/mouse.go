@@ -330,8 +330,8 @@ func (a *App) handleMotion(msg tea.MouseMotionMsg) tea.Cmd {
 		h := a.hit(m.X, m.Y)
 
 		var cmd tea.Cmd
-		if a.focusFollows && a.mouse.press == nil && a.mouse.fwd == nil && (h.area == hitContent || h.area == hitHeader) {
-			cmd = a.focusPane(h.pane)
+		if a.focusFollows && a.mouse.press == nil && a.mouse.fwd == nil && a.mouse.text == nil {
+			cmd = a.hoverFocus(m.X, m.Y, h)
 		}
 
 		if p := a.panes[h.pane]; h.area == hitContent && p != nil {
@@ -339,6 +339,54 @@ func (a *App) handleMotion(msg tea.MouseMotionMsg) tea.Cmd {
 		}
 
 		return cmd
+	}
+
+	return nil
+}
+
+// hoverHeld reports whether hover moves nothing: a zoomed drawer shows, or the
+// rail's or the drawer's search is being typed.
+func (a *App) hoverHeld() bool {
+	if a.rail.searching {
+		return true
+	}
+
+	if !a.drawersOpen {
+		return false
+	}
+
+	st := a.store.State()
+	v := a.drawer.views[st.Tab().ID]
+
+	return st.Tab().Review != nil && v != nil && (v.zoom || v.search != nil)
+}
+
+// hoverFocus gives the keyboard to what lies under (x, y): the rail, the open
+// drawer, or the pane h names. A drawer sliding out is not a target.
+func (a *App) hoverFocus(x, y int, h hitResult) tea.Cmd {
+	if a.hoverHeld() {
+		return nil
+	}
+
+	switch {
+	case a.inRail(x, y):
+		if !a.rail.focused {
+			a.railTake()
+		}
+	case a.inDrawer(x, y):
+		if !a.drawer.closing && !a.drawer.focused {
+			a.drawerTake()
+		}
+	case h.area == hitContent || h.area == hitHeader:
+		if a.rail.focused {
+			a.railRelease()
+		}
+
+		if a.drawer.focused {
+			a.drawerRelease()
+		}
+
+		return a.focusPane(h.pane)
 	}
 
 	return nil

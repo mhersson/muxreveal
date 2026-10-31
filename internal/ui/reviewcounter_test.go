@@ -265,8 +265,8 @@ func TestReviewHintsReviewed(t *testing.T) {
 	t.Parallel()
 
 	const (
-		diff = "j/k line   ]/[ hunk   }/{ file   tab tree   w worktree   f full   u split   e edit   / search   space reviewed   R show reviewed   b/t mode"
-		pr   = "j/k line   ]/[ hunk   c checks   a approve   M merge   O browser   space reviewed   R show reviewed   b/t mode"
+		diff = "j/k line   ]/[ hunk   }/{ file   z zoom   tab tree   w worktree   f full   u split   e edit   / search   space reviewed   R show reviewed   b/t mode"
+		pr   = "j/k line   ]/[ hunk   z zoom   c checks   a approve   M merge   O browser   space reviewed   R show reviewed   b/t mode"
 	)
 
 	hintRow := func(a *App) string {
@@ -300,7 +300,7 @@ func TestReviewHintsReviewed(t *testing.T) {
 			s.tune = withMarked(hunksUpTo(1), func(t *testing.T, a *App, v *reviewView) { v.showRead = true })
 
 			return s
-		}, "j/k line   ]/[ hunk   }/{ file   tab tree   w worktree   f full   u split   e edit   / search   space reviewed   R unread only   b/t mode"},
+		}, "j/k line   ]/[ hunk   }/{ file   z zoom   tab tree   w worktree   f full   u split   e edit   / search   space reviewed   R unread only   b/t mode"},
 		{"pr", func() reviewScene {
 			s := markedScene(hunksUpTo(1))
 			s.w, s.h, s.branch = 312, 52, true
@@ -320,14 +320,14 @@ func TestReviewHintsReviewed(t *testing.T) {
 			})
 
 			return s
-		}, "j/k line   ]/[ hunk   }/{ file   tab tree   w worktree   f full   u split   e edit   / search   b/t mode"},
+		}, "j/k line   ]/[ hunk   }/{ file   z zoom   tab tree   w worktree   f full   u split   e edit   / search   b/t mode"},
 		{"remapped", func() reviewScene {
 			s := markedScene(hunksUpTo(1))
 			s.w, s.h = 312, 52
 			s.keys = core.KeysConfig{Drawer: map[string]string{"m": "review.mark", "space": "none"}}
 
 			return s
-		}, "j/k line   ]/[ hunk   }/{ file   tab tree   w worktree   f full   u split   e edit   / search   m reviewed   R show reviewed   b/t mode"},
+		}, "j/k line   ]/[ hunk   }/{ file   z zoom   tab tree   w worktree   f full   u split   e edit   / search   m reviewed   R show reviewed   b/t mode"},
 	}
 
 	for _, tt := range tests {

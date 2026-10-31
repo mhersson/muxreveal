@@ -418,7 +418,7 @@ func (a *App) popPage(tab core.TabID, v *reviewView) tea.Cmd {
 func (a *App) sizePage(v *reviewView, p *mdPage) {
 	st := a.store.State()
 
-	box, ok := a.drawerFull(st)
+	box, ok := a.drawerBox(st)
 	if !ok {
 		return
 	}
@@ -476,7 +476,7 @@ func pageCommand(id string) bool {
 	switch id {
 	case "review.line.next", "review.line.prev", "review.hunk.next", "review.hunk.prev", "review.page.down", "review.page.up",
 		"review.top", "review.bottom", "review.fold", "review.back", "review.edit", "review.refresh", "review.search",
-		"review.mode.branch", "review.mode.turn", "review.mode.pr", "review.copy":
+		"review.mode.branch", "review.mode.turn", "review.mode.pr", "review.copy", "review.zoom":
 		return true
 	}
 
