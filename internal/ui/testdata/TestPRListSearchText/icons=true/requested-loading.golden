@@ -14,7 +14,7 @@
 │    feat/a        │                                                                              │                   │
 │                   │  loading pull requests…                                                      │                   │
 │                   │                                                                              │                   │
-│                   │  enter diff    i conversation    c checks    a approve    M merge            │                   │
+│                   │  enter diff    i conversation    c checks    a approve    esc close          │                   │
 │ Idle ─────────────╰──────────────────────────────────────────────────────────────────────────────╯                   │
 │                                          ││                                                                          │
 │ 󰗡 api                                 0s ││                                                                          │

@@ -20,7 +20,7 @@
 │ 󰗡 api             │   #305 Retry on timeout  branch-305                           draft  @li  1d │                   │
 │    feat/a        │  pull requests on ghe.example.com: HTTP 502 Bad Gateway                      │                   │
 │   waiting for a pr│                                                                              │                   │
-│                   │  enter diff    i conversation    c checks    a approve    M merge            │                   │
+│                   │  enter diff    i conversation    c checks    a approve    esc close          │                   │
 │                   ╰──────────────────────────────────────────────────────────────────────────────╯                   │
 │ 󰗡 api                                 0s ││                                                                          │
 │    feat/c                     #8 󰔟 3/5 ││                                                                          │

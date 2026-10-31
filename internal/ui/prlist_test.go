@@ -857,3 +857,16 @@ func TestPRCheckoutUsesAnsweredDir(t *testing.T) {
 		t.Errorf("checkout = %q, %v; want the answered directory", dir, ok)
 	}
 }
+
+func TestPRListKeepsEscClose(t *testing.T) {
+	t.Parallel()
+
+	for _, w := range []int{60, 80, 100, 120, 140} {
+		a := listApp(t, true, w, 30, listAgents())
+		press(a, keyLeader, keyRune('g'), keyRune('l'))
+
+		if !strings.Contains(ansi.Strip(a.View().Content), "esc close") {
+			t.Errorf("width %d: the hint row lost esc close", w)
+		}
+	}
+}

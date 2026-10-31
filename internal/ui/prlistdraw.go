@@ -240,25 +240,26 @@ func (a *App) prListBox(lk look, w, room int) []string {
 		{kt.hint("prlist.refresh"), "refresh"},
 		{kt.hint("prlist.close"), "close"},
 	})
-	hints, used := "", 0
 
-	for i, kv := range pairs {
-		need := ansi.StringWidth(kv[0]) + 1 + ansi.StringWidth(kv[1])
-		if i > 0 {
-			need += 4
-		}
-
-		if used+need > cw {
-			break
-		}
-
-		if i > 0 {
-			hints += st.popup.Render("    ")
-		}
-
-		hints += hint(kv[0], kv[1])
-		used += need
+	// esc close always stays; the other pairs drop from the end.
+	var closing [][2]string
+	if n := len(pairs); n > 0 && pairs[n-1][1] == "close" {
+		closing, pairs = pairs[n-1:], pairs[:n-1]
 	}
+
+	const gap = 4
+
+	hroom := cw
+	if len(closing) > 0 {
+		hroom -= ansi.StringWidth(closing[0][0]) + 1 + ansi.StringWidth(closing[0][1]) + gap
+	}
+
+	hints := popupHints(st, pairs, hroom)
+	if hints != "" && len(closing) > 0 {
+		hints += st.popup.Render(strings.Repeat(" ", gap))
+	}
+
+	hints += popupHints(st, closing, cw)
 
 	// The fullest frame the room holds around the whole list; else the list scrolls.
 	frames := []struct{ airy, hints bool }{{true, true}, {false, true}, {false, false}}
