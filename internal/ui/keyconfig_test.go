@@ -159,6 +159,11 @@ func TestCheckKeysErrors(t *testing.T) {
 			"checks without close", contextKeys("checks", "esc", "none"),
 			"keys.checks: nothing is bound to checks.close, so the checks overlay could not close",
 		},
+		{
+			"reader without close", contextKeys("reader", "esc", "none"),
+			"keys.reader: nothing is bound to reader.close, so the overlay could not close",
+		},
+		{"reader takes the leader key", contextKeys("reader", "ctrl+space", "reader.top"), ""},
 		{"pr list close moved", contextKeys("pr_list", "esc", "none", "q", "prlist.close"), ""},
 		{"rail needs no close", contextKeys("rail", "esc", "none"), ""},
 		{"drawer needs no close", drawerKeys("esc", "none"), ""},

@@ -344,8 +344,8 @@ func (a *App) sizePlan() {
 	}
 }
 
-// handlePlanKey answers the open plan overlay; any other key is dropped. A box
-// too small to draw answers esc alone.
+// handlePlanKey answers the open plan overlay. An open chooser or prompt
+// closes on esc at any size; a box too small to draw answers reader.close alone.
 func (a *App) handlePlanKey(msg tea.KeyPressMsg) tea.Cmd {
 	a.notice = ""
 	key := bindingKey(msg)
@@ -353,28 +353,20 @@ func (a *App) handlePlanKey(msg tea.KeyPressMsg) tea.Cmd {
 	pv := a.plan
 	pv.rewritten = false
 
-	if key == "esc" {
+	if key == "esc" && (pv.chooser != nil || pv.searching) {
 		a.clearTextSel()
 
-		var cmd tea.Cmd
-
-		switch {
-		case pv.chooser != nil:
+		if pv.chooser != nil {
 			pv.chooser = nil
-		case pv.searching:
+		} else {
 			pv.searching, pv.query = false, ""
-		case len(pv.pages) > 0:
-			cmd = a.planPop()
-		default:
-			a.closePlan()
 		}
 
-		return cmd
+		return nil
 	}
 
-	_, _, _, boxH, ok := planBox(a.width, a.height)
-	if !ok {
-		return nil
+	if _, _, _, _, ok := planBox(a.width, a.height); !ok {
+		return a.readerClose(key)
 	}
 
 	if pv.chooser != nil {
@@ -396,58 +388,7 @@ func (a *App) handlePlanKey(msg tea.KeyPressMsg) tea.Cmd {
 		return nil
 	}
 
-	cmd, acted := a.planKey(pv, key, boxH)
-	if acted {
-		a.clearTextSel()
-	}
-
-	return cmd
-}
-
-// planKey runs a key of the overlay's own switch and reports whether it acted:
-// y copies and keeps a selection, and a key the switch drops keeps it too.
-func (a *App) planKey(pv *planView, key string, boxH int) (cmd tea.Cmd, acted bool) {
-	v := pv.shown()
-
-	switch key {
-	case "y":
-		return a.planCopy(), false
-	case "j", "down":
-		v.move(1)
-	case "k", "up":
-		v.move(-1)
-	case "ctrl+d":
-		v.page(1)
-	case "ctrl+u":
-		v.page(-1)
-	case "ctrl+f", "pgdown":
-		v.pageFull(1)
-	case "ctrl+b", "pgup":
-		v.pageFull(-1)
-	case "g":
-		v.end(false)
-	case "G":
-		v.end(true)
-	case "]":
-		v.heading(1)
-	case "[":
-		v.heading(-1)
-	case "enter":
-		cmd = a.planEnter()
-	case "/":
-		// The prompt draws in the hint row, so without one there is nowhere to type.
-		if _, _, hint := planRows(boxH); hint {
-			pv.searching, pv.query = true, ""
-		}
-	case "n":
-		a.planFind(pv.last, false)
-	case "N":
-		a.planFind(pv.last, true)
-	default:
-		return nil, false
-	}
-
-	return cmd, true
+	return a.readerKey(key)
 }
 
 // planCopy is y: the selection, kept, else the paragraph or item at the cursor.

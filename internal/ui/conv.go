@@ -257,31 +257,28 @@ func (a *App) sizeConv() {
 	mv.size(vw, rows, a.icons)
 }
 
-// handleConvKey answers the open conversation overlay; any other key is
-// dropped. A box too small to draw answers esc alone.
+// handleConvKey answers the open conversation overlay. An open chooser or
+// prompt closes on esc at any size; a box too small to draw answers
+// reader.close alone.
 func (a *App) handleConvKey(msg tea.KeyPressMsg) tea.Cmd {
 	a.notice = ""
 	key := bindingKey(msg)
 	v := a.conv
 
-	if key == "esc" {
+	if key == "esc" && (v.chooser != nil || v.searching) {
 		a.clearTextSel()
 
-		switch {
-		case v.chooser != nil:
+		if v.chooser != nil {
 			v.chooser = nil
-		case v.searching:
+		} else {
 			v.searching, v.query = false, ""
-		default:
-			a.closeConv()
 		}
 
 		return nil
 	}
 
-	_, _, _, boxH, ok := planBox(a.width, a.height)
-	if !ok {
-		return nil
+	if _, _, _, _, ok := planBox(a.width, a.height); !ok {
+		return a.readerClose(key)
 	}
 
 	a.sizeConv()
@@ -304,62 +301,7 @@ func (a *App) handleConvKey(msg tea.KeyPressMsg) tea.Cmd {
 		return nil
 	}
 
-	cmd, acted := a.convKey(v, key, boxH)
-	if acted {
-		a.clearTextSel()
-	}
-
-	return cmd
-}
-
-// convKey runs a key of the overlay's own switch and reports whether it acted:
-// y copies and keeps a selection, and a key the switch drops keeps it too.
-func (a *App) convKey(v *convView, key string, boxH int) (cmd tea.Cmd, acted bool) {
-	mv := &v.view
-
-	switch key {
-	case "y":
-		return a.convCopy(), false
-	case "j", "down":
-		mv.move(1)
-	case "k", "up":
-		mv.move(-1)
-	case "ctrl+d":
-		mv.page(1)
-	case "ctrl+u":
-		mv.page(-1)
-	case "ctrl+f", "pgdown":
-		mv.pageFull(1)
-	case "ctrl+b", "pgup":
-		mv.pageFull(-1)
-	case "g":
-		mv.end(false)
-	case "G":
-		mv.end(true)
-	case "]":
-		a.convItem(1)
-	case "[":
-		a.convItem(-1)
-	case "enter":
-		cmd = a.convEnter()
-	case "/":
-		// The prompt draws in the hint row, so without one there is nowhere to type.
-		if _, _, hint, _ := convRows(boxH); !hint {
-			return nil, false
-		}
-
-		v.searching, v.query = true, ""
-	case "n":
-		a.convFind(v.last, false)
-	case "N":
-		a.convFind(v.last, true)
-	case "r":
-		cmd = a.readConversation(v)
-	default:
-		return nil, false
-	}
-
-	return cmd, true
+	return a.readerKey(key)
 }
 
 // convCopy is y: the selection, kept, else the paragraph or item at the cursor.
