@@ -143,7 +143,7 @@ func TestParseJobLogGroups(t *testing.T) {
 		}
 	}
 
-	want := []LogSection{{"One", 1, 3}, {"Two", 4, 6}, {"Three", 6, 9}}
+	want := []LogGroup{{"One", 1, 3}, {"Two", 4, 6}, {"Three", 6, 9}}
 	if len(log.Groups) != len(want) {
 		t.Fatalf("groups = %+v", log.Groups)
 	}
@@ -154,7 +154,7 @@ func TestParseJobLogGroups(t *testing.T) {
 		}
 	}
 
-	if log.Lines[1].Kind != LogGroup {
+	if log.Lines[1].Kind != LogGroupHead {
 		t.Errorf("head kind = %d", log.Lines[1].Kind)
 	}
 }

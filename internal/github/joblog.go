@@ -15,7 +15,8 @@ type LogKind uint8
 // The kinds of a job log line.
 const (
 	LogText LogKind = iota
-	LogGroup
+	// LogGroupHead is a group's head line.
+	LogGroupHead
 	LogError
 	LogWarning
 	LogNotice
@@ -40,9 +41,9 @@ type LogLine struct {
 	Group int
 }
 
-// LogSection is a "##[group]" section. Head is its head line and End one past
+// LogGroup is a "##[group]" section. Head is its head line and End one past
 // its last line.
-type LogSection struct {
+type LogGroup struct {
 	Title string
 	Head  int
 	End   int
@@ -52,7 +53,7 @@ type LogSection struct {
 // line, -1 for none; Cut says the log starts partway.
 type JobLog struct {
 	Lines      []LogLine
-	Groups     []LogSection
+	Groups     []LogGroup
 	FirstError int
 	Cut        bool
 }
@@ -111,7 +112,7 @@ func ParseJobLog(data []byte, cut bool) JobLog {
 
 		line.Spans = logSpans(prefix, raw)
 
-		if kind == LogGroup {
+		if kind == LogGroupHead {
 			closeGroup()
 
 			var title strings.Builder
@@ -119,7 +120,7 @@ func ParseJobLog(data []byte, cut bool) JobLog {
 				title.WriteString(s.Text)
 			}
 
-			log.Groups = append(log.Groups, LogSection{Title: title.String(), Head: len(log.Lines)})
+			log.Groups = append(log.Groups, LogGroup{Title: title.String(), Head: len(log.Lines)})
 			open = len(log.Groups) - 1
 		}
 
@@ -170,7 +171,7 @@ func logMarker(b []byte) (LogKind, string, string, []byte) {
 
 	switch name {
 	case "group":
-		return LogGroup, "", name, rest
+		return LogGroupHead, "", name, rest
 	case "endgroup":
 		return LogText, "", name, rest
 	case "error":
