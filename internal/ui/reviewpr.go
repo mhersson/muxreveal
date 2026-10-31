@@ -233,6 +233,8 @@ func (a *App) reviewReload() tea.Cmd {
 		return a.reloadPage(tab.ID, v, true)
 	}
 
+	a.retryPictures(v)
+
 	// A drawer still opening for a pull request shows it but no longer acts on it.
 	if n := a.drawer.prNext; n != nil {
 		n.then = thenNothing
@@ -250,6 +252,16 @@ func (a *App) reviewReload() tea.Cmd {
 	}
 
 	return a.askPR(tab.ID, &prWant{repo: v.pr.Repo, number: v.pr.Number, root: v.pr.Root}, v.prBase, thenNothing)
+}
+
+// retryPictures forgets the failed images of the rendered files v shows, so
+// they load again.
+func (a *App) retryPictures(v *reviewView) {
+	for path := range v.mdOn {
+		if f := v.mdFiles[path]; f != nil {
+			a.pictures.retry(docPictures{reg: a.pictures, root: v.root}, f.doc.layout(max(v.mdW, 1), v.mdIcons))
+		}
+	}
 }
 
 // showPR shows the pull request of the active tab's drawer place in its drawer

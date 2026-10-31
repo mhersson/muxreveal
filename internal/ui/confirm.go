@@ -122,7 +122,7 @@ func confirmBox(c confirm, w int, icons bool, st styles) []string {
 
 // overlayConfirm draws the confirm box over base, centred with its top at a
 // third of the height, clipped to the terminal.
-func overlayConfirm(base string, width, height int, c confirm, icons bool, st styles) string {
+func overlayConfirm(f *frameLayers, base string, width, height int, c confirm, icons bool, st styles) string {
 	maxW := maxConfirmWidth
 
 	switch {
@@ -149,10 +149,10 @@ func overlayConfirm(base string, width, height int, c confirm, icons bool, st st
 	case c.cleanup != nil:
 		top := max(1, height/3)
 
-		return overlayLines(base, width, height, top, cleanupBox(*c.cleanup, w, max(height-1-top, 0), icons, st), w)
+		return overlayLines(f, base, width, height, top, cleanupBox(*c.cleanup, w, max(height-1-top, 0), icons, st), w, nil)
 	default:
 		lines = confirmBox(c, w, icons, st)
 	}
 
-	return overlayLines(base, width, height, max(1, height/3), lines, w)
+	return overlayLines(f, base, width, height, max(1, height/3), lines, w, nil)
 }

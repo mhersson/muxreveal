@@ -396,3 +396,19 @@ func TestMDPainterWidth(t *testing.T) {
 		}
 	})
 }
+
+func TestMDPainterPictureRow(t *testing.T) {
+	t.Parallel()
+
+	th := mochaTheme(t)
+	p := newMDPainter(th, th.UI.Bg)
+	row := md.Line{{Text: "│", Role: md.RoleQuoteBar, Link: -1}, {Text: "   ", Role: md.RolePicture, Link: 0}}
+	links := []md.Link{{URL: "https://example.com/x"}}
+
+	want := p.line(row, nil, 5)
+	got := p.withQuery(" ").line(row, links, 5)
+
+	if got != want || strings.Contains(got, "\x1b]8") {
+		t.Errorf("picture row painted %q, want %q: blank cells, no link, no match", got, want)
+	}
+}

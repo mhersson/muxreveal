@@ -56,6 +56,16 @@ func indexCacheDir(logger *slog.Logger) string {
 	return ""
 }
 
+// imageCacheDir is where fetched images are cached under the index cache; empty
+// when that is off.
+func imageCacheDir(indexCache string) string {
+	if indexCache == "" {
+		return ""
+	}
+
+	return filepath.Join(indexCache, "images")
+}
+
 // startHooks prepares <stateDir>/run: it sweeps files of dead instances, writes
 // this instance's settings file and serves its socket. A failure leaves nothing
 // behind and yields a runtime with a notice, so agents start without hooks.

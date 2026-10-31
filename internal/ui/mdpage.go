@@ -296,6 +296,8 @@ func (a *App) onMDPage(msg mdPageMsg) {
 		return
 	}
 
+	msg.doc.withPictures(docPictures{reg: a.pictures, root: v.root})
+
 	p := &mdPage{path: msg.path, rel: relSlash(v.root, msg.path), view: mdView{doc: msg.doc}, sum: msg.sum}
 	if v.pagePush {
 		v.pages = append(v.pages, p)
@@ -335,6 +337,8 @@ func (a *App) onPageReload(v *reviewView, msg mdPageMsg, active bool) {
 		return
 	}
 
+	msg.doc.withPictures(docPictures{reg: a.pictures, root: v.root})
+
 	line, old := p.anchorLine(), p.view
 	p.view = mdView{doc: msg.doc, w: old.w, h: old.h, icons: old.icons, top: old.top}
 	p.view.goSource(line)
@@ -351,6 +355,8 @@ func (a *App) reloadPage(tab core.TabID, v *reviewView, notice bool) tea.Cmd {
 
 	v.reloadSeq++
 	v.reloadNotice = notice
+
+	a.pictures.retry(docPictures{reg: a.pictures, root: v.root}, p.view.layout())
 
 	return a.readPageCmd(tab, v, p.path, v.reloadSeq, true, nil)
 }

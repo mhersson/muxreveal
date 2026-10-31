@@ -318,7 +318,7 @@ func (a *App) prListBox(lk look, w, room int) []string {
 
 // overlayPRList draws the list over base, centred with its top at a quarter of
 // the height and ending at least two rows above the bottom.
-func (a *App) overlayPRList(base string, lk look) string {
+func (a *App) overlayPRList(f *frameLayers, base string, lk look) string {
 	w := prListWidth(a.width)
 	if w < 12 {
 		return base
@@ -327,5 +327,5 @@ func (a *App) overlayPRList(base string, lk look) string {
 	top := a.height / 4
 	lines := a.prListBox(lk, w, max(a.height-2-top, 0))
 
-	return overlayLines(base, a.width, a.height, top, lines, w)
+	return overlayLines(f, base, a.width, a.height, top, lines, w, nil)
 }

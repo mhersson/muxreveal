@@ -34,6 +34,12 @@ type mdDoc struct {
 	width   int
 	icons   bool
 	layouts int // layouts made
+
+	pics      docPictures
+	hasImages bool      // the document has an image, found at parse
+	picGen    uint64    // pics.reg's gen at the last layout
+	prev      md.Layout // the layout a picture-driven relayout replaced
+	hasPrev   bool
 }
 
 // codeKey identifies a code block by its language and text.
@@ -50,10 +56,6 @@ func parseMarkdown(src []byte, base string, tok codeTokeniser) *mdDoc {
 		open:  map[int]bool{},
 	}
 
-	if tok == nil {
-		return d
-	}
-
 	all := make(map[int]bool, d.doc.FoldCount())
 	for i := range d.doc.FoldCount() {
 		all[i] = true
@@ -61,33 +63,38 @@ func parseMarkdown(src []byte, base string, tok codeTokeniser) *mdDoc {
 
 	used, capped := 0, false
 
-	d.doc.Layout(md.LayoutOptions{Width: mdTokenWidth, Open: all, Highlight: func(lang string, lines []string) [][]md.Span {
-		key := codeKey(lang, lines)
-		if _, ok := d.spans[key]; ok {
-			return nil
-		}
-
-		if capped || used+len(lines) > mdTokenMax {
-			capped = true
-
-			return nil
-		}
-
-		used += len(lines)
-
-		raw := tok(lang, lines)
-		out := make([][]md.Span, len(raw))
-
-		for i, line := range raw {
-			for _, s := range line {
-				out[i] = append(out[i], md.Span{Start: s.Start, End: s.End, Class: uint8(s.Class)})
+	opts := md.LayoutOptions{Width: mdTokenWidth, Open: all}
+	if tok != nil {
+		opts.Highlight = func(lang string, lines []string) [][]md.Span {
+			key := codeKey(lang, lines)
+			if _, ok := d.spans[key]; ok {
+				return nil
 			}
+
+			if capped || used+len(lines) > mdTokenMax {
+				capped = true
+
+				return nil
+			}
+
+			used += len(lines)
+
+			raw := tok(lang, lines)
+			out := make([][]md.Span, len(raw))
+
+			for i, line := range raw {
+				for _, s := range line {
+					out[i] = append(out[i], md.Span{Start: s.Start, End: s.End, Class: uint8(s.Class)})
+				}
+			}
+
+			d.spans[key] = out
+
+			return nil
 		}
+	}
 
-		d.spans[key] = out
-
-		return nil
-	}})
+	d.hasImages = len(d.doc.Layout(opts).Images) > 0
 
 	return d
 }
@@ -98,6 +105,28 @@ func (d *mdDoc) withFoldKey(key *string) *mdDoc {
 	d.fold, d.have = key, false
 
 	return d
+}
+
+// withPictures lends d the pictures of its view and returns d.
+func (d *mdDoc) withPictures(p docPictures) *mdDoc {
+	d.pics, d.have = p, false
+	d.hasPrev = false
+
+	return d
+}
+
+// pictureMove returns the layout a relayout caused by the pictures replaced, once;
+// the view maps its position from it. It gives false after a change of width,
+// icons or folds, which moves the view by itself.
+func (d *mdDoc) pictureMove() (old md.Layout, ok bool) {
+	if !d.hasPrev {
+		return md.Layout{}, false
+	}
+
+	old = d.prev
+	d.prev, d.hasPrev = md.Layout{}, false
+
+	return old, true
 }
 
 // parseCmd parses off the update loop and answers with done's message.
@@ -113,11 +142,33 @@ func (d *mdDoc) cached(lang string, lines []string) [][]md.Span {
 // layout is the doc laid out at width, made again only when the width, the
 // icons or a fold changed since the last call.
 func (d *mdDoc) layout(width int, icons bool) md.Layout {
-	if d.have && d.width == width && d.icons == icons {
+	reg := d.pics.reg
+	same := d.have && d.width == width && d.icons == icons
+	moved := reg != nil && d.hasImages && reg.gen() != d.picGen
+
+	if same && !moved {
 		return d.lay
 	}
 
-	d.lay = d.doc.Layout(md.LayoutOptions{Width: width, Open: d.open, FoldKey: d.fold, Icons: icons, Highlight: d.cached})
+	if same {
+		if !d.hasPrev {
+			d.prev, d.hasPrev = d.lay, true
+		}
+	} else {
+		d.prev, d.hasPrev = md.Layout{}, false
+	}
+
+	opts := md.LayoutOptions{Width: width, Open: d.open, FoldKey: d.fold, Icons: icons, Highlight: d.cached}
+	if reg != nil {
+		opts.Picture = d.pics.size
+	}
+
+	d.lay = d.doc.Layout(opts)
+
+	if reg != nil {
+		d.picGen = reg.gen()
+	}
+
 	d.plain = nil
 	d.have, d.width, d.icons = true, width, icons
 	d.layouts++

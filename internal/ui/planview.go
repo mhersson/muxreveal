@@ -149,6 +149,7 @@ func (a *App) onPlanRead(msg planReadMsg) {
 		return
 	}
 
+	msg.doc.withPictures(docPictures{reg: a.pictures, root: msg.root})
 	a.endLeader()
 	a.plan = &planView{
 		pane: msg.pane, agent: printable(a.cardName(a.store.State(), msg.pane)),
@@ -175,6 +176,8 @@ func (a *App) reloadPlan(p core.Plan) tea.Cmd {
 	pv := a.plan
 	pv.reloadSeq++
 
+	a.pictures.retry(docPictures{reg: a.pictures, root: pv.root}, pv.view.layout())
+
 	return a.readPlanCmd(planReadMsg{seq: pv.reloadSeq, reload: true, view: pv, pane: pv.pane, plan: p, root: pv.root, base: pv.base})
 }
 
@@ -195,8 +198,11 @@ func (a *App) onPlanReload(msg planReadMsg) {
 		return
 	}
 
+	msg.doc.withPictures(docPictures{reg: a.pictures, root: pv.root})
+
 	v := &pv.view
-	v.top, v.cursor = keepPlace(v.layout(), msg.doc.layout(v.textWidth(), v.icons), v.top, v.cursor)
+	old := v.layout() // keeps the cursor in range, so top and cursor are read after it
+	v.top, v.cursor = keepPlace(old, msg.doc.layout(v.textWidth(), v.icons), v.top, v.cursor)
 	v.doc = msg.doc
 	pv.plan, pv.rewritten = msg.plan, true
 

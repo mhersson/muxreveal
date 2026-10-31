@@ -170,7 +170,7 @@ func (a *App) onComposeRendered(msg composeRenderedMsg) {
 		return
 	}
 
-	msg.v.preview.doc, msg.v.preview.parsed = msg.doc, msg.rev
+	msg.v.preview.doc, msg.v.preview.parsed = msg.doc.withPictures(docPictures{reg: a.pictures, host: msg.v.t.repo.Host}), msg.rev
 	a.composePreviewSettle(msg.v)
 }
 
@@ -229,6 +229,10 @@ func (a *App) composePreviewSettle(v *composeView) {
 	}
 
 	lay := p.doc.layout(composePreviewW(a.width), a.icons)
+
+	if old, ok := p.doc.pictureMove(); ok {
+		p.top += pictureShift(old, lay, p.top)
+	}
 
 	if p.anchor > 0 && p.parsed == v.bodyRev && len(lay.Source) > 0 {
 		p.top, p.anchor = sourceLineIndex(lay.Source, p.anchor), 0

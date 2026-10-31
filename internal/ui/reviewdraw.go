@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"image"
 	"image/color"
 	"slices"
 	"strconv"
@@ -167,6 +168,11 @@ type drawCtx struct {
 
 	mdp      *mdPainter // paints rendered rows; made on first use
 	pageRows []string   // the shown page's rows, drawn on first use
+	pagePics []picRow   // the picture rows of pageRows, relative to the page
+	mdPics   []picRow   // the picture rows of the rendered rows drawn, relative to the diff column's body
+
+	picGen uint64            // the picture registry's gen, which re-lays the page out
+	covers []image.Rectangle // the boxes drawn over the drawer's body, relative to the drawer
 
 	pr      core.PRInfo  // the pull request the header shows; zero when headH is 0
 	pinned  bool         // the drawer is held on its root
@@ -230,6 +236,7 @@ type drawKey struct {
 	hasErr               bool
 	page                 *mdPage
 	pageRev              int
+	picGen               uint64
 
 	pr       core.PRInfo
 	unpushed int
@@ -261,7 +268,9 @@ func (d *drawCtx) key(r core.Rect, name string) drawKey {
 	}
 
 	if p := v.page(); p != nil {
-		k.page, k.pageRev = p, p.rev
+		k.page, k.pageRev, k.picGen = p, p.rev, d.picGen
+	} else if len(v.mdFiles) > 0 {
+		k.picGen = d.picGen
 	}
 
 	if len(v.fresh) > 0 && d.now.Before(v.flashUntil) {
@@ -290,32 +299,102 @@ func (d *drawCtx) freshInView() string {
 // are shared with the cache, so callers must not change them. View uses
 // drawerDrawn; this is the seam the drawing tests call.
 func (a *App) drawerLines(st core.State, r core.Rect) []string {
-	lines, _ := a.drawerDrawn(st, r)
+	lines, _, _ := a.drawerDrawn(st, r)
 
 	return lines
 }
 
 // drawerDrawn is drawerLines, and whether every line is exactly r.W cells, ends
 // with no style or link open and carries nothing across cells, as splicing the
-// lines into a frame needs.
-func (a *App) drawerDrawn(st core.State, r core.Rect) (lines []string, fits bool) {
+// lines into a frame needs. pics are the picture rows the lines show, relative
+// to r: none while the drawer slides, and none a box over the page covers.
+func (a *App) drawerDrawn(st core.State, r core.Rect) (lines []string, pics []picRow, fits bool) {
 	d, name, ok := a.drawCtxFor(st)
 	if !ok || r.W <= 0 || r.H <= 0 {
-		return nil, false
+		return nil, nil, false
 	}
 
 	key := d.key(r, name)
 	if d.c.drawnOK && d.c.drawnKey == key {
-		return d.c.drawn, d.c.drawnFit
+		return d.c.drawn, a.slidPics(d.c.drawnPics), d.c.drawnFit
 	}
 
 	a.drawer.renders++
 
 	lines = d.lines(r)
 	fits = !slices.ContainsFunc(lines, func(l string) bool { return ansi.StringWidth(l) != r.W || !endsClean(l) || carriesAcrossCells(l) })
-	d.c.drawn, d.c.drawnFit, d.c.drawnKey, d.c.drawnOK = lines, fits, key, true
+	pics = d.pictureRows(r)
+	d.c.drawn, d.c.drawnPics, d.c.drawnFit, d.c.drawnKey, d.c.drawnOK = lines, pics, fits, key, true
 
-	return lines, fits
+	return lines, a.slidPics(pics), fits
+}
+
+// slidPics is pics, or none while the drawer slides.
+func (a *App) slidPics(pics []picRow) []picRow {
+	if !a.drawer.slideFrom.IsZero() {
+		return nil
+	}
+
+	return pics
+}
+
+// pictureRows are the page's picture rows in the drawer's cells, less any picture a
+// box drawn over the body overlaps. The page fills the diff column from the
+// first body row.
+func (d *drawCtx) pictureRows(r core.Rect) []picRow {
+	pics := d.pagePics // only one of the page and the rendered rows draws pictures
+	if len(pics) == 0 {
+		pics = d.mdPics
+	}
+
+	if len(pics) == 0 {
+		return nil
+	}
+
+	x := 1
+	if d.lay.treeW > 0 {
+		x += d.lay.treeW + 1
+	}
+
+	var rows []picRow
+
+	for _, p := range pics {
+		if p.Y >= d.lay.bodyH || x+p.X+p.Cols > r.W {
+			continue
+		}
+
+		p.X += x
+		p.Y++
+		rows = append(rows, p)
+	}
+
+	return dropCovered(rows, d.covers)
+}
+
+// dropCovered is rows without the pictures a box overlaps.
+func dropCovered(rows []picRow, boxes []image.Rectangle) []picRow {
+	if len(boxes) == 0 {
+		return rows
+	}
+
+	var out []picRow
+
+	for _, id := range picIDs(rows) {
+		var group []picRow
+
+		for _, r := range rows {
+			if r.ID == id {
+				group = append(group, r)
+			}
+		}
+
+		rect := picRect(group)
+		if !slices.ContainsFunc(boxes, rect.Overlaps) {
+			out = append(out, group...)
+		}
+	}
+
+	return out
 }
 
 // drawCtxFor is what drawing the active tab's drawer needs, and the name of the
@@ -348,6 +427,7 @@ func (a *App) drawCtxFor(st core.State) (d *drawCtx, name string, ok bool) {
 
 	d.dv, d.flash = a.diffThemes(lk)
 	d.top = v.viewTop(d.lay.diffH)
+	d.picGen = a.pictures.gen()
 
 	switch {
 	case v.search != nil:
@@ -793,8 +873,10 @@ func (d *drawCtx) diffRow(y int) string {
 	}
 
 	cursor := d.diffKeys() && i == d.v.cursor
+	row := d.exact(d.rowCells(i, cursor), w)
+	d.notePicture(i, d.lay.headH+y, cursor)
 
-	return d.exact(d.rowCells(i, cursor), w)
+	return row
 }
 
 // exact makes s w cells: cut, or padded on the ground.
@@ -1109,6 +1191,29 @@ func (d *drawCtx) mdRow(r reviewRow, f git.FileDiff, cursor bool) string {
 	return railPainter{bg: bg}.line([]railRun{mark}, lead) + text + railPainter{bg: bg}.line(nil, max(w-lead-tw, 0))
 }
 
+// notePicture records the picture row that row i of the diff is, drawn at row y
+// of the body, if it is one.
+func (d *drawCtx) notePicture(i, y int, cursor bool) {
+	r := d.v.rows[i]
+	if r.kind != rowMD {
+		return
+	}
+
+	mf := d.v.mdFiles[d.v.res.Files[r.file].Path]
+	if mf == nil {
+		return
+	}
+
+	lay := mf.doc.layout(max(d.v.mdW, 1), d.v.mdIcons)
+	if r.line >= len(lay.Lines) {
+		return
+	}
+
+	if im, row, ok := pictureAt(lay, r.line); ok {
+		d.mdPics = append(d.mdPics, picRow{X: 2 + pictureCol(lay.Lines[r.line]), Y: y, ID: im.ID, Row: row, Cols: im.Cols, Ground: d.cursorGround(d.ui.Bg, cursor)})
+	}
+}
+
 func (d *drawCtx) mdPainter() mdPainter {
 	if d.mdp == nil {
 		p := newMDPainter(d.th, d.ui.Bg)
@@ -1121,7 +1226,7 @@ func (d *drawCtx) mdPainter() mdPainter {
 // pageRow is row y of the shown markdown page, which fills the diff column.
 func (d *drawCtx) pageRow(p *mdPage, y int) string {
 	if d.pageRows == nil {
-		d.pageRows = p.view.draw(d.mdPainter(), d.diffKeys())
+		d.pageRows, d.pagePics = p.view.drawPictures(d.mdPainter(), d.diffKeys())
 	}
 
 	if y >= len(d.pageRows) {

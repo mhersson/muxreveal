@@ -202,18 +202,18 @@ func (a *App) highlighted(id string) {
 
 // overlayOver draws the palette over base, centred horizontally with its top
 // at a quarter of the height. It is clipped to the body rows, never wrapped.
-func overlayOver(base string, width, height int, pal palette.Model) string {
+func overlayOver(f *frameLayers, base string, width, height int, pal palette.Model) string {
 	pw := min(maxOverlayWidth, width-4)
 	if pw < 2 || height < 2 {
 		return base
 	}
 
-	return overlayLines(base, width, height, height/4, strings.Split(pal.View(pw), "\n"), pw)
+	return overlayLines(f, base, width, height, height/4, strings.Split(pal.View(pw), "\n"), pw, nil)
 }
 
 // overlayLines draws lines pw cells wide over base, centred horizontally with
 // the top at row y, clipped to the body rows.
-func overlayLines(base string, width, height, y int, lines []string, pw int) string {
+func overlayLines(f *frameLayers, base string, width, height, y int, lines []string, pw int, pics []picRow) string {
 	if room := height - 1 - y; len(lines) > room {
 		lines = lines[:max(room, 0)]
 	}
@@ -222,7 +222,7 @@ func overlayLines(base string, width, height, y int, lines []string, pw int) str
 		lines[i] = ansi.Truncate(l, pw, "")
 	}
 
-	return overlayAt(base, width, height, (width-pw)/2, y, lines)
+	return overlayAt(f, base, width, height, (width-pw)/2, y, lines, pics)
 }
 
 // drawerReset ends every style and link a base row leaves open, so the
@@ -234,18 +234,20 @@ const drawerReset = "\x1b[m\x1b]8;;\x1b\\"
 // one base row and the compositor's parse of the whole screen is not needed.
 // Anything that shape does not cover goes through the compositor; spliced says
 // which drew it.
-func overlayDrawer(base string, width, height int, r core.Rect, lines []string, fits bool) (out string, spliced bool) {
+func overlayDrawer(f *frameLayers, base string, width, height int, r core.Rect, lines []string, pics []picRow, fits bool) (out string, spliced bool) {
 	if out, ok := spliceDrawer(base, width, height, r, lines, fits); ok {
+		recordLayer(f, width, height, r.X, r.Y, lines, pics)
+
 		return out, true
 	}
 
-	return overlayAt(base, width, height, r.X, r.Y, lines), false
+	return overlayAt(f, base, width, height, r.X, r.Y, lines, pics), false
 }
 
 // drawDrawer draws the drawer over the frame and counts the frames the
 // compositor drew instead of the splice, each about 3 ms dearer.
-func (a *App) drawDrawer(base string, r core.Rect, lines []string, fits bool) string {
-	out, spliced := overlayDrawer(base, a.width, a.height, r, lines, fits)
+func (a *App) drawDrawer(f *frameLayers, base string, r core.Rect, lines []string, pics []picRow, fits bool) string {
+	out, spliced := overlayDrawer(f, base, a.width, a.height, r, lines, pics, fits)
 	if !spliced {
 		a.drawer.fallbacks++
 	}
@@ -332,9 +334,15 @@ func cutRow(row string, x int) string {
 	return row + drawerReset + strings.Repeat(" ", x-w)
 }
 
-// overlayAt draws lines over base with the top-left corner at x, y.
-func overlayAt(base string, width, height, x, y int, lines []string) string {
+// overlayAt draws lines over base with the top-left corner at x, y and records
+// the box and pics (relative to x, y) in f, clipped to the lines and the screen.
+func overlayAt(f *frameLayers, base string, width, height, x, y int, lines []string, pics []picRow) string {
 	if width < 2 || height < 2 || len(lines) == 0 {
+		return base
+	}
+
+	lines = lines[:max(min(len(lines), height-y), 0)]
+	if len(lines) == 0 {
 		return base
 	}
 
@@ -344,6 +352,8 @@ func overlayAt(base string, width, height, x, y int, lines []string) string {
 	if comp.Bounds() != image.Rect(0, 0, width, height) {
 		return base
 	}
+
+	recordLayer(f, width, height, x, y, lines, pics)
 
 	return comp.Render()
 }

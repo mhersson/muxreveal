@@ -88,6 +88,10 @@ type Options struct {
 	PRActions prActions
 	// Keys is the [keys] config laid over the built-in leader keys.
 	Keys core.KeysConfig
+	// Pictures fetches remote images; nil keeps them as image lines.
+	Pictures pictureFetcher
+	// ImageCache is the directory of the fetched images' disk cache; empty keeps none.
+	ImageCache string
 }
 
 // markFiles is the persistence of the reviewed-hunk marks, one file per
@@ -147,6 +151,8 @@ type App struct {
 	later        []tea.Cmd             // commands raised outside the update's return path; Update batches them
 	outerFocused bool                  // the outer terminal has focus; true until a BlurMsg
 
+	pictures  *pictures      // Kitty graphics support and the pictures sent
+	loader    *pictureLoader // loads the pictures off the update loop
 	getenv    func(string) string
 	cwd       string
 	recordDir string // empty unless recording
@@ -255,8 +261,9 @@ func New(opts Options) (*App, error) {
 		events: opts.Events, notice: opts.Notice, save: opts.Save, marks: opts.Marks,
 		log: opts.Logger, store: opts.Store, reg: reg, keymap: km, keys: tables,
 		panes: map[core.PaneID]*pane{}, outerFocused: true,
-		watches: watchState{set: opts.Watches, open: git.Open, panes: map[core.PaneID]*paneWatch{}, pins: map[core.TabID]*pinWatch{}, failed: map[string]bool{}},
-		getenv:  getenv, cwd: cwd, recordDir: opts.RecordDir, icons: opts.Icons, clock: realClock{}, start: termStart,
+		watches:  watchState{set: opts.Watches, open: git.Open, panes: map[core.PaneID]*paneWatch{}, pins: map[core.TabID]*pinWatch{}, failed: map[string]bool{}},
+		pictures: newPictures(nil, getenv, opts.Logger),
+		getenv:   getenv, cwd: cwd, recordDir: opts.RecordDir, icons: opts.Icons, clock: realClock{}, start: termStart,
 		load:         newSysLoad(),
 		probeSem:     make(chan struct{}, railProbeMax),
 		edits:        editState{resolve: places.Place},
@@ -294,6 +301,8 @@ func New(opts Options) (*App, error) {
 	}
 
 	a.ctx, a.cancel = context.WithCancel(context.Background())
+	a.loader = newPictureLoader(a.ctx, opts.Pictures, opts.ImageCache, opts.Logger)
+	a.pictures.jobs = a.loader
 
 	return a, nil
 }
@@ -417,7 +426,7 @@ func (a *App) Init() tea.Cmd {
 		rail = a.railOpened()
 	}
 
-	return tea.Batch(a.initTray(), a.waitEvent(), a.waitWatch(), a.waitPRs(), rail)
+	return tea.Batch(a.initTray(), a.waitEvent(), a.waitWatch(), a.waitPRs(), rail, a.pictures.start(), a.loader.wait())
 }
 
 // Update implements tea.Model.
@@ -527,7 +536,19 @@ func (a *App) syncPaneColors() {
 }
 
 func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if cmd, ok := a.pictures.reply(msg); ok {
+		return a, cmd
+	}
+
 	switch msg := msg.(type) {
+	case pictureDoneMsg:
+		cmd := a.pictures.done(msg)
+
+		if a.compose != nil && a.compose.preview.on {
+			a.composePreviewSettle(a.compose)
+		}
+
+		return a, tea.Batch(cmd, a.loader.wait())
 	case tea.WindowSizeMsg:
 		a.endSlide()
 
@@ -550,7 +571,7 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 
-		cmds = append(cmds, a.relayout())
+		cmds = append(cmds, a.relayout(), a.pictures.resized())
 		a.sizePlan()
 
 		return a, tea.Batch(cmds...)
@@ -811,51 +832,56 @@ func (a *App) View() tea.View {
 
 	content := a.frameAt(g)
 	st := a.store.State()
+	f := &frameLayers{}
 
 	if r, ok := a.drawerRect(st); ok {
-		lines, fits := a.drawerDrawn(st, r)
-		content = a.drawDrawer(content, r, lines, fits)
+		lines, pics, fits := a.drawerDrawn(st, r)
+		content = a.drawDrawer(f, content, r, lines, pics, fits)
 	}
 
-	content = overlayToast(content, a.width, a.height, a.notice, a.noticeLevel(), a.icons, lk.styles)
+	content = overlayToast(f, content, a.width, a.height, a.notice, a.noticeLevel(), a.icons, lk.styles)
 	if a.sequenceOpen() {
-		content = overlayCorner(content, a.width, a.height, sequencePopup(a.keymap.leader, a.prefix, a.sequenceRows(a.prefix), a.icons, lk.styles))
+		content = overlayCorner(f, content, a.width, a.height, sequencePopup(a.keymap.leader, a.prefix, a.sequenceRows(a.prefix), a.icons, lk.styles))
 	}
 
 	if a.popup {
-		content = overlayWhichKey(content, a.width, a.height, a.keymap.leader, a.hints(), a.icons, lk.styles)
+		content = overlayWhichKey(f, content, a.width, a.height, a.keymap.leader, a.hints(), a.icons, lk.styles)
 	}
 
 	if a.overlay != nil {
-		content = overlayOver(content, a.width, a.height, a.overlay.pal)
+		content = overlayOver(f, content, a.width, a.height, a.overlay.pal)
 	}
 
 	if a.picker.open != nil {
-		content = a.overlayPicker(content, lk)
+		content = a.overlayPicker(f, content, lk)
 	}
 
 	if a.prList != nil {
-		content = a.overlayPRList(content, lk)
+		content = a.overlayPRList(f, content, lk)
 	}
 
 	if a.checks != nil {
-		content = a.overlayChecks(content, lk)
+		content = a.overlayChecks(f, content, lk)
 	}
 
 	if a.merge != nil {
-		content = a.overlayMerge(content, lk)
+		content = a.overlayMerge(f, content, lk)
 	}
 
 	if a.plan != nil {
-		content = a.overlayPlan(content, lk)
+		content = a.overlayPlan(f, content, lk)
 	}
 
 	if a.composeShown() {
-		content = a.overlayCompose(content, lk)
+		content = a.overlayCompose(f, content, lk)
 	}
 
 	if a.confirm != nil {
-		content = overlayConfirm(content, a.width, a.height, *a.confirm, a.icons, lk.styles)
+		content = overlayConfirm(f, content, a.width, a.height, *a.confirm, a.icons, lk.styles)
+	}
+
+	if rows := a.placed(f.visible()); len(rows) > 0 {
+		content = placePictures(content, a.width, a.height, rows)
 	}
 
 	v := tea.NewView(content)

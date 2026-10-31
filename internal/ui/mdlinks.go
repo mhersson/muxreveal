@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"image"
 	"os"
 	"path/filepath"
 	"strings"
@@ -370,4 +371,6 @@ func (d *drawCtx) overlayLinks(lines []string) {
 		y := wtTopY + i
 		lines[y] = cutRow(lines[y], wtInsetX) + line + gap + side
 	}
+
+	d.covers = append(d.covers, image.Rect(wtInsetX, wtTopY, box.W, wtTopY+len(box1)))
 }

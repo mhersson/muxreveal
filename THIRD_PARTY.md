@@ -1,6 +1,6 @@
 # Third-party material
 
-MuxReveal includes material copied from the projects below, each under the MIT License (text at the end).
+MuxReveal includes material copied from the projects below, each under the MIT License (text at the end) unless its entry names another licence.
 
 ## Catppuccin palette
 
@@ -37,6 +37,12 @@ MuxReveal includes material copied from the projects below, each under the MIT L
 - Source: https://github.com/alecthomas/chroma (`lexers/embedded/*.xml` and the Go and Markdown lexers in `lexers/`) at v2.27.0, as carried by tuios `internal/diffview/lexers/`; the licence is in `internal/ui/diffview/lexers/COPYING`
 - Copyright (c) 2017 Alec Thomas
 - Used in `internal/ui/diffview/lexers/`: the gzipped `.xml.gz` definitions and `coded.go`.
+
+## Go WebP test image
+
+- Source: https://cs.opensource.google/go/x/image (`testdata/gopher-doc.1bpp.lossless.webp`, v0.47.0)
+- Copyright 2011 The Go Authors, under the BSD-3-Clause License (https://github.com/golang/image/blob/master/LICENSE)
+- Used in `internal/ui/kitty/testdata/gopher.webp`: the WebP decode test.
 
 ## MIT License
 

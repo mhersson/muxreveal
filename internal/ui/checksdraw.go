@@ -193,7 +193,7 @@ func (a *App) checkLines(rows []checkRow, sel, count, cw int, row func(string) s
 
 // overlayChecks draws the checks overlay over base, centred with its top at a third
 // of the height.
-func (a *App) overlayChecks(base string, lk look) string {
+func (a *App) overlayChecks(f *frameLayers, base string, lk look) string {
 	w := min(maxChecksWidth, a.width-4)
 	if w < 12 {
 		return base
@@ -201,5 +201,5 @@ func (a *App) overlayChecks(base string, lk look) string {
 
 	top := max(1, a.height/3)
 
-	return overlayLines(base, a.width, a.height, top, a.checksBox(lk, w, max(a.height-1-top, 0)), w)
+	return overlayLines(f, base, a.width, a.height, top, a.checksBox(lk, w, max(a.height-1-top, 0)), w, nil)
 }

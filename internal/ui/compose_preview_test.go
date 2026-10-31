@@ -558,3 +558,134 @@ func TestComposePreviewResize(t *testing.T) {
 		t.Errorf("rows = %d after the resize, was %d", got, wide)
 	}
 }
+
+const composeAttachment = "https://github.com/user-attachments/assets/x"
+
+// composeBoxOrigin is the screen cell of the compose box's top-left corner.
+func composeBoxOrigin(r *previewRig, lines int) (x, y int) {
+	return (r.width - min(maxComposeWidth, r.width-2)) / 2, max(1, (r.height-lines)/2)
+}
+
+func TestComposePreviewPicture(t *testing.T) {
+	r := newPreviewRig(t, 120, 40)
+	jobs := picturesOn(t, r.App)
+
+	r.setBody("intro\n\n![s](" + composeAttachment + ")\n\noutro")
+	r.churn(t, press(r.App, keyCtrlP))
+	r.View()
+
+	queued := jobs.take()
+	if len(queued) != 1 || queued[0].render {
+		t.Fatalf("jobs = %+v, want one size job", queued)
+	}
+
+	if got, want := queued[0].key, (pictureKey{src: composeAttachment, scope: r.v.t.repo.Host}); got != want || queued[0].host != r.v.t.repo.Host || r.v.t.repo.Host == "" {
+		t.Fatalf("job key %+v host %q, want %+v with the repository's host %q", got, queued[0].host, want, r.v.t.repo.Host)
+	}
+
+	jobs.add(queued[0])
+
+	if n := answerInfo(r.App, jobs, 5, 3, nil); n != 1 {
+		t.Fatalf("info jobs = %d, want 1", n)
+	}
+
+	id := r.v.preview.doc.layout(composePreviewW(r.width), r.icons).Images[0].ID
+
+	r.View()
+
+	if got := answerRender(t, r.App, jobs); !slices.Equal(got, []string{"SEQ"}) {
+		t.Fatalf("render answers = %q", got)
+	}
+
+	content := r.View().Content
+	rows := placeholders(content, id)
+
+	if len(rows) != 3 || rows[0].n != 5 {
+		t.Fatalf("placeholder rows = %+v, want 3 of 5 cells", rows)
+	}
+
+	lk := r.current()
+	lines, _, _, pics := r.composeBox(lk, min(maxComposeWidth, r.width-2), r.height-2)
+	bx, by := composeBoxOrigin(r, len(lines))
+
+	toggle := slices.IndexFunc(lines, func(l string) bool { return strings.Contains(ansi.Strip(l), "Write │ Preview") })
+	bottom := toggle + 1 + r.v.preview.rows
+
+	for i, p := range pics {
+		if p.Ground != lk.theme.UI.Panel {
+			t.Errorf("picture row %d ground = %s, want Panel", i, p.Ground)
+		}
+
+		if p.Y <= toggle || p.Y > bottom {
+			t.Errorf("picture row %d at box row %d, want inside the body box rows %d..%d", i, p.Y, toggle+1, bottom)
+		}
+
+		if got := rows[i]; got.x != bx+p.X || got.y != by+p.Y {
+			t.Errorf("placeholder row %d at (%d, %d), want (%d, %d)", i, got.x, got.y, bx+p.X, by+p.Y)
+		}
+	}
+
+	if len(pics) != 3 {
+		t.Fatalf("picture rows = %d, want 3", len(pics))
+	}
+
+	r.churn(t, press(r.App, keyCtrlP))
+
+	if got := placeholders(r.View().Content, id); len(got) != 0 {
+		t.Errorf("placeholders in Write mode: %+v", got)
+	}
+}
+
+func TestComposePreviewPictureKeepsTop(t *testing.T) {
+	r := newPreviewRig(t, 120, 40)
+	jobs := picturesOn(t, r.App)
+
+	r.setBody("intro\n\n![s](" + composeAttachment + ")\n\n" + listBody(60))
+	r.churn(t, press(r.App, keyCtrlP))
+	r.View()
+
+	plain := r.v.preview.doc.layout(composePreviewW(r.width), r.icons).Plain()
+	at := slices.IndexFunc(plain, func(l string) bool { return strings.Contains(l, "item 20") })
+
+	if at < 0 {
+		t.Fatalf("no item 20 in %q", plain)
+	}
+
+	r.v.preview.top = at
+
+	if n := answerInfo(r.App, jobs, 5, 3, nil); n != 1 {
+		t.Fatalf("info jobs = %d, want 1", n)
+	}
+
+	lay := r.v.preview.doc.layout(composePreviewW(r.width), r.icons)
+
+	if lay.Images[0].Rows != 3 {
+		t.Fatalf("image rows = %d, want 3", lay.Images[0].Rows)
+	}
+
+	if got := lay.Plain()[r.v.preview.top]; !strings.Contains(got, "item 20") {
+		t.Errorf("top line = %q after the picture arrived, want item 20", got)
+	}
+}
+
+func TestComposePreviewRelativeImage(t *testing.T) {
+	r := newPreviewRig(t, 120, 40)
+	jobs := picturesOn(t, r.App)
+
+	r.setBody("![altword](a.png)")
+	r.churn(t, press(r.App, keyCtrlP))
+	r.View()
+
+	if got := jobs.take(); len(got) != 0 {
+		t.Fatalf("jobs = %+v, want none", got)
+	}
+
+	lay := r.v.preview.doc.layout(composePreviewW(r.width), r.icons)
+	if len(lay.Images) != 1 || lay.Images[0].Rows != 0 {
+		t.Errorf("images = %+v, want one image line", lay.Images)
+	}
+
+	if !strings.Contains(r.text(), "altword") {
+		t.Errorf("the preview lost the image line:\n%s", r.text())
+	}
+}

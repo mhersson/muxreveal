@@ -25,13 +25,15 @@ type composeLine struct {
 	text  string
 	blank bool
 	cur   int
+	pics  []picRow // X is the cell in the line's content, Y is unset
 }
 
 // composeBox draws the compose box w cells wide with room for at most room
 // lines. When the box is too tall the body box shrinks to three rows, then the
 // blank rows go, then the hints. It returns the lines and the cursor's cell
-// within them, or -1 for both when no field shows one.
-func (a *App) composeBox(lk look, w, room int) (lines []string, curX, curY int) {
+// within them, or -1 for both when no field shows one. pics are the preview's
+// picture rows in the box's cells.
+func (a *App) composeBox(lk look, w, room int) (lines []string, curX, curY int, pics []picRow) {
 	ui, st := lk.theme.UI, lk.styles
 	v := a.compose
 
@@ -123,9 +125,16 @@ func (a *App) composeBox(lk look, w, room int) (lines []string, curX, curY int) 
 		if l.cur >= 0 {
 			curX, curY = l.cur, i+1
 		}
+
+		for _, p := range l.pics {
+			// The row puts the border and two cells before the content.
+			p.X += 3
+			p.Y = i + 1
+			pics = append(pics, p)
+		}
 	}
 
-	return append(out, bottom), curX, curY
+	return append(out, bottom), curX, curY, pics
 }
 
 func statusColor(v *composeView, ui theme.UI) theme.Hex {
@@ -173,12 +182,15 @@ func (a *App) composeBody(lk look, cw, rows int) (lines []composeLine) {
 
 	bw := max(inner-2, 0)
 
-	var body []string
+	var (
+		body []string
+		pics []picRow
+	)
 
 	r, c := -1, 0
 
 	if v.preview.on {
-		body = a.composePreviewRows(lk, bw, rows)
+		body, pics = a.composePreviewRows(lk, bw, rows)
 	} else {
 		body, r, c = v.body.View(bw, rows, text)
 	}
@@ -194,6 +206,14 @@ func (a *App) composeBody(lk look, cw, rows int) (lines []composeLine) {
 
 		if v.field == composeBody && i == r {
 			l.cur = 2 + c
+		}
+
+		for _, p := range pics {
+			if p.Y == i {
+				// The line puts the border and a space before the body.
+				p.X += 2
+				l.pics = append(l.pics, p)
+			}
 		}
 
 		lines = append(lines, l)
@@ -218,11 +238,12 @@ func composeBodyRowCount(v *composeView, room int) int {
 }
 
 // composePreviewRows paints the visible rows of the rendered body, w cells
-// each. It only reads; composePreviewSettle keeps the scroll fitted.
-func (a *App) composePreviewRows(lk look, w, rows int) []string {
+// each, and the picture rows among them at row Y of the result. It only reads;
+// composePreviewSettle keeps the scroll fitted.
+func (a *App) composePreviewRows(lk look, w, rows int) ([]string, []picRow) {
 	p := a.compose.preview
 	if p.doc == nil {
-		return nil
+		return nil, nil
 	}
 
 	lay := p.doc.layout(composePreviewW(a.width), a.icons)
@@ -230,11 +251,17 @@ func (a *App) composePreviewRows(lk look, w, rows int) []string {
 	paintr := newMDPainter(lk.theme, lk.theme.UI.Panel)
 	out := make([]string, 0, rows)
 
+	var pics []picRow
+
 	for i := top; i < min(top+rows, len(lay.Lines)); i++ {
 		out = append(out, paintr.line(lay.Lines[i], lay.Links, w))
+
+		if im, row, ok := pictureAt(lay, i); ok {
+			pics = append(pics, picRow{X: pictureCol(lay.Lines[i]), Y: i - top, ID: im.ID, Row: row, Cols: im.Cols, Ground: lk.theme.UI.Panel})
+		}
 	}
 
-	return out
+	return out, pics
 }
 
 // composeHints are the key hints that fit cw cells; preview says the body box
@@ -249,16 +276,16 @@ func composeHints(cw int, preview bool, st styles) string {
 }
 
 // overlayCompose draws the compose box over base, centred.
-func (a *App) overlayCompose(base string, lk look) string {
+func (a *App) overlayCompose(f *frameLayers, base string, lk look) string {
 	w := min(maxComposeWidth, a.width-2)
 	if w < 4 {
 		return base
 	}
 
-	lines, _, _ := a.composeBox(lk, w, a.height-2)
+	lines, _, _, pics := a.composeBox(lk, w, a.height-2)
 	top := max(1, (a.height-len(lines))/2)
 
-	return overlayLines(base, a.width, a.height, top, lines, w)
+	return overlayLines(f, base, a.width, a.height, top, lines, w, pics)
 }
 
 // composeCursor places the terminal's cursor in the field that has it.
@@ -270,7 +297,7 @@ func (a *App) composeCursor() *tea.Cursor {
 
 	lk := a.current()
 
-	lines, x, y := a.composeBox(lk, w, a.height-2)
+	lines, x, y, _ := a.composeBox(lk, w, a.height-2)
 	if x < 0 {
 		return nil
 	}

@@ -601,6 +601,7 @@ func (a *App) onReviewMD(msg reviewMDMsg) tea.Cmd {
 		v.mdFiles = map[string]*mdFile{}
 	}
 
+	msg.file.doc.withPictures(docPictures{reg: a.pictures, root: v.root})
 	v.mdFiles[msg.path] = msg.file
 	v.rebuild(v.rowsSplit)
 

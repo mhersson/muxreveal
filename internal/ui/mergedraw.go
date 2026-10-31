@@ -243,7 +243,7 @@ func hintLine(pairs [][2]string, cw int, st styles) string {
 
 // overlayMerge draws the merge box over base, centred with its top at a third of
 // the height.
-func (a *App) overlayMerge(base string, lk look) string {
+func (a *App) overlayMerge(f *frameLayers, base string, lk look) string {
 	w := min(maxMergeWidth, a.width-2)
 	if w < 4 {
 		return base
@@ -251,7 +251,7 @@ func (a *App) overlayMerge(base string, lk look) string {
 
 	top := max(1, a.height/3)
 
-	return overlayLines(base, a.width, a.height, top, a.mergeBox(lk, w, max(a.height-1-top, 0)), w)
+	return overlayLines(f, base, a.width, a.height, top, a.mergeBox(lk, w, max(a.height-1-top, 0)), w, nil)
 }
 
 // prReviewWords is a pull request's review in words, as the header writes it.

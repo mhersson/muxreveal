@@ -235,7 +235,7 @@ func TestPushConfirmNamesTheTarget(t *testing.T) {
 
 		t.Run(name, func(t *testing.T) {
 			blank := strings.TrimSuffix(strings.Repeat(strings.Repeat(" ", 70)+"\n", 16), "\n")
-			golden.RequireEqual(t, []byte(overlayConfirm(blank, 70, 16, *r.confirm, icons, r.styles)))
+			golden.RequireEqual(t, []byte(overlayConfirm(nil, blank, 70, 16, *r.confirm, icons, r.styles)))
 		})
 	}
 }
@@ -1094,7 +1094,7 @@ func TestPushConfirmFitsANarrowScreen(t *testing.T) {
 	for _, w := range []int{30, 12, 5} {
 		blank := strings.TrimSuffix(strings.Repeat(strings.Repeat(" ", w)+"\n", 16), "\n")
 
-		for y, line := range strings.Split(ansi.Strip(overlayConfirm(blank, w, 16, *r.confirm, true, r.styles)), "\n") {
+		for y, line := range strings.Split(ansi.Strip(overlayConfirm(nil, blank, w, 16, *r.confirm, true, r.styles)), "\n") {
 			if got := ansi.StringWidth(line); got > w {
 				t.Errorf("width %d row %d is %d cells, want at most %d", w, y, got, w)
 			}

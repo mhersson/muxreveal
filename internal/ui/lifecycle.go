@@ -637,14 +637,14 @@ func (a *App) closeFocused() tea.Cmd {
 // quit implements app.quit: open agents ask first.
 func (a *App) quit() tea.Cmd {
 	if !a.hasAgents() {
-		return tea.Quit
+		return a.pictures.quit(tea.Quit)
 	}
 
 	a.openConfirm(confirm{
 		action: "Quit",
 		prompt: "Quit MuxReveal?",
 		detail: "Agent panes are running and will stop.",
-		yes:    func(*App) tea.Cmd { return tea.Quit },
+		yes:    func(a *App) tea.Cmd { return a.pictures.quit(tea.Quit) },
 	})
 
 	return nil
@@ -748,9 +748,10 @@ func (a *App) renameTab() tea.Cmd {
 }
 
 // Close closes every pane, concurrently, and waits for closes already running.
-// ctx bounds the wait; when it ends first Close cancels the app context, and
-// exec's context watcher then SIGKILLs each remaining child's process group and
-// its terminal's foreground group, asynchronously after Close returns.
+// ctx bounds the wait, for the picture loader's workers too; when it ends first
+// Close cancels the app context, and exec's context watcher then SIGKILLs each
+// remaining child's process group and its terminal's foreground group,
+// asynchronously after Close returns.
 // It is safe to call twice, and only after the program stopped running Update.
 func (a *App) Close(ctx context.Context) error {
 	a.endSlide()
@@ -766,6 +767,7 @@ func (a *App) Close(ctx context.Context) error {
 	done := make(chan struct{})
 
 	go func() {
+		a.loader.close()
 		a.closing.Wait()
 		close(done)
 	}()
