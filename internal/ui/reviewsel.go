@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"unicode/utf8"
 
@@ -111,68 +112,43 @@ func diffUnits(s string) []diffUnit {
 	return units
 }
 
-// diffPieces are the pieces of a diff line's code cells from cell 0, as
-// lineShown and the drawing's cut make them. tagCR says the line shows its CR
-// as an ending tag. A cut line's ellipsis cell holds the rest of the line, so
-// a selection that reaches it copies the line whole.
-func diffPieces(raw string, tagCR bool, width int) []md.Piece {
+// diffPartPieces are the pieces of row part of a diff line wrapped at width,
+// from cell 0 of the code column, with the same parts the rows and the drawing
+// use. tagCR says the line shows its CR as an ending tag. The cut's ellipsis
+// holds the rest of the line, so a selection that reaches it copies the line
+// whole. A line without such a row gives none.
+func diffPartPieces(raw string, tagCR bool, width, part int) []md.Piece {
 	if width <= 0 {
+		return nil
+	}
+
+	parts := lineParts(raw, tagCR, width)
+	if part < 0 || part >= len(parts) {
 		return nil
 	}
 
 	line := strings.TrimSuffix(raw, "\r")
 	units := lineUnits(raw, tagCR)
+	pt := parts[part]
 
-	total := 0
-	for _, u := range units {
-		total += u.cells
-	}
-
-	var ellipsis *md.Piece
-
-	if total > width {
-		limit := width
-		if width > 1 {
-			limit = width - 1
-		}
-
-		n, cum := 0, 0
-		for n < len(units) && cum+units[n].cells <= limit {
-			cum += units[n].cells
-			n++
-		}
-
-		if width > 1 && n < len(units) {
-			u := units[n]
-			rest := copyText(line[min(u.raw, len(line)):])
-
-			if tagCR {
-				rest += endingTag
-			}
-
-			// The drawing cuts at width-1 cells, so a tab or tag that straddles the
-			// cut shows its leading cells before the ellipsis; a character that
-			// does not fit is dropped and the ellipsis follows the cells before it.
-			end := cum
-			if u.whole && limit > cum {
-				end = limit
-			}
-
-			ellipsis = &md.Piece{Col: cum, Cells: end - cum + 1, Text: rest, Whole: true}
-		}
-
-		units = units[:n]
-	}
+	// The ellipsis copies the ending tag with the rest, so the tag's own piece is empty.
+	cut := slices.ContainsFunc(units, func(u diffUnit) bool { return u.tail && u.text == "" })
 
 	var out []md.Piece
 
 	col := 0
 
-	for _, u := range units {
+	for _, u := range units[pt.u0:pt.u1] {
 		switch {
-		case u.whole && u.text == "":
-			// The budget's ellipsis, which holds the rest of the line.
-			out = append(out, md.Piece{Col: col, Cells: u.cells, Text: copyText(line[u.raw:]), Whole: true})
+		case u.tail && u.text == "":
+			rest := copyText(line[min(u.raw, len(line)):])
+			if tagCR {
+				rest += endingTag
+			}
+
+			out = append(out, md.Piece{Col: col, Cells: u.cells, Text: rest, Whole: true})
+		case u.tail && cut:
+			out = append(out, md.Piece{Col: col, Cells: u.cells, Whole: true})
 		case u.whole:
 			out = append(out, md.Piece{Col: col, Cells: u.cells, Text: u.text, Whole: true})
 		case len(out) > 0 && !out[len(out)-1].Whole && out[len(out)-1].Col+out[len(out)-1].Cells == col:
@@ -186,11 +162,23 @@ func diffPieces(raw string, tagCR bool, width int) []md.Piece {
 		col += u.cells
 	}
 
-	if ellipsis != nil {
-		out = append(out, *ellipsis)
+	return out
+}
+
+// codePieces is the copy text of row r's code on a side drawn at wrap cells:
+// the pieces of its part, shifted to the code's first cell.
+func codePieces(raw string, tagCR bool, wrap, part, at int) md.LineText {
+	ps := diffPartPieces(raw, tagCR, wrap, part)
+	if ps == nil {
+		return md.LineText{Skip: part > 0}
 	}
 
-	return out
+	lt := md.LineText{Pieces: shiftPieces(ps, at)}
+	if part > 0 {
+		lt.Join = md.JoinTight
+	}
+
+	return lt
 }
 
 // shiftPieces moves pieces right by n cells.
@@ -247,7 +235,7 @@ func (v *reviewView) rowText(lay drawerLayout, i, side int) md.LineText {
 		shown, _ := shownLine(l.Text)
 		tag := lineShown(l.Text, other, p >= 0) != shown
 
-		return md.LineText{Pieces: shiftPieces(diffPieces(l.Text, tag, lay.unifiedCode(2)), markW+2*lay.gw+diffview.SignWidth)}
+		return codePieces(l.Text, tag, v.wrapAt(v.wrapW.line, lay.unifiedCode(2)), r.part, markW+2*lay.gw+diffview.SignWidth)
 	case rowPair:
 		left, right := pairSides(f.Hunks[r.hunk], r)
 
@@ -271,15 +259,30 @@ func (v *reviewView) rowText(lay drawerLayout, i, side int) md.LineText {
 
 		tag := lineShown(ls[idx].Text, o, paired) != shown
 		col, width := lay.splitCodeAt(side)
+		wrap := v.wrapW.left
 
-		return md.LineText{Pieces: shiftPieces(diffPieces(ls[idx].Text, tag, width), col)}
+		if side != 0 {
+			wrap = v.wrapW.right
+		}
+
+		return codePieces(ls[idx].Text, tag, v.wrapAt(wrap, width), r.part, col)
 	case rowFull, rowGhost:
-		return md.LineText{Pieces: shiftPieces(diffPieces(r.text, false, lay.unifiedCode(1)), markW+lay.gw+diffview.SignWidth)}
+		return codePieces(r.text, false, v.wrapAt(v.wrapW.full, lay.unifiedCode(1)), r.part, markW+lay.gw+diffview.SignWidth)
 	case rowMD:
 		return v.mdRowText(r, f)
 	}
 
 	return skip
+}
+
+// wrapAt is the width the rows wrap a code column at: the one they were built
+// with, or the column's own before the first layout.
+func (v *reviewView) wrapAt(built, column int) int {
+	if built > 0 {
+		return built
+	}
+
+	return column
 }
 
 // mdRowText is what a rendered file's line copies. A picture's Once is made

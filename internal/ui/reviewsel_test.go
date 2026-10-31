@@ -513,49 +513,60 @@ func TestPageSelectionCleared(t *testing.T) {
 	})
 }
 
-func TestDiffPieces(t *testing.T) {
+func TestDiffPartPieces(t *testing.T) {
 	t.Parallel()
 
 	thirty := "0123456789abcdefghijklmnopqrst"
 	long := strings.Repeat("x", 1100)
+	seventy := strings.Repeat("0123456789", 7)
+	big := strings.Repeat("y", 1500)
 
 	tests := []struct {
 		name  string
 		raw   string
 		tagCR bool
 		width int
+		part  int
 		want  []md.Piece
 	}{
-		{"plain", "abc", false, 10, []md.Piece{{Col: 0, Cells: 3, Text: "abc"}}},
-		{"tab", "\tx", false, 10, []md.Piece{{Col: 0, Cells: 4, Text: "\t", Whole: true}, {Col: 4, Cells: 1, Text: "x"}}},
-		{"tab stop", "ab\tx", false, 10, []md.Piece{{Col: 0, Cells: 2, Text: "ab"}, {Col: 2, Cells: 2, Text: "\t", Whole: true}, {Col: 4, Cells: 1, Text: "x"}}},
-		{"hidden character", "a\u200bb", false, 20, []md.Piece{
+		{"plain", "abc", false, 10, 0, []md.Piece{{Col: 0, Cells: 3, Text: "abc"}}},
+		{"no such part", "abc", false, 10, 1, nil},
+		{"no width", "abc", false, 0, 0, nil},
+		{"tab", "\tx", false, 10, 0, []md.Piece{{Col: 0, Cells: 4, Text: "\t", Whole: true}, {Col: 4, Cells: 1, Text: "x"}}},
+		{"tab stop", "ab\tx", false, 10, 0, []md.Piece{{Col: 0, Cells: 2, Text: "ab"}, {Col: 2, Cells: 2, Text: "\t", Whole: true}, {Col: 4, Cells: 1, Text: "x"}}},
+		{"hidden character", "a\u200bb", false, 20, 0, []md.Piece{
 			{Col: 0, Cells: 1, Text: "a"}, {Col: 1, Cells: 8, Text: "⟨U+200B⟩", Whole: true}, {Col: 9, Cells: 1, Text: "b"},
 		}},
-		{"cut by the width", thirty, false, 10, []md.Piece{
-			{Col: 0, Cells: 9, Text: thirty[:9]}, {Col: 9, Cells: 1, Text: thirty[9:], Whole: true},
-		}},
-		{"cut by the line budget", long, false, 2000, []md.Piece{
+		{"first of three", seventy, false, 30, 0, []md.Piece{{Col: 0, Cells: 30, Text: seventy[:30]}}},
+		{"second of three", seventy, false, 30, 1, []md.Piece{{Col: 0, Cells: 30, Text: seventy[30:60]}}},
+		{"third of three", seventy, false, 30, 2, []md.Piece{{Col: 0, Cells: 10, Text: seventy[60:]}}},
+		{"fourth of three", seventy, false, 30, 3, nil},
+		{"wide characters", "日本語", false, 10, 0, []md.Piece{{Col: 0, Cells: 6, Text: "日本語"}}},
+		{"wide character moves down", "a日本", false, 4, 1, []md.Piece{{Col: 0, Cells: 2, Text: "本"}}},
+		{"tab kept whole in the next part", "abcd\tx", false, 6, 1, []md.Piece{{Col: 0, Cells: 4, Text: "\t", Whole: true}, {Col: 4, Cells: 1, Text: "x"}}},
+		{"text before a tab stays behind", "abcd\tx", false, 6, 0, []md.Piece{{Col: 0, Cells: 4, Text: "abcd"}}},
+		{"ending tag", "ab", true, 20, 0, []md.Piece{{Col: 0, Cells: 2, Text: "ab"}, {Col: 2, Cells: 8, Text: "⟨U+000D⟩", Whole: true}}},
+		{"ending tag on the last part only", thirty, true, 30, 0, []md.Piece{{Col: 0, Cells: 30, Text: thirty}}},
+		{"ending tag alone", thirty, true, 30, 1, []md.Piece{{Col: 0, Cells: 8, Text: "⟨U+000D⟩", Whole: true}}},
+		{"cut by the line budget", long, false, 2000, 0, []md.Piece{
 			{Col: 0, Cells: lineBudget, Text: long[:lineBudget]}, {Col: lineBudget, Cells: 1, Text: long[lineBudget:], Whole: true},
 		}},
-		{"ending tag", "ab", true, 20, []md.Piece{{Col: 0, Cells: 2, Text: "ab"}, {Col: 2, Cells: 8, Text: "⟨U+000D⟩", Whole: true}}},
-		{"ending tag cut off", "ab", true, 5, []md.Piece{{Col: 0, Cells: 2, Text: "ab"}, {Col: 2, Cells: 3, Text: "⟨U+000D⟩", Whole: true}}},
-		{"wide characters", "日本語", false, 10, []md.Piece{{Col: 0, Cells: 6, Text: "日本語"}}},
-		{"wide character cut", "日本語", false, 5, []md.Piece{{Col: 0, Cells: 4, Text: "日本"}, {Col: 4, Cells: 1, Text: "語", Whole: true}}},
-		{"wide character at the cut", "a日本", false, 4, []md.Piece{{Col: 0, Cells: 3, Text: "a日"}, {Col: 3, Cells: 1, Text: "本", Whole: true}}},
-		{"tag at the cut", "ab\u200bcd", false, 5, []md.Piece{{Col: 0, Cells: 2, Text: "ab"}, {Col: 2, Cells: 3, Text: "⟨U+200B⟩cd", Whole: true}}},
-		{"tab at the cut", "ab\tx", false, 4, []md.Piece{{Col: 0, Cells: 2, Text: "ab"}, {Col: 2, Cells: 2, Text: "\tx", Whole: true}}},
-		{"wide character dropped after a tag", "a\u200b日", false, 10, []md.Piece{{Col: 0, Cells: 1, Text: "a"}, {Col: 1, Cells: 8, Text: "⟨U+200B⟩", Whole: true}, {Col: 9, Cells: 1, Text: "日", Whole: true}}},
-		{"wide character dropped after a tab", "\t日", false, 5, []md.Piece{{Col: 0, Cells: 4, Text: "\t", Whole: true}, {Col: 4, Cells: 1, Text: "日", Whole: true}}},
-		{"tab in the rest", "abcdefgh\ti", false, 5, []md.Piece{{Col: 0, Cells: 4, Text: "abcd"}, {Col: 4, Cells: 1, Text: "efgh\ti", Whole: true}}},
+		{"the cut ends the last part", big, false, 1000, 1, []md.Piece{
+			{Col: 0, Cells: 24, Text: big[1000:1024]}, {Col: 24, Cells: 1, Text: big[1024:], Whole: true},
+		}},
+		{"the cut and the ending tag", big, true, 1100, 0, []md.Piece{
+			{Col: 0, Cells: lineBudget, Text: big[:lineBudget]},
+			{Col: lineBudget, Cells: 1, Text: big[lineBudget:] + endingTag, Whole: true},
+			{Col: lineBudget + 1, Cells: 8, Whole: true},
+		}},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			if got := diffPieces(tt.raw, tt.tagCR, tt.width); !slices.Equal(got, tt.want) {
-				t.Errorf("diffPieces = %+v, want %+v", got, tt.want)
+			if got := diffPartPieces(tt.raw, tt.tagCR, tt.width, tt.part); !slices.Equal(got, tt.want) {
+				t.Errorf("diffPartPieces = %+v, want %+v", got, tt.want)
 			}
 		})
 	}
@@ -1028,8 +1039,8 @@ func TestDiffCopyKey(t *testing.T) {
 func TestDiffPiecesCopyEdges(t *testing.T) {
 	t.Parallel()
 
-	wide := diffPieces("日本", false, 10)
-	tagged := diffPieces("a\u200bb", false, 20)
+	wide := diffPartPieces("日本", false, 10, 0)
+	tagged := diffPartPieces("a\u200bb", false, 20, 0)
 
 	tests := []struct {
 		name      string
@@ -1682,5 +1693,198 @@ func TestDiffSelectionUnderPage(t *testing.T) {
 
 	if got := clipboardWrites(clip); slices.Contains(got, "edited 3") {
 		t.Errorf("leader y copied the hidden diff text %q", got)
+	}
+}
+
+// counted is n characters of 4-digit counters, so a copy shows which cells it took.
+func counted(n int) string {
+	var b strings.Builder
+
+	for i := 0; b.Len() < n; i++ {
+		fmt.Fprintf(&b, "%04d", i)
+	}
+
+	return b.String()[:n]
+}
+
+// wrapRepo is a file with the line add inserted after its second line, and
+// the line del, when set, replaced by it.
+func wrapRepo(t *testing.T, add string) string {
+	t.Helper()
+
+	dir := newRepoDir(t)
+
+	write(t, filepath.Join(dir, "f.txt"), "alpha\nbravo\ncharlie\ndelta\n")
+	commitEverything(t, dir, "init")
+	write(t, filepath.Join(dir, "f.txt"), "alpha\nbravo\n"+add+"\ncharlie\ndelta\n")
+
+	return dir
+}
+
+// newWrapSel is a unified diff rig on wrapRepo and the row of the line's first part.
+func newWrapSel(t *testing.T, line string) (*diffSel, int) {
+	t.Helper()
+
+	dir := wrapRepo(t, line)
+	r := newKeysRig(t, dir)
+	clip := fakeClip(r.App)
+	v := r.opened(t)
+
+	if r.layout(t).split {
+		t.Fatal("setup: the diff is drawn side by side")
+	}
+
+	d := &diffSel{drawerRig: r, v: v, clip: clip, dir: dir, root: rootOf(t, dir)}
+	row := rowWith(t, v, line[:8])
+
+	if v.wrapW.line <= 0 || v.wrapW.line*2 >= len(line) {
+		t.Fatalf("setup: the %d-character line does not take three rows at %d cells", len(line), v.wrapW.line)
+	}
+
+	return d, row
+}
+
+func TestWrappedLineCopiesAsOneLine(t *testing.T) {
+	t.Parallel()
+
+	line := counted(600)
+	d, row := newWrapSel(t, line)
+	w := d.v.wrapW.line
+
+	d.dragRows(t, row, d.code(t, row)+4, row+2, d.code(t, row+2)+2)
+
+	if got, want := primaryWrites(d.clip), []string{line[4 : 2*w+3]}; !slices.Equal(got, want) {
+		t.Errorf("primary writes %q, want %q", got, want)
+	}
+
+	d.clip.calls = nil
+	next := rowWith(t, d.v, "charlie")
+	d.dragRows(t, row, d.code(t, row)+4, next, d.code(t, next)+2)
+
+	if got, want := primaryWrites(d.clip), []string{line[4:] + "\ncha"}; !slices.Equal(got, want) {
+		t.Errorf("a drag on to the next line wrote %q, want %q", got, want)
+	}
+}
+
+func TestWrappedTripleClickTakesLine(t *testing.T) {
+	t.Parallel()
+
+	line := counted(600)
+	d, row := newWrapSel(t, line)
+	x, y := rowCell(t, d.drawerRig, row+1, d.code(t, row+1)+3)
+
+	for range 3 {
+		clickRun(d.App, x, y)
+	}
+
+	got := primaryWrites(d.clip)
+	if len(got) == 0 || got[len(got)-1] != line {
+		t.Errorf("a triple-click on the second row wrote %q, want the line", got)
+	}
+}
+
+func TestWrappedYCopiesLine(t *testing.T) {
+	t.Parallel()
+
+	line := counted(600)
+	d, row := newWrapSel(t, line)
+	d.v.cursor = row
+	d.drawerTake()
+	run(d.App, press(d.App, keyRune('y')))
+
+	if got := clipboardWrites(d.clip); !slices.Equal(got, []string{line}) {
+		t.Errorf("y wrote %q, want the line", got)
+	}
+}
+
+func TestWrappedDoubleClick(t *testing.T) {
+	t.Parallel()
+
+	line := "head " + strings.Repeat("b", 595)
+	d, row := newWrapSel(t, line)
+	w := d.v.wrapW.line
+	x, y := rowCell(t, d.drawerRig, row+1, d.code(t, row+1)+3)
+
+	clickRun(d.App, x, y)
+	clickRun(d.App, x, y)
+
+	got := primaryWrites(d.clip)
+	if want := strings.Repeat("b", w); len(got) == 0 || got[len(got)-1] != want {
+		t.Errorf("a double-click on the second row wrote %q, want its %d cells", got, w)
+	}
+}
+
+func TestWrappedSplitCopy(t *testing.T) {
+	t.Parallel()
+
+	dir := newRepoDir(t)
+	long := counted(100)
+
+	write(t, filepath.Join(dir, "f.txt"), "alpha\nold one\ncharlie\n")
+	commitEverything(t, dir, "init")
+	write(t, filepath.Join(dir, "f.txt"), "alpha\n"+long+"\ncharlie\n")
+
+	d := newSplitSel(t, dir)
+	row := rowWith(t, d.v, "old one")
+	l, _, r := d.splitCols(t)
+
+	if d.v.wrapW.left <= 0 || d.v.rows[row+2].line != d.v.rows[row].line || d.v.rows[row+3].line == d.v.rows[row].line {
+		t.Fatalf("setup: the pair does not take three rows (wrap %+v)", d.v.wrapW)
+	}
+
+	d.dragRows(t, row, r, row+2, r+d.v.wrapW.right-1)
+
+	if got, want := primaryWrites(d.clip), []string{long}; !slices.Equal(got, want) {
+		t.Errorf("a drag on the right side wrote %q, want %q", got, want)
+	}
+
+	d.clip.calls = nil
+	d.dragRows(t, row, l, row+2, l+3)
+
+	if got := primaryWrites(d.clip); !slices.Equal(got, []string{"old one"}) {
+		t.Errorf("a drag on the left side wrote %q, want the left line alone", got)
+	}
+}
+
+// Not parallel: the drawer highlights code, which takes the highlighter's time.
+func TestWrappedSelectionPaint(t *testing.T) {
+	line := counted(600)
+	d, row := newWrapSel(t, line)
+	w := d.v.wrapW.line
+
+	d.dragRows(t, row, d.code(t, row)+4, row+2, d.code(t, row+2)+2)
+
+	lay := d.layout(t)
+	lines := d.drawerLines(d.store.State(), mustRect(t, d.drawerRig))
+	sel := d.current().theme.UI.Selection
+	off := 1
+	top := d.v.viewTop(lay.diffH)
+
+	if lay.treeW > 0 {
+		off += lay.treeW + 1
+	}
+
+	on := func(r, col int) bool { return bgIs(cellBg(lines[1+lay.headH+r-top], off+col), sel) }
+	code := d.code(t, row)
+
+	for _, c := range []struct {
+		name     string
+		row, col int
+		want     bool
+	}{
+		{"before the start", row, code + 3, false},
+		{"the start", row, code + 4, true},
+		{"the end of the first row", row, code + w - 1, true},
+		{"the start of the middle row", row + 1, code, true},
+		{"the end of the middle row", row + 1, code + w - 1, true},
+		{"the end", row + 2, code + 2, true},
+		{"after the end", row + 2, code + 3, false},
+		{"the wrap mark", row + 1, code - diffview.SignWidth, false},
+		{"the second number", row + 1, code - diffview.SignWidth - 1, false},
+		{"the first number", row + 1, markW + 1, false},
+	} {
+		if got := on(c.row, c.col); got != c.want {
+			t.Errorf("%s: on the selection ground = %v, want %v", c.name, got, c.want)
+		}
 	}
 }
