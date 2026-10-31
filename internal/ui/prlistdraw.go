@@ -12,10 +12,10 @@ import (
 	"github.com/mhersson/muxreveal/internal/ui/theme"
 )
 
-// prListWidth is the list's width: the body less 40 cells, at least 60 where
-// the body allows it.
+// prListWidth is the list's width: the conversation box's (planBox), so the
+// list does not show beside a conversation opened over it.
 func prListWidth(width int) int {
-	return min(max(width-40, min(60, width-4)), width)
+	return min(planMaxBox, width-4)
 }
 
 // prListReview is the review column of a row: its words and colour.

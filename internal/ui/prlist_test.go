@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -617,6 +618,42 @@ func TestPRListOnASmallTerminal(t *testing.T) {
 				t.Errorf("%dx%d: line %d is %d cells wide", size[0], size[1], i, w)
 			}
 		}
+	}
+}
+
+// TestPRListMatchesTheConversation checks the list's box takes the
+// conversation's columns, so the list does not show beside a conversation.
+func TestPRListMatchesTheConversation(t *testing.T) {
+	t.Parallel()
+
+	for _, c := range []struct{ width, want int }{{270, 110}, {200, 110}, {120, 110}, {80, 76}} {
+		t.Run(strconv.Itoa(c.width), func(t *testing.T) {
+			t.Parallel()
+
+			const height = 40
+
+			a := listApp(t, false, c.width, height, listAgents())
+			press(a, keyLeader, keyRune('g'), keyRune('l'))
+
+			top := ansi.Strip(strings.Split(a.View().Content, "\n")[height/4])
+			start := strings.Index(top, "╭─ Pull requests ")
+			end := strings.LastIndex(top, "╮")
+
+			if start < 0 || end < start {
+				t.Fatalf("no list top border in %q", top)
+			}
+
+			x, w := ansi.StringWidth(top[:start]), ansi.StringWidth(top[start:end])+1
+			bx, _, bw, _, ok := planBox(c.width, height)
+
+			if !ok {
+				t.Fatalf("no conversation box at %d columns", c.width)
+			}
+
+			if w != c.want || x != bx || w != bw {
+				t.Errorf("list at column %d, %d wide; want column %d, %d wide as the conversation", x, w, bx, c.want)
+			}
+		})
 	}
 }
 
