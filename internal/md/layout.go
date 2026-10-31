@@ -52,6 +52,7 @@ const (
 	RoleFoldHint
 	RoleImage
 	RoleImageHost
+	RolePicture
 	RoleTableFrame
 	RoleTableHeader
 	RoleFootnoteRef
@@ -77,6 +78,17 @@ type LayoutOptions struct {
 	Open      map[int]bool // by Fold.ID; a present key overrides the fold's default
 	Icons     bool
 	Highlight Highlighter
+	// Picture sizes the picture an image shows, given its source and the cells
+	// its line has; nil, or a size with no cells, leaves an image line.
+	Picture func(src string, maxCols int) PictureSize
+}
+
+// PictureSize is what Picture answers: a picture when Cols and Rows are both
+// above zero, else an image line, with a loading note when Loading.
+type PictureSize struct {
+	Cols, Rows int
+	ID         uint32 // the caller's, copied into Image.ID
+	Loading    bool
 }
 
 // Layout is a document laid out for one width.
@@ -109,11 +121,14 @@ type Run struct {
 // Link is a link target the UI may emit as OSC 8: always http, https or mailto.
 type Link struct{ URL string }
 
-// Image is an image reference on a layout line.
+// Image is an image reference on a layout line. For a picture, Line is its
+// first row and Rows, Cols and ID are set; an image line leaves them zero.
 type Image struct {
-	Line     int
-	Alt, Src string
-	Link     int
+	Line       int
+	Alt, Src   string
+	Link       int
+	Rows, Cols int
+	ID         uint32
 }
 
 // Fold is a foldable block.
@@ -122,11 +137,16 @@ type Fold struct {
 	Open     bool // the state laid out, after LayoutOptions.Open
 }
 
-// Plain returns each line's text, for search and copy.
+// Plain returns each line's text, for search and copy; a picture row gives an
+// empty string.
 func (l Layout) Plain() []string {
 	out := make([]string, len(l.Lines))
 
 	for i, line := range l.Lines {
+		if slices.ContainsFunc(line, func(r Run) bool { return r.Role == RolePicture }) {
+			continue
+		}
+
 		var b strings.Builder
 		for _, r := range line {
 			b.WriteString(r.Text)
@@ -145,6 +165,7 @@ type layouter struct {
 	open      map[int]bool
 	icons     bool
 	highlight Highlighter
+	picture   func(src string, maxCols int) PictureSize
 	foldKey   string
 	out       Layout
 }
@@ -173,7 +194,7 @@ type frag struct {
 
 // Layout wraps the document to o.Width cells (at most 100, at least 1).
 func (d *Doc) Layout(o LayoutOptions) Layout {
-	l := &layouter{d: d, width: min(max(o.Width, 1), maxWidth), open: o.Open, icons: o.Icons, highlight: o.Highlight, foldKey: "enter"}
+	l := &layouter{d: d, width: min(max(o.Width, 1), maxWidth), open: o.Open, icons: o.Icons, highlight: o.Highlight, picture: o.Picture, foldKey: "enter"}
 	if o.FoldKey != nil {
 		l.foldKey = *o.FoldKey
 	}
@@ -318,12 +339,44 @@ func (l *layouter) flow(out *frag, segs []seg, width, lead int) {
 
 		start = afterImageBreak(segs, i+1)
 
-		out.images = append(out.images, Image{Line: len(out.lines), Alt: sg.img.alt, Src: sg.img.src, Link: sg.st.link})
-		out.lines = append(out.lines, fit(l.imageLine(sg), max(width-lead, 1)))
+		l.image(out, sg, max(width-lead, 1))
+
 		lead = 0
 	}
 
 	out.lines = append(out.lines, wrapLead(segs[start:], width, lead)...)
+}
+
+// image appends the rows of one image: a picture when l.picture sizes one, else
+// the image line, with a loading note when asked, fit to cols cells.
+func (l *layouter) image(out *frag, sg seg, cols int) {
+	im := Image{Line: len(out.lines), Alt: sg.img.alt, Src: sg.img.src, Link: sg.st.link}
+
+	var size PictureSize
+	if l.picture != nil && sg.img.src != "" {
+		size = l.picture(sg.img.src, cols)
+	}
+
+	if size.Cols > 0 && size.Rows > 0 {
+		im.Rows, im.Cols, im.ID = size.Rows, min(size.Cols, cols), size.ID
+
+		st := styled(RolePicture)
+		st.link = sg.st.link
+		row := Line{st.run(strings.Repeat(" ", im.Cols))}
+
+		for range size.Rows {
+			out.lines = append(out.lines, slices.Clone(row))
+		}
+	} else {
+		line := l.imageLine(sg)
+		if size.Loading {
+			line = append(line, styled(RoleImageHost).run("  loading…"))
+		}
+
+		out.lines = append(out.lines, fit(line, cols))
+	}
+
+	out.images = append(out.images, im)
 }
 
 // afterImageBreak returns where the text after an image starts: past the first

@@ -42,6 +42,7 @@ var roleNames = [...]string{
 	RoleFoldHint:       "FoldHint",
 	RoleImage:          "Image",
 	RoleImageHost:      "ImageHost",
+	RolePicture:        "Picture",
 	RoleTableFrame:     "TableFrame",
 	RoleTableHeader:    "TableHeader",
 	RoleFootnoteRef:    "FootnoteRef",
