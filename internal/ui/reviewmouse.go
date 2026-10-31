@@ -26,7 +26,7 @@ func (a *App) drawerClick(x, y int) {
 	defer a.drawerTake()
 
 	r, shown := a.drawerRect(st)
-	box, _ := a.drawerFull(st)
+	box, _ := a.drawerBox(st)
 	v := a.drawer.views[st.Tab().ID]
 
 	if !shown || v == nil {

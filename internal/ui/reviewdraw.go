@@ -463,7 +463,7 @@ func dropCovered(rows []picRow, boxes []image.Rectangle) []picRow {
 // drawCtxFor is what drawing the active tab's drawer needs, and the name of the
 // theme it draws in; ok is false with no drawer to draw.
 func (a *App) drawCtxFor(st core.State) (d *drawCtx, name string, ok bool) {
-	box, ok := a.drawerFull(st)
+	box, ok := a.drawerBox(st)
 	if !ok {
 		return nil, "", false
 	}

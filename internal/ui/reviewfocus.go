@@ -47,8 +47,30 @@ func (a *App) drawerRelease() {
 
 // unzoom takes every drawer back to its half.
 func (a *App) unzoom() {
-	for _, v := range a.drawer.views {
+	st := a.store.State()
+	active := st.Tab().ID
+
+	for id, v := range a.drawer.views {
+		if !v.zoom {
+			continue
+		}
+
+		// Only the active tab's drawer shows. A slide running ends at once and the
+		// drawer takes its width with no slide; a closing one keeps its width.
+		full, shown := a.drawerFull(st)
+		slide := id == active && shown && !a.drawer.closing
+
+		if slide && !a.drawer.slideFrom.IsZero() {
+			a.endSlide()
+
+			slide = false
+		}
+
 		v.zoom = false
+
+		if slide {
+			a.startResize(full.W)
+		}
 	}
 }
 
@@ -60,6 +82,12 @@ func (a *App) reviewZoom() tea.Cmd {
 		return nil
 	}
 
+	// A slide running ends at once, and the flip takes the new width with no slide.
+	from := 0
+	if full, shown := a.drawerFull(a.store.State()); shown && a.drawer.slideFrom.IsZero() {
+		from = full.W
+	}
+
 	a.endSlide()
 	a.clearDrawerSel(tab.ID)
 
@@ -69,7 +97,13 @@ func (a *App) reviewZoom() tea.Cmd {
 		a.drawerTake()
 	}
 
-	return nil
+	a.startResize(from)
+
+	if a.drawer.resizeFrom == 0 {
+		return nil
+	}
+
+	return a.slideFrameCmd()
 }
 
 // releaseKeys takes the keyboard from the drawer and closes its search prompt
@@ -171,6 +205,17 @@ func (a *App) startSlide(closing bool) tea.Cmd {
 	return a.slideFrameCmd()
 }
 
+// startResize begins a width slide from from columns to the drawer's width. It
+// does nothing with no drawer showing or no change of width.
+func (a *App) startResize(from int) {
+	full, shown := a.drawerFull(a.store.State())
+	if !shown || from <= 0 || from == full.W {
+		return
+	}
+
+	a.drawer.slideFrom, a.drawer.closing, a.drawer.resizeFrom = a.clock.Now(), false, from
+}
+
 // slideFrameCmd asks for the next frame unless one is already on its way; the
 // one outstanding tick is the slide's only owner.
 func (a *App) slideFrameCmd() tea.Cmd {
@@ -205,7 +250,7 @@ func (a *App) onDrawerSlide() tea.Cmd {
 // change it ends the slide first.
 func (a *App) endSlide() {
 	closing := a.drawer.closing
-	a.drawer.slideFrom, a.drawer.closing = time.Time{}, false
+	a.drawer.slideFrom, a.drawer.closing, a.drawer.resizeFrom = time.Time{}, false, 0
 
 	if closing && a.store.State().Tab().Review != nil {
 		// dispatch logs its own failures.

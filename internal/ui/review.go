@@ -154,6 +154,7 @@ type drawerState struct {
 	focused, tree bool // the drawer has the keyboard; within it, the tree has
 	slideFrom     time.Time
 	closing       bool
+	resizeFrom    int // the width a zoom or un-zoom slide started from; 0 for an open or close slide
 	views         map[core.TabID]*reviewView
 	list          *wtList      // the open worktree list, over the active tab's drawer
 	listGen       int          // names the list wanted; an answer for another is stale
@@ -462,12 +463,37 @@ func (a *App) drawerHalf(st core.State) (core.Rect, bool) {
 	return core.Rect{X: body.X + body.W - w, Y: body.Y, W: w, H: body.H}, true
 }
 
+// drawerBox is the box the drawer is laid out at: drawerFull, except during a
+// width slide, where it is the wider of the two widths, so the slide lays the
+// drawer out once and shows its left part.
+func (a *App) drawerBox(st core.State) (core.Rect, bool) {
+	box, ok := a.drawerFull(st)
+	if !ok {
+		return core.Rect{}, false
+	}
+
+	if from := a.drawer.resizeFrom; from > box.W {
+		box.X += box.W - from
+		box.W = from
+	}
+
+	return box, true
+}
+
 // drawerRect is the part of the drawer on screen: all of it when it has slid
 // in, and less while it slides, from the right edge.
 func (a *App) drawerRect(st core.State) (core.Rect, bool) {
 	full, ok := a.drawerFull(st)
 	if !ok {
 		return core.Rect{}, false
+	}
+
+	if from := a.drawer.resizeFrom; from > 0 {
+		shown := int(math.Round(float64(from) + float64(full.W-from)*a.slideEase()))
+		full.X += full.W - shown
+		full.W = shown
+
+		return full, true
 	}
 
 	frac := a.slideEase()

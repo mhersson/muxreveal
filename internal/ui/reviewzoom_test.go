@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/charmbracelet/x/ansi"
 
@@ -65,6 +66,8 @@ func TestReviewZoom(t *testing.T) {
 			t.Errorf("pane %s at %v is not covered by the zoomed drawer", id, rect)
 		}
 	}
+
+	r.finishSlide()
 
 	top := strings.SplitN(r.drawn(t), "\n", 2)[0]
 	tag := " " + iconZoom + " zoom "
@@ -558,4 +561,332 @@ func TestReviewZoomRemap(t *testing.T) {
 	if !r.zoomed() {
 		t.Error("Z did not zoom")
 	}
+}
+
+// slideLines is the drawer's lines as text for r, the cells of the slid rect.
+func (r *drawerRig) slideLines(r2 core.Rect) []string {
+	lines := r.drawerLines(r.store.State(), r2)
+	out := make([]string, len(lines))
+
+	for i, l := range lines {
+		out[i] = ansi.Strip(l)
+	}
+
+	return out
+}
+
+// slideFrames delivers the slide's frames one at a time, 15 ms apart, calling
+// each with the rect the drawer is drawn at, until the slide ends.
+func (r *drawerRig) slideFrames(t *testing.T, each func(rect core.Rect)) {
+	t.Helper()
+
+	for range 20 {
+		if r.drawer.slideFrom.IsZero() {
+			return
+		}
+
+		if rect, ok := r.drawerRect(r.store.State()); ok {
+			each(rect)
+		}
+
+		r.clk.Advance(15 * time.Millisecond)
+		r.fireSlide()
+	}
+
+	t.Fatal("the slide did not end")
+}
+
+// leftOf checks that lines are the left part of the wide drawer's lines.
+func (r *drawerRig) leftOf(t *testing.T, rect, wide core.Rect) {
+	t.Helper()
+
+	want := r.slideLines(wide)
+	got := r.slideLines(rect)
+
+	if len(got) != len(want) {
+		t.Fatalf("drew %d lines, want %d", len(got), len(want))
+	}
+
+	for i := range got {
+		if w := ansi.Strip(ansi.Cut(want[i], 0, rect.W)); got[i] != w {
+			t.Fatalf("width %d line %d = %q, want the zoomed drawer's left part %q", rect.W, i, got[i], w)
+		}
+	}
+}
+
+func TestZoomSlide(t *testing.T) {
+	t.Parallel()
+
+	r := zoomRig(t)
+	st := r.store.State()
+	half, _ := r.drawerHalf(st)
+	body := r.bodyAreaIn(st.Rail)
+
+	r.keys(keyRune('z'))
+
+	last, frames := 0, 0
+
+	r.slideFrames(t, func(rect core.Rect) {
+		frames++
+
+		if rect.X+rect.W != body.X+body.W {
+			t.Errorf("right edge %d, want the body's %d", rect.X+rect.W, body.X+body.W)
+		}
+
+		if rect.W < max(last, half.W) || rect.W > body.W {
+			t.Errorf("width %d after %d, want it growing from %d to %d", rect.W, last, half.W, body.W)
+		}
+
+		last = rect.W
+
+		r.leftOf(t, rect, body)
+	})
+
+	if frames < 3 {
+		t.Errorf("slide drew %d frames, want several", frames)
+	}
+
+	if got, _ := r.drawerRect(r.store.State()); got != body {
+		t.Errorf("rect after the slide = %v, want the body %v", got, body)
+	}
+}
+
+func TestZoomSlideLaysOutOnce(t *testing.T) {
+	t.Parallel()
+
+	r := zoomRig(t)
+	body := r.bodyAreaIn(r.store.State().Rail)
+
+	growth := func(l0, rev0 int) (int, int) { return r.drawer.layouts - l0, r.view().rowsRev - rev0 }
+
+	l0, rev0 := r.drawer.layouts, r.view().rowsRev
+
+	r.keys(keyRune('z'))
+	r.drawn(t)
+
+	dl, dr := growth(l0, rev0)
+	if dl > 1 || dr > 1 {
+		t.Fatalf("first frame grew layouts by %d and rowsRev by %d, want at most one", dl, dr)
+	}
+
+	l1, rev1 := r.drawer.layouts, r.view().rowsRev
+
+	r.slideFrames(t, func(core.Rect) {
+		r.drawn(t)
+
+		if dl, dr := growth(l1, rev1); dl != 0 || dr != 0 {
+			t.Fatalf("a later frame grew layouts by %d and rowsRev by %d", dl, dr)
+		}
+	})
+
+	r.drawn(t)
+	r.finishSlide()
+
+	if dl, dr := growth(l1, rev1); dl != 0 || dr != 0 {
+		t.Errorf("the end of the zoom grew layouts by %d and rowsRev by %d, want none", dl, dr)
+	}
+
+	if got, _ := r.drawerBox(r.store.State()); got != body {
+		t.Fatalf("zoomed box %v, want the body %v", got, body)
+	}
+
+	l2, rev2 := r.drawer.layouts, r.view().rowsRev
+
+	r.keys(keyEsc)
+
+	r.slideFrames(t, func(core.Rect) {
+		r.drawn(t)
+
+		if dl, dr := growth(l2, rev2); dl != 0 || dr != 0 {
+			t.Fatalf("an un-zoom frame grew layouts by %d and rowsRev by %d", dl, dr)
+		}
+	})
+
+	r.clk.Advance(slideFor)
+	r.fireSlide()
+	r.drawn(t)
+
+	if dl, dr := growth(l2, rev2); dl > 1 || dr > 1 {
+		t.Errorf("after the un-zoom layouts grew by %d and rowsRev by %d, want at most one", dl, dr)
+	}
+}
+
+func TestUnzoomSlide(t *testing.T) {
+	t.Parallel()
+
+	r := zoomRig(t)
+	st := r.store.State()
+	half, _ := r.drawerHalf(st)
+	body := r.bodyAreaIn(st.Rail)
+
+	r.keys(keyRune('z'))
+	r.finishSlide()
+	r.keys(keyEsc)
+
+	if r.drawerHasKeys() || r.focus() != "p1" {
+		t.Fatalf("drawer has the keyboard %v, focus %s, want p1 at once", r.drawerHasKeys(), r.focus())
+	}
+
+	last, frames := body.W+1, 0
+
+	r.slideFrames(t, func(rect core.Rect) {
+		frames++
+
+		if rect.X+rect.W != body.X+body.W || rect.W > last || rect.W < half.W {
+			t.Errorf("rect %v after width %d, want a right edge at the body's and a width shrinking to %d", rect, last, half.W)
+		}
+
+		last = rect.W
+
+		r.leftOf(t, rect, body)
+	})
+
+	if frames < 3 {
+		t.Errorf("slide drew %d frames, want several", frames)
+	}
+
+	if got, _ := r.drawerRect(r.store.State()); got != half {
+		t.Errorf("rect after the slide = %v, want the half %v", got, half)
+	}
+}
+
+func TestZoomSlideEnds(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		end     func(t *testing.T, r *drawerRig)
+		closing bool
+		shown   bool
+	}{
+		{"resize", func(t *testing.T, r *drawerRig) { sized(t, r.App, 270, 74) }, false, true},
+		{"tab switch", func(t *testing.T, r *drawerRig) { r.leader('2') }, false, false},
+		{"leader d", func(t *testing.T, r *drawerRig) { r.leader('d') }, true, true},
+		{"z again", func(t *testing.T, r *drawerRig) { r.keys(keyRune('z')) }, false, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			r := zoomRig(t)
+			first := r.view()
+
+			openIn(t, r.App, core.NewTab{Kind: core.KindShell, Cwd: t.TempDir()}, core.SelectTab{Index: 0})
+			r.settle()
+
+			r.keys(keyRune('z'))
+			r.clk.Advance(30 * time.Millisecond)
+			r.fireSlide()
+
+			if r.drawer.resizeFrom == 0 || r.drawer.slideFrom.IsZero() {
+				t.Fatal("setup: no width slide runs")
+			}
+
+			tt.end(t, r)
+
+			if r.drawer.resizeFrom != 0 || r.drawer.closing != tt.closing || r.drawer.slideFrom.IsZero() != !tt.closing {
+				t.Errorf("resizeFrom %d, closing %v, slideFrom zero %v", r.drawer.resizeFrom, r.drawer.closing, r.drawer.slideFrom.IsZero())
+			}
+
+			st := r.store.State()
+
+			full, ok := r.drawerFull(st)
+			if ok != tt.shown {
+				t.Fatalf("drawer shown %v, want %v", ok, tt.shown)
+			}
+
+			if !ok || tt.closing {
+				return
+			}
+
+			if rect, _ := r.drawerRect(st); rect != full {
+				t.Errorf("next frame at %v, want the final width %v", rect, full)
+			}
+
+			if first.zoom != (full == r.bodyAreaIn(st.Rail)) {
+				t.Errorf("zoom flag %v does not match the drawer at %v", first.zoom, full)
+			}
+		})
+	}
+}
+
+func TestZoomSlideNoPictures(t *testing.T) {
+	t.Parallel()
+
+	m := newPicturePage(t, 200, 50, picturePageDoc)
+	m.show(t, 5, 3)
+
+	st := m.store.State()
+	r, _ := m.drawerRect(st)
+
+	if _, pics, _ := m.drawerDrawn(st, r); len(pics) == 0 {
+		t.Fatal("setup: the page shows no picture")
+	}
+
+	m.run(m.reviewZoom())
+
+	r, _ = m.drawerRect(st)
+	if _, pics, _ := m.drawerDrawn(st, r); len(pics) != 0 {
+		t.Errorf("pics while sliding = %+v, want none", pics)
+	}
+
+	m.finishSlide()
+
+	r, _ = m.drawerRect(m.store.State())
+	if _, pics, _ := m.drawerDrawn(m.store.State(), r); len(pics) == 0 {
+		t.Error("no picture rows after the slide")
+	}
+}
+
+func TestZoomSlideNoWidthChange(t *testing.T) {
+	t.Parallel()
+
+	r := newKeysRig(t, keysRepo(t))
+	r.opened(t)
+	zoomLayout(t, r, 80, 24)
+
+	r.keys(keyRune('z'))
+
+	if !r.drawer.slideFrom.IsZero() || r.drawer.resizeFrom != 0 {
+		t.Errorf("slideFrom zero %v, resizeFrom %d, want no slide", r.drawer.slideFrom.IsZero(), r.drawer.resizeFrom)
+	}
+}
+
+func TestZoomSlideOneTick(t *testing.T) {
+	t.Parallel()
+
+	t.Run("zoom with a tick out", func(t *testing.T) {
+		t.Parallel()
+
+		r := zoomRig(t)
+		r.slideTicking = true
+		n := r.ticks.count(slideFrame)
+
+		r.keys(keyRune('z'))
+
+		if got := r.ticks.count(slideFrame); got != n {
+			t.Errorf("ticks scheduled %d, want %d", got, n)
+		}
+	})
+
+	t.Run("un-zoom from a rail click", func(t *testing.T) {
+		t.Parallel()
+
+		r := zoomRig(t)
+		r.keys(keyRune('z'))
+		r.finishSlide()
+
+		n := r.ticks.count(slideFrame)
+		rail := r.railRect()
+		clickRun(r.App, rail.X+1, rail.Y+1)
+
+		if r.drawer.resizeFrom == 0 {
+			t.Fatal("the rail click started no un-zoom slide")
+		}
+
+		if got := r.ticks.count(slideFrame); got != n+1 {
+			t.Errorf("ticks scheduled %d, want %d", got, n+1)
+		}
+	})
 }

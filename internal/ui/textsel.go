@@ -249,7 +249,7 @@ func (a *App) rowsLayout(tab core.TabID, v *reviewView) (drawerLayout, bool) {
 		return drawerLayout{}, false
 	}
 
-	box, ok := a.drawerFull(st)
+	box, ok := a.drawerBox(st)
 	if !ok {
 		return drawerLayout{}, false
 	}

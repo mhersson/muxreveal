@@ -69,8 +69,19 @@ func drawerPaint() tea.Msg { return drawerPaintMsg{} }
 // drawerAfterUpdate settles the open drawer after an update: it lays the rows
 // out for the width, then tokenises the rows near the view. It returns a
 // command that sends drawerPaintMsg only while rows in range wait for the cap,
-// so nothing runs while the drawer is idle.
+// so nothing runs while the drawer is idle. A slide that runs gets its frames
+// here too, since one may begin inside keyboardCheck's release.
 func (a *App) drawerAfterUpdate() tea.Cmd {
+	var tick tea.Cmd
+	if !a.drawer.slideFrom.IsZero() {
+		tick = a.slideFrameCmd()
+	}
+
+	return tea.Batch(tick, a.settleDrawerRows())
+}
+
+// settleDrawerRows is drawerAfterUpdate's layout and highlighting.
+func (a *App) settleDrawerRows() tea.Cmd {
 	a.drawer.tokenised = 0
 
 	st := a.store.State()
@@ -82,7 +93,7 @@ func (a *App) drawerAfterUpdate() tea.Cmd {
 		}
 	}
 
-	box, ok := a.drawerFull(st)
+	box, ok := a.drawerBox(st)
 	if !ok {
 		return nil
 	}

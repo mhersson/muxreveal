@@ -418,7 +418,7 @@ func (a *App) popPage(tab core.TabID, v *reviewView) tea.Cmd {
 func (a *App) sizePage(v *reviewView, p *mdPage) {
 	st := a.store.State()
 
-	box, ok := a.drawerFull(st)
+	box, ok := a.drawerBox(st)
 	if !ok {
 		return
 	}

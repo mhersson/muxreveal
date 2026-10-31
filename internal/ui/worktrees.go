@@ -461,7 +461,7 @@ func (a *App) moveWorktrees(l *wtList, dir int) {
 
 // keepSelected scrolls the list by whole rows so that the selected one shows.
 func (a *App) keepSelected(l *wtList) {
-	box, ok := a.drawerFull(a.store.State())
+	box, ok := a.drawerBox(a.store.State())
 	if !ok {
 		return
 	}

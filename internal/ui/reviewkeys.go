@@ -340,7 +340,7 @@ func (a *App) reviewBack() tea.Cmd {
 func (a *App) reviewBodyH(v *reviewView) int {
 	st := a.store.State()
 
-	box, ok := a.drawerFull(st)
+	box, ok := a.drawerBox(st)
 	if !ok {
 		return 0
 	}
@@ -641,7 +641,7 @@ func (a *App) reviewSplit() tea.Cmd {
 
 	st := a.store.State()
 
-	if box, shown := a.drawerFull(st); v.split && shown && !a.drawerLayoutOf(box, v, drawerTree(st)).split {
+	if box, shown := a.drawerBox(st); v.split && shown && !a.drawerLayoutOf(box, v, drawerTree(st)).split {
 		a.notice = noticeNarrow
 	}
 
