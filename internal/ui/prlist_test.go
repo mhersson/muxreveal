@@ -11,6 +11,7 @@ import (
 	"github.com/charmbracelet/x/exp/golden"
 
 	"github.com/mhersson/muxreveal/internal/core"
+	"github.com/mhersson/muxreveal/internal/github"
 )
 
 // prAged is a tune that sets how long ago a pull request was updated.
@@ -437,7 +438,7 @@ func TestPRListKeepsSelection(t *testing.T) {
 	press(a, keyLeader, keyRune('g'), keyRune('l'))
 	typedList(a, "j")
 
-	selected := func() prListKey { return a.prList.sel }
+	selected := func() prListKey { return a.prList.sel[prTabAgents] }
 
 	if want := (prListKey{"github.com/acme/api", 5}); selected() != want {
 		t.Fatalf("selected %+v, want %+v", selected(), want)
@@ -491,45 +492,71 @@ func TestPRListKeepsSelection(t *testing.T) {
 func TestPRListCleansText(t *testing.T) {
 	t.Parallel()
 
-	const branch = "feat/\x1b[31mred\x07\u200bx"
+	t.Run("agent row", func(t *testing.T) {
+		t.Parallel()
 
-	// The agent's branch is the pull request's head branch, which is what the row draws.
-	tune := func(p *core.PRInfo) { p.HeadBranch = branch }
-	agents := []railAgent{{
-		newTab: true, project: "api", branch: branch, state: core.AgentIdle,
-		pr: ptr(prInfo("OPEN", prNumber(4), tune, prTitled("Fix \x1b]0;pwned\x07the \u202eevil\u200b title\r\nsecond line"), prAged(time.Minute))),
-	}}
-	a := listApp(t, true, 120, 40, agents)
+		const branch = "feat/\x1b[31mred\x07\u200bx"
 
-	if rows := a.prListRows(a.store.State()); len(rows) != 1 || rows[0].pr.HeadBranch != branch {
-		t.Fatalf("rows = %+v, want one with the hostile head branch", rows)
-	}
+		// The agent's branch is the pull request's head branch, which is what the row draws.
+		tune := func(p *core.PRInfo) { p.HeadBranch = branch }
+		agents := []railAgent{{
+			newTab: true, project: "api", branch: branch, state: core.AgentIdle,
+			pr: ptr(prInfo("OPEN", prNumber(4), tune, prTitled("Fix \x1b]0;pwned\x07the \u202eevil\u200b title\r\nsecond line"), prAged(time.Minute))),
+		}}
+		a := listApp(t, true, 120, 40, agents)
 
-	press(a, keyLeader, keyRune('g'), keyRune('l'))
-
-	view := a.View().Content
-	text := ansi.Strip(view)
-
-	for _, bad := range []string{"\x07", "\u200b", "\u202e", "pwned\x07", "\r", "\x1b[31mred"} {
-		if strings.Contains(view, bad) {
-			t.Errorf("the screen holds %q", bad)
+		if rows := a.prListRows(a.store.State()); len(rows) != 1 || rows[0].pr.HeadBranch != branch {
+			t.Fatalf("rows = %+v, want one with the hostile head branch", rows)
 		}
-	}
 
-	if !strings.Contains(text, "#4 Fix") || !strings.Contains(text, "title") {
-		t.Errorf("the title was lost:\n%s", text)
-	}
+		press(a, keyLeader, keyRune('g'), keyRune('l'))
 
-	if !strings.Contains(text, "feat/[31mredx") {
-		t.Errorf("the branch was lost:\n%s", text)
-	}
+		view := a.View().Content
+		text := ansi.Strip(view)
 
-	// The title's second line stays on the row of its number.
-	if !slices.ContainsFunc(strings.Split(text, "\n"), func(l string) bool {
-		return strings.Contains(l, "#4 Fix") && strings.Contains(l, "second line")
-	}) {
-		t.Errorf("no row holds the whole title:\n%s", text)
-	}
+		for _, bad := range []string{"\x07", "\u200b", "\u202e", "pwned\x07", "\r", "\x1b[31mred"} {
+			if strings.Contains(view, bad) {
+				t.Errorf("the screen holds %q", bad)
+			}
+		}
+
+		if !strings.Contains(text, "#4 Fix") || !strings.Contains(text, "title") {
+			t.Errorf("the title was lost:\n%s", text)
+		}
+
+		if !strings.Contains(text, "feat/[31mredx") {
+			t.Errorf("the branch was lost:\n%s", text)
+		}
+
+		// The title's second line stays on the row of its number.
+		if !slices.ContainsFunc(strings.Split(text, "\n"), func(l string) bool {
+			return strings.Contains(l, "#4 Fix") && strings.Contains(l, "second line")
+		}) {
+			t.Errorf("no row holds the whole title:\n%s", text)
+		}
+	})
+
+	t.Run("search row", func(t *testing.T) {
+		t.Parallel()
+
+		mine := map[string]github.MyPRs{"github.com": {Requested: []github.SearchPR{
+			searched("github.com/acme/web", 4, "Fix \x1b]0;pwned\x07the \u202eevil\u200b title", "ka\x1b[31mri\u200b", time.Minute),
+		}}}
+		a, _, _ := searchApp(t, listAgents(), 140, 40, mine, "github.com/acme/web")
+		openList(a)
+		typedList(a, "2")
+
+		view := a.View().Content
+		for _, bad := range []string{"\x07", "\u200b", "\u202e", "pwned\x07", "\x1b[31mri"} {
+			if strings.Contains(view, bad) {
+				t.Errorf("the screen holds %q", bad)
+			}
+		}
+
+		if text := ansi.Strip(view); !strings.Contains(text, "#4 Fix") || !strings.Contains(text, "@ka[31mri") {
+			t.Errorf("the row lost its text:\n%s", text)
+		}
+	})
 }
 
 func TestPRListEmpty(t *testing.T) {

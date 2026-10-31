@@ -79,6 +79,9 @@ func startPRs(clients clientFactory) *prRuntime {
 // actions is the GitHub writes, on the same client cache.
 func (p *prRuntime) actions() ghActions { return ghActions{clients: p.clients} }
 
+// reads is the GitHub reads beyond the poller, on the same client cache.
+func (p *prRuntime) reads() ghReads { return ghReads{clients: p.clients} }
+
 // lookup finds the pull request of a branch with the cached client of its host.
 func (p *prRuntime) lookup(ctx context.Context, r github.Repo, branch string) (github.PR, error) {
 	c, err := p.clients.client(ctx, r.Host)
@@ -130,6 +133,20 @@ func (g ghActions) Merge(ctx context.Context, r github.Repo, pr github.PR, info 
 	}
 
 	return c.Merge(ctx, r, pr, info, m)
+}
+
+// ghReads makes the GitHub reads of the app, each with the cached client of the
+// host.
+type ghReads struct{ clients *clientCache }
+
+// MyPRs searches the host for the viewer's open pull requests.
+func (g ghReads) MyPRs(ctx context.Context, host string) (github.MyPRs, error) {
+	c, err := g.clients.client(ctx, host)
+	if err != nil {
+		return github.MyPRs{}, fmt.Errorf("client for %s: %w", host, err)
+	}
+
+	return c.MyPRs(ctx)
 }
 
 // Close stops the poller: its requests are cancelled, its goroutines end and

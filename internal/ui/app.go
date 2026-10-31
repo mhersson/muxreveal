@@ -86,6 +86,9 @@ type Options struct {
 	// PRActions makes the GitHub writes (approve, merge, open a pull request);
 	// nil turns them off.
 	PRActions prActions
+	// PRReads makes the GitHub reads of the pull request views (the list's
+	// searches); nil turns them off.
+	PRReads prReads
 	// Keys is the [keys] config laid over the built-in leader keys.
 	Keys core.KeysConfig
 	// Pictures fetches remote images; nil keeps them as image lines.
@@ -146,6 +149,8 @@ type App struct {
 	merging                map[mergeKey]bool
 	openLink               urlOpener
 	actions                prActions // GitHub writes; nil means they are off
+	reads                  prReads   // GitHub reads beyond the poller; nil means they are off
+	search                 prSearchState
 
 	panes        map[core.PaneID]*pane // runtime panes, keyed like State.Panes
 	later        []tea.Cmd             // commands raised outside the update's return path; Update batches them
@@ -273,6 +278,7 @@ func New(opts Options) (*App, error) {
 	}
 
 	a.actions = opts.PRActions
+	a.reads = opts.PRReads
 
 	a.openLink = opts.OpenURL
 	if a.openLink == nil {
@@ -709,6 +715,10 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.onMDList(msg)
 	case planReadMsg:
 		a.onPlanRead(msg)
+	case prSearchMsg:
+		a.onPRSearch(msg)
+	case prSearchTickMsg:
+		return a, a.onPRSearchTick(msg)
 	case planPageMsg:
 		a.onPlanPage(msg)
 	case reviewFlashMsg:

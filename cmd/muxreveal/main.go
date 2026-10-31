@@ -230,6 +230,7 @@ func run(ctx context.Context, env core.Env, configPath, recordDir string, fresh 
 		PRs:          prs.poller,
 		PRLookup:     prs.lookup,
 		PRActions:    prs.actions(),
+		PRReads:      prs.reads(),
 		Notice:       strings.Join(notices, "; "),
 		Save:         save,
 		Marks:        markFilesOf(marks),

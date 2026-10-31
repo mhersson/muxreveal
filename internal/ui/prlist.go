@@ -20,12 +20,14 @@ type prListKey struct {
 	number int
 }
 
-// prListView is the open pull request list. The selection is kept by key so a
-// poll that reorders the rows keeps it; idx is where it last stood, for the
-// nearest row when the pull request leaves the list.
+// prListView is the open pull request list: the shown tab and, per tab, the
+// selection. A selection is kept by key so a poll that reorders the rows keeps
+// it; idx is where it last stood, for the nearest row when the pull request
+// leaves the list.
 type prListView struct {
-	sel prListKey
-	idx int
+	tab prListTab
+	sel [prTabCount]prListKey
+	idx [prTabCount]int
 }
 
 // prListRow is one listed pull request and the agent the keys act through.
@@ -85,6 +87,14 @@ func (a *App) prListRows(st core.State) []prListRow {
 		rows = append(rows, prListRow{key: key, pr: pr, pane: id, root: a.rail.panes[id].probe.headCwd})
 	}
 
+	sortPRListRows(rows)
+
+	return rows
+}
+
+// sortPRListRows puts the repositories by name and each one's rows newest
+// update first, so the rows of a repository are adjacent.
+func sortPRListRows(rows []prListRow) {
 	slices.SortStableFunc(rows, func(x, y prListRow) int {
 		if c := strings.Compare(prRepoName(x.key.repo), prRepoName(y.key.repo)); c != 0 {
 			return c
@@ -100,8 +110,6 @@ func (a *App) prListRows(st core.State) []prListRow {
 
 		return y.key.number - x.key.number
 	})
-
-	return rows
 }
 
 // prRepoName is a repository as the list names it: owner/name on github.com,
@@ -113,24 +121,25 @@ func prRepoName(key string) string {
 // selected is the index of the selected row, or -1 for an empty list. A pull
 // request that left the list moves the selection to the row now where it stood.
 func (v *prListView) selected(rows []prListRow) int {
+	t := v.tab
 	if len(rows) == 0 {
-		v.idx = 0
+		v.idx[t] = 0
 
 		return -1
 	}
 
 	for i, r := range rows {
-		if r.key == v.sel {
-			v.idx = i
+		if r.key == v.sel[t] {
+			v.idx[t] = i
 
 			return i
 		}
 	}
 
-	v.idx = min(v.idx, len(rows)-1)
-	v.sel = rows[v.idx].key
+	v.idx[t] = min(v.idx[t], len(rows)-1)
+	v.sel[t] = rows[v.idx[t]].key
 
-	return v.idx
+	return v.idx[t]
 }
 
 // move selects the row delta away, stopping at the ends.
@@ -140,8 +149,8 @@ func (v *prListView) move(rows []prListRow, delta int) {
 		return
 	}
 
-	v.idx = min(max(i+delta, 0), len(rows)-1)
-	v.sel = rows[v.idx].key
+	v.idx[v.tab] = min(max(i+delta, 0), len(rows)-1)
+	v.sel[v.tab] = rows[v.idx[v.tab]].key
 }
 
 // prListCommand is `leader g l`.
@@ -156,7 +165,37 @@ func (a *App) prListCommand() tea.Cmd {
 
 	a.prList = &prListView{}
 
-	return nil
+	return a.prSearchOpen()
+}
+
+// prListShow shows tab. A searched tab needs the reads; without them the list
+// stays where it is.
+func (a *App) prListShow(tab prListTab) {
+	if tab != prTabAgents && a.reads == nil {
+		a.notice = noticePRsOff
+
+		return
+	}
+
+	a.prList.tab = tab
+}
+
+// prListStep shows the next tab (forward) or the previous one, wrapping.
+func (a *App) prListStep(forward bool) {
+	t := a.prList.tab
+
+	switch {
+	case forward && t == prTabCount-1:
+		t = 0
+	case forward:
+		t++
+	case t == 0:
+		t = prTabCount - 1
+	default:
+		t--
+	}
+
+	a.prListShow(t)
 }
 
 // handlePRListKey answers the open list; any other key is swallowed.

@@ -4,8 +4,6 @@ import (
 	"slices"
 
 	tea "charm.land/bubbletea/v2"
-
-	"github.com/mhersson/muxreveal/internal/core"
 )
 
 // The default keys of the agents rail, the PR list and the checks overlay;
@@ -26,6 +24,11 @@ var (
 		{"down", "prlist.next"},
 		{"k", "prlist.prev"},
 		{"up", "prlist.prev"},
+		{"tab", "prlist.tab.next"},
+		{"shift+tab", "prlist.tab.prev"},
+		{"1", "prlist.tab.agents"},
+		{"2", "prlist.tab.requested"},
+		{"3", "prlist.tab.all"},
 		{"enter", "prlist.show"},
 		{"c", "prlist.checks"},
 		{"a", "prlist.approve"},
@@ -139,7 +142,7 @@ func prListCommands() []command {
 				return nil
 			}
 
-			rows := a.prListRows(a.store.State())
+			rows := a.prListRowsOf(a.store.State(), a.prList.tab)
 
 			i := a.prList.selected(rows)
 			if row && i < 0 {
@@ -151,6 +154,31 @@ func prListCommands() []command {
 	}
 
 	return scoped("pr_list", []command{
+		cmd("prlist.tab.next", "next tab", false, func(a *App, _ []prListRow, _ int) tea.Cmd {
+			a.prListStep(true)
+
+			return nil
+		}),
+		cmd("prlist.tab.prev", "previous tab", false, func(a *App, _ []prListRow, _ int) tea.Cmd {
+			a.prListStep(false)
+
+			return nil
+		}),
+		cmd("prlist.tab.agents", "agents tab", false, func(a *App, _ []prListRow, _ int) tea.Cmd {
+			a.prListShow(prTabAgents)
+
+			return nil
+		}),
+		cmd("prlist.tab.requested", "review requested tab", false, func(a *App, _ []prListRow, _ int) tea.Cmd {
+			a.prListShow(prTabRequested)
+
+			return nil
+		}),
+		cmd("prlist.tab.all", "all open tab", false, func(a *App, _ []prListRow, _ int) tea.Cmd {
+			a.prListShow(prTabAll)
+
+			return nil
+		}),
 		cmd("prlist.next", "next", false, func(a *App, rows []prListRow, _ int) tea.Cmd {
 			a.prList.move(rows, 1)
 
@@ -162,6 +190,10 @@ func prListCommands() []command {
 			return nil
 		}),
 		cmd("prlist.show", "show the diff", true, func(a *App, rows []prListRow, i int) tea.Cmd {
+			if rows[i].pane == "" {
+				return nil
+			}
+
 			a.prList = nil
 
 			return a.prListOpen(rows[i], thenNothing)
@@ -183,6 +215,10 @@ func prListCommands() []command {
 				return nil
 			}
 
+			if rows[i].pane == "" {
+				return nil
+			}
+
 			a.prList = nil
 
 			return a.prListOpen(rows[i], thenApprove)
@@ -194,17 +230,21 @@ func prListCommands() []command {
 				return nil
 			}
 
+			if rows[i].pane == "" {
+				return nil
+			}
+
 			a.prList = nil
 
 			return a.prListOpen(rows[i], thenMerge)
 		}),
 		cmd("prlist.browser", "open in the browser", true, func(a *App, rows []prListRow, i int) tea.Cmd {
-			return a.openURL(a.prLink(core.ReviewPR{Repo: rows[i].key.repo, Number: rows[i].key.number}))
+			return a.openURL(a.prListRowURL(rows[i]))
 		}),
 		cmd("prlist.refresh", "refresh", false, func(a *App, rows []prListRow, _ int) tea.Cmd {
 			a.prListRefresh(rows)
 
-			return nil
+			return a.prSearchCmd()
 		}),
 		cmd("prlist.close", "close", false, func(a *App, _ []prListRow, _ int) tea.Cmd {
 			a.prList = nil
