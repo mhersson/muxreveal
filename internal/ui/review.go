@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"math"
+	"slices"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -256,6 +257,55 @@ func (v *reviewView) rebuildFor(res git.Result, split bool) {
 	v.cursor = restoreAnchor(res, v.rows, anchor)
 }
 
+// picturesMoved reports whether a pending picture change leaves the rows of a
+// rendered file out of date: its pictures moved since the rows were laid out.
+func (v *reviewView) picturesMoved() bool {
+	for path := range v.mdOn {
+		if f := v.mdFiles[path]; f != nil && f.doc.hasImages && f.doc.pics.reg != nil && f.doc.pics.reg.gen() != f.rowsGen {
+			return true
+		}
+	}
+
+	return false
+}
+
+// rebuildPictures is rebuild for a change the pictures caused: the cursor keeps
+// its line and the view its screen row, as the rows of a picture come and go.
+func (v *reviewView) rebuildPictures(split bool) {
+	before, file, line := v.cursor, -1, 0
+	if v.cursor >= 0 && v.cursor < len(v.rows) && v.rows[v.cursor].kind == rowMD {
+		file, line = v.rows[v.cursor].file, v.rows[v.cursor].line
+	}
+
+	v.rebuild(split)
+
+	moved := false
+
+	for path, f := range v.mdFiles {
+		old, ok := f.doc.pictureMove()
+		if !ok {
+			continue
+		}
+
+		moved = true
+
+		if file < 0 || v.res.Files[file].Path != path {
+			continue
+		}
+
+		lay := f.doc.layout(max(v.mdW, 1), v.mdIcons)
+		first := slices.IndexFunc(v.rows, func(r reviewRow) bool { return r.kind == rowMD && r.file == file && r.line == 0 })
+
+		if first >= 0 {
+			v.cursor = first + max(min(line+pictureShift(old, lay, line), len(lay.Lines)-1), 0)
+		}
+	}
+
+	if moved {
+		v.top = max(v.top+v.cursor-before, 0)
+	}
+}
+
 // mdRowsOf lays out every rendered file whose parse has answered, with its
 // change marks; a file still parsing has a nil entry.
 func (v *reviewView) mdRowsOf() map[string]*mdRows {
@@ -270,6 +320,7 @@ func (v *reviewView) mdRowsOf() map[string]*mdRows {
 
 		if f := v.mdFiles[path]; f != nil {
 			lay := f.doc.layout(max(v.mdW, 1), v.mdIcons)
+			f.rowsGen = f.doc.picGen
 			out[path] = &mdRows{lay: lay, marks: changeMarks(lay.Source, f.text.old, f.text.new)}
 		}
 	}

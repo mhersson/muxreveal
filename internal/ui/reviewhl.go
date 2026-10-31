@@ -104,7 +104,12 @@ func (a *App) drawerAfterUpdate() tea.Cmd {
 		v.syncMarks(st)
 	}
 
-	if v.rowsSplit != lay.split || (moved && len(v.mdFiles) > 0) || stale {
+	pics := v.picturesMoved()
+
+	switch {
+	case pics:
+		v.rebuildPictures(lay.split)
+	case v.rowsSplit != lay.split || (moved && len(v.mdFiles) > 0) || stale:
 		v.rebuild(lay.split)
 	}
 

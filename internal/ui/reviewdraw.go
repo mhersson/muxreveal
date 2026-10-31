@@ -169,6 +169,7 @@ type drawCtx struct {
 	mdp      *mdPainter // paints rendered rows; made on first use
 	pageRows []string   // the shown page's rows, drawn on first use
 	pagePics []picRow   // the picture rows of pageRows, relative to the page
+	mdPics   []picRow   // the picture rows of the rendered rows drawn, relative to the diff column's body
 
 	picGen uint64            // the picture registry's gen, which re-lays the page out
 	covers []image.Rectangle // the boxes drawn over the drawer's body, relative to the drawer
@@ -268,6 +269,8 @@ func (d *drawCtx) key(r core.Rect, name string) drawKey {
 
 	if p := v.page(); p != nil {
 		k.page, k.pageRev, k.picGen = p, p.rev, d.picGen
+	} else if len(v.mdFiles) > 0 {
+		k.picGen = d.picGen
 	}
 
 	if len(v.fresh) > 0 && d.now.Before(v.flashUntil) {
@@ -339,7 +342,8 @@ func (a *App) slidPics(pics []picRow) []picRow {
 // box drawn over the body overlaps. The page fills the diff column from the
 // first body row.
 func (d *drawCtx) pictureRows(r core.Rect) []picRow {
-	if len(d.pagePics) == 0 {
+	pics := append(slices.Clone(d.pagePics), d.mdPics...)
+	if len(pics) == 0 {
 		return nil
 	}
 
@@ -350,7 +354,7 @@ func (d *drawCtx) pictureRows(r core.Rect) []picRow {
 
 	var rows []picRow
 
-	for _, p := range d.pagePics {
+	for _, p := range pics {
 		if p.Y >= d.lay.bodyH || x+p.X+p.Cols > r.W {
 			continue
 		}
@@ -865,8 +869,10 @@ func (d *drawCtx) diffRow(y int) string {
 	}
 
 	cursor := d.diffKeys() && i == d.v.cursor
+	row := d.exact(d.rowCells(i, cursor), w)
+	d.notePicture(i, d.lay.headH+y, cursor)
 
-	return d.exact(d.rowCells(i, cursor), w)
+	return row
 }
 
 // exact makes s w cells: cut, or padded on the ground.
@@ -1179,6 +1185,29 @@ func (d *drawCtx) mdRow(r reviewRow, f git.FileDiff, cursor bool) string {
 	}
 
 	return railPainter{bg: bg}.line([]railRun{mark}, lead) + text + railPainter{bg: bg}.line(nil, max(w-lead-tw, 0))
+}
+
+// notePicture records the picture row that row i of the diff is, drawn at row y
+// of the body, if it is one.
+func (d *drawCtx) notePicture(i, y int, cursor bool) {
+	r := d.v.rows[i]
+	if r.kind != rowMD {
+		return
+	}
+
+	mf := d.v.mdFiles[d.v.res.Files[r.file].Path]
+	if mf == nil {
+		return
+	}
+
+	lay := mf.doc.layout(max(d.v.mdW, 1), d.v.mdIcons)
+	if r.line >= len(lay.Lines) {
+		return
+	}
+
+	if im, row, ok := pictureAt(lay, r.line); ok {
+		d.mdPics = append(d.mdPics, picRow{X: 2 + pictureCol(lay.Lines[r.line]), Y: y, ID: im.ID, Row: row, Cols: im.Cols, Ground: d.cursorGround(d.ui.Bg, cursor)})
+	}
 }
 
 func (d *drawCtx) mdPainter() mdPainter {

@@ -31,6 +31,8 @@ type mdFile struct {
 	doc  *mdDoc
 	text fullText
 	ids  blobIDs
+
+	rowsGen uint64 // the picture generation the rows were last laid out at
 }
 
 // changeMarks marks the lines of a layout whose source ranges are src, by what
