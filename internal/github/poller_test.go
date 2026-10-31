@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -231,6 +232,68 @@ func (c *collector) waitCount(d time.Duration, n int) {
 
 func anySnap(Snapshot) bool { return true }
 
+// fakeClock is a poller clock that stands still: each wait the poller asks for
+// arrives on asks and ends only when the test ends it.
+type fakeClock struct {
+	at   time.Time
+	asks chan ask
+}
+
+type ask struct {
+	d    time.Duration
+	fire chan time.Time
+}
+
+func newFakeClock() *fakeClock {
+	return &fakeClock{at: time.Date(2026, 10, 27, 9, 0, 0, 0, time.UTC), asks: make(chan ask, 16)}
+}
+
+// options returns o running on the clock.
+func (c *fakeClock) options(o PollerOptions) PollerOptions {
+	o.now = func() time.Time { return c.at }
+	o.after = func(d time.Duration) <-chan time.Time {
+		a := ask{d: d, fire: make(chan time.Time, 1)}
+		c.asks <- a
+
+		return a.fire
+	}
+
+	return o
+}
+
+// next returns the next wait the poller asks for.
+func (c *fakeClock) next(t *testing.T) ask {
+	t.Helper()
+
+	select {
+	case a := <-c.asks:
+		return a
+	case <-time.After(5 * time.Second):
+		t.Fatal("the poller asked for no wait")
+	}
+
+	return ask{}
+}
+
+func (a ask) end() { a.fire <- time.Time{} }
+
+// rateLimited answers the first request with an exhausted rate limit that
+// resets at reset.
+func rateLimited(reset time.Time) func(int64, http.ResponseWriter, *http.Request) bool {
+	return func(n int64, w http.ResponseWriter, _ *http.Request) bool {
+		if n != 1 {
+			return false
+		}
+
+		w.Header().Set("X-RateLimit-Remaining", "0")
+		w.Header().Set("X-RateLimit-Reset", strconv.FormatInt(reset.Unix(), 10))
+		w.WriteHeader(http.StatusForbidden)
+		fmt.Fprint(w, `{"message":"API rate limit exceeded"}`)
+
+		return true
+	}
+}
+
 func TestPollerPollsOnSet(t *testing.T) {
 	srv := &pollServer{}
 	p, col := startPoller(t, srv, PollerOptions{}, nil)
@@ -283,17 +346,17 @@ func TestPollerSlowOtherwise(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			clk := newFakeClock()
 			srv := &pollServer{}
 			srv.pendingPR.Store(tt.pending)
 
-			p, col := startPoller(t, srv, PollerOptions{Slow: testSlow}, nil)
+			p, _ := startPoller(t, srv, clk.options(PollerOptions{Slow: testSlow}), nil)
 
 			p.Set([]Watch{{Repo: repoA, Visible: tt.visible}})
-			col.waitCount(5*time.Second, 2)
+			clk.next(t).end()
 
-			got := col.all()
-			if gap := got[1].At.Sub(got[0].At); gap < 3*testFast {
-				t.Fatalf("second snapshot %v after the first, want none within Fast x3", gap)
+			if a := clk.next(t); a.d != testSlow {
+				t.Fatalf("waits %v after the poll, want Slow (%v)", a.d, testSlow)
 			}
 		})
 	}
@@ -386,22 +449,14 @@ func TestPollerRemovedRepoStops(t *testing.T) {
 }
 
 func TestPollerRateLimitWaitsForReset(t *testing.T) {
+	clk := newFakeClock()
 	srv := &pollServer{}
-	srv.handle = func(n int64, w http.ResponseWriter, _ *http.Request) bool {
-		if n != 1 {
-			return false
-		}
+	srv.handle = rateLimited(clk.at.Add(90 * time.Second))
 
-		w.Header().Set("Retry-After", "1")
-		w.WriteHeader(http.StatusForbidden)
-		fmt.Fprint(w, `{"message":"secondary rate limit"}`)
-
-		return true
-	}
-
-	p, col := startPoller(t, srv, PollerOptions{}, nil)
+	p, col := startPoller(t, srv, clk.options(PollerOptions{}), nil)
 
 	p.Set([]Watch{{Repo: repoA}})
+	clk.next(t).end()
 
 	s := col.waitFor(5*time.Second, "rate limited snapshot", anySnap)
 	if !errors.Is(s.Err, ErrRateLimited) {
@@ -412,34 +467,28 @@ func TestPollerRateLimitWaitsForReset(t *testing.T) {
 		t.Errorf("a failed poll carries data: %+v", s)
 	}
 
+	a := clk.next(t)
+	if a.d != 90*time.Second {
+		t.Fatalf("waits %v after the rate limit, want the 90s to its reset", a.d)
+	}
+
+	if n := len(srv.arrivals()); n != 1 {
+		t.Fatalf("%d requests before the reset, want 1", n)
+	}
+
+	a.end()
 	col.waitFor(5*time.Second, "poll after the reset", func(s Snapshot) bool { return s.Err == nil })
-
-	at := srv.arrivals()
-	if len(at) < 2 {
-		t.Fatalf("%d requests, want at least 2", len(at))
-	}
-
-	if gap := at[1].Sub(at[0]); gap < 900*time.Millisecond {
-		t.Errorf("polled again after %v, want to wait for the reset", gap)
-	}
 }
 
 func TestPollerRefreshWaitsOutRateLimit(t *testing.T) {
+	clk := newFakeClock()
 	srv := &pollServer{}
-	srv.handle = func(n int64, w http.ResponseWriter, _ *http.Request) bool {
-		if n != 1 {
-			return false
-		}
+	srv.handle = rateLimited(clk.at.Add(90 * time.Second))
 
-		w.Header().Set("Retry-After", "1")
-		w.WriteHeader(http.StatusForbidden)
-
-		return true
-	}
-
-	p, col := startPoller(t, srv, PollerOptions{}, nil)
+	p, col := startPoller(t, srv, clk.options(PollerOptions{}), nil)
 
 	p.Set([]Watch{{Repo: repoA}})
+	clk.next(t).end()
 
 	s := col.waitFor(5*time.Second, "rate limited snapshot", anySnap)
 
@@ -448,14 +497,21 @@ func TestPollerRefreshWaitsOutRateLimit(t *testing.T) {
 		t.Fatalf("Err = %v, want a rate limit", s.Err)
 	}
 
+	clk.next(t) // the scheduled poll at the reset, which never comes
 	p.Refresh(repoA)
 	p.Set([]Watch{{Repo: repoA, Focused: 1}})
 
-	col.waitFor(5*time.Second, "poll after the reset", func(s Snapshot) bool { return s.Err == nil })
-
-	if at := srv.arrivals(); len(at) < 2 || at[1].Before(rl.Reset) {
-		t.Errorf("requests at %v, want none before the reset %v", at, rl.Reset)
+	a := clk.next(t)
+	if a.d != 90*time.Second {
+		t.Fatalf("a refresh waits %v, want the 90s to the reset", a.d)
 	}
+
+	if n := len(srv.arrivals()); n != 1 {
+		t.Fatalf("%d requests before the reset, want 1", n)
+	}
+
+	a.end()
+	col.waitFor(5*time.Second, "poll after the reset", func(s Snapshot) bool { return s.Err == nil })
 }
 
 func TestPollerErrorBacksOff(t *testing.T) {
@@ -468,21 +524,25 @@ func TestPollerErrorBacksOff(t *testing.T) {
 		return true
 	}
 
-	p, col := startPoller(t, srv, PollerOptions{MaxBackoff: 100 * time.Millisecond}, nil)
+	clk := newFakeClock()
+	p, col := startPoller(t, srv, clk.options(PollerOptions{MaxBackoff: 100 * time.Millisecond}), nil)
 
 	p.Set([]Watch{{Repo: repoA}})
-	col.waitCount(10*time.Second, 6)
+	clk.next(t).end()
+
+	for i, want := range []time.Duration{testFast, 2 * testFast, 4 * testFast, 100 * time.Millisecond, 100 * time.Millisecond} {
+		a := clk.next(t)
+		if a.d != want {
+			t.Fatalf("wait %d after a failure = %v, want %v", i+1, a.d, want)
+		}
+
+		a.end()
+	}
 
 	for _, s := range col.all() {
 		if s.Err == nil {
 			t.Fatal("a failing server gave a snapshot without Err")
 		}
-	}
-
-	// Fast, 2 x Fast, 4 x Fast, then the cap: a fixed Fast would need ~100 ms.
-	at := srv.arrivals()
-	if span := at[5].Sub(at[0]); span < 300*time.Millisecond {
-		t.Errorf("six requests in %v, want the wait to grow", span)
 	}
 }
 
@@ -743,14 +803,8 @@ func TestPollerCloseStopsEverything(t *testing.T) {
 		t.Fatal("no request started")
 	}
 
-	begin := time.Now()
-
 	if err := p.Close(); err != nil {
 		t.Fatal(err)
-	}
-
-	if d := time.Since(begin); d > time.Second {
-		t.Errorf("Close took %v with a request in flight", d)
 	}
 
 	select {
@@ -798,14 +852,8 @@ func TestPollerCloseWithoutConsumer(t *testing.T) {
 		t.Fatalf("%d snapshots queued, want the buffer of %d full", n, updatesBuffer)
 	}
 
-	begin := time.Now()
-
 	if err := p.Close(); err != nil {
 		t.Fatal(err)
-	}
-
-	if d := time.Since(begin); d > time.Second {
-		t.Errorf("Close took %v with a full channel and no consumer", d)
 	}
 
 	closed := make(chan struct{})

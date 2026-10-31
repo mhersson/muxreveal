@@ -295,20 +295,16 @@ func TestGraphQLRateLimitWaitsForItsReset(t *testing.T) {
 	tests := []struct {
 		name   string
 		header map[string]string
-		check  func(reset time.Time) bool
+		check  func(reset, before, after time.Time) bool
 	}{
 		{
 			"reset header",
 			map[string]string{"X-RateLimit-Remaining": "0", "X-RateLimit-Reset": "4102444800"},
-			func(r time.Time) bool { return r.Unix() == 4102444800 },
+			func(r, _, _ time.Time) bool { return r.Unix() == 4102444800 },
 		},
 		{
 			"no headers", nil,
-			func(r time.Time) bool {
-				d := time.Until(r)
-
-				return d > 50*time.Second && d <= time.Minute
-			},
+			func(r, before, after time.Time) bool { return within(r, before, after, time.Minute) },
 		},
 	}
 
@@ -322,15 +318,17 @@ func TestGraphQLRateLimitWaitsForItsReset(t *testing.T) {
 				okJSON(w, body)
 			}))
 
+			before := time.Now()
 			err := c.query(context.Background(), "Viewer", new(viewerQuery), nil)
+			after := time.Now()
 
 			var rl *RateLimitError
 			if !errors.As(err, &rl) || !errors.Is(err, ErrRateLimited) {
 				t.Fatalf("err = %v, want a *RateLimitError", err)
 			}
 
-			if !tc.check(rl.Reset) {
-				t.Errorf("reset = %v", rl.Reset)
+			if !tc.check(rl.Reset, before, after) {
+				t.Errorf("reset = %v, call from %v to %v", rl.Reset, before, after)
 			}
 
 			var ge *api.GraphQLError
@@ -411,26 +409,27 @@ func TestGraphQLErrorsBesideData(t *testing.T) {
 	}
 }
 
+// within reports whether reset is d after a moment between before and after.
+func within(reset, before, after time.Time, d time.Duration) bool {
+	return !reset.Before(before.Add(d)) && !reset.After(after.Add(d))
+}
+
 func TestRESTRateLimits(t *testing.T) {
 	tests := []struct {
 		name   string
 		status int
 		header map[string]string
-		check  func(reset time.Time) bool
+		check  func(reset, before, after time.Time) bool
 	}{
 		{
 			"403 with an exhausted limit", 403,
 			map[string]string{"X-RateLimit-Remaining": "0", "X-RateLimit-Reset": "4102444800"},
-			func(r time.Time) bool { return r.Unix() == 4102444800 },
+			func(r, _, _ time.Time) bool { return r.Unix() == 4102444800 },
 		},
 		{
 			"429 with Retry-After", 429,
 			map[string]string{"Retry-After": "30"},
-			func(r time.Time) bool {
-				d := time.Until(r)
-
-				return d > 20*time.Second && d <= 30*time.Second
-			},
+			func(r, before, after time.Time) bool { return within(r, before, after, 30*time.Second) },
 		},
 	}
 
@@ -446,15 +445,17 @@ func TestRESTRateLimits(t *testing.T) {
 				_, _ = io.WriteString(w, `{"message":"limited"}`)
 			}))
 
+			before := time.Now()
 			err := c.rest(context.Background(), http.MethodGet, "repos/o/r", nil, nil)
+			after := time.Now()
 
 			var rl *RateLimitError
 			if !errors.As(err, &rl) || !errors.Is(err, ErrRateLimited) {
 				t.Fatalf("err = %v, want a *RateLimitError", err)
 			}
 
-			if !tc.check(rl.Reset) {
-				t.Errorf("reset = %v", rl.Reset)
+			if !tc.check(rl.Reset, before, after) {
+				t.Errorf("reset = %v, call from %v to %v", rl.Reset, before, after)
 			}
 
 			var he *api.HTTPError
