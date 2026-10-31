@@ -285,11 +285,11 @@ func planKindWord(k core.PlanKind) string {
 
 // overlayPlan draws the plan overlay over base; a terminal too small for the
 // box draws nothing.
-func (a *App) overlayPlan(base string, lk look) string {
+func (a *App) overlayPlan(f *frameLayers, base string, lk look) string {
 	x, y, w, h, ok := planBox(a.width, a.height)
 	if !ok {
 		return base
 	}
 
-	return overlayAt(base, a.width, a.height, x, y, a.planLines(lk, w, h))
+	return overlayAt(f, base, a.width, a.height, x, y, a.planLines(lk, w, h), nil)
 }

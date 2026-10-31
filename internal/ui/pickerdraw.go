@@ -30,7 +30,7 @@ func (a *App) pickerBox() (left, top, w int, ok bool) {
 
 // overlayPicker draws the picker over base, centred with its top at a quarter
 // of the height and clipped to the body rows.
-func (a *App) overlayPicker(base string, lk look) string {
+func (a *App) overlayPicker(f *frameLayers, base string, lk look) string {
 	_, top, w, ok := a.pickerBox()
 	if !ok {
 		return base
@@ -44,7 +44,7 @@ func (a *App) overlayPicker(base string, lk look) string {
 		lines = a.pickerFormLines(p, pt)
 	}
 
-	return overlayLines(base, a.width, a.height, top, lines, w)
+	return overlayLines(f, base, a.width, a.height, top, lines, w, nil)
 }
 
 // pickerCursor places the terminal's cursor in the field that has the keyboard;

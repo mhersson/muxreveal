@@ -587,7 +587,7 @@ func composeScene(t *testing.T, r *composeRig, w, h int) string {
 	blank := strings.TrimSuffix(strings.Repeat(strings.Repeat(" ", w)+"\n", h), "\n")
 	r.width, r.height = w, h
 
-	return r.overlayCompose(blank, r.current())
+	return r.overlayCompose(nil, blank, r.current())
 }
 
 func TestComposeGolden(t *testing.T) {

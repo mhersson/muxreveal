@@ -452,7 +452,7 @@ func TestPaletteFooterPlacement(t *testing.T) {
 	}{{22, true, true}, {21, true, false}, {20, false, false}, {19, false, false}} {
 		base := strings.TrimSuffix(strings.Repeat(strings.Repeat(" ", 80)+"\n", tc.height), "\n")
 
-		text := ansi.Strip(overlayOver(base, 80, tc.height, pal))
+		text := ansi.Strip(overlayOver(nil, base, 80, tc.height, pal))
 		if got := strings.Contains(text, "esc close"); got != tc.wantHint {
 			t.Errorf("height %d: hint row visible = %v, want %v", tc.height, got, tc.wantHint)
 		}

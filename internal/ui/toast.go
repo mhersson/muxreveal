@@ -90,7 +90,7 @@ func toastCovers(width, height int, notice string, icons bool, cx, cy int) bool 
 // body, one cell from the right edge, its bottom border on the last row. It is
 // drawn into the frame only, so it takes no keys and no mouse events. Nothing
 // is drawn when the box does not fit the body.
-func overlayToast(base string, width, height int, notice string, level toastLevel, icons bool, st styles) string {
+func overlayToast(f *frameLayers, base string, width, height int, notice string, level toastLevel, icons bool, st styles) string {
 	text, x, y, w, ok := toastLayout(width, height, notice, icons)
 	if !ok {
 		return base
@@ -113,5 +113,5 @@ func overlayToast(base string, width, height int, notice string, level toastLeve
 		tone.Render("╰" + strings.Repeat("─", inner) + "╯"),
 	}
 
-	return overlayAt(base, width, height, x, y, lines)
+	return overlayAt(f, base, width, height, x, y, lines, nil)
 }

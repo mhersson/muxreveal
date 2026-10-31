@@ -203,8 +203,8 @@ func TestOverlayDrawerMatchesTheCompositorAtTheEdge(t *testing.T) {
 					}
 				}
 
-				want := overlayAt(base, spliceWidth, spliceHeight, r.X, r.Y, lines)
-				got, _ := overlayDrawer(base, spliceWidth, spliceHeight, r, lines, true)
+				want := overlayAt(nil, base, spliceWidth, spliceHeight, r.X, r.Y, lines, nil)
+				got, _ := overlayDrawer(nil, base, spliceWidth, spliceHeight, r, lines, nil, true)
 
 				requireSameCells(t, got, want, spliceWidth, spliceHeight)
 
@@ -228,8 +228,8 @@ func TestOverlayDrawerMatchesTheCompositorAtTheLeftEdge(t *testing.T) {
 	r := core.Rect{X: 0, Y: 1, W: spliceWidth, H: spliceHeight - 1}
 	lines := slices.Repeat([]string{strings.Repeat("-", spliceWidth)}, r.H)
 
-	want := overlayAt(base, spliceWidth, spliceHeight, r.X, r.Y, lines)
-	got, _ := overlayDrawer(base, spliceWidth, spliceHeight, r, lines, true)
+	want := overlayAt(nil, base, spliceWidth, spliceHeight, r.X, r.Y, lines, nil)
+	got, _ := overlayDrawer(nil, base, spliceWidth, spliceHeight, r, lines, nil, true)
 
 	requireSameCells(t, got, want, spliceWidth, spliceHeight)
 
@@ -267,8 +267,8 @@ func TestOverlayDrawerFallsBackToTheCompositor(t *testing.T) {
 				t.Error("the splice applied, want the compositor")
 			}
 
-			want := overlayAt(tt.base, spliceWidth, spliceHeight, tt.r.X, tt.r.Y, tt.lines)
-			if got, spliced := overlayDrawer(tt.base, spliceWidth, spliceHeight, tt.r, tt.lines, tt.fits); got != want || spliced {
+			want := overlayAt(nil, tt.base, spliceWidth, spliceHeight, tt.r.X, tt.r.Y, tt.lines, nil)
+			if got, spliced := overlayDrawer(nil, tt.base, spliceWidth, spliceHeight, tt.r, tt.lines, nil, tt.fits); got != want || spliced {
 				t.Errorf("spliced = %v, or the compositor's result was not used", spliced)
 			}
 		})
@@ -370,7 +370,7 @@ func TestDrawDrawerCountsFallbacks(t *testing.T) {
 		t.Fatal("the drawer's lines do not fit the splice")
 	}
 
-	a.drawDrawer(base, r, lines, fits)
+	a.drawDrawer(nil, base, r, lines, nil, fits)
 
 	if a.drawer.fallbacks != 0 {
 		t.Fatalf("%d fallbacks for a frame the splice covers, want 0", a.drawer.fallbacks)
@@ -380,14 +380,14 @@ func TestDrawDrawerCountsFallbacks(t *testing.T) {
 	rows[r.Y+3] += apc
 	held := strings.Join(rows, "\n")
 
-	got := a.drawDrawer(held, r, lines, fits)
-	requireSameCells(t, got, overlayAt(held, a.width, a.height, r.X, r.Y, lines), a.width, a.height)
+	got := a.drawDrawer(nil, held, r, lines, nil, fits)
+	requireSameCells(t, got, overlayAt(nil, held, a.width, a.height, r.X, r.Y, lines, nil), a.width, a.height)
 
 	if a.drawer.fallbacks != 1 {
 		t.Errorf("%d fallbacks after a row the splice declines, want 1", a.drawer.fallbacks)
 	}
 
-	a.drawDrawer(base, r, lines, false)
+	a.drawDrawer(nil, base, r, lines, nil, false)
 
 	if a.drawer.fallbacks != 2 {
 		t.Errorf("%d fallbacks after lines that do not fit, want 2", a.drawer.fallbacks)
@@ -413,8 +413,8 @@ func TestOverlayDrawerMatchesTheCompositorOnTheDrawerScenes(t *testing.T) {
 						base := a.frameAt(a.geometry())
 						lines, fits := a.drawerDrawn(st, r)
 
-						want := overlayAt(base, a.width, a.height, r.X, r.Y, lines)
-						got, _ := overlayDrawer(base, a.width, a.height, r, lines, fits)
+						want := overlayAt(nil, base, a.width, a.height, r.X, r.Y, lines, nil)
+						got, _ := overlayDrawer(nil, base, a.width, a.height, r, lines, nil, fits)
 
 						requireSameCells(t, got, want, a.width, a.height)
 

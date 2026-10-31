@@ -826,51 +826,56 @@ func (a *App) View() tea.View {
 
 	content := a.frameAt(g)
 	st := a.store.State()
+	f := &frameLayers{}
 
 	if r, ok := a.drawerRect(st); ok {
 		lines, fits := a.drawerDrawn(st, r)
-		content = a.drawDrawer(content, r, lines, fits)
+		content = a.drawDrawer(f, content, r, lines, nil, fits)
 	}
 
-	content = overlayToast(content, a.width, a.height, a.notice, a.noticeLevel(), a.icons, lk.styles)
+	content = overlayToast(f, content, a.width, a.height, a.notice, a.noticeLevel(), a.icons, lk.styles)
 	if a.sequenceOpen() {
-		content = overlayCorner(content, a.width, a.height, sequencePopup(a.keymap.leader, a.prefix, a.sequenceRows(a.prefix), a.icons, lk.styles))
+		content = overlayCorner(f, content, a.width, a.height, sequencePopup(a.keymap.leader, a.prefix, a.sequenceRows(a.prefix), a.icons, lk.styles))
 	}
 
 	if a.popup {
-		content = overlayWhichKey(content, a.width, a.height, a.keymap.leader, a.hints(), a.icons, lk.styles)
+		content = overlayWhichKey(f, content, a.width, a.height, a.keymap.leader, a.hints(), a.icons, lk.styles)
 	}
 
 	if a.overlay != nil {
-		content = overlayOver(content, a.width, a.height, a.overlay.pal)
+		content = overlayOver(f, content, a.width, a.height, a.overlay.pal)
 	}
 
 	if a.picker.open != nil {
-		content = a.overlayPicker(content, lk)
+		content = a.overlayPicker(f, content, lk)
 	}
 
 	if a.prList != nil {
-		content = a.overlayPRList(content, lk)
+		content = a.overlayPRList(f, content, lk)
 	}
 
 	if a.checks != nil {
-		content = a.overlayChecks(content, lk)
+		content = a.overlayChecks(f, content, lk)
 	}
 
 	if a.merge != nil {
-		content = a.overlayMerge(content, lk)
+		content = a.overlayMerge(f, content, lk)
 	}
 
 	if a.plan != nil {
-		content = a.overlayPlan(content, lk)
+		content = a.overlayPlan(f, content, lk)
 	}
 
 	if a.composeShown() {
-		content = a.overlayCompose(content, lk)
+		content = a.overlayCompose(f, content, lk)
 	}
 
 	if a.confirm != nil {
-		content = overlayConfirm(content, a.width, a.height, *a.confirm, a.icons, lk.styles)
+		content = overlayConfirm(f, content, a.width, a.height, *a.confirm, a.icons, lk.styles)
+	}
+
+	if rows := f.visible(); len(rows) > 0 {
+		content = placePictures(content, a.width, a.height, rows)
 	}
 
 	v := tea.NewView(content)

@@ -249,7 +249,7 @@ func composeHints(cw int, preview bool, st styles) string {
 }
 
 // overlayCompose draws the compose box over base, centred.
-func (a *App) overlayCompose(base string, lk look) string {
+func (a *App) overlayCompose(f *frameLayers, base string, lk look) string {
 	w := min(maxComposeWidth, a.width-2)
 	if w < 4 {
 		return base
@@ -258,7 +258,7 @@ func (a *App) overlayCompose(base string, lk look) string {
 	lines, _, _ := a.composeBox(lk, w, a.height-2)
 	top := max(1, (a.height-len(lines))/2)
 
-	return overlayLines(base, a.width, a.height, top, lines, w)
+	return overlayLines(f, base, a.width, a.height, top, lines, w, nil)
 }
 
 // composeCursor places the terminal's cursor in the field that has it.

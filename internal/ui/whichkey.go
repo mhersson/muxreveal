@@ -496,18 +496,18 @@ func padColumn(c column, width int, st styles) column {
 // overlayWhichKey draws the popup over base at the bottom-right, one cell
 // from the right edge, its bottom border on the last row. It is clipped to the
 // body rows and the screen, never wrapped.
-func overlayWhichKey(base string, width, height int, leader string, hints []hint, icons bool, st styles) string {
+func overlayWhichKey(f *frameLayers, base string, width, height int, leader string, hints []hint, icons bool, st styles) string {
 	if len(hints) == 0 {
 		return base
 	}
 
-	return overlayCorner(base, width, height, whichKeyPopup(leader, hints, icons, st))
+	return overlayCorner(f, base, width, height, whichKeyPopup(leader, hints, icons, st))
 }
 
 // overlayCorner draws popup lines over base at the bottom-right of the body,
 // one cell from the right edge and ending on the last row, clipped to the body
 // rows and the screen.
-func overlayCorner(base string, width, height int, lines []string) string {
+func overlayCorner(f *frameLayers, base string, width, height int, lines []string) string {
 	if width <= 0 || height < 3 || len(lines) == 0 {
 		return base
 	}
@@ -527,5 +527,5 @@ func overlayCorner(base string, width, height int, lines []string) string {
 		lines[i] = ansi.Truncate(l, width-x, "")
 	}
 
-	return overlayAt(base, width, height, x, y, lines)
+	return overlayAt(f, base, width, height, x, y, lines, nil)
 }
