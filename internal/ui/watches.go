@@ -457,8 +457,10 @@ func (a *App) pinSync() tea.Cmd {
 // pinAcquire takes the watch of a pinned root off the update loop. A root that
 // is gone is no failure: the drawer says so.
 func (a *App) pinAcquire(tab core.TabID, root string) tea.Cmd {
+	set, open := a.watches.set, a.watches.open
+
 	return func() tea.Msg {
-		rel, err := a.acquireRoot(a.ctx, root)
+		rel, err := a.acquireRoot(a.ctx, set, open, root)
 
 		return pinAcquiredMsg{tab: tab, root: root, release: rel, err: err}
 	}
@@ -467,11 +469,11 @@ func (a *App) pinAcquire(tab core.TabID, root string) tea.Cmd {
 // acquireRoot opens root's repository and takes a reference on its watch,
 // registered with holds so App.Close frees it. A root that is gone answers
 // errWorktreeRemoved. It blocks, so it runs off the update loop.
-func (a *App) acquireRoot(ctx context.Context, root string) (func(), error) {
+func (a *App) acquireRoot(ctx context.Context, set *git.WatchSet, open func(context.Context, string) (git.Repo, error), root string) (func(), error) {
 	octx, cancel := context.WithTimeout(ctx, watchResolveTimeout)
 	defer cancel()
 
-	r, err := a.watches.open(octx, root)
+	r, err := open(octx, root)
 	if err != nil {
 		if !usableDir(root) {
 			err = errWorktreeRemoved{root: root}
@@ -480,9 +482,9 @@ func (a *App) acquireRoot(ctx context.Context, root string) (func(), error) {
 		return nil, err
 	}
 
-	rel, err := a.watches.set.Acquire(ctx, r)
+	rel, err := set.Acquire(ctx, r)
 	if err != nil {
-		return nil, fmt.Errorf("watch %s: %w", root, err)
+		return nil, err //nolint:wrapcheck // noticeOnce names the root
 	}
 
 	return a.watches.holds.add(rel), nil
@@ -538,9 +540,10 @@ func (a *App) mdWatchSync() tea.Cmd {
 	}
 
 	a.watches.md = &pinWatch{root: want}
+	set, open := a.watches.set, a.watches.open
 
 	return func() tea.Msg {
-		rel, err := a.acquireRoot(a.ctx, want)
+		rel, err := a.acquireRoot(a.ctx, set, open, want)
 
 		return mdAcquiredMsg{root: want, release: rel, err: err}
 	}
