@@ -139,9 +139,10 @@ Run `make check-fast` before every commit; it must be clean. It runs the format
 check, lint, the glyph, em-dash and wall-clock scan and the tests of the
 packages the change touches (`make check-fast TEST_PKGS=./...` runs them all),
 and it builds and vets the whole module, so a change that stops another package
-or its tests from compiling fails it. Whether the other packages still behave is
-CI's to check. A change to goroutines, channels or locks also runs the race
-detector on the tests it adds or changes: `go test -race -run '<those tests>' ./<package>`.
+or its tests from compiling fails it. Whether the other packages still behave
+is CI's to check. A change to goroutines, channels or locks also runs the race
+detector on the tests it adds or changes:
+`go test -race -run '<those tests>' ./<package>`.
 
 CI runs the full gates on every pull request that changes Go code (every test
 under the race detector, the darwin build, `go mod tidy` and the native macOS
