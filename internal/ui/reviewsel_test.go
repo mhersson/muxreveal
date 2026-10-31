@@ -1707,8 +1707,7 @@ func counted(n int) string {
 	return b.String()[:n]
 }
 
-// wrapRepo is a file with the line add inserted after its second line, and
-// the line del, when set, replaced by it.
+// wrapRepo is a file with the line add inserted after its second line.
 func wrapRepo(t *testing.T, add string) string {
 	t.Helper()
 
@@ -1886,5 +1885,37 @@ func TestWrappedSelectionPaint(t *testing.T) {
 		if got := on(c.row, c.col); got != c.want {
 			t.Errorf("%s: on the selection ground = %v, want %v", c.name, got, c.want)
 		}
+	}
+}
+
+func TestWrappedFullViewWhileSplit(t *testing.T) {
+	line := counted(600)
+	d := newSplitSel(t, wrapRepo(t, line))
+
+	d.keys(keyRune('f'))
+	d.until(t, "the full file", func() bool { return len(d.v.full) == 1 })
+
+	row := slices.IndexFunc(d.v.rows, func(r reviewRow) bool { return r.kind == rowFull && r.text == line })
+	if row < 0 {
+		t.Fatal("the full view has no row for the long line")
+	}
+
+	w := d.v.wrapW.full
+	if w <= 0 || d.v.rows[row+2].text != line || d.v.rows[row+2].part != 2 {
+		t.Fatalf("setup: the line does not take rows from %d at %d cells", row, w)
+	}
+
+	lay := d.layout(t)
+	lines := d.drawerLines(d.store.State(), mustRect(t, d.drawerRig))
+	top := d.v.viewTop(lay.diffH)
+
+	if got := ansi.Strip(lines[1+lay.headH+row+1-top]); !strings.Contains(got, wrapGlyph) {
+		t.Errorf("the continuation row is drawn without %q: %q", wrapGlyph, got)
+	}
+
+	d.dragRows(t, row, d.code(t, row)+4, row+2, d.code(t, row+2)+2)
+
+	if got, want := primaryWrites(d.clip), []string{line[4 : 2*w+3]}; !slices.Equal(got, want) {
+		t.Errorf("primary writes %q, want %q", got, want)
 	}
 }

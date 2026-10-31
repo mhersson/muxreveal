@@ -145,13 +145,16 @@ func (l drawerLayout) unifiedCode(n int) int {
 	return l.diffW - markW - n*l.gw - diffview.SignWidth
 }
 
-// codeWidths are the columns the rows wrap at, as the drawer draws them.
+// codeWidths are the columns the rows wrap at, as the drawer draws them. The
+// full view stays unified when side by side is on; the two sides are set only
+// when split.
 func (l drawerLayout) codeWidths() codeWidths {
+	w := codeWidths{line: l.unifiedCode(2), full: l.unifiedCode(1)}
 	if l.split {
-		return codeWidths{left: l.splitCode(), right: l.splitRightCode()}
+		w.left, w.right = l.splitCode(), l.splitRightCode()
 	}
 
-	return codeWidths{line: l.unifiedCode(2), full: l.unifiedCode(1)}
+	return w
 }
 
 // splitCode is the code columns of the left side of a side by side row, the

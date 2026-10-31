@@ -1019,7 +1019,7 @@ func TestCodeWidths(t *testing.T) {
 
 	l.split = true
 
-	if got, want := l.codeWidths(), (codeWidths{left: l.splitCode(), right: l.splitRightCode()}); got != want {
+	if got, want := l.codeWidths(), (codeWidths{line: l.unifiedCode(2), full: l.unifiedCode(1), left: l.splitCode(), right: l.splitRightCode()}); got != want {
 		t.Errorf("split widths %+v, want %+v", got, want)
 	}
 }

@@ -235,7 +235,7 @@ func (v *reviewView) rowText(lay drawerLayout, i, side int) md.LineText {
 		shown, _ := shownLine(l.Text)
 		tag := lineShown(l.Text, other, p >= 0) != shown
 
-		return codePieces(l.Text, tag, v.wrapAt(v.wrapW.line, lay.unifiedCode(2)), r.part, markW+2*lay.gw+diffview.SignWidth)
+		return codePieces(l.Text, tag, v.wrapW.line, r.part, markW+2*lay.gw+diffview.SignWidth)
 	case rowPair:
 		left, right := pairSides(f.Hunks[r.hunk], r)
 
@@ -258,31 +258,21 @@ func (v *reviewView) rowText(lay drawerLayout, i, side int) md.LineText {
 		}
 
 		tag := lineShown(ls[idx].Text, o, paired) != shown
-		col, width := lay.splitCodeAt(side)
+		col, _ := lay.splitCodeAt(side)
 		wrap := v.wrapW.left
 
 		if side != 0 {
 			wrap = v.wrapW.right
 		}
 
-		return codePieces(ls[idx].Text, tag, v.wrapAt(wrap, width), r.part, col)
+		return codePieces(ls[idx].Text, tag, wrap, r.part, col)
 	case rowFull, rowGhost:
-		return codePieces(r.text, false, v.wrapAt(v.wrapW.full, lay.unifiedCode(1)), r.part, markW+lay.gw+diffview.SignWidth)
+		return codePieces(r.text, false, v.wrapW.full, r.part, markW+lay.gw+diffview.SignWidth)
 	case rowMD:
 		return v.mdRowText(r, f)
 	}
 
 	return skip
-}
-
-// wrapAt is the width the rows wrap a code column at: the one they were built
-// with, or the column's own before the first layout.
-func (v *reviewView) wrapAt(built, column int) int {
-	if built > 0 {
-		return built
-	}
-
-	return column
 }
 
 // mdRowText is what a rendered file's line copies. A picture's Once is made
