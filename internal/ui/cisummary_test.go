@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/charmbracelet/x/exp/golden"
 
@@ -247,6 +248,55 @@ func TestCheckSummaryChooser(t *testing.T) {
 
 	if got := opener.opened(t, 1); !slices.Equal(got, []string{"https://example.com/2"}) {
 		t.Errorf("opened %v, want the second link", got)
+	}
+}
+
+func TestCheckSummaryScroll(t *testing.T) {
+	t.Parallel()
+
+	var b strings.Builder
+	for i := range 60 {
+		fmt.Fprintf(&b, "line %d\n\n", i)
+	}
+
+	a, _, _ := sumApp(t, true, 80, 20, b.String())
+	sumPage(t, a)
+
+	v := a.checks.page.summary
+	x, y, _, _, _ := logBox(a.width, a.height)
+	wheel := func(btn tea.MouseButton) { a.Update(tea.MouseWheelMsg{X: x + 5, Y: y + 5, Button: btn}) }
+
+	wheel(tea.MouseWheelDown)
+
+	if v.top != scrollStep || v.cursor != scrollStep {
+		t.Errorf("wheel down: top %d, cursor %d, want %d, %d", v.top, v.cursor, scrollStep, scrollStep)
+	}
+
+	v.cursor = v.top + 2
+	wheel(tea.MouseWheelDown)
+
+	if v.top != 2*scrollStep || v.cursor < v.top || v.cursor >= v.top+v.h {
+		t.Errorf("wheel down again: top %d, cursor %d", v.top, v.cursor)
+	}
+
+	wheel(tea.MouseWheelUp)
+	wheel(tea.MouseWheelUp)
+
+	if v.top != 0 || v.cursor < v.top || v.cursor >= v.top+v.h {
+		t.Errorf("wheel up: top %d, cursor %d, rows %d", v.top, v.cursor, v.h)
+	}
+
+	press(a, keyRune('G'))
+
+	if last := len(v.layout().Lines) - 1; v.cursor != last || v.top+v.h <= last {
+		t.Errorf("G: cursor %d, top %d, last line %d", v.cursor, v.top, last)
+	}
+
+	press(a, keyRune('g'))
+	press(a, tea.KeyPressMsg{Code: 'd', Mod: tea.ModCtrl})
+
+	if v.cursor != max(v.h/2, 1) {
+		t.Errorf("ctrl+d: cursor %d, want %d", v.cursor, max(v.h/2, 1))
 	}
 }
 
