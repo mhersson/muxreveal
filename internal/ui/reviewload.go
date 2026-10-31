@@ -260,6 +260,8 @@ func (a *App) reviewReset(tab core.TabID, pane core.PaneID) *reviewView {
 		old.stop()
 	}
 
+	a.clearDrawerSel(tab)
+
 	delete(a.drawer.views, tab)
 
 	v := a.reviewViewOf(tab)

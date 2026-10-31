@@ -168,7 +168,7 @@ func (a *App) dropRedrawnSelection(p *pane) {
 func (a *App) selectedText() string {
 	s := a.sel
 	if s == nil {
-		return ""
+		return a.textSelected()
 	}
 
 	p := a.panes[s.pane]
@@ -247,16 +247,16 @@ func (a *App) withSelection(p *pane) []string {
 			out, cloned = slices.Clone(lines), true
 		}
 
-		out[i] = paintSpan(line, cols, &spanPaint{from: from, to: to, bg: bg})
+		out[i] = paintSpans(line, cols, []spanPaint{{from: from, to: to, bg: bg}})
 	}
 
 	return out
 }
 
-// paintSpan repaints a rendered row with hl.
-func paintSpan(line string, cols int, hl *spanPaint) string {
+// paintSpans repaints a rendered row with spans.
+func paintSpans(line string, cols int, spans []spanPaint) string {
 	buf := uv.NewScreenBuffer(cols, 1)
 	uv.NewStyledString(line).Draw(buf, buf.Bounds())
 
-	return renderCells(func(x int) *uv.Cell { return buf.CellAt(x, 0) }, cols, hl)
+	return renderCells(func(x int) *uv.Cell { return buf.CellAt(x, 0) }, cols, spans)
 }

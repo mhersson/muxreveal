@@ -150,6 +150,44 @@ func (l drawerLayout) splitCode() int {
 	return (l.diffW - markW - 1 - 2*(l.gw+diffview.SignWidth)) / 2
 }
 
+// splitRightCode is the code columns of the right side of a side by side row.
+func (l drawerLayout) splitRightCode() int {
+	return l.diffW - markW - 1 - 2*(l.gw+diffview.SignWidth) - l.splitCode()
+}
+
+// splitSep is the column of a side by side row's "│".
+func (l drawerLayout) splitSep() int {
+	return markW + l.gw + diffview.SignWidth + l.splitCode()
+}
+
+// splitSide is the side of a side by side row that column col belongs to: the
+// left up to and including the "│", else the right.
+func (l drawerLayout) splitSide(col int) int {
+	if col <= l.splitSep() {
+		return 0
+	}
+
+	return 1
+}
+
+// splitCols are the columns of a side, without the "│".
+func (l drawerLayout) splitCols(side int) (lo, hi int) {
+	if side == 0 {
+		return 0, l.splitSep() - 1
+	}
+
+	return l.splitSep() + 1, l.diffW - 1
+}
+
+// splitCodeAt is where a side's code starts and how many columns it has.
+func (l drawerLayout) splitCodeAt(side int) (col, width int) {
+	if side == 0 {
+		return markW + l.gw + diffview.SignWidth, l.splitCode()
+	}
+
+	return l.splitSep() + 1 + l.gw + diffview.SignWidth, l.splitRightCode()
+}
+
 // drawCtx is what drawing one frame of the drawer needs.
 type drawCtx struct {
 	ui    theme.UI
@@ -237,6 +275,8 @@ type drawKey struct {
 	page                 *mdPage
 	pageRev              int
 	picGen               uint64
+	sel                  selection // the shown page's or the rows' selection, when hasSel
+	hasSel               bool
 
 	pr       core.PRInfo
 	unpushed int
@@ -269,8 +309,18 @@ func (d *drawCtx) key(r core.Rect, name string) drawKey {
 
 	if p := v.page(); p != nil {
 		k.page, k.pageRev, k.picGen = p, p.rev, d.picGen
-	} else if len(v.mdFiles) > 0 {
-		k.picGen = d.picGen
+
+		if p.view.sel != nil {
+			k.sel, k.hasSel = *p.view.sel, true
+		}
+	} else {
+		if len(v.mdFiles) > 0 {
+			k.picGen = d.picGen
+		}
+
+		if v.sel != nil {
+			k.sel, k.hasSel = *v.sel, true
+		}
 	}
 
 	if len(v.fresh) > 0 && d.now.Before(v.flashUntil) {
@@ -876,6 +926,10 @@ func (d *drawCtx) diffRow(y int) string {
 	row := d.exact(d.rowCells(i, cursor), w)
 	d.notePicture(i, d.lay.headH+y, cursor)
 
+	if spans := d.selSpans(i, w); len(spans) > 0 {
+		row = paintSpans(row, w, spans)
+	}
+
 	return row
 }
 
@@ -1059,12 +1113,17 @@ func (d *drawCtx) cursorGround(bg theme.Hex, cursor bool) theme.Hex {
 	return bg
 }
 
-// fileRow is a file's header: status, path, flags and counts.
-func (d *drawCtx) fileRow(fi int, read, cursor bool) string {
+// fileHeadW is the cells before a file header's path: the mark, a blank, the
+// status letter and a blank. hunkHeadW is the mark and a blank of a hunk header.
+const (
+	fileHeadW = 4
+	hunkHeadW = 2
+)
+
+// fileRight is the flags and counts at the end of a file's header.
+func (d *drawCtx) fileRight(fi int, read bool) []railRun {
 	f := d.v.res.Files[fi]
 	ui, w := d.ui, d.lay.diffW
-	bg := d.cursorGround(ui.Surface, cursor)
-	letter, letterFg := d.statusMark(f)
 
 	var right []railRun
 
@@ -1095,24 +1154,40 @@ func (d *drawCtx) fileRow(fi int, read, cursor bool) string {
 		right = append(right, railRun{text: "+" + strconv.Itoa(f.Added), fg: ui.Success}, railRun{text: " -" + strconv.Itoa(f.Removed), fg: ui.Error})
 	}
 
-	right = append(right, railRun{text: " "})
+	return append(right, railRun{text: " "})
+}
 
-	path, _ := cleanText(f.Path)
+// filePath is a file header's path, "old → new" for a rename, and as much of
+// it as the row has room for beside the flags in right.
+func (d *drawCtx) filePath(f git.FileDiff, right []railRun) (text, shown string) {
+	text, _ = cleanText(f.Path)
 	if f.OldPath != "" {
 		old, _ := cleanText(f.OldPath)
-		path = old + " → " + path
+		text = old + " → " + text
 	}
 
-	// The mark, a blank, the letter and a blank come first; two cells part the path from the flags.
-	room := max(w-4-runsWidth(right)-2, 0)
+	// Two cells part the path from the flags.
+	room := max(d.lay.diffW-fileHeadW-runsWidth(right)-2, 0)
 
-	if pw := ansi.StringWidth(path); pw > room {
-		path = ansi.TruncateLeft(path, pw-room+1, "…")
+	if pw := ansi.StringWidth(text); pw > room {
+		return text, ansi.TruncateLeft(text, pw-room+1, "…")
 	}
+
+	return text, text
+}
+
+// fileRow is a file's header: status, path, flags and counts.
+func (d *drawCtx) fileRow(fi int, read, cursor bool) string {
+	f := d.v.res.Files[fi]
+	ui, w := d.ui, d.lay.diffW
+	bg := d.cursorGround(ui.Surface, cursor)
+	letter, letterFg := d.statusMark(f)
+	right := d.fileRight(fi, read)
+	_, path := d.filePath(f, right)
 
 	runs := []railRun{d.markRun(cursor), {text: " "}, {text: letter, fg: letterFg, bold: true}, {text: " "}}
 	runs = append(runs, d.matchRuns(path, ui.Fg, true)...)
-	runs = append(runs, railRun{text: strings.Repeat(" ", max(w-4-ansi.StringWidth(path)-runsWidth(right), 1))})
+	runs = append(runs, railRun{text: strings.Repeat(" ", max(w-fileHeadW-ansi.StringWidth(path)-runsWidth(right), 1))})
 
 	return railPainter{bg: bg}.line(append(runs, right...), w)
 }

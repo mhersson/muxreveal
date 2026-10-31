@@ -25,6 +25,7 @@ type style struct {
 	class                           uint8
 	link                            int
 	path                            string
+	chrome                          bool // drawn, never copied
 }
 
 func plainStyle() style { return style{link: -1} }
@@ -32,7 +33,7 @@ func plainStyle() style { return style{link: -1} }
 func (s style) run(text string) Run {
 	return Run{
 		Text: text, Role: s.role, Bold: s.bold, Italic: s.italic, Underline: s.underline,
-		Strike: s.strike, Class: s.class, Link: s.link, Path: s.path,
+		Strike: s.strike, Class: s.class, Link: s.link, Path: s.path, chrome: s.chrome,
 	}
 }
 
@@ -57,7 +58,7 @@ type seg struct {
 
 // imageRef is an image seen in inline content. src and host are empty when the
 // source is not one the layout can name.
-type imageRef struct{ alt, src, host string }
+type imageRef struct{ alt, src, host, dest string }
 
 // inliner flattens one block's inline nodes into segs.
 type inliner struct {
@@ -209,7 +210,9 @@ func (in *inliner) text(s string, st style) {
 func (in *inliner) code(s string, st style) {
 	st.role = RoleCode
 	st = in.eff(st)
-	pad := seg{text: " ", st: st, sp: spaceFixed}
+	padSt := st
+	padSt.chrome = true
+	pad := seg{text: " ", st: padSt, sp: spaceFixed}
 
 	in.segs = append(in.segs, pad)
 	in.segs = appendCode(in.segs, s, st)
@@ -272,7 +275,7 @@ func (in *inliner) html(raw string, st style) {
 // image adds an image seg; its source resolves by the link rules and only an
 // http or https URL or a local path is kept.
 func (in *inliner) image(alt, dest string, st style) {
-	ref := &imageRef{alt: strings.Join(strings.Fields(cleanProse(alt)), " ")}
+	ref := &imageRef{alt: strings.Join(strings.Fields(cleanProse(alt)), " "), dest: dest}
 	res := in.l.d.resolve(dest)
 
 	switch {

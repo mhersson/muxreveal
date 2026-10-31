@@ -71,13 +71,20 @@ type mdRig struct {
 func newMDRig(t *testing.T) *mdRig {
 	t.Helper()
 
+	return newMDRigOf(t, planWith(nil), planEdited())
+}
+
+// newMDRigOf is newMDRig with the plan's committed and working text given.
+func newMDRigOf(t *testing.T, committed, edited string) *mdRig {
+	t.Helper()
+
 	dir := newRepoDir(t)
-	write(t, filepath.Join(dir, planPath), planWith(nil))
+	write(t, filepath.Join(dir, planPath), committed)
 	write(t, filepath.Join(dir, "main.go"), numberedLines("line", 40))
 	write(t, filepath.Join(dir, "bin.md"), "a\x00b\x00")
 	write(t, filepath.Join(dir, "gone.md"), "gone content\n")
 	commitEverything(t, dir, "init")
-	write(t, filepath.Join(dir, planPath), planEdited())
+	write(t, filepath.Join(dir, planPath), edited)
 	write(t, filepath.Join(dir, "main.go"), editedLines(40, 3, 30))
 	write(t, filepath.Join(dir, "bin.md"), "c\x00d\x00")
 

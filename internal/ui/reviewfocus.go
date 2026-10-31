@@ -113,6 +113,7 @@ func (a *App) closeDrawer(slide bool) tea.Cmd {
 	a.drawer.mdSeq++
 	a.drawer.mdWant = nil
 	a.drawerRelease()
+	a.clearDrawerSel(a.store.State().Tab().ID)
 
 	if _, shown := a.drawerFull(a.store.State()); slide && shown {
 		return a.startSlide(true)

@@ -116,6 +116,11 @@ type Run struct {
 	Class     uint8  // the highlighter's class, for RoleCodeText
 	Link      int    // index into Layout.Links, -1 for none
 	Path      string // a relative link resolved against a local base
+
+	chrome bool   // drawn, never copied
+	tab    bool   // a code line's tab, drawn as spaces
+	rest   string // on the … that cuts a code line: the line from the first cell the cut dropped
+	join   Join   // on the first run of a wrapped continuation
 }
 
 // Link is a link target the UI may emit as OSC 8: always http, https or mailto.
@@ -125,7 +130,8 @@ type Link struct{ URL string }
 // first row and Rows, Cols and ID are set; an image line leaves them zero.
 type Image struct {
 	Line       int
-	Alt, Src   string
+	Alt, Src   string // Src is resolved for loading
+	Dest       string // the destination as written, for copy
 	Link       int
 	Rows, Cols int
 	ID         uint32
@@ -350,7 +356,7 @@ func (l *layouter) flow(out *frag, segs []seg, width, lead int) {
 // image appends the rows of one image: a picture when l.picture sizes one, else
 // the image line, with a loading note when asked, fit to cols cells.
 func (l *layouter) image(out *frag, sg seg, cols int) {
-	im := Image{Line: len(out.lines), Alt: sg.img.alt, Src: sg.img.src, Link: sg.st.link}
+	im := Image{Line: len(out.lines), Alt: sg.img.alt, Src: sg.img.src, Dest: sg.img.dest, Link: sg.st.link}
 
 	var size PictureSize
 	if l.picture != nil && sg.img.src != "" {
@@ -434,7 +440,7 @@ func (l *layouter) spaces(n int) Line {
 		return nil
 	}
 
-	return Line{plainStyle().run(strings.Repeat(" ", n))}
+	return Line{chromeRun(plainStyle(), strings.Repeat(" ", n))}
 }
 
 // hang puts first before the first line appended since start and rest before
@@ -506,7 +512,7 @@ func fit(line Line, width int) Line {
 			}
 		}
 
-		r.Text = "…"
+		r.Text, r.tab, r.rest = "…", false, ""
 
 		return appendRun(out, r)
 	}

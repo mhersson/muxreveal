@@ -340,7 +340,7 @@ func (a *App) onPageReload(v *reviewView, msg mdPageMsg, active bool) {
 	msg.doc.withPictures(docPictures{reg: a.pictures, root: v.root})
 
 	line, old := p.anchorLine(), p.view
-	p.view = mdView{doc: msg.doc, w: old.w, h: old.h, icons: old.icons, top: old.top}
+	p.view = mdView{doc: msg.doc, w: old.w, h: old.h, icons: old.icons, top: old.top, sel: old.sel}
 	p.view.goSource(line)
 	p.sum = msg.sum
 	p.rev++
@@ -476,7 +476,7 @@ func pageCommand(id string) bool {
 	switch id {
 	case "review.line.next", "review.line.prev", "review.hunk.next", "review.hunk.prev", "review.page.down", "review.page.up",
 		"review.top", "review.bottom", "review.fold", "review.back", "review.edit", "review.refresh", "review.search",
-		"review.mode.branch", "review.mode.turn", "review.mode.pr":
+		"review.mode.branch", "review.mode.turn", "review.mode.pr", "review.copy":
 		return true
 	}
 

@@ -99,13 +99,17 @@ func isDone(item ast.Node) bool {
 	return ok && s == extension.TaskStatusCompleted
 }
 
-// marker is the bullet, number or task mark of item i of list n.
+// marker is the bullet, number or task mark of item i of list n. A number's
+// alignment pad is chrome.
 func (l *layouter) marker(n *ast.List, item ast.Node, i, numW, depth int) Line {
 	var text string
 
+	pad := 0
+
 	if n.IsOrdered() {
 		num := strconv.Itoa(n.Start + i)
-		text = strings.Repeat(" ", numW-len(num)) + num + ". "
+		pad = numW - len(num)
+		text = num + ". "
 	} else {
 		text = [...]string{"•", "◦", "▪"}[min(depth, 2)] + " "
 	}
@@ -118,10 +122,10 @@ func (l *layouter) marker(n *ast.List, item ast.Node, i, numW, depth int) Line {
 			mark.bold = true
 		}
 
-		return concat(Line{mark.run(glyph)}, l.spaces(utf8.RuneCountInString(text)-2))
+		return concat(Line{mark.run(glyph)}, l.spaces(pad+utf8.RuneCountInString(text)-2))
 	}
 
-	return Line{styled(RoleBullet).run(text)}
+	return appendRun(appendRun(nil, chromeRun(styled(RoleBullet), strings.Repeat(" ", pad))), styled(RoleBullet).run(text))
 }
 
 // quote lays out a block quote; past maxNest it adds no more bars.
@@ -145,7 +149,7 @@ func (l *layouter) barred(out *frag, n ast.Node, width int, c blockCtx, bar styl
 
 	l.blocks(out, n, max(width-2, 1), c, false)
 
-	b := Line{bar.run("▎ ")}
+	b := Line{chromeRun(bar, "▎ ")}
 	hang(out, start, b, b, width, true)
 }
 
@@ -169,7 +173,7 @@ func (l *layouter) alert(out *frag, n *alertNode, width int, c blockCtx) {
 	inner.depth++
 
 	if !capped {
-		head = concat(Line{st.run("▎ ")}, head)
+		head = concat(Line{chromeRun(st, "▎ ")}, head)
 	}
 
 	out.lines = append(out.lines, fit(head, max(width-c.lead, 1)))
@@ -182,14 +186,18 @@ func (l *layouter) alert(out *frag, n *alertNode, width int, c blockCtx) {
 func (l *layouter) alertTitle(n *alertNode) (Line, style) {
 	a := alertTitles[n.Alert]
 
-	title := a.title
+	st := styled(a.role)
+
+	var head Line
 	if l.icons {
-		title = a.icon + " " + title
+		head = Line{chromeRun(st, a.icon+" ")}
 	}
 
-	st := styled(a.role)
-	head := Line{st.run(title)}
-	head[0].Bold = true
+	head = append(head, st.run(a.title))
+
+	for i := range head {
+		head[i].Bold = true
+	}
 
 	return head, st
 }

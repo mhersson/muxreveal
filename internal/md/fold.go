@@ -123,7 +123,7 @@ func (l *layouter) footnotes(out *frag, width int) {
 		}
 
 		num := strconv.Itoa(idx)
-		first := Line{styled(RoleFootnoteNumber).run(strings.Repeat(" ", numW-len(num)) + num + ". ")}
+		first := appendRun(appendRun(nil, chromeRun(styled(RoleFootnoteNumber), strings.Repeat(" ", numW-len(num)))), styled(RoleFootnoteNumber).run(num+". "))
 
 		start := len(out.lines)
 

@@ -52,6 +52,7 @@ var reviewKeys = []reviewKey{
 	{",", "review.turn.prev"},
 	{".", "review.turn.next"},
 	{"/", "review.search"},
+	{"y", "review.copy"},
 	{"w", "review.worktrees"},
 	{"e", "review.edit"},
 	{"r", "review.refresh"},
@@ -119,6 +120,7 @@ func reviewCommands() []command {
 		cmd("review.turn.prev", "Review: previous turn", turn(-1)),
 		cmd("review.turn.next", "Review: next turn", turn(1)),
 		cmd("review.search", "Review: search", (*App).reviewSearch),
+		cmd("review.copy", "Review: copy the selection", (*App).reviewCopy),
 		cmd("review.worktrees", "Review: worktrees", (*App).openWorktrees),
 		cmd("review.edit", "Review: open in the editor", (*App).reviewEdit),
 		cmd("review.refresh", "Review: refresh", (*App).reviewReload),
@@ -154,15 +156,21 @@ func (a *App) handleDrawerKey(msg tea.KeyPressMsg) tea.Cmd {
 	}
 
 	if a.listFor(tab) != nil {
+		a.clearDrawerSel(tab.ID)
+
 		return a.handleWorktreesKey(msg)
 	}
 
 	if c := a.linksFor(tab); c != nil {
+		a.clearDrawerSel(tab.ID)
+
 		return a.handleLinksKey(c, msg)
 	}
 
 	if v.search != nil {
-		a.searchKey(v, msg)
+		if a.searchKey(v, msg) {
+			a.clearDrawerSel(tab.ID)
+		}
 
 		return nil
 	}
@@ -181,11 +189,48 @@ func (a *App) handleDrawerKey(msg tea.KeyPressMsg) tea.Cmd {
 		return nil
 	}
 
+	// A command the page drops does not act, so it keeps the selection.
+	if id != "review.copy" && (id == "review.toggle" || !a.pageShown() || pageCommand(id)) {
+		a.clearDrawerSel(tab.ID)
+	}
+
 	return c.run(a)
 }
 
-// searchKey types into the open search prompt.
-func (a *App) searchKey(v *reviewView, msg tea.KeyPressMsg) {
+// clearDrawerSel drops the text selection when the drawer of tab holds it.
+func (a *App) clearDrawerSel(tab core.TabID) {
+	if a.text != nil && a.text.tab == tab {
+		a.clearTextSel()
+	}
+}
+
+// reviewCopy copies the drawer's selection and keeps it. With none it copies
+// the cursor's unit: a paragraph or item on a page, a line or header of the
+// diff, a paragraph of a rendered file.
+func (a *App) reviewCopy() tea.Cmd {
+	tab, v, ok := a.reviewActive()
+	if !ok {
+		return nil
+	}
+
+	if ts := a.text; ts != nil && ts.tab == tab.ID {
+		return a.clip.copy(ts.text())
+	}
+
+	if _, p := a.activePage(); p != nil {
+		return a.clip.copy(p.view.unitText(p.view.cursor))
+	}
+
+	if lay, ok := a.rowsLayout(tab.ID, v); ok {
+		return a.clip.copy(v.unitText(lay, v.cursor))
+	}
+
+	return nil
+}
+
+// searchKey types into the open search prompt and reports whether the prompt
+// took the key.
+func (a *App) searchKey(v *reviewView, msg tea.KeyPressMsg) bool {
 	switch key := msg.String(); {
 	case key == "enter":
 		a.reviewFind(v)
@@ -197,7 +242,11 @@ func (a *App) searchKey(v *reviewView, msg tea.KeyPressMsg) {
 		}
 	case msg.Text != "":
 		*v.search += printable(msg.Text)
+	default:
+		return false
 	}
+
+	return true
 }
 
 // drawerPaste appends pasted text to the search prompt while it is open;
