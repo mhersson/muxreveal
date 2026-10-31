@@ -21,11 +21,11 @@ func lineUnits(raw string, tagCR bool) []diffUnit {
 	units := diffUnits(kept)
 
 	if cut {
-		units = append(units, diffUnit{raw: len(kept), cells: 1, whole: true})
+		units = append(units, diffUnit{raw: len(kept), cells: 1, whole: true, tail: true})
 	}
 
 	if tagCR {
-		units = append(units, diffUnit{raw: len(line), cells: ansi.StringWidth(endingTag), text: endingTag, whole: true})
+		units = append(units, diffUnit{raw: len(line), cells: ansi.StringWidth(endingTag), text: endingTag, whole: true, tail: true})
 	}
 
 	return units
@@ -63,9 +63,11 @@ func wrapLine(units []diffUnit, width int) []wrapPart {
 
 		end := i
 
-		if i == start.u0 {
+		switch {
+		case i == start.u0:
 			end = i + 1
-		} else {
+		case units[i].tail:
+		default:
 			for j := i - 1; j >= start.u0 && ends[j+1] > start.c0+width-wrapReach; j-- {
 				if units[j].text == " " {
 					end = j + 1
@@ -92,7 +94,7 @@ func wrapLine(units []diffUnit, width int) []wrapPart {
 func lineParts(raw string, tagCR bool, width int) []wrapPart {
 	if !tagCR && width > 0 {
 		line := strings.TrimSuffix(raw, "\r")
-		if len(line) <= width && printableASCII(line) {
+		if len(line) <= min(width, lineBudget) && printableASCII(line) {
 			return []wrapPart{{u0: 0, u1: len(line), c0: 0, c1: len(line)}}
 		}
 	}
@@ -100,6 +102,7 @@ func lineParts(raw string, tagCR bool, width int) []wrapPart {
 	return wrapLine(lineUnits(raw, tagCR), width)
 }
 
+// printableASCII reports whether every byte of s is in 0x20-0x7e.
 func printableASCII(s string) bool {
 	for i := 0; i < len(s); i++ {
 		if s[i] < 0x20 || s[i] > 0x7e {

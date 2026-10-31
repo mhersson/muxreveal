@@ -15,11 +15,12 @@ import (
 
 // diffUnit is one thing a diff line draws: a grapheme of text, a tab, a
 // hidden-character tag or the cut's ellipsis. raw is where it starts in the
-// line.
+// line. tail marks the cut's ellipsis and the CR ending tag, which wrap alone.
 type diffUnit struct {
 	raw, cells int
 	text       string
 	whole      bool
+	tail       bool
 }
 
 // isHiddenRune reports whether cleanText draws r as a tag.
