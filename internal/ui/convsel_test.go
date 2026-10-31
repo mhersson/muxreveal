@@ -249,12 +249,9 @@ func TestConversationYKey(t *testing.T) {
 		r := newConvSelRig(t)
 		convOnLine(t, r.a, "Looks fine.")
 
-		v := &r.a.conv.view
-		want := v.unitText(v.cursor)
-
 		r.key(keyRune('y'))
 
-		if got := clipboardWrites(r.clip); want == "" || !slices.Equal(got, []string{want}) {
+		if got, want := clipboardWrites(r.clip), []string{"Looks fine."}; !slices.Equal(got, want) {
 			t.Errorf("clipboard writes %q, want %q", got, want)
 		}
 	})
