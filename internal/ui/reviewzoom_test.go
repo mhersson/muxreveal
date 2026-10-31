@@ -515,6 +515,21 @@ func TestReviewZoomKeepsWidthWhileClosing(t *testing.T) {
 	}
 }
 
+func TestUncoverFocusLeavesNoSlide(t *testing.T) {
+	t.Parallel()
+
+	r := zoomRig(t)
+	r.keys(keyRune('z'))
+	r.finishSlide()
+	openIn(t, r.App, core.FocusPane{ID: "p2"})
+	r.uncoverFocus()
+
+	if _, open := r.drawerRect(r.store.State()); open || !r.drawer.slideFrom.IsZero() || r.drawer.resizeFrom != 0 {
+		t.Errorf("drawer shown %v, slide from %v, resize from %v, want a closed drawer with no slide state",
+			open, r.drawer.slideFrom, r.drawer.resizeFrom)
+	}
+}
+
 func TestReviewZoomClosingRailClick(t *testing.T) {
 	t.Parallel()
 

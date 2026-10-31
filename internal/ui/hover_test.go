@@ -168,6 +168,12 @@ func TestHoverFocus(t *testing.T) {
 				t.Errorf("closing = %v, zoom = %v, want closing and zoom %v", r.drawer.closing, r.view().zoom, zoom)
 			}
 		}},
+		{"drawer text press holds", 270, 75, func(t *testing.T, r *drawerRig, c hoverCells) {
+			r.drawerTake()
+			r.mouse.text = &textPress{}
+			at(r, c.pane)
+			wantHolder(t, r, "drawer")
+		}},
 		{"modal", 270, 75, func(t *testing.T, r *drawerRig, c hoverCells) {
 			r.openCommandPalette()
 			at(r, c.rail)

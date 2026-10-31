@@ -1190,3 +1190,31 @@ func TestWrappedWheelOverTallLine(t *testing.T) {
 		})
 	}
 }
+
+func TestStickyHeaderStandsDownOnTheCursorsLine(t *testing.T) {
+	t.Parallel()
+
+	tall := " " + strings.Repeat("t", 1024)
+	a, v := fitScene(t, padded(0, append(append(manyPads(3), tall), manyShort(25)...)...))
+
+	// Rows: file 0, hunk 1, pads 2-4, the tall line 5-30, short lines 31-.
+	for _, tc := range []struct {
+		name      string
+		cursor    int
+		wantStick bool
+	}{
+		{"cursor on the line of the top row", 5, false},
+		{"cursor on another line", 31, true},
+	} {
+		v.cursor, v.top = tc.cursor, 15
+
+		d, _, ok := a.drawCtxFor(a.store.State())
+		if !ok || d.top != 15 {
+			t.Fatalf("%s: setup: ok %v, top %d, want 15", tc.name, ok, d.top)
+		}
+
+		if _, got := d.stickyHeader(); got != tc.wantStick {
+			t.Errorf("%s: sticky header = %v, want %v", tc.name, got, tc.wantStick)
+		}
+	}
+}

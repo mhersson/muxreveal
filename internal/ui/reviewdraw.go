@@ -909,7 +909,11 @@ func (d *drawCtx) cursorFile() *git.FileDiff {
 // the top one: the top row's file header, when it has scrolled off.
 func (d *drawCtx) stickyHeader() (int, bool) {
 	rows, top := d.v.rows, d.top
-	if top <= 0 || top >= len(rows) || rows[top].kind == rowFile || top == d.v.cursor {
+	if top <= 0 || top >= len(rows) || rows[top].kind == rowFile {
+		return 0, false
+	}
+
+	if c := d.v.cursor; c >= 0 && c < len(rows) && d.v.lineStart(top) == d.v.lineStart(c) {
 		return 0, false
 	}
 

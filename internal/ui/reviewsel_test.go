@@ -1888,6 +1888,7 @@ func TestWrappedSelectionPaint(t *testing.T) {
 	}
 }
 
+// Not parallel: the drawer highlights code, which takes the highlighter's time.
 func TestWrappedFullViewWhileSplit(t *testing.T) {
 	line := counted(600)
 	d := newSplitSel(t, wrapRepo(t, line))

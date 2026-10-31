@@ -165,7 +165,7 @@ func diffPartPieces(raw string, tagCR bool, width, part int) []md.Piece {
 	return out
 }
 
-// codePieces is the copy text of row r's code on a side drawn at wrap cells:
+// codePieces is the copy text of a row's code on a side drawn at wrap cells:
 // the pieces of its part, shifted to the code's first cell.
 func codePieces(raw string, tagCR bool, wrap, part, at int) md.LineText {
 	ps := diffPartPieces(raw, tagCR, wrap, part)

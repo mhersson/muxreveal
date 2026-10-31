@@ -330,7 +330,7 @@ func (a *App) handleMotion(msg tea.MouseMotionMsg) tea.Cmd {
 		h := a.hit(m.X, m.Y)
 
 		var cmd tea.Cmd
-		if a.focusFollows && a.mouse.press == nil && a.mouse.fwd == nil {
+		if a.focusFollows && a.mouse.press == nil && a.mouse.fwd == nil && a.mouse.text == nil {
 			cmd = a.hoverFocus(m.X, m.Y, h)
 		}
 
