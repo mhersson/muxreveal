@@ -235,6 +235,22 @@ func TestConversationPages(t *testing.T) {
 	}
 }
 
+func TestConversationCursorlessPageIsCut(t *testing.T) {
+	t.Parallel()
+
+	body := strings.Replace(string(readFixture(t, "conversation_page.json")), `"startCursor": "CURSOR"`, `"startCursor": ""`, 1)
+	c, _ := newTestClient(t, "github.com", &gqlRecorder{body: []byte(body)})
+
+	conv, err := c.Conversation(context.Background(), testRepo, 24)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !conv.Cut || len(conv.Items) != 1 {
+		t.Errorf("Cut = %v, items = %d, want cut with 1 item", conv.Cut, len(conv.Items))
+	}
+}
+
 func TestConversationGHE(t *testing.T) {
 	t.Parallel()
 
@@ -302,6 +318,19 @@ func TestSignedImages(t *testing.T) {
 			name:     "no signed match",
 			markdown: "![x](https://github.com/user-attachments/assets/1111-2222)",
 			html:     `<img src="https://private-user-images.githubusercontent.com/1/301-3333-4444.png?jwt=q">`,
+		},
+		{
+			name:     "data-src is not src",
+			markdown: "![x](https://github.com/user-attachments/assets/aaaa-bbbb)",
+			html:     `<img data-src="https://private-user-images.githubusercontent.com/1/9-cccc.png?jwt=no" src="https://private-user-images.githubusercontent.com/1/9-aaaa-bbbb.png?jwt=q">`,
+			want: map[string]string{
+				"https://github.com/user-attachments/assets/aaaa-bbbb": "https://private-user-images.githubusercontent.com/1/9-aaaa-bbbb.png?jwt=q",
+			},
+		},
+		{
+			name:     "http is not signed",
+			markdown: "![x](https://github.com/user-attachments/assets/aaaa-bbbb)",
+			html:     `<img src="http://private-user-images.githubusercontent.com/1/9-aaaa-bbbb.png?jwt=q">`,
 		},
 		{name: "no images", markdown: "just text", html: "<p>just text</p>"},
 	}

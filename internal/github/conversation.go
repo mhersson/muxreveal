@@ -219,6 +219,8 @@ func (c *Client) Conversation(ctx context.Context, r Repo, number int) (Conversa
 
 		info := pr.TimelineItems.PageInfo
 		if !info.HasPreviousPage || info.StartCursor == "" {
+			conv.Cut = info.HasPreviousPage
+
 			break
 		}
 
@@ -409,7 +411,7 @@ func newText(markdown, htmlBody string) Text {
 
 var (
 	mdImageRe = regexp.MustCompile(`!\[[^\]]*\]\(\s*<?([^)\s>]+)`)
-	imgSrcRe  = regexp.MustCompile(`(?i)<img\b[^>]*?\bsrc\s*=\s*(?:"([^"]*)"|'([^']*)')`)
+	imgSrcRe  = regexp.MustCompile(`(?i)<img\b[^>]*?\ssrc\s*=\s*(?:"([^"]*)"|'([^']*)')`)
 )
 
 // signedImages maps each image source in markdown to the signed URL that the
@@ -423,7 +425,7 @@ func signedImages(markdown, htmlBody string) map[string]string {
 		src := html.UnescapeString(m[1] + m[2])
 
 		u, err := url.Parse(src)
-		if err != nil || u.Host != signedImageHost {
+		if err != nil || u.Scheme != "https" || u.Host != signedImageHost {
 			continue
 		}
 
