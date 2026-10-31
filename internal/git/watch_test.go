@@ -486,6 +486,10 @@ func TestWatchSteadyStreamIsSentByMaxDelay(t *testing.T) {
 		},
 	})
 
+	if len(timers) != 2 {
+		t.Fatalf("Watch made %d timers, want 2", len(timers))
+	}
+
 	debounce, maxDelay := timers[0], timers[1]
 
 	waitReset := func(f *fakeTimer, want time.Duration) {
@@ -501,8 +505,9 @@ func TestWatchSteadyStreamIsSentByMaxDelay(t *testing.T) {
 		}
 	}
 
-	// Each write is awaited before the next, so the debounce is re-armed by
-	// every event and never has a quiet gap. The max delay is armed once.
+	// Each write waits for a debounce reset before the next (one write can raise
+	// several events, so extra resets may queue), so the debounce never has a
+	// quiet gap. The max delay is armed once.
 	path := filepath.Join(dir, "tracked.txt")
 
 	for i := range 5 {

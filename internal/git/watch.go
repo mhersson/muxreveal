@@ -148,7 +148,7 @@ func Watch(ctx context.Context, r Repo, opts WatchOptions) (*Watcher, error) {
 		return nil, err
 	}
 
-	newTimer := opts.newTimer
+	newTimer := w.opts.newTimer
 	if newTimer == nil {
 		newTimer = func() watchTimer {
 			t := time.NewTimer(time.Hour)
