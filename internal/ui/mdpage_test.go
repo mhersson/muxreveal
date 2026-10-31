@@ -245,7 +245,7 @@ func (r *drawerRig) typeKeys(s string) {
 	}
 }
 
-// openPage shows rel as a page, pushed or as the only one.
+// openPage pushes rel as a page.
 func (m *pageRig) openPage(t *testing.T, rel string) *mdPage {
 	t.Helper()
 
