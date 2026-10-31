@@ -182,6 +182,21 @@ func TestRailPlanKey(t *testing.T) {
 		}
 	})
 
+	t.Run("no selected card", func(t *testing.T) {
+		t.Parallel()
+
+		r := railPlanRig(t)
+		r.a.rail.sel = ""
+
+		if msgs := planMsgs(press(r.a, keyRune('p'))); len(msgs) != 0 {
+			t.Errorf("p raised %d reads with no card selected", len(msgs))
+		}
+
+		if r.a.notice != "" {
+			t.Errorf("notice %q, want none", r.a.notice)
+		}
+	})
+
 	t.Run("typing in the search", func(t *testing.T) {
 		t.Parallel()
 
