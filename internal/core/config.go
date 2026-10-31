@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/mhersson/muxreveal/internal/core/tiling"
 	"github.com/pelletier/go-toml/v2"
@@ -21,14 +22,15 @@ const DefaultTheme = "catppuccin-mocha"
 type Config struct {
 	Theme string `toml:"theme"`
 	// Icons is a pointer so an absent key (nil) can mean true.
-	Icons     *bool           `toml:"icons"`
-	Mouse     Mouse           `toml:"mouse"`
-	Clipboard Clipboard       `toml:"clipboard"`
-	Layout    LayoutConfig    `toml:"layout"`
-	Diff      DiffConfig      `toml:"diff"`
-	Worktrees WorktreesConfig `toml:"worktrees"`
-	Plans     PlansConfig     `toml:"plans"`
-	Keys      KeysConfig      `toml:"keys"`
+	Icons        *bool              `toml:"icons"`
+	Mouse        Mouse              `toml:"mouse"`
+	Clipboard    Clipboard          `toml:"clipboard"`
+	Layout       LayoutConfig       `toml:"layout"`
+	Diff         DiffConfig         `toml:"diff"`
+	Worktrees    WorktreesConfig    `toml:"worktrees"`
+	Plans        PlansConfig        `toml:"plans"`
+	PullRequests PullRequestsConfig `toml:"pull_requests"`
+	Keys         KeysConfig         `toml:"keys"`
 }
 
 // LayoutConfig is the [layout] section. Validate rejects an out-of-range value
@@ -213,6 +215,33 @@ func (c PlansConfig) Validate() error {
 	return nil
 }
 
+// PullRequestsConfig is the [pull_requests] section. ReviewRequestedDays
+// limits the Review requested tab to pull requests updated in that many days;
+// 0, the zero value, is no limit.
+type PullRequestsConfig struct {
+	ReviewRequestedDays int `toml:"review_requested_days"`
+}
+
+// maxReviewRequestedDays is ten years; the bound also keeps the cutoff's
+// duration far from overflowing.
+const maxReviewRequestedDays = 3650
+
+// Validate names the key when the days are out of range.
+func (c PullRequestsConfig) Validate() error {
+	return inRange("pull_requests.review_requested_days", c.ReviewRequestedDays, 0, maxReviewRequestedDays)
+}
+
+// RequestedSince is the oldest update a review request may have at now, or
+// the zero time for no limit. Whole days of 24 hours keep a DST change from
+// moving the cutoff.
+func (c PullRequestsConfig) RequestedSince(now time.Time) time.Time {
+	if c.ReviewRequestedDays <= 0 {
+		return time.Time{}
+	}
+
+	return now.Add(-time.Duration(c.ReviewRequestedDays) * 24 * time.Hour)
+}
+
 // Mouse is the [mouse] section; both switches are off by default.
 type Mouse struct {
 	FocusFollowsMouse bool `toml:"focus_follows_mouse"`
@@ -246,9 +275,10 @@ func DefaultConfig() Config {
 			DefaultMode: string(ModeBSP), AutoScheme: "spiral", MasterRatio: 50, MasterPosition: tiling.MasterPositionLeft,
 			MasterCount: 1, MasterGrid: new(true), ColumnWidth: 50,
 		},
-		Diff:      DiffConfig{Layout: "unified", Mode: string(ReviewBranch), MaxFiles: 400, MaxBytes: 2 << 20, MaxLines: 5000},
-		Worktrees: WorktreesConfig{Root: "inside"},
-		Plans:     PlansConfig{Paths: []string{"docs/superpowers/plans/", "docs/superpowers/specs/"}},
+		Diff:         DiffConfig{Layout: "unified", Mode: string(ReviewBranch), MaxFiles: 400, MaxBytes: 2 << 20, MaxLines: 5000},
+		Worktrees:    WorktreesConfig{Root: "inside"},
+		Plans:        PlansConfig{Paths: []string{"docs/superpowers/plans/", "docs/superpowers/specs/"}},
+		PullRequests: PullRequestsConfig{ReviewRequestedDays: 7},
 	}
 }
 

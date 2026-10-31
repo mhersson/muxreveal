@@ -4,8 +4,10 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/mhersson/muxreveal/internal/core/tiling"
 )
@@ -102,6 +104,17 @@ func TestLoadConfig(t *testing.T) {
 		},
 		{name: "unknown worktrees key", content: "[worktrees]\nroots = \"inside\"\n", wantErr: true, errHas: []string{"unknown key worktrees.roots"}},
 		{name: "worktrees wrong type", content: "[worktrees]\nroot = 3\n", wantErr: true, errHas: []string{"worktrees.root"}},
+		{
+			name: "pull_requests section", content: "[pull_requests]\nreview_requested_days = 30\n",
+			want: func() Config {
+				c := DefaultConfig()
+				c.PullRequests.ReviewRequestedDays = 30
+
+				return c
+			}(),
+		},
+		{name: "unknown pull_requests key", content: "[pull_requests]\nrequested_days = 3\n", wantErr: true, errHas: []string{"unknown key pull_requests.requested_days"}},
+		{name: "pull_requests wrong type", content: "[pull_requests]\nreview_requested_days = \"week\"\n", wantErr: true, errHas: []string{"pull_requests.review_requested_days"}},
 		{name: "unknown keys key", content: "[keys]\nleaderkey = \"ctrl+a\"\n", wantErr: true, errHas: []string{"unknown key keys.leaderkey"}},
 		{name: "unknown keys context", content: "[keys.drawr]\no = \"x\"\n", wantErr: true, errHas: []string{"unknown key keys.drawr"}},
 		{name: "diff wrong type", content: "[diff]\nmax_lines = \"many\"\n", wantErr: true, errHas: []string{"max_lines"}},
@@ -150,6 +163,11 @@ func TestLoadConfig(t *testing.T) {
 			// And for Plans.
 			if tt.want.Plans.Paths == nil {
 				tt.want.Plans = DefaultConfig().Plans
+			}
+
+			// And for PullRequests; TestPullRequestsConfig loads an explicit 0.
+			if tt.want.PullRequests == (PullRequestsConfig{}) {
+				tt.want.PullRequests = DefaultConfig().PullRequests
 			}
 
 			if !tt.wantErr {
@@ -429,5 +447,72 @@ func TestWorktreesConfig(t *testing.T) {
 	// A hand-built config reads as the default.
 	if (WorktreesConfig{}).Sibling() {
 		t.Error("the zero WorktreesConfig is sibling, want inside")
+	}
+}
+
+func TestPullRequestsConfig(t *testing.T) {
+	t.Parallel()
+
+	def := DefaultConfig().PullRequests
+	if def.ReviewRequestedDays != 7 {
+		t.Errorf("default review_requested_days = %d, want 7", def.ReviewRequestedDays)
+	}
+
+	now := time.Date(2026, 10, 31, 10, 0, 0, 0, time.UTC)
+
+	tests := []struct {
+		days      int
+		wantErr   string
+		wantSince time.Time
+	}{
+		{days: 0},
+		{days: 1, wantSince: now.Add(-24 * time.Hour)},
+		{days: 7, wantSince: now.Add(-7 * 24 * time.Hour)},
+		{days: 3650, wantSince: now.Add(-3650 * 24 * time.Hour)},
+		{days: -1, wantErr: "pull_requests.review_requested_days: -1 is out of range 0-3650"},
+		{days: 3651, wantErr: "pull_requests.review_requested_days: 3651 is out of range 0-3650"},
+	}
+	for _, tt := range tests {
+		t.Run(strconv.Itoa(tt.days), func(t *testing.T) {
+			t.Parallel()
+
+			c := PullRequestsConfig{ReviewRequestedDays: tt.days}
+
+			err := c.Validate()
+			if tt.wantErr == "" && err != nil {
+				t.Fatalf("Validate() = %v", err)
+			}
+
+			if tt.wantErr != "" {
+				if err == nil || err.Error() != tt.wantErr {
+					t.Fatalf("Validate() = %v, want %q", err, tt.wantErr)
+				}
+
+				return
+			}
+
+			if got := c.RequestedSince(now); !got.Equal(tt.wantSince) {
+				t.Errorf("RequestedSince() = %v, want %v", got, tt.wantSince)
+			}
+		})
+	}
+}
+
+// An explicit 0 in the file is no limit, not the default 7.
+func TestLoadConfigReviewRequestedDaysZero(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(path, []byte("[pull_requests]\nreview_requested_days = 0\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := LoadConfig(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if d := cfg.PullRequests.ReviewRequestedDays; d != 0 {
+		t.Errorf("review_requested_days = %d, want 0", d)
 	}
 }
