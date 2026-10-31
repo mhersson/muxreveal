@@ -212,7 +212,7 @@ func benchScroll(t *testing.T, hold func(t *testing.T) any) {
 
 	runtime.ReadMemStats(&mem1)
 
-	answers += hl.settle()
+	hl.settle()
 
 	runtime.KeepAlive(held)
 

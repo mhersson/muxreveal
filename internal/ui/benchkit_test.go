@@ -559,6 +559,9 @@ func TestHLRunnerStartsOneBatchAndStopsWithTheApp(t *testing.T) {
 
 	app.drawerAfterUpdate()
 
+	// The command sees the ended context and answers nil; the drawer keeps its job.
+	app.cancel()
+
 	r := newHLRunner(app)
 	r.start()
 	r.start()
@@ -566,9 +569,6 @@ func TestHLRunnerStartsOneBatchAndStopsWithTheApp(t *testing.T) {
 	if app.drawer.hlJob == nil || r.batches != 1 {
 		t.Fatalf("job %v, batches %d; want a job and one batch from two starts", app.drawer.hlJob != nil, r.batches)
 	}
-
-	// The command sees the ended context and answers nil; the drawer keeps its job.
-	app.cancel()
 
 	if n := r.settle(); n != 0 || r.answers != 0 {
 		t.Errorf("settle fed %d answers after the app ended, want none", n)
