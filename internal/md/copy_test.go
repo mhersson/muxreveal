@@ -48,6 +48,7 @@ func TestCopyLines(t *testing.T) {
 		name  string
 		src   string
 		width int
+		base  string
 		picks func(l Layout) []CellRange // nil picks every cell of every line
 		block bool
 		want  string
@@ -144,7 +145,7 @@ func TestCopyLines(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			l := layoutOf(tt.src, tt.width, "")
+			l := layoutOf(tt.src, tt.width, tt.base)
 
 			picks := picksAll(l)
 			if tt.picks != nil {
@@ -170,7 +171,7 @@ func TestCopyPicture(t *testing.T) {
 		t.Fatalf("lines = %d, want 3", len(l.Lines))
 	}
 
-	const want = "![alt](/w/a.png)"
+	const want = "![alt](a.png)"
 
 	if got := CopyLines(linesText(l), picksAll(l), false); got != want {
 		t.Errorf("all rows copy %q, want %q", got, want)

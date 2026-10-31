@@ -99,7 +99,7 @@ func (l Layout) Text(i int) LineText {
 
 	if img >= 0 {
 		im := l.Images[img]
-		src = "![" + im.Alt + "](" + im.Src + ")"
+		src = "![" + im.Alt + "](" + im.Dest + ")"
 
 		if im.Rows > 0 {
 			picRow = i - im.Line

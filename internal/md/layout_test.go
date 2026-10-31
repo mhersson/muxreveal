@@ -510,7 +510,7 @@ func TestImages(t *testing.T) {
 		l := layoutWith("before ![logo](https://example.com/a.png) after", LayoutOptions{Width: 40, Icons: true}, "")
 		wantLines(t, l, "before", iconImage+" logo  example.com", "after")
 
-		if fmt.Sprint(l.Images) != fmt.Sprint([]Image{{Line: 1, Alt: "logo", Src: "https://example.com/a.png", Link: -1}}) {
+		if fmt.Sprint(l.Images) != fmt.Sprint([]Image{{Line: 1, Alt: "logo", Src: "https://example.com/a.png", Dest: "https://example.com/a.png", Link: -1}}) {
 			t.Errorf("images = %+v", l.Images)
 		}
 

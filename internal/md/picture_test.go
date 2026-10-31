@@ -59,7 +59,7 @@ func TestPicture(t *testing.T) {
 			}
 		}
 
-		if want := (Image{Line: 2, Rows: 3, Cols: 10, ID: 7, Alt: "a", Src: "https://h/y.png", Link: -1}); len(l.Images) != 1 || l.Images[0] != want {
+		if want := (Image{Line: 2, Rows: 3, Cols: 10, ID: 7, Alt: "a", Src: "https://h/y.png", Dest: "https://h/y.png", Link: -1}); len(l.Images) != 1 || l.Images[0] != want {
 			t.Errorf("images = %+v, want [%+v]", l.Images, want)
 		}
 

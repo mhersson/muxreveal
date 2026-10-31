@@ -58,7 +58,7 @@ type seg struct {
 
 // imageRef is an image seen in inline content. src and host are empty when the
 // source is not one the layout can name.
-type imageRef struct{ alt, src, host string }
+type imageRef struct{ alt, src, host, dest string }
 
 // inliner flattens one block's inline nodes into segs.
 type inliner struct {
@@ -275,7 +275,7 @@ func (in *inliner) html(raw string, st style) {
 // image adds an image seg; its source resolves by the link rules and only an
 // http or https URL or a local path is kept.
 func (in *inliner) image(alt, dest string, st style) {
-	ref := &imageRef{alt: strings.Join(strings.Fields(cleanProse(alt)), " ")}
+	ref := &imageRef{alt: strings.Join(strings.Fields(cleanProse(alt)), " "), dest: dest}
 	res := in.l.d.resolve(dest)
 
 	switch {

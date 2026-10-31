@@ -130,7 +130,8 @@ type Link struct{ URL string }
 // first row and Rows, Cols and ID are set; an image line leaves them zero.
 type Image struct {
 	Line       int
-	Alt, Src   string
+	Alt, Src   string // Src is resolved for loading
+	Dest       string // the destination as written, for copy
 	Link       int
 	Rows, Cols int
 	ID         uint32
@@ -355,7 +356,7 @@ func (l *layouter) flow(out *frag, segs []seg, width, lead int) {
 // image appends the rows of one image: a picture when l.picture sizes one, else
 // the image line, with a loading note when asked, fit to cols cells.
 func (l *layouter) image(out *frag, sg seg, cols int) {
-	im := Image{Line: len(out.lines), Alt: sg.img.alt, Src: sg.img.src, Link: sg.st.link}
+	im := Image{Line: len(out.lines), Alt: sg.img.alt, Src: sg.img.src, Dest: sg.img.dest, Link: sg.st.link}
 
 	var size PictureSize
 	if l.picture != nil && sg.img.src != "" {
