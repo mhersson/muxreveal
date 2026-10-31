@@ -117,8 +117,9 @@ Dependency rules:
 - Tests check behavior. A test that fails only when someone rewords text no code
   reads is not a test: don't write it, and delete it when found. Rendering
   goldens are behavior.
-- New tests call `t.Parallel()` unless they use `t.Setenv` or change the
-  process's working directory.
+- New tests call `t.Parallel()` unless they use `t.Setenv`, change the
+  process's working directory, or count process-wide resources such as open
+  descriptors or goroutines.
 - Tests don't assert on wall-clock durations: inject a clock or wait for the
   event. A real-time budget belongs in a test behind the `bench` tag.
   `make scan` fails on `time.Since`, `time.Until` and `time.Now().Sub` in a
