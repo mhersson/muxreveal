@@ -106,10 +106,6 @@ func TestDelete(t *testing.T) {
 	if got, want := Delete(9), "\x1b_Ga=d,d=I,i=9,q=2\x1b\\"; got != want {
 		t.Fatalf("Delete = %q, want %q", got, want)
 	}
-
-	if got, want := DeleteAll(), "\x1b_Ga=d,d=A,q=2\x1b\\"; got != want {
-		t.Fatalf("DeleteAll = %q, want %q", got, want)
-	}
 }
 
 func TestPlaceholders(t *testing.T) {

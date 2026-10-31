@@ -525,13 +525,13 @@ func TestPictureCellChange(t *testing.T) {
 
 	p, jobs, _ := onPictures(t)
 	dp := docPictures{reg: p, root: "/repo"}
-	rendered(t, p, jobs, dp, "/repo/a.png")
+	id, _ := rendered(t, p, jobs, dp, "/repo/a.png")
 
 	gen := p.gen()
 
 	cmd, _ := p.reply(uv.CellSizeEvent{Width: 8, Height: 16})
-	if got := rawOf(t, cmd); got != kitty.DeleteAll() {
-		t.Errorf("command = %q, want delete all", got)
+	if got := rawOf(t, cmd); got != kitty.Delete(id) {
+		t.Errorf("command = %q, want the delete of image %d", got, id)
 	}
 
 	if p.gen() == gen {
@@ -579,7 +579,7 @@ func TestPictureQuit(t *testing.T) {
 		t.Errorf("with nothing sent, quit gave %v", got)
 	}
 
-	rendered(t, p, jobs, docPictures{reg: p, root: "/repo"}, "/repo/a.png")
+	id, _ := rendered(t, p, jobs, docPictures{reg: p, root: "/repo"}, "/repo/a.png")
 
 	v := reflect.ValueOf(p.quit(next)())
 	if v.Kind() != reflect.Slice || v.Len() != 2 {
@@ -587,13 +587,13 @@ func TestPictureQuit(t *testing.T) {
 	}
 
 	first, _ := v.Index(0).Interface().(tea.Cmd)
-	if got := rawOf(t, first); got != kitty.DeleteAll() {
-		t.Errorf("first = %q", got)
+	if got := rawOf(t, first); got != kitty.Delete(id) {
+		t.Errorf("first = %q, want the delete of image %d", got, id)
 	}
 
 	second, _ := v.Index(1).Interface().(tea.Cmd)
 	if second() != "next" {
-		t.Error("second is not next")
+		t.Error("second is not next, a frame tick later")
 	}
 }
 
@@ -725,9 +725,8 @@ func TestPictureQuitAfterFailedSize(t *testing.T) {
 	job := jobs.take()[0]
 	p.done(pictureDoneMsg{job: job, err: errors.New("x")})
 
-	v := reflect.ValueOf(p.quit(func() tea.Msg { return "next" })())
-	if v.Kind() != reflect.Slice {
-		t.Errorf("quit after a failed size gave %v, want delete all then next", v)
+	if got := p.quit(func() tea.Msg { return "next" })(); got != "next" {
+		t.Errorf("quit with no image the registry holds gave %v, want next", got)
 	}
 }
 

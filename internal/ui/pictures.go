@@ -4,7 +4,9 @@ import (
 	"log/slog"
 	"net/url"
 	"path/filepath"
+	"slices"
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/colorprofile"
@@ -126,7 +128,6 @@ type pictures struct {
 	queried  bool // start sent the query
 	graphics bool // the graphics query answered OK before the DA1 reply
 	da1      bool
-	onTerm   bool // an image was sent and not yet deleted by cell change
 	asked    bool // the RGB and Tc requests went out
 	profile  colorprofile.Profile
 	cell     kitty.Cell
@@ -226,7 +227,7 @@ func (p *pictures) setCell(c kitty.Cell) tea.Cmd {
 		return nil
 	}
 
-	sent := p.onTerm && p.on()
+	del := p.deletes()
 
 	for _, e := range p.entries {
 		e.sent = nil
@@ -236,13 +237,32 @@ func (p *pictures) setCell(c kitty.Cell) tea.Cmd {
 
 	p.g++
 
-	if !sent {
+	if del == "" {
 		return nil
 	}
 
-	p.onTerm = false
+	return tea.Raw(del)
+}
 
-	return tea.Raw(kitty.DeleteAll())
+// deletes returns the escapes that free every image the terminal holds, by id:
+// a delete-all never touches virtual placements.
+func (p *pictures) deletes() string {
+	var ids []uint32
+
+	for id, ref := range p.ids {
+		if p.entries[ref.key].sent[ref.size].ready {
+			ids = append(ids, id)
+		}
+	}
+
+	slices.Sort(ids)
+
+	var b strings.Builder
+	for _, id := range ids {
+		b.WriteString(kitty.Delete(id))
+	}
+
+	return b.String()
 }
 
 // resized asks for the cell size again after a window size change.
@@ -368,7 +388,6 @@ func (p *pictures) done(msg pictureDoneMsg) tea.Cmd {
 	}
 
 	s.ready, s.pending = true, false
-	p.onTerm = true
 
 	out := msg.seq
 	for _, id := range p.evict(s) {
@@ -457,13 +476,16 @@ func (p *pictures) readyCount() int {
 	return n
 }
 
-// quit deletes every sent image before next, so none outlives the app.
+// quit deletes every sent image before next. Bubble Tea flushes raw output on
+// its 60 Hz tick while the alt screen is up, but at shutdown only after leaving
+// it, so next runs two frames later.
 func (p *pictures) quit(next tea.Cmd) tea.Cmd {
-	if !p.onTerm {
+	del := p.deletes()
+	if del == "" {
 		return next
 	}
 
-	return tea.Sequence(tea.Raw(kitty.DeleteAll()), next)
+	return tea.Sequence(tea.Raw(del), tea.Tick(2*time.Second/60, func(time.Time) tea.Msg { return next() }))
 }
 
 // shown marks the pictures a frame shows as used, and queues the render of any

@@ -63,14 +63,9 @@ func Transmit(id uint32, png []byte, cols, rows int) string {
 	return b.String()
 }
 
-// Delete frees image id and its data.
+// Delete frees image id and its data. Virtual placements go only by id.
 func Delete(id uint32) string {
 	return ansi.KittyGraphics(nil, "a=d", "d=I", "i="+strconv.FormatUint(uint64(id), 10), "q=2")
-}
-
-// DeleteAll frees every image and its data.
-func DeleteAll() string {
-	return ansi.KittyGraphics(nil, "a=d", "d=A", "q=2")
 }
 
 // Placeholders returns cols placeholder cells for image row row.
