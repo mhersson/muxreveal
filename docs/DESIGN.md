@@ -251,7 +251,7 @@ Go 1.27 (`tuios.dev/vt` needs 1.26 or later). The reason for Rust was a proven V
 | Diff rendering | Ported tuios `diffview` with its lexers (M2b) | Highlighting, gutter, tints and side-by-side pairing built for the same job |
 | Syntax | Chroma v2 | Ships Catppuccin styles; wide language coverage |
 | Markdown | goldmark v2 with GFM and footnotes, plus our own layout in `internal/md` | Full control of layout and image placement; Glamour has no images |
-| Images | Own Kitty graphics encoder; `image/*` + `golang.org/x/image` for decode and scaling | The protocol is small; port TUIOS's passthrough (MIT) if it's cleaner |
+| Images | `image/png`, `image/jpeg`, `image/gif` and `golang.org/x/image` (`webp`, `draw`) decode and scale; PNG goes to the terminal | The escapes are ours, built on `x/ansi`'s `KittyGraphics` and placeholder table |
 | File watching | `fsnotify` with our own directory walk | Maintained; the walk skips `.git` internals, `.worktrees` and ignored directories; `rjeczalik/notify` is unmaintained since 2023 and uses FSEvents on macOS only with cgo |
 | GitHub | `cli/go-gh/v2` for hosts, tokens and the REST and GraphQL clients (GraphQL queries as tagged Go structs); ETags through our own transport under its clients | Same login and host routing as `gh`; no schema file or codegen; conditional requests do not count against the rate limit |
 | Fuzzy finder | `sahilm/fuzzy` | Palette and pickers |

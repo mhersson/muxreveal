@@ -49,9 +49,10 @@ require (
 	github.com/thlib/go-timezone-local v0.0.8 // indirect
 	github.com/xo/terminfo v1.0.0 // indirect
 	go.mitchellh.com/libghostty v0.0.0-20260920220152-31b65cdc24cf // indirect
-	golang.org/x/sync v0.22.0 // indirect
+	golang.org/x/image v0.47.0 // indirect
+	golang.org/x/sync v0.24.0 // indirect
 	golang.org/x/term v0.45.0 // indirect
-	golang.org/x/text v0.41.0 // indirect
+	golang.org/x/text v0.43.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	tuios.dev/progstatus v0.1.0 // indirect
 )
