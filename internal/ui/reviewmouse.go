@@ -69,8 +69,17 @@ func (a *App) drawerWheel(dir int) {
 		return
 	}
 
+	a.scrollRows(v, dir*wheelRows)
+}
+
+// scrollRows scrolls the diff rows by n and keeps the cursor in view.
+func (a *App) scrollRows(v *reviewView, n int) {
+	if len(v.rows) == 0 {
+		return
+	}
+
 	h := a.reviewBodyH(v)
 
-	v.top = min(max(v.viewTop(h)+dir*wheelRows, 0), max(len(v.rows)-h, 0))
+	v.top = min(max(v.viewTop(h)+n, 0), max(len(v.rows)-h, 0))
 	v.cursor = min(max(v.cursor, v.top), max(min(v.top+h-1, len(v.rows)-1), 0))
 }

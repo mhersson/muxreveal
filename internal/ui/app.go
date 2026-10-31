@@ -590,6 +590,8 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, a.handleMotion(msg)
 	case tea.MouseReleaseMsg:
 		return a, a.handleRelease(msg)
+	case dragScrollMsg:
+		return a, a.dragScroll(msg)
 	case tea.FocusMsg:
 		a.outerFocused = true
 		a.sendToFocused(func(p *pane) { p.sendFocus(true) })

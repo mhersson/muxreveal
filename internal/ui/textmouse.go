@@ -2,6 +2,7 @@ package ui
 
 import (
 	"image"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -20,7 +21,17 @@ type textPress struct {
 	line int
 	// side is the side of a side by side row the press landed on.
 	side int
+	// px, py are the pointer's last cell; seq is the edge-scroll tick the press
+	// waits for, 0 when none runs.
+	px, py, seq int
 }
+
+// dragScrollEvery is the time between rows scrolled while a drag is held past
+// the text.
+const dragScrollEvery = 50 * time.Millisecond
+
+// dragScrollMsg is an edge-scroll tick of the press it was started for.
+type dragScrollMsg struct{ seq int }
 
 // textHost is a text view on screen: the cells it draws in and what a cell
 // of them reads. The overlay's host has view; the drawer's have rows.
@@ -283,21 +294,114 @@ func (a *App) textPressAt(h textHost, m tea.Mouse) {
 
 // textDrag extends the press's selection to the pointer, clamped to the host's
 // cells. The first move off the press cell starts the selection.
-func (a *App) textDrag(pr *textPress, x, y int) {
+func (a *App) textDrag(pr *textPress, x, y int) tea.Cmd {
+	pr.px, pr.py = x, y
+
 	h, ok := a.textHostOf(pr)
 	if !ok {
 		a.mouse.text = nil
 
-		return
+		return nil
 	}
 
 	if !pr.dragging && x == pr.x && y == pr.y {
-		return
+		return nil
 	}
 
+	if !a.extendTextSel(pr, h, x, y) {
+		return nil
+	}
+
+	if h.edge(y) == 0 {
+		pr.seq = 0
+
+		return nil
+	}
+
+	if pr.seq != 0 {
+		return nil
+	}
+
+	a.mouse.seq++
+	pr.seq = a.mouse.seq
+
+	return dragScrollTick(pr.seq)
+}
+
+func dragScrollTick(seq int) tea.Cmd {
+	return tea.Tick(dragScrollEvery, func(time.Time) tea.Msg { return dragScrollMsg{seq: seq} })
+}
+
+// edge is -1 when screen row y lies above the host's first text row, 1 when
+// below its last and 0 over the text.
+func (h textHost) edge(y int) int {
+	switch {
+	case y < h.rect.Min.Y:
+		return -1
+	case y >= h.rect.Max.Y:
+		return 1
+	}
+
+	return 0
+}
+
+// dragScroll scrolls the held press's host a row toward the pointer, which is
+// past its text, and puts the selection's head on the edge row.
+func (a *App) dragScroll(msg dragScrollMsg) tea.Cmd {
+	pr := a.mouse.text
+	if pr == nil || pr.seq == 0 || pr.seq != msg.seq {
+		return nil
+	}
+
+	h, ok := a.textHostOf(pr)
+	if !ok {
+		pr.seq = 0
+
+		return nil
+	}
+
+	dir := h.edge(pr.py)
+	if dir == 0 {
+		pr.seq = 0
+
+		return nil
+	}
+
+	before := h.top
+
+	switch {
+	case h.rows != nil:
+		a.scrollRows(h.rows, dir)
+	case h.page != nil:
+		h.page.scroll(dir)
+	case h.view != nil:
+		h.view.scroll(dir)
+	}
+
+	h, ok = a.textHostOf(pr)
+	if !ok {
+		a.mouse.text = nil
+
+		return nil
+	}
+
+	a.extendTextSel(pr, h, pr.px, pr.py)
+
+	if h.top == before {
+		pr.seq = 0
+
+		return nil
+	}
+
+	return dragScrollTick(pr.seq)
+}
+
+// extendTextSel moves the press's selection head to the pointer's cell, clamped
+// to h's cells, and reports whether the host has any text.
+func (a *App) extendTextSel(pr *textPress, h textHost, x, y int) bool {
 	g := h.grid()
 	if g.Rows() == 0 {
-		return
+		return false
 	}
 
 	pr.dragging = true
@@ -313,7 +417,7 @@ func (a *App) textDrag(pr *textPress, x, y int) {
 	if ts == nil || ts.view != h.view || ts.rows != h.rows || ts.tab != h.tab {
 		a.setTextSel(h.holder(), s)
 
-		return
+		return true
 	}
 
 	ts.side = h.side
@@ -327,6 +431,8 @@ func (a *App) textDrag(pr *textPress, x, y int) {
 	if same {
 		ts.shown = ts.text()
 	}
+
+	return true
 }
 
 // textRelease ends the press. A drag or multi-click then copies what the

@@ -401,3 +401,41 @@ func TestPlanCloseClears(t *testing.T) {
 		t.Errorf("leader y wrote %q after close", got)
 	}
 }
+
+func TestEdgeScrollToEnd(t *testing.T) {
+	t.Parallel()
+
+	const n = 3000
+
+	r := newPlanRig(t, 100, 40)
+	fakeClip(r.a)
+	r.filePlan(t, "plan.md", numberedMD(n))
+	r.open(t)
+
+	h, _ := r.a.planHost()
+	mdown(r.a, h.rect.Min.X+2, h.rect.Min.Y, tea.MouseLeft, 0)
+
+	cmd := tick(r.a, tea.MouseMotionMsg{X: h.rect.Min.X + 20, Y: h.rect.Max.Y, Button: tea.MouseLeft})
+	seq := r.a.mouse.text.seq
+
+	for ticks := 0; cmd != nil; ticks++ {
+		if ticks > n {
+			t.Fatal("the ticks never stopped")
+		}
+
+		cmd = tick(r.a, dragScrollMsg{seq: seq})
+	}
+
+	if head := selHead(t, r.a); head.row != n-1 {
+		t.Errorf("head row = %d, want %d", head.row, n-1)
+	}
+
+	lines := strings.Split(r.a.textSelected(), "\n")
+	if len(lines) != n {
+		t.Fatalf("copy has %d lines, want %d", len(lines), n)
+	}
+
+	if lines[n-1] != "• line 2999" {
+		t.Errorf("last copied line = %q", lines[n-1])
+	}
+}

@@ -63,6 +63,7 @@ type mouseState struct {
 	press *heldPress
 	fwd   *forwarded
 	text  *textPress
+	seq   int // the last edge-scroll tick's number
 }
 
 // hit finds what lies under the screen cell (x, y): a pane's content or top
@@ -311,9 +312,7 @@ func (a *App) handleMotion(msg tea.MouseMotionMsg) tea.Cmd {
 	m := msg.Mouse()
 
 	if pr := a.mouse.text; pr != nil && m.Button == tea.MouseLeft {
-		a.textDrag(pr, m.X, m.Y)
-
-		return nil
+		return a.textDrag(pr, m.X, m.Y)
 	}
 
 	if a.mouseBlocked() {

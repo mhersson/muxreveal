@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"image/color"
 	"path/filepath"
 	"slices"
@@ -1257,5 +1258,197 @@ func TestSplitSelectionPaint(t *testing.T) {
 				t.Errorf("side %d: %s cell is on the selection ground", side, name)
 			}
 		}
+	}
+}
+
+// selHead is the head of the held text selection.
+func selHead(t *testing.T, a *App) point {
+	t.Helper()
+
+	switch {
+	case a.text == nil:
+		t.Fatal("no selection")
+	case a.text.view != nil && a.text.view.sel != nil:
+		return a.text.view.sel.head
+	case a.text.rows != nil && a.text.rows.sel != nil:
+		return a.text.rows.sel.head
+	}
+
+	t.Fatal("the selection holder has no selection")
+
+	return point{}
+}
+
+// tick sends msg to a and returns the command it answers with.
+func tick(a *App, msg tea.Msg) tea.Cmd {
+	_, cmd := a.Update(msg)
+
+	return cmd
+}
+
+// edgeCase is a text host with the press cell and a cell below its last row.
+type edgeCase struct {
+	a        *App
+	host     func() textHost
+	x, below int
+	press    [2]int
+}
+
+func newEdgeCase(a *App, host func() textHost) edgeCase {
+	h := host()
+
+	return edgeCase{a: a, host: host, x: h.rect.Min.X + 5, below: h.rect.Max.Y, press: [2]int{h.rect.Min.X + 2, h.rect.Min.Y + 1}}
+}
+
+func edgeOverlay(t *testing.T) edgeCase {
+	t.Helper()
+
+	r := newPlanRig(t, 100, 40)
+	fakeClip(r.a)
+	r.filePlan(t, "plan.md", numberedMD(200))
+	r.open(t)
+
+	return newEdgeCase(r.a, func() textHost {
+		h, ok := r.a.planHost()
+		if !ok {
+			t.Fatal("the plan overlay is not a text host")
+		}
+
+		return h
+	})
+}
+
+func edgeDiff(t *testing.T) edgeCase {
+	t.Helper()
+
+	r := newKeysRig(t, keysRepo(t))
+	fakeClip(r.App)
+	v := r.opened(t)
+
+	c := newEdgeCase(r.App, func() textHost {
+		h, ok := r.rowsHost()
+		if !ok {
+			t.Fatal("the diff rows are not a text host")
+		}
+
+		return h
+	})
+
+	if h := c.host(); len(v.rows) <= h.rect.Dy()+2 {
+		t.Fatalf("setup: %d rows fit the %d-row view", len(v.rows), h.rect.Dy())
+	}
+
+	return c
+}
+
+func edgePage(t *testing.T) edgeCase {
+	t.Helper()
+
+	m := newPageRig(t, map[string]string{"docs/long.md": numberedMD(300)})
+	fakeClip(m.App)
+	m.openPage(t, "docs/long.md", false)
+	m.drawerTake()
+	m.drawn(t)
+
+	return newEdgeCase(m.App, func() textHost {
+		h, ok := m.pageHost()
+		if !ok {
+			t.Fatal("the page is not a text host")
+		}
+
+		return h
+	})
+}
+
+// numberedMD is n list lines, one row each.
+func numberedMD(n int) string {
+	var b strings.Builder
+
+	for i := range n {
+		fmt.Fprintf(&b, "- line %d\n", i)
+	}
+
+	return b.String()
+}
+
+func TestEdgeScroll(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		make func(*testing.T) edgeCase
+	}{
+		{"plan overlay", edgeOverlay},
+		{"diff rows", edgeDiff},
+		{"drawer page", edgePage},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			c := tt.make(t)
+			a := c.a
+			motion := func(y int) tea.Cmd {
+				return tick(a, tea.MouseMotionMsg{X: c.x, Y: y, Button: tea.MouseLeft})
+			}
+
+			mdown(a, c.press[0], c.press[1], tea.MouseLeft, 0)
+
+			if motion(c.press[1]+1) != nil {
+				t.Fatal("a motion over the text returned a command")
+			}
+
+			if motion(c.below) == nil {
+				t.Fatal("a drag held below the text returned no command")
+			}
+
+			if motion(c.below+1) != nil {
+				t.Error("a motion while a tick runs returned a command")
+			}
+
+			seq := a.mouse.text.seq
+			top := c.host().top
+
+			if tick(a, dragScrollMsg{seq: seq}) == nil {
+				t.Error("a tick returned no next tick")
+			}
+
+			h := c.host()
+			if h.top != top+1 {
+				t.Errorf("top = %d, want %d: one row", h.top, top+1)
+			}
+
+			if got, want := selHead(t, a).row, h.top+h.rect.Dy()-1; got != want {
+				t.Errorf("head row = %d, want the last text row %d", got, want)
+			}
+
+			if motion(c.press[1]+1) != nil {
+				t.Error("a motion back over the text returned a command")
+			}
+
+			head := selHead(t, a)
+
+			if tick(a, dragScrollMsg{seq: seq}) != nil || c.host().top != top+1 || selHead(t, a) != head {
+				t.Error("a tick after the pointer came back changed something")
+			}
+
+			if motion(c.below) == nil {
+				t.Fatal("outside again returned no command")
+			}
+
+			stale := dragScrollMsg{seq: a.mouse.text.seq}
+			if stale.seq == seq {
+				t.Error("a new tick reused the old seq")
+			}
+
+			mup(a, c.x, c.below, tea.MouseLeft)
+
+			top = c.host().top
+
+			if tick(a, stale) != nil || c.host().top != top {
+				t.Error("a tick after the release changed something")
+			}
+		})
 	}
 }
