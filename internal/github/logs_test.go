@@ -191,7 +191,7 @@ func TestJobLogNotFound(t *testing.T) {
 		t.Errorf("err = %v, want a 404 HTTPError", err)
 	}
 
-	for _, secret := range []string{testToken, "sig=x"} {
+	for _, secret := range []string{testToken, "sig=x", "https://"} {
 		if strings.Contains(err.Error(), secret) {
 			t.Errorf("error %q holds %q", err, secret)
 		}

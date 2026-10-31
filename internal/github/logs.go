@@ -152,17 +152,16 @@ func contentRangeStart(v string) (int64, bool) {
 	return start, err == nil && start >= 0
 }
 
-// redactURL removes the query from the request URL an error names, since a
-// log redirect's query is a signed credential.
+// redactURL removes the request URL from the text of an error: a log
+// redirect's query is a signed credential, and a URL tells the reader nothing.
+// The result still unwraps to the *api.HTTPError.
 func redactURL(err error) error {
 	var he *api.HTTPError
-	if errors.As(err, &he) && he.RequestURL != nil {
+	if errors.As(err, &he) {
 		cp := *he
-		u := *he.RequestURL
-		u.RawQuery, u.Fragment, u.User = "", "", nil
-		cp.RequestURL = &u
+		cp.RequestURL = nil
 
-		return &cp
+		return &httpStatusError{he: &cp}
 	}
 
 	var ue *url.Error
@@ -190,3 +189,17 @@ func (c *Client) CheckRun(ctx context.Context, r Repo, id int64) (CheckRunOutput
 
 	return CheckRunOutput{Title: body.Output.Title, Summary: body.Output.Summary}, nil
 }
+
+// httpStatusError is an *api.HTTPError whose text leaves out the request URL.
+type httpStatusError struct{ he *api.HTTPError }
+
+func (e *httpStatusError) Error() string {
+	msg, _, _ := strings.Cut(e.he.Message, "\n")
+	if msg == "" {
+		return fmt.Sprintf("HTTP %d", e.he.StatusCode)
+	}
+
+	return fmt.Sprintf("HTTP %d: %s", e.he.StatusCode, msg)
+}
+
+func (e *httpStatusError) Unwrap() error { return e.he }

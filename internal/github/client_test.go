@@ -506,8 +506,8 @@ func TestGraphQLErrorsCarryNoURL(t *testing.T) {
 			t.Fatal("no error")
 		}
 
-		if strings.Contains(err.Error(), "?") || strings.Contains(err.Error(), secret) {
-			t.Errorf("the error carries a query string: %v", err)
+		if strings.Contains(err.Error(), "https://") || strings.Contains(err.Error(), "api.github.com") || strings.Contains(err.Error(), secret) {
+			t.Errorf("the error names the URL: %v", err)
 		}
 
 		var he *api.HTTPError
