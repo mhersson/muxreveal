@@ -1,0 +1,46 @@
+{
+  "data": {
+    "repository": {
+      "pullRequest": {
+        "number": 24,
+        "title": "Fix the review drawer",
+        "url": "https://github.com/octo/repo/pull/24",
+        "isDraft": false,
+        "state": "MERGED",
+        "isCrossRepository": false,
+        "headRefName": "fix/review-drawer",
+        "headRefOid": "4c37f33aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "baseRefName": "main",
+        "updatedAt": "2026-10-30T12:00:00Z",
+        "reviewDecision": "APPROVED",
+        "mergeStateStatus": "CLEAN",
+        "author": {"login": "mhersson"},
+        "viewerDidAuthor": false,
+        "commits": {"nodes": []},
+        "createdAt": "2026-10-29T08:00:00Z",
+        "body": "Fixes the drawer.\n\n![shot](https://github.com/user-attachments/assets/e8b9a952-456e-4a57-b08c-012dbbee61fa)",
+        "bodyHTML": "<p>Fixes the drawer.</p><p><a target=\"_blank\" href=\"x\"><img src=\"https://private-user-images.githubusercontent.com/1/301-e8b9a952-456e-4a57-b08c-012dbbee61fa.png?jwt=abc&amp;x=1\" alt=\"shot\"></a></p>",
+        "timelineItems": {
+          "pageInfo": {"hasPreviousPage": false, "startCursor": "c0"},
+          "nodes": [
+            {"__typename": "IssueComment", "id": "IC_1", "author": {"login": "codecov", "__typename": "Bot"}, "createdAt": "2026-10-29T09:00:00Z", "body": "Coverage is 80%.", "bodyHTML": "<p>Coverage is 80%.</p>"},
+            {"__typename": "PullRequestCommit", "id": "PRC_1", "commit": {"oid": "aaa1", "committedDate": "2026-10-29T10:00:00Z", "author": {"name": "M H", "user": {"login": "mhersson"}}}},
+            {"__typename": "PullRequestCommit", "id": "PRC_2", "commit": {"oid": "aaa2", "committedDate": "2026-10-29T10:05:00Z", "author": {"name": "M H", "user": {"login": "mhersson"}}}},
+            {"__typename": "PullRequestCommit", "id": "PRC_3", "commit": {"oid": "aaa3", "committedDate": "2026-10-29T10:10:00Z", "author": {"name": "M H", "user": {"login": "mhersson"}}}},
+            {"__typename": "PullRequestReview", "id": "PRR_1", "author": {"login": "kari-dev", "__typename": "User"}, "createdAt": "2026-10-29T11:00:00Z", "state": "CHANGES_REQUESTED", "body": "Please fix.", "bodyHTML": "<p>Please fix.</p>",
+              "comments": {"nodes": [
+                {"path": "internal/ui/reviewkeys.go", "line": 212, "originalLine": 200, "diffHunk": "@@ -209,2 +209,5 @@\n \tcase a.drawer.tree:\n-\t\ta.reviewLeaveTree(v)\n+\t\tif k == keyTab {\n+\t\t\treturn a.reviewHideTree(v)\n+\t\t}", "body": "Tab should hide the tree.", "bodyHTML": "<p>Tab should hide the tree.</p>"}
+              ]}},
+            {"__typename": "PullRequestReview", "id": "PRR_2", "author": {"login": "mhersson", "__typename": "User"}, "createdAt": "2026-10-29T11:30:00Z", "state": "PENDING", "body": "draft", "bodyHTML": "<p>draft</p>", "comments": {"nodes": []}},
+            {"__typename": "HeadRefForcePushedEvent", "id": "FP_1", "actor": {"login": "mhersson", "__typename": "User"}, "createdAt": "2026-10-29T12:00:00Z", "beforeCommit": {"abbreviatedOid": "b50f694"}, "afterCommit": {"abbreviatedOid": "4c37f33"}, "ref": {"name": "fix/review-drawer"}},
+            {"__typename": "ReviewRequestedEvent", "id": "RR_1", "actor": {"login": "mhersson", "__typename": "User"}, "createdAt": "2026-10-29T12:10:00Z", "requestedReviewer": {"__typename": "User", "login": "octo-reviewer"}},
+            {"__typename": "ReviewRequestedEvent", "id": "RR_2", "actor": {"login": "mhersson", "__typename": "User"}, "createdAt": "2026-10-29T12:11:00Z", "requestedReviewer": {"__typename": "Team", "combinedSlug": "acme/core"}},
+            {"__typename": "PullRequestReview", "id": "PRR_3", "author": {"login": "kari-dev", "__typename": "User"}, "createdAt": "2026-10-30T09:00:00Z", "state": "APPROVED", "body": "", "bodyHTML": "", "comments": {"nodes": []}},
+            {"__typename": "MergedEvent", "id": "ME_1", "actor": {"login": "mhersson", "__typename": "User"}, "createdAt": "2026-10-30T10:00:00Z", "mergeCommit": {"abbreviatedOid": "4c37f33"}, "mergeRefName": "main"},
+            {"__typename": "ClosedEvent", "id": "CE_1", "actor": {"login": "mhersson", "__typename": "User"}, "createdAt": "2026-10-30T10:00:01Z"}
+          ]
+        }
+      }
+    }
+  }
+}
