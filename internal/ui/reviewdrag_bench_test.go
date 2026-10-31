@@ -253,6 +253,10 @@ func benchDrag(t *testing.T, c dragCase) {
 		t.Fatal("the drag left no selection of the diff rows")
 	}
 
+	if h.lay.split && app.text.side != 1 {
+		t.Fatalf("the selection is on side %d; want the new side, 1", app.text.side)
+	}
+
 	rows, size := selectedRows(v), len(app.text.shown)
 
 	start := time.Now()
