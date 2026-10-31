@@ -7,6 +7,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/mhersson/muxreveal/internal/core"
 	"github.com/mhersson/muxreveal/internal/github"
 )
 
@@ -291,6 +292,28 @@ func TestConversationKeysClear(t *testing.T) {
 		})
 	}
 
+	t.Run("search without a hint row", func(t *testing.T) {
+		t.Parallel()
+
+		a, _ := convApp(t, true, 120, 11)
+		r := &convSelRig{a: a, clip: fakeClip(a)}
+		convOpen(t, a)
+
+		x0, _, y0 := r.word(t, "@mhersson opened", "@mhersson")
+		_, x1, _ := r.word(t, "@mhersson opened", "opened")
+		dragRun(a, x0, y0, x1, y0, 0)
+
+		if !r.selected() {
+			t.Fatal("no selection after the drag")
+		}
+
+		r.key(keyRune('/'))
+
+		if !r.selected() || a.conv.searching {
+			t.Errorf("selected = %v, searching = %v; want it kept and no prompt", r.selected(), a.conv.searching)
+		}
+	})
+
 	t.Run("wheel", func(t *testing.T) {
 		t.Parallel()
 
@@ -401,8 +424,28 @@ func TestConversationDragEndsAtEdge(t *testing.T) {
 			t.Parallel()
 
 			r := newConvSelRig(t)
+
+			procs := map[core.PaneID]*fakeProc{}
+
+			for id, p := range r.a.panes {
+				fp, ok := p.proc.(*fakeProc)
+				if !ok {
+					t.Fatalf("pane %s has a %T", id, p.proc)
+				}
+
+				feedAndWait(t, p, fp, "\x1b[?1000h\x1b[?1006h")
+
+				procs[id] = fp
+			}
+
 			x0, _, y0 := r.word(t, "Looks fine.", "Looks")
 			dragRun(r.a, x0, y0, tt.x, tt.y, 0)
+
+			for id, fp := range procs {
+				if got := fp.sent(); got != "" {
+					t.Errorf("pane %s received %q", id, got)
+				}
+			}
 
 			rect, _ := convDocRect(r.a.width, r.a.height)
 			sel := r.sel()

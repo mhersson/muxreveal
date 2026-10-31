@@ -324,9 +324,11 @@ func (a *App) convKey(v *convView, key string, boxH int) (cmd tea.Cmd, acted boo
 		cmd = a.convEnter()
 	case "/":
 		// The prompt draws in the hint row, so without one there is nowhere to type.
-		if _, _, hint, _ := convRows(boxH); hint {
-			v.searching, v.query = true, ""
+		if _, _, hint, _ := convRows(boxH); !hint {
+			return nil, false
 		}
+
+		v.searching, v.query = true, ""
 	case "n":
 		a.convFind(v.last, false)
 	case "N":
