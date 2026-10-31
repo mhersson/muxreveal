@@ -129,11 +129,13 @@ func resolveKeys(cfg core.KeysConfig, reg *registry) (keymap, keyTables, error) 
 		defaults      []reviewKey
 		accept        func(id string) bool
 		into          *keyTable
+		// close is the command that ends a view the leader does not reach; "" when the leader closes it.
+		close, closeNoun string
 	}{
-		{"drawer", "drawer", reviewKeys, func(id string) bool { return strings.HasPrefix(id, "review.") }, &tables.drawer},
-		{"rail", "rail", railKeys, scopedTo(reg, "rail"), &tables.rail},
-		{"pr_list", "PR list", prListKeys, scopedTo(reg, "pr_list"), &tables.prList},
-		{"checks", "checks", checksKeys, scopedTo(reg, "checks"), &tables.checks},
+		{"drawer", "drawer", reviewKeys, func(id string) bool { return strings.HasPrefix(id, "review.") }, &tables.drawer, "", ""},
+		{"rail", "rail", railKeys, scopedTo(reg, "rail"), &tables.rail, "", ""},
+		{"pr_list", "PR list", prListKeys, scopedTo(reg, "pr_list"), &tables.prList, "prlist.close", "PR list"},
+		{"checks", "checks", checksKeys, scopedTo(reg, "checks"), &tables.checks, "checks.close", "checks overlay"},
 	}
 
 	for _, c := range contexts {
@@ -149,6 +151,10 @@ func resolveKeys(cfg core.KeysConfig, reg *registry) (keymap, keyTables, error) 
 		t, err := resolveTable(c.context, c.noun, c.defaults, cfg, c.accept, reg)
 		if err != nil {
 			return keymap{}, keyTables{}, err
+		}
+
+		if _, ok := t.first(c.close); c.close != "" && !ok {
+			return keymap{}, keyTables{}, fmt.Errorf("keys.%s: nothing is bound to %s, so the %s could not close", c.context, c.close, c.closeNoun)
 		}
 
 		*c.into = t

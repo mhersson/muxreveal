@@ -152,6 +152,17 @@ func TestCheckKeysErrors(t *testing.T) {
 		{"key under a bound key", leaderKeys("q x", "pr.list"), `keys.leader: "q" is bound and starts "q x"`},
 		{"prefix freed", leaderKeys(append([]string{"g", "pr.list"}, noGit...)...), ""},
 		{
+			"pr list without close", contextKeys("pr_list", "esc", "none"),
+			"keys.pr_list: nothing is bound to prlist.close, so the PR list could not close",
+		},
+		{
+			"checks without close", contextKeys("checks", "esc", "none"),
+			"keys.checks: nothing is bound to checks.close, so the checks overlay could not close",
+		},
+		{"pr list close moved", contextKeys("pr_list", "esc", "none", "q", "prlist.close"), ""},
+		{"rail needs no close", contextKeys("rail", "esc", "none"), ""},
+		{"drawer needs no close", drawerKeys("esc", "none"), ""},
+		{
 			"leader under leader",
 			func() core.KeysConfig {
 				c := leaderKeys("ctrl+a", "pr.list")
