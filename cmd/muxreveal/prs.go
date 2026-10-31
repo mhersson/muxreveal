@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"sync"
+	"time"
 
 	"github.com/mhersson/muxreveal/internal/github"
 )
@@ -146,7 +147,7 @@ func (g ghReads) MyPRs(ctx context.Context, host string) (github.MyPRs, error) {
 		return github.MyPRs{}, fmt.Errorf("client for %s: %w", host, err)
 	}
 
-	return c.MyPRs(ctx)
+	return c.MyPRs(ctx, time.Time{})
 }
 
 // JobLog reads the tail of an Actions job's log.
