@@ -140,7 +140,7 @@ func TestResolveLeader(t *testing.T) {
 func TestCheckKeysErrors(t *testing.T) {
 	t.Parallel()
 
-	noGit := []string{"g l", "none", "g p", "none", "g o", "none", "g m", "none"}
+	noGit := []string{"g l", "none", "g P", "none", "g o", "none", "g m", "none"}
 
 	tests := []struct {
 		name string
@@ -255,7 +255,7 @@ func TestLeaderRemapScreens(t *testing.T) {
 			got = append(got, h.key+"  "+h.title)
 		}
 
-		want := []string{"p  Push", "o  Open a pull request", "m  Merge pull request", "esc  Cancel"}
+		want := []string{"P  Push", "o  Open a pull request", "m  Merge pull request", "esc  Cancel"}
 		if !slices.Equal(got, want) {
 			t.Errorf("rows = %q, want %q", got, want)
 		}
@@ -860,9 +860,9 @@ func TestPRHeaderFollowsBindings(t *testing.T) {
 		{"refresh default", core.KeysConfig{}, moved, "since this diff; r fetches it", ""},
 		{"refresh moved", drawerKeys("x", "review.refresh", "r", "none"), moved, "since this diff; x fetches it", "r fetches it"},
 		{"refresh unbound", drawerKeys("r", "none"), moved, "the PR moved to bbbbbbb since this diff", "fetches it"},
-		{"push default", core.KeysConfig{}, nil, "the PR shows the pushed head; ctrl+space g p pushes", ""},
-		{"push moved", leaderKeys("g p", "none", "g u", "git.push"), nil, "pushed head; ctrl+space g u pushes", "g p pushes"},
-		{"push unbound", leaderKeys("g p", "none"), nil, "↑2 not pushed: the PR shows the pushed head", "pushes"},
+		{"push default", core.KeysConfig{}, nil, "the PR shows the pushed head; ctrl+space g P pushes", ""},
+		{"push moved", leaderKeys("g P", "none", "g u", "git.push"), nil, "pushed head; ctrl+space g u pushes", "g P pushes"},
+		{"push unbound", leaderKeys("g P", "none"), nil, "↑2 not pushed: the PR shows the pushed head", "pushes"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

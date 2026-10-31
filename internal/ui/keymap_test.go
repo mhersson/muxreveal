@@ -108,12 +108,17 @@ func TestKeymapSequences(t *testing.T) {
 	for key, want := range map[string]string{
 		"> 1": "pane.move.tab.1", "> 9": "pane.move.tab.9", ". 3": "pane.send.tab.3",
 		"; h": "pane.preselect.left", "; esc": "pane.preselect.clear",
-		"g l": "pr.list", "g p": "git.push", "g o": "pr.open", "g m": "pr.merge",
+		"g l": "pr.list", "g P": "git.push", "g o": "pr.open", "g m": "pr.merge",
 		"!": "pane.break", "space": "layout.cycle", "r": "layout.rotate", "=": "layout.equalize", "enter": "layout.promote",
 	} {
 		if got, ok := km.lookup(key); !ok || got != want {
 			t.Errorf("lookup(%q) = %q, %v, want %q", key, got, ok, want)
 		}
+	}
+
+	// Push takes a capital P, so a slip off g l's pull request list pushes nothing.
+	if got, ok := km.lookup("g p"); ok {
+		t.Errorf("lookup(%q) = %q, want unbound", "g p", got)
 	}
 
 	for _, key := range []string{">", ".", ";", "g"} {
@@ -159,7 +164,7 @@ func TestGitGroupKeys(t *testing.T) {
 
 	a := newTestApp(t)
 
-	for key, id := range map[string]string{"g l": "pr.list", "g p": "git.push", "g o": "pr.open", "g m": "pr.merge"} {
+	for key, id := range map[string]string{"g l": "pr.list", "g P": "git.push", "g o": "pr.open", "g m": "pr.merge"} {
 		got, ok := a.keymap.lookup(key)
 		if !ok || got != id {
 			t.Errorf("lookup(%q) = %q, %v, want %q", key, got, ok, id)
