@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 	"reflect"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -355,6 +356,64 @@ func TestPictureRetry(t *testing.T) {
 }
 
 // known sizes src and answers its info, returning the size it then has.
+func TestPictureEvictSkipsShown(t *testing.T) {
+	t.Parallel()
+
+	const visible = pictureMaxSent + 6
+
+	p, jobs, _ := onPictures(t)
+	dp := docPictures{reg: p, root: "/repo"}
+
+	ids := make([]uint32, 0, visible+1)
+	for i := range visible + 1 {
+		ids = append(ids, known(t, p, jobs, dp, "/repo/"+strings.Repeat("a", i+1)+".png", 96).ID)
+	}
+
+	// frame is one View: it shows ids, then answers every render it queued.
+	frame := func(shown []uint32) (renders, deletes int) {
+		for range 200 {
+			p.shown(shown)
+
+			jb := jobs.take()
+			if len(jb) == 0 {
+				return renders, deletes
+			}
+
+			for _, j := range jb {
+				renders++
+				deletes += strings.Count(rawOf(t, p.done(pictureDoneMsg{job: j, seq: "S"})), "a=d")
+			}
+		}
+
+		t.Fatal("renders never settled")
+
+		return 0, 0
+	}
+
+	if renders, deletes := frame(ids[:visible]); renders != visible || deletes != 0 {
+		t.Fatalf("%d pictures shown: %d renders and %d deletes, want %d and none", visible, renders, deletes, visible)
+	}
+
+	if renders, deletes := frame(ids[:visible]); renders != 0 || deletes != 0 {
+		t.Fatalf("a settled frame gave %d renders and %d deletes", renders, deletes)
+	}
+
+	// A frame showing 10 of them, plus one more: the cap holds again.
+	if _, deletes := frame(append(slices.Clone(ids[:10]), ids[visible])); deletes != visible+1-pictureMaxSent {
+		t.Errorf("deletes = %d, want %d", deletes, visible+1-pictureMaxSent)
+	}
+
+	if n := p.readyCount(); n != pictureMaxSent {
+		t.Errorf("ready = %d, want %d", n, pictureMaxSent)
+	}
+
+	for _, id := range ids[:10] {
+		if !p.sent(id) {
+			t.Errorf("image %d shown by the frame was deleted", id)
+		}
+	}
+}
+
 func known(t *testing.T, p *pictures, jobs *recJobs, dp docPictures, src string, maxCols int) md.PictureSize {
 	t.Helper()
 

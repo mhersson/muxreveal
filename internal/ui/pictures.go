@@ -136,6 +136,7 @@ type pictures struct {
 	ids     map[uint32]sentRef
 	nextID  uint32
 	tick    uint64 // use counter for eviction order
+	frame   uint64 // tick at which the latest shown call began
 	g       uint64
 }
 
@@ -436,7 +437,8 @@ func (p *pictures) fail(key pictureKey, e *pictureEntry, err error) {
 }
 
 // evict drops the least recently used sent images past pictureMaxSent, never
-// keep, and returns their ids.
+// keep or one the latest frame shows, and returns their ids. A frame showing
+// more than pictureMaxSent images so raises the cap while it shows them.
 func (p *pictures) evict(keep *sentPicture) []uint32 {
 	var out []uint32
 
@@ -445,7 +447,7 @@ func (p *pictures) evict(keep *sentPicture) []uint32 {
 
 		for _, ref := range p.ids {
 			s := p.entries[ref.key].sent[ref.size]
-			if s == keep || !s.ready || (oldest != nil && s.used >= oldest.used) {
+			if s == keep || !s.ready || s.used >= p.frame || (oldest != nil && s.used >= oldest.used) {
 				continue
 			}
 
@@ -491,6 +493,8 @@ func (p *pictures) quit(next tea.Cmd) tea.Cmd {
 // shown marks the pictures a frame shows as used, and queues the render of any
 // the terminal does not hold (never sent, or evicted).
 func (p *pictures) shown(ids []uint32) {
+	p.frame = p.tick + 1
+
 	for _, id := range ids {
 		ref, ok := p.ids[id]
 		if !ok {
