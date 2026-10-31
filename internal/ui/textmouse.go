@@ -235,7 +235,9 @@ func (a *App) drawerHost() (textHost, bool) {
 	return a.rowsHost()
 }
 
-// textHostAt is the host whose cells hold (x, y).
+// textHostAt is the host whose cells hold (x, y). The conversation is tried
+// before the plan: the two overlays are never open together, so the order only
+// decides between an overlay and the drawer beneath.
 func (a *App) textHostAt(x, y int) (textHost, bool) {
 	pt := image.Point{X: x, Y: y}
 

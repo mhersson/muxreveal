@@ -229,19 +229,23 @@ func TestConvDocHunkHighlight(t *testing.T) {
 func TestConvDocHunkRows(t *testing.T) {
 	t.Parallel()
 
-	hunk := "@@ -1,3 +1,3 @@\n a\n-b\n+c\n d\n\\ No newline at end of file"
-	c := github.Conversation{PR: github.PR{Number: 1, Author: "a"}, Items: []github.TimelineItem{
-		{Kind: github.ItemReview, ID: "r", Author: "k", State: "COMMENTED", Comments: []github.ReviewComment{
-			{Path: "f.go", Line: 3, Hunk: hunk, Body: convText("x")},
-		}},
-	}}
-	plain := convPlain(parseConv(c).layout(60, true))
-	all := strings.Join(plain, "\n")
-
 	// the last three lines: removed b (old 2), added c (new 2), context d (new 3)
-	for _, want := range []string{"   2 - b", "   2 + c", "   3   d"} {
-		if !strings.Contains(all, want) {
-			t.Errorf("no hunk row %q in\n%s", want, all)
+	for name, hunk := range map[string]string{
+		"no newline marker": "@@ -1,3 +1,3 @@\n a\n-b\n+c\n d\n\\ No newline at end of file",
+		"trailing newline":  "@@ -1,3 +1,3 @@\n a\n-b\n+c\n d\n",
+	} {
+		c := github.Conversation{PR: github.PR{Number: 1, Author: "a"}, Items: []github.TimelineItem{
+			{Kind: github.ItemReview, ID: "r", Author: "k", State: "COMMENTED", Comments: []github.ReviewComment{
+				{Path: "f.go", Line: 3, Hunk: hunk, Body: convText("x")},
+			}},
+		}}
+		plain := convPlain(parseConv(c).layout(60, true))
+		all := strings.Join(plain, "\n")
+
+		for _, want := range []string{"   2 - b", "   2 + c", "   3   d"} {
+			if !strings.Contains(all, want) {
+				t.Errorf("%s: no hunk row %q in\n%s", name, want, all)
+			}
 		}
 	}
 }

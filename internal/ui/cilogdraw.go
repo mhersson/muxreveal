@@ -80,8 +80,9 @@ func ansiColor(i int8, p theme.Palette) theme.Hex {
 	return ""
 }
 
-// logTabs expands tabs to the next logTab column stop, for text that starts at
-// column col, and drops every other control character.
+// logTabs expands tabs to the next logTab column stop, for text that starts col
+// cells into the line's text (the time prefix and group indent are not counted),
+// and drops every other control character.
 func logTabs(s string, col int) string {
 	if !strings.ContainsRune(s, '\t') {
 		return printable(s)
@@ -268,13 +269,14 @@ func (a *App) logLines(lk look, w, h int) (out []string, pics []picRow) {
 	}
 
 	top, row, bottom := boxFrame(w, title, boxStyle{border: st.popupBorder, title: st.pushTitle, cut: "…"}, st)
-	n, blanks, status, hints := logSplit(h)
 
 	if p.sum {
 		return a.summaryLines(lk, w, h, top, row, bottom)
 	}
 
+	n, blanks, status, hints := logSplit(h)
 	rows := p.rows()
+	// Resize on draw: the box follows the terminal, and the page is not told.
 	p.fit(len(rows), n)
 
 	body := make([]string, 0, n)
@@ -324,12 +326,8 @@ func (a *App) summaryLines(lk look, w, h int, top string, row func(string) strin
 	ui := lk.theme.UI
 	p := a.checks.page
 	on := func(fg theme.Hex) lipgloss.Style { return lipgloss.NewStyle().Background(ui.Panel).Foreground(fg) }
-	n, blanks, status, hints := logSplit(h)
-
-	if status {
-		n++
-	}
-
+	_, blanks, _, hints := logSplit(h)
+	n := summaryRows(h)
 	out = []string{top}
 
 	if blanks {
@@ -344,6 +342,7 @@ func (a *App) summaryLines(lk look, w, h int, top string, row func(string) strin
 	case p.summary == nil:
 		out = append(out, row(on(ui.Muted).Render(summaryLoading)))
 	default:
+		// Resize on draw: the box follows the terminal, and the view is not told.
 		a.sizeSummary(p)
 
 		var drawn []string
@@ -392,19 +391,9 @@ func sideBorders(ui theme.UI, content string) string {
 // logHints is the page's hint row in cw cells: the close pair always stays and
 // the others drop from the end before it does.
 func (a *App) logHints(st styles, kt keyTable, cw int, summary bool) string {
-	pairs := [][2]string{
-		{kt.hint("checks.next", "checks.prev"), "line"},
-		{kt.hint("checks.error.next", "checks.error.prev"), "error"},
-		{kt.hint("checks.fold"), "group"},
-		{kt.hint("checks.browser"), "browser"},
-	}
-
+	pairs := logPairs(kt)
 	if summary {
-		pairs = [][2]string{
-			{kt.hint("checks.next", "checks.prev"), "line"},
-			{kt.hint("checks.fold"), "open"},
-			{kt.hint("checks.browser"), "browser"},
-		}
+		pairs = summaryPairs(kt)
 	}
 
 	lead := hintPairs(pairs)
@@ -424,6 +413,25 @@ func (a *App) logHints(st styles, kt keyTable, cw int, summary bool) string {
 	}
 
 	return hints + popupHints(st, closing, cw)
+}
+
+// logPairs are the log page's hints, in the order they drop from the end.
+func logPairs(kt keyTable) [][2]string {
+	return [][2]string{
+		{kt.hint("checks.next", "checks.prev"), "line"},
+		{kt.hint("checks.error.next", "checks.error.prev"), "error"},
+		{kt.hint("checks.fold"), "group"},
+		{kt.hint("checks.browser"), "browser"},
+	}
+}
+
+// summaryPairs are the summary page's hints.
+func summaryPairs(kt keyTable) [][2]string {
+	return [][2]string{
+		{kt.hint("checks.next", "checks.prev"), "line"},
+		{kt.hint("checks.fold"), "open"},
+		{kt.hint("checks.browser"), "browser"},
+	}
 }
 
 // overlayCILog draws the log page over base; a terminal too small for the box

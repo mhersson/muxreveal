@@ -303,6 +303,8 @@ func (a *App) prListOpen(row prListRow, then prThen) tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
+// prListOpenCheckout opens the drawer on the row's checkout, or says there is
+// none.
 func (a *App) prListOpenCheckout(st core.State, row prListRow, then prThen) tea.Cmd {
 	dir, ok := a.prCheckout(row.key.repo)
 	if !ok || st.Tab().Focus == "" {

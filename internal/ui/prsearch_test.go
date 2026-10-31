@@ -447,6 +447,22 @@ func TestPRListSearchStale(t *testing.T) {
 		}
 	})
 
+	t.Run("with no map made", func(t *testing.T) {
+		t.Parallel()
+
+		a, _, _ := searchApp(t, listAgents(), 120, 40, mine, "github.com/acme/web")
+		msgs := flatten(press(a, keyLeader, keyRune('g'), keyRune('l')))
+		a.search.hosts = nil
+
+		for _, m := range msgs {
+			a.Update(m)
+		}
+
+		if len(a.search.hosts) == 0 {
+			t.Error("an answer with no host map was dropped")
+		}
+	})
+
 	t.Run("after a reopen", func(t *testing.T) {
 		t.Parallel()
 

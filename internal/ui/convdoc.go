@@ -394,7 +394,7 @@ func hunkTail(rc github.ReviewComment, hl func(string, []string) [][]diffview.Sp
 
 	oldN, newN := 0, 0
 
-	for _, l := range strings.Split(rc.Hunk, "\n") {
+	for _, l := range strings.Split(strings.TrimSuffix(rc.Hunk, "\n"), "\n") {
 		if m := hunkHead.FindStringSubmatch(l); m != nil {
 			oldN, _ = strconv.Atoi(m[1])
 			newN, _ = strconv.Atoi(m[2])
@@ -554,7 +554,17 @@ func (d *convDoc) pictureMove() (md.Layout, bool) {
 	return old, true
 }
 
-// gen is the number of layouts made.
+// boxFold is the fold ID a box passes to the composer: a bot's own, else 0.
+func (d *convDoc) boxFold(it *convItem) int {
+	if it.bot {
+		return d.botBase + it.botIdx
+	}
+
+	return 0
+}
+
+// gen is the number of layouts made. A fold toggled since counts at the next
+// layout, not at the toggle.
 func (d *convDoc) gen() int { return d.gens }
 
 // text is the last layout's lines as plain text, for search.
@@ -647,7 +657,7 @@ func (d *convDoc) compose(w int, icons bool) {
 		case it.bot && !d.botOpen[it.botIdx]:
 			c.botRow(it, d.botBase+it.botIdx)
 		default:
-			c.box(it, d.botBase+it.botIdx)
+			c.box(it, d.boxFold(it))
 		}
 
 		if i == 0 && d.cut {

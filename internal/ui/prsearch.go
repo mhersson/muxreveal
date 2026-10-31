@@ -122,6 +122,10 @@ func (a *App) onPRSearch(msg prSearchMsg) {
 		return
 	}
 
+	if a.search.hosts == nil {
+		a.search.hosts = map[string]*prSearchHost{}
+	}
+
 	h := a.search.hosts[msg.host]
 	if h == nil {
 		h = &prSearchHost{}

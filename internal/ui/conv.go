@@ -54,8 +54,8 @@ type convReadMsg struct {
 }
 
 // openConversation opens the overlay on pull request number of repo (keyed
-// "host/owner/name"), which shows at once and fills when the read answers. pr is
-// what the caller knows of the pull request.
+// "host/owner/name"), which shows at once and fills when the read answers. pr
+// is what the caller knows of the pull request.
 func (a *App) openConversation(repo string, number int, pr core.PRInfo) tea.Cmd {
 	if a.reads == nil {
 		a.notice = noticePRsOff
@@ -124,9 +124,9 @@ func (a *App) readConversation(v *convView) tea.Cmd {
 	}
 }
 
-// onConvRead keeps a conversation's answer. One for an overlay that closed or a
-// read a newer one superseded is dropped; a failed read keeps the old conversation
-// off the screen and says why.
+// onConvRead keeps a conversation's answer. One for an overlay that closed or
+// a read a newer one superseded is dropped; a failed read keeps the old
+// conversation off the screen and says why.
 func (a *App) onConvRead(msg convReadMsg) {
 	v := msg.view
 	if a.conv != v || v == nil || v.seq != msg.seq {
@@ -136,6 +136,7 @@ func (a *App) onConvRead(msg convReadMsg) {
 	v.loading = false
 
 	if msg.err != nil {
+		// A cancelled read is the app shutting down: nothing to show.
 		if !errors.Is(msg.err, context.Canceled) {
 			v.err = printable(msg.err.Error())
 		}
@@ -144,6 +145,8 @@ func (a *App) onConvRead(msg convReadMsg) {
 	}
 
 	v.err = ""
+	// The chooser's targets are the old document's links.
+	v.chooser = nil
 
 	if msg.pr.Number != 0 {
 		v.pr = msg.pr
@@ -200,8 +203,8 @@ func (a *App) convPoll(st core.State, repo string) tea.Cmd {
 	return nil
 }
 
-// sizeConv sets the cells the view draws in, keeping the cursor on its item when
-// the width changes. A box too small to draw leaves the view as it was.
+// sizeConv sets the cells the view draws in, keeping the cursor on its item
+// when the width changes. A box too small to draw leaves the view as it was.
 func (a *App) sizeConv() {
 	v := a.conv
 	if v == nil {

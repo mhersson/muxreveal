@@ -157,8 +157,8 @@ type textRev struct {
 }
 
 // textSelection is the one selection when it is not a pane's: the view that
-// holds it, in the tab whose drawer shows it, or "" for the plan or conversation
-// overlay. Exactly one of view and rows is set.
+// holds it, in the tab whose drawer shows it, or "" for the plan or
+// conversation overlay. Exactly one of view and rows is set.
 type textSelection struct {
 	tab   core.TabID
 	view  *mdView

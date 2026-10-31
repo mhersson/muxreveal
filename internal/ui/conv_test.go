@@ -12,6 +12,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	"github.com/charmbracelet/x/exp/golden"
 
+	"github.com/mhersson/muxreveal/internal/core"
 	"github.com/mhersson/muxreveal/internal/github"
 )
 
@@ -512,6 +513,41 @@ func TestConversationStale(t *testing.T) {
 			t.Error("the older answer replaced the newer one")
 		}
 	})
+
+	t.Run("after the overlay reopened on another pull request", func(t *testing.T) {
+		t.Parallel()
+
+		a, _ := convApp(t, true, 160, 48)
+		first := convReadsOf(press(a, keyRune('i')))
+		repo, number := a.conv.repo, a.conv.number
+
+		press(a, keyEsc)
+		a.openConversation(repo, number+1, core.PRInfo{})
+
+		if len(first) != 1 {
+			t.Fatalf("answers = %d, want 1", len(first))
+		}
+
+		a.Update(first[0])
+
+		if v := a.conv; v == nil || v.number != number+1 || v.doc != nil || !v.loading {
+			t.Errorf("the first view's answer changed the reopened overlay: %+v", v)
+		}
+	})
+}
+
+func TestConversationReadClosesChooser(t *testing.T) {
+	t.Parallel()
+
+	a, _ := convApp(t, true, 160, 48)
+	convOpen(t, a)
+
+	a.conv.chooser = &linkChooser{}
+	ciDeliver(a, a.readConversation(a.conv))
+
+	if a.conv.chooser != nil {
+		t.Error("a re-read left the link chooser open on the old document's links")
+	}
 }
 
 func TestConversationWatch(t *testing.T) {

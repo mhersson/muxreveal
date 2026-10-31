@@ -469,7 +469,7 @@ func (v *mdView) unitText(i int) string {
 
 // selSpans are the cells of line i the selection paints, within cells below end.
 func (v *mdView) selSpans(lay md.Layout, i, end int, bg color.Color) []spanPaint {
-	if v.sel == nil || i >= len(lay.Lines) {
+	if v.sel == nil || v.doc == nil || i >= len(lay.Lines) {
 		return nil
 	}
 
