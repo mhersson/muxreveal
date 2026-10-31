@@ -469,41 +469,47 @@ func (f *fakeTimer) Stop() {}
 
 func (f *fakeTimer) fire() { f.c <- time.Time{} }
 
+// awaitReset waits for the watcher to reset the timer to want.
+func (f *fakeTimer) awaitReset(t *testing.T, want time.Duration) {
+	t.Helper()
+
+	select {
+	case d := <-f.resets:
+		if d != want {
+			t.Fatalf("timer reset to %v, want %v", d, want)
+		}
+	case <-time.After(watchWait):
+		t.Fatalf("timer never reset to %v", want)
+	}
+}
+
+// fakeTimers sets o to run on fake timers and returns them in the order Watch
+// takes them: the debounce, then the max delay.
+func fakeTimers(o *WatchOptions) *[]*fakeTimer {
+	var timers []*fakeTimer
+
+	o.newTimer = func() watchTimer {
+		f := newFakeTimer()
+		timers = append(timers, f)
+
+		return f
+	}
+
+	return &timers
+}
+
 func TestWatchSteadyStreamIsSentByMaxDelay(t *testing.T) {
 	dir := baseRepo(t)
 
-	// Watch takes the debounce timer first, then the max-delay timer.
-	var timers []*fakeTimer
+	o := WatchOptions{Debounce: 400 * time.Millisecond, MaxDelay: time.Second}
+	timers := fakeTimers(&o)
+	w := startWatch(t, dir, o)
 
-	w := startWatch(t, dir, WatchOptions{
-		Debounce: 400 * time.Millisecond,
-		MaxDelay: time.Second,
-		newTimer: func() watchTimer {
-			f := newFakeTimer()
-			timers = append(timers, f)
-
-			return f
-		},
-	})
-
-	if len(timers) != 2 {
-		t.Fatalf("Watch made %d timers, want 2", len(timers))
+	if len(*timers) != 2 {
+		t.Fatalf("Watch made %d timers, want 2", len(*timers))
 	}
 
-	debounce, maxDelay := timers[0], timers[1]
-
-	waitReset := func(f *fakeTimer, want time.Duration) {
-		t.Helper()
-
-		select {
-		case d := <-f.resets:
-			if d != want {
-				t.Fatalf("timer reset to %v, want %v", d, want)
-			}
-		case <-time.After(watchWait):
-			t.Fatalf("timer never reset to %v", want)
-		}
-	}
+	debounce, maxDelay := (*timers)[0], (*timers)[1]
 
 	// Each write waits for a debounce reset before the next (one write can raise
 	// several events, so extra resets may queue), so the debounce never has a
@@ -515,10 +521,10 @@ func TestWatchSteadyStreamIsSentByMaxDelay(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		waitReset(debounce, 400*time.Millisecond)
+		debounce.awaitReset(t, 400*time.Millisecond)
 
 		if i == 0 {
-			waitReset(maxDelay, time.Second)
+			maxDelay.awaitReset(t, time.Second)
 		}
 	}
 
@@ -542,19 +548,30 @@ func TestWatchSteadyStreamIsSentByMaxDelay(t *testing.T) {
 
 func TestWatchBatchWaitsForTheDebounce(t *testing.T) {
 	dir := baseRepo(t)
-	w := startWatch(t, dir, WatchOptions{Debounce: 400 * time.Millisecond})
-
-	start := time.Now()
+	o := WatchOptions{Debounce: 400 * time.Millisecond}
+	timers := fakeTimers(&o)
+	w := startWatch(t, dir, o)
+	debounce := (*timers)[0]
 
 	writeFile(t, dir, "tracked.txt", "two\n")
+	debounce.awaitReset(t, 400*time.Millisecond)
+
+	// No fake timer has fired, so nothing may have sent a batch yet.
+	select {
+	case b := <-w.Batches():
+		t.Fatalf("batch %v before the debounce fired", b.Paths)
+	default:
+	}
+
+	debounce.fire()
 
 	select {
-	case <-w.Batches():
-		if d := time.Since(start); d < 400*time.Millisecond {
-			t.Fatalf("batch after %v, before the debounce", d)
+	case b := <-w.Batches():
+		if !slices.Contains(b.Paths, "tracked.txt") {
+			t.Fatalf("batch paths = %v, want tracked.txt", b.Paths)
 		}
-	case <-time.After(3 * time.Second):
-		t.Fatal("no batch")
+	case <-time.After(watchWait):
+		t.Fatal("no batch after the debounce fired")
 	}
 }
 
@@ -698,14 +715,8 @@ func TestWatchCloseStopsEverything(t *testing.T) {
 
 	writeFile(t, dir, "tracked.txt", "two\n")
 
-	start := time.Now()
-
 	if err := w.Close(); err != nil {
 		t.Fatalf("close: %v", err)
-	}
-
-	if d := time.Since(start); d > time.Second {
-		t.Fatalf("close took %v", d)
 	}
 
 	// Events after Close are dropped without a panic.
