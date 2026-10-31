@@ -225,6 +225,7 @@ func TestSecondLiveResultKeepsLookAheadSpans(t *testing.T) {
 
 	v.top = rowWith(t, v, "chunk 200") - 1
 	v.cursor = v.top
+
 	settleDrawer(t, a)
 
 	edit := func(tag string) {
