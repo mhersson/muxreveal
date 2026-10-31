@@ -829,8 +829,8 @@ func (a *App) View() tea.View {
 	f := &frameLayers{}
 
 	if r, ok := a.drawerRect(st); ok {
-		lines, fits := a.drawerDrawn(st, r)
-		content = a.drawDrawer(f, content, r, lines, nil, fits)
+		lines, pics, fits := a.drawerDrawn(st, r)
+		content = a.drawDrawer(f, content, r, lines, pics, fits)
 	}
 
 	content = overlayToast(f, content, a.width, a.height, a.notice, a.noticeLevel(), a.icons, lk.styles)
@@ -874,7 +874,7 @@ func (a *App) View() tea.View {
 		content = overlayConfirm(f, content, a.width, a.height, *a.confirm, a.icons, lk.styles)
 	}
 
-	if rows := f.visible(); len(rows) > 0 {
+	if rows := a.placed(f.visible()); len(rows) > 0 {
 		content = placePictures(content, a.width, a.height, rows)
 	}
 

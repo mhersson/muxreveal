@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"image"
 	"strings"
 
 	"github.com/charmbracelet/x/ansi"
@@ -113,10 +114,13 @@ func (d *drawCtx) overlayList(lines []string) {
 	gap := railPainter{bg: d.ui.Bg}.line(nil, 1)
 	side := paint(d.edge(), d.ui.Bg, false).Render("│")
 
-	for i, line := range d.listBox(g) {
+	box1 := d.listBox(g)
+	for i, line := range box1 {
 		y := g.y + i
 		lines[y] = cutRow(lines[y], g.x) + line + gap + side
 	}
+
+	d.covers = append(d.covers, image.Rect(g.x, g.y, box.W, g.y+len(box1)))
 }
 
 // listBox draws the box: g.h lines of g.w cells.

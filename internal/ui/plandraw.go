@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"image"
 	"slices"
 	"strconv"
 	"strings"
@@ -130,8 +131,9 @@ func planTop(lead, path, tag string, w int) (title, tagOut string) {
 }
 
 // planLines draws the box w x h: the title and tag in the top border, the view
-// centred in the inner width, the hints and the indicator.
-func (a *App) planLines(lk look, w, h int) []string {
+// centred in the inner width, the hints and the indicator. pics are the view's
+// picture rows in the box's cells, less any picture the link chooser overlaps.
+func (a *App) planLines(lk look, w, h int) (out []string, pics []picRow) {
 	v := a.plan
 	ui := lk.theme.UI
 	on := func(fg theme.Hex) lipgloss.Style { return lipgloss.NewStyle().Foreground(fg).Background(ui.Panel) }
@@ -181,13 +183,20 @@ func (a *App) planLines(lk look, w, h int) []string {
 	ind := planIndicator(len(shown.layout().Lines), rows, shown.top)
 	bottom := border.Render("╰"+strings.Repeat("─", w-3-ansi.StringWidth(ind))) + on(ui.Accent).Bold(true).Render(ind) + border.Render("─╯")
 
-	out := []string{top}
+	out = []string{top}
 	if blanks {
 		out = append(out, row("", 0))
 	}
 
-	for _, l := range shown.draw(newMDPainter(lk.theme, ui.Panel).withQuery(v.query), true) {
+	drawn, viewPics := shown.drawPictures(newMDPainter(lk.theme, ui.Panel).withQuery(v.query), true)
+	for _, l := range drawn {
 		out = append(out, row(l, vw))
+	}
+
+	for _, p := range viewPics {
+		p.X += 1 + off
+		p.Y += len(out) - len(drawn)
+		pics = append(pics, p)
 	}
 
 	if blanks {
@@ -202,18 +211,21 @@ func (a *App) planLines(lk look, w, h int) []string {
 	out = append(out, bottom)
 
 	if v.chooser != nil {
-		a.planChooserLines(ui, out)
+		if covered := a.planChooserLines(ui, out); covered.Dx() > 0 {
+			pics = dropCovered(pics, []image.Rectangle{covered})
+		}
 	}
 
-	return out
+	return out, pics
 }
 
 // planChooserLines draws the link chooser over the box's rows, two cells in from
-// each side from the fourth row; a box without a row for it draws nothing.
-func (a *App) planChooserLines(ui theme.UI, lines []string) {
+// each side from the fourth row; a box without a row for it draws nothing. It
+// returns the cells the box covers.
+func (a *App) planChooserLines(ui theme.UI, lines []string) image.Rectangle {
 	box := a.plan.chooser.lines(ui, ansi.StringWidth(lines[0])-2*wtInsetX, len(lines)-1-wtTopY, a.icons, a.getenv("HOME"))
 	if box == nil {
-		return
+		return image.Rectangle{}
 	}
 
 	gap := lipgloss.NewStyle().Background(ui.Panel).Render(" ")
@@ -223,6 +235,8 @@ func (a *App) planChooserLines(ui theme.UI, lines []string) {
 		y := wtTopY + i
 		lines[y] = cutRow(lines[y], wtInsetX) + l + gap + side
 	}
+
+	return image.Rect(wtInsetX, wtTopY, ansi.StringWidth(lines[0]), wtTopY+len(box))
 }
 
 // planHintRow is the hints that fit w cells, a gap apart.
@@ -291,5 +305,7 @@ func (a *App) overlayPlan(f *frameLayers, base string, lk look) string {
 		return base
 	}
 
-	return overlayAt(f, base, a.width, a.height, x, y, a.planLines(lk, w, h), nil)
+	lines, pics := a.planLines(lk, w, h)
+
+	return overlayAt(f, base, a.width, a.height, x, y, lines, pics)
 }

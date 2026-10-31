@@ -143,6 +143,7 @@ func (a *App) onPlanPage(msg planPageMsg) {
 		return
 	}
 
+	msg.doc.withPictures(docPictures{reg: a.pictures, root: pv.root})
 	pv.pages = append(pv.pages, &planPage{path: msg.path, view: mdView{doc: msg.doc}})
 	pv.chooser = nil
 

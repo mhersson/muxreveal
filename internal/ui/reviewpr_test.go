@@ -862,7 +862,7 @@ func TestPRHeaderNarrow(t *testing.T) {
 	st := a.store.State()
 
 	r, _ := a.drawerRect(st)
-	lines, fits := a.drawerDrawn(st, r)
+	lines, _, fits := a.drawerDrawn(st, r)
 
 	if len(lines) != r.H || !fits {
 		t.Fatalf("drawer drew %d lines (want %d), fits %v: a header row wrapped or overran", len(lines), r.H, fits)

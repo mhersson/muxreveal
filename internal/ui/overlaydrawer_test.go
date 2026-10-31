@@ -364,7 +364,7 @@ func TestDrawDrawerCountsFallbacks(t *testing.T) {
 	a := cacheScene().build(t)
 	r := drawerRectOf(t, a, 0)
 	base := a.frameAt(a.geometry())
-	lines, fits := a.drawerDrawn(a.store.State(), r)
+	lines, _, fits := a.drawerDrawn(a.store.State(), r)
 
 	if !fits {
 		t.Fatal("the drawer's lines do not fit the splice")
@@ -411,7 +411,7 @@ func TestOverlayDrawerMatchesTheCompositorOnTheDrawerScenes(t *testing.T) {
 						r.X += slide
 
 						base := a.frameAt(a.geometry())
-						lines, fits := a.drawerDrawn(st, r)
+						lines, _, fits := a.drawerDrawn(st, r)
 
 						want := overlayAt(nil, base, a.width, a.height, r.X, r.Y, lines, nil)
 						got, _ := overlayDrawer(nil, base, a.width, a.height, r, lines, nil, fits)

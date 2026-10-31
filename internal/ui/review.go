@@ -132,12 +132,13 @@ type reviewCache struct {
 
 	// The drawn lines and what they were drawn from. spansRev counts the chunks
 	// spans gained, as the drawing shows them.
-	drawn    []string
-	drawnFit bool // the drawn lines can be spliced into a frame, see drawerDrawn
-	drawnKey drawKey
-	drawnOK  bool
-	spansRev int
-	bySum    map[chunkSum][][]diffview.Span // spans by the text of their chunk
+	drawn     []string
+	drawnPics []picRow // the picture rows of drawn, relative to the drawer
+	drawnFit  bool     // the drawn lines can be spliced into a frame, see drawerDrawn
+	drawnKey  drawKey
+	drawnOK   bool
+	spansRev  int
+	bySum     map[chunkSum][][]diffview.Span // spans by the text of their chunk
 }
 
 // drawerState is the drawer's UI state outside the views.

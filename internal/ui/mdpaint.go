@@ -2,6 +2,7 @@ package ui
 
 import (
 	"image/color"
+	"slices"
 	"strings"
 	"unicode/utf8"
 
@@ -122,7 +123,9 @@ func (p mdPainter) line(l md.Line, links []md.Link, w int) string {
 
 		text := st.Render(r.Text)
 
-		if r.Link >= 0 && r.Link < len(links) && linkSafe(links[r.Link].URL) {
+		if r.Role == md.RolePicture {
+			text = lipgloss.NewStyle().Background(p.ground).Render(r.Text)
+		} else if r.Link >= 0 && r.Link < len(links) && linkSafe(links[r.Link].URL) {
 			text = ansi.SetHyperlink(links[r.Link].URL) + text + ansi.ResetHyperlink()
 		}
 
@@ -139,7 +142,7 @@ func (p mdPainter) line(l md.Line, links []md.Link, w int) string {
 // splitMatches cuts l's runs at the edges of the occurrences of q in its text
 // and says which of the new runs are occurrences. It returns l when there are none.
 func splitMatches(l md.Line, q string) (md.Line, []bool) {
-	if q == "" {
+	if q == "" || slices.ContainsFunc(l, func(r md.Run) bool { return r.Role == md.RolePicture }) {
 		return l, nil
 	}
 

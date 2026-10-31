@@ -36,7 +36,22 @@ func (v *mdView) layout() md.Layout {
 		return md.Layout{}
 	}
 
-	return v.doc.layout(v.textWidth(), v.icons)
+	lay := v.doc.layout(v.textWidth(), v.icons)
+	if old, ok := v.doc.pictureMove(); ok {
+		v.keepRow(old, lay)
+	}
+
+	return lay
+}
+
+// keepRow moves the cursor and the top by the cursor's shift between two layouts
+// that differ in picture rows, so the cursor keeps its text and its screen row.
+func (v *mdView) keepRow(old, cur md.Layout) {
+	d := pictureShift(old, cur, v.cursor)
+	n, h := len(cur.Lines), max(v.h, 1)
+
+	v.cursor = max(min(v.cursor+d, n-1), 0)
+	v.top = max(min(v.top+d, n-h), 0)
 }
 
 // clamp keeps the cursor on a line and in the window.
@@ -226,7 +241,7 @@ func lineTargets(lay md.Layout, i int) []mdTarget {
 	}
 
 	for _, im := range lay.Images {
-		if im.Line != i || im.Link < 0 || im.Link >= len(lay.Links) {
+		if i < im.Line || i >= im.Line+imageRows(im) || im.Link < 0 || im.Link >= len(lay.Links) {
 			continue
 		}
 
@@ -323,10 +338,20 @@ func sourceLineIndex(src []md.SourceRange, n int) int {
 // ground, cell 1 is blank, the text starts at cell 2 and two cells stay free
 // on the right. An unfocused view shows no cursor.
 func (v *mdView) draw(p mdPainter, focused bool) []string {
+	rows, _ := v.drawPictures(p, focused)
+
+	return rows
+}
+
+// drawPictures is draw, and the picture rows in view: each at cell X, row Y of
+// the view, on the ground of its row.
+func (v *mdView) drawPictures(p mdPainter, focused bool) ([]string, []picRow) {
 	lay := v.layout()
 	lead, tw := min(2, v.w), max(v.w-4, 0)
 	trail := max(v.w-lead-tw, 0)
 	rows := make([]string, 0, v.h)
+
+	var pics []picRow
 
 	pad := func(pp mdPainter, n int) string {
 		return lipgloss.NewStyle().Background(pp.ground).Render(strings.Repeat(" ", n))
@@ -348,10 +373,14 @@ func (v *mdView) draw(p mdPainter, focused bool) []string {
 		text := pad(pp, tw)
 		if i < len(lay.Lines) {
 			text = pp.line(lay.Lines[i], lay.Links, tw)
+
+			if im, row, ok := pictureAt(lay, i); ok {
+				pics = append(pics, picRow{X: 2 + pictureCol(lay.Lines[i]), Y: r, ID: im.ID, Row: row, Cols: im.Cols, Ground: pp.ground})
+			}
 		}
 
 		rows = append(rows, mark+text+pad(pp, trail))
 	}
 
-	return rows
+	return rows, pics
 }
