@@ -157,7 +157,7 @@ type textRev struct {
 }
 
 // textSelection is the one selection when it is not a pane's: the view that
-// holds it, in the tab whose drawer shows it, or "" for the plan overlay. Exactly
+// holds it, in the tab whose drawer shows it, or "" for the plan or conversation overlay. Exactly
 // one of view and rows is set.
 type textSelection struct {
 	tab   core.TabID
@@ -306,6 +306,10 @@ func (a *App) textSelected() string {
 func (a *App) textHolds(ts *textSelection) bool {
 	switch {
 	case ts.view != nil && ts.tab == "":
+		if a.conv != nil && ts.view == &a.conv.view {
+			return true
+		}
+
 		return a.plan != nil && a.plan.shown() == ts.view
 	case ts.view != nil:
 		v := a.drawer.views[ts.tab]

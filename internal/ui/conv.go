@@ -245,6 +245,8 @@ func (a *App) handleConvKey(msg tea.KeyPressMsg) tea.Cmd {
 	v := a.conv
 
 	if key == "esc" {
+		a.clearTextSel()
+
 		switch {
 		case v.chooser != nil:
 			v.chooser = nil
@@ -262,20 +264,42 @@ func (a *App) handleConvKey(msg tea.KeyPressMsg) tea.Cmd {
 		return nil
 	}
 
-	mv := &v.view
-
 	a.sizeConv()
 
 	switch {
 	case v.chooser != nil:
+		switch key {
+		case "j", "down", "k", "up", "enter":
+			a.clearTextSel()
+		}
+
 		return a.convChooserKey(key)
 	case v.searching:
+		if key == "enter" || key == "backspace" || msg.Text != "" {
+			a.clearTextSel()
+		}
+
 		a.convSearchKey(msg)
 
 		return nil
 	}
 
+	cmd, acted := a.convKey(v, key, boxH)
+	if acted {
+		a.clearTextSel()
+	}
+
+	return cmd
+}
+
+// convKey runs a key of the overlay's own switch and reports whether it acted:
+// y copies and keeps a selection, and a key the switch drops keeps it too.
+func (a *App) convKey(v *convView, key string, boxH int) (cmd tea.Cmd, acted bool) {
+	mv := &v.view
+
 	switch key {
+	case "y":
+		return a.convCopy(), false
 	case "j", "down":
 		mv.move(1)
 	case "k", "up":
@@ -297,7 +321,7 @@ func (a *App) handleConvKey(msg tea.KeyPressMsg) tea.Cmd {
 	case "[":
 		a.convItem(-1)
 	case "enter":
-		return a.convEnter()
+		cmd = a.convEnter()
 	case "/":
 		// The prompt draws in the hint row, so without one there is nowhere to type.
 		if _, _, hint, _ := convRows(boxH); hint {
@@ -308,10 +332,22 @@ func (a *App) handleConvKey(msg tea.KeyPressMsg) tea.Cmd {
 	case "N":
 		a.convFind(v.last, true)
 	case "r":
-		return a.readConversation(v)
+		cmd = a.readConversation(v)
+	default:
+		return nil, false
 	}
 
-	return nil
+	return cmd, true
+}
+
+// convCopy is y: the selection, kept, else the paragraph or item at the cursor.
+func (a *App) convCopy() tea.Cmd {
+	v := &a.conv.view
+	if ts := a.text; ts != nil && ts.view == v {
+		return a.clip.copy(a.textSelected())
+	}
+
+	return a.clip.copy(v.unitText(v.cursor))
 }
 
 // convEnter is enter on the view: a fold head toggles, one link opens in the

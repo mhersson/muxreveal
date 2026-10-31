@@ -44,8 +44,8 @@ func (a *App) convLines(lk look, w, h int) (out []string, pics []picRow) {
 
 	rows, blanks, hint, header := convRows(h)
 	inner := w - 2
-	vw := min(w-4, planMaxView)
-	off := (w - 2 - vw) / 2
+	dx, _, vw, _ := convDocCells(w, h)
+	off := dx - 1
 	tw := vw - 4
 
 	row := func(content string, cw int) string {
@@ -152,6 +152,40 @@ func convHints(st styles, cw int) string {
 	}
 
 	return hints + popupHints(st, closing, cw)
+}
+
+// convDocCells places the view in a box w x h, in the box's cells: the view's left
+// cell and first row, its width and its rows.
+func convDocCells(w, h int) (x, y, vw, rows int) {
+	rows, blanks, _, header := convRows(h)
+	vw = min(w-4, planMaxView)
+	x, y = 1+(w-2-vw)/2, 1
+
+	if blanks {
+		y++
+	}
+
+	if header {
+		y += 3
+		if blanks {
+			y++
+		}
+	}
+
+	return x, y, vw, rows
+}
+
+// convDocRect is the screen cells of the overlay's view rows. ok is false for a
+// terminal too small to draw the box.
+func convDocRect(width, height int) (image.Rectangle, bool) {
+	bx, by, w, h, ok := planBox(width, height)
+	if !ok {
+		return image.Rectangle{}, false
+	}
+
+	x, y, vw, rows := convDocCells(w, h)
+
+	return image.Rect(bx+x, by+y, bx+x+vw, by+y+rows), true
 }
 
 // overlayConv draws the conversation overlay over base; a terminal too small for
