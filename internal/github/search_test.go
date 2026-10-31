@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestMyPRs(t *testing.T) {
@@ -16,24 +17,9 @@ func TestMyPRs(t *testing.T) {
 	rec := &gqlRecorder{body: readFixture(t, "search.json")}
 	c, _ := newTestClient(t, "github.com", rec)
 
-	got, err := c.MyPRs(context.Background())
+	got, err := c.MyPRs(context.Background(), time.Time{})
 	if err != nil {
 		t.Fatal(err)
-	}
-
-	var body struct {
-		Variables map[string]any `json:"variables"`
-	}
-	if err := json.Unmarshal([]byte(rec.requests()[0]), &body); err != nil {
-		t.Fatal(err)
-	}
-
-	wantVars := map[string]any{
-		"requested": "is:open is:pr review-requested:@me",
-		"authored":  "is:open is:pr author:@me",
-	}
-	if !reflect.DeepEqual(body.Variables, wantVars) {
-		t.Errorf("variables = %v, want %v", body.Variables, wantVars)
 	}
 
 	type brief struct {
@@ -74,13 +60,60 @@ func TestMyPRs(t *testing.T) {
 	}
 }
 
+func TestMyPRsSearches(t *testing.T) {
+	t.Parallel()
+
+	east := time.FixedZone("UTC+2", 2*60*60)
+
+	tests := []struct {
+		name          string
+		since         time.Time
+		wantRequested string
+	}{
+		{name: "no limit", wantRequested: "is:open is:pr archived:false review-requested:@me"},
+		{
+			name: "since a date", since: time.Date(2026, 10, 24, 10, 0, 0, 0, time.UTC),
+			wantRequested: "is:open is:pr archived:false review-requested:@me updated:>=2026-10-24",
+		},
+		{
+			// 01:00 on the 25th at UTC+2 is still the 24th in UTC.
+			name: "since in another zone", since: time.Date(2026, 10, 25, 1, 0, 0, 0, east),
+			wantRequested: "is:open is:pr archived:false review-requested:@me updated:>=2026-10-24",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			rec := &gqlRecorder{body: readFixture(t, "search.json")}
+			c, _ := newTestClient(t, "github.com", rec)
+
+			if _, err := c.MyPRs(context.Background(), tt.since); err != nil {
+				t.Fatal(err)
+			}
+
+			var body struct {
+				Variables map[string]any `json:"variables"`
+			}
+			if err := json.Unmarshal([]byte(rec.requests()[0]), &body); err != nil {
+				t.Fatal(err)
+			}
+
+			want := map[string]any{"requested": tt.wantRequested, "authored": "is:open is:pr archived:false author:@me"}
+			if !reflect.DeepEqual(body.Variables, want) {
+				t.Errorf("variables = %v, want %v", body.Variables, want)
+			}
+		})
+	}
+}
+
 func TestMyPRsGHE(t *testing.T) {
 	t.Parallel()
 
 	rec := &gqlRecorder{body: readFixture(t, "search.json")}
 	c, reqs := newTestClient(t, "ghe.example.com", rec)
 
-	got, err := c.MyPRs(context.Background())
+	got, err := c.MyPRs(context.Background(), time.Time{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -105,7 +138,7 @@ func TestMyPRsError(t *testing.T) {
 		_, _ = io.WriteString(w, `{"message":"boom"}`)
 	}))
 
-	_, err := c.MyPRs(context.Background())
+	_, err := c.MyPRs(context.Background(), time.Time{})
 	if err == nil || !strings.Contains(err.Error(), "github: query MyPRs") {
 		t.Fatalf("err = %v, want one naming github: query MyPRs", err)
 	}

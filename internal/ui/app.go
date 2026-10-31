@@ -89,6 +89,9 @@ type Options struct {
 	// PRReads makes the GitHub reads of the pull request views (the list's
 	// searches, job logs, check run summaries and conversations); nil turns them off.
 	PRReads prReads
+	// PullRequests is the [pull_requests] config: how many days back the
+	// Review requested tab's search goes. The zero value is no limit.
+	PullRequests core.PullRequestsConfig
 	// Keys is the [keys] config laid over the built-in leader keys.
 	Keys core.KeysConfig
 	// Pictures fetches remote images; nil keeps them as image lines.
@@ -150,8 +153,9 @@ type App struct {
 	editing                map[core.PaneID]*bodyEdit
 	merging                map[mergeKey]bool
 	openLink               urlOpener
-	actions                prActions // GitHub writes; nil means they are off
-	reads                  prReads   // GitHub reads beyond the poller; nil means they are off
+	actions                prActions               // GitHub writes; nil means they are off
+	reads                  prReads                 // GitHub reads beyond the poller; nil means they are off
+	pullRequests           core.PullRequestsConfig // how far back the Review requested search goes
 	search                 prSearchState
 
 	panes        map[core.PaneID]*pane // runtime panes, keyed like State.Panes
@@ -281,6 +285,7 @@ func New(opts Options) (*App, error) {
 
 	a.actions = opts.PRActions
 	a.reads = opts.PRReads
+	a.pullRequests = opts.PullRequests
 
 	a.openLink = opts.OpenURL
 	if a.openLink == nil {
