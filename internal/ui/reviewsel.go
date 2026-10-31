@@ -212,9 +212,10 @@ func shiftPieces(ps []md.Piece, n int) []md.Piece {
 
 // rowText is what row i of the diff column copies, in the column's cells: the
 // code of a line, the path of a file header, the header and section of a hunk,
-// and a rendered file's text. Info and fold rows, and side by side pairs, copy
-// nothing.
-func (v *reviewView) rowText(lay drawerLayout, i int) md.LineText {
+// and a rendered file's text. Info and fold rows copy nothing. A side by side
+// pair gives the code of side, 0 left and 1 right, and nothing where that side
+// is blank.
+func (v *reviewView) rowText(lay drawerLayout, i, side int) md.LineText {
 	skip := md.LineText{Skip: true}
 
 	if i < 0 || i >= len(v.rows) {
@@ -255,6 +256,31 @@ func (v *reviewView) rowText(lay drawerLayout, i int) md.LineText {
 		tag := lineShown(l.Text, other, p >= 0) != shown
 
 		return md.LineText{Pieces: shiftPieces(diffPieces(l.Text, tag, lay.unifiedCode(2)), markW+2*lay.gw+diffview.SignWidth)}
+	case rowPair:
+		left, right := pairSides(f.Hunks[r.hunk], r)
+
+		idx, other := left, right
+		if side != 0 {
+			idx, other = right, left
+		}
+
+		if idx < 0 {
+			return skip
+		}
+
+		ls := f.Hunks[r.hunk].Lines
+		paired := left >= 0 && right >= 0 && left != right
+		shown, _ := shownLine(ls[idx].Text)
+		o := ""
+
+		if paired {
+			o = ls[other].Text
+		}
+
+		tag := lineShown(ls[idx].Text, o, paired) != shown
+		col, width := lay.splitCodeAt(side)
+
+		return md.LineText{Pieces: shiftPieces(diffPieces(ls[idx].Text, tag, width), col)}
 	case rowFull, rowGhost:
 		return md.LineText{Pieces: shiftPieces(diffPieces(r.text, false, lay.unifiedCode(1)), markW+lay.gw+diffview.SignWidth)}
 	case rowMD:
@@ -289,12 +315,12 @@ func (v *reviewView) mdRowText(r reviewRow, f git.FileDiff) md.LineText {
 }
 
 // selGrid is the rows as a selection grid in the layout the selection was made in.
-func (v *reviewView) selGrid() textGrid { return v.gridIn(v.selLay) }
+func (v *reviewView) selGrid() textGrid { return v.gridIn(v.selLay, v.selSide) }
 
-// gridIn is the rows as a selection grid in lay.
-func (v *reviewView) gridIn(lay drawerLayout) textGrid {
+// gridIn is the rows as a selection grid in lay, the side by side rows on side.
+func (v *reviewView) gridIn(lay drawerLayout, side int) textGrid {
 	return textGrid{
-		lines: func(i int) md.LineText { return v.rowText(lay, i) },
+		lines: func(i int) md.LineText { return v.rowText(lay, i, side) },
 		rows:  len(v.rows), cols: lay.diffW,
 	}
 }
@@ -318,7 +344,7 @@ func (v *reviewView) selectedText() string {
 
 // unitText is the text of the unit lineAt takes at row i.
 func (v *reviewView) unitText(lay drawerLayout, i int) string {
-	g := v.gridIn(lay)
+	g := v.gridIn(lay, 0)
 	if g.rows == 0 {
 		return ""
 	}
@@ -340,7 +366,7 @@ func (d *drawCtx) selSpans(i, end int) []spanPaint {
 
 	var spans []spanPaint
 
-	for _, c := range textPaint(d.v.rowText(d.lay, i), from, to) {
+	for _, c := range textPaint(d.v.rowText(d.lay, i, d.v.selSide), from, to) {
 		if c[0] < end {
 			spans = append(spans, spanPaint{from: c[0], to: min(c[1], end-1), bg: d.ui.Selection})
 		}

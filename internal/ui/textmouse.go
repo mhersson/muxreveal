@@ -18,6 +18,8 @@ type textPress struct {
 	// line is the page line or diff row a drawer press landed on, -1 for none;
 	// a click moves the cursor there on its release.
 	line int
+	// side is the side of a side by side row the press landed on.
+	side int
 }
 
 // textHost is a text view on screen: the cells it draws in and what a cell
@@ -34,6 +36,8 @@ type textHost struct {
 	sticky int
 	// minCol and maxCol bound the columns a selection reaches.
 	minCol, maxCol int
+	// side is the side of side by side rows the host reads, 0 when unified.
+	side int
 }
 
 // at is the point under screen cell (x, y), clamped into the host's cells.
@@ -49,13 +53,26 @@ func (h textHost) at(x, y int) point {
 	return point{row: row, col: min(max(dx, h.minCol), h.maxCol)}
 }
 
+// onSide is h limited to one side of side by side rows: the columns a selection
+// reaches are that side's.
+func (h textHost) onSide(side int) textHost {
+	if h.rows == nil || !h.lay.split {
+		return h
+	}
+
+	lo, hi := h.lay.splitCols(side)
+	h.side, h.minCol, h.maxCol = side, max(h.minCol, lo), min(h.maxCol, hi)
+
+	return h
+}
+
 // grid is the host's text as a selection grid.
 func (h textHost) grid() grid {
 	switch {
 	case h.view != nil:
 		return h.view.grid()
 	case h.rows != nil:
-		return h.rows.gridIn(h.lay)
+		return h.rows.gridIn(h.lay, h.side)
 	}
 
 	return textGrid{}
@@ -63,7 +80,7 @@ func (h textHost) grid() grid {
 
 // holder is the selection holder for the host.
 func (h textHost) holder() *textSelection {
-	return &textSelection{tab: h.tab, view: h.view, rows: h.rows, lay: h.lay}
+	return &textSelection{tab: h.tab, view: h.view, rows: h.rows, lay: h.lay, side: h.side}
 }
 
 // planHost is the plan overlay's host while the overlay takes the pointer.
@@ -203,7 +220,7 @@ func (a *App) textHostOf(pr *textPress) (textHost, bool) {
 	}
 
 	if h, ok := a.drawerHost(); ok && h.tab == pr.tab {
-		return h, true
+		return h.onSide(pr.side), true
 	}
 
 	return textHost{}, false
@@ -236,6 +253,11 @@ func (a *App) textClick(m tea.Mouse) bool {
 func (a *App) textPressAt(h textHost, m tea.Mouse) {
 	n := a.countClick(m.X, m.Y)
 	pr := &textPress{tab: h.tab, x: m.X, y: m.Y, alt: m.Mod.Contains(tea.ModAlt), multi: n > 1, line: -1}
+
+	if h.rows != nil && h.lay.split {
+		pr.side = h.lay.splitSide(m.X - h.rect.Min.X)
+		h = h.onSide(pr.side)
+	}
 
 	a.clearSelections()
 
@@ -293,6 +315,8 @@ func (a *App) textDrag(pr *textPress, x, y int) {
 
 		return
 	}
+
+	ts.side = h.side
 
 	// The text read at the press stays the one the release compares with when
 	// the doc changed under the drag.

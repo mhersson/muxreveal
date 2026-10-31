@@ -90,6 +90,7 @@ type reviewView struct {
 	// selLay the layout it was made in.
 	sel        *selection
 	selLay     drawerLayout
+	selSide    int  // the side of side by side rows the selection is on
 	split      bool // side by side is wanted; rowsSplit says whether the rows are laid out so
 	full       map[string]fullText
 	folded     map[string]bool

@@ -150,6 +150,44 @@ func (l drawerLayout) splitCode() int {
 	return (l.diffW - markW - 1 - 2*(l.gw+diffview.SignWidth)) / 2
 }
 
+// splitRightCode is the code columns of the right side of a side by side row.
+func (l drawerLayout) splitRightCode() int {
+	return l.diffW - markW - 1 - 2*(l.gw+diffview.SignWidth) - l.splitCode()
+}
+
+// splitSep is the column of a side by side row's "│".
+func (l drawerLayout) splitSep() int {
+	return markW + l.gw + diffview.SignWidth + l.splitCode()
+}
+
+// splitSide is the side of a side by side row that column col belongs to: the
+// left up to and including the "│", else the right.
+func (l drawerLayout) splitSide(col int) int {
+	if col <= l.splitSep() {
+		return 0
+	}
+
+	return 1
+}
+
+// splitCols are the columns of a side, without the "│".
+func (l drawerLayout) splitCols(side int) (lo, hi int) {
+	if side == 0 {
+		return 0, l.splitSep() - 1
+	}
+
+	return l.splitSep() + 1, l.diffW - 1
+}
+
+// splitCodeAt is where a side's code starts and how many columns it has.
+func (l drawerLayout) splitCodeAt(side int) (col, width int) {
+	if side == 0 {
+		return markW + l.gw + diffview.SignWidth, l.splitCode()
+	}
+
+	return l.splitSep() + 1 + l.gw + diffview.SignWidth, l.splitRightCode()
+}
+
 // drawCtx is what drawing one frame of the drawer needs.
 type drawCtx struct {
 	ui    theme.UI

@@ -1040,3 +1040,174 @@ func TestDiffPiecesCopyEdges(t *testing.T) {
 		})
 	}
 }
+
+// newSplitSel is newDiffSel with the diff side by side.
+func newSplitSel(t *testing.T, dir string) *diffSel {
+	t.Helper()
+
+	r := newKeysRig(t, dir)
+	clip := fakeClip(r.App)
+	v := r.opened(t)
+
+	r.keys(keyRune('u'))
+	r.settle()
+
+	if !v.rowsSplit || !r.layout(t).split {
+		t.Fatal("setup: the diff is not side by side")
+	}
+
+	return &diffSel{drawerRig: r, v: v, clip: clip, dir: dir, root: rootOf(t, dir)}
+}
+
+// splitCols are the diff-column cells of a side by side row: where each side's
+// code starts, and the "│".
+func (d *diffSel) splitCols(t *testing.T) (leftCode, sep, rightCode int) {
+	t.Helper()
+
+	lay := d.layout(t)
+	leftCode = markW + lay.gw + diffview.SignWidth
+	sep = leftCode + lay.splitCode()
+	rightCode = sep + 1 + lay.gw + diffview.SignWidth
+
+	return leftCode, sep, rightCode
+}
+
+// insertedRepo is a file with two lines added between two kept ones, so the
+// two side by side rows of the added lines have a blank left side.
+func insertedRepo(t *testing.T) string {
+	t.Helper()
+
+	dir := newRepoDir(t)
+
+	write(t, filepath.Join(dir, "f.txt"), "alpha\nbravo\ncharlie\ndelta\n")
+	commitEverything(t, dir, "init")
+	write(t, filepath.Join(dir, "f.txt"), "alpha\nbravo\nnew one\nnew two\ncharlie\ndelta\n")
+
+	return dir
+}
+
+func TestSplitSelectionSide(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name string
+		repo func(*testing.T) string
+		// The rows are named by their text; the columns come from where the
+		// layout puts the left code, the divider and the right code.
+		row0, row1 string
+		col0, col1 func(left, sep, right int) int
+		want       string
+		wantSide   int
+	}{
+		{
+			name: "left code to the right half of the next row",
+			repo: keysRepo, row0: "line 3", row1: "line 4",
+			col0: func(l, _, _ int) int { return l },
+			col1: func(_, sep, r int) int { return r + 3 },
+			want: "line 3\nline 4", wantSide: 0,
+		},
+		{
+			name: "right code",
+			repo: keysRepo, row0: "line 3", row1: "line 3",
+			col0: func(_, _, r int) int { return r },
+			col1: func(_, _, r int) int { return r + len("edited 3") - 1 },
+			want: "edited 3", wantSide: 1,
+		},
+		{
+			name: "press on the left number column",
+			repo: keysRepo, row0: "line 3", row1: "line 3",
+			col0: func(l, _, _ int) int { return markW + 1 },
+			col1: func(l, _, _ int) int { return l + len("line 3") - 1 },
+			want: "line 3", wantSide: 0,
+		},
+		{
+			name: "press on the right number column",
+			repo: keysRepo, row0: "line 3", row1: "line 3",
+			col0: func(_, _, r int) int { return r - 2 },
+			col1: func(_, _, r int) int { return r + len("edited 3") - 1 },
+			want: "edited 3", wantSide: 1,
+		},
+		{
+			name: "press on the divider",
+			repo: keysRepo, row0: "line 3", row1: "line 4",
+			col0: func(_, sep, _ int) int { return sep },
+			col1: func(l, _, _ int) int { return l + len("line 4") - 1 },
+			want: "\nline 4", wantSide: 0,
+		},
+		{
+			name: "rows where the left side is blank add no line",
+			repo: insertedRepo, row0: "alpha", row1: "delta",
+			col0: func(l, _, _ int) int { return l },
+			col1: func(l, _, _ int) int { return l + len("delta") - 1 },
+			want: "alpha\nbravo\ncharlie\ndelta", wantSide: 0,
+		},
+		{
+			name: "the right side takes the added lines",
+			repo: insertedRepo, row0: "alpha", row1: "delta",
+			col0: func(_, _, r int) int { return r },
+			col1: func(_, _, r int) int { return r + len("delta") - 1 },
+			want: "alpha\nbravo\nnew one\nnew two\ncharlie\ndelta", wantSide: 1,
+		},
+	}
+
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			d := newSplitSel(t, tt.repo(t))
+			l, sep, r := d.splitCols(t)
+			r0, r1 := rowWith(t, d.v, tt.row0), rowWith(t, d.v, tt.row1)
+
+			d.dragRows(t, r0, tt.col0(l, sep, r), r1, tt.col1(l, sep, r))
+
+			if got := primaryWrites(d.clip); !slices.Equal(got, []string{tt.want}) {
+				t.Errorf("primary writes %q, want %q", got, tt.want)
+			}
+
+			if d.v.selSide != tt.wantSide {
+				t.Errorf("selection side = %d, want %d", d.v.selSide, tt.wantSide)
+			}
+		})
+	}
+}
+
+// Not parallel: the drawer highlights code, which takes the highlighter's time.
+func TestSplitSelectionPaint(t *testing.T) {
+	for _, side := range []int{0, 1} {
+		d := newSplitSel(t, keysRepo(t))
+		pair := rowWith(t, d.v, "line 3")
+		l, sep, r := d.splitCols(t)
+		lay := d.layout(t)
+
+		from, to := l, sep-1
+		if side == 1 {
+			from, to = r, r+len("edited 3")-1
+		}
+
+		d.dragRows(t, pair, from, pair, to)
+
+		lines := d.drawerLines(d.store.State(), mustRect(t, d.drawerRig))
+		sel := d.current().theme.UI.Selection
+		off := 1
+		top := d.v.viewTop(lay.diffH)
+
+		if lay.treeW > 0 {
+			off += lay.treeW + 1
+		}
+
+		line := lines[1+lay.headH+pair-top]
+		on := func(col int) bool { return bgIs(cellBg(line, off+col), sel) }
+
+		// The cells of each side's code that hold text, and the cells that never paint.
+		left, right := on(l), on(r)
+		if left != (side == 0) || right != (side == 1) {
+			t.Errorf("side %d: first code cell painted left = %v, right = %v", side, left, right)
+		}
+
+		for name, col := range map[string]int{"left number": markW + 1, "left sign": l - 1, "divider": sep, "right number": sep + 2, "right sign": r - 1} {
+			if on(col) {
+				t.Errorf("side %d: %s cell is on the selection ground", side, name)
+			}
+		}
+	}
+}

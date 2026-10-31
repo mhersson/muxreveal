@@ -164,6 +164,7 @@ type textSelection struct {
 	view  *mdView
 	rows  *reviewView
 	lay   drawerLayout // the layout rows' columns are in
+	side  int          // the side of side by side rows the selection is on
 	shown string       // the selected text when it was made
 	rev   textRev
 }
@@ -209,7 +210,7 @@ func (ts *textSelection) setSel(s selection, lay drawerLayout) {
 	case ts.view != nil:
 		ts.view.sel = &s
 	case ts.rows != nil:
-		ts.rows.sel, ts.rows.selLay = &s, lay
+		ts.rows.sel, ts.rows.selLay, ts.rows.selSide = &s, lay, ts.side
 	}
 }
 
