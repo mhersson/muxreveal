@@ -130,11 +130,18 @@ const endingTag = "⟨U+000D⟩"
 // differs only in its ending and this one has the CR, the CR shows as a tag so
 // the change is visible; a cut line shows none, as its ending lies past the cut.
 func lineShown(raw, other string, paired bool) string {
-	text, cut := shownLine(raw)
+	text, _ := shownLine(raw)
 
-	if !cut && paired && strings.HasSuffix(raw, "\r") && other == strings.TrimSuffix(raw, "\r") {
+	if tagsCR(raw, other, paired) {
 		text += endingTag
 	}
 
 	return text
+}
+
+// tagsCR reports whether lineShown ends the line with the CR tag.
+func tagsCR(raw, other string, paired bool) bool {
+	_, cut := cutRunes(strings.TrimSuffix(raw, "\r"), lineBudget)
+
+	return !cut && paired && strings.HasSuffix(raw, "\r") && other == strings.TrimSuffix(raw, "\r")
 }

@@ -140,7 +140,7 @@ func (v *reviewView) marksStale(st core.State) bool {
 
 // rowOpts is how the view's rows are laid out.
 func (v *reviewView) rowOpts(split bool) rowOpts {
-	o := rowOpts{split: split, full: v.full, whole: v.fullOn, folded: v.folded, md: v.mdRowsOf()}
+	o := rowOpts{split: split, wrap: v.wrapW, full: v.full, whole: v.fullOn, folded: v.folded, md: v.mdRowsOf()}
 
 	if v.common != "" {
 		marks := v.marks

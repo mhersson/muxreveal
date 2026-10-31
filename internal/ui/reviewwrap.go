@@ -9,6 +9,11 @@ import (
 // wrapReach is how far back from a part's edge a space may end it.
 const wrapReach = 16
 
+// codeWidths are the code columns that wrap a diff line, by the way the row
+// draws it: unified lines, the full view and ghost lines, and the two sides of
+// a side by side row. Zero means no wrapping.
+type codeWidths struct{ line, full, left, right int }
+
 // wrapPart is the units [u0, u1) of a line and the cells [c0, c1) they take,
 // counted from the line's first cell.
 type wrapPart struct{ u0, u1, c0, c1 int }

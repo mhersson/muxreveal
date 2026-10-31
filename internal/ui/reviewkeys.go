@@ -352,7 +352,7 @@ func (a *App) reviewGo(v *reviewView, row int) {
 		return
 	}
 
-	v.cursor = min(max(row, 0), len(v.rows)-1)
+	v.cursor = v.lineStart(min(max(row, 0), len(v.rows)-1))
 	v.top = v.viewTop(a.reviewBodyH(v))
 }
 
@@ -368,7 +368,7 @@ func (a *App) reviewLine(delta int) tea.Cmd {
 	}
 
 	if !a.drawer.tree {
-		a.reviewGo(v, v.cursor+delta)
+		a.reviewStep(v, delta)
 
 		return nil
 	}
@@ -383,6 +383,30 @@ func (a *App) reviewLine(delta int) tea.Cmd {
 	return nil
 }
 
+// reviewStep moves the cursor delta lines. A line taller than the view starts
+// at the top when the cursor lands on it.
+func (a *App) reviewStep(v *reviewView, delta int) {
+	if len(v.rows) == 0 {
+		return
+	}
+
+	i := v.lineStart(min(max(v.cursor, 0), len(v.rows)-1))
+
+	for ; delta > 0 && v.lineEnd(i) < len(v.rows); delta-- {
+		i = v.lineEnd(i)
+	}
+
+	for ; delta < 0 && i > 0; delta++ {
+		i = v.lineStart(i - 1)
+	}
+
+	a.reviewGo(v, i)
+
+	if h := a.reviewBodyH(v); v.lineEnd(i)-i > h && v.top < i {
+		v.top = i
+	}
+}
+
 func (a *App) reviewPage(dir int) tea.Cmd {
 	if a.onPage(func(_ *reviewView, p *mdPage) { p.view.page(dir) }) {
 		return nil
@@ -393,7 +417,12 @@ func (a *App) reviewPage(dir int) tea.Cmd {
 		return nil
 	}
 
-	a.reviewGo(v, v.cursor+dir*max(a.reviewBodyH(v)/2, 1))
+	to := v.cursor + dir*max(a.reviewBodyH(v)/2, 1)
+	if dir > 0 && v.lineStart(min(to, len(v.rows)-1)) == v.lineStart(v.cursor) {
+		to = v.lineEnd(v.cursor) // a tall line: on to the next line
+	}
+
+	a.reviewGo(v, to)
 
 	return nil
 }

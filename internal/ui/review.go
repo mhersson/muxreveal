@@ -108,9 +108,10 @@ type reviewView struct {
 	noSnapshot      bool   // the turn shown has no snapshot
 	foreign         bool   // the shown root is not the root of the agent's own directory
 
-	rowsSplit bool // rows hold side by side pairs
-	rowsRev   int  // bumps whenever rows are replaced; rebuild is the only place that does
-	treeSel   int  // the file selected while the tree has the keyboard
+	wrapW     codeWidths // the code columns the rows wrap at; zero wraps nothing
+	rowsSplit bool       // rows hold side by side pairs
+	rowsRev   int        // bumps whenever rows are replaced; rebuild is the only place that does
+	treeSel   int        // the file selected while the tree has the keyboard
 
 	cache reviewCache
 }
@@ -254,6 +255,7 @@ func (v *reviewView) rebuild(split bool) { v.rebuildFor(v.res, split) }
 // on what it was on. It is the only place that replaces the rows.
 func (v *reviewView) rebuildFor(res git.Result, split bool) {
 	anchor := anchorAt(v.res, v.rows, v.cursor)
+	anchor.part = 0 // the cursor sits on its line's first row
 
 	var ends [2]rowAnchor
 
