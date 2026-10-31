@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"path/filepath"
 	"time"
@@ -24,6 +25,7 @@ const (
 // repository's printable name and path the file's absolute path.
 type mdOpenFile struct {
 	repo, path string
+	sum        [sha256.Size]byte // of the bytes the doc was parsed from
 }
 
 // mdPick names the worktree a markdown list was made for: its root and the
@@ -41,10 +43,15 @@ type mdListMsg struct {
 	err             error
 }
 
-// mdFileMsg answers the read and parse of a picked file.
+// mdFileMsg answers the read and parse of a picked file, or with reload the
+// re-read of the shown one: view is the overlay asked, seq its reloadSeq, and
+// same says the bytes matched the known sum, so doc is nil.
 type mdFileMsg struct {
 	seq              int
+	reload, same     bool
+	view             *planView
 	root, repo, path string
+	sum              [sha256.Size]byte
 	doc              *mdDoc
 	err              error
 }
@@ -167,15 +174,22 @@ func (a *App) pickMarkdown(pick *mdPick, rel string) tea.Cmd {
 			return msg
 		}
 
+		msg.sum = sha256.Sum256(src)
 		msg.doc = parseMarkdown(src, filepath.Dir(msg.path), tok)
 
 		return msg
 	}
 }
 
-// onMDFile shows the file once it was read. An answer for an ask a newer one
-// superseded, or one that lands under the compose box or another modal, is dropped.
+// onMDFile shows the file once it was read, or hands a re-read to onMDReload.
+// An answer for an ask a newer one superseded, or one that lands under the compose box or another modal, is dropped.
 func (a *App) onMDFile(msg mdFileMsg) {
+	if msg.reload {
+		a.onMDReload(msg)
+
+		return
+	}
+
 	if msg.seq != a.planSeq || a.composeShown() || a.aboveDrawerModalOpen() {
 		return
 	}
@@ -191,8 +205,87 @@ func (a *App) onMDFile(msg mdFileMsg) {
 	msg.doc.withPictures(docPictures{reg: a.pictures, root: msg.root})
 	a.endLeader()
 	a.plan = &planView{
-		file: &mdOpenFile{repo: msg.repo, path: msg.path}, root: msg.root, base: filepath.Dir(msg.path),
+		file: &mdOpenFile{repo: msg.repo, path: msg.path, sum: msg.sum}, root: msg.root, base: filepath.Dir(msg.path),
 		view: mdView{doc: msg.doc},
 	}
+	a.sizePlan()
+}
+
+// shownFile is the path and known sum of the doc the overlay shows: the top
+// page's, else the file's.
+func (pv *planView) shownFile() (path string, sum *[sha256.Size]byte) {
+	if n := len(pv.pages); n > 0 {
+		p := pv.pages[n-1]
+
+		return p.path, &p.sum
+	}
+
+	return pv.file.path, &pv.file.sum
+}
+
+// mdCheck reads the shown doc again off the update loop. The answer parses it
+// only when its bytes differ from the known sum; the newest check wins.
+func (a *App) mdCheck(pv *planView) tea.Cmd {
+	pv.reloadSeq++
+
+	path, sum := pv.shownFile()
+	msg := mdFileMsg{seq: pv.reloadSeq, reload: true, view: pv, root: pv.root, path: path}
+	known, parent, tok := *sum, a.ctx, a.drawer.hl.HighlightLang
+
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(parent, mdReadTimeout)
+		defer cancel()
+
+		src, err := readLocalMarkdown(ctx, msg.root, msg.path)
+		if err != nil {
+			msg.err = err
+
+			return msg
+		}
+
+		msg.sum = sha256.Sum256(src)
+		if msg.sum == known {
+			msg.same = true
+
+			return msg
+		}
+
+		msg.doc = parseMarkdown(src, filepath.Dir(msg.path), tok)
+
+		return msg
+	}
+}
+
+// mdBatch re-checks the shown doc when a file overlay is open on root.
+func (a *App) mdBatch(root string) tea.Cmd {
+	if pv := a.plan; pv != nil && pv.file != nil && pv.root == root {
+		return a.mdCheck(pv)
+	}
+
+	return nil
+}
+
+// onMDReload swaps in a re-read doc, keeping the view's place. An answer for
+// an overlay that closed, a check a newer one superseded or a doc no longer
+// shown is dropped; a failed read keeps the old doc in silence.
+func (a *App) onMDReload(msg mdFileMsg) {
+	pv := a.plan
+	if pv == nil || pv.file == nil || msg.view != pv || msg.seq != pv.reloadSeq {
+		return
+	}
+
+	path, sum := pv.shownFile()
+	if msg.path != path || msg.err != nil || msg.same {
+		return
+	}
+
+	msg.doc.withPictures(docPictures{reg: a.pictures, root: pv.root})
+
+	v := pv.shown()
+	old := v.layout() // keeps the cursor in range, so top and cursor are read after it
+	v.top, v.cursor = keepPlace(old, msg.doc.layout(v.textWidth(), v.icons), v.top, v.cursor)
+	v.doc = msg.doc
+	*sum = msg.sum
+
 	a.sizePlan()
 }

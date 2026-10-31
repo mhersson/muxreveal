@@ -355,18 +355,20 @@ func (a *App) handlePlanKey(msg tea.KeyPressMsg) tea.Cmd {
 	if key == "esc" {
 		a.clearTextSel()
 
+		var cmd tea.Cmd
+
 		switch {
 		case pv.chooser != nil:
 			pv.chooser = nil
 		case pv.searching:
 			pv.searching, pv.query = false, ""
 		case len(pv.pages) > 0:
-			a.planPop()
+			cmd = a.planPop()
 		default:
 			a.closePlan()
 		}
 
-		return nil
+		return cmd
 	}
 
 	_, _, _, boxH, ok := planBox(a.width, a.height)

@@ -657,6 +657,8 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.onWatchAcquired(msg)
 	case pinAcquiredMsg:
 		a.onPinAcquired(msg)
+	case mdAcquiredMsg:
+		a.onMDAcquired(msg)
 	case agentTickMsg:
 		return a, a.onAgentTick()
 	case clockMsg:

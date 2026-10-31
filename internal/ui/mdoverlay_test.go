@@ -906,3 +906,324 @@ func TestMDOverlayText(t *testing.T) {
 		}
 	}
 }
+
+// mdWatched waits until the overlay's watch reference is held.
+func (m *pageRig) mdWatched(t *testing.T) {
+	t.Helper()
+
+	m.until(t, "the overlay's watch", func() bool {
+		return m.watches.md != nil && m.watches.md.release != nil && m.watched(m.root)
+	})
+}
+
+func TestMDOverlayWatch(t *testing.T) {
+	t.Parallel()
+
+	t.Run("held while open", func(t *testing.T) {
+		t.Parallel()
+
+		m := newMDOpenRig(t, nil)
+
+		if m.rootWatched(m.root) {
+			t.Fatal("the root is watched before the overlay opens")
+		}
+
+		m.opens(t, "docs/a.md")
+		m.mdWatched(t)
+
+		if !m.rootWatched(m.root) {
+			t.Error("rootWatched is false while only the overlay holds the root")
+		}
+
+		m.press(keyEsc)
+		m.until(t, "the watch to be released", func() bool { return !m.watched(m.root) })
+
+		if m.watches.md != nil || m.rootWatched(m.root) {
+			t.Errorf("md = %+v after esc, want no reference", m.watches.md)
+		}
+	})
+
+	t.Run("shared with an agent", func(t *testing.T) {
+		t.Parallel()
+
+		m := newMDOpenRig(t, nil)
+		id := m.agent(t, m.dir, "")
+		m.watching(t, id, m.root)
+
+		m.opens(t, "docs/a.md")
+		m.mdWatched(t)
+
+		if !m.watched(m.root) {
+			t.Fatal("the root stopped being watched")
+		}
+
+		m.press(keyEsc)
+		m.settle()
+
+		if m.watches.md != nil || !m.watched(m.root) {
+			t.Errorf("md = %+v, watched %v after esc, want the agent's watch kept", m.watches.md, m.watched(m.root))
+		}
+	})
+
+	t.Run("without a watch set", func(t *testing.T) {
+		t.Parallel()
+
+		m := newMDOpenRig(t, nil)
+		m.watches.set = nil
+
+		m.opens(t, "docs/a.md")
+		m.settle()
+
+		if m.watches.md != nil {
+			t.Errorf("md = %+v, want none without a watch set", m.watches.md)
+		}
+	})
+}
+
+// mdLive opens docs/a.md with the More fold open and the cursor on Gamma, at
+// the top of its line.
+func mdLive(t *testing.T) *pageRig {
+	t.Helper()
+
+	m := newMDOpenRig(t, nil)
+	m.opens(t, "docs/a.md")
+	m.mdWatched(t)
+
+	sized(t, m.App, 80, 16) // short enough that top can rest below the first line
+
+	v := &m.plan.view
+	v.cursor = viewLine(t, v, "More")
+
+	m.press(keyEnter)
+
+	v.top = viewLine(t, v, "Gamma")
+	v.cursor = v.top
+
+	return m
+}
+
+func (m *pageRig) batchOf(paths ...string) tea.Cmd {
+	return m.batch(m.root, git.Batch{Paths: paths})
+}
+
+func (m *pageRig) docText() string { return strings.Join(m.plan.shown().doc.text(), "\n") }
+
+func TestMDOverlayLive(t *testing.T) {
+	t.Parallel()
+
+	a := func(m *pageRig) string { return filepath.Join(m.dir, "docs/a.md") }
+	changed := strings.Replace(pageDoc, "intro text", "added above\n\nand more\n\nand more", 1) + mdLinks
+
+	t.Run("changed", func(t *testing.T) {
+		t.Parallel()
+
+		m := mdLive(t)
+		old := m.plan.view.doc
+
+		write(t, a(m), changed)
+		m.flow(m.batchOf("docs/a.md"), nil)
+
+		v := &m.plan.view
+		if v.doc == old || !strings.Contains(m.docText(), "added above") || strings.Contains(m.docText(), "intro text") {
+			t.Fatalf("the doc did not change:\n%s", m.docText())
+		}
+
+		if got := v.doc.text()[v.cursor]; !strings.Contains(got, "Gamma") {
+			t.Errorf("cursor on %q, want the Gamma line", got)
+		}
+
+		if want := viewLine(t, v, "Gamma"); v.top != want {
+			t.Errorf("top = %d, want %d: the heading it sat on", v.top, want)
+		}
+	})
+
+	t.Run("another path", func(t *testing.T) {
+		t.Parallel()
+
+		m := mdLive(t)
+
+		write(t, a(m), changed)
+		m.flow(m.batchOf("main.go"), nil)
+
+		if !strings.Contains(m.docText(), "added above") {
+			t.Errorf("a batch naming main.go did not re-read:\n%s", m.docText())
+		}
+	})
+
+	t.Run("unchanged", func(t *testing.T) {
+		t.Parallel()
+
+		m := mdLive(t)
+		clip := fakeClip(m.App)
+		sized(t, m.App, 120, 40)
+
+		v := &m.plan.view
+		old := v.doc
+
+		var y, x0, x1 int
+
+		for row, line := range m.screen() {
+			if i := strings.Index(line, "last words"); i >= 0 {
+				y, x0 = row, len([]rune(line[:i]))
+				x1 = x0 + len("last") - 1
+
+				break
+			}
+		}
+
+		if x1 == 0 {
+			t.Fatalf("no row holds the words:\n%s", strings.Join(m.screen(), "\n"))
+		}
+
+		dragRun(m.App, x0, y, x1, y, 0)
+
+		if got := primaryWrites(clip); !slices.Equal(got, []string{"last"}) {
+			t.Fatalf("primary writes %q, want the word", got)
+		}
+
+		m.flow(m.batchOf("docs/a.md"), nil)
+
+		if v.doc != old || !strings.Contains(m.docText(), "hidden text") || m.textSelected() != "last" {
+			t.Errorf("same doc %v, fold open %v, selection %q: an unchanged file reset the view", v.doc == old, strings.Contains(m.docText(), "hidden text"), m.textSelected())
+		}
+	})
+
+	t.Run("removed", func(t *testing.T) {
+		t.Parallel()
+
+		m := mdLive(t)
+		old := m.plan.view.doc
+
+		if err := os.Remove(a(m)); err != nil {
+			t.Fatal(err)
+		}
+
+		m.notice = ""
+		m.flow(m.batchOf("docs/a.md"), nil)
+
+		if m.plan == nil || m.plan.view.doc != old || m.notice != "" {
+			t.Errorf("overlay open %v, notice %q, want the old text kept in silence", m.plan != nil, m.notice)
+		}
+	})
+
+	t.Run("back", func(t *testing.T) {
+		t.Parallel()
+
+		m := mdLive(t)
+
+		if err := os.Remove(a(m)); err != nil {
+			t.Fatal(err)
+		}
+
+		m.flow(m.batchOf("docs/a.md"), nil)
+		write(t, a(m), "# Alpha\n\nback again\n")
+		m.flow(m.batchOf("docs/a.md"), nil)
+
+		if !strings.Contains(m.docText(), "back again") {
+			t.Errorf("the file came back and the next batch did not show it:\n%s", m.docText())
+		}
+	})
+
+	t.Run("a page on top", func(t *testing.T) {
+		t.Parallel()
+
+		m := mdLive(t)
+		m.plan.view.cursor = viewLine(t, &m.plan.view, "readme")
+		m.flow(m.step(keyEnter), nil)
+
+		if len(m.plan.pages) != 1 {
+			t.Fatalf("pages = %d, want README.md followed (notice %q)", len(m.plan.pages), m.notice)
+		}
+
+		old := m.plan.view.doc
+
+		write(t, filepath.Join(m.dir, "README.md"), "# Readme\n\nchanged page\n")
+		m.flow(m.batchOf("README.md"), nil)
+
+		if !strings.Contains(m.docText(), "changed page") {
+			t.Fatalf("the page did not change:\n%s", m.docText())
+		}
+
+		write(t, a(m), changed)
+		m.flow(m.batchOf("docs/a.md"), nil)
+
+		if m.plan.view.doc != old {
+			t.Fatal("a change under the page was read while the page showed")
+		}
+
+		m.flow(m.step(keyEsc), nil)
+
+		if len(m.plan.pages) != 0 || !strings.Contains(m.docText(), "added above") {
+			t.Errorf("pages %d, text:\n%s\nwant the file's new text after the pop", len(m.plan.pages), m.docText())
+		}
+	})
+}
+
+func TestMDOverlayReloadLate(t *testing.T) {
+	t.Parallel()
+
+	changed := strings.Replace(pageDoc, "intro text", "added above", 1) + mdLinks
+
+	tests := []struct {
+		name string
+		// late makes the held answer stale and returns what to step to apply a newer one.
+		late func(t *testing.T, m *pageRig) (newer []tea.Msg)
+	}{
+		{"after esc", func(t *testing.T, m *pageRig) []tea.Msg {
+			m.press(keyEsc)
+
+			return nil
+		}},
+		{"after a newer check", func(t *testing.T, m *pageRig) []tea.Msg {
+			return m.flow(m.batchOf("docs/a.md"), holdMDFiles)
+		}},
+		{"after a page push", func(t *testing.T, m *pageRig) []tea.Msg {
+			m.plan.view.cursor = viewLine(t, &m.plan.view, "readme")
+			m.flow(m.step(keyEnter), nil)
+
+			if len(m.plan.pages) != 1 {
+				t.Fatalf("no page pushed (notice %q)", m.notice)
+			}
+
+			return nil
+		}},
+		{"after a pop", func(t *testing.T, m *pageRig) []tea.Msg {
+			m.plan.view.cursor = viewLine(t, &m.plan.view, "readme")
+			m.flow(m.step(keyEnter), nil)
+
+			return m.flow(m.step(keyEsc), holdMDFiles)
+		}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			m := mdLive(t)
+			old := m.plan.view.doc
+
+			write(t, filepath.Join(m.dir, "docs/a.md"), changed)
+
+			held := m.flow(m.batchOf("docs/a.md"), holdMDFiles)
+			if len(held) != 1 {
+				t.Fatalf("held %d answers, want 1", len(held))
+			}
+
+			newer := tt.late(t, m)
+
+			m.flow(m.step(held[0]), holdMDFiles)
+
+			if m.plan != nil && m.plan.view.doc != old {
+				t.Fatal("the late answer changed the doc")
+			}
+
+			if len(newer) == 1 {
+				m.flow(m.step(newer[0]), nil)
+
+				if !strings.Contains(m.docText(), "added above") {
+					t.Errorf("the newest answer did not apply:\n%s", m.docText())
+				}
+			}
+		})
+	}
+}
