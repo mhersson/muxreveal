@@ -392,7 +392,7 @@ func TestPlanRewriteSelection(t *testing.T) {
 			rewrite := func() {
 				write(t, r.path, tt.text)
 
-				for _, m := range planMsgs(r.a.reloadPlan(r.pv.plan)) {
+				for _, m := range planMsgs(r.a.reloadPlan(r.pv.plan, false)) {
 					r.a.Update(m)
 				}
 			}
@@ -430,7 +430,7 @@ func TestPlanDragThroughRewrite(t *testing.T) {
 	mmove(r.a, g1, y, tea.MouseLeft)
 	write(t, r.path, strings.Replace(selPlan, "second item", "second thing", 1))
 
-	for _, m := range planMsgs(r.a.reloadPlan(r.pv.plan)) {
+	for _, m := range planMsgs(r.a.reloadPlan(r.pv.plan, false)) {
 		r.a.Update(m)
 	}
 

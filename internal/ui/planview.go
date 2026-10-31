@@ -56,6 +56,7 @@ type planView struct {
 type planReadMsg struct {
 	seq        int
 	reload     bool
+	again      bool // a read the operator asked for, not a rewrite
 	view       *planView
 	pane       core.PaneID
 	plan       core.Plan
@@ -174,15 +175,15 @@ func (a *App) planShowing(id core.PaneID, path string) bool {
 	return a.plan != nil && a.plan.pane == id && a.plan.plan.Path == path
 }
 
-// reloadPlan reads the rewritten plan p again for the open overlay, off the
-// update loop.
-func (a *App) reloadPlan(p core.Plan) tea.Cmd {
+// reloadPlan reads plan p again for the open overlay, off the update loop; again
+// says the operator asked for it, so it is not marked rewritten.
+func (a *App) reloadPlan(p core.Plan, again bool) tea.Cmd {
 	pv := a.plan
 	pv.reloadSeq++
 
 	a.pictures.retry(docPictures{reg: a.pictures, root: pv.root}, pv.view.layout())
 
-	return a.readPlanCmd(planReadMsg{seq: pv.reloadSeq, reload: true, view: pv, pane: pv.pane, plan: p, root: pv.root, base: pv.base})
+	return a.readPlanCmd(planReadMsg{seq: pv.reloadSeq, reload: true, again: again, view: pv, pane: pv.pane, plan: p, root: pv.root, base: pv.base})
 }
 
 // onPlanReload swaps in a rewritten plan, keeping the view's place. An answer
@@ -208,7 +209,8 @@ func (a *App) onPlanReload(msg planReadMsg) {
 	old := v.layout() // keeps the cursor in range, so top and cursor are read after it
 	v.top, v.cursor = keepPlace(old, msg.doc.layout(v.textWidth(), v.icons), v.top, v.cursor)
 	v.doc = msg.doc
-	pv.plan, pv.rewritten = msg.plan, true
+	pv.plan = msg.plan
+	pv.rewritten = pv.rewritten || !msg.again
 
 	a.sizePlan()
 }

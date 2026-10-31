@@ -40,6 +40,19 @@ func (pv *planView) shown() *mdView {
 	return &pv.view
 }
 
+// shownPath is the path of the file the overlay shows: the top page's, else the
+// markdown file's, else the plan's.
+func (pv *planView) shownPath() string {
+	switch {
+	case len(pv.pages) > 0:
+		return pv.pages[len(pv.pages)-1].path
+	case pv.file != nil:
+		return pv.file.path
+	}
+
+	return pv.plan.Path
+}
+
 // planEnter is enter on the shown view: a fold head toggles, one target is
 // followed, several open the chooser, none does nothing.
 func (a *App) planEnter() tea.Cmd {

@@ -271,7 +271,7 @@ func (a *App) mdBatch(root string) tea.Cmd {
 // shown is dropped; a failed read keeps the old doc in silence.
 func (a *App) onMDReload(msg mdFileMsg) {
 	pv := a.plan
-	if pv == nil || pv.file == nil || msg.view != pv || msg.seq != pv.reloadSeq {
+	if pv == nil || pv.file == nil && len(pv.pages) == 0 || msg.view != pv || msg.seq != pv.reloadSeq {
 		return
 	}
 

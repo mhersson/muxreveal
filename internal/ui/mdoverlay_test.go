@@ -592,14 +592,14 @@ func TestMDOverlayKeys(t *testing.T) {
 
 	cursor := v.cursor
 
-	for _, k := range []tea.KeyPressMsg{keyRune('e'), keyRune('r'), keyRune('z')} {
+	for _, k := range []tea.KeyPressMsg{keyRune('z')} {
 		m.press(k)
 	}
 
 	m.press(keyLeader, keyRune('d'))
 
 	if m.st.count() != base || m.store.State().Tab().Review != nil || m.plan == nil || v.cursor != cursor || m.v != nil {
-		t.Errorf("e, r, z and leader d changed something: %d panes started, review %v, cursor %d (was %d)", m.st.count()-base, m.store.State().Tab().Review != nil, v.cursor, cursor)
+		t.Errorf("z and leader d changed something: %d panes started, review %v, cursor %d (was %d)", m.st.count()-base, m.store.State().Tab().Review != nil, v.cursor, cursor)
 	}
 
 	m.press(keyEsc)

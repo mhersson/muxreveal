@@ -1,7 +1,11 @@
 package ui
 
 import (
+	"strconv"
+
 	tea "charm.land/bubbletea/v2"
+
+	"github.com/mhersson/muxreveal/internal/core"
 )
 
 // readerKeys are the default keys of the reading overlays: the plan, the
@@ -26,6 +30,7 @@ var readerKeys = []reviewKey{
 	{"n", "reader.match.next"},
 	{"N", "reader.match.prev"},
 	{"y", "reader.copy"},
+	{"e", "reader.edit"},
 	{"r", "reader.refresh"},
 	{"esc", "reader.close"},
 }
@@ -68,8 +73,8 @@ func (a *App) readerActs(id string) bool {
 	switch id {
 	case "reader.search":
 		return a.readerHint()
-	case "reader.refresh":
-		return a.plan == nil
+	case "reader.edit":
+		return a.plan != nil
 	}
 
 	return true
@@ -97,6 +102,30 @@ func (a *App) readerClose(key string) tea.Cmd {
 	}
 
 	return nil
+}
+
+// planEdit opens the shown file in the editor at the cursor's source line in a
+// new shell pane and closes the overlay.
+func (a *App) planEdit() tea.Cmd {
+	pv := a.plan
+	line, path, root := pv.shown().sourceLine(), pv.shownPath(), pv.root
+
+	a.closePlan()
+
+	run := &paneRun{program: reviewEditor(a.getenv), args: []string{"+" + strconv.Itoa(line), path}}
+	cmd, _ := a.openPaneAt(core.KindShell, core.SplitVertical, a.store.State().Tab().Focus, root, run)
+
+	return cmd
+}
+
+// planRefresh reads the shown file again, quietly.
+func (a *App) planRefresh() tea.Cmd {
+	pv := a.plan
+	if len(pv.pages) > 0 || pv.file != nil {
+		return a.mdCheck(pv)
+	}
+
+	return a.reloadPlan(pv.plan, true)
 }
 
 func readerCommands() []command {
@@ -187,12 +216,19 @@ func readerCommands() []command {
 
 			return a.planCopy()
 		}),
+		cmd("reader.edit", "open in the editor", func(a *App, _ *mdView, conv bool) tea.Cmd {
+			if conv {
+				return nil
+			}
+
+			return a.planEdit()
+		}),
 		cmd("reader.refresh", "read again", func(a *App, _ *mdView, conv bool) tea.Cmd {
 			if conv {
 				return a.readConversation(a.conv)
 			}
 
-			return nil
+			return a.planRefresh()
 		}),
 		cmd("reader.close", "close the page or the overlay", func(a *App, _ *mdView, conv bool) tea.Cmd {
 			switch {

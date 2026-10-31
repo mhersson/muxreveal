@@ -63,7 +63,7 @@ func (a *App) notePlans(m core.Pane, id core.PaneID, ev harness.Event) tea.Cmd {
 		cur = p
 
 		if shown {
-			reloads = append(reloads, a.reloadPlan(p))
+			reloads = append(reloads, a.reloadPlan(p, false))
 		}
 	}
 
@@ -85,7 +85,7 @@ func (a *App) notePlans(m core.Pane, id core.PaneID, ev harness.Event) tea.Cmd {
 			// The shown plan is no longer the latest, so the edit is not recorded.
 			shown := a.plan.plan
 			shown.At = a.clock.Now()
-			reloads = append(reloads, a.reloadPlan(shown))
+			reloads = append(reloads, a.reloadPlan(shown, false))
 		}
 	}
 
