@@ -91,7 +91,8 @@ func (l Layout) Text(i int) LineText {
 		picRow     = -1
 		imageLine  bool
 		col, bars  int
-		textSeen   bool
+		joined     bool
+		pending    Join // a join seen on a chrome run, for the next piece
 		skippable  = len(line) > 0
 		frameFound bool
 	)
@@ -114,6 +115,7 @@ func (l Layout) Text(i int) LineText {
 		case RoleTableFrame:
 			lt.Table = true
 			bars++
+			pending = JoinNone
 
 			frameFound = true
 		case RoleCodeFrame, RoleRule, RoleFootnoteRule:
@@ -126,17 +128,23 @@ func (l Layout) Text(i int) LineText {
 			skippable = false
 		}
 
+		// A wrap's join sits on the line's first run, which may be a pad.
+		if r.join != JoinNone {
+			if !joined {
+				joined, lt.Join = true, r.join
+			}
+
+			pending = r.join
+		}
+
 		if isChrome(r) {
 			col += w
 
 			continue
 		}
 
-		if !textSeen {
-			textSeen, lt.Join = true, r.join
-		}
-
 		cell := max(bars-1, 0)
+		before := len(lt.Pieces)
 
 		switch {
 		case r.Role == RolePicture && picRow >= 0:
@@ -149,6 +157,12 @@ func (l Layout) Text(i int) LineText {
 		default:
 			lt.Pieces = appendPieces(lt.Pieces, r, col, w, cell)
 		}
+
+		if pending != JoinNone && len(lt.Pieces) > before {
+			lt.Pieces[before].Join = pending
+		}
+
+		pending = JoinNone
 
 		col += w
 

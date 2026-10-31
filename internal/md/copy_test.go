@@ -119,6 +119,24 @@ func TestCopyLines(t *testing.T) {
 			name: "cut code with tab and hidden", src: "```\nabcdefghijklmnopq\trst\u200buvw\n```", width: 20,
 			want: "abcdefghijklmnopq\trst\u27e8U+200B\u27e9uvw",
 		},
+		{name: "wrap before inline code", src: "aaa bbb `code` ccc", width: 10, want: "aaa bbb code ccc"},
+		{name: "wrap before later inline code", src: "a b\n\n`xx` yy `zz` `ww`", width: 10, want: "a b\n\nxx yy zz ww"},
+		{
+			name: "wrapped table cell with inline code", src: "| h |\n| --- |\n| aaa bbb `cc` d |", width: 10,
+			want: "h\naaa bbb cc d",
+		},
+		{
+			name: "inside a hidden tag", src: "x `a\u200bb` y", width: 30, want: "\u27e8U+200B\u27e9",
+			picks: func(l Layout) []CellRange {
+				for _, p := range l.Text(0).Pieces {
+					if p.Whole {
+						return []CellRange{{p.Col + 2, p.Col + 2}}
+					}
+				}
+
+				return nil
+			},
+		},
 		{name: "break rule", src: "a\n\n---\n\nb", width: 20, want: "a\n\n\nb"},
 	}
 
