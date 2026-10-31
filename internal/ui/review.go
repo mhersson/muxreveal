@@ -69,7 +69,6 @@ type reviewView struct {
 	// whose answers are still wanted. UI state, not saved.
 	pages        []*mdPage
 	pageSeq      int
-	pagePush     bool // the ask in flight adds a page rather than replacing the stack
 	reloadSeq    int
 	reloadNotice bool // a failed re-read of the shown page says why
 

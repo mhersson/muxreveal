@@ -246,10 +246,10 @@ func (r *drawerRig) typeKeys(s string) {
 }
 
 // openPage shows rel as a page, pushed or as the only one.
-func (m *pageRig) openPage(t *testing.T, rel string, push bool) *mdPage {
+func (m *pageRig) openPage(t *testing.T, rel string) *mdPage {
 	t.Helper()
 
-	m.flow(m.openMarkdownPage(m.tabID(), filepath.Join(m.root, rel), push), nil)
+	m.flow(m.openMarkdownPage(m.tabID(), filepath.Join(m.root, rel)), nil)
 
 	p := m.v.page()
 	if p == nil || p.rel != rel {
@@ -311,8 +311,8 @@ func TestMarkdownPageLate(t *testing.T) {
 			t.Parallel()
 
 			m := newPageRig(t, nil)
-			shown := m.openPage(t, "README.md", false)
-			held := m.flow(m.openMarkdownPage(m.tabID(), filepath.Join(m.root, "docs/a.md"), true), holdPages)
+			shown := m.openPage(t, "README.md")
+			held := m.flow(m.openMarkdownPage(m.tabID(), filepath.Join(m.root, "docs/a.md")), holdPages)
 
 			tt.after(m)
 			m.flow(m.step(held[0]), nil)
@@ -331,7 +331,7 @@ func TestMarkdownPageLate(t *testing.T) {
 		t.Parallel()
 
 		m := newPageRig(t, nil)
-		held := m.flow(m.openMarkdownPage(m.tabID(), filepath.Join(m.root, "docs/a.md"), false), holdPages)
+		held := m.flow(m.openMarkdownPage(m.tabID(), filepath.Join(m.root, "docs/a.md")), holdPages)
 
 		m.press(keyRune('b'))
 		m.flow(m.step(held[0]), nil)
@@ -345,7 +345,7 @@ func TestMarkdownPageLate(t *testing.T) {
 		t.Parallel()
 
 		m := newPageRig(t, nil)
-		held := m.flow(m.openMarkdownPage(m.tabID(), filepath.Join(m.root, "docs/a.md"), false), holdPages)
+		held := m.flow(m.openMarkdownPage(m.tabID(), filepath.Join(m.root, "docs/a.md")), holdPages)
 
 		m.flow(m.reviewRetarget(m.tabID(), m.v, 0), nil)
 		m.flow(m.step(held[0]), nil)
@@ -359,8 +359,8 @@ func TestMarkdownPageLate(t *testing.T) {
 		t.Parallel()
 
 		m := newPageRig(t, nil)
-		first := m.flow(m.openMarkdownPage(m.tabID(), filepath.Join(m.root, "docs/a.md"), false), holdPages)
-		second := m.flow(m.openMarkdownPage(m.tabID(), filepath.Join(m.root, "README.md"), false), holdPages)
+		first := m.flow(m.openMarkdownPage(m.tabID(), filepath.Join(m.root, "docs/a.md")), holdPages)
+		second := m.flow(m.openMarkdownPage(m.tabID(), filepath.Join(m.root, "README.md")), holdPages)
 
 		m.flow(m.step(second[0]), nil)
 		m.flow(m.step(first[0]), nil)
@@ -401,7 +401,7 @@ func TestMarkdownOpenPageErrors(t *testing.T) {
 			}
 
 			m.notice = ""
-			m.flow(m.openMarkdownPage(m.tabID(), path, false), nil)
+			m.flow(m.openMarkdownPage(m.tabID(), path), nil)
 
 			if m.notice != tt.want || len(m.v.pages) != 0 {
 				t.Errorf("notice = %q, pages %d, want %q and none", m.notice, len(m.v.pages), tt.want)
@@ -411,7 +411,7 @@ func TestMarkdownOpenPageErrors(t *testing.T) {
 
 	t.Run("a symlink out of the worktree", func(t *testing.T) {
 		m.notice = ""
-		m.flow(m.openMarkdownPage(m.tabID(), filepath.Join(m.root, "docs/link.md"), false), nil)
+		m.flow(m.openMarkdownPage(m.tabID(), filepath.Join(m.root, "docs/link.md")), nil)
 
 		if !strings.HasPrefix(m.notice, "not opening docs/link.md: ") || len(m.v.pages) != 0 {
 			t.Errorf("notice = %q, pages %d, want a refusal and no page", m.notice, len(m.v.pages))
@@ -443,7 +443,7 @@ func TestMarkdownPageKeys(t *testing.T) {
 	}
 
 	t.Run("lines", func(t *testing.T) {
-		p := m.openPage(t, "docs/a.md", false)
+		p := m.openPage(t, "docs/a.md")
 
 		m.press(keyRune('j'))
 		m.press(keyRune('j'))
@@ -462,7 +462,7 @@ func TestMarkdownPageKeys(t *testing.T) {
 	})
 
 	t.Run("headings", func(t *testing.T) {
-		p := m.openPage(t, "docs/a.md", false)
+		p := m.openPage(t, "docs/a.md")
 		beta, gamma := pageLine(t, p, "Beta"), pageLine(t, p, "Gamma")
 
 		m.press(keyRune(']'))
@@ -485,7 +485,7 @@ func TestMarkdownPageKeys(t *testing.T) {
 	})
 
 	t.Run("pages and ends", func(t *testing.T) {
-		p := m.openPage(t, "docs/long.md", false)
+		p := m.openPage(t, "docs/long.md")
 		last := len(p.view.layout().Lines) - 1
 		half := p.view.h / 2
 
@@ -519,7 +519,9 @@ func TestMarkdownPageKeys(t *testing.T) {
 	})
 
 	t.Run("enter on a fold head and elsewhere", func(t *testing.T) {
-		p := m.openPage(t, "docs/a.md", false)
+		m.dropPages(m.v)
+
+		p := m.openPage(t, "docs/a.md")
 		before := len(p.view.layout().Lines)
 
 		m.press(keyEnter)
@@ -549,7 +551,7 @@ func TestMarkdownPageKeys(t *testing.T) {
 	})
 
 	t.Run("search", func(t *testing.T) {
-		p := m.openPage(t, "docs/a.md", false)
+		p := m.openPage(t, "docs/a.md")
 
 		m.press(keyRune('/'))
 		m.typeKeys("gamma")
@@ -570,7 +572,7 @@ func TestMarkdownPageKeys(t *testing.T) {
 	})
 
 	t.Run("r reads the file again", func(t *testing.T) {
-		p := m.openPage(t, "docs/a.md", false)
+		p := m.openPage(t, "docs/a.md")
 		write(t, filepath.Join(m.dir, "docs/a.md"), strings.Replace(pageDoc, "intro text", "brand new intro", 1))
 
 		m.press(keyRune('r'))
@@ -583,7 +585,7 @@ func TestMarkdownPageKeys(t *testing.T) {
 	})
 
 	t.Run("other keys are dropped", func(t *testing.T) {
-		m.openPage(t, "docs/a.md", false)
+		m.openPage(t, "docs/a.md")
 
 		before := snapOf()
 
@@ -605,8 +607,8 @@ func TestMarkdownPageStack(t *testing.T) {
 	m.v.cursor = 3
 	diffCursor := m.v.cursor
 
-	first := m.openPage(t, "docs/a.md", false)
-	second := m.openPage(t, "README.md", true)
+	first := m.openPage(t, "docs/a.md")
+	second := m.openPage(t, "README.md")
 
 	if len(m.v.pages) != 2 || m.v.page() != second || m.v.pages[0] != first {
 		t.Fatalf("pages = %v, want a.md under README.md", m.v.pages)
@@ -632,8 +634,9 @@ func TestMarkdownPageStack(t *testing.T) {
 
 	for _, key := range []rune{'b', 't', 'p'} {
 		t.Run(string(key)+" drops the stack", func(t *testing.T) {
-			m.openPage(t, "docs/a.md", false)
-			m.openPage(t, "README.md", true)
+			m.dropPages(m.v)
+			m.openPage(t, "docs/a.md")
+			m.openPage(t, "README.md")
 
 			m.press(keyRune(key))
 
@@ -670,7 +673,7 @@ func TestMarkdownPageReload(t *testing.T) {
 			t.Parallel()
 
 			m := newPageRig(t, nil)
-			p := m.openPage(t, "docs/a.md", false)
+			p := m.openPage(t, "docs/a.md")
 			p.view.cursor = pageLine(t, p, "Gamma")
 			p.view.clamp()
 
@@ -727,7 +730,7 @@ func TestMarkdownPageReload(t *testing.T) {
 		t.Parallel()
 
 		m := newPageRig(t, nil)
-		p := m.openPage(t, "docs/a.md", false)
+		p := m.openPage(t, "docs/a.md")
 		old := p.view.doc
 
 		m.flow(m.batch(m.root, git.Batch{Paths: []string{"main.go"}}), nil)
@@ -741,7 +744,7 @@ func TestMarkdownPageReload(t *testing.T) {
 		t.Parallel()
 
 		m := newPageRig(t, nil)
-		p := m.openPage(t, "notes/b.md", false)
+		p := m.openPage(t, "notes/b.md")
 
 		write(t, filepath.Join(m.dir, "notes/b.md"), "# Ignored\n\nfirst\n\nsecond\n")
 		p.view.goSource(5)
@@ -766,8 +769,8 @@ func TestMarkdownPageReload(t *testing.T) {
 		t.Parallel()
 
 		m := newPageRig(t, nil)
-		low := m.openPage(t, "docs/a.md", false)
-		m.openPage(t, "README.md", true)
+		low := m.openPage(t, "docs/a.md")
+		m.openPage(t, "README.md")
 
 		old := low.view.doc
 
@@ -790,7 +793,7 @@ func TestMarkdownPageReload(t *testing.T) {
 		t.Parallel()
 
 		m := newPageRig(t, nil)
-		m.openPage(t, "docs/a.md", false)
+		m.openPage(t, "docs/a.md")
 
 		held := m.flow(m.batch(m.root, git.Batch{Paths: []string{"docs/a.md"}}), holdPages)
 		if len(held) != 1 {
@@ -833,8 +836,8 @@ func TestMarkdownPageDropped(t *testing.T) {
 			t.Parallel()
 
 			m := newPageRig(t, nil)
-			m.openPage(t, "docs/a.md", false)
-			m.openPage(t, "README.md", true)
+			m.openPage(t, "docs/a.md")
+			m.openPage(t, "README.md")
 
 			if v := tt.drop(m); len(v.pages) != 0 {
 				t.Errorf("%d pages left", len(v.pages))
@@ -852,7 +855,7 @@ func TestMarkdownPageMouse(t *testing.T) {
 	}
 
 	m := newPageRig(t, map[string]string{"docs/long.md": long.String()})
-	p := m.openPage(t, "docs/long.md", false)
+	p := m.openPage(t, "docs/long.md")
 	rect := mustRect(t, m.drawerRig)
 
 	click := func(row int) {
@@ -901,7 +904,7 @@ func TestMarkdownPageEdit(t *testing.T) {
 	t.Parallel()
 
 	m := newPageRig(t, nil)
-	p := m.openPage(t, "docs/a.md", false)
+	p := m.openPage(t, "docs/a.md")
 	p.view.cursor = pageLine(t, p, "Beta")
 	p.view.clamp()
 
@@ -935,5 +938,30 @@ func mdPageScene(th string, icons bool) reviewScene {
 			p.resize(120, 40, icons)
 			p.view.cursor = pageLine(t, p, "Steps")
 		},
+	}
+}
+
+func TestMarkdownPagePushes(t *testing.T) {
+	t.Parallel()
+
+	m := newPageRig(t, nil)
+
+	first := m.openPage(t, "docs/a.md")
+	second := m.openPage(t, "README.md")
+
+	if len(m.v.pages) != 2 || m.v.page() != second || m.v.pages[0] != first {
+		t.Fatalf("pages = %v, want a.md under README.md", m.v.pages)
+	}
+
+	m.press(keyEsc)
+
+	if len(m.v.pages) != 1 || m.v.page() != first {
+		t.Fatalf("after esc: %d pages, top %v, want a.md alone", len(m.v.pages), m.v.page())
+	}
+
+	m.press(keyEsc)
+
+	if len(m.v.pages) != 0 || m.store.State().Tab().Review == nil {
+		t.Fatalf("after the second esc: %d pages, want the diff", len(m.v.pages))
 	}
 }

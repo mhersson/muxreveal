@@ -183,9 +183,9 @@ func relSlash(root, path string) string {
 // ---- opening ----
 
 // openMarkdownPage reads and parses the file at path, off the update loop, and
-// shows it as a page on top of the drawer's stack (push) or as the stack's only
-// page. Only the newest ask is answered; the drawer's other pages are left alone.
-func (a *App) openMarkdownPage(tab core.TabID, path string, push bool) tea.Cmd {
+// pushes it as a page on top of the drawer's stack. Only the newest ask is
+// answered; the drawer's other pages are left alone.
+func (a *App) openMarkdownPage(tab core.TabID, path string) tea.Cmd {
 	v := a.drawer.views[tab]
 	if v == nil || v.root == "" {
 		return nil
@@ -197,7 +197,6 @@ func (a *App) openMarkdownPage(tab core.TabID, path string, push bool) tea.Cmd {
 
 	path = filepath.Clean(path)
 	v.pageSeq++
-	v.pagePush = push
 
 	return a.readPageCmd(tab, v, path, v.pageSeq, false, nil)
 }
@@ -270,11 +269,7 @@ func (a *App) onMDPage(msg mdPageMsg) {
 	msg.doc.withPictures(docPictures{reg: a.pictures, root: v.root})
 
 	p := &mdPage{path: msg.path, rel: relSlash(v.root, msg.path), view: mdView{doc: msg.doc}, sum: msg.sum}
-	if v.pagePush {
-		v.pages = append(v.pages, p)
-	} else {
-		v.pages = []*mdPage{p}
-	}
+	v.pages = append(v.pages, p)
 
 	v.search = nil
 

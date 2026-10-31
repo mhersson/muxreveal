@@ -366,7 +366,7 @@ func newPicturePage(t *testing.T, w, h int, doc string) *picturePage {
 	jobs := picturesOn(t, m.App)
 
 	sized(t, m.App, w, h)
-	m.openPage(t, "docs/p.md", false)
+	m.openPage(t, "docs/p.md")
 
 	return &picturePage{pageRig: m, jobs: jobs}
 }

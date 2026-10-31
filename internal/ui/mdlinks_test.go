@@ -81,7 +81,9 @@ func (m *linkRig) render(t *testing.T, sub string) {
 func (m *linkRig) onPageLine(t *testing.T, sub string) *mdPage {
 	t.Helper()
 
-	p := m.openPage(t, "docs/a.md", false)
+	m.dropPages(m.v)
+
+	p := m.openPage(t, "docs/a.md")
 	p.view.cursor = pageLine(t, p, sub)
 	p.view.clamp()
 
@@ -551,7 +553,7 @@ func TestFollowMarkdownSymlinkOutside(t *testing.T) {
 	}
 
 	m.notice = ""
-	m.flow(m.openMarkdownPage(m.tabID(), filepath.Join(m.root, "docs", "out.md"), true), nil)
+	m.flow(m.openMarkdownPage(m.tabID(), filepath.Join(m.root, "docs", "out.md")), nil)
 
 	const want = "not opening docs/out.md: path escapes from parent"
 	if m.notice != want || len(m.v.pages) != 0 {
@@ -784,7 +786,7 @@ func TestFoldHintFollowsBinding(t *testing.T) {
 			check("the rendered rows")
 
 			m.press(keyRune('m'))
-			m.openPage(t, "docs/a.md", false)
+			m.openPage(t, "docs/a.md")
 			check("the page")
 		})
 	}
