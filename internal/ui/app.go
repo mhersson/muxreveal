@@ -86,6 +86,9 @@ type Options struct {
 	// PRActions makes the GitHub writes (approve, merge, open a pull request);
 	// nil turns them off.
 	PRActions prActions
+	// PRReads makes the GitHub reads of the pull request views (the list's
+	// searches, job logs, check run summaries and conversations); nil turns them off.
+	PRReads prReads
 	// Keys is the [keys] config laid over the built-in leader keys.
 	Keys core.KeysConfig
 	// Pictures fetches remote images; nil keeps them as image lines.
@@ -135,7 +138,9 @@ type App struct {
 	confirm                *confirm     // yes/no question; owns every key while open
 	prompt                 *prompt      // text input; owns every key and paste while open
 	checks                 *checksView  // a pull request's checks; owns every key while open
+	logSeq                 int          // numbers the job log reads, so a late answer is told apart
 	merge                  *mergeView   // the merge box; owns every key while open
+	conv                   *convView    // a pull request's conversation; owns every key while open
 	plan                   *planView    // an agent's plan; owns every key while open
 	planSeq                int          // plan read counter; an answer for another read is stale
 	prList                 *prListView  // the agents' pull requests; owns every key while open
@@ -146,6 +151,8 @@ type App struct {
 	merging                map[mergeKey]bool
 	openLink               urlOpener
 	actions                prActions // GitHub writes; nil means they are off
+	reads                  prReads   // GitHub reads beyond the poller; nil means they are off
+	search                 prSearchState
 
 	panes        map[core.PaneID]*pane // runtime panes, keyed like State.Panes
 	later        []tea.Cmd             // commands raised outside the update's return path; Update batches them
@@ -273,6 +280,7 @@ func New(opts Options) (*App, error) {
 	}
 
 	a.actions = opts.PRActions
+	a.reads = opts.PRReads
 
 	a.openLink = opts.OpenURL
 	if a.openLink == nil {
@@ -576,6 +584,7 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		cmds = append(cmds, a.relayout(), a.pictures.resized())
 		a.sizePlan()
+		a.sizeConv()
 
 		return a, tea.Batch(cmds...)
 	case tea.KeyPressMsg:
@@ -709,6 +718,16 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.onMDList(msg)
 	case planReadMsg:
 		a.onPlanRead(msg)
+	case prSearchMsg:
+		a.onPRSearch(msg)
+	case checkLogMsg:
+		a.onCheckLog(msg)
+	case convReadMsg:
+		a.onConvRead(msg)
+	case checkSummaryMsg:
+		a.onCheckSummary(msg)
+	case prSearchTickMsg:
+		return a, a.onPRSearchTick(msg)
 	case planPageMsg:
 		a.onPlanPage(msg)
 	case reviewFlashMsg:
@@ -867,6 +886,10 @@ func (a *App) View() tea.View {
 
 	if a.checks != nil {
 		content = a.overlayChecks(f, content, lk)
+	}
+
+	if a.conv != nil {
+		content = a.overlayConv(f, content, lk)
 	}
 
 	if a.merge != nil {

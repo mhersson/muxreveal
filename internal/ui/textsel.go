@@ -150,15 +150,15 @@ func textPaint(lt md.LineText, from, to int) [][2]int {
 
 // textRev is what a text selection's text was read against.
 type textRev struct {
-	doc    *mdDoc
+	doc    mdSource
 	gen, w int
 	gw     int // the diff column's number width, which moves the code
 	split  bool
 }
 
 // textSelection is the one selection when it is not a pane's: the view that
-// holds it, in the tab whose drawer shows it, or "" for the plan overlay. Exactly
-// one of view and rows is set.
+// holds it, in the tab whose drawer shows it, or "" for the plan or
+// conversation overlay. Exactly one of view and rows is set.
 type textSelection struct {
 	tab   core.TabID
 	view  *mdView
@@ -183,7 +183,7 @@ func (a *App) revOf(ts *textSelection) textRev {
 	if ts.view != nil {
 		r := textRev{doc: ts.view.doc, w: ts.view.w}
 		if ts.view.doc != nil {
-			r.gen = ts.view.doc.layouts
+			r.gen = ts.view.doc.gen()
 		}
 
 		return r
@@ -306,6 +306,10 @@ func (a *App) textSelected() string {
 func (a *App) textHolds(ts *textSelection) bool {
 	switch {
 	case ts.view != nil && ts.tab == "":
+		if a.conv != nil && ts.view == &a.conv.view {
+			return true
+		}
+
 		return a.plan != nil && a.plan.shown() == ts.view
 	case ts.view != nil:
 		v := a.drawer.views[ts.tab]

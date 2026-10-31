@@ -679,7 +679,7 @@ func TestDrawerHintsFollowBindings(t *testing.T) {
 	const (
 		diffHints = "j/k line   ]/[ hunk   }/{ file   z zoom   tab tree   w worktree   f full   u split   e edit   / search   space reviewed   R show reviewed   b/t mode   ,/. turn"
 		treeHints = "j/k file   enter jump   z zoom   tab hide   esc back"
-		prHints   = "j/k line   ]/[ hunk   z zoom   c checks   a approve   M merge   O browser   space reviewed   R show reviewed   b/t mode"
+		prHints   = "j/k line   ]/[ hunk   z zoom   i conversation   c checks   a approve   M merge   O browser   space reviewed   R show reviewed   b/t mode"
 	)
 
 	tests := []struct {
@@ -736,6 +736,7 @@ func TestPRLoadedNoticeFollowsBindings(t *testing.T) {
 		then prThen
 		want string
 	}{
+		{"conversation", core.KeysConfig{}, thenConversation, "#7 loaded; press i for the conversation"},
 		{"checks", core.KeysConfig{}, thenChecks, "#7 loaded; press c for checks"},
 		{"browser", core.KeysConfig{}, thenBrowser, "#7 loaded; press O to open it"},
 		{"approve", core.KeysConfig{}, thenApprove, "#7 loaded; press a to approve"},

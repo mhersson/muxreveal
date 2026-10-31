@@ -15,10 +15,10 @@
 │    │    ✓ unit                                                   1h 02m │    │
 │    │    ✓ docs                                                          │    │
 │    │                                                                    │    │
-│    │  j/k check    enter open in browser    r refresh    esc close      │    │
+│    │  j/k check    l log    O browser    r refresh    esc close         │    │
 │    ╰────────────────────────────────────────────────────────────────────╯    │
 │                   │      44 +     if !ok || p.Kind != core.KindAgent {       │
 │                   │▎     45 +         return a.notify("a review pane needs   │
 │                   │▎        ↪ an agent pane")                                │
-│                   │ j/k line   ]/[ hunk   z zoom   c checks   a approve      │
+│                   │ j/k line   ]/[ hunk   z zoom   i conversation   c checks │
 ╰───────────────────╰──────────────────────────────────────────────────────────╯

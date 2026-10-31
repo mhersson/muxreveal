@@ -13,7 +13,7 @@ import (
 // mdView is a cursor, scrolling, folds, heading jumps, search and link targets
 // over one mdDoc. The owner calls size before keys and draws.
 type mdView struct {
-	doc         *mdDoc
+	doc         mdSource
 	cursor, top int
 
 	w, h  int
@@ -403,7 +403,15 @@ func (v *mdView) drawPictures(p mdPainter, focused bool) ([]string, []picRow) {
 const textLead = 2
 
 // lineText is what layout line i copies, in view cells.
-func (v *mdView) lineText(i int) md.LineText { return shiftText(v.layout().Text(i)) }
+func (v *mdView) lineText(i int) md.LineText {
+	v.layout()
+
+	if v.doc == nil {
+		return md.LineText{}
+	}
+
+	return shiftText(v.doc.lineText(i))
+}
 
 // shiftText moves a laid-out line's pieces right to where the view draws them.
 func shiftText(lt md.LineText) md.LineText {
@@ -418,10 +426,17 @@ func shiftText(lt md.LineText) md.LineText {
 // grid is the view's lines as a selection grid.
 func (v *mdView) grid() textGrid {
 	lay := v.layout()
+	doc := v.doc
 
 	return textGrid{
-		lines: func(i int) md.LineText { return shiftText(lay.Text(i)) },
-		rows:  len(lay.Lines), cols: v.w,
+		lines: func(i int) md.LineText {
+			if doc == nil {
+				return md.LineText{}
+			}
+
+			return shiftText(doc.lineText(i))
+		},
+		rows: len(lay.Lines), cols: v.w,
 	}
 }
 
@@ -454,7 +469,7 @@ func (v *mdView) unitText(i int) string {
 
 // selSpans are the cells of line i the selection paints, within cells below end.
 func (v *mdView) selSpans(lay md.Layout, i, end int, bg color.Color) []spanPaint {
-	if v.sel == nil || i >= len(lay.Lines) {
+	if v.sel == nil || v.doc == nil || i >= len(lay.Lines) {
 		return nil
 	}
 
@@ -465,7 +480,7 @@ func (v *mdView) selSpans(lay md.Layout, i, end int, bg color.Color) []spanPaint
 
 	var spans []spanPaint
 
-	for _, c := range textPaint(shiftText(lay.Text(i)), from, to) {
+	for _, c := range textPaint(shiftText(v.doc.lineText(i)), from, to) {
 		if c[0] < end {
 			spans = append(spans, spanPaint{from: c[0], to: min(c[1], end-1), bg: bg})
 		}

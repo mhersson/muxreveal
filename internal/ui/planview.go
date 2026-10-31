@@ -298,7 +298,7 @@ func countText(texts []string, text string) int {
 
 // closePlan closes the overlay and drops any read still on its way.
 func (a *App) closePlan() {
-	if ts := a.text; ts != nil && ts.view != nil && ts.tab == "" {
+	if ts := a.text; ts != nil && ts.view != nil && ts.tab == "" && (a.conv == nil || ts.view != &a.conv.view) {
 		a.clearTextSel()
 	}
 

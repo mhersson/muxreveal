@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"slices"
 	"strconv"
 	"strings"
 
@@ -33,7 +34,7 @@ func prListReview(pr core.PRInfo, ui theme.UI) (string, theme.Hex) {
 
 // prListBody draws the groups' headers and rows cw cells wide and gives the
 // line the selected row is on.
-func (a *App) prListBody(rows []prListRow, sel, cw int, lk look) (lines []string, selLine int) {
+func (a *App) prListBody(rows []prListRow, sel, cw int, byAuthor bool, lk look) (lines []string, selLine int) {
 	ui := lk.theme.UI
 	panel := lipgloss.NewStyle().Background(ui.Panel).Foreground(ui.Fg)
 	prev := ""
@@ -62,7 +63,7 @@ func (a *App) prListBody(rows []prListRow, sel, cw int, lk look) (lines []string
 			selLine = len(lines)
 		}
 
-		lines = append(lines, a.prListRowLine(r, i == sel, cw, panel, ui))
+		lines = append(lines, a.prListRowLine(r, i == sel, byAuthor, cw, panel, ui))
 	}
 
 	return lines, selLine
@@ -80,9 +81,9 @@ func prListHeader(name string, count, cw int, panel lipgloss.Style, ui theme.UI)
 }
 
 // prListRowLine is one row: the number, title and branch at the left and the
-// checks, review and age at the right, which give way to the title as the box
-// narrows.
-func (a *App) prListRowLine(r prListRow, selected bool, cw int, panel lipgloss.Style, ui theme.UI) string {
+// checks, review, author (when byAuthor) and age at the right, which give way
+// to the title as the box narrows.
+func (a *App) prListRowLine(r prListRow, selected, byAuthor bool, cw int, panel lipgloss.Style, ui theme.UI) string {
 	bg := ui.Panel
 	if selected {
 		bg = ui.Selection
@@ -111,6 +112,10 @@ func (a *App) prListRowLine(r prListRow, selected bool, cw int, panel lipgloss.S
 
 	words, fg := prListReview(r.pr, ui)
 	pieces = append(pieces, piece{words, fg, false})
+
+	if author := printable(r.pr.Author); byAuthor && author != "" {
+		pieces = append(pieces, piece{"@" + author, ui.Subtle, false})
+	}
 
 	if age := railAge(r.pr.UpdatedAt, a.clock.Now()); age != "" {
 		pieces = append(pieces, piece{age, ui.Subtle, false})
@@ -192,7 +197,8 @@ func (a *App) prListBox(lk look, w, room int) []string {
 	on := func(fg theme.Hex) lipgloss.Style { return panel.Foreground(fg) }
 
 	v := a.prList
-	rows := a.prListRows(a.store.State())
+	state := a.store.State()
+	rows := a.prListRowsOf(state, v.tab)
 	sel := v.selected(rows)
 
 	title := " Pull requests "
@@ -203,28 +209,41 @@ func (a *App) prListBox(lk look, w, room int) []string {
 	top, row, bottom := boxFrame(w, title, boxStyle{border: st.popupBorder, title: st.pushTitle, cut: "…"}, st)
 	cw := w - 5
 
-	tabs := panel.Background(ui.Accent).Foreground(ui.OnAccent).Bold(true).Render(" Agents "+strconv.Itoa(len(rows))+" ") +
-		on(ui.Subtle).Render("  Review requested  All open")
+	hint := func(key, label string) string { return st.popupKey.Render(key) + st.popupMuted.Render(" "+label) }
+	kt := a.keys.prList
+	tabs := a.prListTabRow(state, cw, panel, hint, ui)
 
 	var body []string
 
 	selLine := 0
 
-	if len(rows) == 0 {
-		body = []string{row(on(ui.Subtle).Render(noticePRListNone))}
-	} else {
+	if len(rows) > 0 {
 		var lines []string
 
-		lines, selLine = a.prListBody(rows, sel, cw, lk)
+		lines, selLine = a.prListBody(rows, sel, cw, v.tab != prTabAgents, lk)
 		for _, l := range lines {
 			body = append(body, row(l))
 		}
 	}
 
-	hint := func(key, label string) string { return st.popupKey.Render(key) + st.popupMuted.Render(" "+label) }
-	kt := a.keys.prList
+	// cut maps a note row that continues on the next row to its text, so a
+	// window that ends there can show an ellipsis.
+	cut := map[int]string{}
+
+	for _, t := range a.prListNotes(v.tab, len(rows)) {
+		lines := strings.Split(ansi.Wrap(t, max(cw, 1), ""), "\n")
+		for i, l := range lines {
+			if i < len(lines)-1 {
+				cut[len(body)] = l
+			}
+
+			body = append(body, row(on(ui.Subtle).Render(l)))
+		}
+	}
+
 	pairs := hintPairs([][2]string{
 		{kt.hint("prlist.show"), "diff"},
+		{kt.hint("prlist.conversation"), "conversation"},
 		{kt.hint("prlist.checks"), "checks"},
 		{kt.hint("prlist.approve"), "approve"},
 		{kt.hint("prlist.merge"), "merge"},
@@ -232,25 +251,26 @@ func (a *App) prListBox(lk look, w, room int) []string {
 		{kt.hint("prlist.refresh"), "refresh"},
 		{kt.hint("prlist.close"), "close"},
 	})
-	hints, used := "", 0
 
-	for i, kv := range pairs {
-		need := ansi.StringWidth(kv[0]) + 1 + ansi.StringWidth(kv[1])
-		if i > 0 {
-			need += 4
-		}
-
-		if used+need > cw {
-			break
-		}
-
-		if i > 0 {
-			hints += st.popup.Render("    ")
-		}
-
-		hints += hint(kv[0], kv[1])
-		used += need
+	// esc close always stays; the other pairs drop from the end.
+	var closing [][2]string
+	if n := len(pairs); n > 0 && pairs[n-1][1] == "close" {
+		closing, pairs = pairs[n-1:], pairs[:n-1]
 	}
+
+	const gap = 4
+
+	hroom := cw
+	if len(closing) > 0 {
+		hroom -= ansi.StringWidth(closing[0][0]) + 1 + ansi.StringWidth(closing[0][1]) + gap
+	}
+
+	hints := popupHints(st, pairs, hroom)
+	if hints != "" && len(closing) > 0 {
+		hints += st.popup.Render(strings.Repeat(" ", gap))
+	}
+
+	hints += popupHints(st, closing, cw)
 
 	// The fullest frame the room holds around the whole list; else the list scrolls.
 	frames := []struct{ airy, hints bool }{{true, true}, {false, true}, {false, false}}
@@ -294,6 +314,10 @@ func (a *App) prListBox(lk look, w, room int) []string {
 
 	if win := max(room-overhead(pick), 1); len(body) > win {
 		start := min(max(selLine-win/2, 0), len(body)-win)
+		if t, ok := cut[start+win-1]; ok {
+			body[start+win-1] = row(on(ui.Subtle).Render(ellipsize(t, cw)))
+		}
+
 		body = body[start : start+win]
 	}
 
@@ -328,4 +352,103 @@ func (a *App) overlayPRList(f *frameLayers, base string, lk look) string {
 	lines := a.prListBox(lk, w, max(a.height-2-top, 0))
 
 	return overlayLines(f, base, a.width, a.height, top, lines, w, nil)
+}
+
+// prListNotes are the lines under a tab's rows (or in place of them): the
+// Agents tab's empty text, a searched tab's loading and empty texts, and a row
+// for each host whose search failed.
+func (a *App) prListNotes(tab prListTab, rows int) []string {
+	if tab == prTabAgents {
+		if rows == 0 {
+			return []string{noticePRListNone}
+		}
+
+		return nil
+	}
+
+	if !a.prSearchLoaded() {
+		return []string{noticePRListLoading}
+	}
+
+	notes := a.prSearchFailures()
+
+	hosts := a.prSearchHosts()
+	answered := len(hosts) == 0 || slices.ContainsFunc(hosts, func(h string) bool {
+		s := a.search.hosts[h]
+
+		return s != nil && s.done && s.err == nil
+	})
+
+	if rows == 0 && answered {
+		none := noticePRListNoneAsked
+		if tab == prTabAll {
+			none = noticePRListNoneMine
+		}
+
+		notes = append([]string{none}, notes...)
+	}
+
+	return notes
+}
+
+// prListTabRow is the tab row cw cells wide: the tabs at the left, the shown
+// one on the accent, and at the right the tab keys, which drop from the end
+// when they do not fit.
+func (a *App) prListTabRow(st core.State, cw int, panel lipgloss.Style, hint func(key, label string) string, ui theme.UI) string {
+	var left string
+
+	for t := range prTabCount {
+		n, ok := a.prListTabRows(st, t)
+		label := prTabLabel(t, n, ok)
+
+		style := panel.Foreground(ui.Subtle)
+		if t == a.prList.tab {
+			style = panel.Background(ui.Accent).Foreground(ui.OnAccent).Bold(true)
+		}
+
+		if t > 0 {
+			left += panel.Render(" ")
+		}
+
+		left += style.Render(label)
+	}
+
+	kt := a.keys.prList
+
+	jump := kt.hint("prlist.tab.agents", "prlist.tab.requested", "prlist.tab.all")
+	if jump == "1/2/3" {
+		jump = "1-3"
+	}
+
+	pairs := hintPairs([][2]string{
+		{kt.hint("prlist.tab.next"), "next tab"},
+		{jump, "jump"},
+	})
+
+	room := cw - ansi.StringWidth(left) - 2
+	right, used := "", 0
+
+	for i, kv := range pairs {
+		need := ansi.StringWidth(kv[0]) + 1 + ansi.StringWidth(kv[1])
+		if i > 0 {
+			need += 2
+		}
+
+		if used+need > room {
+			break
+		}
+
+		if i > 0 {
+			right += panel.Render("  ")
+		}
+
+		right += hint(kv[0], kv[1])
+		used += need
+	}
+
+	if right == "" {
+		return left
+	}
+
+	return left + panel.Render(strings.Repeat(" ", max(cw-ansi.StringWidth(left)-used, 0))) + right
 }

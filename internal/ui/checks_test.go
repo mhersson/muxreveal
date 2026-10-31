@@ -146,13 +146,13 @@ func inChecks(t *testing.T) (*prDrawer, *fakeOpen) {
 	return r, f
 }
 
-func TestChecksEnterOnACheckWithoutAPage(t *testing.T) {
+func TestChecksBrowserOnACheckWithoutAPage(t *testing.T) {
 	t.Parallel()
 
 	r, f := inChecks(t)
 
 	r.run(r.step(snapshotWithChecks("aaaaaaa", "aaaaaaa", 7, github.Check{Name: "bare", State: github.CheckSuccess})))
-	r.keys(keyEnter)
+	r.typed("O")
 
 	if r.notice != noticeCheckNoPage {
 		t.Errorf("notice = %q, want %q", r.notice, noticeCheckNoPage)
@@ -203,7 +203,7 @@ func TestChecksOverlay(t *testing.T) {
 		t.Errorf("the checks are not failed, running, passed:\n%s", text)
 	}
 
-	// j and k move the selection, held in range; enter opens the selected check.
+	// j and k move the selection, held in range; O opens the selected check.
 	r.typed("k")
 
 	if r.checks.sel != 0 {
@@ -222,14 +222,14 @@ func TestChecksOverlay(t *testing.T) {
 		t.Errorf("sel = %d after j at the bottom, want 2", r.checks.sel)
 	}
 
-	r.keys(keyEnter)
+	r.typed("O")
 
 	if got := f.opened(t, 1); !slices.Equal(got, []string{"https://ci.example.com/build"}) {
 		t.Errorf("opened %v, want the build's page", got)
 	}
 
 	r.typed("kk")
-	r.keys(keyEnter)
+	r.typed("O")
 
 	if got := f.opened(t, 2); len(got) != 2 || got[1] != "https://ci.example.com/lint" {
 		t.Errorf("opened %v, want the lint's page second", got)
@@ -237,7 +237,7 @@ func TestChecksOverlay(t *testing.T) {
 
 	// The running check's page is not a web link: it is refused, never opened.
 	r.typed("j")
-	r.keys(keyEnter)
+	r.typed("O")
 
 	if got := f.urls(); len(got) != 2 {
 		t.Errorf("opened %v, want a javascript link refused", got)

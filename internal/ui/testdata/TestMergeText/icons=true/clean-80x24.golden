@@ -20,5 +20,5 @@
 ││                                                                            ││
 ││  s/m/r method    d delete branch    enter merge    esc cancel              ││
 │╰────────────────────────────────────────────────────────────────────────────╯│
-│                   │ j/k line   ]/[ hunk   z zoom   c checks   a approve      │
+│                   │ j/k line   ]/[ hunk   z zoom   i conversation   c checks │
 ╰───────────────────╰──────────────────────────────────────────────────────────╯

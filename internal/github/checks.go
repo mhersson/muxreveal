@@ -21,6 +21,8 @@ const maxCheckBody = 8 << 20
 
 // Check is one check run or commit status of a commit.
 type Check struct {
+	ID                     int64  // a run's id, which is its job id for an Actions job; 0 for a status
+	App                    string // a run's app slug; "" for a status
 	Name, Kind, URL        string // Kind "run" or "status"
 	State                  CheckState
 	Conclusion             string // GitHub's raw conclusion or status state
@@ -29,6 +31,10 @@ type Check struct {
 
 type checkRunsPage struct {
 	CheckRuns []struct {
+		ID  int64 `json:"id"`
+		App struct {
+			Slug string `json:"slug"`
+		} `json:"app"`
 		Name        string    `json:"name"`
 		Status      string    `json:"status"`
 		Conclusion  string    `json:"conclusion"`
@@ -84,7 +90,7 @@ func (c *Client) Checks(ctx context.Context, r Repo, sha string) ([]Check, error
 			}
 
 			checks = append(checks, Check{
-				Name: run.Name, Kind: "run", URL: u, State: runState(run.Status, run.Conclusion),
+				ID: run.ID, App: run.App.Slug, Name: run.Name, Kind: "run", URL: u, State: runState(run.Status, run.Conclusion),
 				Conclusion: conclusion, StartedAt: run.StartedAt, CompletedAt: run.CompletedAt,
 			})
 		}
@@ -122,7 +128,7 @@ func (c *Client) Checks(ctx context.Context, r Repo, sha string) ([]Check, error
 func (c *Client) getPage(ctx context.Context, path string, out any) (string, error) {
 	resp, err := c.restAPI.RequestWithContext(ctx, http.MethodGet, path, nil)
 	if err != nil {
-		return "", wrapAPI("github: GET "+pathOnly(path), err, time.Now())
+		return "", wrapAPI("github: GET "+pathOnly(path), redactURL(err), time.Now())
 	}
 
 	defer resp.Body.Close()

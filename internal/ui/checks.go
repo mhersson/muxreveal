@@ -23,6 +23,7 @@ type checksView struct {
 	repo   string
 	number int
 	sel    int
+	page   *checkPage // a job's log shown in place of the list; nil for the list
 }
 
 // checkKind is how a check is told apart and ordered.
@@ -42,6 +43,8 @@ type checkRow struct {
 	name     string
 	url      string
 	duration string
+	id       int64  // a run's job id; 0 for a commit status, which has no log
+	app      string // the app that made the run
 }
 
 // checkKindOf maps a check's state; one not known counts as running.
@@ -67,7 +70,10 @@ func checkRows(c *core.PRChecks, now time.Time) []checkRow {
 
 	rows := make([]checkRow, len(c.Checks))
 	for i, ch := range c.Checks {
-		rows[i] = checkRow{kind: checkKindOf(ch.State), name: ch.Name, url: ch.URL, duration: checkDuration(ch, now)}
+		rows[i] = checkRow{
+			kind: checkKindOf(ch.State), name: ch.Name, url: ch.URL, duration: checkDuration(ch, now),
+			id: ch.ID, app: ch.App,
+		}
 	}
 
 	slices.SortStableFunc(rows, func(x, y checkRow) int { return int(x.kind) - int(y.kind) })
@@ -139,5 +145,9 @@ func (a *App) checksOf(st core.State, v *checksView) *core.PRChecks {
 
 // handleChecksKey answers the open checks overlay; any other key is swallowed.
 func (a *App) handleChecksKey(msg tea.KeyPressMsg) tea.Cmd {
+	if p := a.checks.page; p != nil && p.chooser != nil {
+		return a.summaryChooserKey(p, bindingKey(msg))
+	}
+
 	return a.runKey(a.keys.checks, bindingKey(msg))
 }

@@ -5,7 +5,7 @@
 │                                      ││                                      │
 │▎  web                             0s ││                                      │
 │   feat/b╭─ Pull requests ──────────────────────────────────────────╮         │
-│         │   Agents 5   Review requested  All open                  │         │
+│         │   Agents 5   Review requested   All open    tab next tab │         │
 │         │                                                          │         │
 │         │  acme/api ─────────────────────────────────────────── 2  │         │
 │ Working │   #8 Retry on timeout  feat/c  ci 3/5  no review yet  4m │         │

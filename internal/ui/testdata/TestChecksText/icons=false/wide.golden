@@ -24,7 +24,7 @@
 │                                                                │    ✓ unit                                                   1h 02m │ Init() tea.Cmd                                                 │
 │                                                                │    ✓ docs                                                          │                                                                │
 │                                                                │                                                                    │eview pane beside an agent, or focuses the open one.            │
-│                                                                │  j/k check    enter open in browser    r refresh    esc close      │w(ctx context.Context, agent core.PaneID) tea.Cmd {             │
+│                                                                │  j/k check    l log    O browser    r refresh    esc close         │w(ctx context.Context, agent core.PaneID) tea.Cmd {             │
 │                                                                ╰────────────────────────────────────────────────────────────────────╯nt).Kind != core.KindAgent {                                    │
 │                                                                                                   │  44     -         return nil                                                                     │
 │                                                                                                   │  45     -     }                                                                                  │
@@ -48,5 +48,5 @@
 │                                                                                                   │  @@ -0,0 +1,11 @@                                                                                │
 │                                                                                                   │       1 + package ui                                                                             │
 │                                                                                                   │       2 +                                                                                        │
-│                                                                                                   │ j/k line   ]/[ hunk   z zoom   c checks   a approve   M merge   O browser   space reviewed       │
+│                                                                                                   │ j/k line   ]/[ hunk   z zoom   i conversation   c checks   a approve   M merge   O browser       │
 ╰───────────────────────────────────────────────────────────────────────────────────────────────────╰──────────────────────────────────────────────────────────────────────────────────────────────────╯

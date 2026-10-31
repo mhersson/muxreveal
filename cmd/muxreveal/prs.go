@@ -79,6 +79,9 @@ func startPRs(clients clientFactory) *prRuntime {
 // actions is the GitHub writes, on the same client cache.
 func (p *prRuntime) actions() ghActions { return ghActions{clients: p.clients} }
 
+// reads is the GitHub reads beyond the poller, on the same client cache.
+func (p *prRuntime) reads() ghReads { return ghReads{clients: p.clients} }
+
 // lookup finds the pull request of a branch with the cached client of its host.
 func (p *prRuntime) lookup(ctx context.Context, r github.Repo, branch string) (github.PR, error) {
 	c, err := p.clients.client(ctx, r.Host)
@@ -130,6 +133,50 @@ func (g ghActions) Merge(ctx context.Context, r github.Repo, pr github.PR, info 
 	}
 
 	return c.Merge(ctx, r, pr, info, m)
+}
+
+// ghReads makes the GitHub reads of the app, each with the cached client of the
+// host.
+type ghReads struct{ clients *clientCache }
+
+// MyPRs searches the host for the viewer's open pull requests.
+func (g ghReads) MyPRs(ctx context.Context, host string) (github.MyPRs, error) {
+	c, err := g.clients.client(ctx, host)
+	if err != nil {
+		return github.MyPRs{}, fmt.Errorf("client for %s: %w", host, err)
+	}
+
+	return c.MyPRs(ctx)
+}
+
+// JobLog reads the tail of an Actions job's log.
+func (g ghReads) JobLog(ctx context.Context, r github.Repo, jobID int64) (data []byte, cut bool, err error) {
+	c, err := g.clients.client(ctx, r.Host)
+	if err != nil {
+		return nil, false, fmt.Errorf("client for %s: %w", r.Host, err)
+	}
+
+	return c.JobLog(ctx, r, jobID)
+}
+
+// CheckRun reads the output of a check run that is not an Actions job.
+func (g ghReads) CheckRun(ctx context.Context, r github.Repo, id int64) (github.CheckRunOutput, error) {
+	c, err := g.clients.client(ctx, r.Host)
+	if err != nil {
+		return github.CheckRunOutput{}, fmt.Errorf("client for %s: %w", r.Host, err)
+	}
+
+	return c.CheckRun(ctx, r, id)
+}
+
+// Conversation reads a pull request's description and timeline.
+func (g ghReads) Conversation(ctx context.Context, r github.Repo, number int) (github.Conversation, error) {
+	c, err := g.clients.client(ctx, r.Host)
+	if err != nil {
+		return github.Conversation{}, fmt.Errorf("client for %s: %w", r.Host, err)
+	}
+
+	return c.Conversation(ctx, r, number)
 }
 
 // Close stops the poller: its requests are cancelled, its goroutines end and

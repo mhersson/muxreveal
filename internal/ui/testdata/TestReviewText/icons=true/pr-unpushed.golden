@@ -48,5 +48,5 @@
 │                                                                                                   │  A internal/ui/review_test.go                                        󰀦 hidden characters  +11 -0 │
 │                                                                                                   │  @@ -0,0 +1,11 @@                                                                                │
 │                                                                                                   │       1 + package ui                                                                             │
-│                                                                                                   │ j/k line   ]/[ hunk   z zoom   c checks   a approve   M merge   O browser   space reviewed       │
+│                                                                                                   │ j/k line   ]/[ hunk   z zoom   i conversation   c checks   a approve   M merge   O browser       │
 ╰───────────────────────────────────────────────────────────────────────────────────────────────────╰──────────────────────────────────────────────────────────────────────────────────────────────────╯

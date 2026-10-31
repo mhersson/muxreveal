@@ -20,5 +20,5 @@
 │                   │      44 +     if !ok || p.Kind != core.KindAgent {       │
 │                   │▎     45 +         return a.notify("a review pane needs   │
 │                   │▎        ↪ an agent pane")                                │
-│                   │ j/k line   ]/[ hunk   z zoom   c checks   a approve      │
+│                   │ j/k line   ]/[ hunk   z zoom   i conversation   c checks │
 ╰───────────────────╰──────────────────────────────────────────────────────────╯

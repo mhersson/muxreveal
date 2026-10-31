@@ -1,0 +1,25 @@
+﻿2026-10-30T12:00:01.1000000Z ##[group]Set up job
+2026-10-30T12:00:01.2000000Z Current runner version: '2.321.0'
+2026-10-30T12:00:01.3000000Z Runner Image Provisioner
+2026-10-30T12:00:02.0000000Z ##[endgroup]
+2026-10-30T12:00:03.0000000Z ##[group]Run actions/checkout@v4
+2026-10-30T12:00:03.1000000Z with:
+2026-10-30T12:00:03.2000000Z   fetch-depth: 1
+2026-10-30T12:00:04.0000000Z ##[endgroup]
+2026-10-30T12:00:05.0000000Z ##[group]Run make deps
+2026-10-30T12:00:05.1000000Z [36;1mmake deps[0m
+2026-10-30T12:00:05.2000000Z shell: /usr/bin/bash -e {0}
+2026-10-30T12:00:06.0000000Z ##[endgroup]
+2026-10-30T12:00:07.0000000Z go: downloading github.com/charmbracelet/lipgloss v1.1.0
+2026-10-30T12:00:20.0000000Z ##[group]Run make check
+2026-10-30T12:00:20.1000000Z [36;1mmake check[0m
+2026-10-30T12:00:20.2000000Z shell: /usr/bin/bash -e {0}
+2026-10-30T12:00:21.0000000Z ##[endgroup]
+2026-10-30T12:00:22.0000000Z go test ./...
+2026-10-30T12:00:30.0000000Z [32mok  [0m  github.com/mhersson/muxreveal/internal/git	4.210s
+2026-10-30T12:00:31.0000000Z --- FAIL: TestDiffWordSpans (0.01s)
+2026-10-30T12:00:31.1000000Z     diff_test.go:88: got 3 spans, want 4
+2026-10-30T12:00:31.2000000Z FAIL
+2026-10-30T12:00:31.3000000Z [31mFAIL[0m	github.com/mhersson/muxreveal/internal/git	0.044s
+2026-10-30T12:00:31.4000000Z make: *** [Makefile:31: test] Error 1
+2026-10-30T12:00:31.5000000Z ##[error]Process completed with exit code 2.

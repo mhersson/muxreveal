@@ -22,11 +22,12 @@ import (
 
 const (
 	// Tints mixed into a ground.
-	tintHunk    = 0.10
-	tintGhost   = 0.06
-	tintFlash   = 0.35
-	tintCursor  = 0.24
-	tintGhostNr = 0.05
+	tintHunk     = 0.10
+	tintGhost    = 0.06
+	tintFlash    = 0.35
+	tintCursor   = 0.24
+	tintHunkLine = 0.16
+	tintGhostNr  = 0.05
 
 	markGlyph    = "▎" // ▎ at the first cell of the row under the cursor
 	wrapGlyph    = "↪" // ↪ in the sign column of a line's continuation rows
@@ -831,7 +832,7 @@ func (d *drawCtx) hintRuns(cw int) []railRun {
 	if _, ok := d.v.src.(git.PRSource); ok {
 		pairs = [][2]string{
 			pair("line", next, prev), pair("hunk", "review.hunk.next", "review.hunk.prev"),
-			pair("zoom", "review.zoom"),
+			pair("zoom", "review.zoom"), pair("conversation", "review.conversation"),
 			pair("checks", "review.checks"), pair("approve", "review.approve"), pair("merge", "review.merge"),
 			pair("browser", "review.browser"),
 			pair("reviewed", "review.mark"), d.showReadPair(pair),

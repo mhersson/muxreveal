@@ -10,9 +10,12 @@ import (
 )
 
 // textPress is the left button held down on a text host. tab is "" for the
-// plan overlay.
+// plan and conversation overlays.
 type textPress struct {
-	tab                  core.TabID
+	tab core.TabID
+	// view is the view the press began on, which tells the two overlays that
+	// hold a selection under tab "" apart.
+	view                 *mdView
 	x, y                 int // screen cell of the press
 	anchor               point
 	alt, dragging, multi bool
@@ -116,6 +119,27 @@ func (a *App) planHost() (textHost, bool) {
 	return textHost{view: v, rect: rect, top: v.top, sticky: -1, maxCol: max(rect.Dx()-1, 0)}, true
 }
 
+// convHost is the conversation overlay's host while its view shows and the
+// overlay takes the pointer.
+func (a *App) convHost() (textHost, bool) {
+	cv := a.conv
+	if cv == nil || cv.doc == nil || cv.err != "" || cv.chooser != nil || a.confirm != nil || a.prompt != nil ||
+		a.copy != nil || a.overlay != nil || a.composeShown() || a.merge != nil {
+		return textHost{}, false
+	}
+
+	a.sizeConv()
+
+	rect, ok := convDocRect(a.width, a.height)
+	if !ok {
+		return textHost{}, false
+	}
+
+	v := &cv.view
+
+	return textHost{view: v, rect: rect, top: v.top, sticky: -1, maxCol: max(rect.Dx()-1, 0)}, true
+}
+
 // pageHost is the active tab's drawer page as a host while the drawer takes
 // the pointer: the cells of the diff column's rows.
 func (a *App) pageHost() (textHost, bool) {
@@ -211,9 +235,15 @@ func (a *App) drawerHost() (textHost, bool) {
 	return a.rowsHost()
 }
 
-// textHostAt is the host whose cells hold (x, y).
+// textHostAt is the host whose cells hold (x, y). The conversation is tried
+// before the plan: the two overlays are never open together, so the order only
+// decides between an overlay and the drawer beneath.
 func (a *App) textHostAt(x, y int) (textHost, bool) {
 	pt := image.Point{X: x, Y: y}
+
+	if h, ok := a.convHost(); ok && pt.In(h.rect) {
+		return h, true
+	}
 
 	if h, ok := a.planHost(); ok && pt.In(h.rect) {
 		return h, true
@@ -229,6 +259,10 @@ func (a *App) textHostAt(x, y int) (textHost, bool) {
 // textHostOf is the host a press began on, wherever the pointer is now.
 func (a *App) textHostOf(pr *textPress) (textHost, bool) {
 	if pr.tab == "" {
+		if pr.view != nil && a.conv != nil && pr.view == &a.conv.view {
+			return a.convHost()
+		}
+
 		return a.planHost()
 	}
 
@@ -265,7 +299,7 @@ func (a *App) textClick(m tea.Mouse) bool {
 // or line, and any other press clears the selection and waits for a drag.
 func (a *App) textPressAt(h textHost, m tea.Mouse) {
 	n := a.countClick(m.X, m.Y)
-	pr := &textPress{tab: h.tab, x: m.X, y: m.Y, alt: m.Mod.Contains(tea.ModAlt), multi: n > 1, line: -1}
+	pr := &textPress{tab: h.tab, view: h.view, x: m.X, y: m.Y, alt: m.Mod.Contains(tea.ModAlt), multi: n > 1, line: -1}
 
 	if h.rows != nil && h.lay.split {
 		pr.side = h.lay.splitSide(m.X - h.rect.Min.X)

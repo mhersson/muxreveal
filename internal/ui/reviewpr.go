@@ -42,6 +42,7 @@ type prThen uint8
 // What a key asks for besides showing the pull request.
 const (
 	thenNothing prThen = iota
+	thenConversation
 	thenChecks
 	thenBrowser
 	thenApprove
@@ -54,6 +55,7 @@ type prWant struct {
 	repo   string
 	number int
 	root   string
+	base   string // the base branch when the caller knows it, else the state's
 }
 
 // prPlace is the worktree a pull request is read from: its root, branch, the
@@ -292,6 +294,10 @@ func (a *App) askPR(tab core.TabID, want *prWant, base string, then prThen) tea.
 	switch {
 	case want != nil:
 		dir = want.root
+
+		if base == "" {
+			base = want.base
+		}
 
 		if base == "" {
 			if info, ok := prInfoByNumber(st, want.repo, want.number); ok {
@@ -574,6 +580,8 @@ func (a *App) prLoadedNotice(number int, then prThen) string {
 	id, what := "", ""
 
 	switch then {
+	case thenConversation:
+		id, what = "review.conversation", "for the conversation"
 	case thenChecks:
 		id, what = "review.checks", "for checks"
 	case thenBrowser:
@@ -601,6 +609,10 @@ func (a *App) prThenRun(then prThen) tea.Cmd {
 	}
 
 	switch then {
+	case thenConversation:
+		info, _ := prInfoByNumber(a.store.State(), v.pr.Repo, v.pr.Number)
+
+		return a.openConversation(v.pr.Repo, v.pr.Number, info)
 	case thenChecks:
 		return a.openChecks(v.pr.Repo, v.pr.Number)
 	case thenBrowser:

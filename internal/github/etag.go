@@ -38,7 +38,7 @@ func newETagTransport(next http.RoundTripper) *etagTransport {
 }
 
 func (t *etagTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	if req.Method != http.MethodGet {
+	if req.Method != http.MethodGet || req.Header.Get("Range") != "" {
 		return t.next.RoundTrip(req)
 	}
 

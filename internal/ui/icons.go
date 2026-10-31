@@ -54,6 +54,9 @@ const (
 	iconMarkdown   = "\uF48A"     // nf-oct-markdown
 	iconLinks      = "\U000F0339" // nf-md-link_variant
 	iconPlan       = "\uF405"     // nf-oct-book
+	iconLog        = "\uF4ED"     // nf-oct-log
+
+	iconConversation = "\uF442" // nf-oct-comment_discussion
 
 	iconNewWorktree = "\U000F14CA" // nf-md-source_branch_plus
 	iconPin         = "\U000F0403" // nf-md-pin

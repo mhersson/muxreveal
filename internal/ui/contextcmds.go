@@ -4,8 +4,6 @@ import (
 	"slices"
 
 	tea "charm.land/bubbletea/v2"
-
-	"github.com/mhersson/muxreveal/internal/core"
 )
 
 // The default keys of the agents rail, the PR list and the checks overlay;
@@ -26,7 +24,13 @@ var (
 		{"down", "prlist.next"},
 		{"k", "prlist.prev"},
 		{"up", "prlist.prev"},
+		{"tab", "prlist.tab.next"},
+		{"shift+tab", "prlist.tab.prev"},
+		{"1", "prlist.tab.agents"},
+		{"2", "prlist.tab.requested"},
+		{"3", "prlist.tab.all"},
 		{"enter", "prlist.show"},
+		{"i", "prlist.conversation"},
 		{"c", "prlist.checks"},
 		{"a", "prlist.approve"},
 		{"M", "prlist.merge"},
@@ -39,7 +43,15 @@ var (
 		{"down", "checks.next"},
 		{"k", "checks.prev"},
 		{"up", "checks.prev"},
-		{"enter", "checks.browser"},
+		{"l", "checks.log"},
+		{"O", "checks.browser"},
+		{"enter", "checks.fold"},
+		{"ctrl+d", "checks.page.down"},
+		{"ctrl+u", "checks.page.up"},
+		{"g", "checks.top"},
+		{"G", "checks.bottom"},
+		{"]", "checks.error.next"},
+		{"[", "checks.error.prev"},
 		{"r", "checks.refresh"},
 		{"esc", "checks.close"},
 	}
@@ -139,7 +151,7 @@ func prListCommands() []command {
 				return nil
 			}
 
-			rows := a.prListRows(a.store.State())
+			rows := a.prListRowsOf(a.store.State(), a.prList.tab)
 
 			i := a.prList.selected(rows)
 			if row && i < 0 {
@@ -151,6 +163,31 @@ func prListCommands() []command {
 	}
 
 	return scoped("pr_list", []command{
+		cmd("prlist.tab.next", "next tab", false, func(a *App, _ []prListRow, _ int) tea.Cmd {
+			a.prListStep(true)
+
+			return nil
+		}),
+		cmd("prlist.tab.prev", "previous tab", false, func(a *App, _ []prListRow, _ int) tea.Cmd {
+			a.prListStep(false)
+
+			return nil
+		}),
+		cmd("prlist.tab.agents", "agents tab", false, func(a *App, _ []prListRow, _ int) tea.Cmd {
+			a.prListShow(prTabAgents)
+
+			return nil
+		}),
+		cmd("prlist.tab.requested", "review requested tab", false, func(a *App, _ []prListRow, _ int) tea.Cmd {
+			a.prListShow(prTabRequested)
+
+			return nil
+		}),
+		cmd("prlist.tab.all", "all open tab", false, func(a *App, _ []prListRow, _ int) tea.Cmd {
+			a.prListShow(prTabAll)
+
+			return nil
+		}),
 		cmd("prlist.next", "next", false, func(a *App, rows []prListRow, _ int) tea.Cmd {
 			a.prList.move(rows, 1)
 
@@ -162,11 +199,12 @@ func prListCommands() []command {
 			return nil
 		}),
 		cmd("prlist.show", "show the diff", true, func(a *App, rows []prListRow, i int) tea.Cmd {
-			a.prList = nil
-
 			return a.prListOpen(rows[i], thenNothing)
 		}),
-		// The checks stack over the list, which stays under them.
+		// The conversation and the checks stack over the list, which stays under them.
+		cmd("prlist.conversation", "show the conversation", true, func(a *App, rows []prListRow, i int) tea.Cmd {
+			return a.openConversation(rows[i].key.repo, rows[i].key.number, rows[i].pr)
+		}),
 		cmd("prlist.checks", "show the checks", true, func(a *App, rows []prListRow, i int) tea.Cmd {
 			return a.openChecks(rows[i].key.repo, rows[i].key.number)
 		}),
@@ -183,8 +221,6 @@ func prListCommands() []command {
 				return nil
 			}
 
-			a.prList = nil
-
 			return a.prListOpen(rows[i], thenApprove)
 		}),
 		cmd("prlist.merge", "merge", true, func(a *App, rows []prListRow, i int) tea.Cmd {
@@ -194,17 +230,15 @@ func prListCommands() []command {
 				return nil
 			}
 
-			a.prList = nil
-
 			return a.prListOpen(rows[i], thenMerge)
 		}),
 		cmd("prlist.browser", "open in the browser", true, func(a *App, rows []prListRow, i int) tea.Cmd {
-			return a.openURL(a.prLink(core.ReviewPR{Repo: rows[i].key.repo, Number: rows[i].key.number}))
+			return a.openURL(a.prListRowURL(rows[i]))
 		}),
 		cmd("prlist.refresh", "refresh", false, func(a *App, rows []prListRow, _ int) tea.Cmd {
 			a.prListRefresh(rows)
 
-			return nil
+			return a.prSearchCmd()
 		}),
 		cmd("prlist.close", "close", false, func(a *App, _ []prListRow, _ int) tea.Cmd {
 			a.prList = nil
@@ -230,38 +264,159 @@ func checksCommands() []command {
 		}}
 	}
 
+	// page runs on the open log page, and does nothing in the list. n is the
+	// log rows the page shows.
+	page := func(id, title string, run func(p *checkPage, n int)) command {
+		return cmd(id, title, func(a *App, v *checksView, _ []checkRow) tea.Cmd {
+			if v.page != nil {
+				run(v.page, a.logPageRows())
+			}
+
+			return nil
+		})
+	}
+
 	return scoped("checks", []command{
-		cmd("checks.next", "next check", func(_ *App, v *checksView, rows []checkRow) tea.Cmd {
+		cmd("checks.next", "next check or line", func(a *App, v *checksView, rows []checkRow) tea.Cmd {
+			if p := v.page; p != nil {
+				if p.sum {
+					p.moveSummary(1)
+
+					return nil
+				}
+
+				p.move(p.cursor+1, a.logPageRows())
+
+				return nil
+			}
+
 			v.sel = min(v.sel+1, max(len(rows)-1, 0))
 
 			return nil
 		}),
-		cmd("checks.prev", "previous check", func(_ *App, v *checksView, _ []checkRow) tea.Cmd {
+		cmd("checks.prev", "previous check or line", func(a *App, v *checksView, _ []checkRow) tea.Cmd {
+			if p := v.page; p != nil {
+				if p.sum {
+					p.moveSummary(-1)
+
+					return nil
+				}
+
+				p.move(p.cursor-1, a.logPageRows())
+
+				return nil
+			}
+
 			v.sel = max(v.sel-1, 0)
 
 			return nil
 		}),
-		cmd("checks.browser", "open in the browser", func(a *App, v *checksView, rows []checkRow) tea.Cmd {
-			if v.sel >= len(rows) {
+		cmd("checks.log", "show the job's log", func(a *App, v *checksView, rows []checkRow) tea.Cmd {
+			if v.page != nil || v.sel >= len(rows) {
 				return nil
 			}
 
-			if rows[v.sel].url == "" {
+			return a.checksLog(v, rows[v.sel])
+		}),
+		cmd("checks.browser", "open in the browser", func(a *App, v *checksView, rows []checkRow) tea.Cmd {
+			var c checkRow
+
+			switch {
+			case v.page != nil:
+				c = v.page.check
+			case v.sel < len(rows):
+				c = rows[v.sel]
+			default:
+				return nil
+			}
+
+			if c.url == "" {
 				a.notice = noticeCheckNoPage
 
 				return nil
 			}
 
-			return a.openURL(rows[v.sel].url)
+			return a.openURL(c.url)
+		}),
+		cmd("checks.fold", "open or close the group, or open the link", func(a *App, v *checksView, _ []checkRow) tea.Cmd {
+			switch p := v.page; {
+			case p == nil:
+			case p.sum:
+				return a.summaryEnter(p)
+			default:
+				p.fold()
+			}
+
+			return nil
+		}),
+		page("checks.page.down", "half a page down", func(p *checkPage, n int) {
+			if p.sum {
+				p.pageSummary(1)
+
+				return
+			}
+
+			p.move(p.cursor+max(n/2, 1), n)
+		}),
+		page("checks.page.up", "half a page up", func(p *checkPage, n int) {
+			if p.sum {
+				p.pageSummary(-1)
+
+				return
+			}
+
+			p.move(p.cursor-max(n/2, 1), n)
+		}),
+		page("checks.top", "first line", func(p *checkPage, n int) {
+			if p.sum {
+				p.endSummary(false)
+
+				return
+			}
+
+			p.move(0, n)
+		}),
+		page("checks.bottom", "last line", func(p *checkPage, n int) {
+			if p.sum {
+				p.endSummary(true)
+
+				return
+			}
+
+			p.move(len(p.rows())-1, n)
+		}),
+		page("checks.error.next", "next error", func(p *checkPage, n int) {
+			if i, ok := p.errorRow(1); ok {
+				p.move(i, n)
+			}
+		}),
+		page("checks.error.prev", "previous error", func(p *checkPage, n int) {
+			if i, ok := p.errorRow(-1); ok {
+				p.move(i, n)
+			}
 		}),
 		cmd("checks.refresh", "refresh", func(a *App, v *checksView, _ []checkRow) tea.Cmd {
+			if v.page != nil {
+				if v.page.sum {
+					return a.readCheckRun(v)
+				}
+
+				return a.readJobLog(v)
+			}
+
 			if repo, ok := repoOfKey(v.repo); ok && a.prs.src != nil {
 				a.prs.src.Refresh(repo)
 			}
 
 			return nil
 		}),
-		cmd("checks.close", "close", func(a *App, _ *checksView, _ []checkRow) tea.Cmd {
+		cmd("checks.close", "close", func(a *App, v *checksView, _ []checkRow) tea.Cmd {
+			if v.page != nil {
+				v.page = nil
+
+				return nil
+			}
+
 			a.closeChecks()
 
 			return nil

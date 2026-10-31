@@ -1,0 +1,30 @@
+{
+  "data": {
+    "repository": {
+      "pullRequest": {
+        "number": 24,
+        "title": "Long thread",
+        "url": "https://github.com/octo/repo/pull/24",
+        "isDraft": false,
+        "state": "OPEN",
+        "isCrossRepository": false,
+        "headRefName": "feat/long",
+        "headRefOid": "1111111111111111111111111111111111111111",
+        "baseRefName": "main",
+        "updatedAt": "2026-10-30T12:00:00Z",
+        "author": {"login": "mhersson"},
+        "viewerDidAuthor": false,
+        "commits": {"nodes": []},
+        "createdAt": "2026-10-29T08:00:00Z",
+        "body": "",
+        "bodyHTML": "",
+        "timelineItems": {
+          "pageInfo": {"hasPreviousPage": true, "startCursor": "CURSOR"},
+          "nodes": [
+            {"__typename": "IssueComment", "id": "IC_PAGE", "author": {"login": "kari-dev", "__typename": "User"}, "createdAt": "2026-10-29T09:00:00Z", "body": "hi", "bodyHTML": "<p>hi</p>"}
+          ]
+        }
+      }
+    }
+  }
+}

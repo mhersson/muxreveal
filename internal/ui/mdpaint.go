@@ -83,6 +83,29 @@ func (p mdPainter) style(r md.Run) lipgloss.Style {
 		fg = u.Error
 	case md.RoleSummaryMark:
 		fg, bold = u.Accent, true
+	case roleConvFrame:
+		fg = u.Border
+	case roleConvAuthor:
+		bold = true
+	case roleConvVerb:
+		fg = u.Muted
+	case roleConvApproved:
+		fg = u.Success
+	case roleConvChanges:
+		fg = u.Warning
+	case roleConvMeta:
+		fg = u.Subtle
+	case roleConvPath:
+		fg, bold = u.Dim, true
+	case roleHunkAddGutter, roleHunkDelGutter, roleHunkCtxGutter:
+		fg, bg = u.Subtle, p.hunkGround(r.Role)
+	case roleHunkAdd, roleHunkDel, roleHunkCtx:
+		bg = p.hunkGround(r.Role)
+
+		if r.Class > 0 && int(r.Class) < len(p.syntax) && p.syntax[r.Class] != nil {
+			return lipgloss.NewStyle().Foreground(p.syntax[r.Class]).Background(bg).
+				Bold(bold).Italic(r.Italic).Underline(underline).Strikethrough(r.Strike)
+		}
 	case md.RoleCodeText:
 		if int(r.Class) < len(p.syntax) && p.syntax[r.Class] != nil {
 			return lipgloss.NewStyle().Foreground(p.syntax[r.Class]).Background(bg).
@@ -96,6 +119,19 @@ func (p mdPainter) style(r md.Run) lipgloss.Style {
 
 	return lipgloss.NewStyle().Foreground(fg).Background(bg).
 		Bold(bold).Italic(r.Italic).Underline(underline).Strikethrough(r.Strike)
+}
+
+// hunkGround is the ground of a hunk line's role: the painter's ground, with
+// Success or Error mixed in for an added or removed line.
+func (p mdPainter) hunkGround(role md.Role) theme.Hex {
+	switch role {
+	case roleHunkAdd, roleHunkAddGutter:
+		return mixHex(p.ground, p.ui.Success, tintHunkLine)
+	case roleHunkDel, roleHunkDelGutter:
+		return mixHex(p.ground, p.ui.Error, tintHunkLine)
+	}
+
+	return p.ground
 }
 
 // line paints l in exactly w cells: cut with … when too wide, then padded on

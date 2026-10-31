@@ -1,0 +1,24 @@
+ 1 api   2 api   3 web   4 zeta                                 layout bsp │ #1 
+────────────────────────────────────────────────────────────────────────────────
+╭─ Agents 7 ───── blocked 1 ⠋1 idle 5 ─╮╭─ claude ────────────────────── idle ─╮
+│ Blocked ────────────────────────── 1 ││                                      │
+│                                      ││                                      │
+│▎  web                             0s ││                                      │
+│   feat/b╭─ Pull requests ──────────────────────────────────────────╮         │
+│         │                                                          │         │
+│         │   Agents 4   Review requested 3   All open 1             │         │
+│         │                                                          │         │
+│ Working │  acme/infra ───────────────────────────────────────── 1  │         │
+│         │  ▎#88 Bump the chart  branch-88   changes  @kari-dev  5h │         │
+│ ⠋ api   │                                                          │         │
+│   feat/a│  acme/web ─────────────────────────────────────────── 2  │         │
+│         │   #311 Fix th…  branch…  ci 3/3  approved  @kari-dev  2h │         │
+│         │   #305 Retry on timeout  branch-305       draft  @li  1d │         │
+│         │                                                          │         │
+│ Idle ───│  enter diff    i conversation    c checks    esc close   │         │
+│         ╰──────────────────────────────────────────────────────────╯         │
+│   api                             0s ││                                      │
+│   feat/a          #5 ci 5/5 approved ││                                      │
+│                                      ││                                      │
+│ j/k move  enter jump  p plan         ││                                      │
+╰──────────────────────────────── 5 ↓ ─╯╰──────────────────────────────────────╯

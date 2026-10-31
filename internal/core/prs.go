@@ -27,6 +27,10 @@ type PRInfo struct {
 type CheckInfo struct {
 	Name, URL, State       string
 	StartedAt, CompletedAt time.Time
+	// ID and App are the run's id and the app that made it ("github-actions" for
+	// an Actions job); a commit status has ID 0.
+	ID  int64
+	App string
 }
 
 // PRChecks is the checks of one pull request at one head commit.

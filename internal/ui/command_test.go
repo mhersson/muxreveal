@@ -145,6 +145,7 @@ func TestDefaultCommands(t *testing.T) {
 		want{"review.mode.branch", "Review: branch mode", iconReview},
 		want{"review.mode.turn", "Review: turn mode", iconReview},
 		want{"review.mode.pr", "Review: pull request", iconReview},
+		want{"review.conversation", "Review: conversation", iconReview},
 		want{"review.checks", "Review: checks", iconReview},
 		want{"review.approve", "Review: approve", iconReview},
 		want{"review.merge", "Review: merge", iconReview},
