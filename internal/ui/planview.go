@@ -20,10 +20,13 @@ const (
 	noticeNotAgent = "the focused pane is not an agent"
 )
 
-// planView is the open plan overlay: what an agent's plan file read as. It is
-// UI state and is never saved. root is where the plan reads and its links
-// follow; base is what its relative links resolve against.
+// planView is the open plan overlay: what an agent's plan file read as, or,
+// with file set, a markdown file picked by md.open. It is UI state and is never
+// saved. root is where the plan reads and its links follow; base is what its
+// relative links resolve against.
 type planView struct {
+	// file is the markdown file md.open opened, nil for an agent's plan.
+	file       *mdOpenFile
 	pane       core.PaneID
 	agent      string
 	plan       core.Plan

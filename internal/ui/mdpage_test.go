@@ -12,12 +12,10 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/charmbracelet/x/ansi"
 
 	"github.com/mhersson/muxreveal/internal/core"
 	"github.com/mhersson/muxreveal/internal/git"
 	"github.com/mhersson/muxreveal/internal/md"
-	"github.com/mhersson/muxreveal/internal/ui/palette"
 )
 
 func TestReadLocalMarkdown(t *testing.T) {
@@ -162,6 +160,14 @@ type pageRig struct {
 func newPageRig(t *testing.T, extra map[string]string, opts ...func(*Options)) *pageRig {
 	t.Helper()
 
+	return openPageRig(t, pageRepo(t, extra), opts...)
+}
+
+// pageRepo is the page rig's repository: README.md, docs/a.md and an ignored
+// notes/b.md, with main.go edited; extra adds files to the worktree.
+func pageRepo(t *testing.T, extra map[string]string) string {
+	t.Helper()
+
 	dir := newRepoDir(t)
 	write(t, filepath.Join(dir, "README.md"), "# Readme\n\nhello there\n")
 	write(t, filepath.Join(dir, "docs/a.md"), pageDoc)
@@ -175,10 +181,20 @@ func newPageRig(t *testing.T, extra map[string]string, opts ...func(*Options)) *
 		write(t, filepath.Join(dir, name), text)
 	}
 
-	return openPageRig(t, dir, opts...)
+	return dir
 }
 
 func openPageRig(t *testing.T, dir string, opts ...func(*Options)) *pageRig {
+	t.Helper()
+
+	m := bareRig(t, dir, opts...)
+	m.v = m.opened(t)
+
+	return m
+}
+
+// bareRig is the page rig's app on the repository in dir, with no drawer.
+func bareRig(t *testing.T, dir string, opts ...func(*Options)) *pageRig {
 	t.Helper()
 
 	r := newKeysRig(t, dir, append([]func(*Options){func(o *Options) {
@@ -190,11 +206,7 @@ func openPageRig(t *testing.T, dir string, opts ...func(*Options)) *pageRig {
 	r.start = st.start
 	r.icons = true
 
-	m := &pageRig{drawerRig: r, dir: dir, st: st}
-	m.v = r.opened(t)
-	m.root = rootOf(t, dir)
-
-	return m
+	return &pageRig{drawerRig: r, dir: dir, st: st, root: rootOf(t, dir)}
 }
 
 // flow feeds the messages of cmd, and of what Update returns for them, to Update,
@@ -218,12 +230,6 @@ func (r *drawerRig) flow(cmd tea.Cmd, hold func(tea.Msg) bool) (held []tea.Msg) 
 	return held
 }
 
-func holdLists(m tea.Msg) bool {
-	_, ok := m.(mdListMsg)
-
-	return ok
-}
-
 func holdPages(m tea.Msg) bool {
 	_, ok := m.(mdPageMsg)
 
@@ -237,19 +243,6 @@ func (r *drawerRig) typeKeys(s string) {
 	for _, c := range s {
 		r.press(keyRune(c))
 	}
-}
-
-// mdOpen runs the md.open command and returns the list answers it held.
-func (r *drawerRig) mdOpen() []tea.Msg {
-	c, ok := r.reg.get("md.open")
-	if !ok {
-		panic("md.open is not a command")
-	}
-
-	cmd := c.run(r.App)
-	_, after := r.Update(struct{}{})
-
-	return r.flow(tea.Batch(cmd, after), holdLists)
 }
 
 // openPage shows rel as a page, pushed or as the only one.
@@ -296,281 +289,8 @@ func pageLine(t *testing.T, p *mdPage, sub string) int {
 	return 0
 }
 
-func TestMarkdownOpen(t *testing.T) {
+func TestMarkdownPageLate(t *testing.T) {
 	t.Parallel()
-
-	m := newPageRig(t, nil)
-	m.showTree(t)
-
-	title := func() string { return strings.SplitN(m.drawn(t), "\n", 2)[0] }
-	before := title()
-
-	if m.layout(t).treeW == 0 {
-		t.Fatal("the tree is not open before md.open")
-	}
-
-	for _, held := range m.mdOpen() {
-		m.flow(m.step(held), nil)
-	}
-
-	if want := []string{"README.md", "docs/a.md", "notes/b.md"}; !slices.Equal(overlayIDs(m.App), want) {
-		t.Fatalf("palette lists %v, want %v", overlayIDs(m.App), want)
-	}
-
-	box := ansi.Strip(m.overlay.pal.View(60))
-	for _, want := range []string{iconMarkdown + " Markdown files", "enter open"} {
-		if !strings.Contains(box, want) {
-			t.Errorf("the palette lacks %q:\n%s", want, box)
-		}
-	}
-
-	m.typeKeys("docs/a")
-	m.press(keyEnter)
-
-	p := m.v.page()
-	if p == nil || p.rel != "docs/a.md" || p.path != filepath.Join(m.root, "docs", "a.md") || len(m.v.pages) != 1 {
-		t.Fatalf("pages = %+v, want docs/a.md only (notice %q)", m.v.pages, m.notice)
-	}
-
-	if m.overlay != nil || !m.drawer.focused {
-		t.Errorf("overlay open = %v, drawer has the keyboard = %v, want the page to hold it", m.overlay != nil, m.drawer.focused)
-	}
-
-	got := m.drawn(t)
-	if tag := " " + iconMarkdown + " docs/a.md "; !strings.Contains(strings.SplitN(got, "\n", 2)[0], tag) {
-		t.Errorf("top border = %q, lacks the tag %q", strings.SplitN(got, "\n", 2)[0], tag)
-	}
-
-	if !strings.Contains(got, "Alpha") || strings.Contains(got, "main.go") {
-		t.Errorf("the drawer shows:\n%s\nwant the page and none of the diff", got)
-	}
-
-	if lay := m.layout(t); lay.treeW != 0 || lay.headH != 0 {
-		t.Errorf("layout under a page: tree %d, header %d, want none", lay.treeW, lay.headH)
-	}
-
-	// The title is the diff's.
-	if a, b := titlePart(title()), titlePart(before); a != b {
-		t.Errorf("title = %q, was %q", a, b)
-	}
-}
-
-// titlePart is the title of a drawer's top border: the text up to the tags.
-func titlePart(top string) string {
-	if i := strings.Index(top, " "+iconMarkdown+" "); i >= 0 {
-		top = top[:i]
-	}
-
-	if i := strings.Index(top, " "+iconBranchMode+" "); i >= 0 {
-		top = top[:i]
-	}
-
-	if i := strings.Index(top, " ✓ "); i >= 0 {
-		top = top[:i]
-	}
-
-	return strings.TrimRight(top, "─ ")
-}
-
-func TestMarkdownOpenNoDrawer(t *testing.T) {
-	t.Parallel()
-
-	t.Run("a pane in a repository", func(t *testing.T) {
-		t.Parallel()
-
-		dir := newRepoDir(t)
-		write(t, filepath.Join(dir, "README.md"), "# Readme\n")
-		write(t, filepath.Join(dir, "docs/a.md"), pageDoc)
-		commitEverything(t, dir, "init")
-
-		r := newKeysRig(t, dir)
-		if r.store.State().Tab().Review != nil {
-			t.Fatal("a drawer is open at the start")
-		}
-
-		held := r.mdOpen()
-		r.until(t, "the drawer to open", func() bool { return r.store.State().Tab().Review != nil && r.view() != nil && r.view().root != "" })
-
-		for _, m := range held {
-			r.flow(r.step(m), nil)
-		}
-
-		// The list may be asked for after the drawer knows its root.
-		r.until(t, "the files to be listed", func() bool { return r.overlay != nil })
-
-		if want := []string{"README.md", "docs/a.md"}; !slices.Equal(overlayIDs(r.App), want) {
-			t.Errorf("palette lists %v, want %v", overlayIDs(r.App), want)
-		}
-
-		if !r.drawer.focused {
-			t.Error("the new drawer lacks the keyboard")
-		}
-	})
-
-	t.Run("a pane outside a repository", func(t *testing.T) {
-		t.Parallel()
-
-		r := newKeysRig(t, t.TempDir())
-		r.notice = ""
-
-		held := r.mdOpen()
-
-		r.until(t, "the notice", func() bool { return r.notice == noticeNotRepo })
-
-		if len(held) != 0 || r.overlay != nil || r.store.State().Tab().Review != nil || r.drawer.focused {
-			t.Errorf("held %d answers, overlay %v, drawer %v, want nothing", len(held), r.overlay != nil, r.store.State().Tab().Review != nil)
-		}
-	})
-}
-
-func TestMarkdownOpenNotices(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name   string
-		mutate func(*mdListMsg)
-		want   string
-	}{
-		{"no files", func(m *mdListMsg) { m.files = nil }, "no markdown files in this worktree"},
-		{"a listing error", func(m *mdListMsg) { m.files, m.err = nil, errors.New("boom") }, "markdown files: boom"},
-	}
-
-	m := newPageRig(t, nil)
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			held := m.mdOpen()
-			if len(held) != 1 {
-				t.Fatalf("md.open held %d answers, want 1", len(held))
-			}
-
-			msg, ok := held[0].(mdListMsg)
-			if !ok {
-				t.Fatalf("held %T", held[0])
-			}
-
-			tt.mutate(&msg)
-
-			m.notice = ""
-			m.flow(m.step(msg), nil)
-
-			if m.notice != tt.want || m.overlay != nil {
-				t.Errorf("notice = %q, overlay open = %v, want %q and none", m.notice, m.overlay != nil, tt.want)
-			}
-		})
-	}
-}
-
-func TestMarkdownOpenLate(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name  string
-		after func(m *pageRig)
-		// undo runs after the late answer, to put back what after changed.
-		undo func(m *pageRig)
-	}{
-		{"the drawer closed", func(m *pageRig) { m.closeDrawer(false) }, nil},
-		{"a retarget", func(m *pageRig) { m.flow(m.reviewRetarget(m.tabID(), m.v, 0), nil) }, nil},
-		{"the compose box opened", func(m *pageRig) { m.compose = &composeView{} }, func(m *pageRig) { m.compose = nil }},
-		{"a palette opened", func(m *pageRig) { m.openCommandPalette() }, func(m *pageRig) { m.closeOverlay() }},
-		{"the keyboard went back to the panes", func(m *pageRig) { m.drawerRelease() }, nil},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			m := newPageRig(t, nil)
-
-			held := m.mdOpen()
-			if len(held) != 1 {
-				t.Fatalf("md.open held %d answers, want 1", len(held))
-			}
-
-			tt.after(m)
-			m.flow(m.step(held[0]), nil)
-
-			if m.overlay != nil && m.overlay.kind == overlayMarkdown {
-				t.Errorf("the late list opened the palette: %v", overlayIDs(m.App))
-			}
-
-			if tt.undo != nil {
-				tt.undo(m)
-			}
-		})
-	}
-
-	t.Run("md.open takes the keyboard", func(t *testing.T) {
-		t.Parallel()
-
-		m := newPageRig(t, nil)
-		m.drawerRelease()
-
-		held := m.mdOpen()
-		if !m.drawer.focused {
-			t.Error("md.open left the keyboard with the panes")
-		}
-
-		m.flow(m.step(held[0]), nil)
-
-		if m.overlay == nil || m.overlay.kind != overlayMarkdown {
-			t.Error("the list did not open")
-		}
-	})
-
-	t.Run("a drawer outside a repository", func(t *testing.T) {
-		t.Parallel()
-
-		m := newPageRig(t, nil)
-		pane := m.store.State().Tab().Review.Pane
-
-		openIn(t, m.App, core.SetPaneCwd{ID: pane, Cwd: t.TempDir()})
-		m.settle()
-		m.until(t, "the drawer to notice", m.viewHolds(func(v *reviewView) bool { return v.root == "" && v.loaded && v.err != nil }))
-
-		m.notice = ""
-
-		if held := m.mdOpen(); len(held) != 0 || m.overlay != nil || m.notice != noticeNotRepo || m.drawer.mdWant != nil {
-			t.Fatalf("md.open outside a repository: %d lists, palette %v, notice %q, waiting %v", len(held), m.overlay != nil, m.notice, m.drawer.mdWant)
-		}
-
-		// A request made while the view was still loading goes once it has loaded with no root.
-		m.drawer.mdWant = &mdWant{tab: m.tabID(), open: true}
-		m.settle()
-
-		if m.drawer.mdWant != nil {
-			t.Error("the request outlived the load that found no root")
-		}
-
-		openIn(t, m.App, core.SetPaneCwd{ID: pane, Cwd: m.dir})
-		m.settle()
-		m.until(t, "the drawer to follow the pane", m.viewHolds(func(v *reviewView) bool { return v.root == m.root && v.loaded && !v.loading }))
-		m.settle()
-
-		if m.overlay != nil {
-			t.Errorf("the palette opened on its own: %v", overlayIDs(m.App))
-		}
-	})
-
-	t.Run("a second md.open", func(t *testing.T) {
-		t.Parallel()
-
-		m := newPageRig(t, nil)
-		first, second := m.mdOpen(), m.mdOpen()
-
-		m.flow(m.step(first[0]), nil)
-
-		if m.overlay != nil {
-			t.Fatal("the first list opened after a second md.open")
-		}
-
-		m.flow(m.step(second[0]), nil)
-
-		if m.overlay == nil || m.overlay.kind != overlayMarkdown {
-			t.Error("the second list did not open")
-		}
-	})
 
 	for _, tt := range []struct {
 		name         string
@@ -909,21 +629,6 @@ func TestMarkdownPageStack(t *testing.T) {
 	if got := m.drawn(t); !strings.Contains(got, "main.go") {
 		t.Errorf("the drawer after the last pop:\n%s\nwant the diff", got)
 	}
-
-	t.Run("md.open over a stack replaces it", func(t *testing.T) {
-		m.openPage(t, "docs/a.md", false)
-		m.openPage(t, "README.md", true)
-
-		for _, held := range m.mdOpen() {
-			m.flow(m.step(held), nil)
-		}
-
-		m.flow(m.step(palette.ChosenMsg{ID: "docs/a.md"}), nil)
-
-		if len(m.v.pages) != 1 || m.v.page().rel != "docs/a.md" {
-			t.Errorf("pages = %v, want docs/a.md alone", m.v.pages)
-		}
-	})
 
 	for _, key := range []rune{'b', 't', 'p'} {
 		t.Run(string(key)+" drops the stack", func(t *testing.T) {

@@ -97,15 +97,8 @@ type pushedMsg struct {
 func (a *App) pushDir(st core.State) string {
 	tab := st.Tab()
 
-	if tab.Review != nil {
-		// PR mode holds its worktree like a pin, wherever the pane has gone since.
-		if tab.Review.PR != nil && tab.Review.PR.Root != "" {
-			return tab.Review.PR.Root
-		}
-
-		if dir := a.drawerDir(st, tab, tab.Review.Pane); dir != "" {
-			return dir
-		}
+	if dir := a.drawerShows(st, tab); dir != "" {
+		return dir
 	}
 
 	if dir := st.Panes[tab.Focus].FollowDir(); dir != "" {
@@ -113,6 +106,21 @@ func (a *App) pushDir(st core.State) string {
 	}
 
 	return a.cwd
+}
+
+// drawerShows is the directory tab's open review drawer shows: a held pull
+// request's worktree, wherever the pane has gone since, else what the pane
+// follows or its pin holds. It is "" with no drawer.
+func (a *App) drawerShows(st core.State, tab core.Tab) string {
+	if tab.Review == nil {
+		return ""
+	}
+
+	if tab.Review.PR != nil && tab.Review.PR.Root != "" {
+		return tab.Review.PR.Root
+	}
+
+	return a.drawerDir(st, tab, tab.Review.Pane)
 }
 
 // push is the git.push command: it reads, off the update loop, what pushing the

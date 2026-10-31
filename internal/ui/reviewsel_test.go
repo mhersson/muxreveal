@@ -1671,8 +1671,8 @@ func TestDiffSelectionUnderPage(t *testing.T) {
 		t.Fatal("setup: no selection")
 	}
 
-	// The palette's md.open list opens a page without a drawer key.
-	m.flow(m.pickMarkdown(&mdPick{tab: m.tabID(), gen: v.epoch}, "README.md"), nil)
+	// A page opens over the diff without a drawer key.
+	m.flow(m.openMarkdownPage(m.tabID(), filepath.Join(m.root, "README.md"), true), nil)
 
 	if v.page() == nil {
 		t.Fatal("no page opened")

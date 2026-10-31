@@ -463,10 +463,6 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.later = append(a.later, c)
 	}
 
-	if c := a.mdListAfterSync(); c != nil {
-		a.later = append(a.later, c)
-	}
-
 	a.worktreesSync()
 	a.linksSync()
 	a.textSelAfterUpdate()
@@ -716,6 +712,8 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.onMDPage(msg)
 	case mdListMsg:
 		a.onMDList(msg)
+	case mdFileMsg:
+		a.onMDFile(msg)
 	case planReadMsg:
 		a.onPlanRead(msg)
 	case prSearchMsg:
