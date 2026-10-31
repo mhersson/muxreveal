@@ -669,3 +669,164 @@ func TestPRListText(t *testing.T) {
 		}
 	}
 }
+
+// otherTabsRig is the PR drawer rig with searches that answer o/r#7 (base main)
+// and acme/infra#88 on the Requested tab, and the rig's pane resolved to o/r.
+func otherTabsRig(t *testing.T) *prDrawer {
+	t.Helper()
+
+	r := newPRDrawer(t)
+	r.openLink = (&fakeOpen{}).open
+	r.actions = &fakeActions{}
+	r.reads = &fakeReads{fail: map[string]error{}, mine: map[string]github.MyPRs{
+		"github.com": {Requested: []github.SearchPR{
+			searched("github.com/o/r", 7, "Add x", "kari-dev", time.Hour, func(p *github.PR) {
+				p.BaseBranch, p.HeadBranch = "main", "feat/x"
+			}),
+			searched("github.com/acme/infra", 88, "Bump", "kari-dev", 2*time.Hour),
+		}},
+		"ghe.example.com": {Requested: []github.SearchPR{
+			searched("ghe.example.com/acme/infra", 4, "Svc", "li", time.Hour),
+		}},
+	}}
+
+	watching(r.App, "github.com/o/r", "ghe.example.com/acme/infra")
+
+	focus := r.store.State().Tab().Focus
+	r.prs.panes[focus] = &prPane{key: prKey{cwd: r.dir, branch: "main"}, repo: prRepo, ok: true}
+
+	r.leader('g')
+	r.typed("l")
+	r.typed("2")
+	r.until(t, "both hosts' answers", func() bool {
+		return len(r.prListRowsOf(r.store.State(), prTabRequested)) == 3
+	})
+
+	return r
+}
+
+func (p *prDrawer) selectRow(t *testing.T, repo string) {
+	t.Helper()
+
+	rows := p.prListRowsOf(p.store.State(), p.prList.tab)
+	for i := range rows {
+		if rows[i].key.repo == repo {
+			p.prList.sel[p.prList.tab] = rows[i].key
+
+			return
+		}
+	}
+
+	t.Fatalf("no row of %s", repo)
+}
+
+func TestPRListNoCheckout(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name, repo, want string
+	}{
+		{"github", "github.com/acme/infra", "no checkout of acme/infra here; O opens it in the browser"},
+		{"enterprise", "ghe.example.com/acme/infra", "no checkout of ghe.example.com/acme/infra here; O opens it in the browser"},
+	} {
+		for _, k := range []rune{'\r', 'a', 'M'} {
+			t.Run(fmt.Sprintf("%s %q", tc.name, k), func(t *testing.T) {
+				t.Parallel()
+
+				r := otherTabsRig(t)
+
+				r.selectRow(t, tc.repo)
+
+				if k == '\r' {
+					r.keys(keyEnter)
+				} else {
+					r.keys(keyRune(k))
+				}
+
+				if r.notice != tc.want {
+					t.Errorf("notice = %q, want %q", r.notice, tc.want)
+				}
+
+				if r.prList == nil {
+					t.Error("the list closed")
+				}
+
+				if r.review() != nil {
+					t.Error("a drawer opened")
+				}
+			})
+		}
+	}
+}
+
+func TestPRListCheckout(t *testing.T) {
+	t.Parallel()
+
+	t.Run("enter", func(t *testing.T) {
+		t.Parallel()
+
+		r := otherTabsRig(t)
+		focus := r.store.State().Tab().Focus
+
+		r.selectRow(t, "github.com/o/r")
+		r.keys(keyEnter)
+
+		if r.prList != nil {
+			t.Error("enter left the list open")
+		}
+
+		r.until(t, "PR mode on #7", r.inPRMode(7))
+
+		rv := r.review()
+		if rv.Pane != focus || rv.PR.Root != r.dir {
+			t.Errorf("review = %+v, want the drawer on %s with root %q", rv, focus, r.dir)
+		}
+
+		if v := r.reviewViewOf(r.store.State().Tab().ID); v.prBase != "main" {
+			t.Errorf("base = %q, want main from the row", v.prBase)
+		}
+	})
+
+	t.Run("a opens the approve confirm on the loaded head", func(t *testing.T) {
+		t.Parallel()
+
+		r := otherTabsRig(t)
+		r.selectRow(t, "github.com/o/r")
+		r.keys(keyRune('a'))
+
+		r.until(t, "the approve confirm", func() bool { return r.confirm != nil && r.confirm.approve != nil })
+
+		if r.confirm.approve.number != 7 || r.confirm.approve.sha != r.prHead {
+			t.Errorf("approve target = %+v, want #7 at %s", *r.confirm.approve, r.prHead)
+		}
+	})
+}
+
+func TestPRCheckoutPrefersFocused(t *testing.T) {
+	t.Parallel()
+
+	a := listApp(t, true, 120, 40, nil)
+	st := a.store.State()
+	focus := st.Tab().Focus
+
+	other := core.PaneID("p9")
+	outside := core.PaneID("p10")
+	a.prs.panes = map[core.PaneID]*prPane{
+		focus:   {key: prKey{cwd: "/w/focused"}, repo: prRepo, ok: true},
+		other:   {key: prKey{cwd: "/w/other"}, repo: prRepo, ok: true},
+		outside: {key: prKey{cwd: "/w/elsewhere"}, repo: github.Repo{Host: "github.com", Owner: "x", Name: "y"}, ok: true},
+	}
+
+	if dir, ok := a.prCheckout(prRepo.String()); !ok || dir != "/w/focused" {
+		t.Errorf("checkout = %q, %v; want the focused pane's", dir, ok)
+	}
+
+	// Focus a pane outside the repository: the lowest id of the others wins.
+	a.prs.panes[focus].repo = github.Repo{Host: "github.com", Owner: "z", Name: "z"}
+	a.prs.panes[other].key.cwd = "/w/p9"
+	a.prs.panes[core.PaneID("p2")] = &prPane{key: prKey{cwd: "/w/p2"}, repo: prRepo, ok: true}
+
+	if dir, ok := a.prCheckout(prRepo.String()); !ok || dir != "/w/p2" {
+		t.Errorf("checkout = %q, %v; want the lowest id's (/w/p2, not p9 or p10)", dir, ok)
+	}
+}

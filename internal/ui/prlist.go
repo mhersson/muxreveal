@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"slices"
 	"strings"
 
@@ -12,6 +13,10 @@ import (
 // noticePRListNone is what the list says when no agent's branch has an open
 // pull request.
 const noticePRListNone = "no open pull requests on agent branches"
+
+// noticePRNoCheckout is what a row of the other tabs says when no pane is in
+// its repository; it takes prRepoName of the repository.
+const noticePRNoCheckout = "no checkout of %s here; O opens it in the browser"
 
 // prListKey identifies a pull request in the list: its repository keyed
 // "host/owner/name" and its number.
@@ -224,10 +229,59 @@ func (a *App) prListRefresh(rows []prListRow) {
 	}
 }
 
-// prListOpen switches to the row's agent, as the rail's jump does, and shows
-// the pull request in that tab's drawer, then runs then once its diff has loaded.
+// prCheckout is the directory a pull request of repo is read from when no agent
+// has its branch: a pane resolved to the repository, the active tab's focused
+// pane when it is one, else the lowest pane id.
+func (a *App) prCheckout(repo string) (dir string, ok bool) {
+	focus := a.store.State().Tab().Focus
+
+	var (
+		best  core.PaneID
+		found bool
+	)
+
+	for id, pp := range a.prs.panes {
+		if !pp.ok || pp.repo.String() != repo || pp.key.cwd == "" {
+			continue
+		}
+
+		if id == focus {
+			return pp.key.cwd, true
+		}
+
+		if !found || paneIDLess(id, best) {
+			best, found = id, true
+		}
+	}
+
+	if !found {
+		return "", false
+	}
+
+	return a.prs.panes[best].key.cwd, true
+}
+
+// paneIDLess orders pane ids "p2" before "p10".
+func paneIDLess(x, y core.PaneID) bool {
+	if len(x) != len(y) {
+		return len(x) < len(y)
+	}
+
+	return x < y
+}
+
+// prListOpen shows the row's pull request and runs then once its diff has
+// loaded. A row with an agent switches to the agent's tab, as the rail's jump
+// does; any other opens the active tab's drawer on the focused pane, through a
+// checkout of the repository, or says there is none.
 func (a *App) prListOpen(row prListRow, then prThen) tea.Cmd {
 	st := a.store.State()
+
+	if row.pane == "" {
+		return a.prListOpenCheckout(st, row, then)
+	}
+
+	a.prList = nil
 
 	ti, ok := st.TabOf(row.pane)
 	if !ok {
@@ -243,8 +297,23 @@ func (a *App) prListOpen(row prListRow, then prThen) tea.Cmd {
 	cmds = append(cmds, a.focusPane(row.pane))
 	a.railRelease()
 
-	want := &prWant{repo: row.key.repo, number: row.key.number, root: row.root}
+	want := &prWant{repo: row.key.repo, number: row.key.number, root: row.root, base: row.pr.BaseBranch}
 	cmds = append(cmds, a.openWithPR(row.pane, want, then))
 
 	return tea.Batch(cmds...)
+}
+
+func (a *App) prListOpenCheckout(st core.State, row prListRow, then prThen) tea.Cmd {
+	dir, ok := a.prCheckout(row.key.repo)
+	if !ok || st.Tab().Focus == "" {
+		a.notice = fmt.Sprintf(noticePRNoCheckout, prRepoName(row.key.repo))
+
+		return nil
+	}
+
+	a.prList = nil
+
+	want := &prWant{repo: row.key.repo, number: row.key.number, root: dir, base: row.pr.BaseBranch}
+
+	return a.openWithPR(st.Tab().Focus, want, then)
 }

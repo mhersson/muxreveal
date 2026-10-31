@@ -190,12 +190,6 @@ func prListCommands() []command {
 			return nil
 		}),
 		cmd("prlist.show", "show the diff", true, func(a *App, rows []prListRow, i int) tea.Cmd {
-			if rows[i].pane == "" {
-				return nil
-			}
-
-			a.prList = nil
-
 			return a.prListOpen(rows[i], thenNothing)
 		}),
 		// The checks stack over the list, which stays under them.
@@ -215,12 +209,6 @@ func prListCommands() []command {
 				return nil
 			}
 
-			if rows[i].pane == "" {
-				return nil
-			}
-
-			a.prList = nil
-
 			return a.prListOpen(rows[i], thenApprove)
 		}),
 		cmd("prlist.merge", "merge", true, func(a *App, rows []prListRow, i int) tea.Cmd {
@@ -229,12 +217,6 @@ func prListCommands() []command {
 
 				return nil
 			}
-
-			if rows[i].pane == "" {
-				return nil
-			}
-
-			a.prList = nil
 
 			return a.prListOpen(rows[i], thenMerge)
 		}),
