@@ -96,6 +96,7 @@ func TestCopyLines(t *testing.T) {
 			name: "image line", src: "![alt](https://example.com/a.png)", width: 40,
 			want: "![alt](https://example.com/a.png)",
 		},
+		{name: "relative image line", src: "![alt](docs/a.png)", width: 40, base: "/w", want: "![alt](docs/a.png)"},
 		{name: "fold", src: "<details>\n<summary>More</summary>\n\nhidden\n\n</details>", width: 30, want: "More"},
 		{
 			name: "block", src: wrapSrc, width: 12, block: true, want: "one\nthr",
