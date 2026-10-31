@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -23,11 +24,9 @@ import (
 const (
 	pictureWorkers     = 4
 	pictureMemBytes    = 64 << 20
-	pictureLocalTime   = 10 * time.Second
 	pictureFetchTime   = 20 * time.Second
 	pictureCacheMaxAge = 30 * 24 * time.Hour
 	pictureCacheDir    = 0o700
-	pictureCacheFile   = 0o600
 )
 
 var errPictureTooBig = errors.New("image over the size limit")
@@ -47,10 +46,12 @@ type pictureLoader struct {
 	log      *slog.Logger
 	now      func() time.Time
 
-	out  chan pictureDoneMsg
-	done chan struct{}
-	wg   sync.WaitGroup
-	stop func() bool // deregisters the context hook
+	out     chan pictureDoneMsg
+	done    chan struct{}
+	wg      sync.WaitGroup
+	stop    func() bool // cancels the AfterFunc registered on the parent context
+	spawn   func()      // starts the workers; add calls it once, under mu
+	started bool
 
 	mu      sync.Mutex
 	cond    *sync.Cond
@@ -59,13 +60,20 @@ type pictureLoader struct {
 	pending map[pictureJob]struct{} // queued or running
 
 	memMu sync.Mutex
-	mem   map[pictureKey]*list.Element
+	mem   map[memKey]*list.Element
 	order *list.List // front is the most recent
 	used  int
 }
 
+// memKey adds a local file's size and mtime to its key, so a rewritten file
+// misses; remote keys leave the stamp zero.
+type memKey struct {
+	key       pictureKey
+	size, mod int64
+}
+
 type memPicture struct {
-	key  pictureKey
+	key  memKey
 	data []byte
 }
 
@@ -81,14 +89,16 @@ func newPictureLoader(ctx context.Context, f pictureFetcher, cacheDir string, lo
 		cancel: cancel, fetch: f, cacheDir: cacheDir, log: log, now: time.Now,
 		out: make(chan pictureDoneMsg, 256), done: make(chan struct{}),
 		pending: map[pictureJob]struct{}{},
-		mem:     map[pictureKey]*list.Element{}, order: list.New(),
+		mem:     map[memKey]*list.Element{}, order: list.New(),
 	}
 	l.cond = sync.NewCond(&l.mu)
 
-	for i := range pictureWorkers {
-		l.wg.Add(1)
+	l.spawn = func() {
+		for i := range pictureWorkers {
+			l.wg.Add(1)
 
-		go l.work(ctx, i == 0)
+			go l.work(ctx, i == 0)
+		}
 	}
 
 	l.stop = context.AfterFunc(ctx, l.shutdown)
@@ -107,6 +117,11 @@ func (l *pictureLoader) add(j pictureJob) {
 
 	if _, ok := l.pending[j]; ok {
 		return
+	}
+
+	if !l.started {
+		l.started = true
+		l.spawn()
 	}
 
 	l.pending[j] = struct{}{}
@@ -153,7 +168,7 @@ func (l *pictureLoader) work(ctx context.Context, sweeper bool) {
 	defer l.wg.Done()
 
 	if sweeper {
-		l.sweep(ctx)
+		l.sweep()
 	}
 
 	for {
@@ -216,54 +231,41 @@ func (l *pictureLoader) run(ctx context.Context, j pictureJob) pictureDoneMsg {
 
 // bytes returns the source's bytes from memory, else the file or the network.
 func (l *pictureLoader) bytes(ctx context.Context, j pictureJob) ([]byte, error) {
-	if data, ok := l.memGet(j.key); ok {
+	if !strings.Contains(j.key.src, "://") {
+		return l.readLocal(j)
+	}
+
+	mk := memKey{key: j.key}
+	if data, ok := l.memGet(mk); ok {
 		return data, nil
 	}
 
-	var (
-		data []byte
-		err  error
-	)
-
-	if !strings.Contains(j.key.src, "://") {
-		data, err = l.readLocal(ctx, j.root, j.key.src)
-	} else {
-		data, err = l.readRemote(ctx, j)
-	}
-
+	data, err := l.readRemote(ctx, j)
 	if err != nil {
 		return nil, err
 	}
 
-	l.memPut(j.key, data)
+	l.memPut(mk, data)
 
 	return data, nil
 }
 
-func (l *pictureLoader) readLocal(ctx context.Context, root, src string) ([]byte, error) {
-	ctx, cancel := context.WithTimeout(ctx, pictureLocalTime)
-	defer cancel()
-
-	rel, err := filepath.Rel(root, src)
+// readLocal reads a regular file inside the root. It stats before it opens, so
+// a FIFO or device never blocks a worker, and opens non-blocking as a second guard.
+func (l *pictureLoader) readLocal(j pictureJob) ([]byte, error) {
+	rel, err := filepath.Rel(j.root, j.key.src)
 	if err != nil {
 		return nil, fmt.Errorf("picture path: %w", err)
 	}
 
-	r, err := os.OpenRoot(root)
+	r, err := os.OpenRoot(j.root)
 	if err != nil {
 		return nil, fmt.Errorf("open picture root: %w", err)
 	}
 
 	defer func() { _ = r.Close() }()
 
-	f, err := r.Open(rel)
-	if err != nil {
-		return nil, fmt.Errorf("open picture: %w", err)
-	}
-
-	defer func() { _ = f.Close() }()
-
-	fi, err := f.Stat()
+	fi, err := r.Stat(rel)
 	if err != nil {
 		return nil, fmt.Errorf("stat picture: %w", err)
 	}
@@ -271,6 +273,18 @@ func (l *pictureLoader) readLocal(ctx context.Context, root, src string) ([]byte
 	if !fi.Mode().IsRegular() {
 		return nil, errors.New("picture is not a regular file")
 	}
+
+	mk := memKey{key: j.key, size: fi.Size(), mod: fi.ModTime().UnixNano()}
+	if data, ok := l.memGet(mk); ok {
+		return data, nil
+	}
+
+	f, err := r.OpenFile(rel, os.O_RDONLY|syscall.O_NONBLOCK, 0)
+	if err != nil {
+		return nil, fmt.Errorf("open picture: %w", err)
+	}
+
+	defer func() { _ = f.Close() }()
 
 	data, err := io.ReadAll(io.LimitReader(f, pictureMaxBytes+1))
 	if err != nil {
@@ -281,9 +295,7 @@ func (l *pictureLoader) readLocal(ctx context.Context, root, src string) ([]byte
 		return nil, errPictureTooBig
 	}
 
-	if err := ctx.Err(); err != nil {
-		return nil, fmt.Errorf("read picture: %w", err)
-	}
+	l.memPut(mk, data)
 
 	return data, nil
 }
@@ -310,6 +322,10 @@ func (l *pictureLoader) readRemote(ctx context.Context, j pictureJob) ([]byte, e
 		return nil, errPictureTooBig
 	}
 
+	if _, _, err := kitty.Size(data); err != nil {
+		return nil, fmt.Errorf("fetched picture: %w", err)
+	}
+
 	l.cachePut(path, data)
 
 	return data, nil
@@ -330,8 +346,13 @@ func (l *pictureLoader) cacheGet(path string) ([]byte, bool) {
 		return nil, false
 	}
 
+	fi, err := os.Stat(path)
+	if err != nil || !fi.Mode().IsRegular() || fi.Size() > pictureMaxBytes {
+		return nil, false
+	}
+
 	data, err := os.ReadFile(path)
-	if err != nil || len(data) > pictureMaxBytes {
+	if err != nil {
 		return nil, false
 	}
 
@@ -363,18 +384,25 @@ func (l *pictureLoader) cachePut(path string, data []byte) {
 		return
 	}
 
-	_, werr := tmp.Write(data)
-	cerr := tmp.Close()
+	_, err = tmp.Write(data)
+	if cerr := tmp.Close(); err == nil {
+		err = cerr
+	}
 
-	if err := errors.Join(werr, cerr, os.Chmod(tmp.Name(), pictureCacheFile), os.Rename(tmp.Name(), path)); err != nil {
+	if err == nil {
+		err = os.Rename(tmp.Name(), path)
+	}
+
+	if err != nil {
 		l.log.Debug("picture cache write", "err", err)
 
 		_ = os.Remove(tmp.Name())
 	}
 }
 
-// sweep removes cache files untouched for 30 days.
-func (l *pictureLoader) sweep(ctx context.Context) {
+// sweep removes cache files untouched for 30 days. It runs to the end whatever
+// the context, so close leaves the cache swept.
+func (l *pictureLoader) sweep() {
 	if l.cacheDir == "" {
 		return
 	}
@@ -387,10 +415,6 @@ func (l *pictureLoader) sweep(ctx context.Context) {
 	cutoff := l.now().Add(-pictureCacheMaxAge)
 
 	for _, e := range entries {
-		if ctx.Err() != nil {
-			return
-		}
-
 		fi, err := e.Info()
 		if err != nil || !fi.Mode().IsRegular() || !fi.ModTime().Before(cutoff) {
 			continue
@@ -402,7 +426,7 @@ func (l *pictureLoader) sweep(ctx context.Context) {
 	}
 }
 
-func (l *pictureLoader) memGet(k pictureKey) ([]byte, bool) {
+func (l *pictureLoader) memGet(k memKey) ([]byte, bool) {
 	l.memMu.Lock()
 	defer l.memMu.Unlock()
 
@@ -416,7 +440,7 @@ func (l *pictureLoader) memGet(k pictureKey) ([]byte, bool) {
 	return el.Value.(*memPicture).data, true
 }
 
-func (l *pictureLoader) memPut(k pictureKey, data []byte) {
+func (l *pictureLoader) memPut(k memKey, data []byte) {
 	l.memMu.Lock()
 	defer l.memMu.Unlock()
 

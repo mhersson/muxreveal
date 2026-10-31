@@ -13,6 +13,7 @@ import (
 	"runtime"
 	"strings"
 	"sync/atomic"
+	"syscall"
 	"testing"
 	"time"
 
@@ -97,6 +98,11 @@ func TestLoaderLocal(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	fifo := filepath.Join(root, "pipe.png")
+	if err := syscall.Mkfifo(fifo, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
 	big := write(root, "big.png", append(testPNG(t, 4, 4), make([]byte, 6<<20)...))
 
 	tests := []struct {
@@ -110,6 +116,7 @@ func TestLoaderLocal(t *testing.T) {
 		{"folder", filepath.Join(root, "dir"), 0, 0, true},
 		{"missing", filepath.Join(root, "none.png"), 0, 0, true},
 		{"too big", big, 0, 0, true},
+		{"fifo", fifo, 0, 0, true},
 	}
 
 	for _, tc := range tests {
@@ -202,7 +209,7 @@ func TestLoaderRemoteCache(t *testing.T) {
 		t.Fatalf("cached answer = %+v", m)
 	}
 
-	l2.close() // waits for the sweep
+	l2.close() // worker 0 finishes its sweep before close returns
 
 	if f.calls.Load() != 1 {
 		t.Fatalf("fetches after a cache hit = %d, want 1", f.calls.Load())
@@ -218,6 +225,55 @@ func TestLoaderRemoteCache(t *testing.T) {
 
 	if _, err := os.Stat(file); err != nil {
 		t.Fatalf("fresh cache file swept: %v", err)
+	}
+}
+
+func TestLoaderRejectsNonImageRemote(t *testing.T) {
+	t.Parallel()
+
+	dir := filepath.Join(t.TempDir(), "images")
+	f := &countFetcher{data: []byte("<html>sign in</html>")}
+	job := pictureJob{key: pictureKey{src: "https://github.com/o/r/login.png"}}
+
+	for range 2 {
+		l := newPictureLoader(t.Context(), f, dir, nil)
+		l.add(job)
+
+		if m := recv(t, l); m.err == nil {
+			t.Fatal("want an error for an HTML body")
+		}
+
+		l.close()
+	}
+
+	if f.calls.Load() != 2 {
+		t.Fatalf("fetches = %d, want 2 (a bad body is not cached)", f.calls.Load())
+	}
+
+	if entries, _ := os.ReadDir(dir); len(entries) != 0 {
+		t.Fatalf("cache holds %d files, want none", len(entries))
+	}
+}
+
+func TestLoaderLocalRewrite(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	src := filepath.Join(root, "shot.png")
+
+	l := newPictureLoader(t.Context(), nil, "", nil)
+	t.Cleanup(l.close)
+
+	for _, w := range []int{10, 30} {
+		if err := os.WriteFile(src, testPNG(t, w, 5), 0o600); err != nil {
+			t.Fatal(err)
+		}
+
+		l.add(localJob(root, src))
+
+		if m := recv(t, l); m.err != nil || m.w != w {
+			t.Fatalf("answer = %+v, want width %d", m, w)
+		}
 	}
 }
 
@@ -373,10 +429,17 @@ func TestLoaderClose(t *testing.T) {
 	before := runtime.NumGoroutine()
 
 	l := newPictureLoader(context.Background(), &countFetcher{data: testPNG(t, 4, 4)}, "", nil)
+	l.add(pictureJob{key: pictureKey{src: "https://github.com/o/r/y.png"}})
+	recv(t, l)
 	l.close()
 
-	if got := runtime.NumGoroutine(); got != before {
-		t.Fatalf("goroutines = %d, want %d", got, before)
+	deadline := time.Now().Add(10 * time.Second)
+	for runtime.NumGoroutine() > before && time.Now().Before(deadline) {
+		runtime.Gosched()
+	}
+
+	if got := runtime.NumGoroutine(); got > before {
+		t.Fatalf("goroutines = %d, want at most %d", got, before)
 	}
 
 	l.add(pictureJob{key: pictureKey{src: "https://github.com/o/r/x.png"}})
