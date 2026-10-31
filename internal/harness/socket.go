@@ -40,6 +40,11 @@ type Server struct {
 	// when the server reads it; 0 sets no Deadline. Set before Serve.
 	Budget time.Duration
 
+	// now and after are the clock of the hold, the budget and a full
+	// channel's wait; Listen sets the real one.
+	now   func() time.Time
+	after func(time.Duration) <-chan time.Time
+
 	ln   net.Listener
 	path string
 
@@ -75,7 +80,10 @@ func Listen(path string) (*Server, error) {
 		return nil, fmt.Errorf("harness: chmod socket: %w", err)
 	}
 
-	return &Server{ln: ln, path: path, quit: make(chan struct{}), conns: make(map[net.Conn]struct{})}, nil
+	return &Server{
+		now: time.Now, after: time.After,
+		ln: ln, path: path, quit: make(chan struct{}), conns: make(map[net.Conn]struct{}),
+	}, nil
 }
 
 // Serve accepts connections until ctx ends or Close is called, then waits for
@@ -173,16 +181,13 @@ func (s *Server) handle(ctx context.Context, conn net.Conn, out chan<- Event) {
 		ev.Done = sync.OnceFunc(func() { close(held) })
 
 		if s.Budget > 0 {
-			ev.Deadline = time.Now().Add(s.Budget)
+			ev.Deadline = s.now().Add(s.Budget)
 		}
 	}
 
-	timer := time.NewTimer(sendTimeout)
-	defer timer.Stop()
-
 	select {
 	case out <- ev:
-	case <-timer.C:
+	case <-s.after(sendTimeout):
 		s.drop("event channel full", nil)
 
 		return
@@ -203,12 +208,9 @@ func (s *Server) handle(ctx context.Context, conn net.Conn, out chan<- Event) {
 // hold waits for done, the hold time, shutdown or ctx; it reports whether the
 // connection should still be answered.
 func (s *Server) hold(ctx context.Context, done <-chan struct{}) bool {
-	timer := time.NewTimer(s.Hold)
-	defer timer.Stop()
-
 	select {
 	case <-done:
-	case <-timer.C:
+	case <-s.after(s.Hold):
 	case <-s.quit:
 		return false
 	case <-ctx.Done():

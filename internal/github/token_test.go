@@ -106,29 +106,39 @@ func TestTokenGhEmptyOutput(t *testing.T) {
 	}
 }
 
+// A gh left to run out exits cleanly with no token, so only a cancelled one
+// fails with the context's error.
 func TestTokenGhHangs(t *testing.T) {
-	gh, _ := fakeGH(t, "exec sleep 30\n")
+	gh, args := fakeGH(t, "exec sleep 30\n")
 	o := TokenOptions{GH: gh, FromEnvOrConfig: func(string) string { return "" }}
 
-	ctx, cancel := contextWithTimeout(t, 300*time.Millisecond)
-	defer cancel()
-
-	start := time.Now()
-
-	_, err := Token(ctx, "h", o)
-	if !errors.Is(err, ErrNoToken) {
-		t.Fatalf("err = %v, want ErrNoToken", err)
-	}
-
-	if d := time.Since(start); d > 3*time.Second {
-		t.Fatalf("Token took %v after the deadline", d)
+	_, err := Token(cancelWhenWritten(t, args), "h", o)
+	if !errors.Is(err, ErrNoToken) || !errors.Is(err, context.Canceled) {
+		t.Fatalf("err = %v, want ErrNoToken from the cancel", err)
 	}
 }
 
-func contextWithTimeout(t *testing.T, d time.Duration) (context.Context, context.CancelFunc) {
+// cancelWhenWritten returns a context that is cancelled once path exists, so a
+// test cancels a call at a known point rather than after a guessed delay.
+func cancelWhenWritten(t *testing.T, path string) context.Context {
 	t.Helper()
 
-	return context.WithTimeout(t.Context(), d)
+	ctx, cancel := context.WithCancel(t.Context())
+	t.Cleanup(cancel)
+
+	go func() {
+		for ctx.Err() == nil {
+			if _, err := os.Stat(path); err == nil {
+				cancel()
+
+				return
+			}
+
+			time.Sleep(time.Millisecond)
+		}
+	}()
+
+	return ctx
 }
 
 func TestTokenEmptyHostDoesNotRunGh(t *testing.T) {

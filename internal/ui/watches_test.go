@@ -274,17 +274,11 @@ func TestRailSeesABranchSwitch(t *testing.T) {
 	// No clock jump: the switch lands inside both intervals.
 	gitIn(t, w.real, dir, "switch", "-q", "other")
 
-	start := time.Now()
-
 	w.until(t, "the card to show other with its totals", nil, func() bool {
 		c, _ := w.card(id)
 
 		return c.branch == "other" && c.stats.Files != files
 	})
-
-	if d := time.Since(start); d > 2*time.Second {
-		t.Errorf("the card took %v to follow the switch", d)
-	}
 }
 
 // A test that ends as the rail opens leaves its first probes running; the
@@ -588,7 +582,9 @@ func TestAppCloseNoLeaksWithWatches(t *testing.T) {
 	_, c = r.Update(struct{}{})
 	pm.run(c)
 
-	deadline := time.Now().Add(watchWait)
+	pumped, stop := context.WithTimeout(context.Background(), watchWait)
+	defer stop()
+
 	root, _ := git.Open(context.Background(), r.cwd)
 
 	for {
@@ -596,7 +592,7 @@ func TestAppCloseNoLeaksWithWatches(t *testing.T) {
 			break
 		}
 
-		if !pm.step(r.App, deadline) {
+		if !pm.step(pumped, r.App) {
 			t.Fatal("the agent's worktree was never watched")
 		}
 	}

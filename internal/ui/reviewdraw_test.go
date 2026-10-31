@@ -419,10 +419,8 @@ func rowWidthApp(t *testing.T, icons bool, vr rowWidthVariant, long longLines) *
 }
 
 // resizeDrawer is one step of the drawer: the update and both frames.
-func resizeDrawer(t *testing.T, a *App, w int) (r core.Rect, lines []string, frame string, took time.Duration) {
+func resizeDrawer(t *testing.T, a *App, w int) (r core.Rect, lines []string, frame string) {
 	t.Helper()
-
-	start := time.Now()
 
 	sized(t, a, w, 30)
 	settleDrawer(t, a)
@@ -437,7 +435,7 @@ func resizeDrawer(t *testing.T, a *App, w int) (r core.Rect, lines []string, fra
 	lines = a.drawerLines(st, r)
 	frame = a.View().Content
 
-	return r, lines, frame, time.Since(start)
+	return r, lines, frame
 }
 
 func TestDrawerRowsAreExactWidth(t *testing.T) {
@@ -452,7 +450,7 @@ func TestDrawerRowsAreExactWidth(t *testing.T) {
 
 				for _, w := range rowWidths(icons) {
 					t.Run(fmt.Sprintf("width=%d", w), func(t *testing.T) {
-						r, lines, frame, _ := resizeDrawer(t, a, w)
+						r, lines, frame := resizeDrawer(t, a, w)
 
 						if len(lines) != r.H {
 							t.Fatalf("%d lines, want %d", len(lines), r.H)

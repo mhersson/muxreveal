@@ -46,7 +46,7 @@ func newRailApp(t *testing.T, stats bool) *railApp {
 
 	bin := t.TempDir()
 	r := &railApp{real: realGit, log: filepath.Join(bin, "log"), slow: filepath.Join(bin, "slow")}
-	script := "#!/bin/sh\necho \"$PWD $*\" >> '" + r.log + "'\n[ -e '" + r.slow + "' ] && exec sleep 30\nexec '" + realGit + "' \"$@\"\n"
+	script := "#!/bin/sh\necho \"$PWD $*\" >> '" + r.log + "'\n[ -e '" + r.slow + "' ] && { : > '" + r.slow + ".started'; sleep 30; : > '" + r.slow + ".finished'; exit 1; }\nexec '" + realGit + "' \"$@\"\n"
 
 	if err := os.WriteFile(filepath.Join(bin, "git"), []byte(script), 0o755); err != nil {
 		t.Fatal(err)

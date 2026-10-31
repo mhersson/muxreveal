@@ -155,7 +155,7 @@ func TestRunHookDelivers(t *testing.T) {
 	}
 }
 
-func TestRunHookIsSilentAndQuick(t *testing.T) {
+func TestRunHookIsSilentAndHonoursItsBudget(t *testing.T) {
 	missing := filepath.Join(shortDir(t), "none.sock")
 
 	silent := silentSock(t)
@@ -167,30 +167,49 @@ func TestRunHookIsSilentAndQuick(t *testing.T) {
 		id    string
 		stdin string
 		env   map[string]string
+		// waitsOutBudget marks a payload that is delivered and never
+		// answered: only the budget ends it.
+		waitsOutBudget bool
 	}{
-		{"no socket", "claude-code", sessionStart, map[string]string{"MUXREVEAL_PANE": "p"}},
-		{"no pane", "claude-code", sessionStart, map[string]string{"MUXREVEAL_SOCK": missing}},
-		{"unknown harness", "nope", sessionStart, map[string]string{"MUXREVEAL_SOCK": missing, "MUXREVEAL_PANE": "p"}},
-		{"invalid json", "claude-code", "{not json", map[string]string{"MUXREVEAL_SOCK": missing, "MUXREVEAL_PANE": "p"}},
-		{"truncated", "claude-code", sessionStart[:30], map[string]string{"MUXREVEAL_SOCK": missing, "MUXREVEAL_PANE": "p"}},
-		{"10 MB payload", "claude-code", big, map[string]string{"MUXREVEAL_SOCK": silent, "MUXREVEAL_PANE": "p"}},
-		{"missing socket", "claude-code", sessionStart, map[string]string{"MUXREVEAL_SOCK": missing, "MUXREVEAL_PANE": "p"}},
-		{"never answers", "claude-code", sessionStart, map[string]string{"MUXREVEAL_SOCK": silent, "MUXREVEAL_PANE": "p"}},
+		{"no socket", "claude-code", sessionStart, map[string]string{"MUXREVEAL_PANE": "p"}, false},
+		{"no pane", "claude-code", sessionStart, map[string]string{"MUXREVEAL_SOCK": missing}, false},
+		{"unknown harness", "nope", sessionStart, map[string]string{"MUXREVEAL_SOCK": missing, "MUXREVEAL_PANE": "p"}, false},
+		{"invalid json", "claude-code", "{not json", map[string]string{"MUXREVEAL_SOCK": missing, "MUXREVEAL_PANE": "p"}, false},
+		{"truncated", "claude-code", sessionStart[:30], map[string]string{"MUXREVEAL_SOCK": missing, "MUXREVEAL_PANE": "p"}, false},
+		{"10 MB payload", "claude-code", big, map[string]string{"MUXREVEAL_SOCK": silent, "MUXREVEAL_PANE": "p"}, true},
+		{"missing socket", "claude-code", sessionStart, map[string]string{"MUXREVEAL_SOCK": missing, "MUXREVEAL_PANE": "p"}, false},
+		{"never answers", "claude-code", sessionStart, map[string]string{"MUXREVEAL_SOCK": silent, "MUXREVEAL_PANE": "p"}, true},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			start := time.Now()
+			// Only the budget case gets a context that can expire; the rest
+			// must return on their own with theirs still live.
+			var (
+				ctx    context.Context
+				cancel context.CancelFunc
+			)
+
+			if tt.waitsOutBudget {
+				ctx, cancel = context.WithTimeout(context.Background(), injectedBudget)
+			} else {
+				ctx, cancel = context.WithCancel(context.Background())
+			}
+
+			defer cancel()
 
 			captureStdio(t, func() {
-				ctx, cancel := context.WithTimeout(context.Background(), hookBudget)
-				defer cancel()
-
-				runHook(ctx, tt.id, strings.NewReader(tt.stdin), env(tt.env))
+				returns(t, "runHook", func() {
+					runHook(ctx, tt.id, strings.NewReader(tt.stdin), env(tt.env))
+				})
 			})
 
-			if d := time.Since(start); d > 2500*time.Millisecond {
-				t.Fatalf("runHook took %v, want within 2.5s", d)
+			if tt.waitsOutBudget {
+				// Send ends on the connection deadline, which can precede the
+				// context's own timer, so wait for the context itself.
+				awaitDone(ctx, t)
+			} else if ctx.Err() != nil {
+				t.Fatal("runHook needed the budget to return, want it to return on its own")
 			}
 		})
 	}
@@ -200,16 +219,15 @@ func TestRunHookStdinNeverClosesStaysInBudget(t *testing.T) {
 	pr, pw := io.Pipe()
 	defer func() { _ = pw.Close() }()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), injectedBudget)
 	defer cancel()
 
-	start := time.Now()
+	returns(t, "runHook", func() {
+		runHook(ctx, "claude-code", pr, env(map[string]string{"MUXREVEAL_SOCK": "/x", "MUXREVEAL_PANE": "p"}))
+	})
 
-	runHook(ctx, "claude-code", pr, env(map[string]string{"MUXREVEAL_SOCK": "/x", "MUXREVEAL_PANE": "p"}))
-
-	if d := time.Since(start); d > time.Second {
-		t.Fatalf("runHook took %v, want about 200ms", d)
-	}
+	// Returning is only allowed once the budget ended; wait for its own timer.
+	awaitDone(ctx, t)
 
 	_ = pr.Close()
 }
@@ -271,18 +289,13 @@ func TestRunHookDrainsStdinWithoutEnvironment(t *testing.T) {
 		written <- err
 	}()
 
-	start := time.Now()
+	// A context that never expires: the drain must end on its own.
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
 	captureStdio(t, func() {
-		ctx, cancel := context.WithTimeout(context.Background(), hookBudget)
-		defer cancel()
-
-		runHook(ctx, "claude-code", pr, env(nil))
+		returns(t, "runHook", func() { runHook(ctx, "claude-code", pr, env(nil)) })
 	})
-
-	if d := time.Since(start); d > 2500*time.Millisecond {
-		t.Fatalf("runHook took %v, want within 2.5s", d)
-	}
 
 	select {
 	case err := <-written:

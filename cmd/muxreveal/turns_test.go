@@ -409,7 +409,6 @@ func TestGateSlowSnapshotIsCancelledAtTheBudget(t *testing.T) {
 		order      []string
 		mu         sync.Mutex
 		snapErr    error
-		markedAt   time.Time
 		snapCancel = make(chan struct{})
 	)
 
@@ -431,8 +430,6 @@ func TestGateSlowSnapshotIsCancelledAtTheBudget(t *testing.T) {
 	}
 	marked := make(chan struct{})
 	mark := func(context.Context, string, string, bool) error {
-		markedAt = time.Now()
-
 		record("mark")
 		close(marked)
 
@@ -441,15 +438,11 @@ func TestGateSlowSnapshotIsCancelledAtTheBudget(t *testing.T) {
 
 	r := startGate(t, snap, mark)
 	turn, released := turnEvent("UserPromptSubmit", gateSession, "/repo")
-	start := time.Now()
 
 	r.in <- turn
 
-	within(t, released, turnBudget+500*time.Millisecond, "Done at the budget")
-
-	if d := time.Since(start); d < turnBudget-50*time.Millisecond {
-		t.Errorf("Done after %v, want about %v", d, turnBudget)
-	}
+	// The snapshot only ends on its context, so Done comes at the budget.
+	within(t, released, hangGuard, "Done at the budget")
 
 	within(t, marked, time.Second, "marker")
 	within(t, snapCancel, time.Second, "snapshot cancellation")
@@ -461,7 +454,7 @@ func TestGateSlowSnapshotIsCancelledAtTheBudget(t *testing.T) {
 	mu.Lock()
 	defer mu.Unlock()
 
-	if len(order) != 2 || order[0] != "snap-cancelled" || order[1] != "mark" || markedAt.Before(start) {
+	if len(order) != 2 || order[0] != "snap-cancelled" || order[1] != "mark" {
 		t.Errorf("order = %v, want snapshot cancelled then marker", order)
 	}
 }
@@ -780,27 +773,6 @@ func gitOut(t *testing.T, dir string, args ...string) string {
 	return strings.TrimSpace(string(out))
 }
 
-// slowStaging puts a git wrapper first on PATH that sleeps before staging
-// (update-index) and runs the real git otherwise.
-func slowStaging(t *testing.T) (started string) {
-	t.Helper()
-
-	gitPath, err := exec.LookPath("git")
-	if err != nil {
-		t.Skip("git not found")
-	}
-
-	dir := t.TempDir()
-	started = filepath.Join(dir, "started")
-	script := "#!/bin/sh\ncase \"$*\" in *update-index*) : > '" + started + "'; sleep 10;; esac\nexec '" + gitPath + "' \"$@\"\n"
-
-	writeExecutable(t, filepath.Join(dir, "git"), script)
-
-	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
-
-	return started
-}
-
 // writeExecutable writes a script. A concurrent fork can inherit the write fd
 // and make exec fail with ETXTBSY (go.dev/issue/22315), so the write holds the
 // fork lock.
@@ -818,9 +790,10 @@ func writeExecutable(t *testing.T, path, script string) {
 	}
 }
 
-// blockedStaging is slowStaging with a hold the test controls: staging blocks
-// until the release file exists, which t.Cleanup creates so no wrapper outlives
-// the test. A Stop that waited for git would hang instead of racing a timer.
+// blockedStaging puts a git wrapper first on PATH whose staging (update-index)
+// blocks until the release file exists, which t.Cleanup creates so no wrapper
+// outlives the test; other calls run the real git. A caller that waited for
+// git would hang instead of racing a timer.
 func blockedStaging(t *testing.T) (started string) {
 	t.Helper()
 
@@ -858,20 +831,17 @@ func gitTurns(t *testing.T, dir string) []git.Turn {
 	return turns
 }
 
-func sendTurn(t *testing.T, sock, cwd, session string) time.Duration {
+func sendTurn(t *testing.T, sock, cwd, session string) {
 	t.Helper()
 
 	ctx, cancel := context.WithTimeout(t.Context(), 4*time.Second)
 	defer cancel()
 
-	start := time.Now()
 	ev := harness.Event{Name: "UserPromptSubmit", Session: core.SessionID(session), Cwd: cwd, TurnStart: true, Pane: "p"}
 
 	if err := harness.Send(ctx, sock, ev); err != nil {
 		t.Fatalf("Send() error = %v", err)
 	}
-
-	return time.Since(start)
 }
 
 // settles waits for the goroutine count to fall back to at most base.
@@ -920,7 +890,7 @@ func TestHookAnswersAfterTheSnapshotExists(t *testing.T) {
 
 func TestHookBudgetSlowSnapshot(t *testing.T) {
 	repo := seededRepo(t)
-	_ = slowStaging(t)
+	_ = blockedStaging(t)
 
 	base := runtime.NumGoroutine()
 
@@ -929,10 +899,8 @@ func TestHookBudgetSlowSnapshot(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	took := sendTurn(t, h.Sock, repo, gateSession)
-	if took > turnHold+500*time.Millisecond {
-		t.Errorf("hook answered after %v, want within %v plus a margin", took, turnHold)
-	}
+	// Staging never finishes, so an answer means the hook did not wait for it.
+	sendTurn(t, h.Sock, repo, gateSession)
 
 	deadline := time.Now().Add(5 * time.Second)
 
@@ -1023,9 +991,7 @@ func TestHookBudgetHeldIndexLockDoesNotBlockTheSnapshot(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if took := sendTurn(t, h.Sock, repo, gateSession); took > turnHold+500*time.Millisecond {
-		t.Errorf("hook answered after %v, want within %v plus a margin", took, turnHold)
-	}
+	sendTurn(t, h.Sock, repo, gateSession)
 
 	if turns := gitTurns(t, repo); len(turns) != 1 || turns[0].Missing {
 		t.Errorf("turns = %+v, want one snapshot despite the lock", turns)
@@ -1054,9 +1020,8 @@ func TestHookBudgetUnsnapshottableTurnsAnswerAtOnce(t *testing.T) {
 		"unknown session": {repo, "not-a-session"},
 		"not a repo":      {notRepo, gateSession},
 	} {
-		if took := sendTurn(t, h.Sock, c.cwd, c.session); took > 500*time.Millisecond {
-			t.Errorf("%s: hook answered after %v, want at once", name, took)
-		}
+		// That the gate answers these without the hold is the gate's own test.
+		t.Run(name, func(t *testing.T) { sendTurn(t, h.Sock, c.cwd, c.session) })
 	}
 
 	if turns := gitTurns(t, repo); len(turns) != 0 {

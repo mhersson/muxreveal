@@ -171,9 +171,8 @@ func hunkHolds(v *reviewView, path, text string) bool {
 	return false
 }
 
-// saveToPaneCeiling bounds the median save-to-pane time the test asserts, as
-// saveToDiffCeiling does for the engine. The 300 ms gate is read from the
-// logged median on a quiet machine.
+// saveToPaneCeiling bounds the median save-to-pane time the test asserts. The
+// 300 ms gate is read from the logged median on a quiet machine.
 const saveToPaneCeiling = time.Second
 
 // A file saved in a 2,000-file repository reaches the open drawer. The test
@@ -261,10 +260,12 @@ func TestBenchDrawerResizeWithLongLines(t *testing.T) {
 				var slow, base time.Duration
 
 				for _, w := range rowWidths(icons) {
-					_, _, _, baseTook := resizeDrawer(t, baseline, w)
-					_, _, _, took := resizeDrawer(t, a, w)
+					start := time.Now()
+					_, _, _ = resizeDrawer(t, baseline, w)
+					mid := time.Now()
+					_, _, _ = resizeDrawer(t, a, w)
 
-					base, slow = base+baseTook, slow+took
+					base, slow = base+mid.Sub(start), slow+time.Since(mid)
 				}
 
 				t.Logf("resizes: %v with 1 MiB lines, %v with 1 KiB lines", slow, base)

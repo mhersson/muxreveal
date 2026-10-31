@@ -1324,21 +1324,18 @@ func TestDiffCancelledDuringTheHunkPass(t *testing.T) {
 		writeFile(t, dir, "a.txt", "a\n")
 	})
 
-	// The wrapper hangs on the hunk pass until the engine gives up on it.
-	fakeGit(t, "case \"$*\" in *-U3*) exec sleep 30;; esac")
+	// The hunk pass hangs; it marks its end only if the cancel failed to kill it.
+	logPath := fakeGit(t, `case "$*" in *-U3*) : > "$LOG.hunks"; sleep 30; : > "$LOG.finished"; exit 1;; esac`)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-
-	start := time.Now()
+	ctx := cancelWhenWritten(t, logPath+".hunks")
 	_, err := testEngine(t).Diff(ctx, BranchSource{Worktree: dir, Base: "main"})
 
-	if !errors.Is(err, context.DeadlineExceeded) {
-		t.Errorf("err = %v, want context.DeadlineExceeded", err)
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("err = %v, want context.Canceled", err)
 	}
 
-	if d := time.Since(start); d > 10*time.Second {
-		t.Errorf("Diff took %v to give up", d)
+	if _, err := os.Stat(logPath + ".finished"); err == nil {
+		t.Error("Diff waited for the hunk pass to finish")
 	}
 }
 

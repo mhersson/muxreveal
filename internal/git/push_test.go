@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -363,22 +365,37 @@ func sshRemote(t *testing.T, f pushFixture, script string) {
 	gitOut(t, f.root, "config", "core.sshCommand", script)
 }
 
+// The remote hangs once it has recorded its pid; it marks its end only if the
+// cancel failed to kill it.
 func TestPushHungRemoteIsKilled(t *testing.T) {
 	f := newPushFixture(t)
-	sshRemote(t, f, writeScript(t, "sleep 30"))
+	mark := filepath.Join(t.TempDir(), "remote")
+	sshRemote(t, f, writeScript(t, fmt.Sprintf(`echo $$ > %[1]q.tmp && mv %[1]q.tmp %[1]q.pid
+sleep 30
+: > %[1]q.finished`, mark)))
 
-	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
-	defer cancel()
+	_, err := Push(cancelWhenWritten(t, mark+".pid"), f.repo, "feat")
 
-	start := time.Now()
-	_, err := Push(ctx, f.repo, "feat")
-
-	if !errors.Is(err, context.DeadlineExceeded) {
-		t.Fatalf("err = %v, want a deadline error", err)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("err = %v, want canceled", err)
 	}
 
-	if d := time.Since(start); d > 3*time.Second {
-		t.Errorf("took %v", d)
+	raw, err := os.ReadFile(mark + ".pid")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	pid, err := strconv.Atoi(strings.TrimSpace(string(raw)))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for alive(pid) {
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	if _, err := os.Stat(mark + ".finished"); err == nil {
+		t.Error("the hung remote ran to its end")
 	}
 }
 

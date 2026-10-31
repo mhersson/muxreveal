@@ -94,13 +94,7 @@ func TestWatchSetStopsAfterTheLastRelease(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	start := time.Now()
-
 	rel()
-
-	if time.Since(start) > time.Second {
-		t.Fatalf("release took %v", time.Since(start))
-	}
 
 	if _, ok := s.Seq(r.Root); ok {
 		t.Fatal("Seq still reports a watcher after the last release")

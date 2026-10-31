@@ -671,7 +671,7 @@ func runBench(cfg benchConfig) (benchResult, error) {
 			res.BytesFed += n
 		}
 
-		feedD := time.Since(t)
+		feedD := time.Since(t) // wall-clock: measured for the bench report, never asserted
 		total += feedD
 
 		t = time.Now()
@@ -720,7 +720,7 @@ func runBench(cfg benchConfig) (benchResult, error) {
 
 		if updates > 0 {
 			frame := app.View().Content
-			renderD := time.Since(t)
+			renderD := time.Since(t) // wall-clock: measured for the bench report, never asserted
 			total += renderD
 
 			if frame != last {
@@ -729,7 +729,7 @@ func runBench(cfg benchConfig) (benchResult, error) {
 
 				t = time.Now()
 				err := pr.present(frame)
-				presentD := time.Since(t)
+				presentD := time.Since(t) // wall-clock: measured for the bench report, never asserted
 				total += presentD
 
 				if err != nil {
