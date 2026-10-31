@@ -157,6 +157,39 @@ func planTop(lead, path, tag string, w int) (title, tagOut string) {
 	return ansi.Truncate(lead+planCutStart(path, max(room-fixed, 4))+" ", room, ""), ""
 }
 
+// planHead is what the top border holds before it is fitted: the lead, the
+// path to shorten and the tag. A shown page replaces the path and drops the
+// tag; a markdown file has no tag.
+func (a *App) planHead(v *planView) (lead, path, tag string) {
+	icon, name := iconPlan, v.agent
+	if f := v.file; f != nil {
+		icon, name, path = iconMarkdown, f.repo, f.path
+	}
+
+	lead = " " + name + " · "
+	if a.icons {
+		lead = " " + icon + " " + name + " · "
+	}
+
+	if v.file == nil {
+		tag = " " + planKindWord(v.plan.Kind)
+		if v.rewritten {
+			tag += " · " + planRewritten
+		} else if age := railAge(v.plan.At, a.clock.Now()); age != "" {
+			tag += " · " + age
+		}
+
+		tag += " "
+		path = v.plan.Path
+	}
+
+	if n := len(v.pages); n > 0 {
+		path, tag = v.pages[n-1].path, ""
+	}
+
+	return lead, path, tag
+}
+
 // planLines draws the box w x h: the title and tag in the top border, the view
 // centred in the inner width, the hints and the indicator. pics are the view's
 // picture rows in the box's cells, less any picture the link chooser overlaps.
@@ -176,24 +209,7 @@ func (a *App) planLines(lk look, w, h int) (out []string, pics []picRow) {
 		return border.Render("│") + pad(off) + content + pad(inner-off-cw) + border.Render("│")
 	}
 
-	lead := " " + v.agent + " · "
-	if a.icons {
-		lead = " " + iconPlan + " " + v.agent + " · "
-	}
-
-	tag := " " + planKindWord(v.plan.Kind)
-	if v.rewritten {
-		tag += " · " + planRewritten
-	} else if age := railAge(v.plan.At, a.clock.Now()); age != "" {
-		tag += " · " + age
-	}
-
-	tag += " "
-
-	path := v.plan.Path
-	if n := len(v.pages); n > 0 {
-		path, tag = v.pages[n-1].path, ""
-	}
+	lead, path, tag := a.planHead(v)
 
 	title, tag := planTop(lead, shortPath(path, v.root, a.getenv("HOME")), tag, w)
 	top := border.Render("╭─") + on(ui.Info).Bold(true).Render(title)

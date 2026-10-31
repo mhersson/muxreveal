@@ -32,7 +32,7 @@ func newSelPage(t *testing.T, opts ...func(*Options)) *selPage {
 
 	m := newPageRig(t, nil, opts...)
 	f := fakeClip(m.App)
-	p := m.openPage(t, "docs/a.md", false)
+	p := m.openPage(t, "docs/a.md")
 
 	m.drawerTake()
 	m.drawn(t)
@@ -1379,7 +1379,7 @@ func edgePage(t *testing.T) edgeCase {
 
 	m := newPageRig(t, map[string]string{"docs/long.md": numberedMD(300)})
 	fakeClip(m.App)
-	p := m.openPage(t, "docs/long.md", false)
+	p := m.openPage(t, "docs/long.md")
 	m.drawerTake()
 	m.drawn(t)
 
@@ -1671,8 +1671,8 @@ func TestDiffSelectionUnderPage(t *testing.T) {
 		t.Fatal("setup: no selection")
 	}
 
-	// The palette's md.open list opens a page without a drawer key.
-	m.flow(m.pickMarkdown(&mdPick{tab: m.tabID(), gen: v.epoch}, "README.md"), nil)
+	// A page opens over the diff without a drawer key.
+	m.flow(m.openMarkdownPage(m.tabID(), filepath.Join(m.root, "README.md")), nil)
 
 	if v.page() == nil {
 		t.Fatal("no page opened")

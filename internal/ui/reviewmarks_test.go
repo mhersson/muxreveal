@@ -450,7 +450,7 @@ func TestReviewMarksIgnored(t *testing.T) {
 		t.Parallel()
 
 		m := newPageRig(t, nil)
-		m.openPage(t, "README.md", false)
+		m.openPage(t, "README.md")
 
 		before := len(m.store.State().Marks)
 		m.press(keySpace)

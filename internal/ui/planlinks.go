@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"path/filepath"
 
@@ -14,6 +15,7 @@ import (
 // plan; path is absolute.
 type planPage struct {
 	path string
+	sum  [sha256.Size]byte // of the bytes the doc was parsed from
 	view mdView
 }
 
@@ -23,6 +25,7 @@ type planPageMsg struct {
 	view *planView
 	seq  int
 	path string
+	sum  [sha256.Size]byte
 	doc  *mdDoc
 	err  error
 }
@@ -121,6 +124,7 @@ func (a *App) planOpenPage(path string) tea.Cmd {
 			return msg
 		}
 
+		msg.sum = sha256.Sum256(src)
 		msg.doc = parseMarkdown(src, filepath.Dir(msg.path), tok)
 
 		return msg
@@ -144,17 +148,24 @@ func (a *App) onPlanPage(msg planPageMsg) {
 	}
 
 	msg.doc.withPictures(docPictures{reg: a.pictures, root: pv.root})
-	pv.pages = append(pv.pages, &planPage{path: msg.path, view: mdView{doc: msg.doc}})
+	pv.pages = append(pv.pages, &planPage{path: msg.path, sum: msg.sum, view: mdView{doc: msg.doc}})
 	pv.chooser = nil
 
 	a.sizePlan()
 }
 
-// planPop drops the shown page and any page read still on its way.
-func (a *App) planPop() {
+// planPop drops the shown page and any page read still on its way. In a file
+// overlay it also checks the doc it uncovers, which may have changed meanwhile.
+func (a *App) planPop() tea.Cmd {
 	pv := a.plan
 	pv.pages = pv.pages[:len(pv.pages)-1]
 	pv.pageSeq++
+
+	if pv.file == nil {
+		return nil
+	}
+
+	return a.mdCheck(pv)
 }
 
 // onPlanLinkEdit opens the editor on a file followed from the overlay, closing

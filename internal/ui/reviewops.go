@@ -106,7 +106,6 @@ func (a *App) openReview(pane core.PaneID, focus bool) tea.Cmd {
 // for another tab, or a pane that moved or went, is dropped.
 func (a *App) onReviewOpen(msg reviewOpenMsg) tea.Cmd {
 	st := a.store.State()
-	want := a.takeMDWant(msg.tab)
 
 	next := a.drawer.prNext
 	if next != nil && next.tab == msg.tab && next.pane == msg.pane {
@@ -154,11 +153,6 @@ func (a *App) onReviewOpen(msg reviewOpenMsg) tea.Cmd {
 
 	if msg.focus {
 		a.drawerTake()
-	}
-
-	if want != nil {
-		want.open = true
-		a.drawer.mdWant = want
 	}
 
 	if next != nil {

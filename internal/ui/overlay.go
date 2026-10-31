@@ -31,7 +31,7 @@ type overlay struct {
 	kind  overlayKind
 	items []palette.Item
 	pal   palette.Model
-	pick  *mdPick // the drawer an overlayMarkdown list was made for
+	pick  *mdPick // the worktree an overlayMarkdown list was made for
 }
 
 // look is the theme with its derived styles and highlighted sample. The app
