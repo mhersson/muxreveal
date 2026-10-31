@@ -2,6 +2,7 @@ package ui
 
 import (
 	"log/slog"
+	"maps"
 	"net/url"
 	"path/filepath"
 	"slices"
@@ -135,8 +136,9 @@ type pictures struct {
 	entries map[pictureKey]*pictureEntry
 	ids     map[uint32]sentRef
 	nextID  uint32
-	tick    uint64 // use counter for eviction order
-	frame   uint64 // tick at which the latest shown call began
+	tick    uint64              // use counter for eviction order
+	onTerm  map[uint32]struct{} // ids the terminal holds, apart from the entries so a failed source's stay
+	frame   uint64              // tick at which the latest shown call began
 	g       uint64
 }
 
@@ -149,6 +151,7 @@ func newPictures(jobs pictureJobs, getenv func(string) string, log *slog.Logger)
 	return &pictures{
 		jobs: jobs, getenv: getenv, log: log,
 		entries: map[pictureKey]*pictureEntry{}, ids: map[uint32]sentRef{},
+		onTerm: map[uint32]struct{}{},
 	}
 }
 
@@ -248,15 +251,9 @@ func (p *pictures) setCell(c kitty.Cell) tea.Cmd {
 // deletes returns the escapes that free every image the terminal holds, by id:
 // a delete-all never touches virtual placements.
 func (p *pictures) deletes() string {
-	var ids []uint32
+	ids := slices.Sorted(maps.Keys(p.onTerm))
 
-	for id, ref := range p.ids {
-		if p.entries[ref.key].sent[ref.size].ready {
-			ids = append(ids, id)
-		}
-	}
-
-	slices.Sort(ids)
+	clear(p.onTerm)
 
 	var b strings.Builder
 	for _, id := range ids {
@@ -330,7 +327,8 @@ func (p *pictures) allocID() uint32 {
 			p.nextID = 1
 		}
 
-		if _, taken := p.ids[p.nextID]; !taken {
+		_, taken := p.ids[p.nextID]
+		if _, held := p.onTerm[p.nextID]; !taken && !held {
 			return p.nextID
 		}
 	}
@@ -389,6 +387,7 @@ func (p *pictures) done(msg pictureDoneMsg) tea.Cmd {
 	}
 
 	s.ready, s.pending = true, false
+	p.onTerm[j.id] = struct{}{}
 
 	out := msg.seq
 	for _, id := range p.evict(s) {
@@ -459,6 +458,8 @@ func (p *pictures) evict(keep *sentPicture) []uint32 {
 		}
 
 		oldest.ready = false
+
+		delete(p.onTerm, oldest.id)
 
 		out = append(out, oldest.id)
 	}

@@ -772,20 +772,52 @@ func TestPictureSettles(t *testing.T) {
 	}
 }
 
-func TestPictureQuitAfterFailedSize(t *testing.T) {
-	t.Parallel()
+// failOtherSize renders /repo/a.png at one size and fails it at another, and
+// returns the rendered size's id.
+func failOtherSize(t *testing.T, p *pictures, jobs *recJobs) uint32 {
+	t.Helper()
 
-	p, jobs, _ := onPictures(t)
 	dp := docPictures{reg: p, root: "/repo"}
-	rendered(t, p, jobs, dp, "/repo/a.png")
+	id, _ := rendered(t, p, jobs, dp, "/repo/a.png")
 
 	p.shown([]uint32{p.size(dp, "/repo/a.png", 5).ID})
 
 	job := jobs.take()[0]
 	p.done(pictureDoneMsg{job: job, err: errors.New("x")})
 
-	if got := p.quit(func() tea.Msg { return "next" })(); got != "next" {
-		t.Errorf("quit with no image the registry holds gave %v, want next", got)
+	return id
+}
+
+func TestPictureQuitAfterFailedSize(t *testing.T) {
+	t.Parallel()
+
+	p, jobs, _ := onPictures(t)
+	id := failOtherSize(t, p, jobs)
+
+	v := reflect.ValueOf(p.quit(func() tea.Msg { return "next" })())
+	if v.Kind() != reflect.Slice || v.Len() != 2 {
+		t.Fatalf("quit gave %v, want the delete then next", v)
+	}
+
+	first, _ := v.Index(0).Interface().(tea.Cmd)
+	if got := rawOf(t, first); got != kitty.Delete(id) {
+		t.Errorf("first = %q, want the delete of image %d", got, id)
+	}
+}
+
+func TestPictureCellChangeAfterFailedSize(t *testing.T) {
+	t.Parallel()
+
+	p, jobs, _ := onPictures(t)
+	id := failOtherSize(t, p, jobs)
+
+	cmd, _ := p.reply(uv.CellSizeEvent{Width: 8, Height: 16})
+	if got := rawOf(t, cmd); got != kitty.Delete(id) {
+		t.Errorf("command = %q, want the delete of image %d", got, id)
+	}
+
+	if q := p.quit(func() tea.Msg { return "next" }); q().(string) != "next" {
+		t.Error("quit after the deletes did not give next")
 	}
 }
 
