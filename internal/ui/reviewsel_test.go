@@ -1603,3 +1603,46 @@ func TestDiffDragThroughReload(t *testing.T) {
 		})
 	}
 }
+
+func TestDiffSelectionUnderPage(t *testing.T) {
+	t.Parallel()
+
+	m := newPageRig(t, nil)
+	clip := fakeClip(m.App)
+	v := m.v
+
+	row := rowWith(t, v, "edited 3")
+	lay := m.layout(t)
+	c := markW + 2*lay.gw + diffview.SignWidth
+	x0, y0 := rowCell(t, m.drawerRig, row, c)
+	x1, y1 := rowCell(t, m.drawerRig, row, c+len("edited 3")-1)
+	dragRun(m.App, x0, y0, x1, y1, 0)
+
+	if m.text == nil {
+		t.Fatal("setup: no selection")
+	}
+
+	// The palette's md.open list opens a page without a drawer key.
+	m.flow(m.pickMarkdown(&mdPick{tab: m.tabID(), gen: v.epoch}, "README.md"), nil)
+
+	if v.page() == nil {
+		t.Fatal("no page opened")
+	}
+
+	if m.text != nil || v.sel != nil {
+		t.Error("the diff selection outlived the page opened over it")
+	}
+
+	m.drawerTake()
+	run(m.App, press(m.App, keyRune('y')))
+
+	if got := clipboardWrites(clip); len(got) != 1 || got[0] == "edited 3" {
+		t.Errorf("y wrote %q, want the page's cursor unit", got)
+	}
+
+	run(m.App, press(m.App, keyLeader, keyRune('y')))
+
+	if got := clipboardWrites(clip); slices.Contains(got, "edited 3") {
+		t.Errorf("leader y copied the hidden diff text %q", got)
+	}
+}
