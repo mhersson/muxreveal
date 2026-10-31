@@ -301,16 +301,37 @@ func (a *App) logLines(lk look, w, h int) []string {
 
 	if hints {
 		kt := a.keys.checks
-		out = append(out, row(popupHints(st, hintPairs([][2]string{
-			{kt.hint("checks.next", "checks.prev"), "line"},
-			{kt.hint("checks.error.next", "checks.error.prev"), "error"},
-			{kt.hint("checks.fold"), "group"},
-			{kt.hint("checks.browser"), "browser"},
-			{kt.hint("checks.close"), "checks"},
-		}), w-5)))
+		out = append(out, row(a.logHints(st, kt, w-5)))
 	}
 
 	return append(out, bottom)
+}
+
+// logHints is the page's hint row in cw cells: the close pair always stays and
+// the others drop from the end before it does.
+func (a *App) logHints(st styles, kt keyTable, cw int) string {
+	lead := hintPairs([][2]string{
+		{kt.hint("checks.next", "checks.prev"), "line"},
+		{kt.hint("checks.error.next", "checks.error.prev"), "error"},
+		{kt.hint("checks.fold"), "group"},
+		{kt.hint("checks.browser"), "browser"},
+	})
+
+	closing := hintPairs([][2]string{{kt.hint("checks.close"), "checks"}})
+	if len(closing) == 0 {
+		return popupHints(st, lead, cw)
+	}
+
+	const gap = 4
+
+	room := cw - ansi.StringWidth(closing[0][0]) - 1 - ansi.StringWidth(closing[0][1]) - gap
+	hints := popupHints(st, lead, room)
+
+	if hints != "" {
+		hints += st.popup.Render(strings.Repeat(" ", gap))
+	}
+
+	return hints + popupHints(st, closing, cw)
 }
 
 // overlayCILog draws the log page over base; a terminal too small for the box

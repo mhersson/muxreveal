@@ -6,7 +6,7 @@
 │─│  12:00:31 FAIL    github.com/m…  │─│
 │ │  12:00:31 make: *** [Makefile:…  │ │
 │ │▎ 12:00:31 Error: Process compl…  │ │
-│▎│  j/k line    ]/[ error           │ │
+│▎│  j/k line    esc checks          │ │
 │▎╰──────────────────────────────────╯ │
 │▎        ↪ pane")                     │
 ╰──────────────────────────────────────╯

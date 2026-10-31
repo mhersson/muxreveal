@@ -684,7 +684,7 @@ func TestCILogSmall(t *testing.T) {
 	a := ciScene(t, true, 40, 12, "log")
 	text := shownText(a)
 
-	for _, want := range []string{"failed at step", "j/k line"} {
+	for _, want := range []string{"failed at step", "j/k line", "esc checks"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("40x12 lacks %q:\n%s", want, text)
 		}
