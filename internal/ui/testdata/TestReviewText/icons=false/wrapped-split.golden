@@ -48,5 +48,5 @@
 │                                                                                                   │                                                 │  8 +     return s                              │
 │                                                                                                   │                                                 │  9 + }                                         │
 │                                                                                                   │  M internal/core/state.go                                                                  +9 -1 │
-│                                                                                                   │ j/k line   ]/[ hunk   }/{ file   tab tree   w worktree   f full   u split   e edit   / search    │
+│                                                                                                   │ j/k line   ]/[ hunk   }/{ file   z zoom   tab tree   w worktree   f full   u split   e edit      │
 ╰───────────────────────────────────────────────────────────────────────────────────────────────────╰──────────────────────────────────────────────────────────────────────────────────────────────────╯

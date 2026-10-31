@@ -48,5 +48,5 @@
 │                                                                                                   │                                │   8   9       "v": "pane.split.right",                          │
 │                                                                                                   │                                │  A internal/ui/review_test.go                         !  +11 -0 │
 │                                                                                                   │                                │  @@ -0,0 +1,11 @@                                               │
-│                                                                                                   │ j/k line   ]/[ hunk   }/{ file   tab tree   w worktree   f full   u split   e edit   / search    │
+│                                                                                                   │ j/k line   ]/[ hunk   }/{ file   z zoom   tab tree   w worktree   f full   u split   e edit      │
 ╰───────────────────────────────────────────────────────────────────────────────────────────────────╰──────────────────────────────────────────────────────────────────────────────────────────────────╯

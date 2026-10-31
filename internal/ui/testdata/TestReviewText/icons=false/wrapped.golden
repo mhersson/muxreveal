@@ -48,5 +48,5 @@
 │                                                                                                   │  @@ -40,9 +40,10 @@ func (a *App) Init() tea.Cmd                                                 │
 │                                                                                                   │  40  40                                                                                          │
 │                                                                                                   │  41  41   // openReview opens a review pane beside an agent, or focuses the open one.            │
-│                                                                                                   │ j/k line   ]/[ hunk   }/{ file   tab tree   w worktree   f full   u split   e edit   / search    │
+│                                                                                                   │ j/k line   ]/[ hunk   }/{ file   z zoom   tab tree   w worktree   f full   u split   e edit      │
 ╰───────────────────────────────────────────────────────────────────────────────────────────────────╰──────────────────────────────────────────────────────────────────────────────────────────────────╯

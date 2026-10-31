@@ -674,7 +674,7 @@ func TestReviewMarkdownHints(t *testing.T) {
 	m.onFile(t, planPath)
 	m.press(keyRune('m'))
 
-	want := "j/k line   ]/[ change   enter open   m source   f full   / search"
+	want := "j/k line   ]/[ change   z zoom   enter open   m source   f full   / search"
 	if got := hintText(t, m.drawerRig); got != want {
 		t.Errorf("hints on a rendered file = %q, want %q", got, want)
 	}
@@ -690,7 +690,7 @@ func TestReviewMarkdownHints(t *testing.T) {
 	m.v.src = git.PRSource{Worktree: m.root, Number: 7}
 	m.onFile(t, "main.go")
 
-	wantPR := "j/k line   ]/[ hunk   c checks   a approve   M merge   O browser   space reviewed   R show reviewed   b/t mode"
+	wantPR := "j/k line   ]/[ hunk   z zoom   c checks   a approve   M merge   O browser   space reviewed   R show reviewed   b/t mode"
 	if got := hintText(t, m.drawerRig); got != wantPR {
 		t.Errorf("PR hints = %q, want %q", got, wantPR)
 	}

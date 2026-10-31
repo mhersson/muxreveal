@@ -44,5 +44,5 @@
 │                                          ││                                                       │                    │         ↪ a.notify("a review pane   │
 │                                          ││                                                       │                    │         ↪ needs an agent pane")     │
 │                                          ││                                                       │                    │      46 +     }                     │
-│ j/k move  enter jump  p plan  / search   ││                                                       │ j/k file   enter jump   tab hide   esc back              │
+│ j/k move  enter jump  p plan  / search   ││                                                       │ j/k file   enter jump   z zoom   tab hide   esc back     │
 ╰──────────────────────────────────────────╯╰───────────────────────────────────────────────────────╰──────────────────────────────────────────────────────────╯

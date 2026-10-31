@@ -48,5 +48,5 @@
 │                                                                                                   │                                │       6 +     "d": "review.toggle",                             │
 │                                                                                                   │                                │   6   7       "n": "agent.new",                                 │
 │                                                                                                   │                                │   7   8       "s": "pane.split.down",                           │
-│                                                                                                   │ j/k line   ]/[ hunk   c checks   a approve   M merge   O browser   space reviewed                │
+│                                                                                                   │ j/k line   ]/[ hunk   z zoom   c checks   a approve   M merge   O browser   space reviewed       │
 ╰───────────────────────────────────────────────────────────────────────────────────────────────────╰──────────────────────────────────────────────────────────────────────────────────────────────────╯

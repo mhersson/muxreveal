@@ -476,7 +476,7 @@ func pageCommand(id string) bool {
 	switch id {
 	case "review.line.next", "review.line.prev", "review.hunk.next", "review.hunk.prev", "review.page.down", "review.page.up",
 		"review.top", "review.bottom", "review.fold", "review.back", "review.edit", "review.refresh", "review.search",
-		"review.mode.branch", "review.mode.turn", "review.mode.pr", "review.copy":
+		"review.mode.branch", "review.mode.turn", "review.mode.pr", "review.copy", "review.zoom":
 		return true
 	}
 

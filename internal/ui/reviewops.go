@@ -119,6 +119,12 @@ func (a *App) onReviewOpen(msg reviewOpenMsg) tea.Cmd {
 		return nil
 	}
 
+	if st.Tab().Review == nil {
+		if v := a.drawer.views[msg.tab]; v != nil {
+			v.zoom = false
+		}
+	}
+
 	var gone errWorktreeRemoved
 
 	switch {

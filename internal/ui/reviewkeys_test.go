@@ -183,7 +183,7 @@ func TestReviewKeysTable(t *testing.T) {
 		}
 	}
 
-	for _, want := range []string{"j", "k", "down", "up", "]", "[", "}", "{", "ctrl+d", "ctrl+u", "g", "G", "tab", "f", "u", "enter", "b", "t", ",", ".", "/", "e", "esc"} {
+	for _, want := range []string{"j", "k", "down", "up", "]", "[", "}", "{", "ctrl+d", "ctrl+u", "g", "G", "tab", "f", "u", "enter", "b", "t", ",", ".", "/", "z", "e", "esc"} {
 		if !seen[want] {
 			t.Errorf("key %q is not bound", want)
 		}

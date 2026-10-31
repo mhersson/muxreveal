@@ -28,6 +28,7 @@ const (
 // the cursor is. Only the update loop touches it.
 type reviewView struct {
 	pane     core.PaneID     // the pane reviewed
+	zoom     bool            // the drawer covers the whole body
 	mode     core.ReviewMode // the mode the view follows, as core holds it
 	pr       core.ReviewPR   // the pull request the view shows, as core holds it; zero for none
 	prBase   string          // the shown pull request's base branch
@@ -428,10 +429,25 @@ func drawerTree(st core.State) bool {
 	return rv != nil && rv.Tree
 }
 
-// drawerFull is the active tab's drawer once it has slid in: the right half of
-// the body, at least 60 columns, full height. ok is false with no drawer open
-// or a body too small for a frame.
+// drawerFull is the active tab's drawer once it has slid in: the whole body
+// while zoomed, else the half. ok is false with no drawer open or a body too
+// small for a frame.
 func (a *App) drawerFull(st core.State) (core.Rect, bool) {
+	half, ok := a.drawerHalf(st)
+	if !ok {
+		return core.Rect{}, false
+	}
+
+	if v := a.drawer.views[st.Tab().ID]; v != nil && v.zoom {
+		return a.bodyAreaIn(st.Rail), true
+	}
+
+	return half, true
+}
+
+// drawerHalf is the drawer unzoomed: the right half of the body, at least 60
+// columns, full height. The checks for panes it covers measure it.
+func (a *App) drawerHalf(st core.State) (core.Rect, bool) {
 	if st.Tab().Review == nil {
 		return core.Rect{}, false
 	}

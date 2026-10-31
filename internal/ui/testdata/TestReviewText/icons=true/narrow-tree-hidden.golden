@@ -44,5 +44,5 @@
 │                                          ││                                                       │   4   4   var defaultLeader = map[string]string{         │
 │                                          ││                                                       │   5   5       "a": "rail.toggle",                        │
 │                                          ││                                                       │       6 +     "d": "review.toggle",                      │
-│ j/k move  enter jump  p plan  / search   ││                                                       │ j/k line   ]/[ hunk   }/{ file   tab tree   w worktree   │
+│ j/k move  enter jump  p plan  / search   ││                                                       │ j/k line   ]/[ hunk   }/{ file   z zoom   tab tree       │
 ╰──────────────────────────────────────────╯╰───────────────────────────────────────────────────────╰──────────────────────────────────────────────────────────╯

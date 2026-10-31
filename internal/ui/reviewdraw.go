@@ -595,24 +595,28 @@ func (d *drawCtx) topBorder() string {
 	}
 
 	// Tags sit on the right, the mode tag last. When the title would be left no
-	// room, the split tag drops first, then the pinned tag, then the counter.
-	split, pin := d.lay.split && v.rowsSplit, d.pinned
+	// room, the zoom tag drops first, then split, then pinned, then the counter.
+	zoom, split, pin := v.zoom, d.lay.split && v.rowsSplit, d.pinned
 	count, haveCount := d.counterTag()
-	tags := d.tagRuns(split, pin, count, haveCount)
+	tags := d.tagRuns(zoom, split, pin, count, haveCount)
 
 	// The corner and dash take two cells on each side, and a dash parts the title from the tags.
 	room := func() int { return d.lay.box.W - 4 - runsWidth(tags) - 1 }
 
+	if room() < titleRoomMin+2 && zoom {
+		tags = d.tagRuns(false, split, pin, count, haveCount)
+	}
+
 	if room() < titleRoomMin+2 && split {
-		tags = d.tagRuns(false, pin, count, haveCount)
+		tags = d.tagRuns(false, false, pin, count, haveCount)
 	}
 
 	if room() < titleRoomMin+2 && pin {
-		tags = d.tagRuns(false, false, count, haveCount)
+		tags = d.tagRuns(false, false, false, count, haveCount)
 	}
 
 	if room() < titleRoomMin+2 && haveCount {
-		tags = d.tagRuns(false, false, count, false)
+		tags = d.tagRuns(false, false, false, railRun{}, false)
 	}
 
 	var title []railRun
@@ -657,14 +661,19 @@ func (d *drawCtx) counterTag() (railRun, bool) {
 	return railRun{text: " ✓ " + strconv.Itoa(read) + "/" + strconv.Itoa(all) + " ", fg: fg, bold: true}, true
 }
 
-// tagRuns are the tags on the right of the top border, left to right: split,
-// pinned, the counter, then the mode tag, each followed by a dash but the last.
-func (d *drawCtx) tagRuns(split, pinned bool, counter railRun, haveCounter bool) []railRun {
+// tagRuns are the tags on the right of the top border, left to right: zoom,
+// split, pinned, the counter, then the mode tag, each followed by a dash but
+// the last.
+func (d *drawCtx) tagRuns(zoom, split, pinned bool, counter railRun, haveCounter bool) []railRun {
 	ui := d.ui
 	tag := func(text string) railRun { return railRun{text: " " + text + " ", fg: ui.Accent, bold: true} }
 	dash := railRun{text: "─", fg: d.edge()}
 
 	var tags []railRun
+
+	if zoom {
+		tags = append(tags, tag(d.withIcon(iconZoom, "zoom")), dash)
+	}
 
 	if split {
 		tags = append(tags, tag(d.withIcon(iconSplit, "split")), dash)
@@ -782,7 +791,7 @@ func (d *drawCtx) hintRuns(cw int) []railRun {
 	if d.v.page() != nil {
 		return d.fitHints([][2]string{
 			pair("line", next, prev), pair("heading", "review.hunk.next", "review.hunk.prev"),
-			pair("open", "review.fold"), pair("search", "review.search"), pair("back", "review.back"),
+			pair("zoom", "review.zoom"), pair("open", "review.fold"), pair("search", "review.search"), pair("back", "review.back"),
 		}, cw)
 	}
 
@@ -793,6 +802,7 @@ func (d *drawCtx) hintRuns(cw int) []railRun {
 		pair("line", next, prev),
 		pair("hunk", "review.hunk.next", "review.hunk.prev"),
 		pair("file", "review.file.next", "review.file.prev"),
+		pair("zoom", "review.zoom"),
 		pair("tree", "review.tree"),
 		pair("worktree", "review.worktrees"),
 	}
@@ -821,6 +831,7 @@ func (d *drawCtx) hintRuns(cw int) []railRun {
 	if _, ok := d.v.src.(git.PRSource); ok {
 		pairs = [][2]string{
 			pair("line", next, prev), pair("hunk", "review.hunk.next", "review.hunk.prev"),
+			pair("zoom", "review.zoom"),
 			pair("checks", "review.checks"), pair("approve", "review.approve"), pair("merge", "review.merge"),
 			pair("browser", "review.browser"),
 			pair("reviewed", "review.mark"), d.showReadPair(pair),
@@ -830,13 +841,14 @@ func (d *drawCtx) hintRuns(cw int) []railRun {
 
 	if cur != nil && d.v.mdOn[cur.Path] {
 		pairs = [][2]string{
-			pair("line", next, prev), pair("change", "review.hunk.next", "review.hunk.prev"), pair("open", "review.fold"),
+			pair("line", next, prev), pair("change", "review.hunk.next", "review.hunk.prev"),
+			pair("zoom", "review.zoom"), pair("open", "review.fold"),
 			pair("source", "review.markdown"), pair("full", "review.full"), pair("search", "review.search"),
 		}
 	}
 
 	if d.tree {
-		pairs = [][2]string{pair("file", next, prev), pair("jump", "review.fold"), pair("hide", "review.tree"), pair("back", "review.back")}
+		pairs = [][2]string{pair("file", next, prev), pair("jump", "review.fold"), pair("zoom", "review.zoom"), pair("hide", "review.tree"), pair("back", "review.back")}
 	}
 
 	return d.fitHints(pairs, cw)

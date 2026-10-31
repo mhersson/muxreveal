@@ -53,6 +53,7 @@ var reviewKeys = []reviewKey{
 	{".", "review.turn.next"},
 	{"/", "review.search"},
 	{"y", "review.copy"},
+	{"z", "review.zoom"},
 	{"w", "review.worktrees"},
 	{"e", "review.edit"},
 	{"r", "review.refresh"},
@@ -62,7 +63,7 @@ var reviewKeys = []reviewKey{
 // treeCommand reports whether a drawer command works while the tree has the keyboard.
 func treeCommand(id string) bool {
 	switch id {
-	case "review.line.next", "review.line.prev", "review.fold", "review.tree", "review.back":
+	case "review.line.next", "review.line.prev", "review.fold", "review.tree", "review.back", "review.zoom":
 		return true
 	}
 
@@ -121,6 +122,7 @@ func reviewCommands() []command {
 		cmd("review.turn.next", "Review: next turn", turn(1)),
 		cmd("review.search", "Review: search", (*App).reviewSearch),
 		cmd("review.copy", "Review: copy the selection", (*App).reviewCopy),
+		cmd("review.zoom", "Review: zoom", (*App).reviewZoom),
 		cmd("review.worktrees", "Review: worktrees", (*App).openWorktrees),
 		cmd("review.edit", "Review: open in the editor", (*App).reviewEdit),
 		cmd("review.refresh", "Review: refresh", (*App).reviewReload),

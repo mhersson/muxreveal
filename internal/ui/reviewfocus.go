@@ -38,9 +38,42 @@ func (a *App) drawerTake() {
 	a.drawer.focused, a.drawer.tree = true, false
 }
 
-// drawerRelease takes the keyboard from the drawer and closes its search prompt
-// and the worktree list.
+// drawerRelease takes the keyboard from the drawer and un-zooms it: a zoomed
+// drawer always has the keyboard.
 func (a *App) drawerRelease() {
+	a.releaseKeys()
+	a.unzoom()
+}
+
+// unzoom takes every drawer back to its half.
+func (a *App) unzoom() {
+	for _, v := range a.drawer.views {
+		v.zoom = false
+	}
+}
+
+// reviewZoom is review.zoom: it widens the drawer to the whole body and back,
+// and gives it the keyboard if it lacks it.
+func (a *App) reviewZoom() tea.Cmd {
+	_, v, ok := a.reviewActive()
+	if !ok {
+		return nil
+	}
+
+	a.endSlide()
+
+	v.zoom = !v.zoom
+
+	if !a.drawerHasKeys() {
+		a.drawerTake()
+	}
+
+	return nil
+}
+
+// releaseKeys takes the keyboard from the drawer and closes its search prompt
+// and the worktree list; a zoom stays.
+func (a *App) releaseKeys() {
 	a.drawer.focused, a.drawer.tree = false, false
 	a.closeWorktrees()
 	a.closeLinks()
@@ -112,7 +145,7 @@ func (a *App) closeDrawer(slide bool) tea.Cmd {
 	a.drawer.prNext = nil
 	a.drawer.mdSeq++
 	a.drawer.mdWant = nil
-	a.drawerRelease()
+	a.releaseKeys()
 	a.clearDrawerSel(a.store.State().Tab().ID)
 
 	if _, shown := a.drawerFull(a.store.State()); slide && shown {
@@ -190,7 +223,7 @@ func covered(r, box core.Rect) bool {
 func (a *App) focusDir(d core.Dir) tea.Cmd {
 	st := a.store.State()
 
-	box, shown := a.drawerFull(st)
+	box, shown := a.drawerHalf(st)
 	if !shown || a.drawer.closing {
 		return a.act(core.FocusDir{Dir: d, Area: a.bodyArea()})
 	}
@@ -223,7 +256,7 @@ func (a *App) visibleNeighbour(st core.State, d core.Dir, box core.Rect) (core.P
 func (a *App) drawerLeave() tea.Cmd {
 	st := a.store.State()
 
-	box, shown := a.drawerFull(st)
+	box, shown := a.drawerHalf(st)
 	if !shown {
 		return nil
 	}
@@ -258,11 +291,14 @@ func (a *App) drawerLeave() tea.Cmd {
 }
 
 // uncoverFocus closes the active tab's drawer, with no slide, when the focused
-// pane lies under it: the pane an action just focused must show.
+// pane lies under its half: the pane an action just focused must show. A zoomed
+// drawer goes back to its half first.
 func (a *App) uncoverFocus() {
+	a.unzoom()
+
 	st := a.store.State()
 
-	box, shown := a.drawerFull(st)
+	box, shown := a.drawerHalf(st)
 	if !shown || a.drawer.closing {
 		return
 	}
