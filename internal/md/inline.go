@@ -25,6 +25,7 @@ type style struct {
 	class                           uint8
 	link                            int
 	path                            string
+	chrome                          bool // drawn, never copied
 }
 
 func plainStyle() style { return style{link: -1} }
@@ -32,7 +33,7 @@ func plainStyle() style { return style{link: -1} }
 func (s style) run(text string) Run {
 	return Run{
 		Text: text, Role: s.role, Bold: s.bold, Italic: s.italic, Underline: s.underline,
-		Strike: s.strike, Class: s.class, Link: s.link, Path: s.path,
+		Strike: s.strike, Class: s.class, Link: s.link, Path: s.path, chrome: s.chrome,
 	}
 }
 
@@ -209,7 +210,9 @@ func (in *inliner) text(s string, st style) {
 func (in *inliner) code(s string, st style) {
 	st.role = RoleCode
 	st = in.eff(st)
-	pad := seg{text: " ", st: st, sp: spaceFixed}
+	padSt := st
+	padSt.chrome = true
+	pad := seg{text: " ", st: padSt, sp: spaceFixed}
 
 	in.segs = append(in.segs, pad)
 	in.segs = appendCode(in.segs, s, st)

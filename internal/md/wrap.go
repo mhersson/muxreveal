@@ -200,6 +200,8 @@ type lineBuilder struct {
 	buf    strings.Builder
 	si     uint32
 	w, n   int
+	// next is the join the next line's first run carries.
+	next Join
 }
 
 func (b *lineBuilder) put(c cell) {
@@ -235,12 +237,21 @@ func (b *lineBuilder) take() Line {
 	b.flushRun()
 
 	line := Line(b.runs)
-	b.runs, b.w, b.n = nil, 0, 0
+	if len(line) > 0 {
+		line[0].join = b.next
+	}
+
+	b.runs, b.w, b.n, b.next = nil, 0, 0, JoinNone
 
 	return line
 }
 
+// sameStyle reports whether a and b merge. A tab run never does: each tab copies as one.
 func sameStyle(a, b Run) bool {
+	if a.tab || b.tab {
+		return false
+	}
+
 	a.Text, b.Text = "", ""
 
 	return a == b
@@ -291,6 +302,7 @@ func wrapLead(segs []seg, width, lead int) []Line {
 
 		if cells[i].k == cellBreakHard {
 			lines = append(lines, b.take())
+			b.next = JoinBreak
 			i++
 
 			continue
@@ -313,11 +325,13 @@ func wrapLead(segs []seg, width, lead int) []Line {
 			}
 		default:
 			lines = append(lines, b.take())
+			b.next = JoinSpace
 		}
 
 		for _, c := range word {
 			if b.n > 0 && b.w+int(c.w) > limit() {
 				lines = append(lines, b.take())
+				b.next = JoinTight
 			}
 
 			if int(c.w) > limit() {

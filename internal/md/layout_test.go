@@ -129,7 +129,11 @@ func TestOrderedNumbersAlign(t *testing.T) {
 	l := layoutOf("9. nine\n10. ten\n11. eleven is long enough to wrap around\n", 24, "")
 	wantLines(t, l, "   9. nine", "  10. ten", "  11. eleven is long", "      enough to wrap", "      around")
 
-	if r := l.Lines[0][1]; r.Role != RoleBullet || r.Text != " 9. " {
+	if r := l.Lines[0][1]; r.Role != RoleBullet || r.Text != " " || !r.chrome {
+		t.Errorf("number pad = %+v", r)
+	}
+
+	if r := l.Lines[0][2]; r.Role != RoleBullet || r.Text != "9. " || r.chrome {
 		t.Errorf("number run = %+v", r)
 	}
 
@@ -233,7 +237,11 @@ func TestAlerts(t *testing.T) {
 			}
 		}
 
-		if r := on.Lines[0][1]; r.Role != k.role || !r.Bold || r.Text != k.icon+" "+k.title {
+		if r := on.Lines[0][1]; r.Role != k.role || !r.Bold || r.Text != k.icon+" " || !r.chrome {
+			t.Errorf("%s icon = %+v", k.marker, r)
+		}
+
+		if r := on.Lines[0][2]; r.Role != k.role || !r.Bold || r.Text != k.title || r.chrome {
 			t.Errorf("%s title = %+v", k.marker, r)
 		}
 
@@ -467,7 +475,11 @@ func TestFootnotesSection(t *testing.T) {
 		t.Errorf("rule = %+v", r)
 	}
 
-	if r := l.Lines[3][0]; r.Role != RoleFootnoteNumber || r.Text != " 1. " {
+	if r := l.Lines[3][0]; r.Role != RoleFootnoteNumber || r.Text != " " || !r.chrome {
+		t.Errorf("number pad = %+v", r)
+	}
+
+	if r := l.Lines[3][1]; r.Role != RoleFootnoteNumber || r.Text != "1. " || r.chrome {
 		t.Errorf("number = %+v", r)
 	}
 

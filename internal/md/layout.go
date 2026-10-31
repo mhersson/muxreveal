@@ -116,6 +116,11 @@ type Run struct {
 	Class     uint8  // the highlighter's class, for RoleCodeText
 	Link      int    // index into Layout.Links, -1 for none
 	Path      string // a relative link resolved against a local base
+
+	chrome bool   // drawn, never copied
+	tab    bool   // a code line's tab, drawn as spaces
+	rest   string // on the … that cuts a code line: the line from the first cell the cut dropped
+	join   Join   // on the first run of a wrapped continuation
 }
 
 // Link is a link target the UI may emit as OSC 8: always http, https or mailto.
@@ -434,7 +439,7 @@ func (l *layouter) spaces(n int) Line {
 		return nil
 	}
 
-	return Line{plainStyle().run(strings.Repeat(" ", n))}
+	return Line{chromeRun(plainStyle(), strings.Repeat(" ", n))}
 }
 
 // hang puts first before the first line appended since start and rest before
@@ -506,7 +511,7 @@ func fit(line Line, width int) Line {
 			}
 		}
 
-		r.Text = "…"
+		r.Text, r.tab, r.rest = "…", false, ""
 
 		return appendRun(out, r)
 	}

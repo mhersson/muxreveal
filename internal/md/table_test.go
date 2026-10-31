@@ -128,10 +128,15 @@ func TestTableInlineStyles(t *testing.T) {
 	}
 
 	// Padding next to a link or code run never carries its style.
+	// A code run's own pad spaces are RoleCode, and sit next to its text.
 	for i := 1; i <= 3; i += 2 {
-		for _, r := range l.Lines[i] {
+		for k, r := range l.Lines[i] {
 			if strings.Trim(r.Text, " ") == "" && r.Role != RoleTableFrame {
-				if r.Underline || r.Strike || r.Link != -1 || r.Role == RoleLink || r.Role == RoleCode {
+				pill := r.Role == RoleCode &&
+					((k > 0 && l.Lines[i][k-1].Role == RoleCode && strings.Trim(l.Lines[i][k-1].Text, " ") != "") ||
+						(k+1 < len(l.Lines[i]) && l.Lines[i][k+1].Role == RoleCode && strings.Trim(l.Lines[i][k+1].Text, " ") != ""))
+
+				if r.Underline || r.Strike || r.Link != -1 || r.Role == RoleLink || (r.Role == RoleCode && !pill) {
 					t.Errorf("line %d padding = %+v", i, r)
 				}
 			}
