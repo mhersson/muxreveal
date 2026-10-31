@@ -98,7 +98,7 @@ func TestReviewZoomLeaderZ(t *testing.T) {
 		t.Errorf("leader z with the drawer: drawer zoomed %v, pane zoomed %v, want the drawer only", r.zoomed(), r.store.State().Tab().Zoomed)
 	}
 
-	r.keys(keyEsc)
+	r.leader('h')
 	r.leader('z')
 
 	if r.zoomed() || !r.store.State().Tab().Zoomed {
@@ -110,10 +110,10 @@ func TestReviewZoomPalette(t *testing.T) {
 	t.Parallel()
 
 	r := zoomRig(t)
-	r.keys(keyEsc)
+	r.leader('h')
 
 	if r.drawerHasKeys() {
-		t.Fatal("setup: the drawer kept the keyboard after esc")
+		t.Fatal("setup: the drawer kept the keyboard after leader h")
 	}
 
 	c, ok := r.reg.get("review.zoom")
@@ -203,7 +203,10 @@ func TestReviewZoomLeaves(t *testing.T) {
 		leave func(t *testing.T, r *drawerRig)
 		to    string
 	}{
-		{"esc", func(t *testing.T, r *drawerRig) { r.keys(keyEsc) }, toPane},
+		{"click on a pane", func(t *testing.T, r *drawerRig) {
+			rect := r.geometry().rects["p1"]
+			clickRun(r.App, rect.X+1, rect.Y+1)
+		}, toPane},
 		{"leader h", func(t *testing.T, r *drawerRig) { r.leader('h') }, toPane},
 		{"click on the rail", func(t *testing.T, r *drawerRig) {
 			rail := r.railRect()
@@ -329,10 +332,10 @@ func TestReviewZoomSmall(t *testing.T) {
 		t.Errorf("top border %q lacks the zoom tag", top)
 	}
 
-	r.keys(keyEsc)
+	r.leader('h')
 
 	if !r.drawerHasKeys() || !r.zoomed() {
-		t.Errorf("after esc: drawer has the keyboard %v, zoomed %v, want both kept", r.drawerHasKeys(), r.zoomed())
+		t.Errorf("after leader h: drawer has the keyboard %v, zoomed %v, want both kept", r.drawerHasKeys(), r.zoomed())
 	}
 }
 
@@ -751,7 +754,7 @@ func TestZoomSlideLaysOutOnce(t *testing.T) {
 
 	l2, rev2 := r.drawer.layouts, r.view().rowsRev
 
-	r.keys(keyEsc)
+	r.leader('h')
 
 	r.slideFrames(t, func(core.Rect) {
 		r.drawn(t)
@@ -780,7 +783,7 @@ func TestUnzoomSlide(t *testing.T) {
 
 	r.keys(keyRune('z'))
 	r.finishSlide()
-	r.keys(keyEsc)
+	r.leader('h')
 
 	if r.drawerHasKeys() || r.focus() != "p1" {
 		t.Fatalf("drawer has the keyboard %v, focus %s, want p1 at once", r.drawerHasKeys(), r.focus())

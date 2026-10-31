@@ -161,7 +161,7 @@ func TestKeyboardOwnerWhenPanesClose(t *testing.T) {
 
 		openIn(t, r.App, core.FocusPane{ID: "p1"})
 		r.opened(t)
-		r.keys(keyEsc)
+		r.leader('h')
 
 		openIn(t, r.App, core.FocusPane{ID: below})
 		r.run(r.closePane(below))

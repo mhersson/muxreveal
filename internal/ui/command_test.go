@@ -158,7 +158,7 @@ func TestDefaultCommands(t *testing.T) {
 		want{"review.worktrees", "Review: worktrees", iconReview},
 		want{"review.edit", "Review: open in the editor", iconReview},
 		want{"review.refresh", "Review: refresh", iconReview},
-		want{"review.back", "Review: back to the panes", iconReview},
+		want{"review.back", "Review: back, else close the drawer", iconReview},
 		want{"plan.open", "Open the agent's plan", iconPlan},
 		want{"md.open", "Open a markdown file", iconMarkdown},
 		want{"pr.list", "Pull requests", iconPR},

@@ -94,7 +94,7 @@ func TestLeaderDOpensFocusesClosesAndRetargets(t *testing.T) {
 	waitForText(t, tm, "fifty")
 
 	// p2 lies under the drawer, so the keyboard goes to the pane nearest it that shows.
-	send(keyEsc)
+	send(keyLeader, keyRune('h'))
 	probe.wait(t, "the keyboard back with p1", func(s keysSnap) bool { return !s.drawer && s.focus == "p1" && s.review == "p2" })
 
 	send(keyLeader, keyRune('d'))
@@ -177,10 +177,10 @@ func TestLeaderLEntersTheDrawer(t *testing.T) {
 	t.Parallel()
 	r := newKeysRig(t, keysRepo(t))
 	r.opened(t)
-	r.keys(keyEsc)
+	r.leader('h')
 
 	if r.drawer.focused {
-		t.Fatal("esc left the keyboard with the drawer")
+		t.Fatal("leader h left the keyboard with the drawer")
 	}
 
 	r.leader('l')
@@ -225,10 +225,10 @@ func TestLeaderHLeavesToTheNearestVisiblePane(t *testing.T) {
 	}
 
 	openIn(t, r.App, core.FocusPane{ID: p2})
-	r.keys(keyEsc)
+	r.leader('h')
 
 	if got := r.focus(); got != p3 || r.drawer.focused {
-		t.Errorf("esc: focus = %s, drawer has the keyboard = %v, want %s and false", got, r.drawer.focused, p3)
+		t.Errorf("leader h: focus = %s, drawer has the keyboard = %v, want %s and false", got, r.drawer.focused, p3)
 	}
 }
 
@@ -250,17 +250,17 @@ func TestEscReturnsTheKeyboard(t *testing.T) {
 			t.Errorf("first esc: search open = %v, drawer has the keyboard = %v, want false and true", v.search != nil, r.drawer.focused)
 		}
 
-		r.keys(keyEsc)
+		r.leader('h')
 
 		if r.drawer.focused {
-			t.Fatal("second esc left the keyboard with the drawer")
+			t.Fatal("leader h left the keyboard with the drawer")
 		}
 
 		r.keys(keyRune('x'))
 		eventually(t, "x to reach the pane", func() bool { return r.sentTo("p1") != "" })
 
 		if got := r.sentTo("p1"); got != "x" {
-			t.Errorf("the pane was sent %q after esc, want x", got)
+			t.Errorf("the pane was sent %q after leader h, want x", got)
 		}
 	})
 
@@ -282,10 +282,10 @@ func TestEscReturnsTheKeyboard(t *testing.T) {
 				r.drawer.tree, r.drawer.focused, treeIsOpen(r.App), cursor, v.cursor)
 		}
 
-		r.keys(keyEsc)
+		r.leader('h')
 
 		if r.drawer.focused {
-			t.Error("esc in the diff left the keyboard with the drawer")
+			t.Error("leader h left the keyboard with the drawer")
 		}
 	})
 }
@@ -566,10 +566,10 @@ func TestZoomedTabWithADrawer(t *testing.T) {
 	r.opened(t)
 
 	// The zoomed pane fills the body, so the drawer does not cover it.
-	r.keys(keyEsc)
+	r.leader('h')
 
 	if r.drawer.focused || r.focus() != "p1" {
-		t.Fatalf("esc: drawer has the keyboard = %v, focus = %s, want the zoomed p1 to have it", r.drawer.focused, r.focus())
+		t.Fatalf("leader h: drawer has the keyboard = %v, focus = %s, want the zoomed p1 to have it", r.drawer.focused, r.focus())
 	}
 
 	r.keys(keyRune('x'))
@@ -687,7 +687,7 @@ func TestClickOnARowMovesTheCursor(t *testing.T) {
 	t.Parallel()
 	r := newKeysRig(t, keysRepo(t))
 	v := r.opened(t)
-	r.keys(keyEsc)
+	r.leader('h')
 
 	// The tree is hidden, so the diff starts at the drawer's first inner column.
 	x, y := r.drawerCell(t, 1+8, 1+5)
@@ -699,7 +699,8 @@ func TestClickOnARowMovesTheCursor(t *testing.T) {
 	}
 
 	// With the tree open, a click on one of its files jumps the diff to it.
-	r.keys(keyTab, keyEsc, keyEsc)
+	r.keys(keyTab, keyEsc)
+	r.leader('h')
 
 	if !treeIsOpen(r.App) || r.drawer.focused {
 		t.Fatalf("setup: tree open = %v, drawer has the keyboard = %v, want the tree open and the keyboard with the panes", treeIsOpen(r.App), r.drawer.focused)
