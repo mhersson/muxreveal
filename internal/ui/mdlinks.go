@@ -290,7 +290,7 @@ func (a *App) followLine(tab core.TabID, v *reviewView, targets []mdTarget) tea.
 // openLinkedPage opens a followed markdown file as a page over the drawer's
 // stack.
 func (a *App) openLinkedPage(tab core.TabID) func(string) tea.Cmd {
-	return func(path string) tea.Cmd { return a.openMarkdownPage(tab, path, true) }
+	return func(path string) tea.Cmd { return a.openMarkdownPage(tab, path) }
 }
 
 // ---- the chooser's place in the drawer ----

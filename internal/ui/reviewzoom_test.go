@@ -146,7 +146,7 @@ func TestReviewZoomEverywhere(t *testing.T) {
 		{"page", func(t *testing.T) *drawerRig {
 			m := newPageRig(t, nil)
 			zoomLayout(t, m.drawerRig, 270, 75)
-			m.openPage(t, "README.md", false)
+			m.openPage(t, "README.md")
 
 			return m.drawerRig
 		}, false},
@@ -401,7 +401,7 @@ func TestReviewZoomHints(t *testing.T) {
 		{"page", func(t *testing.T) *drawerRig {
 			m := newPageRig(t, nil)
 			zoomLayout(t, m.drawerRig, 270, 75)
-			m.openPage(t, "README.md", false)
+			m.openPage(t, "README.md")
 
 			return m.drawerRig
 		}, "]/[ heading"},

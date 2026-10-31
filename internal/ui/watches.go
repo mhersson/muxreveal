@@ -63,11 +63,20 @@ type pinAcquiredMsg struct {
 	err     error
 }
 
+// mdAcquiredMsg carries the reference the Acquire for the markdown file
+// overlay's root took.
+type mdAcquiredMsg struct {
+	root    string
+	release func()
+	err     error
+}
+
 type watchState struct {
 	set    *git.WatchSet
 	open   func(context.Context, string) (git.Repo, error)
 	panes  map[core.PaneID]*paneWatch
 	pins   map[core.TabID]*pinWatch
+	md     *pinWatch       // the markdown file overlay's reference on its root
 	failed map[string]bool // roots whose failure was already shown
 	holds  holds
 }
@@ -182,7 +191,7 @@ func (w *paneWatch) drop(a *App) {
 // agents (while there is a set to hold watches in) and the panes a drawer
 // reviews: it starts resolving a pane whose followed directory changed and
 // releases those of panes that closed, stopped being agents or are no longer
-// reviewed. It also syncs the pins' watches.
+// reviewed. It also syncs the pins' watches and the markdown overlay's.
 func (a *App) watchSync() tea.Cmd {
 	st := a.store.State()
 	reviewed := reviewedPanes(st)
@@ -230,7 +239,7 @@ func (a *App) watchSync() tea.Cmd {
 		cmds = append(cmds, a.resolveCmd(id, cwd))
 	}
 
-	return tea.Batch(append(cmds, a.pinSync())...)
+	return tea.Batch(append(cmds, a.pinSync(), a.mdWatchSync())...)
 }
 
 func (a *App) resolveCmd(id core.PaneID, cwd string) tea.Cmd {
@@ -379,7 +388,7 @@ func (a *App) onWatch(msg watchMsg) tea.Cmd {
 		}
 	}
 
-	cmds = append(cmds, a.reviewBatch(msg.Root, b))
+	cmds = append(cmds, a.reviewBatch(msg.Root, b), a.mdBatch(msg.Root))
 
 	return tea.Batch(cmds...)
 }
@@ -403,7 +412,7 @@ func (a *App) rootWatched(root string) bool {
 		}
 	}
 
-	return false
+	return a.watches.md != nil && a.watches.md.release != nil && a.watches.md.root == root
 }
 
 // pinSync reconciles the pin watches with the tabs whose open drawer reviews
@@ -451,25 +460,34 @@ func (a *App) pinAcquire(tab core.TabID, root string) tea.Cmd {
 	set, open := a.watches.set, a.watches.open
 
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(a.ctx, watchResolveTimeout)
-		defer cancel()
+		rel, err := a.acquireRoot(a.ctx, set, open, root)
 
-		r, err := open(ctx, root)
-		if err != nil {
-			if !usableDir(root) {
-				err = errWorktreeRemoved{root: root}
-			}
-
-			return pinAcquiredMsg{tab: tab, root: root, err: err}
-		}
-
-		rel, err := set.Acquire(a.ctx, r)
-		if err != nil {
-			return pinAcquiredMsg{tab: tab, root: root, err: err}
-		}
-
-		return pinAcquiredMsg{tab: tab, root: root, release: a.watches.holds.add(rel)}
+		return pinAcquiredMsg{tab: tab, root: root, release: rel, err: err}
 	}
+}
+
+// acquireRoot opens root's repository and takes a reference on its watch,
+// registered with holds so App.Close frees it. A root that is gone answers
+// errWorktreeRemoved. It blocks, so it runs off the update loop.
+func (a *App) acquireRoot(ctx context.Context, set *git.WatchSet, open func(context.Context, string) (git.Repo, error), root string) (func(), error) {
+	octx, cancel := context.WithTimeout(ctx, watchResolveTimeout)
+	defer cancel()
+
+	r, err := open(octx, root)
+	if err != nil {
+		if !usableDir(root) {
+			err = errWorktreeRemoved{root: root}
+		}
+
+		return nil, err
+	}
+
+	rel, err := set.Acquire(ctx, r)
+	if err != nil {
+		return nil, err //nolint:wrapcheck // noticeOnce names the root
+	}
+
+	return a.watches.holds.add(rel), nil
 }
 
 // onPinAcquired keeps the new reference for its tab's pin. One for a root the
@@ -495,6 +513,63 @@ func (a *App) onPinAcquired(msg pinAcquiredMsg) {
 		pw.release = msg.release
 	case current && !errors.As(msg.err, &gone):
 		a.log.Warn("watch pinned root", "root", msg.root, "err", msg.err)
+		a.noticeOnce("root "+msg.root, filepath.Base(msg.root), msg.err)
+	}
+}
+
+// mdWatchSync keeps one reference on the root of the open markdown file
+// overlay, as pinSync does for a pin: it releases one the overlay no longer
+// wants and starts taking the wanted one off the update loop.
+func (a *App) mdWatchSync() tea.Cmd {
+	want := ""
+	if a.watches.set != nil && a.plan != nil && a.plan.file != nil {
+		want = a.plan.root
+	}
+
+	if w := a.watches.md; w != nil {
+		if w.root == want {
+			return nil
+		}
+
+		a.releaseAsync(w.release)
+		a.watches.md = nil
+	}
+
+	if want == "" {
+		return nil
+	}
+
+	a.watches.md = &pinWatch{root: want}
+	set, open := a.watches.set, a.watches.open
+
+	return func() tea.Msg {
+		rel, err := a.acquireRoot(a.ctx, set, open, want)
+
+		return mdAcquiredMsg{root: want, release: rel, err: err}
+	}
+}
+
+// onMDAcquired keeps the new reference while the overlay still wants its root,
+// else releases it. A root that is gone is no failure.
+func (a *App) onMDAcquired(msg mdAcquiredMsg) {
+	w := a.watches.md
+	current := w != nil && w.root == msg.root && w.release == nil
+
+	var gone errWorktreeRemoved
+
+	switch {
+	case msg.err == nil:
+		delete(a.watches.failed, "root "+msg.root)
+
+		if !current {
+			a.releaseAsync(msg.release)
+
+			return
+		}
+
+		w.release = msg.release
+	case current && !errors.As(msg.err, &gone):
+		a.log.Warn("watch markdown root", "root", msg.root, "err", msg.err)
 		a.noticeOnce("root "+msg.root, filepath.Base(msg.root), msg.err)
 	}
 }

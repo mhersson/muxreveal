@@ -16,19 +16,11 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/mhersson/muxreveal/internal/core"
-	"github.com/mhersson/muxreveal/internal/git"
 	"github.com/mhersson/muxreveal/internal/md"
-	"github.com/mhersson/muxreveal/internal/ui/palette"
 )
 
-const (
-	// mdReadTimeout bounds the read and parse of one page.
-	mdReadTimeout = 10 * time.Second
-	// mdListTimeout bounds the listing of a worktree's markdown files.
-	mdListTimeout = 5 * time.Second
-
-	noticeNoMarkdown = "no markdown files in this worktree"
-)
+// mdReadTimeout bounds the read and parse of one page.
+const mdReadTimeout = 10 * time.Second
 
 var (
 	errOutsideWorktree = errors.New("outside the worktree")
@@ -57,27 +49,6 @@ type mdPageMsg struct {
 	reload bool
 	sum    [sha256.Size]byte
 	same   bool // a check found the file as the page has it, and parsed nothing
-}
-
-// mdListMsg answers the listing of a worktree's markdown files.
-type mdListMsg struct {
-	tab   core.TabID
-	gen   int
-	seq   int
-	files []string
-	err   error
-}
-
-// mdWant is an md.open waiting for its drawer: open once the drawer has opened.
-type mdWant struct {
-	tab  core.TabID
-	open bool
-}
-
-// mdPick names the drawer a markdown list was made for.
-type mdPick struct {
-	tab core.TabID
-	gen int
 }
 
 // page is the page that shows, nil for none.
@@ -212,9 +183,9 @@ func relSlash(root, path string) string {
 // ---- opening ----
 
 // openMarkdownPage reads and parses the file at path, off the update loop, and
-// shows it as a page on top of the drawer's stack (push) or as the stack's only
-// page. Only the newest ask is answered; the drawer's other pages are left alone.
-func (a *App) openMarkdownPage(tab core.TabID, path string, push bool) tea.Cmd {
+// pushes it as a page on top of the drawer's stack. Only the newest ask is
+// answered; the drawer's other pages are left alone.
+func (a *App) openMarkdownPage(tab core.TabID, path string) tea.Cmd {
 	v := a.drawer.views[tab]
 	if v == nil || v.root == "" {
 		return nil
@@ -226,7 +197,6 @@ func (a *App) openMarkdownPage(tab core.TabID, path string, push bool) tea.Cmd {
 
 	path = filepath.Clean(path)
 	v.pageSeq++
-	v.pagePush = push
 
 	return a.readPageCmd(tab, v, path, v.pageSeq, false, nil)
 }
@@ -299,11 +269,7 @@ func (a *App) onMDPage(msg mdPageMsg) {
 	msg.doc.withPictures(docPictures{reg: a.pictures, root: v.root})
 
 	p := &mdPage{path: msg.path, rel: relSlash(v.root, msg.path), view: mdView{doc: msg.doc}, sum: msg.sum}
-	if v.pagePush {
-		v.pages = append(v.pages, p)
-	} else {
-		v.pages = []*mdPage{p}
-	}
+	v.pages = append(v.pages, p)
 
 	v.search = nil
 
@@ -494,160 +460,6 @@ func (a *App) openEditor(tab core.Tab, v *reviewView, path string, line int) tea
 	}
 
 	return cmd
-}
-
-// ---- md.open ----
-
-// mdOpenCommand is md.open: it lists the shown worktree's markdown files in the
-// palette. With no drawer open it opens one for the focused pane first, as leader
-// d does, and lists once the drawer knows its root.
-func (a *App) mdOpenCommand() tea.Cmd {
-	a.endSlide()
-
-	a.drawer.mdSeq++
-	a.drawer.mdWant = nil
-
-	tab := a.store.State().Tab()
-	if tab.Review != nil {
-		if v := a.drawer.views[tab.ID]; v != nil && v.loaded && v.root == "" {
-			a.notice = noticeNotRepo
-
-			return nil
-		}
-
-		a.closeWorktrees()
-		a.closeLinks()
-		a.drawerTake()
-		a.drawer.mdWant = &mdWant{tab: tab.ID, open: true}
-
-		return nil
-	}
-
-	cmd := a.openSliding(tab.Focus)
-	if cmd != nil {
-		a.drawer.mdWant = &mdWant{tab: tab.ID}
-	}
-
-	return cmd
-}
-
-// takeMDWant hands over the md.open waiting for tab's drawer to open.
-func (a *App) takeMDWant(tab core.TabID) *mdWant {
-	w := a.drawer.mdWant
-	if w == nil || w.tab != tab {
-		return nil
-	}
-
-	a.drawer.mdWant = nil
-
-	return w
-}
-
-// mdListAfterSync lists the markdown files of a drawer md.open waited for, once
-// the drawer has opened and knows its root.
-func (a *App) mdListAfterSync() tea.Cmd {
-	w := a.drawer.mdWant
-	if w == nil {
-		return nil
-	}
-
-	tab := a.store.State().Tab()
-
-	switch {
-	case tab.ID != w.tab:
-		a.drawer.mdWant = nil
-
-		return nil
-	case !w.open:
-		return nil
-	case tab.Review == nil:
-		a.drawer.mdWant = nil
-
-		return nil
-	}
-
-	v := a.drawer.views[tab.ID]
-	if v == nil {
-		return nil
-	}
-
-	if v.root == "" {
-		// A view that finished loading without a root has none to list.
-		if v.loaded {
-			a.drawer.mdWant = nil
-		}
-
-		return nil
-	}
-
-	a.drawer.mdWant = nil
-	a.drawer.mdSeq++
-
-	seq, epoch, root, parent := a.drawer.mdSeq, v.epoch, v.root, a.ctx
-	id := tab.ID
-
-	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(parent, mdListTimeout)
-		defer cancel()
-
-		files, err := git.MarkdownFiles(ctx, root)
-
-		return mdListMsg{tab: id, gen: epoch, seq: seq, files: files, err: err}
-	}
-}
-
-// onMDList opens the palette on the files listed. An answer after the drawer
-// closed or retargeted, another modal opened, the drawer lost the keyboard or a
-// newer md.open is dropped.
-func (a *App) onMDList(msg mdListMsg) {
-	st := a.store.State()
-	tab := st.Tab()
-	v := a.drawer.views[msg.tab]
-
-	if v == nil || msg.seq != a.drawer.mdSeq || tab.ID != msg.tab || tab.Review == nil || a.drawer.closing || !a.drawer.focused || msg.gen != v.epoch || a.modalOpen() {
-		return
-	}
-
-	switch {
-	case errors.Is(msg.err, context.Canceled):
-		return
-	case msg.err != nil:
-		a.log.Warn("markdown files", "root", v.root, "err", msg.err)
-		a.notice = "markdown files: " + printable(msg.err.Error())
-
-		return
-	case len(msg.files) == 0:
-		a.notice = noticeNoMarkdown
-
-		return
-	}
-
-	items := make([]palette.Item, len(msg.files))
-	for i, f := range msg.files {
-		items[i] = palette.Item{ID: f, Title: printable(f)}
-	}
-
-	o := a.openOverlay(overlayMarkdown, a.titled(iconMarkdown, "Markdown files"), items)
-	o.pal = o.pal.WithEnterLabel("open")
-	o.pick = &mdPick{tab: msg.tab, gen: msg.gen}
-}
-
-// pickMarkdown opens the file picked from the list as the drawer's only page,
-// unless the drawer it was listed for is gone or has a new source.
-func (a *App) pickMarkdown(pick *mdPick, rel string) tea.Cmd {
-	tab := a.store.State().Tab()
-	if pick == nil || tab.ID != pick.tab || tab.Review == nil {
-		return nil
-	}
-
-	v := a.drawer.views[tab.ID]
-	if v == nil || v.epoch != pick.gen {
-		return nil
-	}
-
-	a.drawerTake()
-
-	return a.openMarkdownPage(tab.ID, filepath.Join(v.root, filepath.FromSlash(rel)), false)
 }
 
 // foldKey is the key a closed fold names in the drawer's markdown: the first

@@ -178,8 +178,6 @@ func (a *App) onSlideOpen(msg slideOpenMsg) tea.Cmd {
 // panes, sliding out when slide is set.
 func (a *App) closeDrawer(slide bool) tea.Cmd {
 	a.drawer.prNext = nil
-	a.drawer.mdSeq++
-	a.drawer.mdWant = nil
 	a.releaseKeys()
 	a.clearDrawerSel(a.store.State().Tab().ID)
 
