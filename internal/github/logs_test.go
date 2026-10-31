@@ -364,3 +364,33 @@ func TestJobLogRangeWithoutStart(t *testing.T) {
 		}
 	}
 }
+
+func TestCheckRunErrorsCarryNoURL(t *testing.T) {
+	t.Parallel()
+
+	for _, status := range []int{http.StatusNotFound, http.StatusBadGateway} {
+		t.Run(http.StatusText(status), func(t *testing.T) {
+			t.Parallel()
+
+			c, _ := newTestClient(t, "github.com", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				http.Error(w, `{"message":"nope"}`, status)
+			}))
+
+			_, err := c.CheckRun(context.Background(), logRepo, 77)
+			if err == nil {
+				t.Fatal("want an error")
+			}
+
+			for _, bad := range []string{"https://", "api.github.com"} {
+				if strings.Contains(err.Error(), bad) {
+					t.Errorf("error %q holds %q", err, bad)
+				}
+			}
+
+			var he *api.HTTPError
+			if !errors.As(err, &he) || he.StatusCode != status {
+				t.Errorf("err = %v, want a %d HTTPError", err, status)
+			}
+		})
+	}
+}

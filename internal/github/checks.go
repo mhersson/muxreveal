@@ -128,7 +128,7 @@ func (c *Client) Checks(ctx context.Context, r Repo, sha string) ([]Check, error
 func (c *Client) getPage(ctx context.Context, path string, out any) (string, error) {
 	resp, err := c.restAPI.RequestWithContext(ctx, http.MethodGet, path, nil)
 	if err != nil {
-		return "", wrapAPI("github: GET "+pathOnly(path), err, time.Now())
+		return "", wrapAPI("github: GET "+pathOnly(path), redactURL(err), time.Now())
 	}
 
 	defer resp.Body.Close()
