@@ -96,9 +96,10 @@ type pictureDoneMsg struct {
 type pictureSize struct{ cols, rows int }
 
 type sentPicture struct {
-	id    uint32
-	ready bool // the escape was returned to the terminal
-	used  uint64
+	id      uint32
+	ready   bool   // the terminal holds the image
+	pending bool   // a render job is out
+	used    uint64 // when shown last; neither ready nor pending means unsent or evicted
 }
 
 type pictureEntry struct {
@@ -106,6 +107,8 @@ type pictureEntry struct {
 	failed bool
 	w, h   int
 	sent   map[pictureSize]*sentPicture
+	root   string // of the doc that first sized it, for tombstone renders
+	host   string
 }
 
 type sentRef struct {
@@ -123,6 +126,7 @@ type pictures struct {
 	queried  bool // start sent the query
 	graphics bool // the graphics query answered OK before the DA1 reply
 	da1      bool
+	onTerm   bool // an image was sent and not yet deleted by cell change
 	asked    bool // the RGB and Tc requests went out
 	profile  colorprofile.Profile
 	cell     kitty.Cell
@@ -177,7 +181,7 @@ func (p *pictures) reply(msg tea.Msg) (cmd tea.Cmd, handled bool) {
 			return nil, false
 		}
 
-		if !p.da1 && string(m.Payload) == "OK" {
+		if p.queried && !p.da1 && string(m.Payload) == "OK" {
 			p.graphics = true
 			cmd = p.askTruecolor()
 		}
@@ -222,6 +226,8 @@ func (p *pictures) setCell(c kitty.Cell) tea.Cmd {
 		return nil
 	}
 
+	sent := p.onTerm && p.on()
+
 	for _, e := range p.entries {
 		e.sent = nil
 	}
@@ -229,6 +235,12 @@ func (p *pictures) setCell(c kitty.Cell) tea.Cmd {
 	clear(p.ids)
 
 	p.g++
+
+	if !sent {
+		return nil
+	}
+
+	p.onTerm = false
 
 	return tea.Raw(kitty.DeleteAll())
 }
@@ -256,7 +268,7 @@ func (p *pictures) size(d docPictures, src string, maxCols int) md.PictureSize {
 
 	e := p.entries[key]
 	if e == nil {
-		p.entries[key] = &pictureEntry{}
+		p.entries[key] = &pictureEntry{root: d.root, host: d.host}
 		p.jobs.add(pictureJob{key: key, root: d.root, host: d.host})
 
 		return md.PictureSize{Loading: true}
@@ -272,15 +284,9 @@ func (p *pictures) size(d docPictures, src string, maxCols int) md.PictureSize {
 
 	cols, rows := kitty.Fit(e.w, e.h, p.cell, min(maxCols, pictureMaxCols), pictureMaxRows)
 	sz := pictureSize{cols, rows}
-	p.tick++
 
 	if s := e.sent[sz]; s != nil {
-		s.used = p.tick
-		if s.ready {
-			return md.PictureSize{Cols: cols, Rows: rows, ID: s.id}
-		}
-
-		return md.PictureSize{Loading: true}
+		return md.PictureSize{Cols: cols, Rows: rows, ID: s.id}
 	}
 
 	id := p.allocID()
@@ -289,11 +295,11 @@ func (p *pictures) size(d docPictures, src string, maxCols int) md.PictureSize {
 		e.sent = map[pictureSize]*sentPicture{}
 	}
 
+	p.tick++
 	e.sent[sz] = &sentPicture{id: id, used: p.tick}
 	p.ids[id] = sentRef{key, sz}
-	p.jobs.add(pictureJob{key: key, root: d.root, host: d.host, render: true, id: id, cols: cols, rows: rows, cell: p.cell})
 
-	return md.PictureSize{Loading: true}
+	return md.PictureSize{Cols: cols, Rows: rows, ID: id}
 }
 
 func (p *pictures) allocID() uint32 {
@@ -351,7 +357,7 @@ func (p *pictures) done(msg pictureDoneMsg) tea.Cmd {
 	}
 
 	s := e.sent[ref.size]
-	if s == nil || s.ready {
+	if s == nil || !s.pending {
 		return nil
 	}
 
@@ -361,8 +367,8 @@ func (p *pictures) done(msg pictureDoneMsg) tea.Cmd {
 		return nil
 	}
 
-	s.ready = true
-	p.g++
+	s.ready, s.pending = true, false
+	p.onTerm = true
 
 	out := msg.seq
 	for _, id := range p.evict(s) {
@@ -397,7 +403,17 @@ func (p *pictures) fail(key pictureKey, e *pictureEntry, err error) {
 	e.sent, e.failed = nil, true
 	p.g++
 
-	p.log.Info("picture not loaded", "src", key.src, "err", err)
+	src := key.src
+	msg := err.Error()
+
+	if u, perr := url.Parse(src); perr == nil && u.Scheme != "" {
+		u.RawQuery, u.Fragment = "", ""
+		clean := u.String()
+		msg = strings.ReplaceAll(msg, src, clean)
+		src = clean
+	}
+
+	p.log.Info("picture not loaded", "src", src, "err", msg)
 }
 
 // evict drops the least recently used sent images past pictureMaxSent, never
@@ -406,11 +422,7 @@ func (p *pictures) evict(keep *sentPicture) []uint32 {
 	var out []uint32
 
 	for p.readyCount() > pictureMaxSent {
-		var (
-			oldest *sentPicture
-			ekey   pictureKey
-			esz    pictureSize
-		)
+		var oldest *sentPicture
 
 		for _, ref := range p.ids {
 			s := p.entries[ref.key].sent[ref.size]
@@ -418,21 +430,16 @@ func (p *pictures) evict(keep *sentPicture) []uint32 {
 				continue
 			}
 
-			oldest, ekey, esz = s, ref.key, ref.size
+			oldest = s
 		}
 
 		if oldest == nil {
 			break
 		}
 
-		delete(p.entries[ekey].sent, esz)
-		delete(p.ids, oldest.id)
+		oldest.ready = false
 
 		out = append(out, oldest.id)
-	}
-
-	if len(out) > 0 {
-		p.g++
 	}
 
 	return out
@@ -452,9 +459,38 @@ func (p *pictures) readyCount() int {
 
 // quit deletes every sent image before next, so none outlives the app.
 func (p *pictures) quit(next tea.Cmd) tea.Cmd {
-	if p.readyCount() == 0 {
+	if !p.onTerm {
 		return next
 	}
 
 	return tea.Sequence(tea.Raw(kitty.DeleteAll()), next)
+}
+
+// shown marks the pictures a frame shows as used, and queues the render of any
+// the terminal does not hold (never sent, or evicted).
+func (p *pictures) shown(ids []uint32) {
+	for _, id := range ids {
+		ref, ok := p.ids[id]
+		if !ok {
+			continue
+		}
+
+		e := p.entries[ref.key]
+		s := e.sent[ref.size]
+		p.tick++
+		s.used = p.tick
+
+		if !s.ready && !s.pending {
+			s.pending = true
+
+			p.jobs.add(pictureJob{key: ref.key, root: e.root, host: e.host, render: true, id: id, cols: ref.size.cols, rows: ref.size.rows, cell: p.cell})
+		}
+	}
+}
+
+// sent reports whether the terminal holds image id.
+func (p *pictures) sent(id uint32) bool {
+	ref, ok := p.ids[id]
+
+	return ok && p.entries[ref.key].sent[ref.size].ready
 }

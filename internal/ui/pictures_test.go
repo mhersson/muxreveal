@@ -109,6 +109,8 @@ func TestPictureDetect(t *testing.T) {
 		{"256 colours", nil, true, []tea.Msg{color256, gfxOK, cell10x2, da1}, false},
 		{"256 colours then truecolor", nil, true, []tea.Msg{color256, gfxOK, cell10x2, da1, truecol}, true},
 		{"tmux", map[string]string{"TMUX": "/tmp/x"}, false, []tea.Msg{truecol, gfxOK, cell10x2, da1}, false},
+		{"tmux 256 colours", map[string]string{"TMUX": "/tmp/x"}, false, []tea.Msg{color256, gfxOK, cell10x2, da1}, false},
+		{"nested pane 256 colours", map[string]string{"MUXREVEAL_PANE": "1"}, false, []tea.Msg{color256, gfxOK, cell10x2, da1}, false},
 		{"nested pane", map[string]string{"MUXREVEAL_PANE": "1"}, false, []tea.Msg{truecol, gfxOK, cell10x2, da1}, false},
 	}
 
@@ -122,7 +124,11 @@ func TestPictureDetect(t *testing.T) {
 				t.Fatalf("start() sent a query = %v, want %v", got, tt.start)
 			}
 
-			feed(p, tt.msgs...)
+			for i, c := range feed(p, tt.msgs...) {
+				if !tt.start && c != nil {
+					t.Errorf("message %d returned a command with the query not sent", i)
+				}
+			}
 
 			if got := p.on(); got != tt.on {
 				t.Errorf("on() = %v, want %v", got, tt.on)
@@ -135,6 +141,7 @@ func TestPictureCapabilityRequest(t *testing.T) {
 	t.Parallel()
 
 	p, _, _ := newTestPictures(nil)
+	p.start()
 	cmds := feed(p, color256, gfxOK)
 
 	if got := batched(t, cmds[1]); got != 2 {
@@ -146,6 +153,8 @@ func TestPictureCapabilityRequest(t *testing.T) {
 	}
 
 	q, _, _ := newTestPictures(nil)
+	q.start()
+
 	if cmd := feed(q, truecol, gfxOK)[1]; cmd != nil {
 		t.Error("OK at truecolor asked for capabilities")
 	}
@@ -253,9 +262,17 @@ func TestPictureSize(t *testing.T) {
 			t.Error("gen did not move")
 		}
 
-		if got := p.size(dp, ghURL, 96); got != (md.PictureSize{Loading: true}) {
-			t.Fatalf("after info = %+v", got)
+		got := p.size(dp, ghURL, 96)
+		if got.Cols != 78 || got.Rows != 20 || got.ID == 0 || got.Loading || len(jobs.jobs) != 0 {
+			t.Fatalf("after info = %+v with %d jobs", got, len(jobs.jobs))
 		}
+
+		if p.sent(got.ID) {
+			t.Error("sent before shown")
+		}
+
+		p.shown([]uint32{got.ID})
+		p.shown([]uint32{got.ID})
 
 		jb := jobs.take()
 		if len(jb) != 1 || !jb[0].render || jb[0].cols != 78 || jb[0].rows != 20 || jb[0].id == 0 || jb[0].cell != (kitty.Cell{W: 10, H: 20}) {
@@ -267,13 +284,12 @@ func TestPictureSize(t *testing.T) {
 			t.Fatalf("render command gave %+v", cmd())
 		}
 
-		want := md.PictureSize{Cols: 78, Rows: 20, ID: jb[0].id}
-		if got := p.size(dp, ghURL, 96); got != want {
-			t.Errorf("after render = %+v, want %+v", got, want)
+		if jb[0].id != got.ID || !p.sent(got.ID) {
+			t.Errorf("job id %d, sent %v", jb[0].id, p.sent(got.ID))
 		}
 
-		if got := p.size(dp, ghURL, 40); !got.Loading || len(jobs.take()) != 1 {
-			t.Errorf("a narrower line gave %+v", got)
+		if narrow := p.size(dp, ghURL, 40); narrow.ID == got.ID || narrow.Cols != 40 || len(jobs.take()) != 0 {
+			t.Errorf("a narrower line gave %+v", narrow)
 		}
 	})
 
@@ -338,19 +354,34 @@ func TestPictureRetry(t *testing.T) {
 	}
 }
 
-// rendered sizes src, answers its info and render, and returns the id.
-func rendered(t *testing.T, p *pictures, jobs *recJobs, dp docPictures, src string) (uint32, tea.Cmd) {
+// known sizes src and answers its info, returning the size it then has.
+func known(t *testing.T, p *pictures, jobs *recJobs, dp docPictures, src string, maxCols int) md.PictureSize {
 	t.Helper()
 
-	p.size(dp, src, 96)
+	p.size(dp, src, maxCols)
 
 	info := jobs.take()
-	if len(info) != 1 {
+	if len(info) != 1 || info[0].render {
 		t.Fatalf("info jobs = %+v", info)
 	}
 
 	p.done(pictureDoneMsg{job: info[0], w: 100, h: 100})
-	p.size(dp, src, 96)
+
+	got := p.size(dp, src, maxCols)
+	if got.ID == 0 || len(jobs.jobs) != 0 {
+		t.Fatalf("size after info = %+v with %d jobs", got, len(jobs.jobs))
+	}
+
+	return got
+}
+
+// rendered shows src and answers its render, answers its info and render, and returns the id.
+func rendered(t *testing.T, p *pictures, jobs *recJobs, dp docPictures, src string) (uint32, tea.Cmd) {
+	t.Helper()
+
+	id := known(t, p, jobs, dp, src, 96).ID
+
+	p.shown([]uint32{id})
 
 	r := jobs.take()
 	if len(r) != 1 || !r[0].render {
@@ -369,9 +400,7 @@ func TestPictureLate(t *testing.T) {
 		t.Parallel()
 
 		p, jobs, _ := onPictures(t)
-		p.size(dp(p), "/repo/a.png", 96)
-		p.done(pictureDoneMsg{job: jobs.take()[0], w: 100, h: 100})
-		p.size(dp(p), "/repo/a.png", 96)
+		p.shown([]uint32{known(t, p, jobs, dp(p), "/repo/a.png", 96).ID})
 
 		job := jobs.take()[0]
 
@@ -387,9 +416,7 @@ func TestPictureLate(t *testing.T) {
 		t.Parallel()
 
 		p, jobs, _ := onPictures(t)
-		p.size(dp(p), "/repo/a.png", 96)
-		p.done(pictureDoneMsg{job: jobs.take()[0], w: 100, h: 100})
-		p.size(dp(p), "/repo/a.png", 96)
+		p.shown([]uint32{known(t, p, jobs, dp(p), "/repo/a.png", 96).ID})
 
 		job := jobs.take()[0]
 		job.id += 1000
@@ -454,8 +481,21 @@ func TestPictureEvict(t *testing.T) {
 		t.Errorf("command %q deletes more than one image", raw)
 	}
 
-	if got := p.size(dp, srcs[0], 96); !got.Loading || len(jobs.take()) != 1 {
-		t.Errorf("evicted picture gave %+v", got)
+	want := md.PictureSize{Cols: 10, Rows: 5, ID: ids[0]}
+	if got := p.size(dp, srcs[0], 96); got != want || len(jobs.take()) != 0 || p.sent(ids[0]) {
+		t.Errorf("evicted picture gave %+v, want %+v, no job and unsent", got, want)
+	}
+
+	p.shown([]uint32{ids[0]})
+	p.shown([]uint32{ids[0]})
+
+	jb := jobs.take()
+	if len(jb) != 1 || !jb[0].render || jb[0].id != ids[0] || jb[0].key.src != srcs[0] {
+		t.Fatalf("shown queued %+v", jb)
+	}
+
+	if raw := rawOf(t, p.done(pictureDoneMsg{job: jb[0], seq: "AGAIN"})); !strings.HasPrefix(raw, "AGAIN") {
+		t.Errorf("done gave %q", raw)
 	}
 
 	if got := p.size(dp, srcs[1], 96); got.ID != ids[1] {
@@ -498,12 +538,15 @@ func TestPictureCellChange(t *testing.T) {
 		t.Error("gen did not move")
 	}
 
-	if got := p.size(dp, "/repo/a.png", 96); !got.Loading {
-		t.Fatalf("size = %+v", got)
+	got := p.size(dp, "/repo/a.png", 96)
+	if got.ID == 0 || got.Cols != 13 || len(jobs.jobs) != 0 {
+		t.Fatalf("size = %+v with %d jobs", got, len(jobs.jobs))
 	}
 
+	p.shown([]uint32{got.ID})
+
 	jb := jobs.take()
-	if len(jb) != 1 || !jb[0].render || jb[0].cell != (kitty.Cell{W: 8, H: 16}) {
+	if len(jb) != 1 || jb[0].id != got.ID || !jb[0].render || jb[0].cell != (kitty.Cell{W: 8, H: 16}) {
 		t.Errorf("jobs = %+v", jb)
 	}
 
@@ -572,7 +615,8 @@ func TestDocPictureMove(t *testing.T) {
 
 		p.g++
 
-		second := d.layout(80, false)
+		d.layout(80, false)
+
 		if d.layouts != 2 {
 			t.Fatalf("layouts = %d, want 2", d.layouts)
 		}
@@ -585,8 +629,6 @@ func TestDocPictureMove(t *testing.T) {
 		if _, ok := d.pictureMove(); ok {
 			t.Error("move offered twice")
 		}
-
-		_ = second
 	})
 
 	t.Run("width change", func(t *testing.T) {
@@ -620,4 +662,104 @@ func TestDocPictureMove(t *testing.T) {
 			t.Errorf("layouts = %d, want 1", d.layouts)
 		}
 	})
+}
+
+func TestPictureUnsolicitedCell(t *testing.T) {
+	t.Parallel()
+
+	p, _, _ := newTestPictures(nil)
+	feed(p, truecol, cell10x2)
+
+	if cmd, _ := p.reply(uv.CellSizeEvent{Width: 8, Height: 16}); cmd != nil {
+		t.Error("a cell size change with graphics off returned a command")
+	}
+}
+
+func TestPictureSettles(t *testing.T) {
+	t.Parallel()
+
+	p, jobs, _ := onPictures(t)
+	dp := docPictures{reg: p, root: "/repo"}
+
+	srcs := make([]string, 70)
+	for i := range srcs {
+		srcs[i] = "/repo/" + strings.Repeat("b", i+1) + ".png"
+		known(t, p, jobs, dp, srcs[i], 96)
+	}
+
+	gen := p.gen()
+
+	for range 3 {
+		for _, src := range srcs {
+			if got := p.size(dp, src, 96); got.Rows == 0 {
+				t.Fatalf("%s gave %+v", src, got)
+			}
+		}
+	}
+
+	if len(jobs.jobs) != 0 || p.gen() != gen {
+		t.Fatalf("did not settle: %d jobs, gen moved %v", len(jobs.jobs), p.gen() != gen)
+	}
+
+	var ids []uint32
+	for _, src := range srcs[:5] {
+		ids = append(ids, p.size(dp, src, 96).ID)
+	}
+
+	p.shown(ids)
+
+	if n := len(jobs.take()); n != 5 {
+		t.Errorf("shown of 5 queued %d renders", n)
+	}
+}
+
+func TestPictureQuitAfterFailedSize(t *testing.T) {
+	t.Parallel()
+
+	p, jobs, _ := onPictures(t)
+	dp := docPictures{reg: p, root: "/repo"}
+	rendered(t, p, jobs, dp, "/repo/a.png")
+
+	p.shown([]uint32{p.size(dp, "/repo/a.png", 5).ID})
+
+	job := jobs.take()[0]
+	p.done(pictureDoneMsg{job: job, err: errors.New("x")})
+
+	v := reflect.ValueOf(p.quit(func() tea.Msg { return "next" })())
+	if v.Kind() != reflect.Slice {
+		t.Errorf("quit after a failed size gave %v, want delete all then next", v)
+	}
+}
+
+func TestPictureLogHasNoQuery(t *testing.T) {
+	t.Parallel()
+
+	p, jobs, lb := onPictures(t)
+	dp := docPictures{reg: p, root: "/repo"}
+	src := "https://private-user-images.githubusercontent.com/1/a.png?jwt=SECRET"
+
+	p.size(dp, src, 96)
+	p.done(pictureDoneMsg{job: jobs.take()[0], err: errors.New("Get " + src + ": boom")})
+
+	if lb.count() != 1 || strings.Contains(lb.buf.String(), "SECRET") {
+		t.Errorf("log = %q", lb.buf.String())
+	}
+}
+
+func TestPictureKeptRender(t *testing.T) {
+	t.Parallel()
+
+	p, jobs, _ := onPictures(t)
+	dp := docPictures{reg: p, root: "/repo"}
+
+	p.shown([]uint32{known(t, p, jobs, dp, "/repo/a.png", 96).ID})
+	job := jobs.take()[0]
+
+	if rawOf(t, p.done(pictureDoneMsg{job: job, seq: "S"})) != "S" {
+		t.Fatal("render not kept")
+	}
+
+	if got := p.size(dp, "/repo/a.png", 96); got.ID != job.id || len(jobs.take()) != 0 {
+		t.Errorf("later size gave %+v", got)
+	}
 }
