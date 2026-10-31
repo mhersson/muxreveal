@@ -14,7 +14,7 @@
 │   feat/a          │                                                                              │                   │
 │                   │  loading pull requests…                                                      │                   │
 │                   │                                                                              │                   │
-│                   │  enter diff    c checks    a approve    M merge    O browser    r refresh    │                   │
+│                   │  enter diff    i conversation    c checks    a approve    M merge            │                   │
 │ Idle ─────────────╰──────────────────────────────────────────────────────────────────────────────╯                   │
 │                                          ││                                                                          │
 │   api                                 0s ││                                                                          │

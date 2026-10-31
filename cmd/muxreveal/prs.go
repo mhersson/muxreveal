@@ -169,6 +169,16 @@ func (g ghReads) CheckRun(ctx context.Context, r github.Repo, id int64) (github.
 	return c.CheckRun(ctx, r, id)
 }
 
+// Conversation reads a pull request's description and timeline.
+func (g ghReads) Conversation(ctx context.Context, r github.Repo, number int) (github.Conversation, error) {
+	c, err := g.clients.client(ctx, r.Host)
+	if err != nil {
+		return github.Conversation{}, fmt.Errorf("client for %s: %w", r.Host, err)
+	}
+
+	return c.Conversation(ctx, r, number)
+}
+
 // Close stops the poller: its requests are cancelled, its goroutines end and
 // its updates close. It is safe to repeat.
 func (p *prRuntime) Close() error { return p.poller.Close() }

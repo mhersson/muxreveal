@@ -30,6 +30,7 @@ var (
 		{"2", "prlist.tab.requested"},
 		{"3", "prlist.tab.all"},
 		{"enter", "prlist.show"},
+		{"i", "prlist.conversation"},
 		{"c", "prlist.checks"},
 		{"a", "prlist.approve"},
 		{"M", "prlist.merge"},
@@ -200,7 +201,10 @@ func prListCommands() []command {
 		cmd("prlist.show", "show the diff", true, func(a *App, rows []prListRow, i int) tea.Cmd {
 			return a.prListOpen(rows[i], thenNothing)
 		}),
-		// The checks stack over the list, which stays under them.
+		// The conversation and the checks stack over the list, which stays under them.
+		cmd("prlist.conversation", "show the conversation", true, func(a *App, rows []prListRow, i int) tea.Cmd {
+			return a.openConversation(rows[i].key.repo, rows[i].key.number, rows[i].pr)
+		}),
 		cmd("prlist.checks", "show the checks", true, func(a *App, rows []prListRow, i int) tea.Cmd {
 			return a.openChecks(rows[i].key.repo, rows[i].key.number)
 		}),

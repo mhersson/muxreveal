@@ -3,8 +3,10 @@ package ui
 import (
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/mhersson/muxreveal/internal/core"
+	"github.com/mhersson/muxreveal/internal/ui/theme"
 )
 
 // prHeaderMinDiff is the rows of diff the header leaves; a column too short for
@@ -77,13 +79,13 @@ func (d *drawCtx) headerRow(y int) string {
 	ui, pr, v := d.ui, d.pr, d.v
 	p := railPainter{bg: ui.Bg}
 	w := d.lay.diffW
-	sp := func(n int) railRun { return railRun{text: strings.Repeat(" ", n), fg: ui.Fg} }
+	lead := railRun{text: strings.Repeat(" ", markW), fg: ui.Fg}
 
 	switch {
 	case y == 0:
-		return p.line([]railRun{sp(markW), {text: prNumberText(pr.Number) + " " + printable(pr.Title), fg: ui.Fg, bold: true}}, w)
+		return p.line([]railRun{lead, {text: prNumberText(pr.Number) + " " + printable(pr.Title), fg: ui.Fg, bold: true}}, w)
 	case y == 1:
-		return p.line(d.prMetaRuns(sp), w)
+		return p.line(append([]railRun{lead}, d.prMetaRuns()...), w)
 	case y == d.lay.headH-1:
 		return p.line([]railRun{{text: strings.Repeat("─", w), fg: ui.Border}}, w)
 	case prMoved(v, pr):
@@ -92,7 +94,7 @@ func (d *drawCtx) headerRow(y int) string {
 			text += "; " + key + " fetches it"
 		}
 
-		return p.line([]railRun{sp(markW), {text: text, fg: ui.Warning}}, w)
+		return p.line([]railRun{lead, {text: text, fg: ui.Warning}}, w)
 	case v.unpushed > 0:
 		text := ": the PR shows the pushed head"
 		if d.pushKey != "" {
@@ -100,7 +102,7 @@ func (d *drawCtx) headerRow(y int) string {
 		}
 
 		return p.line([]railRun{
-			sp(markW),
+			lead,
 			{text: "↑" + strconv.Itoa(v.unpushed) + " not pushed", fg: ui.Warning, bold: true},
 			{text: text, fg: ui.Muted},
 		}, w)
@@ -109,10 +111,9 @@ func (d *drawCtx) headerRow(y int) string {
 	return p.line(nil, w)
 }
 
-// prMetaRuns is the header's second row: branch and base, checks, review,
-// author and age.
-func (d *drawCtx) prMetaRuns(sp func(int) railRun) []railRun {
-	ui, pr, v := d.ui, d.pr, d.v
+// prMetaRuns is the drawer header's second row without its lead.
+func (d *drawCtx) prMetaRuns() []railRun {
+	pr, v := d.pr, d.v
 
 	branch := pr.HeadBranch
 	if branch == "" {
@@ -124,8 +125,14 @@ func (d *drawCtx) prMetaRuns(sp func(int) railRun) []railRun {
 		base = pr.BaseBranch
 	}
 
-	runs := []railRun{sp(markW)}
-	if d.icons {
+	return prMetaRunsOf(pr, branch, base, d.icons, d.ui, d.now)
+}
+
+// prMetaRunsOf is a pull request's second header row: branch and base, checks,
+// review, author and age.
+func prMetaRunsOf(pr core.PRInfo, branch, base string, icons bool, ui theme.UI, now time.Time) []railRun {
+	var runs []railRun
+	if icons {
 		runs = append(runs, railRun{text: iconGit + " ", fg: ui.Git})
 	}
 
@@ -135,11 +142,13 @@ func (d *drawCtx) prMetaRuns(sp func(int) railRun) []railRun {
 		railRun{text: printable(base), fg: ui.Dim},
 	)
 
+	sp := func(n int) railRun { return railRun{text: strings.Repeat(" ", n), fg: ui.Fg} }
+
 	if pr.State == prMergedState || pr.State == prClosedState {
 		runs = append(runs, sp(3))
-		runs = append(runs, prTextOf(pr, d.icons, ui).runs(prStage{counts: true})...)
+		runs = append(runs, prTextOf(pr, icons, ui).runs(prStage{counts: true})...)
 	} else {
-		if glyph, counts := prChecksOf(pr, d.icons, ui); glyph.text != "" {
+		if glyph, counts := prChecksOf(pr, icons, ui); glyph.text != "" {
 			runs = append(runs, sp(3), glyph, sp(1), counts)
 		}
 
@@ -150,7 +159,7 @@ func (d *drawCtx) prMetaRuns(sp func(int) railRun) []railRun {
 		runs = append(runs, railRun{text: "   @" + printable(pr.Author), fg: ui.Subtle})
 	}
 
-	if age := railAge(pr.UpdatedAt, d.now); age != "" {
+	if age := railAge(pr.UpdatedAt, now); age != "" {
 		runs = append(runs, railRun{text: "   " + age, fg: ui.Subtle})
 	}
 

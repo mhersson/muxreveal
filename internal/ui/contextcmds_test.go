@@ -299,7 +299,7 @@ func TestContextHintsFollowBindings(t *testing.T) {
 			cfg       core.KeysConfig
 			want, not string
 		}{
-			{name: "defaults", want: "enter diff    c checks    a approve    M merge    O browser    r refresh    esc close"},
+			{name: "defaults", want: "enter diff    i conversation    c checks    a approve    M merge    O browser    r refresh    esc close"},
 			{name: "browser unbound", cfg: contextKeys("pr_list", "O", "none"), want: "M merge    r refresh", not: "browser"},
 			{name: "approve moved", cfg: contextKeys("pr_list", "A", "prlist.approve", "a", "none"), want: "A approve"},
 		}

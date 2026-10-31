@@ -45,6 +45,10 @@ func (a *App) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		return a.handlePlanKey(msg)
 	}
 
+	if a.conv != nil {
+		return a.handleConvKey(msg)
+	}
+
 	if a.checks != nil {
 		return a.handleChecksKey(msg)
 	}
@@ -77,7 +81,7 @@ func (a *App) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 
 // handlePaste sends a paste to the topmost text input: prompt, overlay, compose box,
 // plan search, picker, then the rail's or drawer's search, else the focused pane.
-// Confirm, copy mode, checks, merge and the PR list drop it.
+// Confirm, copy mode, the conversation, checks, merge and the PR list drop it.
 func (a *App) handlePaste(msg tea.PasteMsg) tea.Cmd {
 	if a.confirm != nil {
 		return nil
@@ -105,7 +109,7 @@ func (a *App) handlePaste(msg tea.PasteMsg) tea.Cmd {
 		return nil
 	}
 
-	if a.checks != nil || a.merge != nil || a.prList != nil {
+	if a.conv != nil || a.checks != nil || a.merge != nil || a.prList != nil {
 		return nil
 	}
 
@@ -171,8 +175,8 @@ func (a *App) reportFocusChange(from, to core.PaneID) {
 
 // modalOpen reports whether any modal owns the keyboard: a confirm, prompt,
 // copy mode, the palette or another overlay, the compose box, the merge box,
-// the plan, the checks, the pull request list, the worktree picker or the drawer's
-// worktree list or link chooser.
+// the plan, the conversation, the checks, the pull request list, the worktree
+// picker or the drawer's worktree list or link chooser.
 func (a *App) modalOpen() bool { return a.composeShown() || a.otherModalOpen() }
 
 // otherModalOpen is modalOpen without the compose box.
@@ -184,5 +188,5 @@ func (a *App) otherModalOpen() bool {
 // link chooser, which the leader opens overlays over.
 func (a *App) aboveDrawerModalOpen() bool {
 	return a.confirm != nil || a.prompt != nil || a.copy != nil || a.overlay != nil || a.merge != nil ||
-		a.plan != nil || a.checks != nil || a.prList != nil || a.picker.open != nil
+		a.plan != nil || a.conv != nil || a.checks != nil || a.prList != nil || a.picker.open != nil
 }

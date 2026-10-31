@@ -32,6 +32,39 @@ type fakeReads struct {
 	runOut   github.CheckRunOutput // what CheckRun returns
 	runErr   error
 	runCalls []jobLogCall
+
+	// Conversation answers convs[n] for the nth call, the last one once they run
+	// out, or convErr.
+	convs     []github.Conversation
+	convErr   error
+	convCalls []convCall
+}
+
+// convCall is one Conversation read.
+type convCall struct {
+	repo   github.Repo
+	number int
+}
+
+func (f *fakeReads) Conversation(_ context.Context, r github.Repo, number int) (github.Conversation, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	n := len(f.convCalls)
+	f.convCalls = append(f.convCalls, convCall{repo: r, number: number})
+
+	if f.convErr != nil || len(f.convs) == 0 {
+		return github.Conversation{}, f.convErr
+	}
+
+	return f.convs[min(n, len(f.convs)-1)], nil
+}
+
+func (f *fakeReads) convReads() []convCall {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	return slices.Clone(f.convCalls)
 }
 
 // jobLogCall is one JobLog read.

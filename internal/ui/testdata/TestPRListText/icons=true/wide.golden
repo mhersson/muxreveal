@@ -26,7 +26,7 @@
 │    feat/c        │  acme/zeta ────────────────────────────────────────────────────────────────────────────────── 1  │                   │
 │   waiting for a pr│   #1 Zeta change  feat/z                                                             changes  2d │                   │
 │                   │                                                                                                  │                   │
-│                   │  enter diff    c checks    a approve    M merge    O browser    r refresh    esc close           │                   │
+│                   │  enter diff    i conversation    c checks    a approve    M merge    O browser    r refresh      │                   │
 │ 󰗡 web             ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯                   │
 │    feat/m                    #3 merged ││                                                                                              │
 │   waiting for a prompt                   ││                                                                                              │

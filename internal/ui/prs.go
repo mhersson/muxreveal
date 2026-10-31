@@ -309,6 +309,14 @@ func (a *App) prWatches(st core.State) []github.Watch {
 		}
 	}
 
+	// The open conversation's pull request is held in the watch set, so its
+	// update time keeps coming.
+	if c := a.conv; c != nil {
+		if repo, ok := repoOfKey(c.repo); ok {
+			visible[repo] = append(visible[repo], c.number)
+		}
+	}
+
 	ws := make([]github.Watch, 0, len(visible))
 
 	for repo, nums := range visible {
@@ -448,6 +456,10 @@ func (a *App) onPRSnapshot(s github.Snapshot) tea.Cmd {
 
 		done[pp.key.branch] = true
 		cmds = append(cmds, a.prLookupCmd(st, s.Repo, pp.key.branch))
+	}
+
+	if cmd := a.convPoll(st, key); cmd != nil {
+		cmds = append(cmds, cmd)
 	}
 
 	return tea.Batch(cmds...)

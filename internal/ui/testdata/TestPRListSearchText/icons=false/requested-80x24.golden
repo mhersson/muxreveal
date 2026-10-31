@@ -15,7 +15,7 @@
 │         │   #311 Fix th…  branch…  ci 3/3  approved  @kari-dev  2h │         │
 │         │   #305 Retry on timeout  branch-305       draft  @li  1d │         │
 │         │                                                          │         │
-│ Idle ───│  enter diff    c checks    a approve    M merge          │         │
+│ Idle ───│  enter diff    i conversation    c checks    a approve   │         │
 │         ╰──────────────────────────────────────────────────────────╯         │
 │   api                             0s ││                                      │
 │   feat/a          #5 ci 5/5 approved ││                                      │

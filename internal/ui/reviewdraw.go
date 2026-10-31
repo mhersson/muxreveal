@@ -832,7 +832,7 @@ func (d *drawCtx) hintRuns(cw int) []railRun {
 	if _, ok := d.v.src.(git.PRSource); ok {
 		pairs = [][2]string{
 			pair("line", next, prev), pair("hunk", "review.hunk.next", "review.hunk.prev"),
-			pair("zoom", "review.zoom"),
+			pair("zoom", "review.zoom"), pair("conversation", "review.conversation"),
 			pair("checks", "review.checks"), pair("approve", "review.approve"), pair("merge", "review.merge"),
 			pair("browser", "review.browser"),
 			pair("reviewed", "review.mark"), d.showReadPair(pair),

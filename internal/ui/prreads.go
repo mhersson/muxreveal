@@ -12,4 +12,5 @@ type prReads interface {
 	MyPRs(ctx context.Context, host string) (github.MyPRs, error)
 	JobLog(ctx context.Context, r github.Repo, jobID int64) (data []byte, cut bool, err error)
 	CheckRun(ctx context.Context, r github.Repo, id int64) (github.CheckRunOutput, error)
+	Conversation(ctx context.Context, r github.Repo, number int) (github.Conversation, error)
 }

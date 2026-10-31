@@ -690,7 +690,7 @@ func TestReviewMarkdownHints(t *testing.T) {
 	m.v.src = git.PRSource{Worktree: m.root, Number: 7}
 	m.onFile(t, "main.go")
 
-	wantPR := "j/k line   ]/[ hunk   z zoom   c checks   a approve   M merge   O browser   space reviewed   R show reviewed   b/t mode"
+	wantPR := "j/k line   ]/[ hunk   z zoom   i conversation   c checks   a approve   M merge   O browser   space reviewed   R show reviewed   b/t mode"
 	if got := hintText(t, m.drawerRig); got != wantPR {
 		t.Errorf("PR hints = %q, want %q", got, wantPR)
 	}

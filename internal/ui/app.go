@@ -140,6 +140,7 @@ type App struct {
 	checks                 *checksView  // a pull request's checks; owns every key while open
 	logSeq                 int          // numbers the job log reads, so a late answer is told apart
 	merge                  *mergeView   // the merge box; owns every key while open
+	conv                   *convView    // a pull request's conversation; owns every key while open
 	plan                   *planView    // an agent's plan; owns every key while open
 	planSeq                int          // plan read counter; an answer for another read is stale
 	prList                 *prListView  // the agents' pull requests; owns every key while open
@@ -583,6 +584,7 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		cmds = append(cmds, a.relayout(), a.pictures.resized())
 		a.sizePlan()
+		a.sizeConv()
 
 		return a, tea.Batch(cmds...)
 	case tea.KeyPressMsg:
@@ -720,6 +722,8 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.onPRSearch(msg)
 	case checkLogMsg:
 		a.onCheckLog(msg)
+	case convReadMsg:
+		a.onConvRead(msg)
 	case checkSummaryMsg:
 		a.onCheckSummary(msg)
 	case prSearchTickMsg:
@@ -882,6 +886,10 @@ func (a *App) View() tea.View {
 
 	if a.checks != nil {
 		content = a.overlayChecks(f, content, lk)
+	}
+
+	if a.conv != nil {
+		content = a.overlayConv(f, content, lk)
 	}
 
 	if a.merge != nil {

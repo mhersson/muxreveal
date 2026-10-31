@@ -266,7 +266,7 @@ func TestReviewHintsReviewed(t *testing.T) {
 
 	const (
 		diff = "j/k line   ]/[ hunk   }/{ file   z zoom   tab tree   w worktree   f full   u split   e edit   / search   space reviewed   R show reviewed   b/t mode"
-		pr   = "j/k line   ]/[ hunk   z zoom   c checks   a approve   M merge   O browser   space reviewed   R show reviewed   b/t mode"
+		pr   = "j/k line   ]/[ hunk   z zoom   i conversation   c checks   a approve   M merge   O browser   space reviewed   R show reviewed   b/t mode"
 	)
 
 	hintRow := func(a *App) string {
