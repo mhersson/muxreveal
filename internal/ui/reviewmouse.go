@@ -15,9 +15,10 @@ func (a *App) inDrawer(x, y int) bool {
 	return ok && x >= r.X && x < r.X+r.W && y >= r.Y && y < r.Y+r.H
 }
 
-// drawerClick gives the drawer the keyboard; on a diff row it moves the cursor
-// there and on a tree file it jumps to it. The tree's scroll depends on who held
-// the keyboard when it was drawn, so that is read before the diff takes it.
+// drawerClick gives the drawer the keyboard; on a tree file it jumps to it. The
+// text of a page or of the diff goes to textClick. The tree's scroll depends on
+// who held the keyboard when it was drawn, so that is read before the diff takes
+// it.
 func (a *App) drawerClick(x, y int) {
 	st := a.store.State()
 	treeWas := a.drawer.focused && a.drawer.tree
@@ -39,38 +40,16 @@ func (a *App) drawerClick(x, y int) {
 		return
 	}
 
-	if p := v.page(); p != nil {
-		p.resize(lay.diffW, lay.diffH, a.icons)
-
-		if line := p.view.top + iy; line < len(p.view.layout().Lines) {
-			p.view.cursor = line
-			p.view.clamp()
-			p.rev++
-		}
-
+	if v.page() != nil || lay.treeW == 0 || ix >= lay.treeW {
 		return
 	}
 
 	top := v.viewTop(lay.diffH)
 	d := &drawCtx{v: v, c: v.derived(), lay: lay, top: top, tree: treeWas}
 
-	switch {
-	case lay.treeW > 0 && ix < lay.treeW:
-		// The tree's rows start after the mode row, the totals row and a blank one.
-		if i := d.treeTop(lay.bodyH-3) + iy - 3; iy >= 3 && i >= 0 && i < len(d.c.tree) && !d.c.tree[i].dir {
-			a.reviewJumpFile(v, d.c.tree[i].file)
-		}
-	case (lay.treeW == 0 || ix > lay.treeW) && iy >= lay.headH:
-		dy := iy - lay.headH
-		i := top + dy
-
-		if sticky, ok := d.stickyHeader(); dy == 0 && ok {
-			i = sticky
-		}
-
-		if i < len(v.rows) {
-			a.reviewGo(v, i)
-		}
+	// The tree's rows start after the mode row, the totals row and a blank one.
+	if i := d.treeTop(lay.bodyH-3) + iy - 3; iy >= 3 && i >= 0 && i < len(d.c.tree) && !d.c.tree[i].dir {
+		a.reviewJumpFile(v, d.c.tree[i].file)
 	}
 }
 
@@ -90,8 +69,17 @@ func (a *App) drawerWheel(dir int) {
 		return
 	}
 
+	a.scrollRows(v, dir*wheelRows)
+}
+
+// scrollRows scrolls the diff rows by n and keeps the cursor in view.
+func (a *App) scrollRows(v *reviewView, n int) {
+	if len(v.rows) == 0 {
+		return
+	}
+
 	h := a.reviewBodyH(v)
 
-	v.top = min(max(v.viewTop(h)+dir*wheelRows, 0), max(len(v.rows)-h, 0))
+	v.top = min(max(v.viewTop(h)+n, 0), max(len(v.rows)-h, 0))
 	v.cursor = min(max(v.cursor, v.top), max(min(v.top+h-1, len(v.rows)-1), 0))
 }

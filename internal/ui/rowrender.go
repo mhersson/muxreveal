@@ -23,9 +23,9 @@ type spanPaint struct {
 
 // renderCells returns a row as a string exactly w cells wide, with style and
 // link sequences closed at the end so rows compose independently. at returns
-// nil for a column without a cell. A non-nil hl repaints its span, wide cells
-// included when any of their columns is inside it.
-func renderCells(at func(x int) *uv.Cell, w int, hl *spanPaint) string {
+// nil for a column without a cell. Each span of hl repaints its columns, wide
+// cells included when any of their columns is inside one.
+func renderCells(at func(x int) *uv.Cell, w int, hl []spanPaint) string {
 	var (
 		sb    strings.Builder
 		style uv.Style
@@ -48,10 +48,14 @@ func renderCells(at func(x int) *uv.Cell, w int, hl *spanPaint) string {
 			c = &uv.Cell{Content: " ", Width: 1, Style: c.Style}
 		}
 
-		if hl != nil && x <= hl.to && x+c.Width > hl.from {
-			painted := *c
-			painted.Style.Bg = hl.bg
-			c = &painted
+		for _, h := range hl {
+			if x <= h.to && x+c.Width > h.from {
+				painted := *c
+				painted.Style.Bg = h.bg
+				c = &painted
+
+				break
+			}
 		}
 
 		if c.Link != link {

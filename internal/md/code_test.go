@@ -40,8 +40,12 @@ func TestCodeFrameAndLabel(t *testing.T) {
 		t.Errorf("row number = %+v", row[1])
 	}
 
-	if row[2].Role != RoleCodeText || row[2].Text != "x := 1        " {
+	if row[2].Role != RoleCodeText || row[2].Text != "x := 1" {
 		t.Errorf("row code = %+v", row[2])
+	}
+
+	if row[3].Role != RoleCodeText || row[3].Text != "        " || !row[3].chrome {
+		t.Errorf("row pad = %+v", row[3])
 	}
 
 	if last := row[len(row)-1]; last.Role != RoleCodeFrame || last.Text != " │" {
@@ -142,7 +146,7 @@ func TestCodeCutNotWrapped(t *testing.T) {
 	wantLines(t, l, "╭"+bar(18)+"╮", "│ 1 "+strings.Repeat("x", 13)+"… │", "╰"+bar(18)+"╯")
 
 	row := l.Lines[1]
-	if r := row[len(row)-2]; !strings.HasSuffix(r.Text, "x…") || r.Role != RoleCodeText || r.Class != 0 {
+	if r := row[len(row)-2]; r.Text != "…" || r.Role != RoleCodeText || r.Class != 0 || r.rest != strings.Repeat("x", 9987) {
 		t.Errorf("cut mark run = %+v", r)
 	}
 

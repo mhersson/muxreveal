@@ -52,12 +52,13 @@ var roleNames = [...]string{
 }
 
 // debug renders l as one text line per layout line, each styled run as
-// ‹Role[,b][,i][,u][,s]:text› and a plain RoleText run as its bare text.
+// ‹Role[,b][,i][,u][,s]:text› and a plain RoleText run as its bare text. Runs
+// that differ only in what a copy does with them print as one.
 func (l Layout) debug() string {
 	var b strings.Builder
 
 	for _, line := range l.Lines {
-		for _, r := range line {
+		for _, r := range mergeCopyMarks(line) {
 			attrs := ""
 
 			for _, a := range []struct {
@@ -82,6 +83,29 @@ func (l Layout) debug() string {
 	}
 
 	return b.String()
+}
+
+// mergeCopyMarks joins adjacent runs that differ only in the fields a copy reads.
+func mergeCopyMarks(line Line) Line {
+	var out Line
+
+	bare := func(r Run) Run {
+		r.Text, r.chrome, r.tab, r.rest, r.join = "", false, false, "", JoinNone
+
+		return r
+	}
+
+	for _, r := range line {
+		if n := len(out); n > 0 && bare(out[n-1]) == bare(r) {
+			out[n-1].Text += r.Text
+
+			continue
+		}
+
+		out = append(out, r)
+	}
+
+	return out
 }
 
 func TestRoleNamesComplete(t *testing.T) {

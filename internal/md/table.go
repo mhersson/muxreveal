@@ -311,6 +311,8 @@ func tableRowLines(row []tableCell, widths []int, aligns []east.Alignment, heade
 		pad.bold = true
 	}
 
+	padRun := func(n int) Run { return chromeRun(pad, strings.Repeat(" ", n)) }
+
 	lines := make([]Line, height)
 
 	for k := range height {
@@ -332,13 +334,13 @@ func tableRowLines(row []tableCell, widths []int, aligns []east.Alignment, heade
 				lead = gap / 2
 			}
 
-			line = appendRun(line, pad.run(strings.Repeat(" ", lead)))
+			line = appendRun(line, padRun(lead))
 
 			for _, r := range cell {
 				line = appendRun(line, r)
 			}
 
-			line = appendRun(line, pad.run(strings.Repeat(" ", gap-lead)))
+			line = appendRun(line, padRun(gap-lead))
 
 			if j < len(widths)-1 {
 				line = appendRun(line, frame.run(" │ "))

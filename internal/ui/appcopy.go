@@ -82,7 +82,7 @@ func (a *App) enterCopyMode() tea.Cmd {
 		return nil
 	}
 
-	a.sel = nil
+	a.clearSelections()
 	a.mouse.press, a.mouse.fwd = nil, nil
 	a.copy = &cs
 

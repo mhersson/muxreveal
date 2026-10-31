@@ -298,6 +298,10 @@ func countText(texts []string, text string) int {
 
 // closePlan closes the overlay and drops any read still on its way.
 func (a *App) closePlan() {
+	if ts := a.text; ts != nil && ts.view != nil && ts.tab == "" {
+		a.clearTextSel()
+	}
+
 	a.plan = nil
 	a.planSeq++
 }
@@ -346,6 +350,8 @@ func (a *App) handlePlanKey(msg tea.KeyPressMsg) tea.Cmd {
 	pv.rewritten = false
 
 	if key == "esc" {
+		a.clearTextSel()
+
 		switch {
 		case pv.chooser != nil:
 			pv.chooser = nil
@@ -366,18 +372,40 @@ func (a *App) handlePlanKey(msg tea.KeyPressMsg) tea.Cmd {
 	}
 
 	if pv.chooser != nil {
+		switch key {
+		case "j", "down", "k", "up", "enter":
+			a.clearTextSel()
+		}
+
 		return a.planChooserKey(msg)
 	}
 
 	if pv.searching {
+		if key == "enter" || key == "backspace" || msg.Text != "" {
+			a.clearTextSel()
+		}
+
 		a.planSearchKey(msg)
 
 		return nil
 	}
 
+	cmd, acted := a.planKey(pv, key, boxH)
+	if acted {
+		a.clearTextSel()
+	}
+
+	return cmd
+}
+
+// planKey runs a key of the overlay's own switch and reports whether it acted:
+// y copies and keeps a selection, and a key the switch drops keeps it too.
+func (a *App) planKey(pv *planView, key string, boxH int) (cmd tea.Cmd, acted bool) {
 	v := pv.shown()
 
 	switch key {
+	case "y":
+		return a.planCopy(), false
 	case "j", "down":
 		v.move(1)
 	case "k", "up":
@@ -399,7 +427,7 @@ func (a *App) handlePlanKey(msg tea.KeyPressMsg) tea.Cmd {
 	case "[":
 		v.heading(-1)
 	case "enter":
-		return a.planEnter()
+		cmd = a.planEnter()
 	case "/":
 		// The prompt draws in the hint row, so without one there is nowhere to type.
 		if _, _, hint := planRows(boxH); hint {
@@ -409,9 +437,21 @@ func (a *App) handlePlanKey(msg tea.KeyPressMsg) tea.Cmd {
 		a.planFind(pv.last, false)
 	case "N":
 		a.planFind(pv.last, true)
+	default:
+		return nil, false
 	}
 
-	return nil
+	return cmd, true
+}
+
+// planCopy is y: the selection, kept, else the paragraph or item at the cursor.
+func (a *App) planCopy() tea.Cmd {
+	v := a.plan.shown()
+	if ts := a.text; ts != nil && ts.view == v {
+		return a.clip.copy(a.textSelected())
+	}
+
+	return a.clip.copy(v.unitText(v.cursor))
 }
 
 // planSearchKey types into the open search prompt.

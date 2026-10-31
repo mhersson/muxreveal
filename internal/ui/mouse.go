@@ -62,6 +62,8 @@ type mouseState struct {
 	click clickState
 	press *heldPress
 	fwd   *forwarded
+	text  *textPress
+	seq   int // the last edge-scroll tick's number
 }
 
 // hit finds what lies under the screen cell (x, y): a pane's content or top
@@ -175,6 +177,14 @@ func (a *App) countClick(x, y int) int {
 }
 
 func (a *App) handleClick(msg tea.MouseClickMsg) tea.Cmd {
+	if msg.Button == tea.MouseLeft {
+		a.mouse.text = nil
+	}
+
+	if a.textClick(msg.Mouse()) {
+		return nil
+	}
+
 	if a.mouseBlocked() {
 		return nil
 	}
@@ -277,7 +287,7 @@ func (a *App) contentPress(h hitResult, m tea.Mouse) tea.Cmd {
 		alt: m.Mod.Contains(tea.ModAlt), mod: m.Mod, multi: n > 1,
 	}
 
-	a.sel = nil
+	a.clearSelections()
 
 	p.withView(func(g grid, top int, trimmed uint64) {
 		at := clampPoint(g, point{top + h.local.row, h.local.col})
@@ -301,11 +311,15 @@ func (a *App) contentPress(h hitResult, m tea.Mouse) tea.Cmd {
 }
 
 func (a *App) handleMotion(msg tea.MouseMotionMsg) tea.Cmd {
+	m := msg.Mouse()
+
+	if pr := a.mouse.text; pr != nil && m.Button == tea.MouseLeft {
+		return a.textDrag(pr, m.X, m.Y)
+	}
+
 	if a.mouseBlocked() {
 		return nil
 	}
-
-	m := msg.Mouse()
 
 	switch {
 	case a.mouse.press != nil && m.Button == tea.MouseLeft:
@@ -331,11 +345,15 @@ func (a *App) handleMotion(msg tea.MouseMotionMsg) tea.Cmd {
 }
 
 func (a *App) handleRelease(msg tea.MouseReleaseMsg) tea.Cmd {
+	m := msg.Mouse()
+
+	if pr := a.mouse.text; pr != nil && m.Button == tea.MouseLeft {
+		return a.textRelease(pr, m)
+	}
+
 	if a.mouseBlocked() {
 		return nil
 	}
-
-	m := msg.Mouse()
 
 	if f := a.mouse.fwd; f != nil && m.Button == f.button {
 		a.mouse.fwd = nil

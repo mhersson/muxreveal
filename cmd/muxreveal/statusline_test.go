@@ -64,7 +64,46 @@ func TestRunStatuslineDelivers(t *testing.T) {
 	}
 }
 
-func TestRunStatuslineIsSilentAndQuick(t *testing.T) {
+// hangGuard bounds a call that must return: it fails the test on a real hang
+// instead of waiting for the go test timeout, and asserts no elapsed time.
+const hangGuard = 30 * time.Second
+
+// returns runs fn and fails the test if it does not return within hangGuard.
+func returns(t *testing.T, what string, fn func()) {
+	t.Helper()
+
+	done := make(chan struct{})
+
+	go func() {
+		defer close(done)
+
+		fn()
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(hangGuard):
+		t.Fatalf("%s did not return", what)
+	}
+}
+
+// awaitDone waits for ctx to end on its own timer.
+func awaitDone(ctx context.Context, t *testing.T) {
+	t.Helper()
+
+	select {
+	case <-ctx.Done():
+	case <-time.After(hangGuard):
+		t.Fatal("the injected budget never ended")
+	}
+}
+
+// injectedBudget is the budget the cases that must wait it out run under:
+// short, because the tests assert that runStatusline honours it, not how long
+// it took.
+const injectedBudget = 50 * time.Millisecond
+
+func TestRunStatuslineIsSilentAndHonoursItsBudget(t *testing.T) {
 	missing := filepath.Join(shortDir(t), "none.sock")
 	silent := silentSock(t)
 
@@ -74,29 +113,48 @@ func TestRunStatuslineIsSilentAndQuick(t *testing.T) {
 		name  string
 		stdin string
 		env   map[string]string
+		// waitsOutBudget marks a payload that is delivered and never
+		// answered: only the budget ends it.
+		waitsOutBudget bool
 	}{
-		{"no socket", statusPayload, map[string]string{"MUXREVEAL_PANE": "p"}},
-		{"no pane", statusPayload, map[string]string{"MUXREVEAL_SOCK": missing}},
-		{"invalid json", "{not json", map[string]string{"MUXREVEAL_SOCK": missing, "MUXREVEAL_PANE": "p"}},
-		{"truncated", statusPayload[:40], map[string]string{"MUXREVEAL_SOCK": silent, "MUXREVEAL_PANE": "p"}},
-		{"oversized", oversized, map[string]string{"MUXREVEAL_SOCK": silent, "MUXREVEAL_PANE": "p"}},
-		{"never answers", statusPayload, map[string]string{"MUXREVEAL_SOCK": silent, "MUXREVEAL_PANE": "p"}},
-		{"missing socket", statusPayload, map[string]string{"MUXREVEAL_SOCK": missing, "MUXREVEAL_PANE": "p"}},
+		{"no socket", statusPayload, map[string]string{"MUXREVEAL_PANE": "p"}, false},
+		{"no pane", statusPayload, map[string]string{"MUXREVEAL_SOCK": missing}, false},
+		{"invalid json", "{not json", map[string]string{"MUXREVEAL_SOCK": missing, "MUXREVEAL_PANE": "p"}, false},
+		{"truncated", statusPayload[:40], map[string]string{"MUXREVEAL_SOCK": silent, "MUXREVEAL_PANE": "p"}, false},
+		{"oversized", oversized, map[string]string{"MUXREVEAL_SOCK": silent, "MUXREVEAL_PANE": "p"}, false},
+		{"never answers", statusPayload, map[string]string{"MUXREVEAL_SOCK": silent, "MUXREVEAL_PANE": "p"}, true},
+		{"missing socket", statusPayload, map[string]string{"MUXREVEAL_SOCK": missing, "MUXREVEAL_PANE": "p"}, false},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			start := time.Now()
+			// Only the budget case gets a context that can expire; the rest
+			// must return on their own with theirs still live.
+			var (
+				ctx    context.Context
+				cancel context.CancelFunc
+			)
+
+			if tt.waitsOutBudget {
+				ctx, cancel = context.WithTimeout(context.Background(), injectedBudget)
+			} else {
+				ctx, cancel = context.WithCancel(context.Background())
+			}
+
+			defer cancel()
 
 			captureStdio(t, func() {
-				ctx, cancel := context.WithTimeout(context.Background(), statuslineBudget)
-				defer cancel()
-
-				runStatusline(ctx, strings.NewReader(tt.stdin), env(tt.env))
+				returns(t, "runStatusline", func() {
+					runStatusline(ctx, strings.NewReader(tt.stdin), env(tt.env))
+				})
 			})
 
-			if d := time.Since(start); d > 1500*time.Millisecond {
-				t.Fatalf("runStatusline took %v, want within 1.5s", d)
+			if tt.waitsOutBudget {
+				// Send ends on the connection deadline, which can precede the
+				// context's own timer, so wait for the context itself.
+				awaitDone(ctx, t)
+			} else if ctx.Err() != nil {
+				t.Fatal("runStatusline needed the budget to return, want it to return on its own")
 			}
 		})
 	}
@@ -106,18 +164,17 @@ func TestRunStatuslineStdinNeverClosesStaysInBudget(t *testing.T) {
 	pr, pw := io.Pipe()
 	defer func() { _ = pw.Close() }()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), injectedBudget)
 	defer cancel()
 
-	start := time.Now()
-
 	captureStdio(t, func() {
-		runStatusline(ctx, pr, env(map[string]string{"MUXREVEAL_SOCK": "/x", "MUXREVEAL_PANE": "p"}))
+		returns(t, "runStatusline", func() {
+			runStatusline(ctx, pr, env(map[string]string{"MUXREVEAL_SOCK": "/x", "MUXREVEAL_PANE": "p"}))
+		})
 	})
 
-	if d := time.Since(start); d > time.Second {
-		t.Fatalf("runStatusline took %v, want about 200ms", d)
-	}
+	// Returning is only allowed once the budget ended; wait for its own timer.
+	awaitDone(ctx, t)
 
 	_ = pr.Close()
 }

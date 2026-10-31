@@ -52,6 +52,33 @@ func planRows(h int) (rows int, blanks, hint bool) {
 	return max(h-2, 1), false, false
 }
 
+// planDoc places the view in a box w x h, in the box's cells: the view's left
+// cell and first row, its width and its rows.
+func planDoc(w, h int) (x, y, vw, rows int) {
+	rows, blanks, _ := planRows(h)
+	vw = min(w-4, planMaxView)
+	x, y = 1+(w-2-vw)/2, 1
+
+	if blanks {
+		y++
+	}
+
+	return x, y, vw, rows
+}
+
+// planDocRect is the screen cells of the overlay's doc rows. ok is false for a
+// terminal too small to draw the box.
+func planDocRect(width, height int) (image.Rectangle, bool) {
+	bx, by, w, h, ok := planBox(width, height)
+	if !ok {
+		return image.Rectangle{}, false
+	}
+
+	x, y, vw, rows := planDoc(w, h)
+
+	return image.Rect(bx+x, by+y, bx+x+vw, by+y+rows), true
+}
+
 // planIndicator says where the view is in the doc.
 func planIndicator(lines, rows, top int) string {
 	switch {
@@ -142,8 +169,8 @@ func (a *App) planLines(lk look, w, h int) (out []string, pics []picRow) {
 
 	rows, blanks, hint := planRows(h)
 	inner := w - 2
-	vw := min(w-4, planMaxView)
-	off := (inner - vw) / 2
+	dx, _, vw, _ := planDoc(w, h)
+	off := dx - 1
 
 	row := func(content string, cw int) string {
 		return border.Render("│") + pad(off) + content + pad(inner-off-cw) + border.Render("│")

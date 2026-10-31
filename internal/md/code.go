@@ -117,6 +117,7 @@ func spanClasses(line string, spans []Span) []uint8 {
 type codeCell struct {
 	run   Run
 	cells int
+	at    int // byte offset in the line
 }
 
 // codeCells lays line out in exactly room cells: tabs expanded, hidden
@@ -125,12 +126,14 @@ type codeCell struct {
 func codeCells(line string, spans []Span, room int) Line {
 	classes := spanClasses(line, spans)
 	cells := make([]codeCell, 0, min(len(line), room+1))
-	col, cut := 0, false
+	col, cut, cutAt := 0, false, 0
 
 	// emit adds one unit starting at byte offset at; it reports false when the
 	// unit does not fit.
-	emit := func(at int, text string, cw int, hidden bool) bool {
+	emit := func(at int, text string, cw int, hidden, tab bool) bool {
 		if col+cw > room {
+			cutAt = at
+
 			return false
 		}
 
@@ -141,7 +144,10 @@ func codeCells(line string, spans []Span, room int) Line {
 			st.class = classes[at]
 		}
 
-		cells = append(cells, codeCell{run: st.run(text), cells: cw})
+		run := st.run(text)
+		run.tab = tab
+
+		cells = append(cells, codeCell{run: run, cells: cw, at: at})
 		col += cw
 
 		return true
@@ -153,7 +159,7 @@ func codeCells(line string, spans []Span, room int) Line {
 		i += len(g)
 
 		if len(g) == 1 && g[0] >= 0x20 && g[0] < 0x7f {
-			cut = !emit(at, g, gw, false)
+			cut = !emit(at, g, gw, false, false)
 
 			continue
 		}
@@ -184,7 +190,7 @@ func codeCells(line string, spans []Span, room int) Line {
 			}
 
 			if p > start {
-				cut = !emit(at+start, g[start:p], textWidth(g[start:p]), false)
+				cut = !emit(at+start, g[start:p], textWidth(g[start:p]), false, false)
 			}
 
 			if tab {
@@ -192,7 +198,7 @@ func codeCells(line string, spans []Span, room int) Line {
 			}
 
 			if !cut {
-				cut = !emit(at+p, text, textWidth(text), hidden)
+				cut = !emit(at+p, text, textWidth(text), hidden, tab)
 			}
 
 			p += size
@@ -205,13 +211,14 @@ func codeCells(line string, spans []Span, room int) Line {
 				w = textWidth(g[start:])
 			}
 
-			cut = !emit(at+start, g[start:], w, false)
+			cut = !emit(at+start, g[start:], w, false, false)
 		}
 	}
 
 	if cut {
 		for col > room-1 {
 			col -= cells[len(cells)-1].cells
+			cutAt = cells[len(cells)-1].at
 			cells = cells[:len(cells)-1]
 		}
 	}
@@ -224,13 +231,54 @@ func codeCells(line string, spans []Span, room int) Line {
 	pad := styled(RoleCodeText)
 
 	if cut {
-		out = appendRun(out, pad.run(strings.Repeat(" ", room-1-col)))
-		out = appendRun(out, pad.run("…"))
+		ellipsis := pad.run("…")
+		ellipsis.rest = codeRest(line[cutAt:])
+
+		out = appendRun(out, chromeRun(pad, strings.Repeat(" ", room-1-col)))
+		out = appendRun(out, ellipsis)
 	} else {
-		out = appendRun(out, pad.run(strings.Repeat(" ", room-col)))
+		out = appendRun(out, chromeRun(pad, strings.Repeat(" ", room-col)))
 	}
 
 	return out
+}
+
+// codeRest is what a copy gives for the part of a code line a cut dropped: tabs
+// stay tabs, hidden characters become their tags.
+func codeRest(s string) string {
+	plain := true
+
+	for i := 0; i < len(s); i++ {
+		if c := s[i]; (c < 0x20 && c != '\t') || c >= 0x7f {
+			plain = false
+
+			break
+		}
+	}
+
+	if plain {
+		return s
+	}
+
+	var b strings.Builder
+
+	for i := 0; i < len(s); {
+		r, size := utf8.DecodeRuneInString(s[i:])
+		i += size
+
+		switch {
+		case r == utf8.RuneError && size == 1:
+			b.WriteRune('�')
+		case r == '\t':
+			b.WriteByte('\t')
+		case unicode.IsControl(r) || invisible.Rune(r):
+			b.WriteString(hiddenTag(r))
+		default:
+			b.WriteRune(r)
+		}
+	}
+
+	return b.String()
 }
 
 // appendRun adds r to line, merging it into the last run when the styles match

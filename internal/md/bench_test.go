@@ -3,6 +3,7 @@
 package md
 
 import (
+	"strings"
 	"testing"
 	"time"
 )
@@ -57,5 +58,15 @@ func TestFourMiBBudget(t *testing.T) {
 
 	if best := fastestLayout(t, "corpus repeated", b); best >= fourMiBBudget {
 		t.Errorf("fastest layout took %v, want under %v", best, fourMiBBudget)
+	}
+}
+
+// TestTableHugeCellBudget bounds the layout of a 1 MiB table cell, which
+// guards against quadratic wrapping.
+func TestTableHugeCellBudget(t *testing.T) {
+	src := "| h | x |\n|---|---|\n| " + strings.Repeat("y", 1<<20) + " | z |\n"
+
+	if best := fastestLayout(t, "huge cell", []byte(src)); best > 5*time.Second {
+		t.Errorf("layout took %v, want under 5s", best)
 	}
 }

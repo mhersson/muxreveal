@@ -151,22 +151,26 @@ func (d *drawCtx) lineCells(th *diffview.Theme, kind diffview.Kind, cursor bool,
 	return b.String()
 }
 
+// pairSides are the indexes of the lines a side by side row shows on its left
+// and right, -1 for a side with none.
+func pairSides(h git.Hunk, r reviewRow) (left, right int) {
+	switch h.Lines[r.line].Kind {
+	case git.Context:
+		return r.line, r.line
+	case git.Del:
+		return r.line, r.other
+	}
+
+	return -1, r.line
+}
+
 // pairRow is a row of two lines side by side.
 func (d *drawCtx) pairRow(r reviewRow, f git.FileDiff, cursor, fresh bool) string {
 	th := d.thFor(fresh)
 	h := f.Hunks[r.hunk]
 	lay := d.lay
 
-	var left, right int
-
-	switch h.Lines[r.line].Kind {
-	case git.Context:
-		left, right = r.line, r.line
-	case git.Del:
-		left, right = r.line, r.other
-	default:
-		left, right = -1, r.line
-	}
+	left, right := pairSides(h, r)
 
 	var lt, rt string
 

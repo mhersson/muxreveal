@@ -831,7 +831,7 @@ func TestPRHeaderKeepsTheCursorInView(t *testing.T) {
 	r, _ := a.drawerRect(st)
 	k := 3 // the diff column's fourth row
 
-	mdown(a, r.X+1+lay.treeW+3, r.Y+1+head+k, tea.MouseLeft, 0)
+	click(a, r.X+1+lay.treeW+3, r.Y+1+head+k)
 
 	if v.cursor != k {
 		t.Errorf("a click on diff row %d put the cursor on %d", k, v.cursor)

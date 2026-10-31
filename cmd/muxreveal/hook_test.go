@@ -105,9 +105,12 @@ func captureStdio(t *testing.T, f func()) {
 
 	os.Stdout, os.Stderr = w, w
 
-	f()
+	func() {
+		defer func() { os.Stdout, os.Stderr = stdout, stderr }()
 
-	os.Stdout, os.Stderr = stdout, stderr
+		f()
+	}()
+
 	_ = w.Close()
 
 	got, _ := io.ReadAll(r)
