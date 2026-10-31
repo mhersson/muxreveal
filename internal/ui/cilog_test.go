@@ -132,6 +132,17 @@ func TestChecksLogKey(t *testing.T) {
 		})
 	}
 
+	t.Run("a skipped job", func(t *testing.T) {
+		t.Parallel()
+
+		a, reads, _ := ciApp(t, true, 160, 48)
+		ciDeliver(a, a.checksLog(a.checks, checkRow{kind: checkSkipped, name: "gate", id: 13, app: actionsApp}))
+
+		if want := "no log for gate; O opens its page"; a.checks.page != nil || a.notice != want || len(reads.logReads()) != 0 {
+			t.Errorf("page %v, notice %q (want %q), %d reads", a.checks.page, a.notice, want, len(reads.logReads()))
+		}
+	})
+
 	t.Run("enter in the list", func(t *testing.T) {
 		t.Parallel()
 
@@ -433,6 +444,35 @@ func TestCILogStale(t *testing.T) {
 			t.Errorf("the second answer is not on the page: %+v", p.log.Lines)
 		}
 	})
+}
+
+func TestCILogRefreshKeepsThePlace(t *testing.T) {
+	t.Parallel()
+
+	a, _, _ := ciApp(t, true, 160, 48)
+	ciPage(t, a)
+
+	p := a.checks.page
+	if len(p.log.Groups) == 0 {
+		t.Fatal("the fixture has no groups")
+	}
+
+	p.open[0] = !logGroupOpen(p.log, p.open, 0)
+	p.move(2, a.logPageRows())
+
+	line := p.rows()[p.cursor].line
+	want := p.open[0]
+
+	ciDeliver(a, press(a, keyRune('r')))
+
+	p = a.checks.page
+	if got, ok := p.open[0]; !ok || got != want {
+		t.Errorf("open[0] = %v (set %v), want %v", got, ok, want)
+	}
+
+	if got := p.rows()[p.cursor].line; got != line {
+		t.Errorf("the cursor is on line %d, want %d", got, line)
+	}
 }
 
 func TestCILogRefresh(t *testing.T) {

@@ -209,6 +209,10 @@ func (a *App) checksLog(v *checksView, r checkRow) tea.Cmd {
 		a.notice = noticeLogRunning
 
 		return nil
+	case r.kind == checkSkipped:
+		a.notice = fmt.Sprintf(noticeNoLog, printable(r.name))
+
+		return nil
 	case r.app != actionsApp:
 		v.page = &checkPage{check: r, sum: true}
 
@@ -429,8 +433,36 @@ func (a *App) onCheckLog(msg checkLogMsg) {
 		return
 	}
 
-	p.err, p.loaded, p.log, p.open = "", true, msg.log, map[int]bool{}
-	p.place(a.logPageRows())
+	n := a.logPageRows()
+
+	if !p.loaded {
+		p.err, p.loaded, p.log, p.open = "", true, msg.log, map[int]bool{}
+		p.place(n)
+
+		return
+	}
+
+	// A refresh keeps the opened groups and the cursor's line, clamped to the new log.
+	line, above := -1, p.cursor-p.top
+	if rows := p.rows(); p.cursor < len(rows) {
+		line = rows[p.cursor].line
+	}
+
+	p.err, p.log = "", msg.log
+	line = min(line, len(p.log.Lines)-1)
+
+	// A line a closed group hides lands on the nearest row above it.
+	rows := p.rows()
+	i := 0
+
+	for k, r := range rows {
+		if r.line <= line {
+			i = k
+		}
+	}
+
+	p.cursor, p.top = i, i-above
+	p.fit(len(rows), n)
 }
 
 // logWheel scrolls the log page when the wheel is over its box and reports
