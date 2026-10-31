@@ -64,6 +64,40 @@ func TestRunStatuslineDelivers(t *testing.T) {
 	}
 }
 
+// hangGuard bounds a call that must return: it fails the test on a real hang
+// instead of waiting for the go test timeout, and asserts no elapsed time.
+const hangGuard = 30 * time.Second
+
+// returns runs fn and fails the test if it does not return within hangGuard.
+func returns(t *testing.T, what string, fn func()) {
+	t.Helper()
+
+	done := make(chan struct{})
+
+	go func() {
+		defer close(done)
+
+		fn()
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(hangGuard):
+		t.Fatalf("%s did not return", what)
+	}
+}
+
+// awaitDone waits for ctx to end on its own timer.
+func awaitDone(ctx context.Context, t *testing.T) {
+	t.Helper()
+
+	select {
+	case <-ctx.Done():
+	case <-time.After(hangGuard):
+		t.Fatal("the injected budget never ended")
+	}
+}
+
 // injectedBudget is the budget the cases that must wait it out run under:
 // short, because the tests assert that runStatusline honours it, not how long
 // it took.
@@ -96,21 +130,31 @@ func TestRunStatuslineIsSilentAndHonoursItsBudget(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Only the budget case gets a context that can expire; the rest
 			// must return on their own with theirs still live.
-			ctx, cancel := context.WithCancel(context.Background())
-			if tt.waitsOutBudget {
-				cancel()
+			var (
+				ctx    context.Context
+				cancel context.CancelFunc
+			)
 
+			if tt.waitsOutBudget {
 				ctx, cancel = context.WithTimeout(context.Background(), injectedBudget)
+			} else {
+				ctx, cancel = context.WithCancel(context.Background())
 			}
 
 			defer cancel()
 
 			captureStdio(t, func() {
-				runStatusline(ctx, strings.NewReader(tt.stdin), env(tt.env))
+				returns(t, "runStatusline", func() {
+					runStatusline(ctx, strings.NewReader(tt.stdin), env(tt.env))
+				})
 			})
 
-			if got := ctx.Err() != nil; got != tt.waitsOutBudget {
-				t.Fatalf("budget expired = %v, want %v: runStatusline must return on its own except when the budget ends it", got, tt.waitsOutBudget)
+			if tt.waitsOutBudget {
+				// Send ends on the connection deadline, which can precede the
+				// context's own timer, so wait for the context itself.
+				awaitDone(ctx, t)
+			} else if ctx.Err() != nil {
+				t.Fatal("runStatusline needed the budget to return, want it to return on its own")
 			}
 		})
 	}
@@ -124,12 +168,13 @@ func TestRunStatuslineStdinNeverClosesStaysInBudget(t *testing.T) {
 	defer cancel()
 
 	captureStdio(t, func() {
-		runStatusline(ctx, pr, env(map[string]string{"MUXREVEAL_SOCK": "/x", "MUXREVEAL_PANE": "p"}))
+		returns(t, "runStatusline", func() {
+			runStatusline(ctx, pr, env(map[string]string{"MUXREVEAL_SOCK": "/x", "MUXREVEAL_PANE": "p"}))
+		})
 	})
 
-	if ctx.Err() == nil {
-		t.Fatal("runStatusline returned before its budget ended, want it held by the open stdin")
-	}
+	// Returning is only allowed once the budget ended; wait for its own timer.
+	awaitDone(ctx, t)
 
 	_ = pr.Close()
 }

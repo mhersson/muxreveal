@@ -982,7 +982,7 @@ func TestHookBudgetServerClosingMidSnapshot(t *testing.T) {
 
 	// The snapshot's git stays blocked until cleanup, so Stop returning at
 	// all means it cancelled the snapshot instead of waiting for it.
-	h.Stop()
+	returns(t, "Stop", h.Stop)
 
 	if err := <-sent; err == nil {
 		t.Error("Send() succeeded though the server closed mid-snapshot")
