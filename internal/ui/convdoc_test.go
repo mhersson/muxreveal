@@ -487,6 +487,14 @@ func TestConvDocItemJump(t *testing.T) {
 		t.Errorf("previous from the force push = %d, %v, want %d", got, ok, review)
 	}
 
+	if got, ok := d.itemLine(inside, -1); !ok || got != review {
+		t.Errorf("previous from inside the review = %d, %v, want its top %d", got, ok, review)
+	}
+
+	if got, ok := d.itemLine(review, -1); !ok || got != review-1 {
+		t.Errorf("previous from the review's top = %d, %v, want the row above %d", got, ok, review-1)
+	}
+
 	if _, ok := d.itemLine(len(lay.Lines)-1, 1); ok {
 		t.Error("next past the last item answered")
 	}

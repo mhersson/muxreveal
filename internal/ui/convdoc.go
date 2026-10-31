@@ -887,8 +887,9 @@ func (d *convDoc) itemIndex(i int) int {
 	return sort.Search(len(d.starts), func(k int) bool { return d.starts[k] > i }) - 1
 }
 
-// itemLine is the first line of the item after (dir > 0) or before the one
-// holding line from; false when there is none.
+// itemLine is the first line of the item after line from (dir > 0), or the
+// nearest item first line above it (dir < 0), which is the current item's own
+// top from inside it; false when there is none.
 func (d *convDoc) itemLine(from, dir int) (int, bool) {
 	k := d.itemIndex(from)
 	if k < 0 {
@@ -897,7 +898,7 @@ func (d *convDoc) itemLine(from, dir int) (int, bool) {
 
 	if dir > 0 {
 		k++
-	} else {
+	} else if d.starts[k] == from {
 		k--
 	}
 
