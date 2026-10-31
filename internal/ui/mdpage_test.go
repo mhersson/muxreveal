@@ -1151,7 +1151,7 @@ func TestMarkdownPageMouse(t *testing.T) {
 	rect := mustRect(t, m.drawerRig)
 
 	click := func(row int) {
-		m.Update(tea.MouseClickMsg{X: rect.X + 6, Y: rect.Y + 1 + row, Button: tea.MouseLeft})
+		clickRun(m.App, rect.X+6, rect.Y+1+row)
 	}
 
 	click(4)

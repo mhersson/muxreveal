@@ -15,6 +15,9 @@ type textPress struct {
 	x, y                 int // screen cell of the press
 	anchor               point
 	alt, dragging, multi bool
+	// line is the page line a drawer press landed on, -1 for none; a click
+	// moves the cursor there on its release.
+	line int
 }
 
 // textHost is a text view on screen: the cells it draws in and what a cell
@@ -22,6 +25,7 @@ type textPress struct {
 type textHost struct {
 	view *mdView
 	rows *reviewView
+	page *mdPage
 	tab  core.TabID
 	rect image.Rectangle
 	top  int
@@ -78,9 +82,50 @@ func (a *App) planHost() (textHost, bool) {
 	return textHost{view: v, rect: rect, top: v.top, sticky: -1, maxCol: max(rect.Dx()-1, 0)}, true
 }
 
+// pageHost is the active tab's drawer page as a host while the drawer takes
+// the pointer: the cells of the diff column's rows.
+func (a *App) pageHost() (textHost, bool) {
+	if !a.drawersOpen || a.modalOpen() || a.pending || a.drawer.closing {
+		return textHost{}, false
+	}
+
+	st := a.store.State()
+
+	r, shown := a.drawerRect(st)
+	if !shown {
+		return textHost{}, false
+	}
+
+	v, p := a.activePage()
+	if p == nil {
+		return textHost{}, false
+	}
+
+	box, _ := a.drawerFull(st)
+	lay := a.drawerLayoutOf(box, v, false)
+	w := min(lay.diffW, r.W-2)
+
+	if w <= 0 || lay.diffH <= 0 {
+		return textHost{}, false
+	}
+
+	rect := image.Rect(r.X+1, r.Y+1, r.X+1+w, r.Y+1+lay.diffH)
+
+	return textHost{
+		view: &p.view, page: p, tab: st.Tab().ID, rect: rect, top: p.view.top,
+		sticky: -1, maxCol: w - 1,
+	}, true
+}
+
 // textHostAt is the host whose cells hold (x, y).
 func (a *App) textHostAt(x, y int) (textHost, bool) {
-	if h, ok := a.planHost(); ok && (image.Point{X: x, Y: y}).In(h.rect) {
+	pt := image.Point{X: x, Y: y}
+
+	if h, ok := a.planHost(); ok && pt.In(h.rect) {
+		return h, true
+	}
+
+	if h, ok := a.pageHost(); ok && pt.In(h.rect) {
 		return h, true
 	}
 
@@ -91,6 +136,10 @@ func (a *App) textHostAt(x, y int) (textHost, bool) {
 func (a *App) textHostOf(pr *textPress) (textHost, bool) {
 	if pr.tab == "" {
 		return a.planHost()
+	}
+
+	if h, ok := a.pageHost(); ok && h.tab == pr.tab {
+		return h, true
 	}
 
 	return textHost{}, false
@@ -111,6 +160,10 @@ func (a *App) textClick(m tea.Mouse) bool {
 	a.endPress()
 	a.textPressAt(h, m)
 
+	if h.page != nil {
+		a.drawerTake()
+	}
+
 	return true
 }
 
@@ -118,11 +171,16 @@ func (a *App) textClick(m tea.Mouse) bool {
 // or line, and any other press clears the selection and waits for a drag.
 func (a *App) textPressAt(h textHost, m tea.Mouse) {
 	n := a.countClick(m.X, m.Y)
-	pr := &textPress{tab: h.tab, x: m.X, y: m.Y, alt: m.Mod.Contains(tea.ModAlt), multi: n > 1}
+	pr := &textPress{tab: h.tab, x: m.X, y: m.Y, alt: m.Mod.Contains(tea.ModAlt), multi: n > 1, line: -1}
 
 	a.clearSelections()
 
 	g := h.grid()
+
+	if line := h.top + m.Y - h.rect.Min.Y; h.page != nil && line < g.Rows() {
+		pr.line = line
+	}
+
 	if g.Rows() > 0 {
 		pr.anchor = clampPoint(g, h.at(m.X, m.Y))
 
@@ -193,6 +251,8 @@ func (a *App) textRelease(pr *textPress, m tea.Mouse) tea.Cmd {
 	}
 
 	if !pr.dragging && !pr.multi {
+		a.pageClick(pr, m)
+
 		return nil
 	}
 
@@ -211,4 +271,21 @@ func (a *App) textRelease(pr *textPress, m tea.Mouse) tea.Cmd {
 	}
 
 	return a.clip.copyPrimary(text)
+}
+
+// pageClick moves a page's cursor to the line a press landed on when the
+// button came up on the cell it went down on.
+func (a *App) pageClick(pr *textPress, m tea.Mouse) {
+	if pr.line < 0 || m.X != pr.x || m.Y != pr.y {
+		return
+	}
+
+	h, ok := a.textHostOf(pr)
+	if !ok || h.page == nil {
+		return
+	}
+
+	h.view.cursor = pr.line
+	h.view.clamp()
+	h.page.rev++
 }

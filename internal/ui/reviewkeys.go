@@ -52,6 +52,7 @@ var reviewKeys = []reviewKey{
 	{",", "review.turn.prev"},
 	{".", "review.turn.next"},
 	{"/", "review.search"},
+	{"y", "review.copy"},
 	{"w", "review.worktrees"},
 	{"e", "review.edit"},
 	{"r", "review.refresh"},
@@ -119,6 +120,7 @@ func reviewCommands() []command {
 		cmd("review.turn.prev", "Review: previous turn", turn(-1)),
 		cmd("review.turn.next", "Review: next turn", turn(1)),
 		cmd("review.search", "Review: search", (*App).reviewSearch),
+		cmd("review.copy", "Review: copy the selection", (*App).reviewCopy),
 		cmd("review.worktrees", "Review: worktrees", (*App).openWorktrees),
 		cmd("review.edit", "Review: open in the editor", (*App).reviewEdit),
 		cmd("review.refresh", "Review: refresh", (*App).reviewReload),
@@ -154,14 +156,19 @@ func (a *App) handleDrawerKey(msg tea.KeyPressMsg) tea.Cmd {
 	}
 
 	if a.listFor(tab) != nil {
+		a.clearDrawerSel(tab.ID)
+
 		return a.handleWorktreesKey(msg)
 	}
 
 	if c := a.linksFor(tab); c != nil {
+		a.clearDrawerSel(tab.ID)
+
 		return a.handleLinksKey(c, msg)
 	}
 
 	if v.search != nil {
+		a.clearDrawerSel(tab.ID)
 		a.searchKey(v, msg)
 
 		return nil
@@ -181,7 +188,37 @@ func (a *App) handleDrawerKey(msg tea.KeyPressMsg) tea.Cmd {
 		return nil
 	}
 
+	if id != "review.copy" {
+		a.clearDrawerSel(tab.ID)
+	}
+
 	return c.run(a)
+}
+
+// clearDrawerSel drops the text selection when the drawer of tab holds it.
+func (a *App) clearDrawerSel(tab core.TabID) {
+	if a.text != nil && a.text.tab == tab {
+		a.clearTextSel()
+	}
+}
+
+// reviewCopy copies the drawer's selection and keeps it. With none it copies
+// the cursor's unit: a paragraph or item on a page.
+func (a *App) reviewCopy() tea.Cmd {
+	tab, _, ok := a.reviewActive()
+	if !ok {
+		return nil
+	}
+
+	if ts := a.text; ts != nil && ts.tab == tab.ID {
+		return a.clip.copy(ts.text())
+	}
+
+	if _, p := a.activePage(); p != nil {
+		return a.clip.copy(p.view.unitText(p.view.cursor))
+	}
+
+	return nil
 }
 
 // searchKey types into the open search prompt.

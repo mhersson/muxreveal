@@ -237,6 +237,8 @@ type drawKey struct {
 	page                 *mdPage
 	pageRev              int
 	picGen               uint64
+	sel                  selection // the shown view's selection, when hasSel
+	hasSel               bool
 
 	pr       core.PRInfo
 	unpushed int
@@ -269,6 +271,10 @@ func (d *drawCtx) key(r core.Rect, name string) drawKey {
 
 	if p := v.page(); p != nil {
 		k.page, k.pageRev, k.picGen = p, p.rev, d.picGen
+
+		if p.view.sel != nil {
+			k.sel, k.hasSel = *p.view.sel, true
+		}
 	} else if len(v.mdFiles) > 0 {
 		k.picGen = d.picGen
 	}

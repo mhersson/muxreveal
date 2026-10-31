@@ -16,7 +16,7 @@ func (a *App) inDrawer(x, y int) bool {
 }
 
 // drawerClick gives the drawer the keyboard; on a diff row it moves the cursor
-// there and on a tree file it jumps to it. The tree's scroll depends on who held
+// there and on a tree file it jumps to it. A page's rows go to textClick. The tree's scroll depends on who held
 // the keyboard when it was drawn, so that is read before the diff takes it.
 func (a *App) drawerClick(x, y int) {
 	st := a.store.State()
@@ -39,15 +39,8 @@ func (a *App) drawerClick(x, y int) {
 		return
 	}
 
-	if p := v.page(); p != nil {
-		p.resize(lay.diffW, lay.diffH, a.icons)
-
-		if line := p.view.top + iy; line < len(p.view.layout().Lines) {
-			p.view.cursor = line
-			p.view.clamp()
-			p.rev++
-		}
-
+	// A page's text takes its presses in textClick.
+	if v.page() != nil {
 		return
 	}
 
