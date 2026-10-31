@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"testing"
@@ -363,12 +364,38 @@ func settleDrawer(t *testing.T, a *App) {
 	t.Helper()
 
 	for range 200 {
-		if a.drawerAfterUpdate() == nil {
+		cmd := a.drawerAfterUpdate()
+
+		if runHighlight(t, a) {
+			continue
+		}
+
+		if cmd == nil {
 			return
 		}
 	}
 
 	t.Fatal("the drawer never settled")
+}
+
+// runHighlight runs the batch the drawer started, if any, on the test's
+// goroutine, applies its answer and reports whether one ran.
+func runHighlight(t *testing.T, a *App) bool {
+	t.Helper()
+
+	j := a.drawer.hlJob
+	if j == nil {
+		return false
+	}
+
+	msg, ok := j.run(context.Background(), &a.drawer.hl).(drawerSpansMsg)
+	if !ok {
+		t.Fatal("the batch gave no answer")
+	}
+
+	a.onDrawerSpans(msg)
+
+	return true
 }
 
 // rowWith is the first row of the diff whose text holds sub.

@@ -30,6 +30,10 @@ func settleCounting(t *testing.T, a *App) int {
 		cmd := a.drawerAfterUpdate()
 		total += a.drawer.tokenised
 
+		if runHighlight(t, a) {
+			continue
+		}
+
 		if cmd == nil {
 			return total
 		}

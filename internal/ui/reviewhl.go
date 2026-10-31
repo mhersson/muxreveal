@@ -1,21 +1,25 @@
 package ui
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/binary"
 	"io"
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/mhersson/muxreveal/internal/core"
 	"github.com/mhersson/muxreveal/internal/git"
+	"github.com/mhersson/muxreveal/internal/ui/diffview"
 )
 
 const (
 	// hlChunk is how many lines of one side of a hunk, or of a whole file, are
 	// tokenised as one text.
 	hlChunk = 512
-	// highlightCap bounds the lines tokenised in one pass.
-	highlightCap = 2000
+	// hlBatch bounds the lines one highlighting batch tokenises; a chunk is at
+	// most hlChunk lines, so each fits a batch on its own.
+	hlBatch = 512
 )
 
 // Sides of a hunk that are tokenised on their own.
@@ -61,16 +65,49 @@ func sumOf(path string, lines []string) chunkSum {
 	return sum
 }
 
-// drawerPaintMsg asks for another pass of highlighting.
-type drawerPaintMsg struct{}
+// hlText is one text to tokenise and the chunks that read it.
+type hlText struct {
+	keys  []spanKey
+	sum   chunkSum
+	path  string
+	lines []string
+}
 
-func drawerPaint() tea.Msg { return drawerPaintMsg{} }
+// hlJob is one batch of texts to tokenise. It holds copies of what it reads, so
+// its command never touches the app or the view.
+type hlJob struct {
+	tab   core.TabID
+	view  *reviewView
+	gen   int
+	texts []hlText
+}
+
+// drawerSpansMsg answers a job: spans[i] belong to job.texts[i].
+type drawerSpansMsg struct {
+	job   *hlJob
+	spans [][][]diffview.Span
+}
+
+// run tokenises the job's texts in order. It returns nil once ctx has ended.
+func (j *hlJob) run(ctx context.Context, hl *diffview.Highlighter) tea.Msg {
+	spans := make([][][]diffview.Span, len(j.texts))
+
+	for i, t := range j.texts {
+		if ctx.Err() != nil {
+			return nil
+		}
+
+		spans[i] = hl.Highlight(t.path, t.lines)
+	}
+
+	return drawerSpansMsg{job: j, spans: spans}
+}
 
 // drawerAfterUpdate settles the open drawer after an update: it lays the rows
-// out for the width, then tokenises the rows near the view. It returns a
-// command that sends drawerPaintMsg only while rows in range wait for the cap,
-// so nothing runs while the drawer is idle. A slide that runs gets its frames
-// here too, since one may begin inside keyboardCheck's release.
+// out for the width, then starts a batch tokenising the rows near the view. The
+// batch's command answers with drawerSpansMsg, so nothing runs while the drawer
+// is idle. A slide that runs gets its frames here too, since one may begin
+// inside keyboardCheck's release.
 func (a *App) drawerAfterUpdate() tea.Cmd {
 	var tick tea.Cmd
 	if !a.drawer.slideFrom.IsZero() {
@@ -135,19 +172,23 @@ func (a *App) settleDrawerRows() tea.Cmd {
 		v.rebuild(lay.split)
 	}
 
-	if a.highlightRows(v, lay) {
-		return drawerPaint
+	j := a.highlightRows(st.Tab().ID, v, lay)
+	if j == nil {
+		return nil
 	}
 
-	return nil
+	ctx, hl := a.ctx, &a.drawer.hl
+
+	return func() tea.Msg { return j.run(ctx, hl) }
 }
 
-// highlightRows tokenises the chunks the rows within one screen of the visible
-// ones need and no cache holds, up to highlightCap lines. It reports whether
-// chunks were left for a later pass.
-func (a *App) highlightRows(v *reviewView, lay drawerLayout) (more bool) {
-	if len(v.rows) == 0 || lay.diffH <= 0 {
-		return false
+// highlightRows gathers the chunks the rows within one screen of the visible
+// ones need and no cache holds into a job of at most hlBatch lines. It returns
+// nil while a job runs, and when nothing is left to tokenise; chunks past the
+// batch wait for the next one.
+func (a *App) highlightRows(tab core.TabID, v *reviewView, lay drawerLayout) *hlJob {
+	if a.drawer.hlJob != nil || len(v.rows) == 0 || lay.diffH <= 0 {
+		return nil
 	}
 
 	c := v.derived()
@@ -155,16 +196,21 @@ func (a *App) highlightRows(v *reviewView, lay drawerLayout) (more bool) {
 	key := scanKey{rev: v.rowsRev, top: top, bodyH: lay.diffH}
 
 	if c.scanned && c.scan == key {
-		return false
+		return nil
 	}
 
 	a.drawer.scans++
 
-	budget := highlightCap
+	var (
+		texts  []hlText
+		bySum  = map[chunkSum]int{}
+		queued = map[spanKey]bool{}
+		budget = hlBatch
+	)
 
 	for i := max(top-lay.diffH, 0); i < min(top+2*lay.diffH, len(v.rows)); i++ {
 		for _, ref := range v.rowSpans(i) {
-			if _, done := c.spans[ref.key]; done {
+			if _, done := c.spans[ref.key]; done || queued[ref.key] {
 				continue
 			}
 
@@ -176,26 +222,81 @@ func (a *App) highlightRows(v *reviewView, lay drawerLayout) (more bool) {
 				spans, known = c.bySum[sum]
 			}
 
-			if !known {
-				if len(lines) > budget {
-					more = true
+			if known {
+				c.spans[ref.key], c.bySum[sum] = spans, spans
+				c.spansRev++
 
-					continue
-				}
-
-				budget -= len(lines)
-				a.drawer.tokenised += len(lines)
-				spans = a.drawer.hl.Highlight(path, lines)
+				continue
 			}
 
-			c.spans[ref.key], c.bySum[sum] = spans, spans
+			if at, ok := bySum[sum]; ok {
+				texts[at].keys = append(texts[at].keys, ref.key)
+				queued[ref.key] = true
+
+				continue
+			}
+
+			if len(lines) > budget {
+				continue
+			}
+
+			budget -= len(lines)
+			bySum[sum] = len(texts)
+			queued[ref.key] = true
+			texts = append(texts, hlText{keys: []spanKey{ref.key}, sum: sum, path: path, lines: lines})
+		}
+	}
+
+	c.scan = key
+
+	if len(texts) == 0 {
+		c.scanned = true
+
+		return nil
+	}
+
+	c.scanned = false
+	j := &hlJob{tab: tab, view: v, gen: c.gen, texts: texts}
+	a.drawer.hlJob = j
+
+	for _, t := range texts {
+		a.drawer.tokenised += len(t.lines)
+	}
+
+	return j
+}
+
+// onDrawerSpans takes a job's answer. The spans always join the view's by-text
+// cache; they reach the by-key one only while the result is the job's own
+// generation. The scan is then stale, so the next settle picks the next batch.
+func (a *App) onDrawerSpans(msg drawerSpansMsg) {
+	if msg.job != a.drawer.hlJob {
+		return
+	}
+
+	a.drawer.hlJob = nil
+
+	job := msg.job
+	if a.drawer.views[job.tab] != job.view {
+		return
+	}
+
+	c := job.view.derived()
+
+	for i, t := range job.texts {
+		c.bySum[t.sum] = msg.spans[i]
+
+		if c.gen != job.gen {
+			continue
+		}
+
+		for _, k := range t.keys {
+			c.spans[k] = msg.spans[i]
 			c.spansRev++
 		}
 	}
 
-	c.scan, c.scanned = key, !more
-
-	return more
+	c.scanned = false
 }
 
 // scanKey is what the rows searched for chunks to tokenise depend on besides

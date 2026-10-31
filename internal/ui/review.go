@@ -168,7 +168,8 @@ type drawerState struct {
 	reads         int             // the last full-file read serial handed out
 	prSeq         int             // the last pull request request; its answers carry it
 	prNext        *prNext         // a drawer being opened for a pull request
-	tokenised     int             // lines tokenised by the last highlighting pass
+	hlJob         *hlJob          // the batch being tokenised; at most one runs
+	tokenised     int             // lines handed to the batch the last settle started; 0 for none
 	layouts       int             // layouts computed rather than reused; tests read it
 	scans         int             // searches of the visible rows for chunks to tokenise; tests read it
 	renders       int             // drawers drawn rather than reused; tests read it

@@ -677,7 +677,8 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.onRailPulse()
 	case railFlashMsg:
 		a.onRailFlash(msg)
-	case drawerPaintMsg:
+	case drawerSpansMsg:
+		a.onDrawerSpans(msg)
 	case reviewOpenMsg:
 		return a, a.onReviewOpen(msg)
 	case slideOpenMsg:
