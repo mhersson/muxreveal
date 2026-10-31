@@ -47,7 +47,8 @@ files=$(xargs -0 grep -lE "$bound" /dev/null < "$list") || :
 report=$(printf '%s\n' "$files" | while IFS= read -r f; do
 	[ -n "$f" ] || continue
 
-	case " $pending " in *" $f "*) continue ;; esac
+	# The leading paren keeps bash 3.2, macOS's sh, from ending $( at the pattern.
+	case " $pending " in (*" $f "*) continue ;; esac
 
 	sed -n '1,/^package /p' "$f" | grep -Eq "$bench" && continue
 
