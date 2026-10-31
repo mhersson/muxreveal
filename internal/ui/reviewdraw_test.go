@@ -1088,7 +1088,8 @@ func prSceneWith(tune func(*core.PRInfo), unpushed int) func(t *testing.T, a *Ap
 	}
 }
 
-// wrappedResult is turn4Result and a file of long Go lines: a call that wraps
+// wrappedResult is turn4Result under a file of long Go lines, so the first
+// screen shows them: a call that wraps
 // at a space, a word past the reach, a tab indented line and one with a
 // hidden character.
 func wrappedResult() git.Result {
@@ -1100,10 +1101,11 @@ func wrappedResult() git.Result {
 		"+\treturn ansi.Truncate(strings.TrimSpace(strings.ReplaceAll(s, \"\\n\", \" \")), width-len(ellipsis)-padding, ellipsis) + strings.Repeat(\" \", max(width-ansi.StringWidth(s), 0))",
 		"+\t// averyveryveryverylongcommentwordwithoutanyspacesatallsothatitcannotbebrokenatawordboundaryandwrapsattheedgeofthecolumnwhereverthatis",
 		"+\tconst hidden = \"zero\u200bwidth \u202eand a bidi mark, then enough plain text after them to pass the column and wrap onto a second row\"",
+		"+\t"+strings.Repeat("budget ", 160),
 		"+\treturn s",
 		"+}",
 	))
-	res.Files = append(res.Files, f)
+	res.Files = append([]git.FileDiff{f}, res.Files...)
 
 	return res
 }

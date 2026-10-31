@@ -134,7 +134,7 @@ func (d *drawCtx) unifiedRow(r reviewRow, f git.FileDiff, cursor, fresh bool) st
 
 	part, has := d.partOf(l.Text, tagsCR(l.Text, other, p >= 0), d.v.wrapW.line, r.part)
 	if !has {
-		part = &wrapPart{}
+		part = &wrapPart{} // the row builders never ask past the last part; this only blanks the code defensively
 	}
 
 	return d.lineCells(d.thFor(fresh), diffKind(l.Kind), cursor, []int{l.Old, l.New}, text, d.spansAt(ref, ok), changedIn(h.Lines, r.line, text), d.lay.unifiedCode(2), part, r.part == 0)
@@ -315,7 +315,7 @@ func (d *drawCtx) fullRow(r reviewRow, cursor, fresh bool) string {
 
 	part, has := d.partOf(r.text, false, d.v.wrapW.full, r.part)
 	if !has {
-		part = &wrapPart{}
+		part = &wrapPart{} // the row builders never ask past the last part; this only blanks the code defensively
 	}
 
 	return d.lineCells(d.thFor(fresh), kind, cursor, []int{r.line + 1}, text, d.spansAt(ref, true), diffview.Range{}, d.lay.unifiedCode(1), part, r.part == 0)

@@ -760,6 +760,10 @@ func TestWrappedRowLook(t *testing.T) {
 						t.Errorf("part %d: number cell ground %v, want %v", k, bg, th.GutterBg(kind, cursor))
 					}
 
+					if bg := styleAt(line, codeX).Bg; bg == nil || !sameColor(bg, th.CodeBg(kind, cursor)) {
+						t.Errorf("part %d: code ground %v, want %v", k, bg, th.CodeBg(kind, cursor))
+					}
+
 					if k == 0 {
 						continue
 					}
@@ -841,10 +845,14 @@ func TestWrappedSplitSides(t *testing.T) {
 	lone := altText
 	res := git.Result{Turn: 1, Files: []git.FileDiff{fileSpec(wrapPath, git.Modified, hunkSpec(1, 1, "",
 		"-"+strings.Repeat("L", 65), "+"+right, "+"+lone))}}
-	s := newDrawnScene(t, res, 160, 30, codeWidths{left: 80, right: 30}, true, nil)
+	res.Files[0].Hunks[0].Lines[0].Text = strings.Repeat("L", 30)
 
-	if !s.lay.split {
-		t.Fatal("the drawer is not side by side")
+	probe := newDrawnScene(t, res, 160, 30, codeWidths{}, true, nil)
+	cw := probe.lay.codeWidths()
+	s := newDrawnScene(t, res, 160, 30, cw, true, nil)
+
+	if !s.lay.split || cw.left < 30 || len(lineParts(right, false, cw.right)) != 3 {
+		t.Fatalf("widths %+v: want a split drawer, a left column of 30 or more and the right line in 3 rows", cw)
 	}
 
 	th := s.d.dv
@@ -860,8 +868,8 @@ func TestWrappedSplitSides(t *testing.T) {
 	}{{"paired", right, false}, {"left missing", lone, true}}
 
 	for _, tt := range tests {
-		for k := range 3 {
-			part := tt.text[30*k : min(30*k+30, 70)]
+		for k, wp := range lineParts(tt.text, false, cw.right) {
+			part := tt.text[wp.c0:wp.c1]
 			line := s.lines[s.find(t, part)]
 			plain := ansi.Strip(line)
 			left := ansi.Cut(plain, 1, sep)
