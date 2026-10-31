@@ -48,8 +48,6 @@ func TestFit(t *testing.T) {
 	}
 }
 
-func pngHeader(w, h uint32) []byte { return pngHeaderDepth(w, h, 8) }
-
 // pngHeaderDepth is a truecolor PNG header of the given bit depth.
 func pngHeaderDepth(w, h uint32, depth byte) []byte {
 	ihdr := make([]byte, 0, 17)

@@ -1455,6 +1455,7 @@ type blockFetcher struct {
 
 func (f *blockFetcher) Fetch(context.Context, string, string, int64) ([]byte, error) {
 	f.started <- struct{}{}
+
 	<-f.release
 
 	return nil, errors.New("released")
