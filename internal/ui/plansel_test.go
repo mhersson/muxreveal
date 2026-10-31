@@ -435,6 +435,13 @@ func TestEdgeScrollToEnd(t *testing.T) {
 		t.Fatalf("copy has %d lines, want %d", len(lines), n)
 	}
 
+	// The press is on the list indent (the bullet is at cell 4), so row 0 copies
+	// whole; a head on the indent would copy nothing of the last row, hence the
+	// pointer further in.
+	if lines[0] != "• line 0" {
+		t.Errorf("first copied line = %q", lines[0])
+	}
+
 	if lines[n-1] != "• line 2999" {
 		t.Errorf("last copied line = %q", lines[n-1])
 	}

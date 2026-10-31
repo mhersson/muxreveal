@@ -57,7 +57,7 @@ func (h textHost) at(x, y int) point {
 	dy := min(max(y-h.rect.Min.Y, 0), max(h.rect.Dy()-1, 0))
 	row := h.top + dy
 
-	if dy == 0 && h.sticky >= 0 {
+	if dy == 0 && h.sticky >= 0 && y >= h.rect.Min.Y {
 		row = h.sticky
 	}
 
