@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"image"
+	"image/color"
 	"image/draw"
 	_ "image/gif"  // registers the GIF decoder
 	_ "image/jpeg" // registers the JPEG decoder
@@ -17,14 +18,15 @@ import (
 const (
 	// MaxSide is the longest side, in pixels, that is decoded.
 	MaxSide = 16384
-	// MaxPixels is the most pixels in total that are decoded.
-	MaxPixels = 40_000_000
+	// MaxDecodedBytes is the most memory a decoded image may take: 40 megapixels
+	// at 4 bytes, counted from the header's colour model.
+	MaxDecodedBytes = 160_000_000
 )
 
 var (
 	// ErrFormat means the data is not a PNG, JPEG, GIF or WebP image.
 	ErrFormat = errors.New("not a PNG, JPEG, GIF or WebP image")
-	// ErrTooBig means the image is over MaxSide or MaxPixels.
+	// ErrTooBig means the image is over MaxSide or MaxDecodedBytes.
 	ErrTooBig = errors.New("image too large to decode")
 )
 
@@ -46,11 +48,29 @@ func Size(data []byte) (w, h int, err error) {
 		return 0, 0, ErrFormat
 	}
 
-	if cfg.Width > MaxSide || cfg.Height > MaxSide || cfg.Width*cfg.Height > MaxPixels {
+	if cfg.Width > MaxSide || cfg.Height > MaxSide || cfg.Width*cfg.Height*bytesPerPixel(cfg.ColorModel) > MaxDecodedBytes {
 		return 0, 0, ErrTooBig
 	}
 
 	return cfg.Width, cfg.Height, nil
+}
+
+// bytesPerPixel is what a pixel of model takes once decoded.
+func bytesPerPixel(m color.Model) int {
+	switch m {
+	case color.RGBA64Model, color.NRGBA64Model:
+		return 8
+	case color.Gray16Model:
+		return 2
+	case color.GrayModel:
+		return 1
+	}
+
+	if _, ok := m.(color.Palette); ok {
+		return 1
+	}
+
+	return 4
 }
 
 // Fit returns the cells a w by h pixel image takes: natural size, shrunk to

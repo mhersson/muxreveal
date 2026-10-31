@@ -48,12 +48,15 @@ func TestFit(t *testing.T) {
 	}
 }
 
-func pngHeader(w, h uint32) []byte {
+func pngHeader(w, h uint32) []byte { return pngHeaderDepth(w, h, 8) }
+
+// pngHeaderDepth is a truecolor PNG header of the given bit depth.
+func pngHeaderDepth(w, h uint32, depth byte) []byte {
 	ihdr := make([]byte, 0, 17)
 	ihdr = append(ihdr, "IHDR"...)
 	ihdr = binary.BigEndian.AppendUint32(ihdr, w)
 	ihdr = binary.BigEndian.AppendUint32(ihdr, h)
-	ihdr = append(ihdr, 8, 2, 0, 0, 0)
+	ihdr = append(ihdr, depth, 2, 0, 0, 0)
 	out := []byte("\x89PNG\r\n\x1a\n")
 	out = binary.BigEndian.AppendUint32(out, 13)
 	out = append(out, ihdr...)
@@ -67,17 +70,23 @@ func TestSizeLimits(t *testing.T) {
 	tests := []struct {
 		name    string
 		w, h    uint32
+		depth   byte
 		wantErr error
 	}{
-		{"pixels", 30000, 30000, ErrTooBig},
-		{"side", 16385, 1, ErrTooBig},
-		{"at limit", 16384, 1, nil},
+		{"pixels", 30000, 30000, 8, ErrTooBig},
+		{"side", 16385, 1, 8, ErrTooBig},
+		{"at limit", 16384, 1, 8, nil},
+		{"8-bit at the byte cap", 10000, 4000, 8, nil},
+		{"8-bit over the byte cap", 10000, 4001, 8, ErrTooBig},
+		{"16-bit just over the byte cap", 10000, 2001, 16, ErrTooBig},
+		{"16-bit at the byte cap", 10000, 2000, 16, nil},
+		{"8-bit same pixels as the 16-bit over", 10000, 2001, 8, nil},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			w, h, err := Size(pngHeader(tt.w, tt.h))
+			w, h, err := Size(pngHeaderDepth(tt.w, tt.h, tt.depth))
 			if !errors.Is(err, tt.wantErr) {
 				t.Fatalf("err = %v, want %v", err, tt.wantErr)
 			}
