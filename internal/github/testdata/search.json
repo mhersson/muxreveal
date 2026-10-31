@@ -1,0 +1,161 @@
+{
+  "data": {
+    "requested": {
+      "nodes": [
+        {
+          "number": 311,
+          "title": "Retry the upload",
+          "url": "https://github.com/acme/web/pull/311",
+          "isDraft": false,
+          "state": "OPEN",
+          "isCrossRepository": false,
+          "headRefName": "feat/311",
+          "headRefOid": "0000000000000000000000000000000000000311",
+          "baseRefName": "main",
+          "updatedAt": "2026-10-30T09:00:00Z",
+          "reviewDecision": null,
+          "mergeStateStatus": "CLEAN",
+          "author": {
+            "login": "kari-dev"
+          },
+          "viewerDidAuthor": false,
+          "commits": {
+            "nodes": [
+              {
+                "commit": {
+                  "statusCheckRollup": {
+                    "state": "SUCCESS",
+                    "contexts": {
+                      "checkRunCount": 6,
+                      "checkRunCountsByState": [
+                        {
+                          "state": "SUCCESS",
+                          "count": 6
+                        }
+                      ],
+                      "statusContextCount": 0,
+                      "statusContextCountsByState": []
+                    }
+                  }
+                }
+              }
+            ]
+          },
+          "repository": {
+            "name": "web",
+            "owner": {
+              "login": "acme"
+            }
+          }
+        },
+        {},
+        {},
+        {},
+        {
+          "number": 305,
+          "title": "Dark mode",
+          "url": "https://github.com/acme/web/pull/305",
+          "isDraft": false,
+          "state": "OPEN",
+          "isCrossRepository": false,
+          "headRefName": "feat/305",
+          "headRefOid": "0000000000000000000000000000000000000305",
+          "baseRefName": "main",
+          "updatedAt": "2026-10-30T09:00:00Z",
+          "reviewDecision": null,
+          "mergeStateStatus": "CLEAN",
+          "author": {
+            "login": "lars"
+          },
+          "viewerDidAuthor": false,
+          "commits": {
+            "nodes": []
+          },
+          "repository": {
+            "name": "web",
+            "owner": {
+              "login": "acme"
+            }
+          }
+        },
+        {
+          "number": 88,
+          "title": "Bump the chart",
+          "url": "https://github.com/acme/infra/pull/88",
+          "isDraft": false,
+          "state": "OPEN",
+          "isCrossRepository": false,
+          "headRefName": "feat/88",
+          "headRefOid": "0000000000000000000000000000000000000088",
+          "baseRefName": "main",
+          "updatedAt": "2026-10-30T09:00:00Z",
+          "reviewDecision": null,
+          "mergeStateStatus": "CLEAN",
+          "author": {
+            "login": "bot-user"
+          },
+          "viewerDidAuthor": false,
+          "commits": {
+            "nodes": []
+          },
+          "repository": {
+            "name": "infra",
+            "owner": {
+              "login": "acme"
+            }
+          }
+        }
+      ]
+    },
+    "authored": {
+      "nodes": [
+        {
+          "number": 24,
+          "title": "Read the conversation",
+          "url": "https://github.com/mhersson/muxreveal/pull/24",
+          "isDraft": false,
+          "state": "OPEN",
+          "isCrossRepository": false,
+          "headRefName": "feat/24",
+          "headRefOid": "0000000000000000000000000000000000000024",
+          "baseRefName": "main",
+          "updatedAt": "2026-10-30T09:00:00Z",
+          "reviewDecision": null,
+          "mergeStateStatus": "CLEAN",
+          "author": {
+            "login": "mhersson"
+          },
+          "viewerDidAuthor": true,
+          "commits": {
+            "nodes": [
+              {
+                "commit": {
+                  "statusCheckRollup": {
+                    "state": "SUCCESS",
+                    "contexts": {
+                      "checkRunCount": 6,
+                      "checkRunCountsByState": [
+                        {
+                          "state": "SUCCESS",
+                          "count": 6
+                        }
+                      ],
+                      "statusContextCount": 0,
+                      "statusContextCountsByState": []
+                    }
+                  }
+                }
+              }
+            ]
+          },
+          "repository": {
+            "name": "muxreveal",
+            "owner": {
+              "login": "mhersson"
+            }
+          }
+        }
+      ]
+    }
+  }
+}
