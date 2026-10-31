@@ -2,9 +2,8 @@
 // aaaa128cd35b38ba8aa08a5f69e688f01385ec3e (github.com/Gaurav-Gosain/tuios).
 // Copyright (c) 2025 Gaurav Gosain. MIT License; see THIRD_PARTY.md.
 
-// Package linediff computes the line edit script between two texts by longest
-// common subsequence, for diffing the lines inside a changed hunk. It imports
-// only the standard library.
+// Package linediff splits texts into lines and finds a shortest line edit
+// script between two of them. It imports only the standard library.
 package linediff
 
 import (

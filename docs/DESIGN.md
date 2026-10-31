@@ -200,7 +200,7 @@ One Go module, `github.com/mhersson/muxreveal`.
 | `internal/ui` | Compositor, widgets, keymap, themes, syntax highlighting, image placement |
 | `internal/term` | PTY plus the `VT` interface; `tuios.dev/vt` adapter (fallback `charmbracelet/x/vt`) |
 | `internal/harness` | `Harness` interface; Claude Code adapter (launch args, hook settings, resume, a session's custom name from its transcript) |
-| `internal/git` | Worktrees, turn snapshots, watcher and watch set, diff engine; `linediff` and `invisible` (ported from tuios); `fsnotify` (a copy of fsnotify v1.10.1) |
+| `internal/git` | Worktrees, turn snapshots, watcher and watch set, diff engine; `linediff` (ported from tuios, except its Myers diff) and `invisible` (ported from tuios); `fsnotify` (a copy of fsnotify v1.10.1) |
 | `internal/github` | Auth via `gh`, GraphQL and REST client, poller, PR actions, image fetch, conversations, searches, job logs |
 | `internal/md` | Markdown to width-wrapped lines of styled runs, with link targets, image references and folds; no UI imports |
 | `internal/store` | `state.json` and reviewed-hunk persistence |
