@@ -138,6 +138,7 @@ type App struct {
 	confirm                *confirm     // yes/no question; owns every key while open
 	prompt                 *prompt      // text input; owns every key and paste while open
 	checks                 *checksView  // a pull request's checks; owns every key while open
+	logSeq                 int          // numbers the job log reads, so a late answer is told apart
 	merge                  *mergeView   // the merge box; owns every key while open
 	plan                   *planView    // an agent's plan; owns every key while open
 	planSeq                int          // plan read counter; an answer for another read is stale
@@ -717,6 +718,8 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.onPlanRead(msg)
 	case prSearchMsg:
 		a.onPRSearch(msg)
+	case checkLogMsg:
+		a.onCheckLog(msg)
 	case prSearchTickMsg:
 		return a, a.onPRSearchTick(msg)
 	case planPageMsg:

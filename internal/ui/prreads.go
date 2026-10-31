@@ -10,4 +10,5 @@ import (
 // cmd/muxreveal fills it from its client cache, picking the client by host.
 type prReads interface {
 	MyPRs(ctx context.Context, host string) (github.MyPRs, error)
+	JobLog(ctx context.Context, r github.Repo, jobID int64) (data []byte, cut bool, err error)
 }

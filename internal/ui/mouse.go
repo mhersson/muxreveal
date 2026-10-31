@@ -551,7 +551,7 @@ func (a *App) planWheel(msg tea.MouseWheelMsg) bool {
 // that tracks the mouse gets the event, the alt screen gets cursor-key presses,
 // and any other pane scrolls its view.
 func (a *App) handleWheel(msg tea.MouseWheelMsg) {
-	if a.planWheel(msg) || a.mouseBlocked() {
+	if a.planWheel(msg) || a.logWheel(msg) || a.mouseBlocked() {
 		return
 	}
 

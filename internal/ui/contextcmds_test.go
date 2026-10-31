@@ -228,13 +228,13 @@ func TestChecksRemappedKeys(t *testing.T) {
 	t.Parallel()
 
 	r, f := inChecks(t)
-	remapTables(t, r.App, contextKeys("checks", "o", "checks.browser", "enter", "none"))
+	remapTables(t, r.App, contextKeys("checks", "o", "checks.browser", "O", "none"))
 	r.run(r.step(snapshotWithChecks("aaaaaaa", "aaaaaaa", 7, sampleChecks()[0])))
 
-	r.keys(keyEnter)
+	r.typed("O")
 
 	if got := f.urls(); len(got) != 0 {
-		t.Fatalf("enter opened %v although it is unbound", got)
+		t.Fatalf("O opened %v although it is unbound", got)
 	}
 
 	r.keys(keyRune('o'))
@@ -327,9 +327,9 @@ func TestContextHintsFollowBindings(t *testing.T) {
 			cfg       core.KeysConfig
 			want, not string
 		}{
-			{name: "defaults", want: "j/k check    enter open in browser    r refresh    esc close"},
-			{name: "browser moved", cfg: contextKeys("checks", "o", "checks.browser", "enter", "none"), want: "o open in browser", not: "enter open"},
-			{name: "refresh unbound", cfg: contextKeys("checks", "r", "none"), want: "enter open in browser    esc close", not: "refresh"},
+			{name: "defaults", want: "j/k check    l log    O browser    r refresh    esc close"},
+			{name: "browser moved", cfg: contextKeys("checks", "o", "checks.browser", "O", "none"), want: "o browser", not: "O browser    r"},
+			{name: "refresh unbound", cfg: contextKeys("checks", "r", "none"), want: "O browser    esc close", not: "refresh"},
 		}
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {

@@ -149,6 +149,16 @@ func (g ghReads) MyPRs(ctx context.Context, host string) (github.MyPRs, error) {
 	return c.MyPRs(ctx)
 }
 
+// JobLog reads the tail of an Actions job's log.
+func (g ghReads) JobLog(ctx context.Context, r github.Repo, jobID int64) (data []byte, cut bool, err error) {
+	c, err := g.clients.client(ctx, r.Host)
+	if err != nil {
+		return nil, false, fmt.Errorf("client for %s: %w", r.Host, err)
+	}
+
+	return c.JobLog(ctx, r, jobID)
+}
+
 // Close stops the poller: its requests are cancelled, its goroutines end and
 // its updates close. It is safe to repeat.
 func (p *prRuntime) Close() error { return p.poller.Close() }

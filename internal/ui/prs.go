@@ -474,7 +474,7 @@ func focusedChecksOf(f *github.FocusedChecks) *core.PRChecks {
 	for i, c := range f.Checks {
 		checks[i] = core.CheckInfo{
 			Name: c.Name, URL: c.URL, State: string(c.State),
-			StartedAt: c.StartedAt, CompletedAt: c.CompletedAt,
+			StartedAt: c.StartedAt, CompletedAt: c.CompletedAt, ID: c.ID, App: c.App,
 		}
 	}
 

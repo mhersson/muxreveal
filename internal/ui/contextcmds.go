@@ -42,7 +42,15 @@ var (
 		{"down", "checks.next"},
 		{"k", "checks.prev"},
 		{"up", "checks.prev"},
-		{"enter", "checks.browser"},
+		{"l", "checks.log"},
+		{"O", "checks.browser"},
+		{"enter", "checks.fold"},
+		{"ctrl+d", "checks.page.down"},
+		{"ctrl+u", "checks.page.up"},
+		{"g", "checks.top"},
+		{"G", "checks.bottom"},
+		{"]", "checks.error.next"},
+		{"[", "checks.error.prev"},
 		{"r", "checks.refresh"},
 		{"esc", "checks.close"},
 	}
@@ -252,38 +260,101 @@ func checksCommands() []command {
 		}}
 	}
 
+	// page runs on the open log page, and does nothing in the list. n is the
+	// log rows the page shows.
+	page := func(id, title string, run func(p *checkPage, n int)) command {
+		return cmd(id, title, func(a *App, v *checksView, _ []checkRow) tea.Cmd {
+			if v.page != nil {
+				run(v.page, a.logPageRows())
+			}
+
+			return nil
+		})
+	}
+
 	return scoped("checks", []command{
-		cmd("checks.next", "next check", func(_ *App, v *checksView, rows []checkRow) tea.Cmd {
+		cmd("checks.next", "next check or line", func(a *App, v *checksView, rows []checkRow) tea.Cmd {
+			if p := v.page; p != nil {
+				p.move(p.cursor+1, a.logPageRows())
+
+				return nil
+			}
+
 			v.sel = min(v.sel+1, max(len(rows)-1, 0))
 
 			return nil
 		}),
-		cmd("checks.prev", "previous check", func(_ *App, v *checksView, _ []checkRow) tea.Cmd {
+		cmd("checks.prev", "previous check or line", func(a *App, v *checksView, _ []checkRow) tea.Cmd {
+			if p := v.page; p != nil {
+				p.move(p.cursor-1, a.logPageRows())
+
+				return nil
+			}
+
 			v.sel = max(v.sel-1, 0)
 
 			return nil
 		}),
-		cmd("checks.browser", "open in the browser", func(a *App, v *checksView, rows []checkRow) tea.Cmd {
-			if v.sel >= len(rows) {
+		cmd("checks.log", "show the job's log", func(a *App, v *checksView, rows []checkRow) tea.Cmd {
+			if v.page != nil || v.sel >= len(rows) {
 				return nil
 			}
 
-			if rows[v.sel].url == "" {
+			return a.checksLog(v, rows[v.sel])
+		}),
+		cmd("checks.browser", "open in the browser", func(a *App, v *checksView, rows []checkRow) tea.Cmd {
+			var c checkRow
+
+			switch {
+			case v.page != nil:
+				c = v.page.check
+			case v.sel < len(rows):
+				c = rows[v.sel]
+			default:
+				return nil
+			}
+
+			if c.url == "" {
 				a.notice = noticeCheckNoPage
 
 				return nil
 			}
 
-			return a.openURL(rows[v.sel].url)
+			return a.openURL(c.url)
+		}),
+		page("checks.fold", "open or close the group", func(p *checkPage, _ int) { p.fold() }),
+		page("checks.page.down", "half a page down", func(p *checkPage, n int) { p.move(p.cursor+max(n/2, 1), n) }),
+		page("checks.page.up", "half a page up", func(p *checkPage, n int) { p.move(p.cursor-max(n/2, 1), n) }),
+		page("checks.top", "first line", func(p *checkPage, n int) { p.move(0, n) }),
+		page("checks.bottom", "last line", func(p *checkPage, n int) { p.move(len(p.rows())-1, n) }),
+		page("checks.error.next", "next error", func(p *checkPage, n int) {
+			if i, ok := p.errorRow(1); ok {
+				p.move(i, n)
+			}
+		}),
+		page("checks.error.prev", "previous error", func(p *checkPage, n int) {
+			if i, ok := p.errorRow(-1); ok {
+				p.move(i, n)
+			}
 		}),
 		cmd("checks.refresh", "refresh", func(a *App, v *checksView, _ []checkRow) tea.Cmd {
+			if v.page != nil {
+				return a.readJobLog(v)
+			}
+
 			if repo, ok := repoOfKey(v.repo); ok && a.prs.src != nil {
 				a.prs.src.Refresh(repo)
 			}
 
 			return nil
 		}),
-		cmd("checks.close", "close", func(a *App, _ *checksView, _ []checkRow) tea.Cmd {
+		cmd("checks.close", "close", func(a *App, v *checksView, _ []checkRow) tea.Cmd {
+			if v.page != nil {
+				v.page = nil
+
+				return nil
+			}
+
 			a.closeChecks()
 
 			return nil

@@ -23,6 +23,33 @@ type fakeReads struct {
 	calls []string
 	mine  map[string]github.MyPRs
 	fail  map[string]error
+
+	logData  []byte // what JobLog returns
+	logCut   bool
+	logErr   error
+	logCalls []jobLogCall
+}
+
+// jobLogCall is one JobLog read.
+type jobLogCall struct {
+	repo github.Repo
+	id   int64
+}
+
+func (f *fakeReads) JobLog(_ context.Context, r github.Repo, id int64) (data []byte, cut bool, err error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	f.logCalls = append(f.logCalls, jobLogCall{repo: r, id: id})
+
+	return f.logData, f.logCut, f.logErr
+}
+
+func (f *fakeReads) logReads() []jobLogCall {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	return slices.Clone(f.logCalls)
 }
 
 func (f *fakeReads) MyPRs(_ context.Context, host string) (github.MyPRs, error) {

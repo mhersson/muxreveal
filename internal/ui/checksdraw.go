@@ -91,33 +91,14 @@ func (a *App) checksBox(lk look, w, room int) []string {
 		body = a.checkLines(rows, v.sel, count, cw, row, lk)
 	}
 
-	hint := func(key, label string) string { return st.popupKey.Render(key) + st.popupMuted.Render(" "+label) }
 	kt := a.keys.checks
-	pairs := hintPairs([][2]string{
+	hints := popupHints(st, hintPairs([][2]string{
 		{kt.hint("checks.next", "checks.prev"), "check"},
-		{kt.hint("checks.browser"), "open in browser"},
+		{kt.hint("checks.log"), "log"},
+		{kt.hint("checks.browser"), "browser"},
 		{kt.hint("checks.refresh"), "refresh"},
 		{kt.hint("checks.close"), "close"},
-	})
-	hints, used := "", 0
-
-	for i, kv := range pairs {
-		need := ansi.StringWidth(kv[0]) + 1 + ansi.StringWidth(kv[1])
-		if i > 0 {
-			need += 4
-		}
-
-		if used+need > cw {
-			break
-		}
-
-		if i > 0 {
-			hints += st.popup.Render("    ")
-		}
-
-		hints += hint(kv[0], kv[1])
-		used += need
-	}
+	}), cw)
 
 	// The frame, two blank rows and the hints take five lines beyond the checks.
 	full := len(body) + 5
@@ -140,6 +121,32 @@ func (a *App) checksBox(lk look, w, room int) []string {
 	}
 
 	return append([]string{top}, body...)
+}
+
+// popupHints draws the key and label pairs a popup's hint row holds in cw cells,
+// the pairs that do not fit dropped from the end.
+func popupHints(st styles, pairs [][2]string, cw int) string {
+	hints, used := "", 0
+
+	for i, kv := range pairs {
+		need := ansi.StringWidth(kv[0]) + 1 + ansi.StringWidth(kv[1])
+		if i > 0 {
+			need += 4
+		}
+
+		if used+need > cw {
+			break
+		}
+
+		if i > 0 {
+			hints += st.popup.Render("    ")
+		}
+
+		hints += st.popupKey.Render(kv[0]) + st.popupMuted.Render(" "+kv[1])
+		used += need
+	}
+
+	return hints
 }
 
 // checkLines draws count check rows cw cells wide, scrolled so the selected one shows.
@@ -194,6 +201,10 @@ func (a *App) checkLines(rows []checkRow, sel, count, cw int, row func(string) s
 // overlayChecks draws the checks overlay over base, centred with its top at a third
 // of the height.
 func (a *App) overlayChecks(f *frameLayers, base string, lk look) string {
+	if a.checks.page != nil {
+		return a.overlayCILog(f, base, lk)
+	}
+
 	w := min(maxChecksWidth, a.width-4)
 	if w < 12 {
 		return base
