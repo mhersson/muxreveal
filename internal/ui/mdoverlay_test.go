@@ -1018,22 +1018,36 @@ func TestMDOverlayLive(t *testing.T) {
 		t.Parallel()
 
 		m := mdLive(t)
-		old := m.plan.view.doc
+		v := &m.plan.view
+		old := v.doc
+
+		// The top rests below the Beta heading and the cursor below the top.
+		beta := viewLine(t, v, "Beta")
+		v.top = viewLine(t, v, "item one")
+		v.cursor = v.top + 1
+
+		below, cursorOff := v.top-beta, v.cursor-v.top
+		if below < 1 || cursorOff < 1 {
+			t.Fatalf("top is %d below the heading and the cursor %d below the top, want both at least 1", below, cursorOff)
+		}
 
 		write(t, a(m), changed)
 		m.flow(m.batchOf("docs/a.md"), nil)
 
-		v := &m.plan.view
 		if v.doc == old || !strings.Contains(m.docText(), "added above") || strings.Contains(m.docText(), "intro text") {
 			t.Fatalf("the doc did not change:\n%s", m.docText())
 		}
 
-		if got := v.doc.text()[v.cursor]; !strings.Contains(got, "Gamma") {
-			t.Errorf("cursor on %q, want the Gamma line", got)
+		if got := viewLine(t, v, "Beta"); got == beta {
+			t.Fatalf("the heading stayed on line %d, so the case does not move it", got)
 		}
 
-		if want := viewLine(t, v, "Gamma"); v.top != want {
-			t.Errorf("top = %d, want %d: the heading it sat on", v.top, want)
+		if got := v.top - viewLine(t, v, "Beta"); got != below {
+			t.Errorf("top is %d below the heading, want %d as before", got, below)
+		}
+
+		if got := v.cursor - v.top; got != cursorOff {
+			t.Errorf("cursor is %d below the top, want %d as before", got, cursorOff)
 		}
 	})
 
@@ -1088,23 +1102,48 @@ func TestMDOverlayLive(t *testing.T) {
 		}
 	})
 
-	t.Run("removed", func(t *testing.T) {
-		t.Parallel()
+	gone := []struct {
+		name string
+		gone func(t *testing.T, m *pageRig)
+	}{
+		{"removed", func(t *testing.T, m *pageRig) {
+			if err := os.Remove(a(m)); err != nil {
+				t.Fatal(err)
+			}
+		}},
+		{"renamed", func(t *testing.T, m *pageRig) {
+			if err := os.Rename(a(m), a(m)+".moved"); err != nil {
+				t.Fatal(err)
+			}
+		}},
+		{"turned into a folder", func(t *testing.T, m *pageRig) {
+			if err := os.Remove(a(m)); err != nil {
+				t.Fatal(err)
+			}
 
-		m := mdLive(t)
-		old := m.plan.view.doc
+			if err := os.Mkdir(a(m), 0o755); err != nil {
+				t.Fatal(err)
+			}
+		}},
+	}
 
-		if err := os.Remove(a(m)); err != nil {
-			t.Fatal(err)
-		}
+	for _, tt := range gone {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 
-		m.notice = ""
-		m.flow(m.batchOf("docs/a.md"), nil)
+			m := mdLive(t)
+			old := m.plan.view.doc
 
-		if m.plan == nil || m.plan.view.doc != old || m.notice != "" {
-			t.Errorf("overlay open %v, notice %q, want the old text kept in silence", m.plan != nil, m.notice)
-		}
-	})
+			tt.gone(t, m)
+
+			m.notice = ""
+			m.flow(m.batchOf("docs/a.md"), nil)
+
+			if m.plan == nil || m.plan.view.doc != old || m.notice != "" {
+				t.Errorf("overlay open %v, notice %q, want the old text kept in silence", m.plan != nil, m.notice)
+			}
+		})
+	}
 
 	t.Run("back", func(t *testing.T) {
 		t.Parallel()

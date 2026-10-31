@@ -161,17 +161,17 @@ func planTop(lead, path, tag string, w int) (title, tagOut string) {
 // path to shorten and the tag. A shown page replaces the path and drops the
 // tag; a markdown file has no tag.
 func (a *App) planHead(v *planView) (lead, path, tag string) {
+	icon, name := iconPlan, v.agent
 	if f := v.file; f != nil {
-		lead, path = " "+f.repo+" · ", f.path
-		if a.icons {
-			lead = " " + iconMarkdown + " " + f.repo + " · "
-		}
-	} else {
-		lead = " " + v.agent + " · "
-		if a.icons {
-			lead = " " + iconPlan + " " + v.agent + " · "
-		}
+		icon, name, path = iconMarkdown, f.repo, f.path
+	}
 
+	lead = " " + name + " · "
+	if a.icons {
+		lead = " " + icon + " " + name + " · "
+	}
+
+	if v.file == nil {
 		tag = " " + planKindWord(v.plan.Kind)
 		if v.rewritten {
 			tag += " · " + planRewritten

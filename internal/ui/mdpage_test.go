@@ -443,6 +443,8 @@ func TestMarkdownPageKeys(t *testing.T) {
 	}
 
 	t.Run("lines", func(t *testing.T) {
+		m.dropPages(m.v)
+
 		p := m.openPage(t, "docs/a.md")
 
 		m.press(keyRune('j'))
@@ -462,6 +464,8 @@ func TestMarkdownPageKeys(t *testing.T) {
 	})
 
 	t.Run("headings", func(t *testing.T) {
+		m.dropPages(m.v)
+
 		p := m.openPage(t, "docs/a.md")
 		beta, gamma := pageLine(t, p, "Beta"), pageLine(t, p, "Gamma")
 
@@ -485,6 +489,8 @@ func TestMarkdownPageKeys(t *testing.T) {
 	})
 
 	t.Run("pages and ends", func(t *testing.T) {
+		m.dropPages(m.v)
+
 		p := m.openPage(t, "docs/long.md")
 		last := len(p.view.layout().Lines) - 1
 		half := p.view.h / 2
@@ -551,6 +557,8 @@ func TestMarkdownPageKeys(t *testing.T) {
 	})
 
 	t.Run("search", func(t *testing.T) {
+		m.dropPages(m.v)
+
 		p := m.openPage(t, "docs/a.md")
 
 		m.press(keyRune('/'))
@@ -572,6 +580,8 @@ func TestMarkdownPageKeys(t *testing.T) {
 	})
 
 	t.Run("r reads the file again", func(t *testing.T) {
+		m.dropPages(m.v)
+
 		p := m.openPage(t, "docs/a.md")
 		write(t, filepath.Join(m.dir, "docs/a.md"), strings.Replace(pageDoc, "intro text", "brand new intro", 1))
 
@@ -585,6 +595,8 @@ func TestMarkdownPageKeys(t *testing.T) {
 	})
 
 	t.Run("other keys are dropped", func(t *testing.T) {
+		m.dropPages(m.v)
+
 		m.openPage(t, "docs/a.md")
 
 		before := snapOf()
@@ -634,7 +646,6 @@ func TestMarkdownPageStack(t *testing.T) {
 
 	for _, key := range []rune{'b', 't', 'p'} {
 		t.Run(string(key)+" drops the stack", func(t *testing.T) {
-			m.dropPages(m.v)
 			m.openPage(t, "docs/a.md")
 			m.openPage(t, "README.md")
 
