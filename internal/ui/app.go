@@ -542,7 +542,13 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	switch msg := msg.(type) {
 	case pictureDoneMsg:
-		return a, tea.Batch(a.pictures.done(msg), a.loader.wait())
+		cmd := a.pictures.done(msg)
+
+		if a.compose != nil && a.compose.preview.on {
+			a.composePreviewSettle(a.compose)
+		}
+
+		return a, tea.Batch(cmd, a.loader.wait())
 	case tea.WindowSizeMsg:
 		a.endSlide()
 
