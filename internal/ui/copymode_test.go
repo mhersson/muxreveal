@@ -5,7 +5,6 @@ import (
 	"runtime"
 	"strings"
 	"testing"
-	"time"
 )
 
 func copyTestGrid() *fakeGrid {
@@ -403,7 +402,6 @@ func TestSearchOverCappedHistoryIsCheap(t *testing.T) {
 
 	var (
 		found      bool
-		elapsed    time.Duration
 		allocBytes uint64
 		rows       int
 	)
@@ -416,15 +414,13 @@ func TestSearchOverCappedHistoryIsCheap(t *testing.T) {
 		runtime.GC()
 		runtime.ReadMemStats(&before)
 
-		start := time.Now()
 		_, found = copyMode{cursor: point{row: rows - 1}}.search(g, "zzz", false)
-		elapsed = time.Since(start)
 
 		runtime.ReadMemStats(&after)
 		allocBytes = after.TotalAlloc - before.TotalAlloc
 	})
 
-	t.Logf("search over %d rows: %v, %d KB allocated", rows, elapsed, allocBytes>>10)
+	t.Logf("search over %d rows: %d KB allocated", rows, allocBytes>>10)
 
 	if found {
 		t.Fatal("found a match that is not there")

@@ -260,10 +260,12 @@ func TestBenchDrawerResizeWithLongLines(t *testing.T) {
 				var slow, base time.Duration
 
 				for _, w := range rowWidths(icons) {
-					_, _, _, baseTook := resizeDrawer(t, baseline, w)
-					_, _, _, took := resizeDrawer(t, a, w)
+					start := time.Now()
+					_, _, _ = resizeDrawer(t, baseline, w)
+					mid := time.Now()
+					_, _, _ = resizeDrawer(t, a, w)
 
-					base, slow = base+baseTook, slow+took
+					base, slow = base+mid.Sub(start), slow+time.Since(mid)
 				}
 
 				t.Logf("resizes: %v with 1 MiB lines, %v with 1 KiB lines", slow, base)
