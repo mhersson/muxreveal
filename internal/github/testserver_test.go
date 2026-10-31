@@ -17,16 +17,24 @@ type routeTransport struct {
 	host   string
 	target *url.URL
 	next   *http.Transport
+	others map[string]*url.URL // host to server, for a redirect's target
 
 	mu   sync.Mutex
 	reqs []*http.Request
 }
 
 func (rt *routeTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	if req.URL.Host != rt.host {
-		rt.t.Errorf("request to unexpected host %q", req.URL.Host)
+	target := rt.target
 
-		return nil, http.ErrUseLastResponse
+	if req.URL.Host != rt.host {
+		other, ok := rt.others[req.URL.Host]
+		if !ok {
+			rt.t.Errorf("request to unexpected host %q", req.URL.Host)
+
+			return nil, http.ErrUseLastResponse
+		}
+
+		target = other
 	}
 
 	rt.mu.Lock()
@@ -34,8 +42,8 @@ func (rt *routeTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	rt.mu.Unlock()
 
 	out := req.Clone(req.Context())
-	out.URL.Scheme = rt.target.Scheme
-	out.URL.Host = rt.target.Host
+	out.URL.Scheme = target.Scheme
+	out.URL.Host = target.Host
 
 	resp, err := rt.next.RoundTrip(out)
 	if err != nil {
@@ -52,6 +60,14 @@ func (rt *routeTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 func newTestClient(t *testing.T, host string, h http.Handler) (*Client, func() []*http.Request) {
 	t.Helper()
 
+	return newTestClientWith(t, host, h, nil)
+}
+
+// newTestClientWith is newTestClient with extra servers, keyed by the host a
+// redirect points at.
+func newTestClientWith(t *testing.T, host string, h http.Handler, others map[string]http.Handler) (*Client, func() []*http.Request) {
+	t.Helper()
+
 	srv := httptest.NewServer(h)
 	t.Cleanup(srv.Close)
 
@@ -65,7 +81,20 @@ func newTestClient(t *testing.T, host string, h http.Handler) (*Client, func() [
 		apiHost = "api.github.com"
 	}
 
-	rt := &routeTransport{t: t, host: apiHost, target: target, next: &http.Transport{}}
+	rt := &routeTransport{t: t, host: apiHost, target: target, next: &http.Transport{}, others: map[string]*url.URL{}}
+
+	for oh, oHandler := range others {
+		osrv := httptest.NewServer(oHandler)
+		t.Cleanup(osrv.Close)
+
+		ou, err := url.Parse(osrv.URL)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		rt.others[oh] = ou
+	}
+
 	t.Cleanup(rt.next.CloseIdleConnections)
 
 	c, err := NewClient(host, Options{Token: testToken, Transport: rt})

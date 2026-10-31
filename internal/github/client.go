@@ -56,7 +56,7 @@ func NewClient(host string, o Options) (*Client, error) {
 	opts := api.ClientOptions{
 		Host:         host,
 		AuthToken:    o.Token,
-		Transport:    etags,
+		Transport:    headerTransport{next: etags},
 		LogIgnoreEnv: true,
 		EnableCache:  false,
 		Timeout:      timeout,
