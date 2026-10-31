@@ -87,7 +87,7 @@ type Options struct {
 	// nil turns them off.
 	PRActions prActions
 	// PRReads makes the GitHub reads of the pull request views (the list's
-	// searches); nil turns them off.
+	// searches, job logs, check run summaries and conversations); nil turns them off.
 	PRReads prReads
 	// Keys is the [keys] config laid over the built-in leader keys.
 	Keys core.KeysConfig

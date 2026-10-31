@@ -8,7 +8,7 @@ import (
 )
 
 // handleKey routes a key press: an open confirm first, then an open prompt, then
-// copy mode, then the open overlay, compose box, merge box, plan overlay, checks,
+// copy mode, then the open overlay, compose box, merge box, plan overlay, conversation, checks,
 // PR list or worktree picker, then the leader state machine, then the rail while
 // it has the keyboard, then the review drawer while it has it, then the focused pane.
 func (a *App) handleKey(msg tea.KeyPressMsg) tea.Cmd {
@@ -81,7 +81,8 @@ func (a *App) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 
 // handlePaste sends a paste to the topmost text input: prompt, overlay, compose box,
 // plan search, picker, then the rail's or drawer's search, else the focused pane.
-// Confirm, copy mode, the conversation, checks, merge and the PR list drop it.
+// Confirm, copy mode, checks, merge and the PR list drop it; the conversation
+// takes it only into its search prompt.
 func (a *App) handlePaste(msg tea.PasteMsg) tea.Cmd {
 	if a.confirm != nil {
 		return nil
