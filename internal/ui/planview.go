@@ -298,6 +298,10 @@ func countText(texts []string, text string) int {
 
 // closePlan closes the overlay and drops any read still on its way.
 func (a *App) closePlan() {
+	if ts := a.text; ts != nil && ts.view != nil && ts.tab == "" {
+		a.clearTextSel()
+	}
+
 	a.plan = nil
 	a.planSeq++
 }
@@ -346,6 +350,8 @@ func (a *App) handlePlanKey(msg tea.KeyPressMsg) tea.Cmd {
 	pv.rewritten = false
 
 	if key == "esc" {
+		a.clearTextSel()
+
 		switch {
 		case pv.chooser != nil:
 			pv.chooser = nil
@@ -366,10 +372,19 @@ func (a *App) handlePlanKey(msg tea.KeyPressMsg) tea.Cmd {
 	}
 
 	if pv.chooser != nil {
+		switch key {
+		case "j", "down", "k", "up", "enter":
+			a.clearTextSel()
+		}
+
 		return a.planChooserKey(msg)
 	}
 
 	if pv.searching {
+		if key == "enter" || key == "backspace" || msg.Text != "" {
+			a.clearTextSel()
+		}
+
 		a.planSearchKey(msg)
 
 		return nil
@@ -377,7 +392,13 @@ func (a *App) handlePlanKey(msg tea.KeyPressMsg) tea.Cmd {
 
 	v := pv.shown()
 
+	if planActs(key) {
+		a.clearTextSel()
+	}
+
 	switch key {
+	case "y":
+		return a.planCopy()
 	case "j", "down":
 		v.move(1)
 	case "k", "up":
@@ -412,6 +433,28 @@ func (a *App) handlePlanKey(msg tea.KeyPressMsg) tea.Cmd {
 	}
 
 	return nil
+}
+
+// planActs reports whether key is one of handlePlanKey's switch that moves or
+// opens something, and so clears a selection first; y copies and keeps it.
+func planActs(key string) bool {
+	switch key {
+	case "j", "down", "k", "up", "ctrl+d", "ctrl+u", "ctrl+f", "pgdown", "ctrl+b", "pgup",
+		"g", "G", "]", "[", "enter", "/", "n", "N":
+		return true
+	}
+
+	return false
+}
+
+// planCopy is y: the selection, kept, else the paragraph or item at the cursor.
+func (a *App) planCopy() tea.Cmd {
+	v := a.plan.shown()
+	if ts := a.text; ts != nil && ts.view == v {
+		return a.clip.copy(a.textSelected())
+	}
+
+	return a.clip.copy(v.unitText(v.cursor))
 }
 
 // planSearchKey types into the open search prompt.

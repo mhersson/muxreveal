@@ -62,6 +62,7 @@ type mouseState struct {
 	click clickState
 	press *heldPress
 	fwd   *forwarded
+	text  *textPress
 }
 
 // hit finds what lies under the screen cell (x, y): a pane's content or top
@@ -175,6 +176,12 @@ func (a *App) countClick(x, y int) int {
 }
 
 func (a *App) handleClick(msg tea.MouseClickMsg) tea.Cmd {
+	a.mouse.text = nil
+
+	if a.textClick(msg.Mouse()) {
+		return nil
+	}
+
 	if a.mouseBlocked() {
 		return nil
 	}
@@ -301,11 +308,17 @@ func (a *App) contentPress(h hitResult, m tea.Mouse) tea.Cmd {
 }
 
 func (a *App) handleMotion(msg tea.MouseMotionMsg) tea.Cmd {
-	if a.mouseBlocked() {
+	m := msg.Mouse()
+
+	if pr := a.mouse.text; pr != nil && m.Button == tea.MouseLeft {
+		a.textDrag(pr, m.X, m.Y)
+
 		return nil
 	}
 
-	m := msg.Mouse()
+	if a.mouseBlocked() {
+		return nil
+	}
 
 	switch {
 	case a.mouse.press != nil && m.Button == tea.MouseLeft:
@@ -331,11 +344,15 @@ func (a *App) handleMotion(msg tea.MouseMotionMsg) tea.Cmd {
 }
 
 func (a *App) handleRelease(msg tea.MouseReleaseMsg) tea.Cmd {
+	m := msg.Mouse()
+
+	if pr := a.mouse.text; pr != nil && m.Button == tea.MouseLeft {
+		return a.textRelease(pr, m)
+	}
+
 	if a.mouseBlocked() {
 		return nil
 	}
-
-	m := msg.Mouse()
 
 	if f := a.mouse.fwd; f != nil && m.Button == f.button {
 		a.mouse.fwd = nil

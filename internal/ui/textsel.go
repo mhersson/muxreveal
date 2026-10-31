@@ -250,9 +250,10 @@ func (a *App) textHolds(ts *textSelection) bool {
 
 // textSelAfterUpdate drops the text selection when its holder is gone or its
 // width changed, and when a new document or layout changed the selected text.
+// It waits for the release of the press that is making the selection.
 func (a *App) textSelAfterUpdate() {
 	ts := a.text
-	if ts == nil {
+	if ts == nil || a.mouse.text != nil {
 		return
 	}
 
