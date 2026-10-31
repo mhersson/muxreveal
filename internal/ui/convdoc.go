@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"maps"
 	"regexp"
 	"slices"
 	"sort"
@@ -540,6 +541,47 @@ func (d *convDoc) withPictures(p docPictures) *convDoc {
 	}
 
 	return d
+}
+
+// carryOpen opens in d what the user opened in old, by item id: bot boxes and
+// the folds of each body whose fold count is unchanged.
+func (d *convDoc) carryOpen(old *convDoc) {
+	if old == nil {
+		return
+	}
+
+	byID := make(map[string]*convItem, len(old.items))
+	for _, it := range old.items {
+		byID[it.id] = it
+	}
+
+	body := func(n, o *convBody) {
+		if n != nil && o != nil && n.folds() == o.folds() {
+			maps.Copy(n.doc.open, o.doc.open)
+			n.doc.have = false
+		}
+	}
+
+	for _, it := range d.items {
+		o := byID[it.id]
+		if o == nil {
+			continue
+		}
+
+		if it.bot && o.bot && old.botOpen[o.botIdx] {
+			d.botOpen[it.botIdx] = true
+		}
+
+		body(it.body, o.body)
+
+		if len(it.comments) == len(o.comments) {
+			for i := range it.comments {
+				body(it.comments[i].body, o.comments[i].body)
+			}
+		}
+	}
+
+	d.have = false
 }
 
 // pictureMove returns the layout a relayout caused by the pictures replaced, once.

@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"errors"
+	"fmt"
 	"slices"
 	"time"
 
@@ -89,7 +90,8 @@ func (a *App) readConversation(v *convView) tea.Cmd {
 
 	repo, ok := repoOfKey(v.repo)
 	if !ok || a.reads == nil {
-		v.loading, v.err = false, "not available"
+		v.loading = false
+		a.convFailed(v, "not available")
 
 		return nil
 	}
@@ -124,9 +126,22 @@ func (a *App) readConversation(v *convView) tea.Cmd {
 	}
 }
 
+// convFailed reports a failed read: in the notice when a conversation is on
+// screen, else in place of the items.
+func (a *App) convFailed(v *convView, reason string) {
+	reason = printable(reason)
+	if v.doc != nil {
+		a.notice = fmt.Sprintf(convReadFailed, reason)
+
+		return
+	}
+
+	v.err = reason
+}
+
 // onConvRead keeps a conversation's answer. One for an overlay that closed or
-// a read a newer one superseded is dropped; a failed read keeps the old
-// conversation off the screen and says why.
+// a read a newer one superseded is dropped; a failed read leaves the
+// conversation drawn and says why.
 func (a *App) onConvRead(msg convReadMsg) {
 	v := msg.view
 	if a.conv != v || v == nil || v.seq != msg.seq {
@@ -138,7 +153,7 @@ func (a *App) onConvRead(msg convReadMsg) {
 	if msg.err != nil {
 		// A cancelled read is the app shutting down: nothing to show.
 		if !errors.Is(msg.err, context.Canceled) {
-			v.err = printable(msg.err.Error())
+			a.convFailed(v, msg.err.Error())
 		}
 
 		return
@@ -176,6 +191,8 @@ func (a *App) onConvRead(msg convReadMsg) {
 		id, off = v.doc.itemAt(mv.cursor)
 		above = mv.cursor - mv.top
 	}
+
+	msg.doc.carryOpen(v.doc)
 
 	v.doc, mv.doc = msg.doc, msg.doc
 	mv.layout()

@@ -448,6 +448,149 @@ func TestConversationRereads(t *testing.T) {
 	})
 }
 
+// convWithDetails is convFor(7) with a comment that folds some text and a bot
+// comment that folds away.
+func convWithDetails() github.Conversation {
+	c := convFor(7)
+	extra := github.TimelineItem{
+		Kind: github.ItemComment, ID: "IC_9", Author: "pat", At: t0.Add(-150 * time.Minute),
+		Body: convText("Intro.\n\n<details><summary>More</summary>\n\nhidden words\n\n</details>"),
+	}
+	c.Items = append([]github.TimelineItem{extra}, c.Items...)
+
+	return c
+}
+
+func convShows(a *App, s string) bool {
+	a.conv.view.layout()
+
+	return slices.ContainsFunc(a.conv.doc.text(), func(l string) bool { return strings.Contains(l, s) })
+}
+
+func TestConversationRereadsKeepWhatWasOpened(t *testing.T) {
+	t.Parallel()
+
+	t.Run("an opened bot box", func(t *testing.T) {
+		t.Parallel()
+
+		a, reads := convApp(t, true, 160, 48)
+		reads.convs = []github.Conversation{convWithDetails()}
+
+		convOpen(t, a)
+
+		if convShows(a, "Coverage is 80%.") {
+			t.Fatal("the bot box starts open")
+		}
+
+		d := a.conv.doc
+		d.toggleFold(d.botBase)
+
+		if !convShows(a, "Coverage is 80%.") {
+			t.Fatal("toggling the bot box did not open it")
+		}
+
+		v := &a.conv.view
+		line := d.lineOf("IC_1", 1)
+		v.cursor, v.top = line, max(line-2, 0)
+		v.clamp()
+
+		id, off := a.conv.doc.itemAt(v.cursor)
+
+		ciDeliver(a, press(a, keyRune('r')))
+
+		if !convShows(a, "Coverage is 80%.") {
+			t.Error("a re-read folded the opened bot box")
+		}
+
+		if gotID, gotOff := a.conv.doc.itemAt(v.cursor); gotID != id || gotOff != off {
+			t.Errorf("the cursor is on %q+%d, want %q+%d", gotID, gotOff, id, off)
+		}
+	})
+
+	t.Run("an opened details", func(t *testing.T) {
+		t.Parallel()
+
+		a, reads := convApp(t, true, 160, 48)
+		reads.convs = []github.Conversation{convWithDetails()}
+
+		convOpen(t, a)
+
+		if convShows(a, "hidden words") {
+			t.Fatal("the details start open")
+		}
+
+		var folds int
+
+		for _, b := range a.conv.doc.bodies {
+			if b.folds() > 0 {
+				a.conv.doc.toggleFold(b.foldBase)
+
+				folds++
+			}
+		}
+
+		if folds != 1 || !convShows(a, "hidden words") {
+			t.Fatalf("toggled %d folds; shows hidden = %v", folds, convShows(a, "hidden words"))
+		}
+
+		ciDeliver(a, press(a, keyRune('r')))
+
+		if !convShows(a, "hidden words") {
+			t.Error("a re-read closed the opened details")
+		}
+	})
+}
+
+func TestConversationFailedReread(t *testing.T) {
+	t.Parallel()
+
+	t.Run("keeps the thread and says why", func(t *testing.T) {
+		t.Parallel()
+
+		a, reads := convApp(t, true, 160, 48)
+		convOpen(t, a)
+
+		doc, cursor := a.conv.doc, a.conv.view.cursor
+		reads.convErr = errors.New("boom")
+
+		ciDeliver(a, press(a, keyRune('r')))
+
+		v := a.conv
+		if v.doc != doc || v.view.cursor != cursor || v.err != "" {
+			t.Errorf("a failed re-read changed the view: same doc %v, cursor %d (was %d), err %q", v.doc == doc, v.view.cursor, cursor, v.err)
+		}
+
+		if want := "could not read the conversation: boom"; a.notice != want {
+			t.Errorf("notice = %q, want %q", a.notice, want)
+		}
+
+		if !convShows(a, "Fixes the drawer.") {
+			t.Error("the thread is not drawn")
+		}
+	})
+
+	t.Run("a failed first read shows the error and r reads again", func(t *testing.T) {
+		t.Parallel()
+
+		a, reads := convApp(t, true, 160, 48)
+		reads.convErr = errors.New("boom")
+
+		ciDeliver(a, press(a, keyRune('i')))
+
+		if a.conv == nil || a.conv.doc != nil || a.conv.err != "boom" {
+			t.Fatalf("conv = %+v", a.conv)
+		}
+
+		reads.convErr = nil
+
+		ciDeliver(a, press(a, keyRune('r')))
+
+		if a.conv.doc == nil || a.conv.err != "" {
+			t.Error("r did not read again")
+		}
+	})
+}
+
 // convReadsOf runs cmd and returns the conversation answers it raised.
 func convReadsOf(cmd tea.Cmd) []convReadMsg {
 	var out []convReadMsg
