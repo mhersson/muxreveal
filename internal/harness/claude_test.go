@@ -503,6 +503,8 @@ func TestParseEventSubagent(t *testing.T) {
 }
 
 func TestParseEventNewConversation(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name, event, rest string
 		want              bool
@@ -518,6 +520,8 @@ func TestParseEventNewConversation(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			ev, err := Claude{}.ParseEvent(payload(tt.event, tt.rest))
 			if err != nil {
 				t.Fatal(err)
