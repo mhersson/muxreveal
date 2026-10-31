@@ -114,7 +114,27 @@ func TestHighlightAnswerFollowsItsView(t *testing.T) {
 		{"drawer closed", cacheScene, func(t *testing.T, a *App, v *reviewView) {
 			openIn(t, a, core.CloseReview{})
 			a.Update(struct{}{})
-		}, func(t *testing.T, a *App, v *reviewView) {}},
+		}, func(t *testing.T, a *App, v *reviewView) {
+			if n := len(v.derived().spans); n != 0 {
+				t.Errorf("the dropped view's cache gained %d span entries from the answer", n)
+			}
+
+			tab := a.store.State().Tab().ID
+			if a.drawer.views[tab] != nil {
+				t.Fatal("the closed drawer still holds its view")
+			}
+
+			openIn(t, a, core.OpenReview{Pane: "p1", Mode: core.ReviewTurn})
+
+			nv := a.reviewViewOf(tab)
+			nv.pane, nv.mode, nv.loaded, nv.root = v.pane, v.mode, true, v.root
+			nv.src, nv.res, nv.gen = v.src, v.res, 1
+			nv.rebuild(false)
+
+			if a.drawerAfterUpdate(); a.drawer.hlJob == nil || a.drawer.hlJob.view != nv {
+				t.Error("the reopened drawer did not start its own batch")
+			}
+		}},
 		{"no lexer", noLexer, func(t *testing.T, a *App, v *reviewView) {}, func(t *testing.T, a *App, v *reviewView) {
 			var k spanKey
 
@@ -234,10 +254,12 @@ func TestHighlightJobRace(t *testing.T) {
 	settleDrawer(t, a)
 
 	spans := v.derived().spans
-	for i := range v.rows {
+	top := v.viewTop(a.reviewBodyH(v))
+
+	for i := top; i < min(top+a.reviewBodyH(v), len(v.rows)); i++ {
 		for _, ref := range v.rowSpans(i) {
-			if _, ok := spans[ref.key]; !ok && i < 10 {
-				t.Errorf("row %d: chunk %v has no spans", i, ref.key)
+			if _, ok := spans[ref.key]; !ok {
+				t.Errorf("visible row %d: chunk %v has no spans", i, ref.key)
 			}
 		}
 	}
@@ -410,7 +432,7 @@ func TestHighlightVisibleFirst(t *testing.T) {
 		}
 	}
 
-	// A move up by more than the window is wide: nothing it needs is held.
+	// A move up by 4h: the new window does not overlap the old one, so nothing it needs is held.
 	v.top, v.cursor = top-4*h, top-4*h
 	newTop := v.viewTop(h)
 

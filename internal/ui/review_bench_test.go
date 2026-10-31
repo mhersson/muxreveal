@@ -80,7 +80,7 @@ func TestBenchReviewScroll(t *testing.T) {
 	t.Run("heap=session", func(t *testing.T) { benchScroll(t, sessionHeap) })
 }
 
-// sessionEmulators, sessionCols and sessionRows size sessionHeap: a session's panes.
+// sessionEmulators, sessionCols and sessionRows size sessionHeap: the panes of a busy session, one emulator each.
 const (
 	sessionEmulators = 6
 	sessionCols      = 120

@@ -122,7 +122,8 @@ type drawerSpansMsg struct {
 	spans [][][]diffview.Span
 }
 
-// run tokenises the job's texts in order. It returns nil once ctx has ended.
+// run tokenises the job's texts in order. It returns nil once ctx has ended, which
+// happens only as the app closes, so the drawer's hlJob stays set and nothing waits.
 func (j *hlJob) run(ctx context.Context, hl *diffview.Highlighter) tea.Msg {
 	spans := make([][][]diffview.Span, len(j.texts))
 

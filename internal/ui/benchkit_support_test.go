@@ -199,6 +199,7 @@ type hlRunner struct {
 	done    chan tea.Msg // holds the one running batch's answer, so its send never blocks
 	batches int
 	answers int
+	closed  bool // a nil answer came: the app's context ended, so nothing starts or waits again
 }
 
 func newHLRunner(app *App) *hlRunner {
@@ -209,7 +210,7 @@ func newHLRunner(app *App) *hlRunner {
 // Call it after every Update.
 func (r *hlRunner) start() {
 	j := r.app.drawer.hlJob
-	if j == nil || j == r.started {
+	if r.closed || j == nil || j == r.started {
 		return
 	}
 
@@ -224,6 +225,10 @@ func (r *hlRunner) start() {
 // deliver feeds an answer that has arrived to the app without blocking, then
 // starts the next batch. It returns 1 for an answer fed, else 0.
 func (r *hlRunner) deliver() int {
+	if r.closed {
+		return 0
+	}
+
 	select {
 	case msg := <-r.done:
 		return r.feed(msg)
@@ -237,7 +242,7 @@ func (r *hlRunner) deliver() int {
 func (r *hlRunner) settle() int {
 	n := 0
 
-	for r.start(); r.app.drawer.hlJob != nil && r.app.drawer.hlJob == r.started; {
+	for r.start(); !r.closed && r.app.drawer.hlJob != nil && r.app.drawer.hlJob == r.started; {
 		k := r.feed(<-r.done)
 		if k == 0 {
 			break
@@ -251,6 +256,8 @@ func (r *hlRunner) settle() int {
 
 func (r *hlRunner) feed(msg tea.Msg) int {
 	if msg == nil {
+		r.closed = true
+
 		return 0
 	}
 
