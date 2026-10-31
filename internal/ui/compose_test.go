@@ -709,3 +709,51 @@ func TestReadBodyFileKeepsWholeRunes(t *testing.T) {
 		t.Errorf("read %d bytes (valid %v), want the %d bytes before the split rune", len(got), utf8.ValidString(got), len(want))
 	}
 }
+
+func TestComposeRemappedKeys(t *testing.T) {
+	r := newComposeRig(t)
+	r.pushBranch(t)
+	r.mustOpen(t)
+	remapTables(t, r.App, contextKeys("compose", "ctrl+o", "compose.create", "ctrl+s", "none", "ctrl+q", "compose.cancel", "ctrl+k", "compose.preview"))
+
+	r.typed(t, "sq")
+
+	if got := r.compose.title.Value(); !strings.HasSuffix(got, "sq") {
+		t.Fatalf("typing left the title %q", got)
+	}
+
+	title := r.compose.title.Value()
+
+	r.keys(t, tea.KeyPressMsg{Code: 'k', Mod: tea.ModCtrl})
+
+	if !r.compose.preview.on || r.compose.title.Value() != title {
+		t.Errorf("ctrl+k: preview = %v, title %q, want preview on and title %q", r.compose.preview.on, r.compose.title.Value(), title)
+	}
+
+	hints := r.text()
+	for _, want := range []string{"ctrl+o create", "ctrl+q cancel", "write"} {
+		if !strings.Contains(hints, want) {
+			t.Errorf("the hints lack %q:\n%s", want, hints)
+		}
+	}
+
+	r.keys(t, keyCtrlS)
+
+	if got := r.acts.created(); len(got) != 0 {
+		t.Fatalf("ctrl+s created %v", got)
+	}
+
+	r.keys(t, tea.KeyPressMsg{Code: 'o', Mod: tea.ModCtrl})
+
+	if got := r.acts.created(); len(got) != 1 {
+		t.Fatalf("ctrl+o creates = %v, want one", got)
+	}
+
+	r.openCompose(t)
+	r.mustOpen(t)
+	r.keys(t, tea.KeyPressMsg{Code: 'q', Mod: tea.ModCtrl})
+
+	if r.compose != nil {
+		t.Error("ctrl+q did not close the box")
+	}
+}

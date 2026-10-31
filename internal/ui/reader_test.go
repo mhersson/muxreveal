@@ -236,6 +236,10 @@ func TestDefaultOverlayKeys(t *testing.T) {
 	if !slices.Equal(tables.merge.binds, mergeKeys) {
 		t.Errorf("merge keys = %v, want %v", tables.merge.binds, mergeKeys)
 	}
+
+	if !slices.Equal(tables.compose.binds, composeKeys) {
+		t.Errorf("compose keys = %v, want %v", tables.compose.binds, composeKeys)
+	}
 }
 
 func TestReaderHintsFollowBindings(t *testing.T) {

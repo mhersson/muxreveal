@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"reflect"
 	"slices"
 	"strings"
@@ -205,6 +206,67 @@ func TestCheckKeysErrors(t *testing.T) {
 				t.Errorf("CheckKeys() = %v, want %q", err, tt.want)
 			}
 		})
+	}
+}
+
+func TestComposeKeyErrors(t *testing.T) {
+	t.Parallel()
+
+	typing := func(k string) string {
+		return fmt.Sprintf("keys.compose: %q is a key the title and body take", k)
+	}
+
+	tests := []struct {
+		name string
+		cfg  core.KeysConfig
+		want string
+	}{
+		{"leader key", contextKeys("compose", "ctrl+space", "compose.create"), `keys.compose: "ctrl+space" is the leader key`},
+		{"no cancel", contextKeys("compose", "esc", "none"), "keys.compose: nothing is bound to compose.cancel, so the compose box could not close"},
+		{"typing key with another context's command", contextKeys("compose", "s", "merge.run"), `keys.compose: "s" = "merge.run": not a compose command`},
+		{"typing key none", contextKeys("compose", "s", "none", "esc", "compose.cancel"), ""},
+	}
+	for _, k := range []string{"s", "H", "space", "enter", "left", "pgdown", "home", "shift+left", "shift+enter", "backspace", "delete"} {
+		tests = append(tests, struct {
+			name string
+			cfg  core.KeysConfig
+			want string
+		}{"refuses " + k, contextKeys("compose", k, "compose.create"), typing(k)})
+	}
+
+	for _, k := range []string{"ctrl+o", "alt+s", "f5", "tab", "insert", "ctrl+left", "shift+tab"} {
+		tests = append(tests, struct {
+			name string
+			cfg  core.KeysConfig
+			want string
+		}{"accepts " + k, contextKeys("compose", k, "compose.create"), ""})
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			err := CheckKeys(tt.cfg)
+			switch {
+			case tt.want == "" && err != nil:
+				t.Errorf("CheckKeys() = %v, want nil", err)
+			case tt.want != "" && (err == nil || err.Error() != tt.want):
+				t.Errorf("CheckKeys() = %v, want %q", err, tt.want)
+			}
+		})
+	}
+}
+
+func TestComposeTypes(t *testing.T) {
+	t.Parallel()
+
+	for key, want := range map[string]bool{
+		"s": true, "H": true, "shift+h": true, "shift+left": true, "space": true, "enter": true, "pgup": true,
+		"ctrl+k": false, "alt+b": false, "tab": false, "esc": false, "f1": false, "insert": false, "ctrl+shift+left": false,
+	} {
+		if got := composeTypes(key); got != want {
+			t.Errorf("composeTypes(%q) = %v, want %v", key, got, want)
+		}
 	}
 }
 

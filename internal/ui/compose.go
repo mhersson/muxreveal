@@ -612,6 +612,49 @@ func (a *App) onComposeLog(msg composeLogMsg) {
 // closeCompose closes the box.
 func (a *App) closeCompose() { a.compose = nil }
 
+// composeKeys are the default keys of the compose box. [keys.compose] is laid over them.
+var composeKeys = []reviewKey{
+	{"tab", "compose.field.next"},
+	{"shift+tab", "compose.field.prev"},
+	{"ctrl+s", "compose.create"},
+	{"ctrl+e", "compose.editor"},
+	{"ctrl+p", "compose.preview"},
+	{"esc", "compose.cancel"},
+}
+
+func composeCommands() []command {
+	cmd := func(id, title string, run func(a *App, v *composeView) tea.Cmd) command {
+		return command{id: id, title: "Compose: " + title, run: func(a *App) tea.Cmd {
+			if !a.composeShown() || a.compose.busy {
+				return nil
+			}
+
+			return run(a, a.compose)
+		}}
+	}
+
+	return scoped("compose", []command{
+		cmd("compose.field.next", "next field", func(_ *App, v *composeView) tea.Cmd {
+			v.focus((v.field + 1) % (composeBody + 1))
+
+			return nil
+		}),
+		cmd("compose.field.prev", "previous field", func(_ *App, v *composeView) tea.Cmd {
+			v.focus((v.field + composeBody) % (composeBody + 1))
+
+			return nil
+		}),
+		cmd("compose.create", "create the pull request", func(a *App, v *composeView) tea.Cmd { return a.composeSubmit(v) }),
+		cmd("compose.editor", "body in the editor", func(a *App, _ *composeView) tea.Cmd { return a.composeEditor() }),
+		cmd("compose.preview", "preview or write", func(a *App, v *composeView) tea.Cmd { return a.composePreviewToggle(v) }),
+		cmd("compose.cancel", "cancel", func(a *App, _ *composeView) tea.Cmd {
+			a.closeCompose()
+
+			return nil
+		}),
+	})
+}
+
 // handleComposeKey answers the open compose box. While a run is in flight every
 // key but the leader is dropped.
 func (a *App) handleComposeKey(msg tea.KeyPressMsg) tea.Cmd {
@@ -625,25 +668,8 @@ func (a *App) handleComposeKey(msg tea.KeyPressMsg) tea.Cmd {
 
 	v.status, v.statusErr = "", false
 
-	switch msg.String() {
-	case "esc":
-		a.closeCompose()
-
-		return nil
-	case "tab":
-		v.focus((v.field + 1) % (composeBody + 1))
-
-		return nil
-	case "shift+tab":
-		v.focus((v.field + composeBody) % (composeBody + 1))
-
-		return nil
-	case "ctrl+s":
-		return a.composeSubmit(v)
-	case "ctrl+e":
-		return a.composeEditor()
-	case "ctrl+p":
-		return a.composePreviewToggle(v)
+	if key := bindingKey(msg); a.keys.compose.has(key) {
+		return a.runKey(a.keys.compose, key)
 	}
 
 	switch v.field {

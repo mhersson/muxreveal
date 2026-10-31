@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/mhersson/muxreveal/internal/core"
 )
@@ -75,12 +77,13 @@ type keyTable struct{ binds []reviewKey }
 
 // keyTables holds the resolved tables of the contexts other than the leader.
 type keyTables struct {
-	drawer keyTable
-	rail   keyTable
-	prList keyTable
-	checks keyTable
-	reader keyTable
-	merge  keyTable
+	drawer  keyTable
+	rail    keyTable
+	prList  keyTable
+	checks  keyTable
+	reader  keyTable
+	merge   keyTable
+	compose keyTable
 }
 
 // lookup is the command a key runs.
@@ -166,6 +169,22 @@ func (t keyTable) hint(ids ...string) string {
 	return b.String()
 }
 
+// composeTypes reports whether the compose box's fields take key as text or
+// cursor movement: a bare or shifted printable character or editing key.
+func composeTypes(key string) bool {
+	mods, base := keyMods(key)
+	if mods != "" && mods != "shift+" {
+		return false
+	}
+
+	switch base {
+	case "space", "enter", "backspace", "delete", "up", "down", "left", "right", "home", "end", "pgup", "pgdown":
+		return true
+	}
+
+	return utf8.RuneCountInString(base) == 1 && unicode.IsPrint([]rune(base)[0])
+}
+
 // resolveKeys lays the config over the leader keymap and the context tables.
 func resolveKeys(cfg core.KeysConfig, reg *registry) (keymap, keyTables, error) {
 	km, err := resolveLeader(cfg, reg)
@@ -189,11 +208,12 @@ func resolveKeys(cfg core.KeysConfig, reg *registry) (keymap, keyTables, error) 
 		{"checks", "checks", checksKeys, scopedTo(reg, "checks"), &tables.checks, "checks.close", "checks overlay"},
 		{"reader", "reader", readerKeys, scopedTo(reg, "reader"), &tables.reader, "reader.close", "overlay"},
 		{"merge", "merge", mergeKeys, scopedTo(reg, "merge"), &tables.merge, "merge.cancel", "merge box"},
+		{"compose", "compose", composeKeys, scopedTo(reg, "compose"), &tables.compose, "compose.cancel", "compose box"},
 	}
 
 	for _, c := range contexts {
-		// The leader is routed before the drawer and the rail, so a key of theirs equal to it never runs.
-		if c.context == "drawer" || c.context == "rail" {
+		// The leader is routed before the drawer and the rail, and runs in the compose box while a create is in flight.
+		if c.context == "drawer" || c.context == "rail" || c.context == "compose" {
 			for _, b := range cfg.Binds(c.context) {
 				if b.Key == km.leader {
 					return keymap{}, keyTables{}, fmt.Errorf("keys.%s: %q is the leader key", c.context, b.Key)
@@ -204,6 +224,14 @@ func resolveKeys(cfg core.KeysConfig, reg *registry) (keymap, keyTables, error) 
 		t, err := resolveTable(c.context, c.noun, c.defaults, cfg, c.accept, reg)
 		if err != nil {
 			return keymap{}, keyTables{}, err
+		}
+
+		if c.context == "compose" {
+			for _, b := range cfg.Binds(c.context) {
+				if b.Command != core.KeyNone && composeTypes(b.Key) {
+					return keymap{}, keyTables{}, fmt.Errorf("keys.compose: %q is a key the title and body take", b.Key)
+				}
+			}
 		}
 
 		if _, ok := t.first(c.close); c.close != "" && !ok {
@@ -365,4 +393,11 @@ func (k keymap) preselectPrefix(key string) bool {
 	}
 
 	return found
+}
+
+// has reports whether key is bound in the table.
+func (t keyTable) has(key string) bool {
+	_, ok := t.lookup(key)
+
+	return ok
 }
