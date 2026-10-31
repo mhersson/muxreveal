@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -432,25 +433,106 @@ func TestReviewZoomHints(t *testing.T) {
 func TestReviewZoomClearsSelection(t *testing.T) {
 	t.Parallel()
 
-	d := newDiffSel(t)
-	del, add := rowWith(t, d.v, "line 3"), rowWith(t, d.v, "edited 3")
+	routes := map[string]func(d *diffSel){
+		"z":        func(d *diffSel) { d.keys(keyRune('z')) },
+		"leader z": func(d *diffSel) { d.leader('z') },
+		"palette": func(d *diffSel) {
+			c, ok := d.reg.get("review.zoom")
+			if !ok {
+				panic("no review.zoom command")
+			}
 
-	d.dragRows(t, del, d.code(t, del), add, d.code(t, add)+len("edited 3")-1)
-
-	if d.text == nil {
-		t.Fatal("setup: the drag selected nothing")
+			d.run(c.run(d.App))
+		},
 	}
 
-	d.keys(keyRune('z'))
+	for _, small := range []bool{false, true} {
+		for name, route := range routes {
+			t.Run(fmt.Sprintf("%s small=%v", name, small), func(t *testing.T) {
+				t.Parallel()
 
-	if d.text != nil || d.v.sel != nil {
-		t.Errorf("selection %v, view selection %v after z, want none", d.text, d.v.sel)
+				d := newDiffSel(t)
+				if small {
+					zoomLayout(t, d.drawerRig, 80, 24)
+				}
+
+				del, add := rowWith(t, d.v, "line 3"), rowWith(t, d.v, "edited 3")
+
+				d.dragRows(t, del, d.code(t, del), add, d.code(t, add)+len("edited 3")-1)
+
+				if d.text == nil {
+					t.Fatal("setup: the drag selected nothing")
+				}
+
+				route(d)
+
+				if !d.v.zoom {
+					t.Fatal("the route did not zoom")
+				}
+
+				if d.text != nil || d.v.sel != nil {
+					t.Errorf("selection %v, view selection %v after zoom, want none", d.text, d.v.sel)
+				}
+
+				d.keys(keyLeader, keyRune('y'))
+
+				if got := clipboardWrites(d.clip); len(got) != 0 {
+					t.Errorf("leader y wrote %q, want nothing", got)
+				}
+			})
+		}
+	}
+}
+
+func TestReviewZoomClearsOnTabChange(t *testing.T) {
+	t.Parallel()
+
+	r := zoomRig(t)
+	first := r.view()
+
+	r.keys(keyRune('z'))
+	openIn(t, r.App, core.NewTab{Kind: core.KindShell, Cwd: t.TempDir()})
+	r.drawerAfterUpdate()
+
+	if first.zoom || !r.drawer.slideFrom.IsZero() {
+		t.Errorf("left tab zoomed %v, sliding %v, want no zoom and no slide", first.zoom, !r.drawer.slideFrom.IsZero())
+	}
+}
+
+func TestReviewZoomKeepsWidthWhileClosing(t *testing.T) {
+	t.Parallel()
+
+	r := zoomRig(t)
+	r.keys(keyRune('z'))
+	r.leader('d')
+	r.uncoverFocus()
+
+	if !r.zoomed() || !r.drawer.closing {
+		t.Errorf("zoomed %v, closing %v, want the close slide to keep its width", r.zoomed(), r.drawer.closing)
+	}
+}
+
+func TestReviewZoomWithoutDrawer(t *testing.T) {
+	t.Parallel()
+
+	r := newKeysRig(t, keysRepo(t))
+
+	c, ok := r.reg.get("review.zoom")
+	if !ok {
+		t.Fatal("no review.zoom command")
 	}
 
-	d.keys(keyLeader, keyRune('y'))
+	r.run(c.run(r.App))
 
-	if got := clipboardWrites(d.clip); len(got) != 0 {
-		t.Errorf("leader y wrote %q, want nothing", got)
+	if r.notice != noticeNoDrawer {
+		t.Errorf("notice = %q, want %q", r.notice, noticeNoDrawer)
+	}
+
+	c, _ = r.reg.get("pane.zoom")
+	r.run(c.run(r.App))
+
+	if !r.store.State().Tab().Zoomed {
+		t.Error("pane.zoom with no drawer did not zoom the pane")
 	}
 }
 

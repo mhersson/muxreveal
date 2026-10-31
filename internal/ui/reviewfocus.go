@@ -55,12 +55,13 @@ func (a *App) unzoom() {
 // reviewZoom is review.zoom: it widens the drawer to the whole body and back,
 // and gives it the keyboard if it lacks it.
 func (a *App) reviewZoom() tea.Cmd {
-	_, v, ok := a.reviewActive()
+	tab, v, ok := a.reviewActive()
 	if !ok {
 		return nil
 	}
 
 	a.endSlide()
+	a.clearDrawerSel(tab.ID)
 
 	v.zoom = !v.zoom
 
@@ -294,7 +295,9 @@ func (a *App) drawerLeave() tea.Cmd {
 // pane lies under its half: the pane an action just focused must show. A zoomed
 // drawer goes back to its half first.
 func (a *App) uncoverFocus() {
-	a.unzoom()
+	if !a.drawer.closing {
+		a.unzoom()
+	}
 
 	st := a.store.State()
 

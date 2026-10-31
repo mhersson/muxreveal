@@ -75,6 +75,13 @@ func (a *App) drawerAfterUpdate() tea.Cmd {
 
 	st := a.store.State()
 
+	// A drawer that no longer shows has no zoom to keep, whichever way its tab was left.
+	for id, o := range a.drawer.views {
+		if id != st.Tab().ID {
+			o.zoom = false
+		}
+	}
+
 	box, ok := a.drawerFull(st)
 	if !ok {
 		return nil
