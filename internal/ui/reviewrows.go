@@ -109,6 +109,16 @@ func newFullText(old, nw []string, hunks []git.Hunk) fullText {
 // hunkOps is the edit script from old to nw that the hunks give, the lines
 // between them kept; false when the hunks do not turn old into nw.
 func hunkOps(old, nw []string, hunks []git.Hunk) ([]linediff.Op, bool) {
+	// A type change is two patches: one removes the old file, the next adds the new.
+	if len(hunks) == 2 && hunks[0].NewStart == 0 && hunks[0].NewLines == 0 && hunks[1].OldStart == 0 && hunks[1].OldLines == 0 {
+		gone, okGone := hunkOps(old, nil, hunks[:1])
+		added, okAdded := hunkOps(nil, nw, hunks[1:])
+
+		if okGone && okAdded {
+			return append(gone, added...), true
+		}
+	}
+
 	ops := make([]linediff.Op, 0, max(len(old), len(nw)))
 	oi, ni := 0, 0
 

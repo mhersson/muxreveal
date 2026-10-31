@@ -484,6 +484,10 @@ func (a *App) reviewFullCmd(tab core.TabID, v *reviewView, f git.FileDiff, ids b
 		defer cancel()
 
 		old, nw, err := eng.FileText(ctx, root, f)
+		if err == nil {
+			// The diff can run long, so a read the view has ended skips it.
+			err = ctx.Err()
+		}
 
 		text := fullText{err: err}
 		if err == nil {

@@ -156,7 +156,7 @@ func TestBuildRowsFullFileGhosts(t *testing.T) {
 		{Path: "img.png", Status: git.Modified, Binary: true},
 	}}
 	full := map[string]fullText{
-		"a.go": newFullText([]string{"a", "b", "c", "d", "e"}, []string{"a", "c", "X", "e", "f"}, res.Files[0].Hunks),
+		"a.go": newFullText([]string{"a", "b", "c", "d", "e"}, []string{"a", "c", "X", "e", "f"}, nil),
 	}
 	// old b removed (ghost), c kept, d removed + X added (ghost then added), e kept, f added.
 	type want struct {
@@ -325,11 +325,22 @@ func TestNewFullTextFollowsTheHunks(t *testing.T) {
 			[]op{{Op: ' ', Line: "a"}, {Op: '-', Line: "b"}, {Op: '+', Line: "c"}},
 		},
 		{
-			"hunks out of order",
-			[]string{"x"},
-			[]string{"y"},
-			[]git.Hunk{hunkOf(1, 0, ln(git.Del, 1, 0, "x")), hunkOf(0, 1, ln(git.Add, 0, 1, "y"))},
-			[]op{{Op: '-', Line: "x"}, {Op: '+', Line: "y"}},
+			// A type change is two patches: the old file removed, the new one added.
+			"a type change",
+			[]string{"foo", "bar"},
+			[]string{"foo"},
+			[]git.Hunk{hunkOf(1, 0, ln(git.Del, 1, 0, "foo"), ln(git.Del, 2, 0, "bar")), hunkOf(0, 1, ln(git.Add, 0, 1, "foo"))},
+			[]op{{Op: '-', Line: "foo"}, {Op: '-', Line: "bar"}, {Op: '+', Line: "foo"}},
+		},
+		{
+			"two hunks placing repeated lines",
+			[]string{"a", "a", "x", "b", "b"},
+			[]string{"a", "x", "b"},
+			[]git.Hunk{
+				hunkOf(1, 1, ln(git.Del, 1, 0, "a"), ln(git.Context, 2, 1, "a")),
+				hunkOf(4, 3, ln(git.Context, 4, 3, "b"), ln(git.Del, 5, 0, "b")),
+			},
+			[]op{{Op: '-', Line: "a"}, {Op: ' ', Line: "a"}, {Op: ' ', Line: "x"}, {Op: ' ', Line: "b"}, {Op: '-', Line: "b"}},
 		},
 		{
 			"no hunks, as past the diff caps",
