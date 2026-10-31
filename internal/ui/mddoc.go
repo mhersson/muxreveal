@@ -20,6 +20,18 @@ const (
 // diffview.Highlighter.HighlightLang does.
 type codeTokeniser func(lang string, lines []string) [][]diffview.Span
 
+// mdSource is what an mdView shows: one document, or several composed into one.
+type mdSource interface {
+	layout(width int, icons bool) md.Layout
+	pictureMove() (md.Layout, bool)
+	text() []string
+	toggleFold(id int)
+	// lineText is what line i of the last layout copies, in the layout's cells.
+	lineText(i int) md.LineText
+	// gen counts the layouts made, so a holder can tell a reload from a repaint.
+	gen() int
+}
+
 // mdDoc is a parsed markdown document with its code tokenised, laid out on the
 // update loop and cached until the width, the icons or a fold changes.
 type mdDoc struct {
@@ -175,6 +187,12 @@ func (d *mdDoc) layout(width int, icons bool) md.Layout {
 
 	return d.lay
 }
+
+// lineText is what line i of the last layout copies.
+func (d *mdDoc) lineText(i int) md.LineText { return d.lay.Text(i) }
+
+// gen is the number of layouts made.
+func (d *mdDoc) gen() int { return d.layouts }
 
 // text is the last layout's lines as plain text, for search.
 func (d *mdDoc) text() []string {

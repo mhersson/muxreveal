@@ -22,11 +22,12 @@ import (
 
 const (
 	// Tints mixed into a ground.
-	tintHunk    = 0.10
-	tintGhost   = 0.06
-	tintFlash   = 0.35
-	tintCursor  = 0.24
-	tintGhostNr = 0.05
+	tintHunk     = 0.10
+	tintGhost    = 0.06
+	tintFlash    = 0.35
+	tintCursor   = 0.24
+	tintHunkLine = 0.16
+	tintGhostNr  = 0.05
 
 	markGlyph    = "▎" // ▎ at the first cell of the row under the cursor
 	wrapGlyph    = "↪" // ↪ in the sign column of a line's continuation rows

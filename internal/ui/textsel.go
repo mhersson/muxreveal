@@ -150,7 +150,7 @@ func textPaint(lt md.LineText, from, to int) [][2]int {
 
 // textRev is what a text selection's text was read against.
 type textRev struct {
-	doc    *mdDoc
+	doc    mdSource
 	gen, w int
 	gw     int // the diff column's number width, which moves the code
 	split  bool
@@ -183,7 +183,7 @@ func (a *App) revOf(ts *textSelection) textRev {
 	if ts.view != nil {
 		r := textRev{doc: ts.view.doc, w: ts.view.w}
 		if ts.view.doc != nil {
-			r.gen = ts.view.doc.layouts
+			r.gen = ts.view.doc.gen()
 		}
 
 		return r

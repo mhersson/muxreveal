@@ -34,6 +34,7 @@ type pictureKey struct{ src, scope string }
 type docPictures struct {
 	reg        *pictures
 	root, host string
+	alias      map[string]string // a source to the URL that loads it, for signed images
 }
 
 // size answers md.LayoutOptions.Picture for a document of this view.
@@ -43,6 +44,10 @@ func (d docPictures) size(src string, maxCols int) md.PictureSize {
 
 // key reports the key of src when it may load for this view.
 func (d docPictures) key(src string) (pictureKey, bool) {
+	if to, ok := d.alias[src]; ok {
+		src = to
+	}
+
 	if strings.Contains(src, "://") {
 		if !github.ImageHost(src, d.host) {
 			return pictureKey{}, false
