@@ -93,6 +93,12 @@ what to do about it. Skim it before your first commit each session.
   its entries change, and Chmod-only events. The watcher keeps them from
   counting as changes (see Watch set in `docs/DESIGN.md`); a change to its
   event filter needs its tests to pass on macOS as well as Linux.
+- `fsnotify` is a copy in `internal/git/fsnotify` because v1.10.1's kqueue
+  backend can close a watch descriptor twice while a watcher closes. The
+  second close shuts whatever took the number, such as another git call's
+  pipe, which then holds a stranger's output. Keep the copy until a release
+  fixes https://github.com/fsnotify/fsnotify/issues/788, then swap it whole
+  for the module. Its kqueue tests run only on macOS.
 
 ## Platform-specific code
 

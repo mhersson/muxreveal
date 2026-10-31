@@ -24,6 +24,14 @@ type kqueue struct {
 	kq        int    // File descriptor (as returned by the kqueue() syscall).
 	closepipe [2]int // Pipe used for closing kq.
 	watches   *watches
+
+	// opMu serializes every change to the watch set: Add and Remove, the
+	// watches readEvents adds and drops on its own, and the final release.
+	// Without it a descriptor could be closed twice, the second time after
+	// its number was reused by an unrelated file.
+	opMu sync.Mutex
+	// exited is closed once readEvents released every watch and returned.
+	exited chan struct{}
 }
 
 type (
@@ -166,6 +174,23 @@ func (w *watches) remove(fd int, path string) bool {
 	return isDir
 }
 
+// drain empties the set and returns the descriptors it held.
+func (w *watches) drain() []int {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	wds := make([]int, 0, len(w.wd))
+	for wd := range w.wd {
+		wds = append(wds, wd)
+	}
+	w.wd = make(map[int]watch)
+	w.path = make(map[string]int)
+	w.byDir = make(map[string]map[int]struct{})
+	w.seen = make(map[string]struct{})
+	w.byUser = make(map[string]struct{})
+	return wds
+}
+
 func (w *watches) markSeen(path string, exists bool) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -198,6 +223,7 @@ func newBackend(ev chan Event, errs chan error) (backend, error) {
 		kq:        kq,
 		closepipe: closepipe,
 		watches:   newWatches(),
+		exited:    make(chan struct{}),
 	}
 
 	go w.readEvents()
@@ -246,30 +272,23 @@ func (w *kqueue) Close() error {
 		return nil
 	}
 
-	// Snapshot and drop all watches directly. w.Remove -> w.remove
-	// short-circuits on isClosed() (which is already true after
-	// w.shared.close() above), so calling Remove here in the happy path
-	// leaked every watched directory + file descriptor. On macOS a
-	// single directory watch opens an fd for every file in the dir, so
-	// long-running processes that recreate watchers (hot-reload dev
-	// servers, etc.) ran out of fds with EMFILE (#732).
-	pathsToRemove := w.watches.listPaths(false)
-	for _, name := range pathsToRemove {
-		info, ok := w.watches.byPath(name)
-		if !ok {
-			// w.path has an entry for name but w.wd doesn't --
-			// drop the stale lookup entry so the map state is
-			// consistent after Close.
-			w.watches.remove(0, name)
-			continue
-		}
-		_ = w.register([]int{info.wd}, unix.EV_DELETE, 0)
-		unix.Close(info.wd)
-		w.watches.remove(info.wd, name)
-	}
-
+	// readEvents releases the watches on its way out: releasing them here
+	// raced with the watches it adds and drops on its own, leaking the ones
+	// added after the snapshot and closing others twice.
 	unix.Close(w.closepipe[1]) // Send "quit" message to readEvents
+	<-w.exited
 	return nil
+}
+
+// releaseWatches closes every watch. Run by readEvents once the watcher is
+// closed, so no watch can be added after it: addWatch sees the closed
+// watcher under opMu.
+func (w *kqueue) releaseWatches() {
+	w.opMu.Lock()
+	defer w.opMu.Unlock()
+	for _, wd := range w.watches.drain() {
+		unix.Close(wd) // Closing the descriptor also drops its kevent.
+	}
 }
 
 func (w *kqueue) Add(name string) error { return w.AddWith(name) }
@@ -285,6 +304,8 @@ func (w *kqueue) AddWith(name string, opts ...addOpt) error {
 		return fmt.Errorf("%w: %s", xErrUnsupported, with.op)
 	}
 
+	w.opMu.Lock()
+	defer w.opMu.Unlock()
 	_, err := w.addWatch(name, noteAllEvents, false)
 	if err != nil {
 		return err
@@ -298,9 +319,12 @@ func (w *kqueue) Remove(name string) error {
 		fmt.Fprintf(os.Stderr, "FSNOTIFY_DEBUG: %s  Remove(%q)\n",
 			time.Now().Format("15:04:05.000000000"), name)
 	}
+	w.opMu.Lock()
+	defer w.opMu.Unlock()
 	return w.remove(name, true)
 }
 
+// remove must be called with opMu held.
 func (w *kqueue) remove(name string, unwatchFiles bool) error {
 	if w.isClosed() {
 		return nil
@@ -327,8 +351,9 @@ func (w *kqueue) remove(name string, unwatchFiles bool) error {
 		for _, name := range pathsToRemove {
 			// Since these are internal, not much sense in propagating error to
 			// the user, as that will just confuse them with an error about a
-			// path they did not explicitly watch themselves.
-			w.Remove(name)
+			// path they did not explicitly watch themselves. Remove would
+			// take opMu, which is held.
+			w.remove(name, true)
 		}
 	}
 	return nil
@@ -348,6 +373,8 @@ const noteAllEvents = unix.NOTE_DELETE | unix.NOTE_WRITE | unix.NOTE_ATTRIB | un
 // described in kevent(2).
 //
 // Returns the real path to the file which was added, with symlinks resolved.
+//
+// addWatch must be called with opMu held.
 func (w *kqueue) addWatch(name string, flags uint32, listDir bool) (string, error) {
 	if w.isClosed() {
 		return "", ErrClosed
@@ -405,7 +432,11 @@ func (w *kqueue) addWatch(name string, flags uint32, listDir bool) (string, erro
 
 	err := w.register([]int{info.wd}, unix.EV_ADD|unix.EV_CLEAR|unix.EV_ENABLE, flags)
 	if err != nil {
-		unix.Close(info.wd)
+		// Close only a descriptor opened above: one already watched stays
+		// in the watch set and is released with it.
+		if !alreadyWatching {
+			unix.Close(info.wd)
+		}
 		return "", err
 	}
 
@@ -439,10 +470,12 @@ func (w *kqueue) addWatch(name string, flags uint32, listDir bool) (string, erro
 // Event values that it sends down the Events channel.
 func (w *kqueue) readEvents() {
 	defer func() {
+		w.releaseWatches()
 		close(w.Events)
 		close(w.Errors)
 		_ = unix.Close(w.kq)
 		unix.Close(w.closepipe[0])
+		close(w.exited)
 	}()
 
 	eventBuffer := make([]unix.Kevent_t, 10)
@@ -498,7 +531,9 @@ func (w *kqueue) readEvents() {
 			event := w.newEvent(path.name, path.linkName, mask)
 
 			if event.Has(Rename) || event.Has(Remove) {
+				w.opMu.Lock()
 				w.remove(event.Name, false)
+				w.opMu.Unlock()
 				w.watches.markSeen(event.Name, false)
 			}
 
@@ -661,7 +696,9 @@ func (w *kqueue) sendCreateIfNew(path string, fi os.FileInfo) error {
 	}
 
 	// Like watchDirectoryFiles, but without doing another ReadDir.
+	w.opMu.Lock()
 	path, err := w.internalWatch(path, fi)
+	w.opMu.Unlock()
 	if err != nil {
 		return err
 	}
