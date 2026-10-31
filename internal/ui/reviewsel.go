@@ -120,16 +120,7 @@ func diffPieces(raw string, tagCR bool, width int) []md.Piece {
 	}
 
 	line := strings.TrimSuffix(raw, "\r")
-	kept, cutBudget := cutRunes(line, lineBudget)
-	units := diffUnits(kept)
-
-	if cutBudget {
-		units = append(units, diffUnit{raw: len(kept), cells: 1, whole: true})
-	}
-
-	if tagCR {
-		units = append(units, diffUnit{raw: len(line), cells: ansi.StringWidth(endingTag), text: endingTag, whole: true})
-	}
+	units := lineUnits(raw, tagCR)
 
 	total := 0
 	for _, u := range units {
