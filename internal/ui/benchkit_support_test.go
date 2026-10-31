@@ -789,6 +789,7 @@ func runBench(cfg benchConfig) (benchResult, error) {
 		if cfg.Review {
 			if v := app.drawer.views[tab]; v != nil && !v.flashUntil.IsZero() && !now.Before(v.flashUntil) {
 				app.Update(reviewFlashMsg{tab: tab})
+				hl.start()
 
 				updates++
 			}

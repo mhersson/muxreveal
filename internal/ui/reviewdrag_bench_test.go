@@ -196,6 +196,7 @@ func benchDrag(t *testing.T, c dragCase) {
 	x, y, outY := h.rect.Max.X-h.rect.Dx()/4, h.rect.Min.Y+1, h.rect.Max.Y
 
 	app.Update(tea.MouseClickMsg{X: x, Y: y, Button: tea.MouseLeft})
+	hl.start()
 
 	if err := pr.present(app.View().Content); err != nil {
 		t.Fatalf("present: %v", err)
