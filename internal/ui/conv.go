@@ -1,8 +1,10 @@
 package ui
 
 import (
+	"cmp"
 	"context"
 	"errors"
+	"slices"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -33,6 +35,13 @@ type convView struct {
 	loading bool
 	err     string
 	readAt  time.Time
+
+	// chooser holds a line's several links. searching is the prompt being open,
+	// typing into query; last is the query n and N repeat, and query stays
+	// painted after enter.
+	chooser     *linkChooser
+	searching   bool
+	query, last string
 }
 
 // convReadMsg answers one read of a conversation.
@@ -233,21 +242,38 @@ func (a *App) sizeConv() {
 func (a *App) handleConvKey(msg tea.KeyPressMsg) tea.Cmd {
 	a.notice = ""
 	key := bindingKey(msg)
+	v := a.conv
 
 	if key == "esc" {
-		a.closeConv()
+		switch {
+		case v.chooser != nil:
+			v.chooser = nil
+		case v.searching:
+			v.searching, v.query = false, ""
+		default:
+			a.closeConv()
+		}
 
 		return nil
 	}
 
-	if _, _, _, _, ok := planBox(a.width, a.height); !ok {
+	_, _, _, boxH, ok := planBox(a.width, a.height)
+	if !ok {
 		return nil
 	}
 
-	v := a.conv
 	mv := &v.view
 
 	a.sizeConv()
+
+	switch {
+	case v.chooser != nil:
+		return a.convChooserKey(key)
+	case v.searching:
+		a.convSearchKey(msg)
+
+		return nil
+	}
 
 	switch key {
 	case "j", "down":
@@ -271,12 +297,105 @@ func (a *App) handleConvKey(msg tea.KeyPressMsg) tea.Cmd {
 	case "[":
 		a.convItem(-1)
 	case "enter":
-		mv.fold()
+		return a.convEnter()
+	case "/":
+		// The prompt draws in the hint row, so without one there is nowhere to type.
+		if _, _, hint, _ := convRows(boxH); hint {
+			v.searching, v.query = true, ""
+		}
+	case "n":
+		a.convFind(v.last, false)
+	case "N":
+		a.convFind(v.last, true)
 	case "r":
 		return a.readConversation(v)
 	}
 
 	return nil
+}
+
+// convEnter is enter on the view: a fold head toggles, one link opens in the
+// browser, several open the chooser. Only web links are targets; the
+// conversation has no checkout to resolve a path against.
+func (a *App) convEnter() tea.Cmd {
+	v := a.conv
+	if v.view.fold() {
+		return nil
+	}
+
+	targets := slices.DeleteFunc(v.view.targets(), func(t mdTarget) bool { return t.Path != "" || t.URL == "" })
+
+	switch len(targets) {
+	case 0:
+	case 1:
+		return a.openURL(targets[0].URL)
+	default:
+		v.chooser = &linkChooser{targets: targets}
+	}
+
+	return nil
+}
+
+// convChooserKey runs a key while the link chooser has the keyboard.
+func (a *App) convChooserKey(key string) tea.Cmd {
+	v := a.conv
+
+	pick, done := v.chooser.key(key)
+	if !done {
+		return nil
+	}
+
+	v.chooser = nil
+
+	if pick == nil {
+		return nil
+	}
+
+	return a.openURL(pick.URL)
+}
+
+// convSearchKey types into the open search prompt.
+func (a *App) convSearchKey(msg tea.KeyPressMsg) {
+	v := a.conv
+
+	switch key := msg.String(); {
+	case key == "enter":
+		v.searching = false
+		a.convFind(cmp.Or(v.query, v.last), false)
+	case key == "backspace":
+		if r := []rune(v.query); len(r) > 0 {
+			v.query = string(r[:len(r)-1])
+		}
+	case msg.Text != "":
+		v.query += printable(msg.Text)
+	}
+}
+
+// convPaste extends the search query while the prompt is open; any other paste
+// is dropped.
+func (a *App) convPaste(text string) {
+	if v := a.conv; v.searching {
+		v.query += printable(text)
+	}
+}
+
+// convFind keeps q and moves to its next (or previous) match; a miss says so.
+func (a *App) convFind(q string, back bool) {
+	if q == "" {
+		return
+	}
+
+	v := a.conv
+	v.last, v.query = q, q
+
+	find := v.view.find
+	if back {
+		find = v.view.findPrev
+	}
+
+	if v.doc != nil && !find(q) {
+		a.notice = noticeNotFound + q
+	}
 }
 
 // convItem puts the cursor on the first line of the next (dir 1) or the current

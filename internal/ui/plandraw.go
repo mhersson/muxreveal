@@ -290,12 +290,17 @@ func (a *App) planHintRow(ui theme.UI, w int) string {
 // planPromptRow is the search prompt in w cells: the query cut from its start
 // to leave the caret in view, then the prompt's hints when they fit.
 func (a *App) planPromptRow(ui theme.UI, w int) string {
+	return searchPromptRow(ui, w, a.plan.query)
+}
+
+// searchPromptRow is the prompt for query in w cells.
+func searchPromptRow(ui theme.UI, w int, query string) string {
 	on := func(fg theme.Hex) lipgloss.Style { return lipgloss.NewStyle().Foreground(fg).Background(ui.Panel) }
 	gap := on(ui.Fg).Render(strings.Repeat(" ", planHintGap))
 	hints := on(ui.Key).Bold(true).Render("enter") + on(ui.Muted).Render(" find") + gap +
 		on(ui.Key).Bold(true).Render("esc") + on(ui.Muted).Render(" cancel")
 
-	q, _ := cleanText(a.plan.query)
+	q, _ := cleanText(query)
 	room := w - 3 // "/ " and the caret
 
 	if tail := planHintGap + ansi.StringWidth(ansi.Strip(hints)); room-tail >= 8 {

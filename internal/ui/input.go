@@ -109,7 +109,13 @@ func (a *App) handlePaste(msg tea.PasteMsg) tea.Cmd {
 		return nil
 	}
 
-	if a.conv != nil || a.checks != nil || a.merge != nil || a.prList != nil {
+	if a.conv != nil {
+		a.convPaste(msg.Content)
+
+		return nil
+	}
+
+	if a.checks != nil || a.merge != nil || a.prList != nil {
 		return nil
 	}
 

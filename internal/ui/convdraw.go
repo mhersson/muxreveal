@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"image"
 	"strconv"
 	"strings"
 
@@ -95,7 +96,7 @@ func (a *App) convLines(lk look, w, h int) (out []string, pics []picRow) {
 	case v.doc == nil:
 		out = append(out, text(on(ui.Muted).Render(convLoading)))
 	default:
-		drawn, viewPics := v.view.drawPictures(newMDPainter(lk.theme, ui.Panel), true)
+		drawn, viewPics := v.view.drawPictures(newMDPainter(lk.theme, ui.Panel).withQuery(v.query), true)
 		for _, l := range drawn {
 			out = append(out, row(l, vw))
 		}
@@ -117,10 +118,22 @@ func (a *App) convLines(lk look, w, h int) (out []string, pics []picRow) {
 
 	if hint {
 		hints := convHints(lk.styles, tw)
+		if v.searching {
+			hints = searchPromptRow(ui, tw, v.query)
+		}
+
 		out = append(out, row(pad(2)+hints, 2+ansi.StringWidth(ansi.Strip(hints))))
 	}
 
-	return append(out, border.Render("╰"+strings.Repeat("─", w-2)+"╯")), pics
+	out = append(out, border.Render("╰"+strings.Repeat("─", w-2)+"╯"))
+
+	if v.chooser != nil {
+		if covered := a.chooserLines(v.chooser, ui, out); covered.Dx() > 0 {
+			pics = dropCovered(pics, []image.Rectangle{covered})
+		}
+	}
+
+	return out, pics
 }
 
 // convHints is the overlay's hint row in cw cells: the pairs that do not fit

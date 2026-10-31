@@ -547,11 +547,43 @@ func (a *App) planWheel(msg tea.MouseWheelMsg) bool {
 	return true
 }
 
+// convWheel scrolls the conversation overlay when the wheel is over its box and
+// reports whether it took the event. The box takes the wheel while the chooser
+// is open, but does not scroll.
+func (a *App) convWheel(msg tea.MouseWheelMsg) bool {
+	v := a.conv
+	if v == nil {
+		return false
+	}
+
+	m := msg.Mouse()
+
+	x, y, w, h, ok := planBox(a.width, a.height)
+	if !ok || m.X < x || m.X >= x+w || m.Y < y || m.Y >= y+h {
+		return false
+	}
+
+	if v.chooser != nil || v.doc == nil {
+		return true
+	}
+
+	a.sizeConv()
+
+	switch m.Button {
+	case tea.MouseWheelDown:
+		v.view.scroll(scrollStep)
+	case tea.MouseWheelUp:
+		v.view.scroll(-scrollStep)
+	}
+
+	return true
+}
+
 // handleWheel acts on the pane under the pointer without moving focus: a guest
 // that tracks the mouse gets the event, the alt screen gets cursor-key presses,
 // and any other pane scrolls its view.
 func (a *App) handleWheel(msg tea.MouseWheelMsg) {
-	if a.planWheel(msg) || a.logWheel(msg) || a.mouseBlocked() {
+	if a.planWheel(msg) || a.convWheel(msg) || a.logWheel(msg) || a.mouseBlocked() {
 		return
 	}
 

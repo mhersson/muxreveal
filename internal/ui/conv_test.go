@@ -732,3 +732,419 @@ func TestConversationSmall(t *testing.T) {
 		t.Errorf("a box of 8 rows keeps %d view rows", rows)
 	}
 }
+
+// convLinkBody is a description with one link on a line, two on a line, a
+// relative link and a hostile one.
+const convLinkBody = "One [a](https://example.com/a) link.\n\n" +
+	"Two [b](https://example.com/b) and [c](https://example.com/c) links.\n\n" +
+	"Relative [r](/octo/repo/files) link.\n\n" +
+	"Plain line with nothing."
+
+// convReading is the PR drawer on #7 showing a conversation whose description
+// is convLinkBody and whose first comment holds a javascript: link; opener
+// records the links followed.
+func convReading(t *testing.T, w, h int) (a *App, opener *fakeOpen) {
+	t.Helper()
+
+	a, reads := convApp(t, true, w, h)
+	opener = &fakeOpen{}
+	a.openLink = opener.open
+
+	c := convFor(7)
+	c.Body = github.Text{Markdown: convLinkBody}
+	c.Items = append([]github.TimelineItem{{
+		Kind: github.ItemComment, ID: "IC_9", Author: "kari-dev", At: c.Created.Add(time.Minute),
+		Body: github.Text{Markdown: "Evil [x](javascript:alert(1)) link."},
+	}}, c.Items...)
+	reads.convs = []github.Conversation{c}
+
+	convOpen(t, a)
+
+	return a, opener
+}
+
+// convOnLine puts the cursor on the first line holding s.
+func convOnLine(t *testing.T, a *App, s string) {
+	t.Helper()
+
+	v := &a.conv.view
+	v.layout()
+
+	for i, l := range v.doc.text() {
+		if strings.Contains(l, s) {
+			v.cursor = i
+			v.clamp()
+
+			return
+		}
+	}
+
+	t.Fatalf("no line holds %q", s)
+}
+
+func TestConversationLinks(t *testing.T) {
+	t.Parallel()
+
+	t.Run("enter on one link opens it and the overlay stays", func(t *testing.T) {
+		t.Parallel()
+
+		a, opener := convReading(t, 160, 48)
+		convOnLine(t, a, "One a link")
+		ciDeliver(a, press(a, keyEnter))
+
+		if got := opener.urls(); !slices.Equal(got, []string{"https://example.com/a"}) {
+			t.Errorf("opened %q", got)
+		}
+
+		if a.conv == nil || a.conv.chooser != nil {
+			t.Error("the overlay should stay open without a chooser")
+		}
+	})
+
+	t.Run("two links open the chooser inside the box", func(t *testing.T) {
+		t.Parallel()
+
+		a, opener := convReading(t, 160, 48)
+		convOnLine(t, a, "Two b and c")
+		press(a, keyEnter)
+
+		if a.conv.chooser == nil || len(a.conv.chooser.targets) != 2 {
+			t.Fatalf("chooser = %+v, want two targets", a.conv.chooser)
+		}
+
+		x, y, _, _, _ := planBox(a.width, a.height)
+		rows := strings.Split(shownText(a), "\n")
+
+		if got := []rune(rows[y+wtTopY])[x+wtInsetX]; got != '╭' {
+			t.Errorf("cell two in on the box's fourth row = %q, want the chooser's corner", got)
+		}
+
+		press(a, keyRune('j'))
+		ciDeliver(a, press(a, keyEnter))
+
+		if got := opener.urls(); !slices.Equal(got, []string{"https://example.com/c"}) {
+			t.Errorf("opened %q, want the selected link", got)
+		}
+
+		if a.conv == nil || a.conv.chooser != nil {
+			t.Error("enter should close the chooser and keep the overlay")
+		}
+	})
+
+	t.Run("esc closes the chooser, then the overlay", func(t *testing.T) {
+		t.Parallel()
+
+		a, _ := convReading(t, 160, 48)
+		convOnLine(t, a, "Two b and c")
+		press(a, keyEnter)
+		press(a, keyEsc)
+
+		if a.conv == nil || a.conv.chooser != nil {
+			t.Fatal("the first esc should close the chooser alone")
+		}
+
+		press(a, keyEsc)
+
+		if a.conv != nil {
+			t.Error("the second esc should close the overlay")
+		}
+	})
+
+	t.Run("a relative link resolves against the pull request's page", func(t *testing.T) {
+		t.Parallel()
+
+		a, opener := convReading(t, 160, 48)
+		convOnLine(t, a, "Relative r link")
+		ciDeliver(a, press(a, keyEnter))
+
+		if got := opener.urls(); !slices.Equal(got, []string{"https://github.com/octo/repo/files"}) {
+			t.Errorf("opened %q", got)
+		}
+	})
+
+	t.Run("a javascript link has no target and never reaches the screen", func(t *testing.T) {
+		t.Parallel()
+
+		a, opener := convReading(t, 160, 48)
+		convOnLine(t, a, "Evil x link")
+
+		if got := a.conv.view.targets(); len(got) != 0 {
+			t.Errorf("targets = %+v, want none", got)
+		}
+
+		ciDeliver(a, press(a, keyEnter))
+
+		if got := opener.urls(); len(got) != 0 {
+			t.Errorf("opened %q", got)
+		}
+
+		if raw := a.View().Content; strings.Contains(raw, "javascript:") {
+			t.Error("a javascript: link reached the raw view")
+		}
+	})
+}
+
+func TestConversationSearch(t *testing.T) {
+	t.Parallel()
+
+	typed := func(a *App, s string) {
+		for _, c := range s {
+			a.Update(keyRune(c))
+		}
+	}
+	cursorText := func(a *App) string { return a.conv.view.doc.text()[a.conv.view.cursor] }
+
+	t.Run("the prompt takes the hint row", func(t *testing.T) {
+		t.Parallel()
+
+		a, _ := convReading(t, 160, 48)
+		press(a, keyRune('/'))
+
+		if s := shownText(a); !strings.Contains(s, "/ ▏") || !strings.Contains(s, "enter find") || strings.Contains(s, "]/[ item") {
+			t.Errorf("empty prompt:\n%s", s)
+		}
+
+		typed(a, "lin")
+		a.Update(tea.PasteMsg{Content: "ks"})
+
+		if s := shownText(a); !strings.Contains(s, "/ links▏") {
+			t.Errorf("typed and pasted:\n%s", s)
+		}
+
+		a.Update(tea.KeyPressMsg{Code: tea.KeyBackspace})
+
+		if s := shownText(a); !strings.Contains(s, "/ link▏") {
+			t.Errorf("after backspace:\n%s", s)
+		}
+	})
+
+	t.Run("matches paint in Match", func(t *testing.T) {
+		t.Parallel()
+
+		a, _ := convReading(t, 160, 48)
+		if n := matchCount(t, a); n != 0 {
+			t.Fatalf("%d cells paint in Match before any query", n)
+		}
+
+		press(a, keyRune('/'))
+		typed(a, "nothing")
+
+		if matchCount(t, a) == 0 {
+			t.Error("no match painted while typing")
+		}
+	})
+
+	t.Run("enter finds, n and N repeat", func(t *testing.T) {
+		t.Parallel()
+
+		a, _ := convReading(t, 160, 48)
+		press(a, keyRune('/'))
+		typed(a, "link")
+		press(a, keyEnter)
+
+		if a.conv.searching || !strings.Contains(cursorText(a), "link") {
+			t.Fatalf("after enter: searching %v, cursor on %q", a.conv.searching, cursorText(a))
+		}
+
+		first := a.conv.view.cursor
+
+		press(a, keyRune('n'))
+
+		if a.conv.view.cursor == first || !strings.Contains(strings.ToLower(cursorText(a)), "link") {
+			t.Errorf("n: cursor %d on %q", a.conv.view.cursor, cursorText(a))
+		}
+
+		press(a, keyRune('N'))
+
+		if a.conv.view.cursor != first {
+			t.Errorf("N: cursor %d, want %d", a.conv.view.cursor, first)
+		}
+	})
+
+	t.Run("a miss says so", func(t *testing.T) {
+		t.Parallel()
+
+		a, _ := convReading(t, 160, 48)
+		press(a, keyRune('/'))
+		typed(a, "zzzz")
+		press(a, keyEnter)
+
+		if a.notice != noticeNotFound+"zzzz" {
+			t.Errorf("notice = %q", a.notice)
+		}
+	})
+
+	t.Run("esc closes the prompt, then the overlay", func(t *testing.T) {
+		t.Parallel()
+
+		a, _ := convReading(t, 160, 48)
+		press(a, keyRune('/'))
+		typed(a, "ab")
+		press(a, keyEsc)
+
+		if a.conv == nil || a.conv.searching || a.conv.query != "" {
+			t.Fatalf("the first esc should close the prompt alone: %+v", a.conv)
+		}
+
+		press(a, keyEsc)
+
+		if a.conv != nil {
+			t.Error("the second esc should close the overlay")
+		}
+	})
+
+	t.Run("a paste outside the prompt is dropped", func(t *testing.T) {
+		t.Parallel()
+
+		a, _ := convReading(t, 160, 48)
+		a.Update(tea.PasteMsg{Content: "abc"})
+
+		if a.conv.query != "" || a.conv.searching {
+			t.Errorf("a paste changed the query: %+v", a.conv)
+		}
+	})
+}
+
+func TestConversationPictures(t *testing.T) {
+	t.Parallel()
+
+	a, _ := convApp(t, true, 160, 48)
+	jobs := picturesOn(t, a)
+
+	convOpen(t, a)
+	a.View()
+
+	got := jobs.take()
+	if len(got) == 0 {
+		t.Fatal("the registry was asked for nothing")
+	}
+
+	for _, j := range got {
+		if j.key.src != convShotURL || j.host != "github.com" {
+			t.Errorf("job for %q on host %q, want the alias URL on github.com", j.key.src, j.host)
+		}
+	}
+
+	jobs.jobs = got
+
+	if n := answerInfo(a, jobs, 5, 3, nil); n == 0 {
+		t.Fatal("no info job")
+	}
+
+	a.View()
+
+	if got := answerRender(t, a, jobs); len(got) != 1 {
+		t.Fatalf("render answers = %q", got)
+	}
+
+	id := a.conv.doc.layout(a.conv.view.w, true).Images[0].ID
+	if len(placeholders(a.View().Content, id)) == 0 {
+		t.Fatal("the picture does not draw in the box")
+	}
+
+	a.conv.chooser = &linkChooser{targets: []mdTarget{
+		{Text: "one", URL: "https://example.com/1"},
+		{Text: "two", URL: "https://example.com/2"},
+		{Text: "three", URL: "https://example.com/3"},
+		{Text: "four", URL: "https://example.com/4"},
+	}}
+
+	if got := placeholders(a.View().Content, id); len(got) != 0 {
+		t.Errorf("placeholders under the chooser: %+v", got)
+	}
+}
+
+func TestConversationWheel(t *testing.T) {
+	t.Parallel()
+
+	t.Run("over the box", func(t *testing.T) {
+		t.Parallel()
+
+		a, _ := convApp(t, true, 120, 24)
+		convOpen(t, a)
+
+		v := &a.conv.view
+		v.cursor = 5
+
+		a.Update(tea.MouseWheelMsg{X: 60, Y: 10, Button: tea.MouseWheelDown})
+
+		if v.top != 3 || v.cursor != 5 {
+			t.Errorf("top, cursor = %d, %d; want 3, 5", v.top, v.cursor)
+		}
+
+		a.Update(tea.MouseWheelMsg{X: 60, Y: 10, Button: tea.MouseWheelDown})
+
+		if v.top != 6 || v.cursor != 6 {
+			t.Errorf("top, cursor = %d, %d; want 6, 6 (the cursor follows only when it would leave)", v.top, v.cursor)
+		}
+
+		a.Update(tea.MouseWheelMsg{X: 60, Y: 10, Button: tea.MouseWheelUp})
+
+		if v.top != 3 {
+			t.Errorf("top = %d after a notch up, want 3", v.top)
+		}
+	})
+
+	t.Run("outside the box and clicks", func(t *testing.T) {
+		t.Parallel()
+
+		a, _ := convApp(t, true, 120, 24)
+		convOpen(t, a)
+
+		v := &a.conv.view
+
+		a.Update(tea.MouseWheelMsg{X: 1, Y: 1, Button: tea.MouseWheelDown})
+		a.Update(tea.MouseWheelMsg{X: 60, Y: 23, Button: tea.MouseWheelDown})
+		a.Update(tea.MouseClickMsg{X: 60, Y: 10, Button: tea.MouseLeft})
+		a.Update(tea.MouseClickMsg{X: 1, Y: 1, Button: tea.MouseLeft})
+
+		if v.top != 0 || v.cursor != 0 || a.conv == nil {
+			t.Errorf("top, cursor = %d, %d, open %v; want nothing changed", v.top, v.cursor, a.conv != nil)
+		}
+	})
+}
+
+// convReadingScene opens the link fixture and puts it in a reading state.
+func convReadingScene(t *testing.T, icons bool, name string) *App {
+	t.Helper()
+
+	a, _ := convReading(t, 120, 40)
+	a.icons = icons
+
+	switch name {
+	case "search":
+		press(a, keyRune('/'))
+
+		for _, c := range "link" {
+			a.Update(keyRune(c))
+		}
+	case "chooser":
+		convOnLine(t, a, "Two b and c")
+		press(a, keyEnter)
+	}
+
+	return a
+}
+
+// TestConversationReadingGolden draws the search prompt and the chooser in
+// colour; it compares highlighted colours, so it runs serially.
+func TestConversationReadingGolden(t *testing.T) {
+	for _, name := range []string{"search", "chooser"} {
+		t.Run("catppuccin-mocha/icons=true/"+name, func(t *testing.T) {
+			golden.RequireEqual(t, []byte(convReadingScene(t, true, name).View().Content))
+		})
+	}
+}
+
+func TestConversationReadingText(t *testing.T) {
+	t.Parallel()
+
+	for _, icons := range []bool{true, false} {
+		for _, name := range []string{"search", "chooser"} {
+			t.Run(fmt.Sprintf("icons=%v/%s", icons, name), func(t *testing.T) {
+				t.Parallel()
+				golden.RequireEqual(t, []byte(shownText(convReadingScene(t, icons, name))))
+			})
+		}
+	}
+}
