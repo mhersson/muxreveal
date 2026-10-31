@@ -182,7 +182,8 @@ func (a *App) pickMarkdown(pick *mdPick, rel string) tea.Cmd {
 }
 
 // onMDFile shows the file once it was read, or hands a re-read to onMDReload.
-// An answer for an ask a newer one superseded, or one that lands under the compose box or another modal, is dropped.
+// An answer for an ask a newer one superseded, or one that lands under the
+// compose box or another modal, is dropped.
 func (a *App) onMDFile(msg mdFileMsg) {
 	if msg.reload {
 		a.onMDReload(msg)

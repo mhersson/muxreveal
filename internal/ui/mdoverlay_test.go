@@ -147,6 +147,13 @@ func TestMDOpen(t *testing.T) {
 		t.Fatalf("palette lists %v, want %v", overlayIDs(m.App), want)
 	}
 
+	box := ansi.Strip(m.overlay.pal.View(60))
+	for _, want := range []string{iconMarkdown + " Markdown files", "enter open"} {
+		if !strings.Contains(box, want) {
+			t.Errorf("the palette lacks %q:\n%s", want, box)
+		}
+	}
+
 	if m.store.State().Tab().Review != nil {
 		t.Fatal("md.open opened a drawer")
 	}
@@ -166,8 +173,9 @@ func TestMDOpen(t *testing.T) {
 		t.Errorf("top border = %q, want %q, no tag and the corner", screen[2], want)
 	}
 
-	if !strings.Contains(screen[len(screen)-4], "esc close") && !slices.ContainsFunc(screen, func(l string) bool { return strings.Contains(l, "esc close") }) {
-		t.Errorf("no hint row:\n%s", strings.Join(screen, "\n"))
+	bottom := slices.IndexFunc(screen, func(l string) bool { return strings.Contains(l, "╯") })
+	if bottom < 1 || !strings.Contains(screen[bottom-1], "esc close") {
+		t.Errorf("the row above the bottom border (%d) lacks the hint:\n%s", bottom, strings.Join(screen, "\n"))
 	}
 
 	t.Run("without icons", func(t *testing.T) {
@@ -207,22 +215,23 @@ func TestMDOpenWhere(t *testing.T) {
 
 	tests := []struct {
 		name  string
+		keys  bool // the drawer holds the keyboard after setup
 		setup func(t *testing.T, m *pageRig, wt string)
 		want  func(m *pageRig, wt string) string // the list's root
 	}{
-		{"no drawer", func(*testing.T, *pageRig, string) {}, func(m *pageRig, _ string) string { return m.root }},
-		{"a pinned drawer with the keyboard", func(t *testing.T, m *pageRig, wt string) {
+		{"no drawer", false, func(*testing.T, *pageRig, string) {}, func(m *pageRig, _ string) string { return m.root }},
+		{"a pinned drawer with the keyboard", true, func(t *testing.T, m *pageRig, wt string) {
 			m.opened(t)
 			openIn(t, m.App, core.PinReview{Root: wt})
 			m.settle()
 		}, func(_ *pageRig, wt string) string { return wt }},
-		{"the pinned drawer without the keyboard", func(t *testing.T, m *pageRig, wt string) {
+		{"the pinned drawer without the keyboard", false, func(t *testing.T, m *pageRig, wt string) {
 			m.opened(t)
 			openIn(t, m.App, core.PinReview{Root: wt})
 			m.settle()
 			m.drawerRelease()
 		}, func(m *pageRig, _ string) string { return m.root }},
-		{"a drawer on a pull request", func(t *testing.T, m *pageRig, wt string) {
+		{"a drawer on a pull request", true, func(t *testing.T, m *pageRig, wt string) {
 			m.opened(t)
 			openIn(t, m.App, core.ShowReviewPR{Repo: "github.com/o/r", Number: 7, Root: wt})
 			m.settle()
@@ -237,7 +246,7 @@ func TestMDOpenWhere(t *testing.T) {
 			wt := linkedWorktree(t, m)
 			tt.setup(t, m, wt)
 
-			if !strings.Contains(tt.name, "without") && tt.name != "no drawer" && !m.drawerHasKeys() {
+			if tt.keys && !m.drawerHasKeys() {
 				t.Fatal("setup: the drawer lacks the keyboard")
 			}
 
@@ -950,6 +959,8 @@ func TestMDOverlayWatch(t *testing.T) {
 		id := m.agent(t, m.dir, "")
 		m.watching(t, id, m.root)
 
+		before := m.holdCount()
+
 		m.opens(t, "docs/a.md")
 		m.mdWatched(t)
 
@@ -957,8 +968,12 @@ func TestMDOverlayWatch(t *testing.T) {
 			t.Fatal("the root stopped being watched")
 		}
 
+		if got := m.holdCount(); got != before+1 {
+			t.Fatalf("holds = %d with the overlay open, want %d", got, before+1)
+		}
+
 		m.press(keyEsc)
-		m.settle()
+		m.until(t, "the overlay's reference to be released", func() bool { return m.holdCount() == before })
 
 		if m.watches.md != nil || !m.watched(m.root) {
 			t.Errorf("md = %+v, watched %v after esc, want the agent's watch kept", m.watches.md, m.watched(m.root))
