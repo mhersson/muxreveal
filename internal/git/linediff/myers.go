@@ -1,3 +1,10 @@
+// Adapted from go-diff's diffBisect in diffmatchpatch/diff.go at v1.4.0
+// (github.com/sergi/go-diff). Copyright (c) 2012-2016 The go-diff authors. MIT
+// License. go-diff is a Go port of Google's diff-match-patch, Copyright (c) 2006
+// Google Inc., Apache License 2.0. See THIRD_PARTY.md. Changed from it: split
+// compares lines, numbered so that they compare as integers, instead of runes,
+// and gives up at a work cap instead of a deadline.
+
 package linediff
 
 import "slices"
