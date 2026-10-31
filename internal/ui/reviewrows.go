@@ -493,7 +493,12 @@ func anchorAt(res git.Result, rows []reviewRow, i int) rowAnchor {
 // A row of a wrapped line is found on the anchor's part, or the last one the
 // line has.
 func restoreAnchor(res git.Result, rows []reviewRow, a rowAnchor) int {
+	if len(rows) == 0 {
+		return 0
+	}
+
 	i := restoreLine(res, rows, a)
+	i -= rows[i].part // the nearest-index fallback can land on a continuation row
 
 	for k := 0; k < a.part && i+1 < len(rows) && rows[i+1].part == rows[i].part+1; k++ {
 		i++

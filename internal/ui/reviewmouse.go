@@ -85,6 +85,7 @@ func (a *App) scrollRows(v *reviewView, n int) {
 	// The cursor stays while a row of its line shows. Otherwise it takes the
 	// first line that starts in the view, or the last row's line when it was
 	// below.
+	v.cursor = min(max(v.cursor, 0), len(v.rows)-1)
 	start, end := v.lineStart(v.cursor), v.lineEnd(v.cursor)
 	bottom := min(v.top+h, len(v.rows)) - 1
 

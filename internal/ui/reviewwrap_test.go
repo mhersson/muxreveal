@@ -343,6 +343,7 @@ func TestWrappedTallLine(t *testing.T) {
 		v *reviewView
 	)
 
+	// The drawer's chrome sets diffH from the scene height; find the height that gives 20.
 	for sh := 20; sh <= 40; sh++ {
 		a, v = wrapScene(t, res, codeWidths{line: 40}, sh)
 		if a.reviewBodyH(v) == 20 {
@@ -585,5 +586,19 @@ func TestWrappedViewKeepsSelectionPart(t *testing.T) {
 
 	if v.sel.head.row != third || v.sel.anchor.row != third-2 {
 		t.Errorf("selection ends %d and %d, want %d and %d", v.sel.anchor.row, v.sel.head.row, third-2, third)
+	}
+}
+
+func TestWrappedRestoreFallbackFirstRow(t *testing.T) {
+	t.Parallel()
+
+	res := padded(0, " "+longLine, " mid")
+	rows := buildRows(res, rowOpts{wrap: codeWidths{line: 30}})
+	// Row 0 file, 1 hunk, 2-4 the long line, 5 mid. No file matches, so the
+	// nearest index (row 4, a continuation row) is the answer.
+	gone := rowAnchor{path: "gone.go", row: rowLine, index: 4}
+
+	if got := restoreAnchor(res, rows, gone); got != 2 {
+		t.Errorf("restored row %d, want 2 (the long line's first row)", got)
 	}
 }
