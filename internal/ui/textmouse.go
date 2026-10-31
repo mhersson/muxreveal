@@ -15,8 +15,8 @@ type textPress struct {
 	x, y                 int // screen cell of the press
 	anchor               point
 	alt, dragging, multi bool
-	// line is the page line a drawer press landed on, -1 for none; a click
-	// moves the cursor there on its release.
+	// line is the page line or diff row a drawer press landed on, -1 for none;
+	// a click moves the cursor there on its release.
 	line int
 }
 
@@ -25,6 +25,7 @@ type textPress struct {
 type textHost struct {
 	view *mdView
 	rows *reviewView
+	lay  drawerLayout // the layout of rows' cells
 	page *mdPage
 	tab  core.TabID
 	rect image.Rectangle
@@ -50,8 +51,11 @@ func (h textHost) at(x, y int) point {
 
 // grid is the host's text as a selection grid.
 func (h textHost) grid() grid {
-	if h.view != nil {
+	switch {
+	case h.view != nil:
 		return h.view.grid()
+	case h.rows != nil:
+		return h.rows.gridIn(h.lay)
 	}
 
 	return textGrid{}
@@ -59,7 +63,7 @@ func (h textHost) grid() grid {
 
 // holder is the selection holder for the host.
 func (h textHost) holder() *textSelection {
-	return &textSelection{tab: h.tab, view: h.view, rows: h.rows}
+	return &textSelection{tab: h.tab, view: h.view, rows: h.rows, lay: h.lay}
 }
 
 // planHost is the plan overlay's host while the overlay takes the pointer.
@@ -117,6 +121,66 @@ func (a *App) pageHost() (textHost, bool) {
 	}, true
 }
 
+// rowsHost is the active tab's diff rows as a host while the drawer takes the
+// pointer: the diff column under the pull request header. The tree, the header
+// and the hint row are not text.
+func (a *App) rowsHost() (textHost, bool) {
+	if !a.drawersOpen || a.modalOpen() || a.pending || a.drawer.closing {
+		return textHost{}, false
+	}
+
+	st := a.store.State()
+
+	r, shown := a.drawerRect(st)
+	if !shown {
+		return textHost{}, false
+	}
+
+	tab := st.Tab().ID
+
+	v := a.drawer.views[tab]
+	if v == nil || v.page() != nil {
+		return textHost{}, false
+	}
+
+	box, _ := a.drawerFull(st)
+	lay := a.drawerLayoutOf(box, v, drawerTree(st))
+
+	x := r.X + 1
+	if lay.treeW > 0 {
+		x += lay.treeW + 1
+	}
+
+	w := min(lay.diffW, r.X+r.W-1-x)
+
+	if w <= 0 || lay.diffH <= 0 {
+		return textHost{}, false
+	}
+
+	top := v.viewTop(lay.diffH)
+	sticky := -1
+
+	if i, ok := (&drawCtx{v: v, top: top}).stickyHeader(); ok {
+		sticky = i
+	}
+
+	y := r.Y + 1 + lay.headH
+
+	return textHost{
+		rows: v, lay: lay, tab: tab, rect: image.Rect(x, y, x+w, y+lay.diffH), top: top,
+		sticky: sticky, maxCol: w - 1,
+	}, true
+}
+
+// drawerHost is the drawer's text host: its page, or its diff rows.
+func (a *App) drawerHost() (textHost, bool) {
+	if h, ok := a.pageHost(); ok {
+		return h, true
+	}
+
+	return a.rowsHost()
+}
+
 // textHostAt is the host whose cells hold (x, y).
 func (a *App) textHostAt(x, y int) (textHost, bool) {
 	pt := image.Point{X: x, Y: y}
@@ -125,7 +189,7 @@ func (a *App) textHostAt(x, y int) (textHost, bool) {
 		return h, true
 	}
 
-	if h, ok := a.pageHost(); ok && pt.In(h.rect) {
+	if h, ok := a.drawerHost(); ok && pt.In(h.rect) {
 		return h, true
 	}
 
@@ -138,7 +202,7 @@ func (a *App) textHostOf(pr *textPress) (textHost, bool) {
 		return a.planHost()
 	}
 
-	if h, ok := a.pageHost(); ok && h.tab == pr.tab {
+	if h, ok := a.drawerHost(); ok && h.tab == pr.tab {
 		return h, true
 	}
 
@@ -160,7 +224,7 @@ func (a *App) textClick(m tea.Mouse) bool {
 	a.endPress()
 	a.textPressAt(h, m)
 
-	if h.page != nil {
+	if h.page != nil || h.rows != nil {
 		a.drawerTake()
 	}
 
@@ -177,7 +241,7 @@ func (a *App) textPressAt(h textHost, m tea.Mouse) {
 
 	g := h.grid()
 
-	if line := h.top + m.Y - h.rect.Min.Y; h.page != nil && line < g.Rows() {
+	if line := h.at(m.X, m.Y).row; (h.page != nil || h.rows != nil) && line < g.Rows() {
 		pr.line = line
 	}
 
@@ -234,7 +298,7 @@ func (a *App) textDrag(pr *textPress, x, y int) {
 	// the doc changed under the drag.
 	same := a.revOf(ts) == ts.rev
 
-	ts.view.sel = &s
+	ts.setSel(s, h.lay)
 
 	if same {
 		ts.shown = ts.text()
@@ -273,19 +337,24 @@ func (a *App) textRelease(pr *textPress, m tea.Mouse) tea.Cmd {
 	return a.clip.copyPrimary(text)
 }
 
-// pageClick moves a page's cursor to the line a press landed on when the
-// button came up on the cell it went down on.
+// pageClick moves the cursor of a page or of the diff to the line a press
+// landed on when the button came up on the cell it went down on.
 func (a *App) pageClick(pr *textPress, m tea.Mouse) {
 	if pr.line < 0 || m.X != pr.x || m.Y != pr.y {
 		return
 	}
 
 	h, ok := a.textHostOf(pr)
-	if !ok || h.page == nil {
+	if !ok {
 		return
 	}
 
-	h.view.cursor = pr.line
-	h.view.clamp()
-	h.page.rev++
+	switch {
+	case h.rows != nil:
+		a.reviewGo(h.rows, pr.line)
+	case h.page != nil:
+		h.view.cursor = pr.line
+		h.view.clamp()
+		h.page.rev++
+	}
 }

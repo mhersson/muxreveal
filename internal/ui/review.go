@@ -86,14 +86,18 @@ type reviewView struct {
 	gen         int // bumps whenever res is replaced; the caches follow it
 	rows        []reviewRow
 	cursor, top int
-	split       bool // side by side is wanted; rowsSplit says whether the rows are laid out so
-	full        map[string]fullText
-	folded      map[string]bool
-	flashUntil  time.Time
-	fresh       map[int]bool
-	search      *string // the open search prompt's text; nil when closed
-	last        string  // the last search
-	err         error
+	// sel is the text selection over rows, in the diff column's cells, and
+	// selLay the layout it was made in.
+	sel        *selection
+	selLay     drawerLayout
+	split      bool // side by side is wanted; rowsSplit says whether the rows are laid out so
+	full       map[string]fullText
+	folded     map[string]bool
+	flashUntil time.Time
+	fresh      map[int]bool
+	search     *string // the open search prompt's text; nil when closed
+	last       string  // the last search
+	err        error
 
 	// What the title, the mode tag, the mode row and the info rows show and
 	// git.Result does not carry.
@@ -250,11 +254,22 @@ func (v *reviewView) rebuild(split bool) { v.rebuildFor(v.res, split) }
 func (v *reviewView) rebuildFor(res git.Result, split bool) {
 	anchor := anchorAt(v.res, v.rows, v.cursor)
 
+	var ends [2]rowAnchor
+
+	if v.sel != nil {
+		ends = [2]rowAnchor{anchorAt(v.res, v.rows, v.sel.anchor.row), anchorAt(v.res, v.rows, v.sel.head.row)}
+	}
+
 	v.res = res
 	v.rowsSplit = split
 	v.rowsRev++
 	v.rows = buildRows(res, v.rowOpts(split))
 	v.cursor = restoreAnchor(res, v.rows, anchor)
+
+	if v.sel != nil {
+		v.sel.anchor.row = restoreAnchor(res, v.rows, ends[0])
+		v.sel.head.row = restoreAnchor(res, v.rows, ends[1])
+	}
 }
 
 // picturesMoved reports whether a pending picture change leaves the rows of a
@@ -272,9 +287,14 @@ func (v *reviewView) picturesMoved() bool {
 // rebuildPictures is rebuild for a change the pictures caused: the cursor keeps
 // its line and the view its screen row, as the rows of a picture come and go.
 func (v *reviewView) rebuildPictures(split bool) {
-	before, file, line := v.cursor, -1, 0
-	if v.cursor >= 0 && v.cursor < len(v.rows) && v.rows[v.cursor].kind == rowMD {
-		file, line = v.rows[v.cursor].file, v.rows[v.cursor].line
+	before := v.cursor
+	file, line := v.mdRowAt(v.cursor)
+
+	var ends [2]struct{ file, line int }
+
+	if v.sel != nil {
+		ends[0].file, ends[0].line = v.mdRowAt(v.sel.anchor.row)
+		ends[1].file, ends[1].line = v.mdRowAt(v.sel.head.row)
 	}
 
 	v.rebuild(split)
@@ -289,21 +309,45 @@ func (v *reviewView) rebuildPictures(split bool) {
 
 		moved = true
 
-		if file < 0 || v.res.Files[file].Path != path {
+		fi := slices.IndexFunc(v.res.Files, func(f git.FileDiff) bool { return f.Path == path })
+		if fi < 0 {
 			continue
 		}
 
 		lay := f.doc.layout(max(v.mdW, 1), v.mdIcons)
-		first := slices.IndexFunc(v.rows, func(r reviewRow) bool { return r.kind == rowMD && r.file == file && r.line == 0 })
+		first := slices.IndexFunc(v.rows, func(r reviewRow) bool { return r.kind == rowMD && r.file == fi && r.line == 0 })
 
-		if first >= 0 {
-			v.cursor = first + max(min(line+pictureShift(old, lay, line), len(lay.Lines)-1), 0)
+		if first < 0 {
+			continue
+		}
+
+		shifted := func(l int) int { return first + max(min(l+pictureShift(old, lay, l), len(lay.Lines)-1), 0) }
+
+		if file == fi {
+			v.cursor = shifted(line)
+		}
+
+		if v.sel != nil {
+			for k, p := range []*point{&v.sel.anchor, &v.sel.head} {
+				if ends[k].file == fi {
+					p.row = shifted(ends[k].line)
+				}
+			}
 		}
 	}
 
 	if moved {
 		v.top = max(v.top+v.cursor-before, 0)
 	}
+}
+
+// mdRowAt is the file and layout line of row i when it is a rendered row, else -1 and 0.
+func (v *reviewView) mdRowAt(i int) (file, line int) {
+	if i < 0 || i >= len(v.rows) || v.rows[i].kind != rowMD {
+		return -1, 0
+	}
+
+	return v.rows[i].file, v.rows[i].line
 }
 
 // mdRowsOf lays out every rendered file whose parse has answered, with its

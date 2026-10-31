@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"image/color"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -8,9 +9,13 @@ import (
 	"unicode/utf8"
 
 	tea "charm.land/bubbletea/v2"
+	uv "github.com/charmbracelet/ultraviolet"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/mhersson/muxreveal/internal/core"
 	"github.com/mhersson/muxreveal/internal/git"
+	"github.com/mhersson/muxreveal/internal/md"
+	"github.com/mhersson/muxreveal/internal/ui/diffview"
 )
 
 // selPage is a page rig with docs/a.md shown, a fake clipboard and the drawer
@@ -481,4 +486,516 @@ func TestPageSelectionCleared(t *testing.T) {
 			t.Error("a re-read with only another line changed cleared the selection")
 		}
 	})
+}
+
+func TestDiffPieces(t *testing.T) {
+	t.Parallel()
+
+	thirty := "0123456789abcdefghijklmnopqrst"
+	long := strings.Repeat("x", 1100)
+
+	tests := []struct {
+		name  string
+		raw   string
+		tagCR bool
+		width int
+		want  []md.Piece
+	}{
+		{"plain", "abc", false, 10, []md.Piece{{Col: 0, Cells: 3, Text: "abc"}}},
+		{"tab", "\tx", false, 10, []md.Piece{{Col: 0, Cells: 4, Text: "\t", Whole: true}, {Col: 4, Cells: 1, Text: "x"}}},
+		{"tab stop", "ab\tx", false, 10, []md.Piece{{Col: 0, Cells: 2, Text: "ab"}, {Col: 2, Cells: 2, Text: "\t", Whole: true}, {Col: 4, Cells: 1, Text: "x"}}},
+		{"hidden character", "a\u200bb", false, 20, []md.Piece{
+			{Col: 0, Cells: 1, Text: "a"}, {Col: 1, Cells: 8, Text: "⟨U+200B⟩", Whole: true}, {Col: 9, Cells: 1, Text: "b"},
+		}},
+		{"cut by the width", thirty, false, 10, []md.Piece{
+			{Col: 0, Cells: 9, Text: thirty[:9]}, {Col: 9, Cells: 1, Text: thirty[9:], Whole: true},
+		}},
+		{"cut by the line budget", long, false, 2000, []md.Piece{
+			{Col: 0, Cells: lineBudget, Text: long[:lineBudget]}, {Col: lineBudget, Cells: 1, Text: long[lineBudget:], Whole: true},
+		}},
+		{"ending tag", "ab", true, 20, []md.Piece{{Col: 0, Cells: 2, Text: "ab"}, {Col: 2, Cells: 8, Text: "⟨U+000D⟩", Whole: true}}},
+		{"ending tag cut off", "ab", true, 5, []md.Piece{{Col: 0, Cells: 2, Text: "ab"}, {Col: 2, Cells: 1, Text: "⟨U+000D⟩", Whole: true}}},
+		{"wide characters", "日本語", false, 10, []md.Piece{{Col: 0, Cells: 6, Text: "日本語"}}},
+		{"wide character cut", "日本語", false, 5, []md.Piece{{Col: 0, Cells: 4, Text: "日本"}, {Col: 4, Cells: 1, Text: "語", Whole: true}}},
+		{"wide character at the cut", "a日本", false, 4, []md.Piece{{Col: 0, Cells: 3, Text: "a日"}, {Col: 3, Cells: 1, Text: "本", Whole: true}}},
+		{"tag at the cut", "ab\u200bcd", false, 5, []md.Piece{{Col: 0, Cells: 2, Text: "ab"}, {Col: 2, Cells: 1, Text: "⟨U+200B⟩cd", Whole: true}}},
+		{"tab in the rest", "abcdefgh\ti", false, 5, []md.Piece{{Col: 0, Cells: 4, Text: "abcd"}, {Col: 4, Cells: 1, Text: "efgh\ti", Whole: true}}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			if got := diffPieces(tt.raw, tt.tagCR, tt.width); !slices.Equal(got, tt.want) {
+				t.Errorf("diffPieces = %+v, want %+v", got, tt.want)
+			}
+		})
+	}
+}
+
+// diffSel is a drawer rig on keysRepo with the drawer open, a fake clipboard
+// and the unified diff showing.
+type diffSel struct {
+	*drawerRig
+	v    *reviewView
+	clip *fakeRun
+	dir  string
+	root string
+}
+
+func newDiffSel(t *testing.T) *diffSel {
+	t.Helper()
+
+	dir := keysRepo(t)
+	r := newKeysRig(t, dir)
+	clip := fakeClip(r.App)
+	v := r.opened(t)
+
+	if r.layout(t).split {
+		t.Fatal("setup: the diff is drawn side by side")
+	}
+
+	return &diffSel{drawerRig: r, v: v, clip: clip, dir: dir, root: rootOf(t, dir)}
+}
+
+// rowCell is the screen cell of diff-column cell col on row row of the diff.
+func rowCell(t *testing.T, r *drawerRig, row, col int) (x, y int) {
+	t.Helper()
+
+	h, ok := r.rowsHost()
+	if !ok {
+		t.Fatal("the diff rows are not a text host")
+	}
+
+	y = h.rect.Min.Y + row - h.top
+	if y < h.rect.Min.Y || y >= h.rect.Max.Y {
+		t.Fatalf("row %d is not in view (top %d)", row, h.top)
+	}
+
+	return h.rect.Min.X + col, y
+}
+
+// code is the diff-column cell where row i's code starts.
+func (d *diffSel) code(t *testing.T, i int) int {
+	t.Helper()
+
+	lay := d.layout(t)
+
+	switch d.v.rows[i].kind {
+	case rowLine:
+		return markW + 2*lay.gw + diffview.SignWidth
+	case rowFull, rowGhost:
+		return markW + lay.gw + diffview.SignWidth
+	}
+
+	t.Fatalf("row %d is not a code row", i)
+
+	return 0
+}
+
+// dragRows drags from cell c0 of row r0 to cell c1 of row r1 and releases.
+func (d *diffSel) dragRows(t *testing.T, r0, c0, r1, c1 int) {
+	t.Helper()
+
+	x0, y0 := rowCell(t, d.drawerRig, r0, c0)
+	x1, y1 := rowCell(t, d.drawerRig, r1, c1)
+	dragRun(d.App, x0, y0, x1, y1, 0)
+}
+
+func TestDiffDragCopiesCodeOnly(t *testing.T) {
+	t.Parallel()
+
+	d := newDiffSel(t)
+	del, add := rowWith(t, d.v, "line 3"), rowWith(t, d.v, "edited 3")
+
+	d.dragRows(t, del, d.code(t, del), add, d.code(t, add)+len("edited 3")-1)
+
+	if got := primaryWrites(d.clip); !slices.Equal(got, []string{"line 3\nedited 3"}) {
+		t.Errorf("primary writes %q, want [line 3\\nedited 3]", got)
+	}
+
+	if d.text == nil || d.v.sel == nil || !d.drawer.focused {
+		t.Errorf("selection = %v, view selection = %v, drawer has the keyboard = %v, want all set", d.text, d.v.sel, d.drawer.focused)
+	}
+}
+
+func TestDiffHeadersCopyWhole(t *testing.T) {
+	t.Parallel()
+
+	d := newDiffSel(t)
+	line := rowWith(t, d.v, "line 1")
+	hunk := d.v.res.Files[0].Hunks[0]
+
+	d.dragRows(t, 0, 6, line, d.code(t, line)+len("line 1")-1)
+
+	want := "a.txt\n" + hunkHeader(hunk) + "\nline 1"
+	if got := primaryWrites(d.clip); !slices.Equal(got, []string{want}) {
+		t.Errorf("primary writes %q, want %q", got, want)
+	}
+}
+
+func TestDiffRowsLeftOut(t *testing.T) {
+	t.Parallel()
+
+	d := newDiffSel(t)
+	d.keys(keyRune('f'))
+	d.until(t, "the full file", func() bool { return len(d.v.full) == 1 })
+
+	ghost := slices.IndexFunc(d.v.rows, func(r reviewRow) bool { return r.kind == rowGhost })
+	if ghost < 0 {
+		t.Fatal("the full view has no ghost line")
+	}
+
+	d.v.cursor = ghost
+	d.keys(keyEnter)
+
+	fold := slices.IndexFunc(d.v.rows, func(r reviewRow) bool { return r.kind == rowFold })
+	if fold < 1 || fold+1 >= len(d.v.rows) {
+		t.Fatalf("no fold row in the middle of the rows (at %d)", fold)
+	}
+
+	d.v.top = 0
+	before, after := d.v.rows[fold-1], d.v.rows[fold+1]
+
+	d.dragRows(t, fold-1, d.code(t, fold-1), fold+1, d.code(t, fold+1)+len(after.text)-1)
+
+	want := before.text + "\n" + after.text
+	if got := primaryWrites(d.clip); !slices.Equal(got, []string{want}) {
+		t.Errorf("primary writes %q, want %q", got, want)
+	}
+}
+
+// cellBg is the background of screen cell x of a drawn line.
+func cellBg(line string, x int) color.Color {
+	buf := uv.NewScreenBuffer(ansi.StringWidth(line), 1)
+	uv.NewStyledString(line).Draw(buf, buf.Bounds())
+
+	return buf.CellAt(x, 0).Style.Bg
+}
+
+// bgIs reports whether a cell's background is want.
+func bgIs(c, want color.Color) bool { return c != nil && sameColor(c, want) }
+
+// Not parallel: the drawer highlights code, which takes the highlighter's time.
+func TestDiffSelectionPaint(t *testing.T) {
+	d := newDiffSel(t)
+	add := rowWith(t, d.v, "edited 3")
+	del := rowWith(t, d.v, "line 3")
+	d.v.cursor = add
+
+	d.dragRows(t, del, d.code(t, del), add, d.code(t, add)+len("edited 3")-1)
+
+	st := d.store.State()
+	rect := mustRect(t, d.drawerRig)
+	lay := d.layout(t)
+	lines := d.drawerLines(st, rect)
+	sel := d.current().theme.UI.Selection
+	off := 1
+	top := d.v.viewTop(lay.diffH)
+
+	if lay.treeW > 0 {
+		off += lay.treeW + 1
+	}
+
+	at := func(row, col int) (string, int) { return lines[1+lay.headH+row-top], off + col }
+
+	for _, c := range []struct {
+		name     string
+		row, col int
+		want     bool
+	}{
+		{"first code cell of the removed line", del, d.code(t, del), true},
+		{"last code cell of the added line", add, d.code(t, add) + len("edited 3") - 1, true},
+		{"line number of the removed line", del, markW + 1, false},
+		{"sign of the removed line", del, markW + 2*lay.gw + 1, false},
+		{"line number of the added line", add, markW + lay.gw + 1, false},
+		{"mark of the added line", add, 0, false},
+	} {
+		line, x := at(c.row, c.col)
+		if got := bgIs(cellBg(line, x), sel); got != c.want {
+			t.Errorf("%s: on the selection ground = %v, want %v", c.name, got, c.want)
+		}
+	}
+
+	line, x := at(add, 0)
+	if got := ansi.Strip(line); !strings.Contains(got, markGlyph) {
+		t.Errorf("the cursor's mark is gone: %q", got)
+	}
+
+	if bgIs(cellBg(line, x), sel) {
+		t.Error("the cursor's mark cell is on the selection ground")
+	}
+}
+
+func TestDiffDragReleasedOverPane(t *testing.T) {
+	t.Parallel()
+
+	d := newDiffSel(t)
+	row := rowWith(t, d.v, "line 3")
+	x0, y := rowCell(t, d.drawerRig, row, d.code(t, row)+3)
+
+	px := 10
+	if d.hit(px, y).area != hitContent || px >= mustRect(t, d.drawerRig).X {
+		t.Fatalf("setup: (%d, %d) is not a pane's content left of the drawer", px, y)
+	}
+
+	dragRun(d.App, x0, y, px, y, 0)
+
+	if d.v.sel == nil || d.v.sel.head.col != 0 {
+		t.Errorf("selection = %+v, want it ending at the column's left edge", d.v.sel)
+	}
+
+	if got := primaryWrites(d.clip); !slices.Equal(got, []string{"line"}) {
+		t.Errorf("primary writes %q, want [line]", got)
+	}
+
+	if got := d.sentSoFar(t, "p1"); got != "" {
+		t.Errorf("the pane's program was sent %q, want nothing", got)
+	}
+}
+
+func TestDiffPressOutsideText(t *testing.T) {
+	t.Parallel()
+
+	d := newDiffSel(t)
+	d.showTree(t)
+
+	lay := d.layout(t)
+	if lay.treeW == 0 || !lay.hints {
+		t.Fatalf("setup: tree width %d, hints %v", lay.treeW, lay.hints)
+	}
+
+	z := slices.IndexFunc(d.v.derived().tree, func(it treeItem) bool { return !it.dir && d.v.res.Files[it.file].Path == "z.txt" })
+	treeX, treeY := d.drawerCell(t, 2, 1+3+z)
+	hintX, hintY := d.drawerCell(t, 10, 1+lay.bodyH)
+	row := rowWith(t, d.v, "line 3")
+	rx, ry := rowCell(t, d.drawerRig, row, d.code(t, row))
+	dragRun(d.App, rx, ry, rx+4, ry, 0)
+
+	if d.text == nil {
+		t.Fatal("setup: no selection")
+	}
+
+	cursor := d.v.cursor
+
+	dragRun(d.App, hintX, hintY, hintX+5, hintY, 0)
+
+	if d.v.cursor != cursor || !d.drawer.focused || d.mouse.text != nil {
+		t.Errorf("a drag on the hint row: cursor %d -> %d, drawer has the keyboard = %v, held press = %v", cursor, d.v.cursor, d.drawer.focused, d.mouse.text != nil)
+	}
+
+	clickRun(d.App, treeX, treeY)
+
+	if fileAtCursor(d.v) != "z.txt" || d.mouse.text != nil {
+		t.Errorf("a click on z.txt in the tree: cursor on %s, held press = %v, want z.txt's header and none", fileAtCursor(d.v), d.mouse.text != nil)
+	}
+
+	if got := primaryWrites(d.clip); len(got) != 1 {
+		t.Errorf("primary writes %q, want only the first drag's", got)
+	}
+}
+
+func TestStickyHeaderSelects(t *testing.T) {
+	t.Parallel()
+
+	d := newDiffSel(t)
+	d.v.top, d.v.cursor = 8, 11
+
+	h, ok := d.rowsHost()
+	if !ok || h.sticky != 0 {
+		t.Fatalf("setup: host ok = %v, sticky row = %d, want the first file's header on the first row", ok, h.sticky)
+	}
+
+	x, y := h.rect.Min.X+5, h.rect.Min.Y
+
+	clickRun(d.App, x, y)
+	clickRun(d.App, x, y)
+
+	if got := primaryWrites(d.clip); !slices.Equal(got, []string{"a.txt"}) {
+		t.Errorf("primary writes %q, want [a.txt]", got)
+	}
+}
+
+func TestDiffSelectionReload(t *testing.T) {
+	t.Parallel()
+
+	edits := func(n ...int) func(*testing.T, string) {
+		return func(t *testing.T, dir string) { write(t, filepath.Join(dir, "a.txt"), editedLines(40, n...)) }
+	}
+
+	tests := []struct {
+		name     string
+		from, to string // the rows the selection runs over
+		edit     func(*testing.T, string)
+		hidden   bool // the drawer's tab is hidden while the file changes
+		held     bool // the button is held while the file changes
+		reloads  bool
+		want     bool // the selection is kept
+	}{
+		{"rewritten with the same content", "line 28", "line 29", edits(3, 30), false, false, false, true},
+		{"selected line edited", "line 28", "line 29", edits(3, 29), false, false, true, false},
+		{"a line above edited", "line 28", "line 29", edits(4, 30), false, false, true, true},
+		{"edited while the tab is hidden", "line 28", "line 29", edits(3, 29), true, false, true, false},
+		{"untouched while the tab is hidden", "line 28", "line 29", edits(4, 30), true, false, true, true},
+		{"edited during a held drag", "line 28", "line 29", edits(3, 29), false, true, true, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			d := newDiffSel(t)
+			v := d.v
+			from, to := rowWith(t, v, tt.from), rowWith(t, v, tt.to)
+			x0, y0 := rowCell(t, d.drawerRig, from, d.code(t, from))
+			x1, y1 := rowCell(t, d.drawerRig, to, d.code(t, to)+len(tt.to)-1)
+
+			if tt.held {
+				mdown(d.App, x0, y0, tea.MouseLeft, 0)
+				mmove(d.App, x1, y1, tea.MouseLeft)
+			} else {
+				dragRun(d.App, x0, y0, x1, y1, 0)
+			}
+
+			if d.text == nil || v.sel == nil {
+				t.Fatal("setup: no selection")
+			}
+
+			first := d.tabID()
+			gen := v.gen
+
+			if tt.hidden {
+				d.watching(t, "p1", d.root)
+				openIn(t, d.App, core.NewTab{Kind: core.KindShell, Cwd: t.TempDir()})
+				d.settle()
+			}
+
+			tt.edit(t, d.dir)
+
+			if tt.hidden {
+				d.batch(d.root, git.Batch{Paths: []string{"a.txt"}})
+				d.until(t, "the watcher to report a.txt", d.reportedAll(filepath.Join(d.root, "a.txt")))
+
+				openIn(t, d.App, core.SelectTab{Index: 0})
+
+				if d.tabID() != first {
+					t.Fatalf("active tab = %s, want %s", d.tabID(), first)
+				}
+
+				d.settle()
+			} else {
+				d.run(d.batch(d.root, git.Batch{Paths: []string{"a.txt"}}))
+			}
+
+			if tt.reloads {
+				d.until(t, "the drawer to reload", func() bool { return v.gen > gen && !v.loading && v.queued == nil })
+			} else {
+				d.settle()
+			}
+
+			if tt.held {
+				if d.text == nil || v.sel == nil {
+					t.Fatal("the selection went before the button came up")
+				}
+
+				release(d.App, x1, y1)
+			}
+
+			if got := d.text != nil && v.sel != nil; got != tt.want {
+				t.Errorf("selection kept = %v, want %v", got, tt.want)
+			}
+
+			if got := d.text == nil; got == (v.sel != nil) {
+				t.Errorf("the app's selection (%v) and the view's (%v) disagree", d.text, v.sel)
+			}
+
+			if tt.held {
+				if got := primaryWrites(d.clip); len(got) != 0 {
+					t.Errorf("the release wrote %q, want nothing", got)
+				}
+			}
+		})
+	}
+}
+
+func TestRenderedRowsCopy(t *testing.T) {
+	t.Parallel()
+
+	para := strings.TrimSpace(strings.Repeat("alpha beta gamma delta ", 12))
+	m := newMDRigOf(t, planWith(map[int]string{3: para}), planWith(map[int]string{3: para + " omega", 8: "- 2nd step"}))
+	clip := fakeClip(m.App)
+
+	m.onFile(t, planPath)
+	m.press(keyRune('m'))
+
+	var rows []int
+
+	for i, r := range m.v.rows {
+		if r.kind == rowMD && (strings.Contains(r.text, "alpha") || strings.Contains(r.text, "omega")) {
+			rows = append(rows, i)
+		}
+	}
+
+	if len(rows) < 2 {
+		t.Fatalf("the paragraph is on %d rendered rows, want it wrapped", len(rows))
+	}
+
+	m.v.cursor = rows[0]
+	m.v.top = max(rows[0]-1, 0)
+
+	last := rows[len(rows)-1]
+	x0, y0 := rowCell(t, m.drawerRig, rows[0], 2)
+	x1, y1 := rowCell(t, m.drawerRig, last, m.layout(t).diffW-1)
+
+	dragRun(m.App, x0, y0, x1, y1, 0)
+
+	want := para + " omega"
+	if got := primaryWrites(clip); !slices.Equal(got, []string{want}) {
+		t.Errorf("primary writes %q, want the paragraph as one line %q", got, want)
+	}
+
+	m.clearSelections()
+	m.v.cursor = rows[1]
+	m.drawerTake()
+	run(m.App, press(m.App, keyRune('y')))
+
+	if got := clipboardWrites(clip); !slices.Equal(got, []string{want}) {
+		t.Errorf("y on the second row wrote %q, want the whole paragraph %q", got, want)
+	}
+}
+
+func TestDiffCopyKey(t *testing.T) {
+	t.Parallel()
+
+	d := newDiffSel(t)
+
+	tests := []struct {
+		name string
+		row  func() int
+		want []string
+	}{
+		{"a diff line", func() int { return rowWith(t, d.v, "edited 3") }, []string{"edited 3"}},
+		{"a file header", func() int { return 0 }, []string{"a.txt"}},
+		{"a hunk header", func() int { return 1 }, []string{hunkHeader(d.v.res.Files[0].Hunks[0])}},
+	}
+
+	for _, tt := range tests {
+		d.clip.calls = nil
+		d.v.cursor = tt.row()
+		d.drawerTake()
+		run(d.App, press(d.App, keyRune('y')))
+
+		if got := clipboardWrites(d.clip); !slices.Equal(got, tt.want) {
+			t.Errorf("%s: y wrote %q, want %q", tt.name, got, tt.want)
+		}
+	}
+
+	d.clip.calls = nil
+	d.v.rows = append(d.v.rows, reviewRow{kind: rowInfo, file: 0, hunk: -1, line: -1, other: -1, text: "note"})
+	d.v.cursor = len(d.v.rows) - 1
+	run(d.App, press(d.App, keyRune('y')))
+
+	if got := clipboardWrites(d.clip); len(got) != 0 || d.notice != "" {
+		t.Errorf("y on an info row wrote %q with the notice %q, want nothing", got, d.notice)
+	}
 }

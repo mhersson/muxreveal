@@ -204,9 +204,10 @@ func (a *App) clearDrawerSel(tab core.TabID) {
 }
 
 // reviewCopy copies the drawer's selection and keeps it. With none it copies
-// the cursor's unit: a paragraph or item on a page.
+// the cursor's unit: a paragraph or item on a page, a line or header of the
+// diff, a paragraph of a rendered file.
 func (a *App) reviewCopy() tea.Cmd {
-	tab, _, ok := a.reviewActive()
+	tab, v, ok := a.reviewActive()
 	if !ok {
 		return nil
 	}
@@ -217,6 +218,10 @@ func (a *App) reviewCopy() tea.Cmd {
 
 	if _, p := a.activePage(); p != nil {
 		return a.clip.copy(p.view.unitText(p.view.cursor))
+	}
+
+	if lay, ok := a.rowsLayout(tab.ID, v); ok {
+		return a.clip.copy(v.unitText(lay, v.cursor))
 	}
 
 	return nil

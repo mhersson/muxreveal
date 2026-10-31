@@ -152,6 +152,7 @@ func textPaint(lt md.LineText, from, to int) [][2]int {
 type textRev struct {
 	doc    *mdDoc
 	gen, w int
+	gw     int // the diff column's number width, which moves the code
 	split  bool
 }
 
@@ -162,12 +163,22 @@ type textSelection struct {
 	tab   core.TabID
 	view  *mdView
 	rows  *reviewView
-	shown string // the selected text when it was made
+	lay   drawerLayout // the layout rows' columns are in
+	shown string       // the selected text when it was made
 	rev   textRev
 }
 
 // revOf is the state of ts's holder now.
 func (a *App) revOf(ts *textSelection) textRev {
+	if ts.rows != nil {
+		r := textRev{gen: ts.rows.rowsRev, w: ts.rev.w, gw: ts.rev.gw, split: ts.rev.split}
+		if lay, ok := a.rowsLayout(ts.tab, ts.rows); ok {
+			r.w, r.gw, r.split = lay.diffW, lay.gw, lay.split
+		}
+
+		return r
+	}
+
 	if ts.view != nil {
 		r := textRev{doc: ts.view.doc, w: ts.view.w}
 		if ts.view.doc != nil {
@@ -182,11 +193,55 @@ func (a *App) revOf(ts *textSelection) textRev {
 
 // textText is the text ts's selection covers now.
 func (ts *textSelection) text() string {
-	if ts.view != nil {
+	switch {
+	case ts.view != nil:
 		return ts.view.selectedText()
+	case ts.rows != nil:
+		return ts.rows.selectedText()
 	}
 
 	return ""
+}
+
+// setSel makes s the holder's selection; lay is the layout of rows' columns.
+func (ts *textSelection) setSel(s selection, lay drawerLayout) {
+	switch {
+	case ts.view != nil:
+		ts.view.sel = &s
+	case ts.rows != nil:
+		ts.rows.sel, ts.rows.selLay = &s, lay
+	}
+}
+
+// drop clears the holder's selection.
+func (ts *textSelection) drop() {
+	switch {
+	case ts.view != nil:
+		ts.view.sel = nil
+	case ts.rows != nil:
+		ts.rows.sel = nil
+	}
+}
+
+// has reports whether the holder still holds a selection.
+func (ts *textSelection) has() bool {
+	return (ts.view != nil && ts.view.sel != nil) || (ts.rows != nil && ts.rows.sel != nil)
+}
+
+// rowsLayout is the layout the drawer of tab draws rows in, ok only while that
+// tab shows.
+func (a *App) rowsLayout(tab core.TabID, v *reviewView) (drawerLayout, bool) {
+	st := a.store.State()
+	if st.Tab().ID != tab {
+		return drawerLayout{}, false
+	}
+
+	box, ok := a.drawerFull(st)
+	if !ok {
+		return drawerLayout{}, false
+	}
+
+	return a.drawerLayoutOf(box, v, drawerTree(st)), true
 }
 
 // setTextSel makes s ts's holder's selection, the app's only one.
@@ -194,10 +249,7 @@ func (a *App) setTextSel(ts *textSelection, s selection) {
 	a.sel = nil
 	a.clearTextSel()
 
-	if ts.view != nil {
-		ts.view.sel = &s
-	}
-
+	ts.setSel(s, ts.lay)
 	ts.shown = ts.text()
 	ts.rev = a.revOf(ts)
 	a.text = ts
@@ -210,9 +262,7 @@ func (a *App) clearTextSel() {
 		return
 	}
 
-	if ts.view != nil {
-		ts.view.sel = nil
-	}
+	ts.drop()
 
 	a.text = nil
 }
@@ -257,14 +307,21 @@ func (a *App) textSelAfterUpdate() {
 		return
 	}
 
-	if !a.textHolds(ts) || (ts.view != nil && ts.view.sel == nil) {
+	if !a.textHolds(ts) || !ts.has() {
 		a.clearTextSel()
 
 		return
 	}
 
+	// A hidden tab's drawer reloads when it shows, and the text is compared then.
+	if ts.rows != nil {
+		if _, shown := a.rowsLayout(ts.tab, ts.rows); !shown {
+			return
+		}
+	}
+
 	cur := a.revOf(ts)
-	if cur.w != ts.rev.w || cur.split != ts.rev.split {
+	if cur.w != ts.rev.w || cur.gw != ts.rev.gw || cur.split != ts.rev.split {
 		a.clearTextSel()
 
 		return
