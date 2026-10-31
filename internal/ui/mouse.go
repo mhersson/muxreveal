@@ -277,7 +277,7 @@ func (a *App) contentPress(h hitResult, m tea.Mouse) tea.Cmd {
 		alt: m.Mod.Contains(tea.ModAlt), mod: m.Mod, multi: n > 1,
 	}
 
-	a.sel = nil
+	a.clearSelections()
 
 	p.withView(func(g grid, top int, trimmed uint64) {
 		at := clampPoint(g, point{top + h.local.row, h.local.col})

@@ -173,7 +173,8 @@ type App struct {
 	engine    *git.Engine   // nil when the rail's diff stats and the review drawer's diffs are off
 	probeSem  chan struct{} // its capacity bounds the head, stats and name probes running at once
 	clip      *clipboard
-	sel       *paneSelection // the one selection; survives tab switches
+	sel       *paneSelection // a pane's selection; survives tab switches
+	text      *textSelection // the selection of a text view when no pane holds one
 	copy      *copyState     // copy mode; owns every key and ignores the mouse while set
 	mouse     mouseState
 
@@ -460,6 +461,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	a.worktreesSync()
 	a.linksSync()
+	a.textSelAfterUpdate()
 
 	if c := a.drawerAfterUpdate(); c != nil {
 		a.later = append(a.later, c)
@@ -553,6 +555,7 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.endSlide()
 
 		a.width, a.height = msg.Width, msg.Height
+		a.clearTextSel()
 
 		if a.compose != nil {
 			a.composePreviewSettle(a.compose)

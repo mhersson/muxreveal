@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"image/color"
 	"slices"
 	"strings"
 
@@ -17,6 +18,8 @@ type mdView struct {
 
 	w, h  int
 	icons bool
+
+	sel *selection // rows are layout lines, columns the view's cells
 }
 
 // mdTarget is somewhere a rendered line leads: a URL or a local path.
@@ -52,6 +55,12 @@ func (v *mdView) keepRow(old, cur md.Layout) {
 
 	v.cursor = max(min(v.cursor+d, n-1), 0)
 	v.top = max(min(v.top+d, n-h), 0)
+
+	if v.sel != nil {
+		for _, p := range []*point{&v.sel.anchor, &v.sel.head} {
+			p.row = max(min(p.row+pictureShift(old, cur, p.row), n-1), 0)
+		}
+	}
 }
 
 // clamp keeps the cursor on a line and in the window.
@@ -379,8 +388,88 @@ func (v *mdView) drawPictures(p mdPainter, focused bool) ([]string, []picRow) {
 			}
 		}
 
-		rows = append(rows, mark+text+pad(pp, trail))
+		row := mark + text + pad(pp, trail)
+		if spans := v.selSpans(lay, i, lead+tw, p.ui.Selection); len(spans) > 0 {
+			row = paintSpans(row, v.w, spans)
+		}
+
+		rows = append(rows, row)
 	}
 
 	return rows, pics
+}
+
+// textLead is the cells left of the text.
+const textLead = 2
+
+// lineText is what layout line i copies, in view cells.
+func (v *mdView) lineText(i int) md.LineText { return shiftText(v.layout().Text(i)) }
+
+// shiftText moves a laid-out line's pieces right to where the view draws them.
+func shiftText(lt md.LineText) md.LineText {
+	lt.Pieces = slices.Clone(lt.Pieces)
+	for k := range lt.Pieces {
+		lt.Pieces[k].Col += textLead
+	}
+
+	return lt
+}
+
+// grid is the view's lines as a selection grid.
+func (v *mdView) grid() textGrid {
+	lay := v.layout()
+
+	return textGrid{
+		lines: func(i int) md.LineText { return shiftText(lay.Text(i)) },
+		rows:  len(lay.Lines), cols: v.w,
+	}
+}
+
+// selectedText is the text of the selection, "" when none.
+func (v *mdView) selectedText() string {
+	if v.sel == nil {
+		return ""
+	}
+
+	g := v.grid()
+	if g.rows == 0 {
+		return ""
+	}
+
+	s := *v.sel
+	s.anchor, s.head = clampPoint(g, s.anchor), clampPoint(g, s.head)
+
+	return textCopy(g.lines, s, g.cols)
+}
+
+// unitText is the text of the unit lineAt takes at line i.
+func (v *mdView) unitText(i int) string {
+	g := v.grid()
+	if g.rows == 0 {
+		return ""
+	}
+
+	return textCopy(g.lines, lineAt(g, point{i, 0}), g.cols)
+}
+
+// selSpans are the cells of line i the selection paints, within cells below end.
+func (v *mdView) selSpans(lay md.Layout, i, end int, bg color.Color) []spanPaint {
+	if v.sel == nil || i >= len(lay.Lines) {
+		return nil
+	}
+
+	from, to, ok := v.sel.rowSpan(i, v.w)
+	if !ok {
+		return nil
+	}
+
+	var spans []spanPaint
+
+	for _, c := range textPaint(shiftText(lay.Text(i)), from, to) {
+		if c[0] < end {
+			spans = append(spans, spanPaint{from: c[0], to: min(c[1], end-1), bg: bg})
+		}
+	}
+
+	return spans
 }
