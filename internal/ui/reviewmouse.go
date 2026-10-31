@@ -16,8 +16,9 @@ func (a *App) inDrawer(x, y int) bool {
 }
 
 // drawerClick gives the drawer the keyboard; on a diff row it moves the cursor
-// there and on a tree file it jumps to it. A page's rows go to textClick. The tree's scroll depends on who held
-// the keyboard when it was drawn, so that is read before the diff takes it.
+// there and on a tree file it jumps to it. A page's rows go to textClick. The
+// tree's scroll depends on who held the keyboard when it was drawn, so that is
+// read before the diff takes it.
 func (a *App) drawerClick(x, y int) {
 	st := a.store.State()
 	treeWas := a.drawer.focused && a.drawer.tree

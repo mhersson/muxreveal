@@ -188,7 +188,8 @@ func (a *App) handleDrawerKey(msg tea.KeyPressMsg) tea.Cmd {
 		return nil
 	}
 
-	if id != "review.copy" {
+	// A command the page drops does not act, so it keeps the selection.
+	if id != "review.copy" && (id == "review.toggle" || !a.pageShown() || pageCommand(id)) {
 		a.clearDrawerSel(tab.ID)
 	}
 

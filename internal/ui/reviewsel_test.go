@@ -57,6 +57,16 @@ func (m *selPage) word(t *testing.T, row, word string) (x0, x1, y int) {
 	return 0, 0, 0
 }
 
+// drawerHasSel reports whether the active tab's drawer draws a selection.
+func (m *selPage) drawerHasSel() (selection, bool) {
+	v := m.view()
+	if v == nil || v.page() == nil || v.page().view.sel == nil {
+		return selection{}, false
+	}
+
+	return *v.page().view.sel, true
+}
+
 func (m *selPage) selected() bool { return m.text != nil && m.p.view.sel != nil }
 
 // dragIntro selects "intro text".
@@ -241,6 +251,9 @@ func TestDrawerKeysClear(t *testing.T) {
 		{"search then a letter", []tea.KeyPressMsg{keyRune('/'), keyRune('z')}, false},
 		{"back", []tea.KeyPressMsg{keyEsc}, false},
 		{"copy", []tea.KeyPressMsg{keyRune('y')}, true},
+		{"full file, which a page drops", []tea.KeyPressMsg{keyRune('f')}, true},
+		{"split, which a page drops", []tea.KeyPressMsg{keyRune('u')}, true},
+		{"file next, which a page drops", []tea.KeyPressMsg{keyRune('}')}, true},
 		{"dropped key", []tea.KeyPressMsg{keyRune('x')}, true},
 	}
 
@@ -309,8 +322,20 @@ func TestOneSelectionAcrossHosts(t *testing.T) {
 			t.Error("a tab switch cleared the drawer's selection")
 		}
 
-		if v := m.drawer.views[m.tabID()]; v != nil && v.page() != nil && v.page().view.sel != nil {
+		m.run(m.openReview(m.focus(), true))
+		m.until(t, "the other tab's drawer to open", func() bool { return m.store.State().Tab().Review != nil })
+
+		other := m.drawer.views[m.tabID()]
+		if other == nil {
+			t.Fatal("the other tab has no drawer view")
+		}
+
+		if other.page() != nil && other.page().view.sel != nil {
 			t.Error("the other tab's drawer holds the selection")
+		}
+
+		if _, ok := m.drawerHasSel(); ok {
+			t.Error("the other tab's drawer draws a selection")
 		}
 
 		openIn(t, m.App, core.SelectTab{Index: 0})
@@ -372,7 +397,7 @@ func TestOneSelectionAcrossHosts(t *testing.T) {
 
 		msgs := planMsgs(m.openPlan(id))
 		if len(msgs) != 1 {
-			t.Fatalf("leader p raised %d plan reads, want 1", len(msgs))
+			t.Fatalf("the plan ask raised %d plan reads, want 1", len(msgs))
 		}
 
 		m.Update(msgs[0])
