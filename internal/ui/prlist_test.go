@@ -622,7 +622,7 @@ func TestPRListOnASmallTerminal(t *testing.T) {
 }
 
 // TestPRListMatchesTheConversation checks the list's box takes the
-// conversation's columns, so the list does not show beside a conversation.
+// conversation's columns, so a conversation drawn over it hides them.
 func TestPRListMatchesTheConversation(t *testing.T) {
 	t.Parallel()
 

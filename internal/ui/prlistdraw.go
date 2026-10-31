@@ -12,8 +12,8 @@ import (
 	"github.com/mhersson/muxreveal/internal/ui/theme"
 )
 
-// prListWidth is the list's width: the conversation box's (planBox), so the
-// list does not show beside a conversation opened over it.
+// prListWidth is the list's width: the conversation box's (planBox), so a
+// conversation drawn over the list hides its columns.
 func prListWidth(width int) int {
 	return min(planMaxBox, width-4)
 }
