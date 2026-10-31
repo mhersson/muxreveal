@@ -168,8 +168,9 @@ func (a *App) handleDrawerKey(msg tea.KeyPressMsg) tea.Cmd {
 	}
 
 	if v.search != nil {
-		a.clearDrawerSel(tab.ID)
-		a.searchKey(v, msg)
+		if a.searchKey(v, msg) {
+			a.clearDrawerSel(tab.ID)
+		}
 
 		return nil
 	}
@@ -227,8 +228,9 @@ func (a *App) reviewCopy() tea.Cmd {
 	return nil
 }
 
-// searchKey types into the open search prompt.
-func (a *App) searchKey(v *reviewView, msg tea.KeyPressMsg) {
+// searchKey types into the open search prompt and reports whether the prompt
+// took the key.
+func (a *App) searchKey(v *reviewView, msg tea.KeyPressMsg) bool {
 	switch key := msg.String(); {
 	case key == "enter":
 		a.reviewFind(v)
@@ -240,7 +242,11 @@ func (a *App) searchKey(v *reviewView, msg tea.KeyPressMsg) {
 		}
 	case msg.Text != "":
 		*v.search += printable(msg.Text)
+	default:
+		return false
 	}
+
+	return true
 }
 
 // drawerPaste appends pasted text to the search prompt while it is open;

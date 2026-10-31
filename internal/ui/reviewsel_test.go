@@ -270,6 +270,30 @@ func TestDrawerKeysClear(t *testing.T) {
 		})
 	}
 
+	t.Run("dropped key in the search prompt", func(t *testing.T) {
+		t.Parallel()
+
+		m := newSelPage(t)
+		m.key(keyRune('/'))
+		m.dragIntro(t)
+
+		if m.v.search == nil || m.text == nil {
+			t.Fatal("setup: the prompt is closed or nothing is selected")
+		}
+
+		m.key(tea.KeyPressMsg{Code: tea.KeyUp})
+
+		if m.text == nil {
+			t.Error("a key the prompt drops cleared the selection")
+		}
+
+		m.key(keyRune('z'))
+
+		if m.text != nil {
+			t.Error("a key the prompt takes kept the selection")
+		}
+	})
+
 	t.Run("wheel", func(t *testing.T) {
 		t.Parallel()
 
@@ -292,7 +316,14 @@ func TestOneSelectionAcrossHosts(t *testing.T) {
 		t.Parallel()
 
 		m := newSelPage(t)
-		m.sel = &paneSelection{pane: m.focus()}
+		m.agent(t, m.dir, "")
+
+		// The first pane is left of the drawer.
+		drag(m.App, 5, 10, 20, 10, 0)
+
+		if m.sel == nil {
+			t.Fatal("setup: the pane drag selected nothing")
+		}
 
 		m.dragIntro(t)
 
@@ -365,10 +396,17 @@ func TestOneSelectionAcrossHosts(t *testing.T) {
 		t.Parallel()
 
 		m := newSelPage(t)
+		m.agent(t, m.dir, "")
+		m.drawn(t)
 		m.dragIntro(t)
 
+		before := m.focus()
 		m.focusFollows = true
-		hover(m.App, 70, 10)
+		hover(m.App, 10, 10)
+
+		if m.focus() == before {
+			t.Fatalf("setup: hovering a pane left the focus on %s", before)
+		}
 
 		if m.text == nil {
 			t.Error("hovering a pane cleared the selection")

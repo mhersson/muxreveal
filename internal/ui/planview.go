@@ -390,15 +390,22 @@ func (a *App) handlePlanKey(msg tea.KeyPressMsg) tea.Cmd {
 		return nil
 	}
 
-	v := pv.shown()
-
-	if planActs(key) {
+	cmd, acted := a.planKey(pv, key, boxH)
+	if acted {
 		a.clearTextSel()
 	}
 
+	return cmd
+}
+
+// planKey runs a key of the overlay's own switch and reports whether it acted:
+// y copies and keeps a selection, and a key the switch drops keeps it too.
+func (a *App) planKey(pv *planView, key string, boxH int) (cmd tea.Cmd, acted bool) {
+	v := pv.shown()
+
 	switch key {
 	case "y":
-		return a.planCopy()
+		return a.planCopy(), false
 	case "j", "down":
 		v.move(1)
 	case "k", "up":
@@ -420,7 +427,7 @@ func (a *App) handlePlanKey(msg tea.KeyPressMsg) tea.Cmd {
 	case "[":
 		v.heading(-1)
 	case "enter":
-		return a.planEnter()
+		cmd = a.planEnter()
 	case "/":
 		// The prompt draws in the hint row, so without one there is nowhere to type.
 		if _, _, hint := planRows(boxH); hint {
@@ -430,21 +437,11 @@ func (a *App) handlePlanKey(msg tea.KeyPressMsg) tea.Cmd {
 		a.planFind(pv.last, false)
 	case "N":
 		a.planFind(pv.last, true)
+	default:
+		return nil, false
 	}
 
-	return nil
-}
-
-// planActs reports whether key is one of handlePlanKey's switch that moves or
-// opens something, and so clears a selection first; y copies and keeps it.
-func planActs(key string) bool {
-	switch key {
-	case "j", "down", "k", "up", "ctrl+d", "ctrl+u", "ctrl+f", "pgdown", "ctrl+b", "pgup",
-		"g", "G", "]", "[", "enter", "/", "n", "N":
-		return true
-	}
-
-	return false
+	return cmd, true
 }
 
 // planCopy is y: the selection, kept, else the paragraph or item at the cursor.
