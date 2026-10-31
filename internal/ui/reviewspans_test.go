@@ -30,6 +30,10 @@ func settleCounting(t *testing.T, a *App) int {
 		cmd := a.drawerAfterUpdate()
 		total += a.drawer.tokenised
 
+		if runHighlight(t, a) {
+			continue
+		}
+
 		if cmd == nil {
 			return total
 		}
@@ -207,4 +211,40 @@ func TestFullFileToggleKeepsSpansOfUnchangedChunks(t *testing.T) {
 	}
 
 	counted(t, "showing the file as hunks again", had)
+}
+
+// A second live result while a batch runs still keeps the spans of the chunks
+// the first one kept: only the chunk the second changed is tokenised again.
+func TestSecondLiveResultKeepsLookAheadSpans(t *testing.T) {
+	t.Parallel()
+
+	s := reviewScene{theme: "catppuccin-mocha", icons: true, w: 200, h: 52, res: manyHunks(400), turn: 1, turns: 1, focused: true}
+	a := s.build(t)
+	tab := a.store.State().Tab().ID
+	v := a.reviewViewOf(tab)
+
+	v.top = rowWith(t, v, "chunk 200") - 1
+	v.cursor = v.top
+
+	settleDrawer(t, a)
+
+	edit := func(tag string) {
+		res := manyHunks(400)
+		res.Files[0].Hunks[200].Lines[0].Text += tag
+		a.reviewApply(v, reviewLoadedMsg{tab: tab, res: res, live: true, info: reviewInfo{project: "muxreveal", branch: "feat/review-pane", base: "origin/main", turns: 1, hidden: hiddenFlags(res.Files)}})
+	}
+
+	edit(" // one")
+
+	if a.drawerAfterUpdate() == nil || a.drawer.hlJob == nil {
+		t.Fatal("the first live result started no batch")
+	}
+
+	edit(" // two")
+
+	runHighlight(t, a)
+
+	if got, want := settleCounting(t, a), 6; got != want {
+		t.Errorf("after two live results %d lines were tokenised, want the %d of the one chunk the second changed", got, want)
+	}
 }

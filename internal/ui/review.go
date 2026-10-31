@@ -47,6 +47,8 @@ type reviewView struct {
 	queued   *git.Batch                     // changes seen since the last load started
 	hiddenIn []bool                         // per file of res: handed over with it, so derived scans no text
 	carry    map[chunkSum][][]diffview.Span // the last generation's spans by chunk text, for the next to take
+	hlTop    int                            // the top of the last highlighting scan
+	hlUp     bool                           // the top of the last scan is above the one before
 
 	// The files the operator wants shown whole, the blobs res names for them
 	// that full holds, and the blobs being read.
@@ -168,7 +170,8 @@ type drawerState struct {
 	reads         int             // the last full-file read serial handed out
 	prSeq         int             // the last pull request request; its answers carry it
 	prNext        *prNext         // a drawer being opened for a pull request
-	tokenised     int             // lines tokenised by the last highlighting pass
+	hlJob         *hlJob          // the batch being tokenised; at most one runs
+	tokenised     int             // lines handed to the batch the last settle started; 0 for none
 	layouts       int             // layouts computed rather than reused; tests read it
 	scans         int             // searches of the visible rows for chunks to tokenise; tests read it
 	renders       int             // drawers drawn rather than reused; tests read it

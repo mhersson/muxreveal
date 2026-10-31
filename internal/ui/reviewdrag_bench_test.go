@@ -186,6 +186,9 @@ func benchDrag(t *testing.T, c dragCase) {
 		t.Fatalf("the view holds %d rows; want at least %d, so the drag can grow to %d", len(v.rows), dragRows+h.rect.Dy(), dragRows)
 	}
 
+	hl := newHLRunner(app)
+	hl.settle()
+
 	pr := newPresenter(benchWidth, benchHeight)
 
 	// The press lands on the second text row, clear of a pinned header, and a
@@ -193,6 +196,7 @@ func benchDrag(t *testing.T, c dragCase) {
 	x, y, outY := h.rect.Max.X-h.rect.Dx()/4, h.rect.Min.Y+1, h.rect.Max.Y
 
 	app.Update(tea.MouseClickMsg{X: x, Y: y, Button: tea.MouseLeft})
+	hl.start()
 
 	if err := pr.present(app.View().Content); err != nil {
 		t.Fatalf("present: %v", err)
@@ -205,7 +209,12 @@ func benchDrag(t *testing.T, c dragCase) {
 	step := func(into *frameTimes, msg tea.Msg) tea.Cmd {
 		start := time.Now()
 
+		hl.deliver()
+
 		_, cmd := app.Update(msg)
+
+		hl.start()
+
 		updateD := time.Since(start)
 
 		err := pr.present(app.View().Content)
@@ -256,6 +265,8 @@ func benchDrag(t *testing.T, c dragCase) {
 	if h.lay.split && app.text.side != 1 {
 		t.Fatalf("the selection is on side %d; want the new side, 1", app.text.side)
 	}
+
+	hl.settle()
 
 	rows, size := selectedRows(v), len(app.text.shown)
 

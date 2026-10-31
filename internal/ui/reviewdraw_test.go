@@ -503,7 +503,7 @@ func TestDrawerRowsAreExactWidth(t *testing.T) {
 	}
 }
 
-func TestHighlightCapPerFrame(t *testing.T) {
+func TestHighlightBatchCap(t *testing.T) {
 	t.Parallel()
 
 	res, full := bigResult(10000)
@@ -531,29 +531,36 @@ func TestHighlightCapPerFrame(t *testing.T) {
 			v.rebuild(false)
 			s.tune(t, a, v)
 
-			passes, total, more := 0, 0, true
+			passes, total := 0, 0
 
-			for more && passes < 100 {
-				more = a.drawerAfterUpdate() != nil
+			for passes < 100 {
+				a.drawerAfterUpdate()
+
+				if a.drawer.hlJob == nil {
+					break
+				}
+
 				passes++
 
-				if got := a.drawer.tokenised; got > 2000 {
-					t.Fatalf("pass %d tokenised %d lines, want at most 2000", passes, got)
+				if got := a.drawer.tokenised; got > hlBatch {
+					t.Fatalf("pass %d tokenised %d lines, want at most %d", passes, got, hlBatch)
 				}
 
 				total += a.drawer.tokenised
+
+				runHighlight(t, a)
 			}
 
 			if passes < 2 {
 				t.Errorf("the whole range was tokenised in %d pass; the cap never applied", passes)
 			}
 
-			if total < 2000 || total > len(full.new) {
+			if total < hlBatch || total > len(full.new) {
 				t.Errorf("tokenised %d lines in all", total)
 			}
 
-			if more {
-				t.Fatal("highlighting still asks for a redraw after 100 passes")
+			if a.drawer.hlJob != nil {
+				t.Fatal("highlighting still runs batches after 100 passes")
 			}
 
 			// Nothing is left: the next update must not tokenise or ask again.

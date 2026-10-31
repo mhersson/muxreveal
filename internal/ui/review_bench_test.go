@@ -5,15 +5,18 @@ package ui
 import (
 	"context"
 	"fmt"
+	"io"
 	"path/filepath"
 	"runtime"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/mhersson/muxreveal/internal/git"
+	"github.com/mhersson/muxreveal/internal/term"
 )
 
 // Gate numbers for paging through a long diff in the drawer: the 99th
@@ -68,8 +71,56 @@ func benchScrollResult() git.Result {
 // ctrl+d, one press per frame at 60 FPS on the virtual clock, and times update,
 // view and present for each frame. Run it with:
 //
-//	CGO_ENABLED=1 go test -tags bench ./internal/ui -run TestBenchReviewScroll -v
+//	CGO_ENABLED=1 go test -tags bench ./internal/ui -run 'TestBenchReviewScroll' -v
+//
+// It runs twice: over the bench's own small heap, and over a heap the size of a
+// session. Run one with -run 'TestBenchReviewScroll/heap=session'.
 func TestBenchReviewScroll(t *testing.T) {
+	t.Run("heap=bench", func(t *testing.T) { benchScroll(t, nil) })
+	t.Run("heap=session", func(t *testing.T) { benchScroll(t, sessionHeap) })
+}
+
+// sessionEmulators, sessionCols and sessionRows size sessionHeap: the panes of a busy session, one emulator each.
+const (
+	sessionEmulators = 6
+	sessionCols      = 120
+	sessionRows      = 40
+)
+
+// sessionHeap is six 120x40 emulators, each fed term.ScrollbackLines+40
+// lines of about 100 columns with an SGR colour, so every scrollback is full.
+func sessionHeap(t *testing.T) any {
+	t.Helper()
+
+	vts := make([]term.VT, 0, sessionEmulators)
+
+	for e := range sessionEmulators {
+		vt := term.NewVT(sessionCols, sessionRows, io.Discard)
+
+		t.Cleanup(func() { _ = vt.Close() })
+
+		for i := range term.ScrollbackLines + 40 {
+			text := fmt.Sprintf("emulator %d line %d ", e, i)
+			text += strings.Repeat("x", 100-len(text))
+
+			if _, err := fmt.Fprintf(vt, "\x1b[3%dm%s\x1b[0m\r\n", 1+i%6, text); err != nil {
+				t.Fatalf("feed emulator %d: %v", e, err)
+			}
+		}
+
+		if n := vt.ScrollbackLen(); n != term.ScrollbackLines {
+			t.Fatalf("emulator %d holds %d scrollback lines, want %d", e, n, term.ScrollbackLines)
+		}
+
+		vts = append(vts, vt)
+	}
+
+	return vts
+}
+
+// benchScroll is TestBenchReviewScroll's run; hold, when set, builds what
+// the run keeps live (runtime.KeepAlive after the last frame).
+func benchScroll(t *testing.T, hold func(t *testing.T) any) {
 	t0 := time.Unix(1_000_000, 0)
 	clk := &fakeClock{t: t0}
 
@@ -92,14 +143,28 @@ func TestBenchReviewScroll(t *testing.T) {
 		t.Fatal("the drawer does not have the keyboard")
 	}
 
+	hl := newHLRunner(app)
+	hl.settle()
+
 	pr := newPresenter(benchWidth, benchHeight)
 	if err := pr.present(app.View().Content); err != nil {
 		t.Fatalf("present: %v", err)
 	}
 
+	var held any
+	if hold != nil {
+		held = hold(t)
+	}
+
 	runtime.GC()
 
+	var mem0, mem1 runtime.MemStats
+
+	runtime.ReadMemStats(&mem0)
+
 	var (
+		answers, plainFrames, plainRun, plainMax int
+
 		frames, render, present frameTimes
 		press                   = tea.KeyPressMsg{Code: 'd', Mod: tea.ModCtrl}
 		fi                      = time.Second / 60
@@ -115,7 +180,10 @@ func TestBenchReviewScroll(t *testing.T) {
 		before := v.cursor
 		start := time.Now()
 
+		answers += hl.deliver()
+
 		app.Update(press)
+		hl.start()
 
 		frame := app.View().Content
 		renderD := time.Since(start)
@@ -132,13 +200,30 @@ func TestBenchReviewScroll(t *testing.T) {
 		if v.cursor <= before {
 			t.Fatalf("ctrl+d moved the cursor from row %d to %d", before, v.cursor)
 		}
+
+		if plainRows(app, v) > 0 {
+			plainFrames++
+			plainRun++
+			plainMax = max(plainMax, plainRun)
+		} else {
+			plainRun = 0
+		}
 	}
+
+	runtime.ReadMemStats(&mem1)
+
+	hl.settle()
+
+	runtime.KeepAlive(held)
 
 	s, r, p := frames.summary(), render.summary(), present.summary()
 	t.Logf("paged %d rows in %d frames (%d rows a page): p50 %s, p95 %s, p99 %s (gate %s), max %s (gate %s)",
 		len(v.rows), s.Count, app.reviewBodyH(v)/2, fmtMS(s.P50), fmtMS(s.P95), fmtMS(s.P99), fmtMS(scrollGateP99), fmtMS(s.Max), fmtMS(scrollGateMax))
 	t.Logf("per-component p50/p99 (they do not sum to the frame's): update+view %s/%s, present %s/%s",
 		fmtMS(r.P50), fmtMS(r.P99), fmtMS(p.P50), fmtMS(p.P99))
+
+	t.Logf("highlight: %d answers between frames; %d of %d frames drew rows not yet coloured, at most %d in a row; live heap %.1f MB after setup, %d GCs in the run",
+		answers, plainFrames, s.Count, plainMax, float64(mem0.HeapAlloc)/(1<<20), mem1.NumGC-mem0.NumGC)
 
 	if app.drawer.fallbacks != 0 {
 		t.Errorf("the compositor drew the drawer in %d frames, so the run did not measure the splice", app.drawer.fallbacks)
@@ -151,6 +236,33 @@ func TestBenchReviewScroll(t *testing.T) {
 	if s.Max > scrollGateMax {
 		t.Errorf("max = %v, gate is %v", s.Max, scrollGateMax)
 	}
+}
+
+// plainRows counts the visible rows with a chunk that has no spans yet.
+func plainRows(app *App, v *reviewView) int {
+	st := app.store.State()
+
+	box, ok := app.drawerBox(st)
+	if !ok {
+		return 0
+	}
+
+	lay := app.drawerLayoutOf(box, v, drawerTree(st))
+	top := v.viewTop(lay.diffH)
+	c := v.derived()
+	n := 0
+
+	for i := top; i < min(top+lay.diffH, len(v.rows)); i++ {
+		for _, ref := range v.rowSpans(i) {
+			if _, ok := c.spans[ref.key]; !ok {
+				n++
+
+				break
+			}
+		}
+	}
+
+	return n
 }
 
 func hunkHolds(v *reviewView, path, text string) bool {
