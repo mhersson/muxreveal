@@ -5,15 +5,18 @@ package ui
 import (
 	"context"
 	"fmt"
+	"io"
 	"path/filepath"
 	"runtime"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/mhersson/muxreveal/internal/git"
+	"github.com/mhersson/muxreveal/internal/term"
 )
 
 // Gate numbers for paging through a long diff in the drawer: the 99th
@@ -68,8 +71,56 @@ func benchScrollResult() git.Result {
 // ctrl+d, one press per frame at 60 FPS on the virtual clock, and times update,
 // view and present for each frame. Run it with:
 //
-//	CGO_ENABLED=1 go test -tags bench ./internal/ui -run TestBenchReviewScroll -v
+//	CGO_ENABLED=1 go test -tags bench ./internal/ui -run 'TestBenchReviewScroll' -v
+//
+// It runs twice: over the bench's own small heap, and over a heap the size of a
+// session. Run one with -run 'TestBenchReviewScroll/heap=session'.
 func TestBenchReviewScroll(t *testing.T) {
+	t.Run("heap=bench", func(t *testing.T) { benchScroll(t, nil) })
+	t.Run("heap=session", func(t *testing.T) { benchScroll(t, sessionHeap) })
+}
+
+// sessionEmulators, sessionCols and sessionRows size sessionHeap: a session's panes.
+const (
+	sessionEmulators = 6
+	sessionCols      = 120
+	sessionRows      = 40
+)
+
+// sessionHeap is six 120x40 emulators, each fed term.ScrollbackLines+40
+// lines of about 100 columns with an SGR colour, so every scrollback is full.
+func sessionHeap(t *testing.T) any {
+	t.Helper()
+
+	vts := make([]term.VT, 0, sessionEmulators)
+
+	for e := range sessionEmulators {
+		vt := term.NewVT(sessionCols, sessionRows, io.Discard)
+
+		t.Cleanup(func() { _ = vt.Close() })
+
+		for i := range term.ScrollbackLines + 40 {
+			text := fmt.Sprintf("emulator %d line %d ", e, i)
+			text += strings.Repeat("x", 100-len(text))
+
+			if _, err := fmt.Fprintf(vt, "\x1b[3%dm%s\x1b[0m\r\n", 1+i%6, text); err != nil {
+				t.Fatalf("feed emulator %d: %v", e, err)
+			}
+		}
+
+		if n := vt.ScrollbackLen(); n != term.ScrollbackLines {
+			t.Fatalf("emulator %d holds %d scrollback lines, want %d", e, n, term.ScrollbackLines)
+		}
+
+		vts = append(vts, vt)
+	}
+
+	return vts
+}
+
+// benchScroll is TestBenchReviewScroll's run; hold, when set, builds what
+// the run keeps live (runtime.KeepAlive after the last frame).
+func benchScroll(t *testing.T, hold func(t *testing.T) any) {
 	t0 := time.Unix(1_000_000, 0)
 	clk := &fakeClock{t: t0}
 
@@ -98,6 +149,11 @@ func TestBenchReviewScroll(t *testing.T) {
 	pr := newPresenter(benchWidth, benchHeight)
 	if err := pr.present(app.View().Content); err != nil {
 		t.Fatalf("present: %v", err)
+	}
+
+	var held any
+	if hold != nil {
+		held = hold(t)
 	}
 
 	runtime.GC()
@@ -157,6 +213,8 @@ func TestBenchReviewScroll(t *testing.T) {
 	runtime.ReadMemStats(&mem1)
 
 	answers += hl.settle()
+
+	runtime.KeepAlive(held)
 
 	s, r, p := frames.summary(), render.summary(), present.summary()
 	t.Logf("paged %d rows in %d frames (%d rows a page): p50 %s, p95 %s, p99 %s (gate %s), max %s (gate %s)",
