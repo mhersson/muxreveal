@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	maps0 "maps"
+	"maps"
 	"slices"
 	"strconv"
 	"strings"
@@ -698,8 +698,7 @@ func tabScene(t *testing.T, icons bool, w, h int, tab prListTab, answered bool, 
 	a, reads, _ := searchApp(t, listAgents(), w, h, mine, repos...)
 	a.icons = icons
 
-	maps := fail
-	maps0.Copy(reads.fail, maps)
+	maps.Copy(reads.fail, fail)
 
 	if answered {
 		openList(a)
