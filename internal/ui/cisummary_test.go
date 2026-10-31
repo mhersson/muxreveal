@@ -272,6 +272,7 @@ func TestCheckSummaryScroll(t *testing.T) {
 		t.Errorf("wheel down: top %d, cursor %d, want %d, %d", v.top, v.cursor, scrollStep, scrollStep)
 	}
 
+
 	v.cursor = v.top + 2
 	wheel(tea.MouseWheelDown)
 
