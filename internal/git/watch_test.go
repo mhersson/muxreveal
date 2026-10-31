@@ -447,42 +447,91 @@ func TestWatchBurstCoalesces(t *testing.T) {
 	}
 }
 
+// fakeTimer is a watchTimer that fires only when a test says so. Each Reset
+// is reported on resets, so a test can wait for the watcher to see an event.
+type fakeTimer struct {
+	c      chan time.Time
+	resets chan time.Duration
+}
+
+func newFakeTimer() *fakeTimer {
+	return &fakeTimer{c: make(chan time.Time, 1), resets: make(chan time.Duration, 64)}
+}
+
+func (f *fakeTimer) C() <-chan time.Time { return f.c }
+func (f *fakeTimer) Reset(d time.Duration) {
+	select {
+	case f.resets <- d:
+	default:
+	}
+}
+func (f *fakeTimer) Stop() {}
+
+func (f *fakeTimer) fire() { f.c <- time.Time{} }
+
 func TestWatchSteadyStreamIsSentByMaxDelay(t *testing.T) {
 	dir := baseRepo(t)
-	w := startWatch(t, dir, WatchOptions{Debounce: 400 * time.Millisecond})
 
-	stop := make(chan struct{})
-	finished := make(chan struct{})
+	// Watch takes the debounce timer first, then the max-delay timer.
+	var timers []*fakeTimer
 
-	go func() {
-		defer close(finished)
+	w := startWatch(t, dir, WatchOptions{
+		Debounce: 400 * time.Millisecond,
+		MaxDelay: time.Second,
+		newTimer: func() watchTimer {
+			f := newFakeTimer()
+			timers = append(timers, f)
 
-		for i := 0; ; i++ {
-			select {
-			case <-stop:
-				return
-			case <-time.After(50 * time.Millisecond):
-				_ = os.WriteFile(filepath.Join(dir, "tracked.txt"), []byte(fmt.Sprint(i)), 0o644)
+			return f
+		},
+	})
+
+	debounce, maxDelay := timers[0], timers[1]
+
+	waitReset := func(f *fakeTimer, want time.Duration) {
+		t.Helper()
+
+		select {
+		case d := <-f.resets:
+			if d != want {
+				t.Fatalf("timer reset to %v, want %v", d, want)
 			}
+		case <-time.After(watchWait):
+			t.Fatalf("timer never reset to %v", want)
 		}
-	}()
+	}
 
-	defer func() {
-		close(stop)
-		<-finished
-	}()
+	// Each write is awaited before the next, so the debounce is re-armed by
+	// every event and never has a quiet gap. The max delay is armed once.
+	path := filepath.Join(dir, "tracked.txt")
 
-	start := time.Now()
+	for i := range 5 {
+		if err := os.WriteFile(path, []byte(fmt.Sprint(i)), 0o644); err != nil {
+			t.Fatal(err)
+		}
+
+		waitReset(debounce, 400*time.Millisecond)
+
+		if i == 0 {
+			waitReset(maxDelay, time.Second)
+		}
+	}
 
 	select {
-	case <-w.Batches():
-		// Events every 50 ms keep resetting the 400 ms debounce, so only the
-		// 1 s maximum delay can have sent this batch.
-		if d := time.Since(start); d < 800*time.Millisecond || d > 2*time.Second {
-			t.Fatalf("first batch after %v, want about 1s", d)
+	case b := <-w.Batches():
+		t.Fatalf("batch %v before any timer fired", b.Paths)
+	case <-time.After(50 * time.Millisecond):
+	}
+
+	maxDelay.fire()
+
+	select {
+	case b := <-w.Batches():
+		if len(b.Paths) != 1 || b.Paths[0] != "tracked.txt" {
+			t.Fatalf("batch paths = %v, want tracked.txt", b.Paths)
 		}
-	case <-time.After(3 * time.Second):
-		t.Fatal("no batch while writes continue")
+	case <-time.After(watchWait):
+		t.Fatal("no batch after the max delay fired")
 	}
 }
 

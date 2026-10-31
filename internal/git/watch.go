@@ -45,7 +45,23 @@ type WatchOptions struct {
 
 	// injectErrs lets tests raise watcher errors: fsnotify's goroutine owns its Errors channel.
 	injectErrs <-chan error
+
+	// newTimer replaces the debounce and max-delay timers, so tests drive time.
+	newTimer func() watchTimer
 }
+
+// watchTimer is the part of time.Timer the loop uses.
+type watchTimer interface {
+	C() <-chan time.Time
+	Reset(d time.Duration)
+	Stop()
+}
+
+type realTimer struct{ t *time.Timer }
+
+func (r realTimer) C() <-chan time.Time   { return r.t.C }
+func (r realTimer) Reset(d time.Duration) { r.t.Reset(d) }
+func (r realTimer) Stop()                 { r.t.Stop() }
 
 // Watcher reports debounced changes of one worktree. Directories git ignores,
 // .git internals and the main checkout's .worktrees get no watch.
@@ -64,6 +80,8 @@ type Watcher struct {
 
 	seq      atomic.Uint64
 	degraded atomic.Bool // an error or overflow was reported: events may be missing for good
+
+	debounce, maxDelay watchTimer
 
 	skipWorktrees bool
 	refsDir       string
@@ -130,6 +148,18 @@ func Watch(ctx context.Context, r Repo, opts WatchOptions) (*Watcher, error) {
 		return nil, err
 	}
 
+	newTimer := opts.newTimer
+	if newTimer == nil {
+		newTimer = func() watchTimer {
+			t := time.NewTimer(time.Hour)
+			t.Stop()
+
+			return realTimer{t}
+		}
+	}
+
+	w.debounce, w.maxDelay = newTimer(), newTimer()
+
 	go w.loop(ctx)
 
 	return w, nil
@@ -181,11 +211,7 @@ func (w *Watcher) loop(ctx context.Context) {
 		close(w.done)
 	}()
 
-	debounce := time.NewTimer(time.Hour)
-	maxDelay := time.NewTimer(time.Hour)
-
-	debounce.Stop()
-	maxDelay.Stop()
+	debounce, maxDelay := w.debounce, w.maxDelay
 
 	var (
 		p        = newPending()
@@ -280,9 +306,9 @@ func (w *Watcher) loop(ctx context.Context) {
 			onError(err)
 		case err := <-w.opts.injectErrs:
 			onError(err)
-		case <-debounce.C:
+		case <-debounce.C():
 			flush()
-		case <-maxDelay.C:
+		case <-maxDelay.C():
 			flush()
 		case sendC <- out:
 			ready = nil
