@@ -802,6 +802,32 @@ func slowStaging(t *testing.T) (started string) {
 	return started
 }
 
+// blockedStaging is slowStaging with a hold the test controls: staging blocks
+// until the release file exists, which t.Cleanup creates so no wrapper outlives
+// the test. A Stop that waited for git would hang instead of racing a timer.
+func blockedStaging(t *testing.T) (started string) {
+	t.Helper()
+
+	gitPath, err := exec.LookPath("git")
+	if err != nil {
+		t.Skip("git not found")
+	}
+
+	dir := t.TempDir()
+	started = filepath.Join(dir, "started")
+	release := filepath.Join(dir, "release")
+	script := "#!/bin/sh\ncase \"$*\" in *update-index*) : > '" + started + "'; while [ ! -e '" + release + "' ]; do sleep 0.05; done;; esac\nexec '" + gitPath + "' \"$@\"\n"
+
+	if err := os.WriteFile(filepath.Join(dir, "git"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Cleanup(func() { _ = os.WriteFile(release, nil, 0o600) })
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	return started
+}
+
 func gitTurns(t *testing.T, dir string) []git.Turn {
 	t.Helper()
 
@@ -920,7 +946,7 @@ func TestHookBudgetSlowSnapshot(t *testing.T) {
 
 func TestHookBudgetServerClosingMidSnapshot(t *testing.T) {
 	repo := seededRepo(t)
-	started := slowStaging(t)
+	started := blockedStaging(t)
 
 	base := runtime.NumGoroutine()
 
@@ -954,13 +980,9 @@ func TestHookBudgetServerClosingMidSnapshot(t *testing.T) {
 		t.Fatal("the snapshot never reached staging")
 	}
 
-	start := time.Now()
-
+	// The snapshot's git stays blocked until cleanup, so Stop returning at
+	// all means it cancelled the snapshot instead of waiting for it.
 	h.Stop()
-
-	if d := time.Since(start); d > 2*time.Second {
-		t.Errorf("Stop took %v mid-snapshot", d)
-	}
 
 	if err := <-sent; err == nil {
 		t.Error("Send() succeeded though the server closed mid-snapshot")
