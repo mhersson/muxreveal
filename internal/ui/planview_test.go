@@ -711,3 +711,60 @@ func TestPlanOverlayHugeDoc(t *testing.T) {
 	r.keys("G")
 	assertScreen(t, r.a, 120, 40)
 }
+
+func TestPlanOpensOverDrawerModals(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		set  func(a *App, v *reviewView)
+	}{
+		{"link chooser", func(a *App, v *reviewView) {
+			a.drawer.links = &linkChooser{root: "/w/p1", targets: []mdTarget{{Text: "a", URL: "https://example.com/a"}, {Text: "b", URL: "https://example.com/b"}}}
+			a.drawer.linksOf = linksOwner{tab: a.store.State().Tab().ID, pane: "p1", view: v}
+		}},
+		{"worktree list", func(a *App, _ *reviewView) { showList(a, nil, "", 0) }},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			root := realTemp(t)
+			path := filepath.Join(root, "docs/plans/a.md")
+			write(t, path, "# Title\n\nbody\n")
+
+			s := reviewScene{
+				theme: "catppuccin-mocha", w: 200, h: 52, branch: true, focused: true, res: mdResult(),
+				tune: func(t *testing.T, a *App, v *reviewView) {
+					t.Helper()
+
+					openIn(t, a,
+						core.SetPaneKind{ID: "p1", Kind: core.KindAgent, Harness: "claude-code"},
+						core.NotePlan{ID: "p1", Plan: core.Plan{Path: path, Root: root, Kind: core.PlanFile, At: t0, Unread: true}},
+					)
+					tt.set(a, v)
+				},
+			}
+			a := s.build(t)
+
+			if a.drawer.links == nil && a.drawer.list == nil {
+				t.Fatal("the drawer modal is not open")
+			}
+
+			msgs := planMsgs(press(a, keyLeader, keyRune('p')))
+			if len(msgs) != 1 {
+				t.Fatalf("leader p raised %d plan reads, want 1", len(msgs))
+			}
+
+			a.Update(msgs[0])
+
+			if a.plan == nil {
+				t.Fatal("the overlay did not open")
+			}
+
+			if a.store.State().Panes["p1"].Plan.Unread {
+				t.Error("the plan is still unread while shown")
+			}
+		})
+	}
+}

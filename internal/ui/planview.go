@@ -137,7 +137,7 @@ func (a *App) onPlanRead(msg planReadMsg) {
 	}
 
 	m, ok := a.store.State().Panes[msg.pane]
-	if msg.seq != a.planSeq || a.modalOpen() || !ok || m.Kind != core.KindAgent {
+	if msg.seq != a.planSeq || a.composeShown() || a.aboveDrawerModalOpen() || !ok || m.Kind != core.KindAgent {
 		return
 	}
 

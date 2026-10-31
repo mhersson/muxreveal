@@ -8,9 +8,9 @@ import (
 )
 
 // handleKey routes a key press: an open confirm first, then an open prompt, then
-// copy mode, then the open overlay, checks or worktree picker, then the leader state
-// machine, then the rail while it has the keyboard, then the review drawer while
-// it has it, then the focused pane.
+// copy mode, then the open overlay, compose box, merge box, plan overlay, checks,
+// PR list or worktree picker, then the leader state machine, then the rail while
+// it has the keyboard, then the review drawer while it has it, then the focused pane.
 func (a *App) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 	// An esc cancels a plan read that has not answered yet.
 	if msg.String() == "esc" {
@@ -177,6 +177,12 @@ func (a *App) modalOpen() bool { return a.composeShown() || a.otherModalOpen() }
 
 // otherModalOpen is modalOpen without the compose box.
 func (a *App) otherModalOpen() bool {
+	return a.aboveDrawerModalOpen() || a.drawer.list != nil || a.drawer.links != nil
+}
+
+// aboveDrawerModalOpen is otherModalOpen without the drawer's worktree list and
+// link chooser, which the leader opens overlays over.
+func (a *App) aboveDrawerModalOpen() bool {
 	return a.confirm != nil || a.prompt != nil || a.copy != nil || a.overlay != nil || a.merge != nil ||
-		a.plan != nil || a.checks != nil || a.prList != nil || a.picker.open != nil || a.drawer.list != nil || a.drawer.links != nil
+		a.plan != nil || a.checks != nil || a.prList != nil || a.picker.open != nil
 }
