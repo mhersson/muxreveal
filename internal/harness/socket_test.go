@@ -137,7 +137,7 @@ func recv(t *testing.T, ch <-chan Event) Event {
 
 func TestSendRoundTrip(t *testing.T) {
 	s := startServer(t, 1, nil)
-	want := Event{Pane: "p1", Name: "SessionStart", Session: "abc", Transcript: "/t.jsonl", State: core.AgentIdle, Start: true}
+	want := Event{Pane: "p1", Name: "SessionStart", Session: "abc", Transcript: "/t.jsonl", State: core.AgentIdle, Start: true, NewConversation: true}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()

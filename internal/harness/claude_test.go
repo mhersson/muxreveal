@@ -86,6 +86,8 @@ func TestParseEvent(t *testing.T) {
 				TurnStart:  tt.name == "UserPromptSubmit",
 				Action:     tt.action,
 				ActionSet:  tt.set,
+
+				NewConversation: tt.fixture == "session_start_startup" || tt.fixture == "session_start_clear",
 			}
 			if !reflect.DeepEqual(ev, want) {
 				t.Errorf("event = %+v, want %+v", ev, want)
@@ -495,6 +497,38 @@ func TestParseEventSubagent(t *testing.T) {
 
 			if ev.Subagent != tt.want {
 				t.Errorf("Subagent = %v, want %v", ev.Subagent, tt.want)
+			}
+		})
+	}
+}
+
+func TestParseEventNewConversation(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name, event, rest string
+		want              bool
+	}{
+		{"clear", "SessionStart", `"session_id":"s","source":"clear"`, true},
+		{"startup", "SessionStart", `"session_id":"s","source":"startup"`, true},
+		{"resume", "SessionStart", `"session_id":"s","source":"resume"`, false},
+		{"fork", "SessionStart", `"session_id":"s","source":"fork"`, false},
+		{"compact", "SessionStart", `"session_id":"s","source":"compact"`, false},
+		{"no source", "SessionStart", `"session_id":"s"`, false},
+		{"unknown source", "SessionStart", `"session_id":"s","source":"teleport"`, false},
+		{"another event", "UserPromptSubmit", `"session_id":"s","source":"clear"`, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			ev, err := Claude{}.ParseEvent(payload(tt.event, tt.rest))
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if ev.NewConversation != tt.want {
+				t.Errorf("NewConversation = %v, want %v", ev.NewConversation, tt.want)
 			}
 		})
 	}

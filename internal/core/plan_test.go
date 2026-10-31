@@ -163,6 +163,8 @@ func TestPlanLifetime(t *testing.T) {
 	}{
 		{"a new session keeps it", SetAgentSession{ID: "p1", Session: "s2"}, plan},
 		{"an empty session keeps it", SetAgentSession{ID: "p1"}, plan},
+		{"a new conversation drops it", SetAgentSession{ID: "p1", Session: "s2", NewConversation: true}, Plan{}},
+		{"a new conversation in the same session drops it", SetAgentSession{ID: "p1", Session: "s1", NewConversation: true}, Plan{}},
 		{"becoming a shell drops it", SetPaneKind{ID: "p1", Kind: KindShell}, Plan{}},
 	}
 	for _, tt := range tests {

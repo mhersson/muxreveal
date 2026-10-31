@@ -216,30 +216,31 @@ type Harness interface {
 }
 
 type Event struct {
-	Pane         core.PaneID     `json:"pane"`
-	Name         string          `json:"name"` // the harness's hook event name, or "statusline", for logs
-	Session      core.SessionID  `json:"session,omitempty"`
-	Transcript   string          `json:"transcript,omitempty"`
-	State        core.AgentState `json:"state,omitempty"`      // AgentUnknown leaves the state as it is
-	Start        bool            `json:"start,omitempty"`      // Session is now the pane's current session
-	End          bool            `json:"end,omitempty"`        // the session ended
-	Cwd          string          `json:"cwd,omitempty"`        // the agent's working directory, from the hook
-	TurnStart    bool            `json:"turn_start,omitempty"` // a prompt was submitted
-	Action       string          `json:"action,omitempty"`     // the agent's current action (see Current action)
-	ActionSet    bool            `json:"action_set,omitempty"` // Action replaces the pane's action, an empty one clears it
-	Edit         string          `json:"edit,omitempty"`       // the cleaned absolute path of the file an edit tool changes (see Edits)
-	Plan         string          `json:"plan,omitempty"`       // the cleaned absolute path of the plan file an ExitPlanMode PreToolUse names (see Plans)
-	Before       bool            `json:"before,omitempty"`     // a PreToolUse whose Edit its tool has not changed yet (see Edits)
-	Subagent     bool            `json:"subagent,omitempty"`   // a subagent sent the event, not the agent's own session
-	Changed      []string        `json:"changed,omitempty"`    // the cleaned absolute paths of the files a Bash command changed, one per directory (see Edits)
-	Status       bool            `json:"status,omitempty"`     // a statusline update, not a hook (see Status line)
-	Model        string          `json:"model,omitempty"`      // the model's display name
-	Context      float64         `json:"context,omitempty"`    // percent of the context window in use, when ContextKnown
-	ContextKnown bool            `json:"context_known,omitempty"`
-	Window       int             `json:"window,omitempty"`       // the context window size in tokens
-	InputTokens  int             `json:"input_tokens,omitempty"` // input tokens used so far
-	Done         func()          `json:"-"`                      // set by the server on a held event; call it once the turn snapshot is taken
-	Snapped      <-chan struct{} `json:"-"`                      // set by the turn gate on a turn start it snapshots; closed when that snapshot is finished
+	Pane            core.PaneID     `json:"pane"`
+	Name            string          `json:"name"` // the harness's hook event name, or "statusline", for logs
+	Session         core.SessionID  `json:"session,omitempty"`
+	Transcript      string          `json:"transcript,omitempty"`
+	State           core.AgentState `json:"state,omitempty"`            // AgentUnknown leaves the state as it is
+	Start           bool            `json:"start,omitempty"`            // Session is now the pane's current session
+	End             bool            `json:"end,omitempty"`              // the session ended
+	NewConversation bool            `json:"new_conversation,omitempty"` // a session start that begins a new conversation, a /clear or a fresh start (see Plans)
+	Cwd             string          `json:"cwd,omitempty"`              // the agent's working directory, from the hook
+	TurnStart       bool            `json:"turn_start,omitempty"`       // a prompt was submitted
+	Action          string          `json:"action,omitempty"`           // the agent's current action (see Current action)
+	ActionSet       bool            `json:"action_set,omitempty"`       // Action replaces the pane's action, an empty one clears it
+	Edit            string          `json:"edit,omitempty"`             // the cleaned absolute path of the file an edit tool changes (see Edits)
+	Plan            string          `json:"plan,omitempty"`             // the cleaned absolute path of the plan file an ExitPlanMode PreToolUse names (see Plans)
+	Before          bool            `json:"before,omitempty"`           // a PreToolUse whose Edit its tool has not changed yet (see Edits)
+	Subagent        bool            `json:"subagent,omitempty"`         // a subagent sent the event, not the agent's own session
+	Changed         []string        `json:"changed,omitempty"`          // the cleaned absolute paths of the files a Bash command changed, one per directory (see Edits)
+	Status          bool            `json:"status,omitempty"`           // a statusline update, not a hook (see Status line)
+	Model           string          `json:"model,omitempty"`            // the model's display name
+	Context         float64         `json:"context,omitempty"`          // percent of the context window in use, when ContextKnown
+	ContextKnown    bool            `json:"context_known,omitempty"`
+	Window          int             `json:"window,omitempty"`       // the context window size in tokens
+	InputTokens     int             `json:"input_tokens,omitempty"` // input tokens used so far
+	Done            func()          `json:"-"`                      // set by the server on a held event; call it once the turn snapshot is taken
+	Snapped         <-chan struct{} `json:"-"`                      // set by the turn gate on a turn start it snapshots; closed when that snapshot is finished
 }
 ```
 
@@ -560,7 +561,7 @@ Rounded boxes (`╭ ╮ ╰ ╯`, matching the pane frames; the which-key rule k
   - **Links and pages.** `enter` on a line that is no fold head follows its one target, opens the link chooser for several (inside the box, two cells in from each side from its fourth row, as in the review drawer) and does nothing for none. A URL opens in the browser and the overlay stays. A markdown file inside the read root opens as a page over the plan, read and parsed off the update loop; its title shows the page's path from the root and the tag is hidden. A page's own links push further pages. Scroll, `]`/`[`, search and `enter` act on the shown page, and a kept query stays. `esc` closes the chooser, else the search prompt, else pops a page, else closes the overlay. Any other local file closes the overlay and opens in the editor at line 1 in a new pane; a path outside the root says `not opening <path>: outside the worktree` and the overlay stays. An answer for a page the overlay no longer waits for (after `esc`, a pop or a newer follow) is dropped. While the chooser is open every key but `j`/`k`, the arrows, `enter` and `esc` is dropped, and so is a paste.
   - **Mouse.** The wheel over the box scrolls three lines a notch, the cursor moving only to stay in the window; it scrolls the view under an open link chooser too. The left button over the doc rows selects text: a press selects nothing yet, a drag selects, a double-click selects a word, a triple-click the paragraph or item, and a click only clears the selection and leaves the cursor (see Mouse and clipboard); with the link chooser open the left button is ignored. Every other mouse event is ignored. No terminal cursor shows.
   - **Resize.** The view is laid out at the new width and the cursor stays on its source line.
-  - **Opening.** The plan is read and parsed off the update loop under 10 s (see Markdown page for the read), and the overlay shows when the answer lands: there is no loading state. A plan file is read through its root and its relative links resolve against the file's folder; a plan-mode plan is read through its own folder, and its links resolve against the agent's working directory when it opened, since Claude writes them relative to the project. `ReadPlan` is dispatched as the overlay shows, which clears the plan's unread flag unless a newer plan with another path was recorded meanwhile; that one stays unread. An answer is dropped when a newer ask (a plan or `md.open` ask) was made, when `esc` or the compose box or another modal other than the drawer's link chooser and worktree list came meanwhile, or when the pane is gone or no longer an agent. The overlay stays open when its pane closes, showing what it read.
+  - **Opening.** The plan is read and parsed off the update loop under 10 s (see Markdown page for the read), and the overlay shows when the answer lands: there is no loading state. A plan file is read through its root and its relative links resolve against the file's folder; a plan-mode plan is read through its own folder, and its links resolve against the agent's working directory when it opened, since Claude writes them relative to the project. `ReadPlan` is dispatched as the overlay shows, which clears the plan's unread flag unless a newer plan with another path was recorded meanwhile; that one stays unread. An answer is dropped when a newer ask (a plan or `md.open` ask) was made, when `esc` or the compose box or another modal other than the drawer's link chooser and worktree list came meanwhile, or when the pane is gone or no longer an agent. The overlay stays open when its pane closes or a new conversation drops its plan (see Plans), showing what it read.
   - **Pictures.** The plan and the pages followed from it show the images inside the plan's read root as pictures (see Images and markdown). The box reports their rows relative to itself, less any picture the link chooser overlaps. The reload of a rewritten plan forgets the failed images of the shown plan before it reads the file again.
   - **Notices** leave the overlay unopened: `the focused pane is not an agent` (a shell, or an empty tab), `no plan from <agent> yet` and, for a plan that cannot be read, the Markdown page's notices (`not opening <path>: no such file`, `it is a folder` and the rest; a plan file that is a symlink out of its root reads as the error the root gives). The toast stays under the overlay.
 - **Markdown file** (the command `md.open`, "Open a markdown file", icon U+F48A, palette only, no key). A markdown file of a worktree, read-only, in the plan overlay's centred box with its keys. The overlay is UI state and is never saved. It leaves the review drawer alone: it never opens, closes, retargets or takes the keyboard from one, and draws over it, the drawer's worktree list and link chooser included, so on `esc` the keyboard is where it was.
@@ -694,7 +695,7 @@ The example shows three events; the generated file has the same handler for ever
 
 | Claude hook (`hook_event_name`) | Effect |
 | --- | --- |
-| `SessionStart` | session id and transcript recorded, the places the agent edited emptied when the id is a new one; state idle, except `source: "compact"`, which leaves the state |
+| `SessionStart` | session id and transcript recorded, the places the agent edited emptied when the id is a new one; the plan dropped for `source` `clear` and `startup` (see Plans); state idle, except `source: "compact"`, which leaves the state |
 | `SessionEnd` | session, transcript, state and the places the agent edited cleared |
 | `UserPromptSubmit`, `PostToolUse`, `PostToolUseFailure`, `ElicitationResult` | working |
 | `PreToolUse` | blocked when `tool_name` is `AskUserQuestion`, else working |
@@ -730,7 +731,7 @@ An agent pane whose Claude has sent no hook has no state and shows no badge. The
 
 **Hook command and socket**
 
-- `muxreveal hook claude-code` is a subcommand of the same binary. It reads the hook JSON from stdin, parses it with the harness, adds the pane id from `MUXREVEAL_PANE` and sends one compact event (pane, event name, session id, transcript path, state, working directory, current action and the flag that says whether it is set, the file an edit tool changes, the plan file ExitPlanMode names, whether the edit's tool has run yet, the files a Bash command changed, whether a subagent sent it, and the start, end and turn-start flags) as one JSON line over the Unix socket in `MUXREVEAL_SOCK`.
+- `muxreveal hook claude-code` is a subcommand of the same binary. It reads the hook JSON from stdin, parses it with the harness, adds the pane id from `MUXREVEAL_PANE` and sends one compact event (pane, event name, session id, transcript path, state, working directory, current action and the flag that says whether it is set, the file an edit tool changes, the plan file ExitPlanMode names, whether the edit's tool has run yet, the files a Bash command changed, whether a subagent sent it, whether a session start begins a new conversation, and the start, end and turn-start flags) as one JSON line over the Unix socket in `MUXREVEAL_SOCK`.
 - The server listens on `<state dir>/run/<pid>.sock` (mode 0600; the `run` directory is mode 0700). Both the socket and the settings file are removed on exit. The client waits up to 2 s for the server's `ok` line, which the server writes once the event is queued, except for a turn-start event (`UserPromptSubmit`) and an edit's `PreToolUse`, which it answers after the gate calls `Done` or after 1.5 s, whichever comes first. The snapshot therefore lands before the agent edits anything, and a slow snapshot never holds the agent longer than the budget.
 - The server holds a turn-start event's or an edit's `PreToolUse` `ok` until the event's `Done` is called (`Server.Hold`). A gate in `cmd/muxreveal` sits between the server and the app's event channel: it forwards every event to the app in order, at once, numbers each turn start by its arrival (see Turn snapshots), runs the snapshot for it in its own goroutine with a 1.4 s context, then calls `Done`. The gate keeps each pane's last turn (its session, number, every worktree it started, markers included, and whether a worktree it could not find makes the turn unsure) and keeps a pane's turn starts in arrival order. A turn start ends first the worktrees among them that were started with a snapshot that is written (a marker has no end; a start still being taken when the prompt's deadline comes gets an end marker once it is written, so that turn shows no snapshot and is never live past the next prompt), whatever session that turn was in, so `/clear` and a resumed session end the old turn too: the new start's own worktree through the start itself when the session is the same, any other worktree with `git.EndTurn`, concurrently, all under the start's deadline. A pane with no remembered turn (the first prompt after a start of MuxReveal) ends instead the session's open turns at its highest number in the own directory's repository (`git.OpenTurns`, found from the refs); a `/clear` after such a restart therefore ends nothing, because `OpenTurns` is asked with the new session, and the old session's last turn stays open, shown only if that session is resumed, until its first prompt. A turn that has no snapshot, or whose end failed, ends nothing more: a failed end gets an end marker after the answer. `Stop`, `StopFailure` and `SessionEnd` end nothing and are answered at once with no `Snapped`. The forwarded event carries `Snapped`, a channel closed when the ends and that snapshot (or the marker of a failed one) are finished, for the app to wait on; an event whose `cwd` is not inside a repository, or whose session id is not a UUID, gets no snapshot, no `Snapped` and is answered at once. An edit's `PreToolUse` (`Before`, also a subagent's) is handled like this:
   - With no turn on its pane (no turn start seen for the pane in this run, or a main-session event of another session than the pane's turn), it is answered at once with no lookup. After `Stop` the turn runs on to the next prompt, so an edit then belongs to it.
@@ -1065,7 +1066,7 @@ A pull request's conversation is one `mdView` over a `convDoc`, which is an `mdS
 A plan is a markdown file an agent produced: the file ExitPlanMode names (a plan-mode plan, `Event.Plan`) or a markdown file under a `[plans] paths` folder (a plan file).
 
 - `core.Pane.Plan` holds the agent's latest plan only: `Path`, `Root` (for a plan file, the folder its `[plans] paths` entry sits under; empty for a plan-mode plan), `Kind`, `At` (when it arrived or was last rewritten) and `Unread`. A zero `Path` means none. A plan is valid when its path is absolute and clean and its kind is known, a plan file has an absolute, clean root that strictly holds its path, and a plan-mode plan has no root.
-- `NotePlan` replaces the pane's plan and is a no-op, with no error, for a closed pane or a shell; an invalid plan is an error. `ReadPlan` clears `Unread` and is a no-op when the pane has no plan.
+- `NotePlan` replaces the pane's plan and is a no-op, with no error, for a closed pane or a shell; an invalid plan is an error. `ReadPlan` clears `Unread` and is a no-op when the pane has no plan. `SetAgentSession` with `NewConversation` drops the plan.
 - The UI records plans from hook events, after the session is recorded:
   - ExitPlanMode's `Event.Plan` is a plan-mode plan when its name is markdown; any other path records nothing.
   - A plan file is a finished edit (`Edit` with `Before` false) or a path of a Bash `Changed` list that names a markdown file under a `[plans]` folder. It is matched on the path alone, with no git, so ignored folders count. The folder's components must appear as consecutive directory components with at least the file name after them, at any depth.
@@ -1073,7 +1074,7 @@ A plan is a markdown file an agent produced: the file ExitPlanMode names (a plan
   - A finished edit of the latest plan's own path, of either kind, is a rewrite: it keeps the kind and root and takes a new time. Only agents' edits count, not the operator's editor.
   - Subagents count. The latest plan wins, and every plan recorded this way is unread, except one at the path the overlay shows.
 - A plan being read is never marked unread: a record at the path the overlay shows is recorded read (see Overlays, Plan).
-- A plan survives a change of session (`/clear`, a resume), goes when the pane becomes a shell, and is saved in `state.json` with its time and unread flag (see Persisted state).
+- A plan belongs to its conversation. A `SessionStart` whose `source` is `clear` or `startup` (`Event.NewConversation`) drops it, of either kind, so `plan.open` says there is no plan and the rail's mark goes; a fresh `claude` that a restore starts in place of a session it cannot resume is a `startup`. A resume (a restore's included), a fork and a compaction keep it, and so does a `SessionStart` with no `source` or another one, since it cannot tell a resume from a new conversation. A plan also goes when the pane becomes a shell, and is saved in `state.json` with its time and unread flag (see Persisted state), so a dropped plan is not restored.
 - A plan opens in the plan overlay (see Overlays, Plan) with `leader p` (`plan.open`) or the palette, on the focused pane, and from the rail with `p` (`rail.plan`) or a click on the card's mark, on the selected agent; opening it dispatches `ReadPlan`.
 - While `Unread`, the agent's rail card shows the plan mark (see Agents rail, Cards); opening the plan clears it. A read plan shows no mark.
 

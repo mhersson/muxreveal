@@ -81,7 +81,9 @@ func (a *App) onHook(ev harness.Event) tea.Cmd {
 		}
 
 		// dispatch logs its own failures.
-		_ = a.dispatch(core.SetAgentSession{ID: ev.Pane, Session: ev.Session, Transcript: ev.Transcript})
+		_ = a.dispatch(core.SetAgentSession{
+			ID: ev.Pane, Session: ev.Session, Transcript: ev.Transcript, NewConversation: ev.NewConversation,
+		})
 	case ev.End:
 		_ = a.dispatch(core.SetAgentSession{ID: ev.Pane})
 		_ = a.changeAgentState(ev.Pane, core.AgentUnknown)
