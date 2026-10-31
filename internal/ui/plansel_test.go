@@ -235,6 +235,44 @@ func TestPlanYKey(t *testing.T) {
 	})
 }
 
+func TestPlanYCopiesCursorUnitWhenAnotherViewHoldsTheSelection(t *testing.T) {
+	t.Parallel()
+
+	r := newSelRig(t)
+	r.a.text = &textSelection{view: &mdView{}}
+
+	v := &r.pv.view
+	for !strings.Contains(layoutLine(v.layout(), v.cursor), "second item") {
+		r.key(keyRune('j'))
+	}
+
+	r.key(keyRune('y'))
+
+	if got := clipboardWrites(r.clip); !slices.Equal(got, []string{"• second item"}) {
+		t.Errorf("clipboard writes %q", got)
+	}
+}
+
+func TestPlanOtherButtonsKeepTheDrag(t *testing.T) {
+	t.Parallel()
+
+	for _, b := range []tea.MouseButton{tea.MouseMiddle, tea.MouseRight} {
+		r := newSelRig(t)
+		b0, _, y := r.word(t, "Alpha", "beta")
+		_, d1, _ := r.word(t, "Alpha", "delta")
+
+		mdown(r.a, b0, y, tea.MouseLeft, 0)
+		mmove(r.a, d1, y, tea.MouseLeft)
+		mdown(r.a, b0+2, y, b, 0)
+		mup(r.a, b0+2, y, b)
+		release(r.a, d1, y)
+
+		if got := primaryWrites(r.clip); !slices.Equal(got, []string{"beta gamma delta"}) {
+			t.Errorf("button %v: primary writes %q", b, got)
+		}
+	}
+}
+
 func TestPlanKeysClear(t *testing.T) {
 	t.Parallel()
 
@@ -415,7 +453,7 @@ func TestEdgeScrollToEnd(t *testing.T) {
 	h, _ := r.a.planHost()
 	mdown(r.a, h.rect.Min.X+2, h.rect.Min.Y, tea.MouseLeft, 0)
 
-	cmd := tick(r.a, tea.MouseMotionMsg{X: h.rect.Min.X + 20, Y: h.rect.Max.Y, Button: tea.MouseLeft})
+	cmd := dragTick(r.a, tea.MouseMotionMsg{X: h.rect.Min.X + 20, Y: h.rect.Max.Y, Button: tea.MouseLeft})
 	seq := r.a.mouse.text.seq
 
 	for ticks := 0; cmd != nil; ticks++ {
@@ -423,10 +461,10 @@ func TestEdgeScrollToEnd(t *testing.T) {
 			t.Fatal("the ticks never stopped")
 		}
 
-		cmd = tick(r.a, dragScrollMsg{seq: seq})
+		cmd = dragTick(r.a, dragScrollMsg{seq: seq})
 	}
 
-	if head := selHead(t, r.a); head.row != n-1 {
+	if head := textSelHead(t, r.a); head.row != n-1 {
 		t.Errorf("head row = %d, want %d", head.row, n-1)
 	}
 

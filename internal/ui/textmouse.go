@@ -51,7 +51,9 @@ type textHost struct {
 	side int
 }
 
-// at is the point under screen cell (x, y), clamped into the host's cells.
+// at is the point under screen cell (x, y), clamped into the host's cells. The
+// sticky stand-in applies only to a pointer inside the rect; above it the point
+// is the first real row.
 func (h textHost) at(x, y int) point {
 	dx := min(max(x-h.rect.Min.X, 0), max(h.rect.Dx()-1, 0))
 	dy := min(max(y-h.rect.Min.Y, 0), max(h.rect.Dy()-1, 0))

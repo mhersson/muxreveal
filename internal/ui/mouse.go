@@ -177,7 +177,9 @@ func (a *App) countClick(x, y int) int {
 }
 
 func (a *App) handleClick(msg tea.MouseClickMsg) tea.Cmd {
-	a.mouse.text = nil
+	if msg.Button == tea.MouseLeft {
+		a.mouse.text = nil
+	}
 
 	if a.textClick(msg.Mouse()) {
 		return nil

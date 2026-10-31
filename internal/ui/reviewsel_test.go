@@ -63,16 +63,6 @@ func (m *selPage) word(t *testing.T, row, word string) (x0, x1, y int) {
 	return 0, 0, 0
 }
 
-// drawerHasSel reports whether the active tab's drawer draws a selection.
-func (m *selPage) drawerHasSel() (selection, bool) {
-	v := m.view()
-	if v == nil || v.page() == nil || v.page().view.sel == nil {
-		return selection{}, false
-	}
-
-	return *v.page().view.sel, true
-}
-
 func (m *selPage) selected() bool { return m.text != nil && m.p.view.sel != nil }
 
 // dragIntro selects "intro text".
@@ -338,10 +328,6 @@ func TestOneSelectionAcrossHosts(t *testing.T) {
 
 		if other.page() != nil && other.page().view.sel != nil {
 			t.Error("the other tab's drawer holds the selection")
-		}
-
-		if _, ok := m.drawerHasSel(); ok {
-			t.Error("the other tab's drawer draws a selection")
 		}
 
 		openIn(t, m.App, core.SelectTab{Index: 0})
@@ -1261,8 +1247,8 @@ func TestSplitSelectionPaint(t *testing.T) {
 	}
 }
 
-// selHead is the head of the held text selection.
-func selHead(t *testing.T, a *App) point {
+// textSelHead is the head of the held text selection.
+func textSelHead(t *testing.T, a *App) point {
 	t.Helper()
 
 	switch {
@@ -1279,8 +1265,8 @@ func selHead(t *testing.T, a *App) point {
 	return point{}
 }
 
-// tick sends msg to a and returns the command it answers with.
-func tick(a *App, msg tea.Msg) tea.Cmd {
+// dragTick sends msg to a and returns the command it answers with.
+func dragTick(a *App, msg tea.Msg) tea.Cmd {
 	_, cmd := a.Update(msg)
 
 	return cmd
@@ -1432,7 +1418,7 @@ func edgeScrollOne(t *testing.T, c edgeCase, dir int) {
 		return h.top + h.rect.Dy() - 1
 	}
 	motion := func(y int) tea.Cmd {
-		return tick(a, tea.MouseMotionMsg{X: x, Y: y, Button: tea.MouseLeft})
+		return dragTick(a, tea.MouseMotionMsg{X: x, Y: y, Button: tea.MouseLeft})
 	}
 
 	mdown(a, h0.rect.Min.X+2, pressY, tea.MouseLeft, 0)
@@ -1452,11 +1438,11 @@ func edgeScrollOne(t *testing.T, c edgeCase, dir int) {
 	seq := a.mouse.text.seq
 	top := c.host().top
 
-	if got, want := selHead(t, a).row, edgeRow(c.host()); got != want {
+	if got, want := textSelHead(t, a).row, edgeRow(c.host()); got != want {
 		t.Errorf("head row after the drag = %d, want the edge row %d", got, want)
 	}
 
-	if tick(a, dragScrollMsg{seq: seq}) == nil {
+	if dragTick(a, dragScrollMsg{seq: seq}) == nil {
 		t.Error("a tick returned no next tick")
 	}
 
@@ -1465,7 +1451,7 @@ func edgeScrollOne(t *testing.T, c edgeCase, dir int) {
 		t.Errorf("top = %d, want %d: one row", h.top, top+dir)
 	}
 
-	if got, want := selHead(t, a).row, edgeRow(h); got != want {
+	if got, want := textSelHead(t, a).row, edgeRow(h); got != want {
 		t.Errorf("head row = %d, want the edge row %d", got, want)
 	}
 
@@ -1473,9 +1459,9 @@ func edgeScrollOne(t *testing.T, c edgeCase, dir int) {
 		t.Error("a motion back over the text returned a command")
 	}
 
-	head := selHead(t, a)
+	head := textSelHead(t, a)
 
-	if tick(a, dragScrollMsg{seq: seq}) != nil || c.host().top != top+dir || selHead(t, a) != head {
+	if dragTick(a, dragScrollMsg{seq: seq}) != nil || c.host().top != top+dir || textSelHead(t, a) != head {
 		t.Error("a tick after the pointer came back changed something")
 	}
 
@@ -1492,7 +1478,7 @@ func edgeScrollOne(t *testing.T, c edgeCase, dir int) {
 
 	top = c.host().top
 
-	if tick(a, stale) != nil || c.host().top != top {
+	if dragTick(a, stale) != nil || c.host().top != top {
 		t.Error("a tick after the release changed something")
 	}
 }
@@ -1520,17 +1506,17 @@ func TestEdgeScrollStopsAtTop(t *testing.T) {
 
 			mdown(a, h.rect.Min.X+2, h.rect.Max.Y-2, tea.MouseLeft, 0)
 
-			if tick(a, tea.MouseMotionMsg{X: h.rect.Min.X + 5, Y: h.rect.Min.Y - 1, Button: tea.MouseLeft}) == nil {
+			if dragTick(a, tea.MouseMotionMsg{X: h.rect.Min.X + 5, Y: h.rect.Min.Y - 1, Button: tea.MouseLeft}) == nil {
 				t.Fatal("a drag held above the text returned no command")
 			}
 
-			head := selHead(t, a)
+			head := textSelHead(t, a)
 
-			if tick(a, dragScrollMsg{seq: a.mouse.text.seq}) != nil {
+			if dragTick(a, dragScrollMsg{seq: a.mouse.text.seq}) != nil {
 				t.Error("a tick at the top returned a next tick")
 			}
 
-			if c.host().top != 0 || selHead(t, a) != head {
+			if c.host().top != 0 || textSelHead(t, a) != head {
 				t.Error("a tick at the top changed something")
 			}
 		})
@@ -1552,19 +1538,19 @@ func TestEdgeScrollUpPastStickyHeader(t *testing.T) {
 
 	mdown(d.App, x, h.rect.Max.Y-2, tea.MouseLeft, 0)
 
-	if tick(d.App, tea.MouseMotionMsg{X: x, Y: h.rect.Min.Y - 1, Button: tea.MouseLeft}) == nil {
+	if dragTick(d.App, tea.MouseMotionMsg{X: x, Y: h.rect.Min.Y - 1, Button: tea.MouseLeft}) == nil {
 		t.Fatal("a drag above the text returned no command")
 	}
 
-	if got := selHead(t, d.App).row; got != h.top {
+	if got := textSelHead(t, d.App).row; got != h.top {
 		t.Errorf("head row after the drag = %d, want the first text row %d, not the header %d", got, h.top, h.sticky)
 	}
 
-	tick(d.App, dragScrollMsg{seq: d.mouse.text.seq})
+	dragTick(d.App, dragScrollMsg{seq: d.mouse.text.seq})
 
 	h, _ = d.rowsHost()
 
-	if got := selHead(t, d.App).row; got != h.top || h.top != 7 {
+	if got := textSelHead(t, d.App).row; got != h.top || h.top != 7 {
 		t.Errorf("head row = %d, top = %d, want the head on the new first row 7", got, h.top)
 	}
 }

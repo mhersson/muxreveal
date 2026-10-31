@@ -192,7 +192,7 @@ func (a *App) revOf(ts *textSelection) textRev {
 	return textRev{}
 }
 
-// textText is the text ts's selection covers now.
+// text is the text ts's selection covers now.
 func (ts *textSelection) text() string {
 	switch {
 	case ts.view != nil:

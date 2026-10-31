@@ -207,7 +207,7 @@ func TestTextPaint(t *testing.T) {
 		{"cells before the text", 0, 0, 3, [][2]int{{2, 3}}},
 		{"all", 0, 0, 39, [][2]int{{2, 12}}},
 		{"nothing picked", 0, 30, 39, nil},
-		{"a tab is whole", lineOf(lay, "x"), 0, 39, nil},
+		{"a tab is whole", lineOf(lay, "x"), 0, 39, [][2]int{{6, 10}}},
 	}
 
 	for _, tt := range tests {
@@ -215,14 +215,6 @@ func TestTextPaint(t *testing.T) {
 			t.Parallel()
 
 			got := textPaint(v.lineText(tt.line), tt.from, tt.to)
-			if tt.name == "a tab is whole" {
-				if len(got) == 0 {
-					t.Fatal("no cells for a code row")
-				}
-
-				return
-			}
-
 			if fmt.Sprint(got) != fmt.Sprint(tt.want) {
 				t.Errorf("textPaint = %v, want %v", got, tt.want)
 			}

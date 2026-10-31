@@ -356,7 +356,7 @@ func (v *mdView) draw(p mdPainter, focused bool) []string {
 // the view, on the ground of its row.
 func (v *mdView) drawPictures(p mdPainter, focused bool) ([]string, []picRow) {
 	lay := v.layout()
-	lead, tw := min(2, v.w), max(v.w-4, 0)
+	lead, tw := min(textLead, v.w), max(v.w-4, 0)
 	trail := max(v.w-lead-tw, 0)
 	rows := make([]string, 0, v.h)
 
