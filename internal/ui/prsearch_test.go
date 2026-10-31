@@ -557,23 +557,34 @@ func TestPRListSearchTexts(t *testing.T) {
 		}
 	})
 
-	t.Run("no rows", func(t *testing.T) {
-		t.Parallel()
+	// The empty Review requested tab names the age limit; All open has none.
+	for _, tt := range []struct {
+		days int
+		want string
+	}{
+		{days: 0, want: "no open pull requests ask for your review"},
+		{days: 1, want: "no open pull requests updated in the last 1 day ask for your review"},
+		{days: 7, want: "no open pull requests updated in the last 7 days ask for your review"},
+	} {
+		t.Run(fmt.Sprintf("no rows, %d days", tt.days), func(t *testing.T) {
+			t.Parallel()
 
-		a, _, _ := searchApp(t, listAgents(), 120, 40, nil, "github.com/acme/web")
-		openList(a)
-		typedList(a, "2")
+			a, _, _ := searchApp(t, listAgents(), 120, 40, nil, "github.com/acme/web")
+			a.pullRequests = core.PullRequestsConfig{ReviewRequestedDays: tt.days}
+			openList(a)
+			typedList(a, "2")
 
-		if text := ansi.Strip(a.View().Content); !strings.Contains(text, noticePRListNoneAsked) || !strings.Contains(text, " Review requested 0 ") {
-			t.Errorf("no empty text:\n%s", text)
-		}
+			if text := ansi.Strip(a.View().Content); !strings.Contains(text, tt.want) || !strings.Contains(text, " Review requested 0 ") {
+				t.Errorf("no empty text %q:\n%s", tt.want, text)
+			}
 
-		typedList(a, "3")
+			typedList(a, "3")
 
-		if text := ansi.Strip(a.View().Content); !strings.Contains(text, noticePRListNoneMine) {
-			t.Errorf("no empty text:\n%s", text)
-		}
-	})
+			if text := ansi.Strip(a.View().Content); !strings.Contains(text, noticePRListNoneMine) {
+				t.Errorf("no empty text:\n%s", text)
+			}
+		})
+	}
 
 	t.Run("a failed host", func(t *testing.T) {
 		t.Parallel()
@@ -718,11 +729,15 @@ func tabScenes(t *testing.T, icons bool) map[string]*App {
 	fail := map[string]error{"ghe.example.com": errors.New("HTTP 502 Bad Gateway")}
 	both := []string{"github.com/acme/web", "ghe.example.com/team/svc"}
 
+	// The empty tab under the default age limit.
+	none := tabScene(t, icons, 120, 40, prTabRequested, true, nil, nil, "github.com/acme/web")
+	none.pullRequests = core.DefaultConfig().PullRequests
+
 	return map[string]*App{
 		"requested":         tabScene(t, icons, 120, 40, prTabRequested, true, full, nil, "github.com/acme/web"),
 		"all":               tabScene(t, icons, 120, 40, prTabAll, true, full, nil, "github.com/acme/web"),
 		"requested-loading": tabScene(t, icons, 120, 40, prTabRequested, false, full, nil, "github.com/acme/web"),
-		"requested-none":    tabScene(t, icons, 120, 40, prTabRequested, true, nil, nil, "github.com/acme/web"),
+		"requested-none":    none,
 		"requested-failed":  tabScene(t, icons, 120, 40, prTabRequested, true, full, fail, both...),
 		"requested-80x24":   tabScene(t, icons, 80, 24, prTabRequested, true, full, nil, "github.com/acme/web"),
 	}

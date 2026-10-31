@@ -380,7 +380,7 @@ func (a *App) prListNotes(tab prListTab, rows int) []string {
 	})
 
 	if rows == 0 && answered {
-		none := noticePRListNoneAsked
+		none := prListNoneAsked(a.pullRequests.ReviewRequestedDays)
 		if tab == prTabAll {
 			none = noticePRListNoneMine
 		}
@@ -389,6 +389,19 @@ func (a *App) prListNotes(tab prListTab, rows int) []string {
 	}
 
 	return notes
+}
+
+// prListNoneAsked is the empty Review requested tab's text; it names the age
+// limit when there is one, as RequestedSince reads the days.
+func prListNoneAsked(days int) string {
+	switch {
+	case days <= 0:
+		return noticePRListNoneAsked
+	case days == 1:
+		return "no open pull requests updated in the last 1 day ask for your review"
+	default:
+		return "no open pull requests updated in the last " + strconv.Itoa(days) + " days ask for your review"
+	}
 }
 
 // prListTabRow is the tab row cw cells wide: the tabs at the left, the shown
