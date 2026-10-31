@@ -637,14 +637,14 @@ func (a *App) closeFocused() tea.Cmd {
 // quit implements app.quit: open agents ask first.
 func (a *App) quit() tea.Cmd {
 	if !a.hasAgents() {
-		return tea.Quit
+		return a.pictures.quit(tea.Quit)
 	}
 
 	a.openConfirm(confirm{
 		action: "Quit",
 		prompt: "Quit MuxReveal?",
 		detail: "Agent panes are running and will stop.",
-		yes:    func(*App) tea.Cmd { return tea.Quit },
+		yes:    func(a *App) tea.Cmd { return a.pictures.quit(tea.Quit) },
 	})
 
 	return nil

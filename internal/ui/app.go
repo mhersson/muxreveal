@@ -147,6 +147,7 @@ type App struct {
 	later        []tea.Cmd             // commands raised outside the update's return path; Update batches them
 	outerFocused bool                  // the outer terminal has focus; true until a BlurMsg
 
+	pictures  *pictures // Kitty graphics support and the pictures sent
 	getenv    func(string) string
 	cwd       string
 	recordDir string // empty unless recording
@@ -255,8 +256,9 @@ func New(opts Options) (*App, error) {
 		events: opts.Events, notice: opts.Notice, save: opts.Save, marks: opts.Marks,
 		log: opts.Logger, store: opts.Store, reg: reg, keymap: km, keys: tables,
 		panes: map[core.PaneID]*pane{}, outerFocused: true,
-		watches: watchState{set: opts.Watches, open: git.Open, panes: map[core.PaneID]*paneWatch{}, pins: map[core.TabID]*pinWatch{}, failed: map[string]bool{}},
-		getenv:  getenv, cwd: cwd, recordDir: opts.RecordDir, icons: opts.Icons, clock: realClock{}, start: termStart,
+		watches:  watchState{set: opts.Watches, open: git.Open, panes: map[core.PaneID]*paneWatch{}, pins: map[core.TabID]*pinWatch{}, failed: map[string]bool{}},
+		pictures: newPictures(nil, getenv, opts.Logger),
+		getenv:   getenv, cwd: cwd, recordDir: opts.RecordDir, icons: opts.Icons, clock: realClock{}, start: termStart,
 		load:         newSysLoad(),
 		probeSem:     make(chan struct{}, railProbeMax),
 		edits:        editState{resolve: places.Place},
@@ -417,7 +419,7 @@ func (a *App) Init() tea.Cmd {
 		rail = a.railOpened()
 	}
 
-	return tea.Batch(a.initTray(), a.waitEvent(), a.waitWatch(), a.waitPRs(), rail)
+	return tea.Batch(a.initTray(), a.waitEvent(), a.waitWatch(), a.waitPRs(), rail, a.pictures.start())
 }
 
 // Update implements tea.Model.
@@ -527,7 +529,13 @@ func (a *App) syncPaneColors() {
 }
 
 func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if cmd, ok := a.pictures.reply(msg); ok {
+		return a, cmd
+	}
+
 	switch msg := msg.(type) {
+	case pictureDoneMsg:
+		return a, a.pictures.done(msg)
 	case tea.WindowSizeMsg:
 		a.endSlide()
 
@@ -550,7 +558,7 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 
-		cmds = append(cmds, a.relayout())
+		cmds = append(cmds, a.relayout(), a.pictures.resized())
 		a.sizePlan()
 
 		return a, tea.Batch(cmds...)
