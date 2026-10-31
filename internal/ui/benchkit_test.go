@@ -454,6 +454,14 @@ func TestBenchKitServesReviewAnswers(t *testing.T) {
 	if on.Fallbacks != 0 {
 		t.Errorf("the compositor drew the drawer in %d frames, want the splice", on.Fallbacks)
 	}
+
+	if off.Batches != 0 {
+		t.Errorf("without the drawer: %d highlight batches, want 0", off.Batches)
+	}
+
+	if on.Batches == 0 || on.Answers != on.Batches {
+		t.Errorf("highlight batches = %d, answers = %d; want some, and every batch started answered", on.Batches, on.Answers)
+	}
 }
 
 func TestBenchAppOpensTheRail(t *testing.T) {

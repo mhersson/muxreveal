@@ -92,6 +92,9 @@ func TestBenchReviewScroll(t *testing.T) {
 		t.Fatal("the drawer does not have the keyboard")
 	}
 
+	hl := newHLRunner(app)
+	hl.settle()
+
 	pr := newPresenter(benchWidth, benchHeight)
 	if err := pr.present(app.View().Content); err != nil {
 		t.Fatalf("present: %v", err)
@@ -99,7 +102,13 @@ func TestBenchReviewScroll(t *testing.T) {
 
 	runtime.GC()
 
+	var mem0, mem1 runtime.MemStats
+
+	runtime.ReadMemStats(&mem0)
+
 	var (
+		answers, plainFrames, plainRun, plainMax int
+
 		frames, render, present frameTimes
 		press                   = tea.KeyPressMsg{Code: 'd', Mod: tea.ModCtrl}
 		fi                      = time.Second / 60
@@ -115,7 +124,10 @@ func TestBenchReviewScroll(t *testing.T) {
 		before := v.cursor
 		start := time.Now()
 
+		answers += hl.deliver()
+
 		app.Update(press)
+		hl.start()
 
 		frame := app.View().Content
 		renderD := time.Since(start)
@@ -132,13 +144,28 @@ func TestBenchReviewScroll(t *testing.T) {
 		if v.cursor <= before {
 			t.Fatalf("ctrl+d moved the cursor from row %d to %d", before, v.cursor)
 		}
+
+		if plainRows(app, v) > 0 {
+			plainFrames++
+			plainRun++
+			plainMax = max(plainMax, plainRun)
+		} else {
+			plainRun = 0
+		}
 	}
+
+	runtime.ReadMemStats(&mem1)
+
+	answers += hl.settle()
 
 	s, r, p := frames.summary(), render.summary(), present.summary()
 	t.Logf("paged %d rows in %d frames (%d rows a page): p50 %s, p95 %s, p99 %s (gate %s), max %s (gate %s)",
 		len(v.rows), s.Count, app.reviewBodyH(v)/2, fmtMS(s.P50), fmtMS(s.P95), fmtMS(s.P99), fmtMS(scrollGateP99), fmtMS(s.Max), fmtMS(scrollGateMax))
 	t.Logf("per-component p50/p99 (they do not sum to the frame's): update+view %s/%s, present %s/%s",
 		fmtMS(r.P50), fmtMS(r.P99), fmtMS(p.P50), fmtMS(p.P99))
+
+	t.Logf("highlight: %d answers between frames; %d of %d frames drew rows not yet coloured, at most %d in a row; live heap %.1f MB after setup, %d GCs in the run",
+		answers, plainFrames, s.Count, plainMax, float64(mem0.HeapAlloc)/(1<<20), mem1.NumGC-mem0.NumGC)
 
 	if app.drawer.fallbacks != 0 {
 		t.Errorf("the compositor drew the drawer in %d frames, so the run did not measure the splice", app.drawer.fallbacks)
@@ -151,6 +178,33 @@ func TestBenchReviewScroll(t *testing.T) {
 	if s.Max > scrollGateMax {
 		t.Errorf("max = %v, gate is %v", s.Max, scrollGateMax)
 	}
+}
+
+// plainRows counts the visible rows with a chunk that has no spans yet.
+func plainRows(app *App, v *reviewView) int {
+	st := app.store.State()
+
+	box, ok := app.drawerBox(st)
+	if !ok {
+		return 0
+	}
+
+	lay := app.drawerLayoutOf(box, v, drawerTree(st))
+	top := v.viewTop(lay.diffH)
+	c := v.derived()
+	n := 0
+
+	for i := top; i < min(top+lay.diffH, len(v.rows)); i++ {
+		for _, ref := range v.rowSpans(i) {
+			if _, ok := c.spans[ref.key]; !ok {
+				n++
+
+				break
+			}
+		}
+	}
+
+	return n
 }
 
 func hunkHolds(v *reviewView, path, text string) bool {
