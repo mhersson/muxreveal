@@ -233,7 +233,8 @@ func (c *collector) waitCount(d time.Duration, n int) {
 func anySnap(Snapshot) bool { return true }
 
 // fakeClock is a poller clock that stands still: each wait the poller asks for
-// arrives on asks and ends only when the test ends it.
+// arrives on asks and ends only when the test ends it. A test that leaves more
+// than asks holds unread blocks the poller.
 type fakeClock struct {
 	at   time.Time
 	asks chan ask
