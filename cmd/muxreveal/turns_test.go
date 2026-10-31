@@ -14,6 +14,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"testing"
 	"time"
 
@@ -793,13 +794,28 @@ func slowStaging(t *testing.T) (started string) {
 	started = filepath.Join(dir, "started")
 	script := "#!/bin/sh\ncase \"$*\" in *update-index*) : > '" + started + "'; sleep 10;; esac\nexec '" + gitPath + "' \"$@\"\n"
 
-	if err := os.WriteFile(filepath.Join(dir, "git"), []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
+	writeExecutable(t, filepath.Join(dir, "git"), script)
 
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	return started
+}
+
+// writeExecutable writes a script. A concurrent fork can inherit the write fd
+// and make exec fail with ETXTBSY (go.dev/issue/22315), so the write holds the
+// fork lock.
+func writeExecutable(t *testing.T, path, script string) {
+	t.Helper()
+
+	syscall.ForkLock.RLock()
+
+	err := os.WriteFile(path, []byte(script), 0o755)
+
+	syscall.ForkLock.RUnlock()
+
+	if err != nil {
+		t.Fatal(err)
+	}
 }
 
 // blockedStaging is slowStaging with a hold the test controls: staging blocks
@@ -818,9 +834,7 @@ func blockedStaging(t *testing.T) (started string) {
 	release := filepath.Join(dir, "release")
 	script := "#!/bin/sh\ncase \"$*\" in *update-index*) : > '" + started + "'; while [ ! -e '" + release + "' ]; do sleep 0.05; done;; esac\nexec '" + gitPath + "' \"$@\"\n"
 
-	if err := os.WriteFile(filepath.Join(dir, "git"), []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
+	writeExecutable(t, filepath.Join(dir, "git"), script)
 
 	t.Cleanup(func() { _ = os.WriteFile(release, nil, 0o600) })
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
