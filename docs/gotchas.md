@@ -157,8 +157,8 @@ what to do about it. Skim it before your first commit each session.
   sooner, and a late batch then reloads the drawer after the test read its
   `epoch` or `gen`. The rig's `reportedAll` waits for the paths written.
 - `t.Setenv` and `t.Chdir` panic in a parallel test. That is why tests that
-  use them, and tests that count or scan the process's goroutines, skip
-  `t.Parallel()`.
+  use them, and tests that count or scan the process's goroutines or open
+  descriptors, skip `t.Parallel()`.
 - Writing an executable and then running it while parallel tests fork can
   fail with `ETXTBSY`: a concurrent fork inherits the still-open write
   descriptor (go.dev/issue/22315). Hold `syscall.ForkLock.RLock()` around the

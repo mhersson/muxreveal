@@ -28,7 +28,8 @@ func TestCloseWhileWatchingNewFiles(t *testing.T) {
 	}
 
 	// A first watcher sets up what the runtime keeps open for good, such as its poller.
-	closeWatcher(t, watchDir(t, dir))
+	first, _ := watchDir(t, dir)
+	closeWatcher(t, first)
 
 	before := openFDs(t)
 
@@ -55,8 +56,14 @@ func TestCloseWhileWatchingNewFiles(t *testing.T) {
 	guard := time.After(time.Minute)
 
 	for range watchers {
-		w := watchDir(t, dir)
-		awaitCreate(t, w, guard)
+		w, created := watchDir(t, dir)
+
+		select {
+		case <-created:
+		case <-guard:
+			t.Fatal("no create event")
+		}
+
 		closeWatcher(t, w)
 	}
 
@@ -74,14 +81,29 @@ func TestCloseWhileWatchingNewFiles(t *testing.T) {
 }
 
 // watchDir watches dir, retrying while the churn removes a file the watcher was
-// about to watch. The watcher's errors are drained until it closes.
-func watchDir(t *testing.T, dir string) *Watcher {
+// about to watch. created closes at the first Create. Events and errors are
+// drained until the watcher closes, so its reader keeps up with the churn and
+// is still busy when the caller closes it.
+func watchDir(t *testing.T, dir string) (w *Watcher, created <-chan struct{}) {
 	t.Helper()
 
 	w, err := NewWatcher()
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	t.Cleanup(func() { _ = w.Close() })
+
+	seen := make(chan struct{})
+	once := sync.OnceFunc(func() { close(seen) })
+
+	go func() {
+		for ev := range w.Events {
+			if ev.Has(Create) {
+				once()
+			}
+		}
+	}()
 
 	go func() {
 		for range w.Errors {
@@ -91,34 +113,11 @@ func watchDir(t *testing.T, dir string) *Watcher {
 	for tries := 1; ; tries++ {
 		err := w.Add(dir)
 		if err == nil {
-			return w
+			return w, seen
 		}
 
 		if tries == 100 {
-			_ = w.Close()
-
 			t.Fatalf("watch %s: %v", dir, err)
-		}
-	}
-}
-
-// awaitCreate reads events until a Create, so the reader is busy watching the
-// new file when the caller goes on.
-func awaitCreate(t *testing.T, w *Watcher, guard <-chan time.Time) {
-	t.Helper()
-
-	for {
-		select {
-		case ev, ok := <-w.Events:
-			if !ok {
-				t.Fatal("events closed before a create")
-			}
-
-			if ev.Has(Create) {
-				return
-			}
-		case <-guard:
-			t.Fatal("no create event")
 		}
 	}
 }
