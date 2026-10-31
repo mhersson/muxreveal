@@ -672,7 +672,7 @@ func TestComposePreviewRelativeImage(t *testing.T) {
 	r := newPreviewRig(t, 120, 40)
 	jobs := picturesOn(t, r.App)
 
-	r.setBody("![a](a.png)")
+	r.setBody("![altword](a.png)")
 	r.churn(t, press(r.App, keyCtrlP))
 	r.View()
 
@@ -681,11 +681,11 @@ func TestComposePreviewRelativeImage(t *testing.T) {
 	}
 
 	lay := r.v.preview.doc.layout(composePreviewW(r.width), r.icons)
-	if len(lay.Images) > 0 && lay.Images[0].Rows != 0 {
-		t.Errorf("image = %+v, want an image line", lay.Images[0])
+	if len(lay.Images) != 1 || lay.Images[0].Rows != 0 {
+		t.Errorf("images = %+v, want one image line", lay.Images)
 	}
 
-	if !strings.Contains(r.text(), "a") {
+	if !strings.Contains(r.text(), "altword") {
 		t.Errorf("the preview lost the image line:\n%s", r.text())
 	}
 }

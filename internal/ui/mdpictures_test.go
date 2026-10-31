@@ -603,9 +603,16 @@ func TestPlanPicture(t *testing.T) {
 		t.Fatalf("render answers = %q", got)
 	}
 
-	rows := placeholders(r.a.View().Content, id)
+	content := r.a.View().Content
+
+	rows := placeholders(content, id)
 	if len(rows) != 3 || rows[0].n != 5 {
 		t.Fatalf("placeholder rows = %+v, want 3 of 5 cells", rows)
+	}
+
+	// The picture sits in the first column of the view, where the text starts.
+	if x := textX(t, content, "tail"); rows[0].x != x {
+		t.Fatalf("placeholders start at column %d, the text at %d", rows[0].x, x)
 	}
 
 	r.a.plan.chooser = &linkChooser{targets: []mdTarget{{Text: "one", URL: "https://example.com/1"}, {Text: "two", URL: "https://example.com/2"}}, root: r.wt}

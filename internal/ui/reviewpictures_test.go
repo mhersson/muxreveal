@@ -190,6 +190,35 @@ func TestRenderedPictureKeepsRow(t *testing.T) {
 	}
 }
 
+func TestRenderedPictureAboveCursorFile(t *testing.T) {
+	t.Parallel()
+
+	m := newRenderedPicture(t, 100, 20, renderedPicDoc)
+	v := m.v
+
+	at := rowWith(t, v, "edited 30")
+	if at < rowWith(t, v, "after three") {
+		t.Fatal("the cursor's file is not below the rendered one")
+	}
+
+	v.top, v.cursor = at-5, at
+
+	before := frameRow(t, m.View().Content, "edited 30")
+
+	// Sized 5 x 3 cells: the picture above the cursor grows by two rows.
+	if n := answerInfo(m.App, m.jobs, 5, 3, nil); n != 1 {
+		t.Fatalf("info jobs = %d, want 1", n)
+	}
+
+	if v.cursor != at+2 {
+		t.Errorf("cursor at row %d, want %d", v.cursor, at+2)
+	}
+
+	if got := frameRow(t, m.View().Content, "edited 30"); got != before {
+		t.Errorf("cursor text at frame row %d, want %d", got, before)
+	}
+}
+
 func TestRenderedPictureCovered(t *testing.T) {
 	t.Parallel()
 

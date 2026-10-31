@@ -24,7 +24,7 @@ const (
 // Query probes for Kitty graphics support; the trailing device-attributes
 // request makes a terminal without support still answer.
 func Query() string {
-	return ansi.KittyGraphics([]byte("AAAA"), "i=31", "s=1", "v=1", "a=q", "t=d", "f=24") +
+	return ansi.KittyGraphics([]byte("AAAA"), "i="+strconv.Itoa(QueryID), "s=1", "v=1", "a=q", "t=d", "f=24") +
 		CellSizeQuery + "\x1b[c"
 }
 
@@ -32,6 +32,7 @@ func Query() string {
 // of cols x rows cells for Unicode placeholders.
 func Transmit(id uint32, png []byte, cols, rows int) string {
 	enc := base64.StdEncoding.EncodeToString(png)
+	img := "i=" + strconv.FormatUint(uint64(id), 10)
 
 	var b strings.Builder
 
@@ -46,7 +47,7 @@ func Transmit(id uint32, png []byte, cols, rows int) string {
 
 		m := "m=" + strconv.Itoa(more)
 		if first {
-			b.WriteString(ansi.KittyGraphics([]byte(chunk), "a=t", "f=100", "t=d", "i="+strconv.FormatUint(uint64(id), 10), "q=2", m))
+			b.WriteString(ansi.KittyGraphics([]byte(chunk), "a=t", "f=100", "t=d", img, "q=2", m))
 		} else {
 			b.WriteString(ansi.KittyGraphics([]byte(chunk), m))
 		}
@@ -56,7 +57,7 @@ func Transmit(id uint32, png []byte, cols, rows int) string {
 		}
 	}
 
-	b.WriteString(ansi.KittyGraphics(nil, "a=p", "U=1", "i="+strconv.FormatUint(uint64(id), 10),
+	b.WriteString(ansi.KittyGraphics(nil, "a=p", "U=1", img,
 		"c="+strconv.Itoa(cols), "r="+strconv.Itoa(rows), "q=2"))
 
 	return b.String()

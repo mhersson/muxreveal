@@ -759,6 +759,10 @@ func TestPictureKeptRender(t *testing.T) {
 		t.Fatal("render not kept")
 	}
 
+	if !p.sent(job.id) {
+		t.Error("kept render not marked sent")
+	}
+
 	if got := p.size(dp, "/repo/a.png", 96); got.ID != job.id || len(jobs.take()) != 0 {
 		t.Errorf("later size gave %+v", got)
 	}

@@ -342,7 +342,11 @@ func (a *App) slidPics(pics []picRow) []picRow {
 // box drawn over the body overlaps. The page fills the diff column from the
 // first body row.
 func (d *drawCtx) pictureRows(r core.Rect) []picRow {
-	pics := append(slices.Clone(d.pagePics), d.mdPics...)
+	pics := d.pagePics // only one of the page and the rendered rows draws pictures
+	if len(pics) == 0 {
+		pics = d.mdPics
+	}
+
 	if len(pics) == 0 {
 		return nil
 	}

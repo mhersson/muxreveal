@@ -88,6 +88,15 @@ func TestPicture(t *testing.T) {
 		}
 	})
 
+	t.Run("empty source", func(t *testing.T) {
+		t.Parallel()
+
+		l, calls := pictureLayout("![a]()", 40, PictureSize{Cols: 10, Rows: 3, ID: 7})
+		if len(calls) != 0 || len(pictureRows(l)) != 0 || len(l.Lines) != 1 {
+			t.Errorf("calls = %v, lines = %q", calls, l.Plain())
+		}
+	})
+
 	t.Run("loading", func(t *testing.T) {
 		t.Parallel()
 

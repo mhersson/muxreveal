@@ -85,6 +85,7 @@ func TestPlacePictures(t *testing.T) {
 	out := placePictures(blank, w, h, []picRow{
 		{X: 3, Y: 1, ID: 42, Row: 0, Cols: 4},
 		{X: 3, Y: 5, ID: 42, Row: 1, Cols: 4},
+		{X: 0, Y: 3, ID: 43, Row: 0, Cols: 2, Ground: "#102030"},
 	})
 
 	rows := strings.Split(out, "\n")
@@ -107,7 +108,15 @@ func TestPlacePictures(t *testing.T) {
 		t.Fatalf("row 1 = %q, want %q", got, want)
 	}
 
-	for _, y := range []int{0, 2, 3, 4} {
+	if !strings.Contains(rows[3], "48;2;16;32;48") {
+		t.Fatalf("row 3 lacks the ground background: %q", rows[3])
+	}
+
+	if strings.Contains(rows[1], "48;2;") {
+		t.Fatalf("row 1 has a background without a ground: %q", rows[1])
+	}
+
+	for _, y := range []int{0, 2, 4} {
 		if got := ansi.Strip(rows[y]); got != strings.Repeat(".", w) {
 			t.Fatalf("row %d changed: %q", y, got)
 		}
