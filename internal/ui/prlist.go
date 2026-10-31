@@ -241,12 +241,12 @@ func (a *App) prCheckout(repo string) (dir string, ok bool) {
 	)
 
 	for id, pp := range a.prs.panes {
-		if !pp.ok || pp.repo.String() != repo || pp.key.cwd == "" {
+		if !pp.ok || pp.repo.String() != repo || pp.answered.cwd == "" {
 			continue
 		}
 
 		if id == focus {
-			return pp.key.cwd, true
+			return pp.answered.cwd, true
 		}
 
 		if !found || paneIDLess(id, best) {
@@ -258,7 +258,7 @@ func (a *App) prCheckout(repo string) (dir string, ok bool) {
 		return "", false
 	}
 
-	return a.prs.panes[best].key.cwd, true
+	return a.prs.panes[best].answered.cwd, true
 }
 
 // paneIDLess orders pane ids "p2" before "p10".

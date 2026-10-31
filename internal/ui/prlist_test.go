@@ -693,7 +693,8 @@ func otherTabsRig(t *testing.T) *prDrawer {
 	watching(r.App, "github.com/o/r", "ghe.example.com/acme/infra")
 
 	focus := r.store.State().Tab().Focus
-	r.prs.panes[focus] = &prPane{key: prKey{cwd: r.dir, branch: "main"}, repo: prRepo, ok: true}
+	k := prKey{cwd: r.dir, branch: "main"}
+	r.prs.panes[focus] = &prPane{key: k, answered: k, repo: prRepo, ok: true}
 
 	r.leader('g')
 	r.typed("l")
@@ -805,28 +806,54 @@ func TestPRListCheckout(t *testing.T) {
 func TestPRCheckoutPrefersFocused(t *testing.T) {
 	t.Parallel()
 
-	a := listApp(t, true, 120, 40, nil)
-	st := a.store.State()
-	focus := st.Tab().Focus
+	a := newPRDrawer(t)
+	focus := a.store.State().Tab().Focus
 
-	other := core.PaneID("p9")
-	outside := core.PaneID("p10")
+	if focus != "p1" {
+		t.Fatalf("focus = %q, the test assumes p1", focus)
+	}
+
+	resolved := func(cwd string, repo github.Repo) *prPane {
+		k := prKey{cwd: cwd}
+
+		return &prPane{key: k, answered: k, repo: repo, ok: true}
+	}
+	elsewhere := github.Repo{Host: "github.com", Owner: "x", Name: "y"}
+
+	// p0 has the lower id; the focused p1 wins anyway.
 	a.prs.panes = map[core.PaneID]*prPane{
-		focus:   {key: prKey{cwd: "/w/focused"}, repo: prRepo, ok: true},
-		other:   {key: prKey{cwd: "/w/other"}, repo: prRepo, ok: true},
-		outside: {key: prKey{cwd: "/w/elsewhere"}, repo: github.Repo{Host: "github.com", Owner: "x", Name: "y"}, ok: true},
+		"p0":  resolved("/w/lower", prRepo),
+		focus: resolved("/w/focused", prRepo),
 	}
 
 	if dir, ok := a.prCheckout(prRepo.String()); !ok || dir != "/w/focused" {
 		t.Errorf("checkout = %q, %v; want the focused pane's", dir, ok)
 	}
 
-	// Focus a pane outside the repository: the lowest id of the others wins.
-	a.prs.panes[focus].repo = github.Repo{Host: "github.com", Owner: "z", Name: "z"}
-	a.prs.panes[other].key.cwd = "/w/p9"
-	a.prs.panes[core.PaneID("p2")] = &prPane{key: prKey{cwd: "/w/p2"}, repo: prRepo, ok: true}
+	// A focused pane outside the repository: the lowest id of the others wins.
+	a.prs.panes = map[core.PaneID]*prPane{
+		"p9":  resolved("/w/p9", prRepo),
+		"p2":  resolved("/w/p2", prRepo),
+		focus: resolved("/w/elsewhere", elsewhere),
+	}
 
 	if dir, ok := a.prCheckout(prRepo.String()); !ok || dir != "/w/p2" {
-		t.Errorf("checkout = %q, %v; want the lowest id's (/w/p2, not p9 or p10)", dir, ok)
+		t.Errorf("checkout = %q, %v; want the lowest id's (/w/p2)", dir, ok)
+	}
+}
+
+func TestPRCheckoutUsesAnsweredDir(t *testing.T) {
+	t.Parallel()
+
+	a := newPRDrawer(t)
+	focus := a.store.State().Tab().Focus
+
+	// The pane moved on; its repository answer has not caught up.
+	a.prs.panes = map[core.PaneID]*prPane{
+		focus: {key: prKey{cwd: "/w/moved"}, answered: prKey{cwd: "/w/answered"}, repo: prRepo, ok: true},
+	}
+
+	if dir, ok := a.prCheckout(prRepo.String()); !ok || dir != "/w/answered" {
+		t.Errorf("checkout = %q, %v; want the answered directory", dir, ok)
 	}
 }
