@@ -155,6 +155,7 @@ func TestKeysConfigValidate(t *testing.T) {
 		{name: "space name", cfg: KeysConfig{Drawer: map[string]string{"space": "review.x"}}},
 		{name: "plus key", cfg: KeysConfig{Drawer: map[string]string{"ctrl++": "review.x"}}},
 		{name: "semicolon esc", cfg: KeysConfig{Leader: map[string]string{"; esc": "none"}}},
+		{name: "capital in sequence", cfg: KeysConfig{Leader: map[string]string{"g P": "git.push"}}},
 		{name: "none command", cfg: KeysConfig{Leader: map[string]string{"g l": KeyNone}}},
 	}
 	for _, tt := range tests {

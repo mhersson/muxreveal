@@ -23,7 +23,7 @@
 │                                                                    ││                                                                    │
 │                                                                    ││                                        ╭─ ctrl+space g ───────────╮│
 │                                                                    ││                                        │ l    Pull requests       ││
-│                                                                    ││                                        │ p    Push                ││
+│                                                                    ││                                        │ P    Push                ││
 │                                                                    ││                                        │ o    Open a pull request ││
 │                                                                    ││                                        │ m    Merge pull request  ││
 │                                                                    ││                                        │ esc  Cancel              ││

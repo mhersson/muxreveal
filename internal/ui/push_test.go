@@ -150,16 +150,16 @@ func (r *pushRig) splitURLs(t *testing.T, fetch string) {
 	gitIn(t, r.real, r.dir, "config", "remote.origin.pushurl", pushRemoteURL)
 }
 
-// leaderP presses leader g p and returns the command it raised.
+// leaderP presses leader g P and returns the command it raised.
 func (r *pushRig) leaderP() tea.Cmd {
 	press(r.App, keyLeader)
 
 	press(r.App, keyRune('g'))
 
-	return press(r.App, keyRune('p'))
+	return press(r.App, keyRune('P'))
 }
 
-// ask presses leader g p and answers what follows.
+// ask presses leader g P and answers what follows.
 func (r *pushRig) ask(t *testing.T) []tea.Msg {
 	t.Helper()
 
@@ -173,7 +173,7 @@ func (r *pushRig) askOpen(t *testing.T) {
 	r.ask(t)
 
 	if r.confirm == nil || r.confirm.push == nil {
-		t.Fatalf("no push confirm after leader g p; notice = %q", r.notice)
+		t.Fatalf("no push confirm after leader g P; notice = %q", r.notice)
 	}
 }
 
@@ -939,7 +939,7 @@ func TestPushRunsOffTheLoop(t *testing.T) {
 	cmd := r.leaderP()
 
 	if got := r.gitCalls(); got != calls {
-		t.Fatalf("leader g p ran git %d times on the update loop", got-calls)
+		t.Fatalf("leader g P ran git %d times on the update loop", got-calls)
 	}
 
 	msgs := flatten(cmd)
@@ -1068,12 +1068,45 @@ func TestPushCommand(t *testing.T) {
 		t.Fatalf("git.push = %+v, %v; want Push branch with the push icon", c, ok)
 	}
 
-	if key, _ := a.keymap.keyOf("git.push"); key != "g p" || a.keymap.groupOf("git.push") != "Git" {
-		t.Errorf("git.push bound to %q in group %q, want g p in Git", key, a.keymap.groupOf("git.push"))
+	if key, _ := a.keymap.keyOf("git.push"); key != "g P" || a.keymap.groupOf("git.push") != "Git" {
+		t.Errorf("git.push bound to %q in group %q, want g P in Git", key, a.keymap.groupOf("git.push"))
 	}
 
 	if iconPush != "\uF403" {
 		t.Errorf("iconPush = %q, want U+F403", iconPush)
+	}
+}
+
+func TestPushKey(t *testing.T) {
+	tests := []struct {
+		name    string
+		key     tea.KeyPressMsg
+		confirm bool
+		notice  string
+	}{
+		{"P", keyRune('P'), true, ""},
+		{"shift+p without text", tea.KeyPressMsg{Code: 'p', ShiftedCode: 'P', Mod: tea.ModShift}, true, ""},
+		{"p", keyRune('p'), false, "ctrl+space g p is not bound"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := newPushRig(t)
+
+			press(r.App, keyLeader, keyRune('g'))
+			r.churnMsgs(t, press(r.App, tt.key))
+
+			if got := r.confirm != nil && r.confirm.push != nil; got != tt.confirm {
+				t.Errorf("push confirm open = %v, want %v; notice = %q", got, tt.confirm, r.notice)
+			}
+
+			if r.notice != tt.notice {
+				t.Errorf("notice = %q, want %q", r.notice, tt.notice)
+			}
+
+			if n := r.pushCalls(); n != 0 {
+				t.Errorf("git pushed %d times without an answer", n)
+			}
+		})
 	}
 }
 
