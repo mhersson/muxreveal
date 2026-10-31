@@ -19,6 +19,7 @@ import (
 
 	"github.com/mhersson/muxreveal/internal/core"
 	"github.com/mhersson/muxreveal/internal/git"
+	"github.com/mhersson/muxreveal/internal/github"
 	"github.com/mhersson/muxreveal/internal/store"
 	"github.com/mhersson/muxreveal/internal/ui"
 	"github.com/mhersson/muxreveal/internal/ui/theme"
@@ -222,6 +223,8 @@ func run(ctx context.Context, env core.Env, configPath, recordDir string, fresh 
 		Events:       hooks.Events,
 		GitTempDir:   hooks.RunDir,
 		IndexCache:   indexCache,
+		Pictures:     github.NewImageFetcher(github.ImageOptions{}),
+		ImageCache:   imageCacheDir(indexCache),
 		Watches:      watches,
 		Places:       places,
 		PRs:          prs.poller,

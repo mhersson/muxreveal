@@ -772,6 +772,8 @@ func (a *App) Close(ctx context.Context) error {
 
 	defer a.cancel()
 
+	a.loader.close()
+
 	select {
 	case <-done:
 		return nil

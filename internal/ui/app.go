@@ -88,6 +88,10 @@ type Options struct {
 	PRActions prActions
 	// Keys is the [keys] config laid over the built-in leader keys.
 	Keys core.KeysConfig
+	// Pictures fetches remote images; nil keeps them as image lines.
+	Pictures pictureFetcher
+	// ImageCache is the directory of the fetched images' disk cache; empty keeps none.
+	ImageCache string
 }
 
 // markFiles is the persistence of the reviewed-hunk marks, one file per
@@ -147,7 +151,8 @@ type App struct {
 	later        []tea.Cmd             // commands raised outside the update's return path; Update batches them
 	outerFocused bool                  // the outer terminal has focus; true until a BlurMsg
 
-	pictures  *pictures // Kitty graphics support and the pictures sent
+	pictures  *pictures      // Kitty graphics support and the pictures sent
+	loader    *pictureLoader // loads the pictures off the update loop
 	getenv    func(string) string
 	cwd       string
 	recordDir string // empty unless recording
@@ -296,6 +301,8 @@ func New(opts Options) (*App, error) {
 	}
 
 	a.ctx, a.cancel = context.WithCancel(context.Background())
+	a.loader = newPictureLoader(a.ctx, opts.Pictures, opts.ImageCache, opts.Logger)
+	a.pictures.jobs = a.loader
 
 	return a, nil
 }
@@ -419,7 +426,7 @@ func (a *App) Init() tea.Cmd {
 		rail = a.railOpened()
 	}
 
-	return tea.Batch(a.initTray(), a.waitEvent(), a.waitWatch(), a.waitPRs(), rail, a.pictures.start())
+	return tea.Batch(a.initTray(), a.waitEvent(), a.waitWatch(), a.waitPRs(), rail, a.pictures.start(), a.loader.wait())
 }
 
 // Update implements tea.Model.
@@ -535,7 +542,7 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	switch msg := msg.(type) {
 	case pictureDoneMsg:
-		return a, a.pictures.done(msg)
+		return a, tea.Batch(a.pictures.done(msg), a.loader.wait())
 	case tea.WindowSizeMsg:
 		a.endSlide()
 
