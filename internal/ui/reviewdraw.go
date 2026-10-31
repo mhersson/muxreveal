@@ -1023,8 +1023,7 @@ func (d *drawCtx) emptyRuns(y int) []railRun {
 	if v.err != nil {
 		lines = []string{v.err.Error()}
 
-		var gone errWorktreeRemoved
-		if errors.As(v.err, &gone) {
+		if gone, ok := errors.AsType[errWorktreeRemoved](v.err); ok {
 			lines, fg = []string{noticeRemoved + shortPath(gone.root, "", d.home)}, d.ui.Muted
 		}
 	}

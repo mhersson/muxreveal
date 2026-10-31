@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"path"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -235,8 +236,8 @@ func (c *Client) Conversation(ctx context.Context, r Repo, number int) (Conversa
 	}
 
 	var nodes []timelineNode
-	for i := len(pages) - 1; i >= 0; i-- {
-		nodes = append(nodes, pages[i]...)
+	for _, page := range slices.Backward(pages) {
+		nodes = append(nodes, page...)
 	}
 
 	conv.Items = timelineItems(nodes)

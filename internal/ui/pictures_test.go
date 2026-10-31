@@ -645,12 +645,12 @@ func TestPictureQuit(t *testing.T) {
 		t.Fatalf("quit gave %v", v)
 	}
 
-	first, _ := v.Index(0).Interface().(tea.Cmd)
+	first, _ := reflect.TypeAssert[tea.Cmd](v.Index(0))
 	if got := rawOf(t, first); got != kitty.Delete(id) {
 		t.Errorf("first = %q, want the delete of image %d", got, id)
 	}
 
-	second, _ := v.Index(1).Interface().(tea.Cmd)
+	second, _ := reflect.TypeAssert[tea.Cmd](v.Index(1))
 	if second() != "next" {
 		t.Error("second is not next, a frame tick later")
 	}
@@ -799,7 +799,7 @@ func TestPictureQuitAfterFailedSize(t *testing.T) {
 		t.Fatalf("quit gave %v, want the delete then next", v)
 	}
 
-	first, _ := v.Index(0).Interface().(tea.Cmd)
+	first, _ := reflect.TypeAssert[tea.Cmd](v.Index(0))
 	if got := rawOf(t, first); got != kitty.Delete(id) {
 		t.Errorf("first = %q, want the delete of image %d", got, id)
 	}

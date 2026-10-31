@@ -29,13 +29,13 @@ func prTitled(title string) func(p *core.PRInfo) {
 // one repository, a draft, a merged pull request and an agent with none.
 func listAgents() []railAgent {
 	return []railAgent{
-		{newTab: true, project: "api", branch: "feat/a", state: core.AgentIdle, pr: ptr(prInfo("OPEN", prNumber(5), prTitled("Add the a endpoint"), checksPassed, prReview("APPROVED"), prAged(3*time.Hour)))},
-		{newTab: true, project: "api", branch: "feat/a", state: core.AgentWorking, pr: ptr(prInfo("OPEN", prNumber(5), prTitled("Add the a endpoint"), checksPassed, prReview("APPROVED"), prAged(3*time.Hour)))},
-		{project: "api", branch: "feat/c", state: core.AgentIdle, pr: ptr(prInfo("OPEN", prNumber(8), prTitled("Retry on timeout"), checksRunning, prAged(4*time.Minute)))},
-		{newTab: true, project: "web", branch: "feat/b", state: core.AgentBlocked, pr: ptr(prInfo("OPEN", prNumber(9), prTitled("Login form"), prDraft, checksFailing, prAged(8*time.Second)))},
-		{project: "web", branch: "feat/m", state: core.AgentIdle, pr: ptr(prInfo("MERGED", prNumber(3), prTitled("Already merged")))},
+		{newTab: true, project: "api", branch: "feat/a", state: core.AgentIdle, pr: new(prInfo("OPEN", prNumber(5), prTitled("Add the a endpoint"), checksPassed, prReview("APPROVED"), prAged(3*time.Hour)))},
+		{newTab: true, project: "api", branch: "feat/a", state: core.AgentWorking, pr: new(prInfo("OPEN", prNumber(5), prTitled("Add the a endpoint"), checksPassed, prReview("APPROVED"), prAged(3*time.Hour)))},
+		{project: "api", branch: "feat/c", state: core.AgentIdle, pr: new(prInfo("OPEN", prNumber(8), prTitled("Retry on timeout"), checksRunning, prAged(4*time.Minute)))},
+		{newTab: true, project: "web", branch: "feat/b", state: core.AgentBlocked, pr: new(prInfo("OPEN", prNumber(9), prTitled("Login form"), prDraft, checksFailing, prAged(8*time.Second)))},
+		{project: "web", branch: "feat/m", state: core.AgentIdle, pr: new(prInfo("MERGED", prNumber(3), prTitled("Already merged")))},
 		{project: "web", branch: "main", state: core.AgentIdle},
-		{newTab: true, project: "zeta", branch: "feat/z", state: core.AgentIdle, pr: ptr(prInfo("OPEN", prNumber(1), prTitled("Zeta change"), prReview("CHANGES_REQUESTED"), prAged(2*24*time.Hour)))},
+		{newTab: true, project: "zeta", branch: "feat/z", state: core.AgentIdle, pr: new(prInfo("OPEN", prNumber(1), prTitled("Zeta change"), prReview("CHANGES_REQUESTED"), prAged(2*24*time.Hour)))},
 	}
 }
 
@@ -502,7 +502,7 @@ func TestPRListCleansText(t *testing.T) {
 		tune := func(p *core.PRInfo) { p.HeadBranch = branch }
 		agents := []railAgent{{
 			newTab: true, project: "api", branch: branch, state: core.AgentIdle,
-			pr: ptr(prInfo("OPEN", prNumber(4), tune, prTitled("Fix \x1b]0;pwned\x07the \u202eevil\u200b title\r\nsecond line"), prAged(time.Minute))),
+			pr: new(prInfo("OPEN", prNumber(4), tune, prTitled("Fix \x1b]0;pwned\x07the \u202eevil\u200b title\r\nsecond line"), prAged(time.Minute))),
 		}}
 		a := listApp(t, true, 120, 40, agents)
 
@@ -663,7 +663,7 @@ func prListScene(t *testing.T, icons bool, w, h int) *App {
 	agents := listAgents()
 	agents = append(agents, railAgent{
 		newTab: true, project: "muxreveal", branch: "feat/a-branch-with-a-rather-long-name-that-has-to-be-cut", state: core.AgentIdle,
-		pr: ptr(prInfo("OPEN", prNumber(112), prTitled("A pull request title that is far too long to fit in the list as it is drawn \x1b[31mhere\x07"), checksFailing, prReview("CHANGES_REQUESTED"), prAged(26*time.Hour))),
+		pr: new(prInfo("OPEN", prNumber(112), prTitled("A pull request title that is far too long to fit in the list as it is drawn \x1b[31mhere\x07"), checksFailing, prReview("CHANGES_REQUESTED"), prAged(26*time.Hour))),
 	})
 
 	a := listApp(t, icons, w, h, agents)

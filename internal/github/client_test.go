@@ -189,11 +189,7 @@ func TestClientConcurrentGETs(t *testing.T) {
 	var wg sync.WaitGroup
 
 	for i := range 32 {
-		wg.Add(1)
-
-		go func() {
-			defer wg.Done()
-
+		wg.Go(func() {
 			var out struct{ N int }
 
 			path := "repos/o/r/a"
@@ -210,7 +206,7 @@ func TestClientConcurrentGETs(t *testing.T) {
 			if out.N != 1 {
 				t.Errorf("n = %d", out.N)
 			}
-		}()
+		})
 	}
 
 	wg.Wait()
@@ -325,8 +321,7 @@ func TestGraphQLRateLimitWaitsForItsReset(t *testing.T) {
 				t.Errorf("reset = %v, call from %v to %v", rl.Reset, before, after)
 			}
 
-			var ge *api.GraphQLError
-			if !errors.As(err, &ge) {
+			if _, ok := errors.AsType[*api.GraphQLError](err); !ok {
 				t.Error("original *api.GraphQLError lost")
 			}
 		})
@@ -364,8 +359,7 @@ func TestErrorsCarryNoToken(t *testing.T) {
 		}
 	}
 
-	var ge *api.GraphQLError
-	if !errors.As(errs["graphql"], &ge) {
+	if _, ok := errors.AsType[*api.GraphQLError](errs["graphql"]); !ok {
 		t.Errorf("graphql error is not a *api.GraphQLError: %v", errs["graphql"])
 	}
 }
@@ -393,8 +387,7 @@ func TestGraphQLErrorsBesideData(t *testing.T) {
 
 	err := c.query(context.Background(), "Partial", new(viewerQuery), map[string]any{"n": 1})
 
-	var ge *api.GraphQLError
-	if !errors.As(err, &ge) {
+	if _, ok := errors.AsType[*api.GraphQLError](err); !ok {
 		t.Fatalf("err = %v, want a *api.GraphQLError", err)
 	}
 
@@ -452,8 +445,7 @@ func TestRESTRateLimits(t *testing.T) {
 				t.Errorf("reset = %v, call from %v to %v", rl.Reset, before, after)
 			}
 
-			var he *api.HTTPError
-			if !errors.As(err, &he) {
+			if _, ok := errors.AsType[*api.HTTPError](err); !ok {
 				t.Error("original *api.HTTPError lost")
 			}
 		})

@@ -218,7 +218,7 @@ func TestRemoveWorktree(t *testing.T) {
 
 			seen = true
 
-			for _, f := range strings.Fields(line) {
+			for f := range strings.FieldsSeq(line) {
 				if f == "--force" || f == "-f" {
 					t.Errorf("forced: %q", line)
 				}

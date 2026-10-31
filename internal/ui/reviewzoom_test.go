@@ -69,7 +69,7 @@ func TestReviewZoom(t *testing.T) {
 
 	r.finishSlide()
 
-	top := strings.SplitN(r.drawn(t), "\n", 2)[0]
+	top, _, _ := strings.Cut(r.drawn(t), "\n")
 	tag := " " + iconZoom + " zoom "
 
 	if i, j := strings.Index(top, tag), strings.Index(top, "branch"); i < 0 || j < i {
@@ -325,7 +325,7 @@ func TestReviewZoomSmall(t *testing.T) {
 		t.Errorf("zoomed %v, sliding %v, want the tag and no slide", r.zoomed(), !r.drawer.slideFrom.IsZero())
 	}
 
-	if top := strings.SplitN(r.drawn(t), "\n", 2)[0]; !strings.Contains(top, " "+iconZoom+" zoom ") {
+	if top, _, _ := strings.Cut(r.drawn(t), "\n"); !strings.Contains(top, " "+iconZoom+" zoom ") {
 		t.Errorf("top border %q lacks the zoom tag", top)
 	}
 

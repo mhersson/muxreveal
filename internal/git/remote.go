@@ -84,7 +84,7 @@ func configuredRemote(ctx context.Context, r Repo, remote string) (string, error
 		return "", fmt.Errorf("list remotes: %w", err)
 	}
 
-	for _, name := range strings.Split(string(out), "\n") {
+	for name := range strings.SplitSeq(string(out), "\n") {
 		if name != "" && name == remote {
 			return remote, nil
 		}

@@ -92,7 +92,7 @@ func EditPlace(ctx context.Context, path string) (Place, error) {
 // hasGitComponent reports whether any component of an absolute path is ".git",
 // in any case, since the filesystem may ignore case.
 func hasGitComponent(path string) bool {
-	for _, part := range strings.Split(path, string(filepath.Separator)) {
+	for part := range strings.SplitSeq(path, string(filepath.Separator)) {
 		if strings.EqualFold(part, ".git") {
 			return true
 		}

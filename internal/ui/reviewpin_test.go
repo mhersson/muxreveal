@@ -170,14 +170,14 @@ func TestWorktreeRemovedRow(t *testing.T) {
 	for _, line := range lines {
 		plain := ansi.Strip(line)
 
-		i := strings.Index(plain, want)
-		if i < 0 {
+		before, _, ok := strings.Cut(plain, want)
+		if !ok {
 			continue
 		}
 
 		ui := a.current().theme.UI
 		vt := lineVT(t, line, ansi.StringWidth(line))
-		x := ansi.StringWidth(plain[:i])
+		x := ansi.StringWidth(before)
 
 		assertColours(t, vt, x, 0, "w", ui.Muted, ui.Bg, false)
 		assertColours(t, vt, x+len(want)-1, 0, "b", ui.Muted, ui.Bg, false)

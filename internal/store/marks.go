@@ -193,8 +193,7 @@ func (m *MarkFiles) Load(commonDir string, now time.Time) (map[string]string, er
 
 	marks, err := LoadMarks(path, commonDir, now)
 
-	var rerr *marksReadError
-	if errors.As(err, &rerr) {
+	if _, ok := errors.AsType[*marksReadError](err); ok {
 		m.mu.Lock()
 		m.kept[path] = true
 		m.mu.Unlock()

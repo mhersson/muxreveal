@@ -173,19 +173,19 @@ func (a *App) prListRowLine(r prListRow, selected, byAuthor bool, cw int, panel 
 		left += with(ui.Fg, false).Render("  ") + with(ui.Dim, false).Render(ansi.Truncate(branch, branchW, "…"))
 	}
 
-	var tail string
+	var tail strings.Builder
 
 	for i, p := range pieces {
 		if i > 0 {
-			tail += with(ui.Fg, false).Render("  ")
+			tail.WriteString(with(ui.Fg, false).Render("  "))
 		}
 
-		tail += with(p.fg, p.bold).Render(p.text)
+		tail.WriteString(with(p.fg, p.bold).Render(p.text))
 	}
 
-	gap := max(cw-1-ansi.StringWidth(left)-ansi.StringWidth(tail), 0)
+	gap := max(cw-1-ansi.StringWidth(left)-ansi.StringWidth(tail.String()), 0)
 
-	return marker + left + with(ui.Fg, false).Render(strings.Repeat(" ", gap)) + tail
+	return marker + left + with(ui.Fg, false).Render(strings.Repeat(" ", gap)) + tail.String()
 }
 
 // prListBox draws the list w cells wide with room for at most room lines. A
@@ -408,7 +408,7 @@ func prListNoneAsked(days int) string {
 // one on the accent, and at the right the tab keys, which drop from the end
 // when they do not fit.
 func (a *App) prListTabRow(st core.State, cw int, panel lipgloss.Style, hint func(key, label string) string, ui theme.UI) string {
-	var left string
+	var left strings.Builder
 
 	for t := range prTabCount {
 		n, ok := a.prListTabRows(st, t)
@@ -420,10 +420,10 @@ func (a *App) prListTabRow(st core.State, cw int, panel lipgloss.Style, hint fun
 		}
 
 		if t > 0 {
-			left += panel.Render(" ")
+			left.WriteString(panel.Render(" "))
 		}
 
-		left += style.Render(label)
+		left.WriteString(style.Render(label))
 	}
 
 	kt := a.keys.prList
@@ -438,7 +438,7 @@ func (a *App) prListTabRow(st core.State, cw int, panel lipgloss.Style, hint fun
 		{jump, "jump"},
 	})
 
-	room := cw - ansi.StringWidth(left) - 2
+	room := cw - ansi.StringWidth(left.String()) - 2
 	right, used := "", 0
 
 	for i, kv := range pairs {
@@ -460,8 +460,8 @@ func (a *App) prListTabRow(st core.State, cw int, panel lipgloss.Style, hint fun
 	}
 
 	if right == "" {
-		return left
+		return left.String()
 	}
 
-	return left + panel.Render(strings.Repeat(" ", max(cw-ansi.StringWidth(left)-used, 0))) + right
+	return left.String() + panel.Render(strings.Repeat(" ", max(cw-ansi.StringWidth(left.String())-used, 0))) + right
 }

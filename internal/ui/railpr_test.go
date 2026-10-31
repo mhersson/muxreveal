@@ -117,37 +117,37 @@ func TestRailLineTwoPR(t *testing.T) {
 		icons bool
 		right string
 	}{
-		{"open, checks running", ptr(prInfo("OPEN", checksRunning)), 0, true, iconPR + " #24 " + iconRunning + " 3/5"},
-		{"open, checks passed", ptr(prInfo("OPEN", checksPassed)), 0, true, iconPR + " #24 " + iconPassed + " 5/5"},
-		{"open, checks failed, others still running", ptr(prInfo("OPEN", checksFailing)), 0, true, iconPR + " #24 " + iconFailed + " 2 failed"},
-		{"open, no checks", ptr(prInfo("OPEN")), 0, true, iconPR + " #24"},
-		{"failed with every check done", ptr(prInfo("OPEN", checksDoneFailing)), 0, true, iconPR + " #24 " + iconFailed + " 2 failed"},
-		{"failed with no check counted", ptr(prInfo("OPEN", checksFailedUncounted)), 0, true, iconPR + " #24 " + iconFailed + " 1 failed"},
-		{"approved", ptr(prInfo("OPEN", checksRunning, prReview("APPROVED"))), 0, true, iconPR + " #24 " + iconRunning + " 3/5 " + iconApproved},
-		{"approved, no checks", ptr(prInfo("OPEN", prReview("APPROVED"))), 0, true, iconPR + " #24 " + iconApproved},
-		{"changes requested", ptr(prInfo("OPEN", checksPassed, prReview("CHANGES_REQUESTED"))), 0, true, iconPR + " #24 " + iconPassed + " 5/5 " + iconChanges},
-		{"review required reads as no review", ptr(prInfo("OPEN", checksRunning, prReview("REVIEW_REQUIRED"))), 0, true, iconPR + " #24 " + iconRunning + " 3/5"},
-		{"draft", ptr(prInfo("OPEN", prDraft, checksRunning, prReview("APPROVED"))), 0, true, iconPRDraft + " #24 draft"},
-		{"merged", ptr(prInfo("MERGED", checksPassed, prReview("APPROVED"))), 0, true, iconMerge + " #24 merged"},
-		{"closed", ptr(prInfo("CLOSED", checksRunning)), 0, true, iconPRClosed + " #24 closed"},
-		{"after the commits ahead", ptr(prInfo("OPEN", checksRunning)), 2, true, "↑2  " + iconPR + " #24 " + iconRunning + " 3/5"},
-		{"merged after the commits ahead", ptr(prInfo("MERGED")), 12, true, "↑12  " + iconMerge + " #24 merged"},
+		{"open, checks running", new(prInfo("OPEN", checksRunning)), 0, true, iconPR + " #24 " + iconRunning + " 3/5"},
+		{"open, checks passed", new(prInfo("OPEN", checksPassed)), 0, true, iconPR + " #24 " + iconPassed + " 5/5"},
+		{"open, checks failed, others still running", new(prInfo("OPEN", checksFailing)), 0, true, iconPR + " #24 " + iconFailed + " 2 failed"},
+		{"open, no checks", new(prInfo("OPEN")), 0, true, iconPR + " #24"},
+		{"failed with every check done", new(prInfo("OPEN", checksDoneFailing)), 0, true, iconPR + " #24 " + iconFailed + " 2 failed"},
+		{"failed with no check counted", new(prInfo("OPEN", checksFailedUncounted)), 0, true, iconPR + " #24 " + iconFailed + " 1 failed"},
+		{"approved", new(prInfo("OPEN", checksRunning, prReview("APPROVED"))), 0, true, iconPR + " #24 " + iconRunning + " 3/5 " + iconApproved},
+		{"approved, no checks", new(prInfo("OPEN", prReview("APPROVED"))), 0, true, iconPR + " #24 " + iconApproved},
+		{"changes requested", new(prInfo("OPEN", checksPassed, prReview("CHANGES_REQUESTED"))), 0, true, iconPR + " #24 " + iconPassed + " 5/5 " + iconChanges},
+		{"review required reads as no review", new(prInfo("OPEN", checksRunning, prReview("REVIEW_REQUIRED"))), 0, true, iconPR + " #24 " + iconRunning + " 3/5"},
+		{"draft", new(prInfo("OPEN", prDraft, checksRunning, prReview("APPROVED"))), 0, true, iconPRDraft + " #24 draft"},
+		{"merged", new(prInfo("MERGED", checksPassed, prReview("APPROVED"))), 0, true, iconMerge + " #24 merged"},
+		{"closed", new(prInfo("CLOSED", checksRunning)), 0, true, iconPRClosed + " #24 closed"},
+		{"after the commits ahead", new(prInfo("OPEN", checksRunning)), 2, true, "↑2  " + iconPR + " #24 " + iconRunning + " 3/5"},
+		{"merged after the commits ahead", new(prInfo("MERGED")), 12, true, "↑12  " + iconMerge + " #24 merged"},
 		{"no pull request", nil, 0, true, ""},
 		{"no pull request, commits ahead", nil, 2, true, "↑2"},
 
-		{"icons off, running", ptr(prInfo("OPEN", checksRunning)), 0, false, "#24 ci 3/5"},
-		{"icons off, passed", ptr(prInfo("OPEN", checksPassed)), 0, false, "#24 ci 5/5"},
-		{"icons off, failed", ptr(prInfo("OPEN", checksFailing)), 0, false, "#24 ci 2 failed"},
-		{"icons off, failed with every check done", ptr(prInfo("OPEN", checksDoneFailing)), 0, false, "#24 ci 2 failed"},
-		{"icons off, failed with no check counted", ptr(prInfo("OPEN", checksFailedUncounted)), 0, false, "#24 ci 1 failed"},
-		{"icons off, no checks", ptr(prInfo("OPEN")), 0, false, "#24"},
-		{"icons off, approved", ptr(prInfo("OPEN", checksRunning, prReview("APPROVED"))), 0, false, "#24 ci 3/5 approved"},
-		{"icons off, changes requested", ptr(prInfo("OPEN", checksPassed, prReview("CHANGES_REQUESTED"))), 0, false, "#24 ci 5/5 changes"},
-		{"icons off, approved, no checks", ptr(prInfo("OPEN", prReview("APPROVED"))), 0, false, "#24 approved"},
-		{"icons off, draft", ptr(prInfo("OPEN", prDraft, checksRunning)), 0, false, "#24 draft"},
-		{"icons off, merged", ptr(prInfo("MERGED")), 0, false, "#24 merged"},
-		{"icons off, closed", ptr(prInfo("CLOSED")), 0, false, "#24 closed"},
-		{"icons off, after the commits ahead", ptr(prInfo("OPEN", checksRunning)), 2, false, "↑2  #24 ci 3/5"},
+		{"icons off, running", new(prInfo("OPEN", checksRunning)), 0, false, "#24 ci 3/5"},
+		{"icons off, passed", new(prInfo("OPEN", checksPassed)), 0, false, "#24 ci 5/5"},
+		{"icons off, failed", new(prInfo("OPEN", checksFailing)), 0, false, "#24 ci 2 failed"},
+		{"icons off, failed with every check done", new(prInfo("OPEN", checksDoneFailing)), 0, false, "#24 ci 2 failed"},
+		{"icons off, failed with no check counted", new(prInfo("OPEN", checksFailedUncounted)), 0, false, "#24 ci 1 failed"},
+		{"icons off, no checks", new(prInfo("OPEN")), 0, false, "#24"},
+		{"icons off, approved", new(prInfo("OPEN", checksRunning, prReview("APPROVED"))), 0, false, "#24 ci 3/5 approved"},
+		{"icons off, changes requested", new(prInfo("OPEN", checksPassed, prReview("CHANGES_REQUESTED"))), 0, false, "#24 ci 5/5 changes"},
+		{"icons off, approved, no checks", new(prInfo("OPEN", prReview("APPROVED"))), 0, false, "#24 approved"},
+		{"icons off, draft", new(prInfo("OPEN", prDraft, checksRunning)), 0, false, "#24 draft"},
+		{"icons off, merged", new(prInfo("MERGED")), 0, false, "#24 merged"},
+		{"icons off, closed", new(prInfo("CLOSED")), 0, false, "#24 closed"},
+		{"icons off, after the commits ahead", new(prInfo("OPEN", checksRunning)), 2, false, "↑2  #24 ci 3/5"},
 		{"icons off, no pull request", nil, 0, false, ""},
 	}
 
@@ -420,13 +420,13 @@ func TestRailCardsTakeTheirPRFromTheStore(t *testing.T) {
 	t.Parallel()
 
 	agents := []railAgent{
-		{newTab: true, project: "api", branch: "feat/login", state: core.AgentIdle, pr: ptr(prInfo("OPEN", checksRunning))},
-		{project: "web", branch: "feat/old", state: core.AgentIdle, pr: ptr(prInfo("MERGED"))},
+		{newTab: true, project: "api", branch: "feat/login", state: core.AgentIdle, pr: new(prInfo("OPEN", checksRunning))},
+		{project: "web", branch: "feat/old", state: core.AgentIdle, pr: new(prInfo("MERGED"))},
 		{project: "docs", branch: "main", state: core.AgentIdle},
-		{project: "infra", branch: "feat/infra", state: core.AgentIdle, pr: ptr(prInfo("OPEN"))},
-		{project: "ops", branch: "feat/ops", state: core.AgentIdle, pr: ptr(prInfo("OPEN"))},
-		{project: "tools", branch: "a1b2c3d", detached: true, state: core.AgentIdle, pr: ptr(prInfo("OPEN"))},
-		{project: "lint", branch: "feat/lint", state: core.AgentIdle, pr: ptr(prInfo("OPEN"))},
+		{project: "infra", branch: "feat/infra", state: core.AgentIdle, pr: new(prInfo("OPEN"))},
+		{project: "ops", branch: "feat/ops", state: core.AgentIdle, pr: new(prInfo("OPEN"))},
+		{project: "tools", branch: "a1b2c3d", detached: true, state: core.AgentIdle, pr: new(prInfo("OPEN"))},
+		{project: "lint", branch: "feat/lint", state: core.AgentIdle, pr: new(prInfo("OPEN"))},
 	}
 
 	a := drawApp(t, "catppuccin-mocha", true, 100, 30, agents)
@@ -471,7 +471,7 @@ func TestRailPRShowsInTheFrame(t *testing.T) {
 	t.Parallel()
 
 	agents := []railAgent{
-		{newTab: true, project: "api", branch: "feat/login", state: core.AgentWorking, action: "Edit a.go", age: 4 * time.Minute, stats: &git.Stats{}, ahead: 1, pr: ptr(prInfo("OPEN", checksFailing))},
+		{newTab: true, project: "api", branch: "feat/login", state: core.AgentWorking, action: "Edit a.go", age: 4 * time.Minute, stats: &git.Stats{}, ahead: 1, pr: new(prInfo("OPEN", checksFailing))},
 	}
 
 	a := drawApp(t, "catppuccin-mocha", true, 100, 30, agents)
@@ -558,7 +558,7 @@ func TestPRWaitsForTheNewRepositoryAfterAMove(t *testing.T) {
 			p.churn(t, held)
 			check("once the new repository answered, before its poll", 0, false)
 
-			p.churn(t, p.step(prSnapshotMsg{Snapshot: github.Snapshot{Repo: repoB, PRs: []github.PR{openPRIn(9, "x")}}}))
+			p.churn(t, p.step(prSnapshotMsg{Repo: repoB, PRs: []github.PR{openPRIn(9, "x")}}))
 			check("after the new repository's poll", 9, true)
 		})
 	}

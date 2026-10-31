@@ -20,7 +20,7 @@ const longReason = "HTTP 502 Bad Gateway from the upstream proxy after three ret
 func wholeReason(t *testing.T, text string) {
 	t.Helper()
 
-	for _, w := range strings.Fields(longReason) {
+	for w := range strings.FieldsSeq(longReason) {
 		if !strings.Contains(text, w) {
 			t.Errorf("the word %q of the reason is not shown:\n%s", w, text)
 
@@ -28,7 +28,7 @@ func wholeReason(t *testing.T, text string) {
 		}
 	}
 
-	for _, l := range strings.Split(text, "\n") {
+	for l := range strings.SplitSeq(text, "\n") {
 		if cutWord.MatchString(l) && (strings.Contains(l, "upstream") || strings.Contains(l, "backend") || strings.Contains(l, "zzEND")) {
 			t.Errorf("a row of the reason was cut with an ellipsis: %q", l)
 		}
@@ -145,7 +145,7 @@ func TestPageHintsWaitForTheContent(t *testing.T) {
 	hintRow := func(t *testing.T, a *App) string {
 		t.Helper()
 
-		for _, l := range strings.Split(shownText(a), "\n") {
+		for l := range strings.SplitSeq(shownText(a), "\n") {
 			if strings.Contains(l, "esc checks") {
 				return l
 			}

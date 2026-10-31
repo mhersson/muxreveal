@@ -3,6 +3,7 @@ package core
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"testing"
 )
@@ -188,7 +189,7 @@ func TestMasterStackGeometry(t *testing.T) {
 
 func TestMasterStackConfig(t *testing.T) {
 	lc := defaultLayout()
-	lc.MasterPosition, lc.MasterCount, lc.MasterRatio, lc.MasterGrid = "right", 2, 70, ptr(false)
+	lc.MasterPosition, lc.MasterCount, lc.MasterRatio, lc.MasterGrid = "right", 2, 70, new(false)
 
 	s := openN(t, ModeMaster, 4, lc)
 	if s.Tab().Master != 0.7 {
@@ -706,9 +707,7 @@ func TestSetLayoutModeRebuilds(t *testing.T) {
 
 func copyPanes(m map[PaneID]Pane) map[PaneID]Pane {
 	out := make(map[PaneID]Pane, len(m))
-	for k, v := range m {
-		out[k] = v
-	}
+	maps.Copy(out, m)
 
 	return out
 }

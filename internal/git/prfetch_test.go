@@ -65,13 +65,13 @@ func TestFetchPRWritesOnlyItsRefs(t *testing.T) {
 	after := refs(t, f.work)
 
 	was := map[string]bool{}
-	for _, line := range strings.Split(before, "\n") {
+	for line := range strings.SplitSeq(before, "\n") {
 		was[line] = true
 	}
 
 	var added []string
 
-	for _, line := range strings.Split(after, "\n") {
+	for line := range strings.SplitSeq(after, "\n") {
 		if !was[line] {
 			added = append(added, strings.Fields(line)[0])
 		}
@@ -188,7 +188,7 @@ func TestFetchPRRefusesBadInput(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	for _, line := range strings.Split(string(log), "\n") {
+	for line := range strings.SplitSeq(string(log), "\n") {
 		if strings.Contains(line, "fetch") {
 			t.Errorf("a fetch ran: %s", line)
 		}

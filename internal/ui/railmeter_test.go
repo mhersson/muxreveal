@@ -57,7 +57,7 @@ func TestRailMeterColours(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(strconv.Itoa(tt.pct), func(t *testing.T) {
-			agents := []railAgent{{newTab: true, project: "api", branch: "main", state: core.AgentIdle, age: 8 * time.Second, model: "Opus 5.5", meter: pct(tt.pct)}}
+			agents := []railAgent{{newTab: true, project: "api", branch: "main", state: core.AgentIdle, age: 8 * time.Second, model: "Opus 5.5", meter: new(tt.pct)}}
 			a := drawApp(t, "catppuccin-mocha", true, 100, 30, agents)
 			vt := viewVT(t, a)
 
@@ -155,7 +155,7 @@ func TestMeterIsClampedForDrawing(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(strconv.Itoa(tt.held), func(t *testing.T) {
-			agents := []railAgent{{newTab: true, project: "api", branch: "main", state: core.AgentWorking, model: "Opus 5.5", meter: pct(50)}}
+			agents := []railAgent{{newTab: true, project: "api", branch: "main", state: core.AgentWorking, model: "Opus 5.5", meter: new(50)}}
 			a := drawApp(t, "catppuccin-mocha", true, 100, 30, agents)
 
 			st := a.store.State()

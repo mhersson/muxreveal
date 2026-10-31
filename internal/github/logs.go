@@ -156,16 +156,14 @@ func contentRangeStart(v string) (int64, bool) {
 // redirect's query is a signed credential, and a URL tells the reader nothing.
 // The result still unwraps to the *api.HTTPError.
 func redactURL(err error) error {
-	var he *api.HTTPError
-	if errors.As(err, &he) {
+	if he, ok := errors.AsType[*api.HTTPError](err); ok {
 		cp := *he
 		cp.RequestURL = nil
 
 		return &httpStatusError{he: &cp}
 	}
 
-	var ue *url.Error
-	if errors.As(err, &ue) {
+	if ue, ok := errors.AsType[*url.Error](err); ok {
 		return fmt.Errorf("%s: %w", ue.Op, ue.Err)
 	}
 

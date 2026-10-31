@@ -468,7 +468,7 @@ func TestFailedWatchNotifiesOnce(t *testing.T) {
 
 func TestWatchBatchErrorShowsNothing(t *testing.T) {
 	w := newWatchApp(t, false)
-	w.step(watchMsg{RootBatch: git.RootBatch{Root: "/x", Err: errors.New("boom")}})
+	w.step(watchMsg{Root: "/x", Err: errors.New("boom")})
 
 	if w.notice != "" {
 		t.Errorf("notice = %q", w.notice)

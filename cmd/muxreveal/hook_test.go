@@ -290,8 +290,7 @@ func TestRunHookDrainsStdinWithoutEnvironment(t *testing.T) {
 	}()
 
 	// A context that never expires: the drain must end on its own.
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	captureStdio(t, func() {
 		returns(t, "runHook", func() { runHook(ctx, "claude-code", pr, env(nil)) })

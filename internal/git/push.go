@@ -64,7 +64,7 @@ func Push(ctx context.Context, r Repo, branch string) (PushResult, error) {
 // "<flag>\t<src>:<dst>\t<summary>". summary is git's text after the bracketed
 // reason, e.g. "(non-fast-forward)".
 func parsePorcelain(out, dst string) (status byte, summary string, found bool) {
-	for _, line := range strings.Split(out, "\n") {
+	for line := range strings.SplitSeq(out, "\n") {
 		parts := strings.SplitN(line, "\t", 3)
 		if len(parts) != 3 || len(parts[0]) != 1 {
 			continue

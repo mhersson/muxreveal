@@ -182,7 +182,7 @@ func TestPushURLsIsARead(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	for _, line := range strings.Fields(string(locks)) {
+	for line := range strings.FieldsSeq(string(locks)) {
 		if line != "locks=0" {
 			t.Errorf("a git call ran with %s, want GIT_OPTIONAL_LOCKS=0", line)
 		}
@@ -339,7 +339,7 @@ func TestHasUpstreamIsARead(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	for _, line := range strings.Fields(string(locks)) {
+	for line := range strings.FieldsSeq(string(locks)) {
 		if line != "locks=0" {
 			t.Errorf("a git call ran with %s, want GIT_OPTIONAL_LOCKS=0", line)
 		}

@@ -150,8 +150,7 @@ func TestPullRequestsPartialErrors(t *testing.T) {
 
 	_, prs, _, err := c.PullRequests(context.Background(), testRepo)
 
-	var ge *api.GraphQLError
-	if !errors.As(err, &ge) {
+	if _, ok := errors.AsType[*api.GraphQLError](err); !ok {
 		t.Fatalf("err = %v, want a *api.GraphQLError", err)
 	}
 

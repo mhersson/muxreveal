@@ -4,6 +4,7 @@ import (
 	"html"
 	"net/url"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"unicode"
@@ -184,8 +185,8 @@ func (in *inliner) flat(n ast.Node, st style) {
 			kids = append(kids, k)
 		}
 
-		for i := len(kids) - 1; i >= 0; i-- {
-			stack = append(stack, kids[i])
+		for _, kid := range slices.Backward(kids) {
+			stack = append(stack, kid)
 		}
 	}
 }

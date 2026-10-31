@@ -273,33 +273,33 @@ func TestTrayPRModule(t *testing.T) {
 		tune  func(a *App)
 		want  string // the module's text; empty when it is hidden
 	}{
-		{"the focused agent's PR with checks running", true, agentApp, ptr(prInfo("OPEN", checksRunning)), nil, " " + iconPR + " #24 " + iconRunning + " 3/5 "},
-		{"checks passed", true, agentApp, ptr(prInfo("OPEN", checksPassed)), nil, " " + iconPR + " #24 " + iconPassed + " 5/5 "},
-		{"checks failed, others still running", true, agentApp, ptr(prInfo("OPEN", checksFailing)), nil, " " + iconPR + " #24 " + iconFailed + " 2 failed "},
-		{"no checks", true, agentApp, ptr(prInfo("OPEN")), nil, " " + iconPR + " #24 "},
-		{"failed with every check done", true, agentApp, ptr(prInfo("OPEN", checksDoneFailing)), nil, " " + iconPR + " #24 " + iconFailed + " 2 failed "},
-		{"failed with no check counted", true, agentApp, ptr(prInfo("OPEN", checksFailedUncounted)), nil, " " + iconPR + " #24 " + iconFailed + " 1 failed "},
-		{"the review decision stays on the card", true, agentApp, ptr(prInfo("OPEN", checksRunning, prReview("APPROVED"))), nil, " " + iconPR + " #24 " + iconRunning + " 3/5 "},
-		{"a focused shell pane on a branch with a PR", true, shellApp, ptr(prInfo("OPEN", checksRunning)), nil, " " + iconPR + " #24 " + iconRunning + " 3/5 "},
-		{"icons off", false, agentApp, ptr(prInfo("OPEN", checksRunning)), nil, " #24 ci 3/5 "},
-		{"icons off, passed", false, shellApp, ptr(prInfo("OPEN", checksPassed)), nil, " #24 ci 5/5 "},
-		{"icons off, failed", false, agentApp, ptr(prInfo("OPEN", checksFailing)), nil, " #24 ci 2 failed "},
-		{"icons off, no checks", false, agentApp, ptr(prInfo("OPEN")), nil, " #24 "},
+		{"the focused agent's PR with checks running", true, agentApp, new(prInfo("OPEN", checksRunning)), nil, " " + iconPR + " #24 " + iconRunning + " 3/5 "},
+		{"checks passed", true, agentApp, new(prInfo("OPEN", checksPassed)), nil, " " + iconPR + " #24 " + iconPassed + " 5/5 "},
+		{"checks failed, others still running", true, agentApp, new(prInfo("OPEN", checksFailing)), nil, " " + iconPR + " #24 " + iconFailed + " 2 failed "},
+		{"no checks", true, agentApp, new(prInfo("OPEN")), nil, " " + iconPR + " #24 "},
+		{"failed with every check done", true, agentApp, new(prInfo("OPEN", checksDoneFailing)), nil, " " + iconPR + " #24 " + iconFailed + " 2 failed "},
+		{"failed with no check counted", true, agentApp, new(prInfo("OPEN", checksFailedUncounted)), nil, " " + iconPR + " #24 " + iconFailed + " 1 failed "},
+		{"the review decision stays on the card", true, agentApp, new(prInfo("OPEN", checksRunning, prReview("APPROVED"))), nil, " " + iconPR + " #24 " + iconRunning + " 3/5 "},
+		{"a focused shell pane on a branch with a PR", true, shellApp, new(prInfo("OPEN", checksRunning)), nil, " " + iconPR + " #24 " + iconRunning + " 3/5 "},
+		{"icons off", false, agentApp, new(prInfo("OPEN", checksRunning)), nil, " #24 ci 3/5 "},
+		{"icons off, passed", false, shellApp, new(prInfo("OPEN", checksPassed)), nil, " #24 ci 5/5 "},
+		{"icons off, failed", false, agentApp, new(prInfo("OPEN", checksFailing)), nil, " #24 ci 2 failed "},
+		{"icons off, no checks", false, agentApp, new(prInfo("OPEN")), nil, " #24 "},
 
 		{"no PR hides the module", true, agentApp, nil, nil, ""},
 		{"no PR hides the module for a shell pane", true, shellApp, nil, nil, ""},
-		{"a draft hides it", true, agentApp, ptr(prInfo("OPEN", prDraft, checksRunning)), nil, ""},
-		{"a merged PR hides it", true, agentApp, ptr(prInfo("MERGED")), nil, ""},
-		{"a closed PR hides it", true, shellApp, ptr(prInfo("CLOSED")), nil, ""},
-		{"a repository not on GitHub hides it", true, agentApp, ptr(prInfo("OPEN")), func(a *App) { a.prs.panes["p1"].ok = false }, ""},
-		{"a repository resolved for another branch hides it", true, agentApp, ptr(prInfo("OPEN")), func(a *App) { a.prs.panes["p1"].answered.branch = "other" }, ""},
-		{"a repository resolved for another directory hides it", true, agentApp, ptr(prInfo("OPEN")), func(a *App) { a.prs.panes["p1"].answered.cwd = "/w/elsewhere" }, ""},
-		{"a failed resolution hides it", true, agentApp, ptr(prInfo("OPEN")), func(a *App) {
+		{"a draft hides it", true, agentApp, new(prInfo("OPEN", prDraft, checksRunning)), nil, ""},
+		{"a merged PR hides it", true, agentApp, new(prInfo("MERGED")), nil, ""},
+		{"a closed PR hides it", true, shellApp, new(prInfo("CLOSED")), nil, ""},
+		{"a repository not on GitHub hides it", true, agentApp, new(prInfo("OPEN")), func(a *App) { a.prs.panes["p1"].ok = false }, ""},
+		{"a repository resolved for another branch hides it", true, agentApp, new(prInfo("OPEN")), func(a *App) { a.prs.panes["p1"].answered.branch = "other" }, ""},
+		{"a repository resolved for another directory hides it", true, agentApp, new(prInfo("OPEN")), func(a *App) { a.prs.panes["p1"].answered.cwd = "/w/elsewhere" }, ""},
+		{"a failed resolution hides it", true, agentApp, new(prInfo("OPEN")), func(a *App) {
 			pp := a.prs.panes["p1"]
 			pp.failed, pp.answered.branch = true, "feat/old"
 		}, ""},
-		{"a detached head hides it", true, agentApp, ptr(prInfo("OPEN")), func(a *App) { a.railEntry("p1").probe.detached = true }, ""},
-		{"a pane the head probe has not answered for hides it", true, agentApp, ptr(prInfo("OPEN")), func(a *App) { a.railEntry("p1").probe.known = false }, ""},
+		{"a detached head hides it", true, agentApp, new(prInfo("OPEN")), func(a *App) { a.railEntry("p1").probe.detached = true }, ""},
+		{"a pane the head probe has not answered for hides it", true, agentApp, new(prInfo("OPEN")), func(a *App) { a.railEntry("p1").probe.known = false }, ""},
 	}
 
 	for _, tt := range tests {
@@ -510,13 +510,13 @@ func TestBarGoldens(t *testing.T) {
 		{"icons layout and clock", true, 50, nil},
 		{"plain wide", false, 100, nil},
 		{"plain without load", false, 60, nil},
-		{"icons wide with a PR running", true, 100, ptr(prInfo("OPEN", checksRunning))},
-		{"icons wide with a PR passed", true, 100, ptr(prInfo("OPEN", checksPassed))},
-		{"icons wide with a PR failed", true, 100, ptr(prInfo("OPEN", checksFailing))},
-		{"icons without load with a PR", true, 70, ptr(prInfo("OPEN", checksRunning))},
-		{"plain wide with a PR running", false, 100, ptr(prInfo("OPEN", checksRunning))},
-		{"plain wide with a PR failed", false, 100, ptr(prInfo("OPEN", checksFailing))},
-		{"plain without load with a PR", false, 70, ptr(prInfo("OPEN", checksPassed))},
+		{"icons wide with a PR running", true, 100, new(prInfo("OPEN", checksRunning))},
+		{"icons wide with a PR passed", true, 100, new(prInfo("OPEN", checksPassed))},
+		{"icons wide with a PR failed", true, 100, new(prInfo("OPEN", checksFailing))},
+		{"icons without load with a PR", true, 70, new(prInfo("OPEN", checksRunning))},
+		{"plain wide with a PR running", false, 100, new(prInfo("OPEN", checksRunning))},
+		{"plain wide with a PR failed", false, 100, new(prInfo("OPEN", checksFailing))},
+		{"plain without load with a PR", false, 70, new(prInfo("OPEN", checksPassed))},
 	}
 
 	for _, tt := range tests {

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -261,9 +262,9 @@ func headings(lay md.Layout) (at []int, text []string) {
 func headingAbove(lay md.Layout, top int) (text string, nth, at int, ok bool) {
 	lines, texts := headings(lay)
 
-	for k := len(lines) - 1; k >= 0; k-- {
-		if lines[k] <= top {
-			return texts[k], countText(texts[:k], texts[k]), lines[k], true
+	for k, line := range slices.Backward(lines) {
+		if line <= top {
+			return texts[k], countText(texts[:k], texts[k]), line, true
 		}
 	}
 

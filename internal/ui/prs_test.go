@@ -171,7 +171,7 @@ func (r *railApp) churn(t *testing.T, cmd tea.Cmd) {
 func snapshotOf(prs ...github.PR) prSnapshotMsg { return snapshotOfRepo(prRepo, prs...) }
 
 func snapshotOfRepo(repo github.Repo, prs ...github.PR) prSnapshotMsg {
-	return prSnapshotMsg{Snapshot: github.Snapshot{Repo: repo, Info: github.RepoInfo{DefaultBranch: "main"}, PRs: prs}}
+	return prSnapshotMsg{Repo: repo, Info: github.RepoInfo{DefaultBranch: "main"}, PRs: prs}
 }
 
 func openPRIn(n int, branch string) github.PR {
@@ -365,7 +365,7 @@ func TestIdenticalPollsDispatchNothing(t *testing.T) {
 }
 
 func errSnapshot(err error) prSnapshotMsg {
-	return prSnapshotMsg{Snapshot: github.Snapshot{Repo: prRepo, Err: err}}
+	return prSnapshotMsg{Repo: prRepo, Err: err}
 }
 
 func TestPollErrorIsShownOnce(t *testing.T) {

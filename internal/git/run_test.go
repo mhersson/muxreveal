@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"syscall"
@@ -280,7 +281,7 @@ wait`)
 
 	deadline := time.Now().Add(time.Second)
 
-	for _, field := range strings.Fields(string(raw)) {
+	for field := range strings.FieldsSeq(string(raw)) {
 		pid, err := strconv.Atoi(field)
 		if err != nil {
 			t.Fatal(err)
@@ -377,23 +378,13 @@ func TestNetCallHasNoTerminal(t *testing.T) {
 		os.Unsetenv(name)
 	}
 
-	hasEnv := func(cmdEnv []string, kv string) bool {
-		for _, e := range cmdEnv {
-			if e == kv {
-				return true
-			}
-		}
-
-		return false
-	}
-
 	netCmd := call{args: []string{"fetch"}, net: true}.command(context.Background())
 	if !netCmd.SysProcAttr.Setsid || netCmd.SysProcAttr.Setpgid {
 		t.Errorf("net call attr = %+v, want Setsid without Setpgid", netCmd.SysProcAttr)
 	}
 
 	for _, kv := range []string{"GIT_TERMINAL_PROMPT=0", "GCM_INTERACTIVE=never"} {
-		if !hasEnv(netCmd.Env, kv) {
+		if !slices.Contains(netCmd.Env, kv) {
 			t.Errorf("net call lacks %s", kv)
 		}
 	}
@@ -404,7 +395,7 @@ func TestNetCallHasNoTerminal(t *testing.T) {
 	}
 
 	for _, kv := range []string{"GIT_TERMINAL_PROMPT=0", "GCM_INTERACTIVE=never"} {
-		if hasEnv(plain.Env, kv) {
+		if slices.Contains(plain.Env, kv) {
 			t.Errorf("plain call has %s", kv)
 		}
 	}

@@ -70,7 +70,7 @@ func parseWorktrees(out []byte) []Worktree {
 		cur  *Worktree
 	)
 
-	for _, field := range bytes.Split(out, []byte{0}) {
+	for field := range bytes.SplitSeq(out, []byte{0}) {
 		line := string(field)
 		if line == "" {
 			cur = nil

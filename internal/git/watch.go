@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -423,10 +424,8 @@ func (w *Watcher) relPath(name string) (string, bool) {
 		return "", false
 	}
 
-	for _, part := range parts {
-		if part == ".git" {
-			return "", false
-		}
+	if slices.Contains(parts, ".git") {
+		return "", false
 	}
 
 	return filepath.ToSlash(rel), true
@@ -711,7 +710,7 @@ func (w *Watcher) checkIgnore(ctx context.Context, paths []string) (map[string]b
 
 	ignored := map[string]bool{}
 
-	for _, p := range strings.Split(string(out), "\x00") {
+	for p := range strings.SplitSeq(string(out), "\x00") {
 		if p != "" {
 			ignored[p] = true
 		}

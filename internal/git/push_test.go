@@ -325,7 +325,7 @@ func TestPushNeverForces(t *testing.T) {
 
 	seen := false
 
-	for _, line := range strings.Split(string(log), "\n") {
+	for line := range strings.SplitSeq(string(log), "\n") {
 		fields := strings.Fields(line)
 		if !slices.Contains(fields, "push") {
 			continue

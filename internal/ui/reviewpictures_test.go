@@ -94,9 +94,9 @@ func (m *renderedPicture) show(t *testing.T, w, h int) uint32 {
 func textX(t *testing.T, content, text string) int {
 	t.Helper()
 
-	for _, l := range strings.Split(ansi.Strip(content), "\n") {
-		if i := strings.Index(l, text); i >= 0 {
-			return ansi.StringWidth(l[:i])
+	for l := range strings.SplitSeq(ansi.Strip(content), "\n") {
+		if before, _, ok := strings.Cut(l, text); ok {
+			return ansi.StringWidth(before)
 		}
 	}
 

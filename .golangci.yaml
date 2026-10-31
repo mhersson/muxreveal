@@ -16,6 +16,7 @@ linters:
   - godot
   - gosec
   - misspell
+  - modernize
   - nakedret
   - nlreturn
   - noctx

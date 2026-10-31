@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"image"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -141,9 +142,9 @@ func logFailedStep(l github.JobLog) string {
 		return ""
 	}
 
-	for g := len(l.Groups) - 1; g >= 0; g-- {
-		if l.Groups[g].Head < l.FirstError {
-			return l.Groups[g].Title
+	for _, v := range slices.Backward(l.Groups) {
+		if v.Head < l.FirstError {
+			return v.Title
 		}
 	}
 

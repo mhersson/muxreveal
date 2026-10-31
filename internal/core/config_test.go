@@ -12,10 +12,8 @@ import (
 	"github.com/mhersson/muxreveal/internal/core/tiling"
 )
 
-func ptr[T any](v T) *T { return &v }
-
 func TestIconsOn(t *testing.T) {
-	if !DefaultConfig().IconsOn() || !(Config{Icons: ptr(true)}).IconsOn() || (Config{Icons: ptr(false)}).IconsOn() {
+	if !DefaultConfig().IconsOn() || !(Config{Icons: new(true)}).IconsOn() || (Config{Icons: new(false)}).IconsOn() {
 		t.Error("IconsOn: want true for nil and true, false for false")
 	}
 }
@@ -30,7 +28,7 @@ func TestClipboardDefaultsOn(t *testing.T) {
 		t.Error("mouse: want both options off by default")
 	}
 
-	off := Clipboard{OSC52: ptr(false), Native: ptr(false)}
+	off := Clipboard{OSC52: new(false), Native: new(false)}
 	if off.OSC52On() || off.NativeOn() {
 		t.Error("clipboard: want false to turn both off")
 	}
@@ -51,8 +49,8 @@ func TestLoadConfig(t *testing.T) {
 		{name: "comments only", content: "# theme = \"x\"\n\n# more\n", want: DefaultConfig()},
 		{name: "theme set", content: "theme = \"catppuccin-latte\"\n", want: Config{Theme: "catppuccin-latte"}},
 		{name: "theme name not validated", content: "theme = \"no-such-theme\"\n", want: Config{Theme: "no-such-theme"}},
-		{name: "icons off", content: "icons = false\n", want: Config{Theme: DefaultTheme, Icons: ptr(false)}},
-		{name: "icons on", content: "icons = true\n", want: Config{Theme: DefaultTheme, Icons: ptr(true)}},
+		{name: "icons off", content: "icons = false\n", want: Config{Theme: DefaultTheme, Icons: new(false)}},
+		{name: "icons on", content: "icons = true\n", want: Config{Theme: DefaultTheme, Icons: new(true)}},
 		{name: "icons wrong type", content: "icons = \"no\"\n", wantErr: true, errHas: []string{"line 1", "icons"}},
 		{
 			name: "mouse options", content: "[mouse]\nfocus_follows_mouse = true\ncopy_on_select = true\n",
@@ -64,11 +62,11 @@ func TestLoadConfig(t *testing.T) {
 		},
 		{
 			name: "clipboard off", content: "[clipboard]\nosc52 = false\nnative = false\n",
-			want: Config{Theme: DefaultTheme, Clipboard: Clipboard{OSC52: ptr(false), Native: ptr(false)}},
+			want: Config{Theme: DefaultTheme, Clipboard: Clipboard{OSC52: new(false), Native: new(false)}},
 		},
 		{
 			name: "clipboard native only off", content: "[clipboard]\nnative = false\n",
-			want: Config{Theme: DefaultTheme, Clipboard: Clipboard{Native: ptr(false)}},
+			want: Config{Theme: DefaultTheme, Clipboard: Clipboard{Native: new(false)}},
 		},
 		{name: "unknown mouse key", content: "[mouse]\nfocus = true\n", wantErr: true, errHas: []string{"unknown key mouse.focus"}},
 		{name: "unknown clipboard key", content: "[clipboard]\nosc = true\n", wantErr: true, errHas: []string{"unknown key clipboard.osc"}},
@@ -200,7 +198,7 @@ func TestLayoutDefaults(t *testing.T) {
 
 	want := LayoutConfig{
 		DefaultMode: "bsp", AutoScheme: "spiral", MasterRatio: 50, MasterPosition: "left",
-		MasterCount: 1, MasterGrid: ptr(true), ColumnWidth: 50,
+		MasterCount: 1, MasterGrid: new(true), ColumnWidth: 50,
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("default layout = %+v, want %+v", got, want)
@@ -221,7 +219,7 @@ func TestLayoutZeroValueMeansDefaults(t *testing.T) {
 
 	set := LayoutConfig{
 		DefaultMode: "master-stack", AutoScheme: "alternate", MasterRatio: 70, MasterCount: 2,
-		MasterPosition: "top", MasterGrid: ptr(false), ColumnWidth: 25,
+		MasterPosition: "top", MasterGrid: new(false), ColumnWidth: 25,
 	}
 	if set.Mode() != ModeMaster || set.Scheme() != tiling.SchemeAlternate || set.ratio() != 0.7 || set.count() != 2 ||
 		set.position() != "top" || set.grid() || set.columnWidth() != 0.25 {
@@ -257,7 +255,7 @@ func TestLayoutValidate(t *testing.T) {
 		{"top", with(func(c *LayoutConfig) { c.MasterPosition = "top" })},
 		{"bottom", with(func(c *LayoutConfig) { c.MasterPosition = "bottom" })},
 		{"center", with(func(c *LayoutConfig) { c.MasterPosition = "center" })},
-		{"grid off", with(func(c *LayoutConfig) { c.MasterGrid = ptr(false) })},
+		{"grid off", with(func(c *LayoutConfig) { c.MasterGrid = new(false) })},
 	}
 	for _, tt := range good {
 		if err := tt.c.Validate(); err != nil {

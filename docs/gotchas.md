@@ -214,3 +214,14 @@ what to do about it. Skim it before your first commit each session.
   changes only those files runs no CI at all.
 - CI pins golangci-lint to v2.15.0. Use the same version locally: another one
   can format or lint differently and fail `fmt-check` or `lint` in CI only.
+
+## Go version upgrades
+
+- Lint runs `modernize`, so new code takes the modern forms at commit time;
+  `golangci-lint run --fix` applies them.
+- A new Go release can bring new `go fix` fixers. After raising the Go version
+  in `go.mod`, run `go fix ./...` and `go fix -tags bench,live ./...`, then
+  `make fmt` and `make check-fast TEST_PKGS=./...`, fix by hand the lint the
+  rewrite trips (helpers it leaves unused, blank lines), and put it up as its
+  own pull request, apart from feature work. The fsnotify copy must stay
+  untouched.

@@ -24,12 +24,12 @@ func assertBordersAligned(t *testing.T, l Layout, rows []string) {
 	want := -1
 
 	for i, p := range rows {
-		j := strings.LastIndex(p, "│")
-		if j < 0 {
+		before, _, ok := strings.CutLast(p, "│")
+		if !ok {
 			continue
 		}
 
-		col := ansi.StringWidth(p[:j])
+		col := ansi.StringWidth(before)
 		if want < 0 {
 			want = col
 		} else if col != want {

@@ -293,7 +293,7 @@ func TestRenamePromptWithoutIcons(t *testing.T) {
 	chord(a, ',')
 	press(a, keyRune('a'))
 
-	if got := strings.Split(ansi.Strip(a.View().Content), "\n")[0]; !strings.HasPrefix(got, " 1 a ") {
+	if got, _, _ := strings.Cut(ansi.Strip(a.View().Content), "\n"); !strings.HasPrefix(got, " 1 a ") {
 		t.Errorf("bar = %q, want ` 1 a `", got)
 	}
 
@@ -590,7 +590,7 @@ func TestHiddenPaneExit(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if got := strings.Split(ansi.Strip(a.View().Content), "\n")[0]; strings.Contains(got, iconRename) {
+		if got, _, _ := strings.Cut(ansi.Strip(a.View().Content), "\n"); strings.Contains(got, iconRename) {
 			t.Errorf("bar draws the input of a hidden tab: %q", got)
 		}
 
