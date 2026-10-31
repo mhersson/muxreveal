@@ -91,7 +91,7 @@ func ParseJobLog(data []byte, cut bool) JobLog {
 		}
 
 		first = false
-		raw = bytes.TrimSuffix(raw, []byte{'\r'})
+		raw = bytes.TrimRight(raw, "\r")
 
 		var line LogLine
 
@@ -216,9 +216,12 @@ func logSpans(prefix string, b []byte) []LogSpan {
 		case c == 0x1b:
 			end, params, sgr := logEscape(b, i)
 			if sgr {
-				flush()
+				nc, nb := applySGR(params, color, bold)
+				if nc != color || nb != bold {
+					flush()
 
-				color, bold = applySGR(params, color, bold)
+					color, bold = nc, nb
+				}
 			}
 
 			i = end

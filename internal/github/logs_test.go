@@ -90,6 +90,9 @@ func TestJobLogRange(t *testing.T) {
 	}{
 		{"tail of a longer log", "bytes 10-19/20", true},
 		{"whole log", "bytes 0-19/20", false},
+		{"unknown start, short body", "bytes */20", false},
+		{"missing header, short body", "", false},
+		{"garbled header, short body", "garbled", false},
 	}
 
 	for _, tt := range tests {
@@ -302,5 +305,62 @@ func TestCheckRun(t *testing.T) {
 
 	if want := (CheckRunOutput{Title: "Coverage", Summary: "92% of lines"}); got != want {
 		t.Errorf("got %+v, want %+v", got, want)
+	}
+}
+
+func TestReadTail(t *testing.T) {
+	t.Parallel()
+
+	got, total, err := readTail(strings.NewReader("0123456789"), 4, 20)
+	if err != nil || string(got) != "6789" || total != 10 {
+		t.Fatalf("readTail = %q, %d, %v", got, total, err)
+	}
+
+	got, total, err = readTail(strings.NewReader("0123456789"), 4, 9)
+	if !errors.Is(err, ErrJobLogTooLarge) || got != nil || total <= 9 {
+		t.Fatalf("over the limit: %q, %d, %v", got, total, err)
+	}
+}
+
+func TestContentRangeStart(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		in    string
+		start int64
+		ok    bool
+	}{
+		{"bytes 10-19/20", 10, true},
+		{"bytes 0-19/20", 0, true},
+		{"bytes */20", 0, false},
+		{"", 0, false},
+		{"garbled", 0, false},
+		{"bytes x-19/20", 0, false},
+	}
+	for _, tc := range tests {
+		start, ok := contentRangeStart(tc.in)
+		if start != tc.start || ok != tc.ok {
+			t.Errorf("contentRangeStart(%q) = %d, %v; want %d, %v", tc.in, start, ok, tc.start, tc.ok)
+		}
+	}
+}
+
+func TestJobLogRangeWithoutStart(t *testing.T) {
+	t.Parallel()
+
+	for _, header := range []string{"bytes */9999999", "", "garbled"} {
+		c, _ := logClient(t, func(w http.ResponseWriter, _ *http.Request) {
+			if header != "" {
+				w.Header().Set("Content-Range", header)
+			}
+
+			w.WriteHeader(http.StatusPartialContent)
+			_, _ = w.Write(bytes.Repeat([]byte("x"), JobLogTail))
+		})
+
+		_, cut, err := c.JobLog(context.Background(), logRepo, 51234987)
+		if err != nil || !cut {
+			t.Errorf("Content-Range %q: cut %v, err %v; a full tail with no start reads cut", header, cut, err)
+		}
 	}
 }

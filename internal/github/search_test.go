@@ -57,7 +57,7 @@ func TestMyPRs(t *testing.T) {
 		{Repo{"github.com", "acme", "infra"}, 88, "bot-user"},
 	}
 	if g := briefs(got.Requested); !reflect.DeepEqual(g, wantReq) {
-		t.Errorf("Requested = %v, want %v", g, wantReq)
+		t.Fatalf("Requested = %v, want %v", g, wantReq)
 	}
 
 	if c := got.Requested[0].PR.Checks; c.Total != 6 || c.Done != 6 || c.State != CheckSuccess {

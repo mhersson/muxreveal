@@ -41,6 +41,11 @@ func TestParseJobLogLines(t *testing.T) {
 		{"empty", "", false, nil, time.Time{}},
 		{"bad time", "2026-13-30T12:01:05Z x\n", false, []string{"2026-13-30T12:01:05Z x"}, time.Time{}},
 		{"tab kept", "a\tb\n", false, []string{"a\tb"}, time.Time{}},
+		{"double cr", "a\r\r\n", false, []string{"a"}, time.Time{}},
+		{"colour then cr", "\x1b[31m\rz\n", false, []string{"z"}, time.Time{}},
+		{"timestamp only", "2026-10-30T12:01:05.1234567Z \n", false, []string{""}, at},
+		{"stray endgroup", "##[endgroup]\na\n", false, []string{"a"}, time.Time{}},
+		{"unterminated osc then line", "a\x1b]0;t\nb\n", false, []string{"a", "b"}, time.Time{}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -182,6 +187,10 @@ func TestParseJobLogColours(t *testing.T) {
 		{"empty resets", "\x1b[1;31ma\x1b[mb", []LogSpan{{"a", 1, true}, {"b", -1, false}}},
 		{"trailing empty resets", "\x1b[1;31ma\x1b[1;mb", []LogSpan{{"a", 1, true}, {"b", -1, false}}},
 		{"unterminated", "a\x1b[31", []LogSpan{{"a", -1, false}}},
+		{"leading reset", "\x1b[0ma", []LogSpan{{"a", -1, false}}},
+		{"reset changes nothing", "a\x1b[0mb", []LogSpan{{"ab", -1, false}}},
+		{"repeated colour", "\x1b[31ma\x1b[31mb", []LogSpan{{"ab", 1, false}}},
+		{"colour then bold", "\x1b[31ma\x1b[1mb", []LogSpan{{"a", 1, false}, {"b", 1, true}}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -225,6 +234,7 @@ func TestParseJobLogEscapes(t *testing.T) {
 		{"invisible", "q\xe2\x80\xaer\xe2\x80\x8bs\xef\xbb\xbf", "qrs"},
 		{"invalid utf8", "t\xffu\xc3v\x9bw", "tuvw"},
 		{"lone esc", "x\x1b", "x"},
+		{"csi intermediate", "\x1b[1 qz", "z"},
 		{"esc in csi", "y\x1b[3\x1b[31mz", "yz"},
 	}
 	for _, tc := range tests {
@@ -248,6 +258,19 @@ func TestParseJobLogEscapes(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestParseJobLogGroupTitleColour(t *testing.T) {
+	t.Parallel()
+
+	log := ParseJobLog([]byte("##[group]\x1b[36;1mBuild\x1b[0m step\nx\n"), false)
+	if len(log.Groups) != 1 || log.Groups[0].Title != "Build step" {
+		t.Fatalf("groups = %+v", log.Groups)
+	}
+
+	if got := log.Lines[0].Spans[0]; got.Color != 6 || !got.Bold {
+		t.Errorf("head span = %+v, want cyan bold", got)
 	}
 }
 
