@@ -148,5 +148,5 @@ func (c *Client) query(ctx context.Context, name string, q any, vars map[string]
 		return nil
 	}
 
-	return fmt.Errorf("github: query %s: %w", name, classifyAt(err, time.Now(), reset))
+	return fmt.Errorf("github: query %s: %w", name, classifyAt(redactURL(err), time.Now(), reset))
 }

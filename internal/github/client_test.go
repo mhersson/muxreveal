@@ -5,7 +5,6 @@ import (
 	"errors"
 	"io"
 	"net/http"
-	"net/url"
 	"os"
 	"strings"
 	"sync"
@@ -277,11 +276,6 @@ func TestGraphQLHTTPErrors(t *testing.T) {
 				t.Errorf("no *api.HTTPError with status %d in %v", tc.status, err)
 			}
 
-			var ue *url.Error
-			if !errors.As(err, &ue) {
-				t.Errorf("no *url.Error in the chain: %v", err)
-			}
-
 			if strings.Contains(err.Error(), testToken) {
 				t.Error("error carries the token")
 			}
@@ -464,4 +458,61 @@ func TestRESTRateLimits(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestGraphQLErrorsCarryNoURL(t *testing.T) {
+	t.Parallel()
+
+	const secret = "sig=SECRET"
+
+	t.Run("a transport failure names no URL", func(t *testing.T) {
+		t.Parallel()
+
+		cause := errors.New("connection refused")
+		rt := roundTripFunc(func(*http.Request) (*http.Response, error) { return nil, cause })
+
+		c, err := NewClient("github.com", Options{Token: testToken, Transport: rt})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		var q viewerQuery
+
+		err = c.query(context.Background(), "Viewer", &q, nil)
+		if err == nil {
+			t.Fatal("no error")
+		}
+
+		if strings.Contains(err.Error(), "https://") || strings.Contains(err.Error(), "api.github.com") {
+			t.Errorf("the error names the URL: %v", err)
+		}
+
+		if !errors.Is(err, cause) {
+			t.Errorf("the cause is lost: %v", err)
+		}
+	})
+
+	t.Run("a bad gateway names no query string", func(t *testing.T) {
+		t.Parallel()
+
+		c, _ := newTestClient(t, "github.com", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusBadGateway)
+		}))
+
+		var q viewerQuery
+
+		err := c.query(context.Background(), "Viewer", &q, map[string]any{"x": secret})
+		if err == nil {
+			t.Fatal("no error")
+		}
+
+		if strings.Contains(err.Error(), "?") || strings.Contains(err.Error(), secret) {
+			t.Errorf("the error carries a query string: %v", err)
+		}
+
+		var he *api.HTTPError
+		if !errors.As(err, &he) || he.StatusCode != http.StatusBadGateway {
+			t.Errorf("no 502 *api.HTTPError in %v", err)
+		}
+	})
 }
