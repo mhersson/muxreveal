@@ -151,12 +151,22 @@ func diffPieces(raw string, tagCR bool, width int) []md.Piece {
 		}
 
 		if width > 1 && n < len(units) {
-			rest := copyText(line[min(units[n].raw, len(line)):])
+			u := units[n]
+			rest := copyText(line[min(u.raw, len(line)):])
+
 			if tagCR {
 				rest += endingTag
 			}
 
-			ellipsis = &md.Piece{Col: cum, Cells: 1, Text: rest, Whole: true}
+			// The drawing cuts at width-1 cells, so a tab or tag that straddles the
+			// cut shows its leading cells before the ellipsis; a character that
+			// does not fit is dropped and the ellipsis follows the cells before it.
+			end := cum
+			if u.whole && limit > cum {
+				end = limit
+			}
+
+			ellipsis = &md.Piece{Col: cum, Cells: end - cum + 1, Text: rest, Whole: true}
 		}
 
 		units = units[:n]

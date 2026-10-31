@@ -514,11 +514,14 @@ func TestDiffPieces(t *testing.T) {
 			{Col: 0, Cells: lineBudget, Text: long[:lineBudget]}, {Col: lineBudget, Cells: 1, Text: long[lineBudget:], Whole: true},
 		}},
 		{"ending tag", "ab", true, 20, []md.Piece{{Col: 0, Cells: 2, Text: "ab"}, {Col: 2, Cells: 8, Text: "⟨U+000D⟩", Whole: true}}},
-		{"ending tag cut off", "ab", true, 5, []md.Piece{{Col: 0, Cells: 2, Text: "ab"}, {Col: 2, Cells: 1, Text: "⟨U+000D⟩", Whole: true}}},
+		{"ending tag cut off", "ab", true, 5, []md.Piece{{Col: 0, Cells: 2, Text: "ab"}, {Col: 2, Cells: 3, Text: "⟨U+000D⟩", Whole: true}}},
 		{"wide characters", "日本語", false, 10, []md.Piece{{Col: 0, Cells: 6, Text: "日本語"}}},
 		{"wide character cut", "日本語", false, 5, []md.Piece{{Col: 0, Cells: 4, Text: "日本"}, {Col: 4, Cells: 1, Text: "語", Whole: true}}},
 		{"wide character at the cut", "a日本", false, 4, []md.Piece{{Col: 0, Cells: 3, Text: "a日"}, {Col: 3, Cells: 1, Text: "本", Whole: true}}},
-		{"tag at the cut", "ab\u200bcd", false, 5, []md.Piece{{Col: 0, Cells: 2, Text: "ab"}, {Col: 2, Cells: 1, Text: "⟨U+200B⟩cd", Whole: true}}},
+		{"tag at the cut", "ab\u200bcd", false, 5, []md.Piece{{Col: 0, Cells: 2, Text: "ab"}, {Col: 2, Cells: 3, Text: "⟨U+200B⟩cd", Whole: true}}},
+		{"tab at the cut", "ab\tx", false, 4, []md.Piece{{Col: 0, Cells: 2, Text: "ab"}, {Col: 2, Cells: 2, Text: "\tx", Whole: true}}},
+		{"wide character dropped after a tag", "a\u200b日", false, 10, []md.Piece{{Col: 0, Cells: 1, Text: "a"}, {Col: 1, Cells: 8, Text: "⟨U+200B⟩", Whole: true}, {Col: 9, Cells: 1, Text: "日", Whole: true}}},
+		{"wide character dropped after a tab", "\t日", false, 5, []md.Piece{{Col: 0, Cells: 4, Text: "\t", Whole: true}, {Col: 4, Cells: 1, Text: "日", Whole: true}}},
 		{"tab in the rest", "abcdefgh\ti", false, 5, []md.Piece{{Col: 0, Cells: 4, Text: "abcd"}, {Col: 4, Cells: 1, Text: "efgh\ti", Whole: true}}},
 	}
 
@@ -997,5 +1000,43 @@ func TestDiffCopyKey(t *testing.T) {
 
 	if got := clipboardWrites(d.clip); len(got) != 0 || d.notice != "" {
 		t.Errorf("y on an info row wrote %q with the notice %q, want nothing", got, d.notice)
+	}
+}
+
+func TestDiffPiecesCopyEdges(t *testing.T) {
+	t.Parallel()
+
+	wide := diffPieces("日本", false, 10)
+	tagged := diffPieces("a\u200bb", false, 20)
+
+	tests := []struct {
+		name      string
+		pieces    []md.Piece
+		from, to  int
+		want      string
+		wantPaint [][2]int
+	}{
+		{"ends on a wide right half", wide, 0, 1, "日", [][2]int{{0, 1}}},
+		{"starts on a wide right half", wide, 1, 1, "日", [][2]int{{0, 1}}},
+		{"spans two wide characters", wide, 1, 2, "日本", [][2]int{{0, 3}}},
+		{"ends inside a tag", tagged, 0, 4, "a⟨U+200B⟩", [][2]int{{0, 8}}},
+		{"starts inside a tag", tagged, 3, 9, "⟨U+200B⟩b", [][2]int{{1, 9}}},
+		{"only inside a tag", tagged, 3, 3, "⟨U+200B⟩", [][2]int{{1, 8}}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			lt := md.LineText{Pieces: tt.pieces}
+
+			if got := md.CopyLines([]md.LineText{lt}, []md.CellRange{{From: tt.from, To: tt.to}}, false); got != tt.want {
+				t.Errorf("copy = %q, want %q", got, tt.want)
+			}
+
+			if got := textPaint(lt, tt.from, tt.to); !slices.Equal(got, tt.wantPaint) {
+				t.Errorf("paint = %v, want %v", got, tt.wantPaint)
+			}
+		})
 	}
 }
