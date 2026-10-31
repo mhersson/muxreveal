@@ -65,9 +65,8 @@ func TestHighlightRunsOffTheLoop(t *testing.T) {
 	}
 }
 
+// It compares highlighted spans, so it runs serially (docs/gotchas.md).
 func TestHighlightAnswerFollowsItsView(t *testing.T) {
-	t.Parallel()
-
 	noLexer := func() reviewScene {
 		s := cacheScene()
 		lines := []string{" \tone", "-\ttwo", "+\tthree", " \tfour"}
@@ -95,7 +94,30 @@ func TestHighlightAnswerFollowsItsView(t *testing.T) {
 			}
 		}},
 		{"changed text", cacheScene, func(t *testing.T, a *App, v *reviewView) {
-			applyLive(a, v, edited())
+			before := map[spanKey][]string{}
+
+			for i := range v.rows {
+				for _, r := range v.rowSpans(i) {
+					_, before[r.key] = v.chunkLines(r.key)
+				}
+			}
+
+			res := turn4Result()
+			res.Files[1].Hunks[0].Lines[3].Text = "\t// a comment where the code was"
+			applyLive(a, v, res)
+
+			differs := false
+
+			for k, old := range before {
+				path, lines := v.chunkLines(k)
+				if !reflect.DeepEqual(a.drawer.hl.Highlight(path, old), a.drawer.hl.Highlight(path, lines)) {
+					differs = true
+				}
+			}
+
+			if !differs {
+				t.Fatal("the edit leaves every chunk's spans as they were, so the case cannot fail")
+			}
 		}, func(t *testing.T, a *App, v *reviewView) {
 			settleDrawer(t, a)
 
@@ -174,8 +196,6 @@ func TestHighlightAnswerFollowsItsView(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
 			a := tt.scene().build(t)
 			v := a.reviewViewOf(a.store.State().Tab().ID)
 			v.gen++
