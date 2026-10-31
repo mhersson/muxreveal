@@ -248,7 +248,8 @@ func (a *App) highlightRows(tab core.TabID, v *reviewView, lay drawerLayout) *hl
 		budget = hlBatch
 	)
 
-	walk := func(rows []int) {
+	// holdOnly stores the chunks a cache holds and adds no text to the job.
+	walk := func(rows []int, holdOnly bool) {
 		for _, i := range rows {
 			for _, ref := range v.rowSpans(i) {
 				if _, done := c.spans[ref.key]; done || queued[ref.key] {
@@ -270,6 +271,10 @@ func (a *App) highlightRows(tab core.TabID, v *reviewView, lay drawerLayout) *hl
 					continue
 				}
 
+				if holdOnly {
+					continue
+				}
+
 				if at, ok := bySum[sum]; ok {
 					texts[at].keys = append(texts[at].keys, ref.key)
 					queued[ref.key] = true
@@ -278,6 +283,8 @@ func (a *App) highlightRows(tab core.TabID, v *reviewView, lay drawerLayout) *hl
 				}
 
 				if len(lines) > budget {
+					queued[ref.key] = true
+
 					continue
 				}
 
@@ -291,10 +298,14 @@ func (a *App) highlightRows(tab core.TabID, v *reviewView, lay drawerLayout) *hl
 
 	visible, rest := hlWindow(top, lay.diffH, len(v.rows), v.hlUp)
 
-	walk(visible)
+	walk(visible, false)
 
-	if len(texts) == 0 {
-		walk(rest)
+	switch {
+	case len(texts) == 0:
+		walk(rest, false)
+	case len(v.carry) > 0:
+		// A second generation would otherwise drop the look-ahead spans that only carry holds.
+		walk(rest, true)
 	}
 
 	c.scan = key
