@@ -103,13 +103,17 @@ func (t cleanupTarget) keptReason() string {
 }
 
 // keptBy says that panes keep the worktree at path.
-func keptBy(path string, panes []cleanupPane) string {
+func keptBy(path string, panes []cleanupPane) string { return "kept " + path + ": " + inIt(panes) }
+
+// inIt says that panes are in the worktree; the box's row under the worktree's
+// leaves out the path that row already shows.
+func inIt(panes []cleanupPane) string {
 	verb := "are"
 	if len(panes) == 1 {
 		verb = "is"
 	}
 
-	return fmt.Sprintf("kept %s: %s %s in it", path, paneList(panes), verb)
+	return paneList(panes) + " " + verb + " in it"
 }
 
 // paneList names panes: agents by card name in tab order, then the shells counted.

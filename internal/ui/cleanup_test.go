@@ -166,7 +166,7 @@ func (r *cleanupRig) done(t *testing.T) {
 	r.until(t, "the answer", func() bool { return r.notice != "" })
 }
 
-// kept is the row and the notice for panes that keep the worktree.
+// kept is the notice for panes that keep the worktree.
 func kept(panes string) string { return "kept .worktrees/feat-x: " + panes }
 
 func TestCleanupOffer(t *testing.T) {
@@ -299,7 +299,7 @@ func TestCleanupInUse(t *testing.T) {
 	tests := []struct {
 		name   string
 		before func(*testing.T, *cleanupRig)
-		kept   func(r *cleanupRig) string // the row under the worktree's; nil when it can go
+		kept   func(r *cleanupRig) string // the panes the row under the worktree's names; nil when it can go
 	}{
 		{name: "only an agent that cd'd in"},
 		{
@@ -312,17 +312,17 @@ func TestCleanupInUse(t *testing.T) {
 		{
 			name:   "a shell",
 			before: started(core.KindShell),
-			kept:   func(*cleanupRig) string { return kept("1 shell is in it") },
+			kept:   func(*cleanupRig) string { return "1 shell is in it" },
 		},
 		{
 			name:   "two shells",
 			before: started(core.KindShell, core.KindShell),
-			kept:   func(*cleanupRig) string { return kept("2 shells are in it") },
+			kept:   func(*cleanupRig) string { return "2 shells are in it" },
 		},
 		{
 			name:   "an agent started in it",
 			before: started(core.KindAgent),
-			kept:   func(r *cleanupRig) string { return kept(r.nameOf(r.keepers[0]) + " is in it") },
+			kept:   func(r *cleanupRig) string { return r.nameOf(r.keepers[0]) + " is in it" },
 		},
 		{
 			name: "an agent started in it that cd'd out",
@@ -330,12 +330,12 @@ func TestCleanupInUse(t *testing.T) {
 				t.Helper()
 				openIn(t, r.App, core.SetAgentCwd{ID: r.keeper(t, core.KindAgent), Cwd: r.main})
 			},
-			kept: func(r *cleanupRig) string { return kept(r.nameOf(r.keepers[0]) + " is in it") },
+			kept: func(r *cleanupRig) string { return r.nameOf(r.keepers[0]) + " is in it" },
 		},
 		{
 			name:   "a shell and an agent",
 			before: started(core.KindShell, core.KindAgent),
-			kept:   func(r *cleanupRig) string { return kept(r.nameOf(r.keepers[1]) + " and 1 shell are in it") },
+			kept:   func(r *cleanupRig) string { return r.nameOf(r.keepers[1]) + " and 1 shell are in it" },
 		},
 		{
 			name: "two agents and a shell",
@@ -345,7 +345,7 @@ func TestCleanupInUse(t *testing.T) {
 				r.named(t, r.keepers[0], "worker-a")
 				r.named(t, r.keepers[2], "worker-b")
 			},
-			kept: func(*cleanupRig) string { return kept("worker-a, worker-b and 1 shell are in it") },
+			kept: func(*cleanupRig) string { return "worker-a, worker-b and 1 shell are in it" },
 		},
 	}
 
@@ -385,7 +385,7 @@ func TestCleanupInUse(t *testing.T) {
 
 			for _, want := range []string{
 				"[-] remove the worktree  .worktrees/feat-x",
-				tc.kept(r),
+				"    " + tc.kept(r),
 				"[-] delete the local branch  feat/x",
 				"needs the worktree removed",
 				"esc keep",
@@ -527,7 +527,7 @@ func TestCleanupGuards(t *testing.T) {
 			},
 			toast: func(*cleanupRig) string { return mergedToast },
 			box: []string{
-				"[-] remove the worktree  .worktrees/feat-x", kept("1 shell is in it"),
+				"[-] remove the worktree  .worktrees/feat-x", "    1 shell is in it",
 				"[-] delete the local branch  feat/x", "kept feat/x: it has 2 commits the PR did not merge",
 			},
 			final:  func(*cleanupRig) string { return noticeNothingToClean },

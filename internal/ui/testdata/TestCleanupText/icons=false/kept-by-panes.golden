@@ -17,7 +17,7 @@
 │                    │  is merged at a1b2c3d. Clean up its worktree?                              │t a review pane     │
 │                    │                                                                            │.                   │
 │                    │  [-] remove the worktree  .worktrees/feat-review-pane                      │                    │
-│                    │      kept .worktrees/feat-review-pane: muxr-worker-2 and 1 shell are in it │                    │
+│                    │      muxr-worker-2 and 1 shell are in it                                   │                    │
 │                    │  [-] delete the local branch  feat/review-pane                             │                    │
 │                    │      needs the worktree removed                                            │atest               │
 │                    │                                                                            │                    │

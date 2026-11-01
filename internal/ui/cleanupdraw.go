@@ -39,7 +39,7 @@ func cleanupBox(t cleanupTarget, w, room int, icons bool, st styles) []string {
 	} else {
 		lines = append(lines,
 			mergeLine{text: st.popupMuted.Render("[-] remove the worktree  " + t.path())},
-			mergeLine{text: st.popupWarn.Render("    " + keptBy(t.path(), t.inUse))})
+			mergeLine{text: st.popupWarn.Render("    " + inIt(t.inUse))})
 	}
 
 	branch := printable(t.found.branch)
