@@ -1,0 +1,55 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
+#
+# No Windows build: creack/pty has no Windows support. No `before` hook: `go mod
+# tidy` there can reach the network and change go.mod mid-release; `make check`
+# already runs the tidy check.
+version: 2
+project_name: aim
+
+builds:
+  - id: aim
+    main: ./cmd/aim
+    binary: aim
+    env: [CGO_ENABLED=0]
+    goos: [linux, darwin]
+    goarch: [amd64, arm64]
+    flags: [-trimpath]
+    ldflags:
+      - -s -w
+      - -X main.version=v{{ .Version }}
+      - -X main.commit={{ .ShortCommit }}
+      - -X main.date={{ .Date }}
+
+archives:
+  - formats: [tar.gz]
+    files:
+      - LICENSE
+      - THIRD_PARTY.md
+      - README*
+      - config.example*
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-snapshot-{{ .ShortCommit }}"
+
+release:
+  github:
+    owner: mhersson
+    name: aim
+  prerelease: auto
+
+changelog:
+  use: git
+  sort: asc
+  filters:
+    include:
+      - '^(?:[0-9a-f]{7,40} )?(?:feat|fix|perf)(?:\([^)]*\))?!?: '
+  groups:
+    - title: Features
+      regexp: '^(?:[0-9a-f]{7,40} )?feat(?:\([^)]*\))?!?: '
+      order: 0
+    - title: Fixes
+      regexp: '^(?:[0-9a-f]{7,40} )?fix(?:\([^)]*\))?!?: '
+      order: 1
+    - title: Performance
+      regexp: '^(?:[0-9a-f]{7,40} )?perf(?:\([^)]*\))?!?: '
+      order: 2

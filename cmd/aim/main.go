@@ -49,6 +49,7 @@ func newRootCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:           "aim",
+		Version:       versionString(stamp{version, commit, date}, buildInfo()),
 		Short:         "Coding agents in terminal panes, with their diffs and pull requests beside them",
 		Args:          cobra.NoArgs,
 		SilenceUsage:  true,
@@ -67,6 +68,8 @@ func newRootCmd() *cobra.Command {
 			return run(cmd.Context(), env, configPath, recordDir, fresh, githubClients)
 		},
 	}
+
+	cmd.SetVersionTemplate("aim {{.Version}}\n")
 
 	defaultConfig := ""
 	if envErr == nil {

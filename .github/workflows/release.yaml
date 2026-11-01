@@ -1,0 +1,59 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+# No concurrency group: the github context inside ci.yaml is this workflow's,
+# so ${{ github.workflow }}-${{ github.ref }} here would be ci.yaml's own group
+# and the two runs would block each other.
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci.yaml
+
+  release:
+    needs: [ci]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          # A release builds from a clean module cache, not one a run on
+          # another ref saved.
+          cache: false
+
+      - name: Release notes and tags
+        id: notes
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          # Runs first: a tag the script refuses stops the job before anything
+          # is written.
+          out=$(sh scripts/release-notes.sh "$TAG" "$RUNNER_TEMP")
+          notes=$(printf '%s\n' "$out" | sed -n 's/^notes=//p')
+          previous=$(printf '%s\n' "$out" | sed -n 's/^previous=//p')
+          echo "args=${notes:+--release-notes=$notes}" >> "$GITHUB_OUTPUT"
+          # A final tag on its release candidate's commit would otherwise lose
+          # GoReleaser's pick to the candidate.
+          echo "GORELEASER_CURRENT_TAG=$TAG" >> "$GITHUB_ENV"
+          if [ -n "$previous" ]; then
+            echo "GORELEASER_PREVIOUS_TAG=$previous" >> "$GITHUB_ENV"
+          fi
+
+      - uses: goreleaser/goreleaser-action@v7
+        with:
+          version: "~> v2"
+          args: release --clean ${{ steps.notes.outputs.args }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

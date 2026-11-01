@@ -19,10 +19,13 @@ help:
 	@echo "  check-fast   the per-commit check: build, fmt-check, vet, lint, test-changed, scan; a change of non-code files only runs scan and the doc tests"
 	@echo "  check        the Linux go-checks gates of CI: build, build-darwin, fmt-check, vet, lint, test-race, tidy-check, scan"
 	@echo "  install      go install the binary into GOBIN, else GOPATH/bin"
-	@echo "  clean        remove bin/"
+	@echo "  release-dry  the GoReleaser dry run (needs GoReleaser 2): snapshot archives, checksums and binaries, then the changelog and notes in a scratch clone"
+	@echo "  clean        remove bin/ and dist/"
+
+GO_LDFLAGS = -s -w
 
 build:
-	go build -trimpath -o bin/aim ./cmd/aim
+	go build -trimpath -ldflags='$(GO_LDFLAGS)' -o bin/aim ./cmd/aim
 
 build-darwin:
 	GOOS=darwin go build ./...
@@ -113,7 +116,12 @@ check-fast-full: build fmt-check vet lint test-changed scan
 check: build build-darwin fmt-check vet lint test-race tidy-check scan
 
 install:
-	go install -trimpath ./cmd/aim
+	go install -trimpath -ldflags='$(GO_LDFLAGS)' ./cmd/aim
+
+.PHONY: release-dry
+release-dry:
+	sh scripts/release-check.sh
+	sh scripts/release-notes-check.sh
 
 clean:
-	rm -rf bin
+	rm -rf bin dist

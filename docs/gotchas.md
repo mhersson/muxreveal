@@ -223,6 +223,16 @@ what to do about it. Skim it before your first commit each session.
   changes only those files runs no CI at all.
 - CI pins golangci-lint to v2.15.0. Use the same version locally: another one
   can format or lint differently and fail `fmt-check` or `lint` in CI only.
+- `release.yaml` calls `ci.yaml`, and inside a called workflow the event is the
+  caller's: a tag push arrives as `push`. A gate job whose `if` excludes `push`
+  needs `|| github.ref_type == 'tag'`, or a tag releases without it.
+- The `github` context of a called workflow is the caller's, so `release.yaml`
+  must not take the concurrency group `${{ github.workflow }}-${{ github.ref }}`.
+  That is `ci.yaml`'s group too, and the two runs would block each other.
+- git's version sort ranks `v1.0.0-rc.1` above `v1.0.0`. So GoReleaser, left to
+  pick the tag on a commit that has both, takes the candidate. The release step
+  passes the pushed tag and the previous final tag for that reason, and
+  `scripts/release-notes.sh` compares versions by number.
 
 ## Go version upgrades
 
