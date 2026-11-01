@@ -72,6 +72,14 @@ func (a *App) routeKey(msg tea.KeyPressMsg) tea.Cmd {
 	}
 
 	if a.overlay != nil {
+		// The palette answers esc with a ClosedMsg a later update applies; closing
+		// here hands the pane the keyboard within this key, where the esc guard sees it.
+		if msg.String() == "esc" {
+			a.closeOverlay()
+
+			return nil
+		}
+
 		return a.updateOverlay(msg)
 	}
 

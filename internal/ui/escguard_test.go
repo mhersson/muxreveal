@@ -9,6 +9,7 @@ import (
 	uv "github.com/charmbracelet/ultraviolet"
 
 	"github.com/mhersson/muxreveal/internal/core"
+	"github.com/mhersson/muxreveal/internal/ui/palette"
 )
 
 const escByte = "\x1b"
@@ -206,6 +207,30 @@ func TestEscGuardCloses(t *testing.T) {
 
 			return a, clk
 		}, func(a *App) bool { return a.compose == nil }},
+		{"command palette", func(t *testing.T) (*App, *fakeClock) {
+			t.Helper()
+
+			a, clk := escApp(t)
+			a.openCommandPalette()
+
+			return a, clk
+		}, func(a *App) bool { return a.overlay == nil }},
+		{"theme picker", func(t *testing.T) (*App, *fakeClock) {
+			t.Helper()
+
+			a, clk := escApp(t)
+			a.openThemePicker()
+
+			return a, clk
+		}, func(a *App) bool { return a.overlay == nil }},
+		{"markdown picker", func(t *testing.T) (*App, *fakeClock) {
+			t.Helper()
+
+			a, clk := escApp(t)
+			a.openOverlay(overlayMarkdown, "Markdown", []palette.Item{{ID: "a.md", Title: "a.md"}})
+
+			return a, clk
+		}, func(a *App) bool { return a.overlay == nil }},
 		{"agents rail", func(t *testing.T) (*App, *fakeClock) {
 			t.Helper()
 
@@ -235,7 +260,11 @@ func TestEscGuardCloses(t *testing.T) {
 				t.Fatal("setup: it did not open with the keyboard")
 			}
 
-			press(a, keyEsc)
+			// What the esc's command sends lands before the next key, as a quick
+			// command's message does in Bubble Tea.
+			for _, m := range flatten(press(a, keyEsc)) {
+				a.Update(m)
+			}
 
 			if !tt.closed(a) || !a.paneHasKeys() {
 				t.Fatal("esc did not close it and hand the keyboard to the pane")
