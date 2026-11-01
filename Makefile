@@ -108,7 +108,7 @@ check-fast:
 		$(MAKE) --no-print-directory check-fast-full; \
 	else \
 		echo "check-fast: no code changed; running only the scan and the doc tests"; \
-		$(MAKE) --no-print-directory scan && go test -run '^(TestKeysPage|TestGuideLinks|TestConfigExample)$$' ./internal/ui ./cmd/aim; \
+		$(MAKE) --no-print-directory scan && go test -run '^(TestKeysPage|TestGuideLinks|TestConfigExample|TestReadmeKeys)$$' ./internal/ui ./cmd/aim; \
 	fi
 
 check-fast-full: build fmt-check vet lint test-changed scan
