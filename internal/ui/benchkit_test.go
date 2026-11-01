@@ -533,6 +533,100 @@ func TestBenchKitServesReviewAnswers(t *testing.T) {
 	}
 }
 
+// A run with a picture places it in every frame it draws, beside the drawer's
+// results and the rail too; a run without one places none.
+func TestBenchKitPlacesThePictureInEveryFrame(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name                   string
+		pictures, review, rail bool
+	}{
+		{name: "off"},
+		{name: "alone", pictures: true},
+		{name: "with the drawer's results", pictures: true, review: true},
+		{name: "with the rail", pictures: true, rail: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			cfg := benchConfig{
+				Panes: 2, Recordings: [][]rec.Record{rec.Synth(40, 16, 5*time.Second, 1)},
+				Width: 240, Height: 64, Stagger: ms(500), Length: time.Second, FPS: 60,
+				Agents: true, Review: tt.review, Rail: tt.rail,
+			}
+			if tt.pictures {
+				cfg.Pictures = t.TempDir()
+			}
+
+			res, err := runBench(cfg)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if res.Frames.Count == 0 {
+				t.Fatal("no frames were drawn")
+			}
+
+			want := 0
+			if tt.pictures {
+				want = res.Frames.Count
+			}
+
+			if res.Pictured != want {
+				t.Errorf("the picture was placed in %d of %d frames, want %d", res.Pictured, res.Frames.Count, want)
+			}
+
+			if shown := res.Picture != [2]int{}; shown != tt.pictures {
+				t.Errorf("picture size = %v, want one only with the knob", res.Picture)
+			}
+
+			if res.Fallbacks != 0 {
+				t.Errorf("the compositor drew the drawer in %d frames, want the splice", res.Fallbacks)
+			}
+		})
+	}
+}
+
+// The bench counts a frame as placing the picture only when it shows every
+// row of it where setup saw them.
+func TestBenchPicturePlacedIn(t *testing.T) {
+	t.Parallel()
+
+	const w, h, id = 40, 10, 7
+
+	base := strings.TrimSuffix(strings.Repeat(strings.Repeat(" ", w)+"\n", h), "\n")
+	frame := func(id uint32, x, rows int) string {
+		var pics []picRow
+		for k := range rows {
+			pics = append(pics, picRow{X: x, Y: 2 + k, ID: id, Row: k, Cols: 6})
+		}
+
+		return placePictures(base, w, h, pics)
+	}
+	pic := benchPicture{id: id, at: placeholders(frame(id, 3, 4), id)}
+
+	tests := []struct {
+		name  string
+		frame string
+		want  bool
+	}{
+		{"every row where setup saw it", frame(id, 3, 4), true},
+		{"no picture", base, false},
+		{"a row short", frame(id, 3, 3), false},
+		{"a column over", frame(id, 4, 4), false},
+		{"another picture", frame(id+1, 3, 4), false},
+	}
+
+	for _, tt := range tests {
+		if got := pic.placedIn(tt.frame); got != tt.want {
+			t.Errorf("%s: placedIn = %v, want %v", tt.name, got, tt.want)
+		}
+	}
+}
+
 func TestBenchAppOpensTheRail(t *testing.T) {
 	t.Parallel()
 
