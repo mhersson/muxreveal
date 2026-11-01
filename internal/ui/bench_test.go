@@ -214,7 +214,7 @@ func TestBench(t *testing.T) {
 				t.Errorf("%d panes: the compositor drew the drawer in %d frames, so the run did not measure the splice", n, res.Fallbacks)
 			}
 
-			if pictures && res.Pictured != res.Frames.Count {
+			if pictures && (res.Frames.Count == 0 || res.Pictured != res.Frames.Count) {
 				t.Errorf("%d panes: the picture was placed in %d of %d frames, so the run did not measure placing it", n, res.Pictured, res.Frames.Count)
 			}
 

@@ -182,8 +182,9 @@ type benchConfig struct {
 	// Review opens the review drawer on the first pane over a 40-file result; a new result arrives every benchReviewEvery.
 	Review bool
 	// Pictures, when set, is a directory the run writes a page with one picture
-	// into; the drawer opens on the first pane with the page and the picture
-	// placed (see showBenchPicture).
+	// into; the drawer opens on the first pane, over the fake engine's first
+	// result as with Review, and shows the page with the picture placed (see
+	// showBenchPicture).
 	Pictures string
 	Trace    func(at time.Duration, drew bool) // tests only; nil in production
 }
@@ -647,10 +648,10 @@ func benchReviewMsg(app *App, res git.Result, live bool) reviewLoadedMsg {
 
 // openBenchDrawer opens the drawer on pane, whose worktree is root, in branch
 // mode, with its tree open and the keyboard, and answers its first load with
-// the fake engine's first result. The app has
-// no engine: an answer is the one message a load ends in, so the sync that
-// starts the load and the apply of its answer run as in the app. The load's
-// command is not run, so its context is ended here.
+// the fake engine's first result. The app has no engine: an answer is the one
+// message a load ends in, so the sync that starts the load and the apply of its
+// answer run as in the app. The load's command is not run, so its context is
+// ended here.
 func openBenchDrawer(app *App, pane core.PaneID, root string) error {
 	if err := app.dispatch(core.OpenReview{Pane: pane, Mode: core.ReviewBranch}); err != nil {
 		return fmt.Errorf("open the drawer: %w", err)
@@ -1002,6 +1003,7 @@ func runBench(cfg benchConfig) (benchResult, error) {
 				renderS.add(renderD)
 				presentS.add(presentD)
 
+				// Outside the timed sections; its garbage is a small share of a frame's.
 				if cfg.Pictures != "" && pic.placedIn(frame) {
 					res.Pictured++
 				}
