@@ -98,6 +98,8 @@ func TestRootVersion(t *testing.T) {
 
 			args := tt.setup(t, configHome)
 
+			home := os.Getenv("HOME")
+
 			var stdout, stderr bytes.Buffer
 
 			cmd := newRootCmd()
@@ -123,6 +125,13 @@ func TestRootVersion(t *testing.T) {
 
 			if entries, _ := os.ReadDir(stateHome); len(entries) != 0 {
 				t.Errorf("state dir has %d entries, want none", len(entries))
+			}
+
+			// macOS keeps the state dir under HOME and ignores XDG_STATE_HOME.
+			if home != "" {
+				if entries, _ := os.ReadDir(home); len(entries) != 0 {
+					t.Errorf("HOME has %d entries, want none", len(entries))
+				}
 			}
 		})
 	}

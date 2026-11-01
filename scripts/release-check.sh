@@ -14,6 +14,7 @@ cd "$(git rev-parse --show-toplevel)"
 
 scratch=$(mktemp -d "${TMPDIR:-/tmp}/aim-release-check.XXXXXX")
 trap 'rm -rf "$scratch"' EXIT
+trap 'exit 1' INT TERM
 
 goreleaser --version 2>/dev/null | grep -Eq '^GitVersion:[[:space:]]+v?2\.' ||
 	fail "needs GoReleaser 2 on PATH"
@@ -96,10 +97,10 @@ for t in $targets; do
 	[ "$got" = "$wantfiles" ] || fail "$archive holds '$got', want '$wantfiles'"
 
 	mkdir "$scratch/$t"
-	tar -xzf "$archive" -C "$scratch/$t"
+	tar -xzf "$archive" -C "$scratch/$t" || fail "$archive cannot be extracted"
 	bin=$scratch/$t/aim
 
-	info=$(go version -m "$bin")
+	info=$(go version -m "$bin") || fail "$t: go version -m failed"
 	for line in "GOOS=$os" "GOARCH=$arch" "CGO_ENABLED=0" "-trimpath=true" "vcs.revision=$full"; do
 		printf '%s\n' "$info" | grep -Eq "[[:space:]]$line\$" ||
 			fail "$t: go version -m lacks $line"

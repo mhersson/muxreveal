@@ -1,7 +1,8 @@
 # yaml-language-server: $schema=https://goreleaser.com/static/schema.json
 #
-# No Windows build: creack/pty has no Windows support. No `before` hook: the
-# release and its dry run must work without the network.
+# No Windows build: creack/pty has no Windows support. No `before` hook: `go mod
+# tidy` there can reach the network and change go.mod mid-release; `make check`
+# already runs the tidy check.
 version: 2
 project_name: aim
 
