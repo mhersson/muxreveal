@@ -125,7 +125,10 @@ Dependency rules:
 - A change to the config's settings or checks (`internal/core`'s config and
   keys, `internal/ui`'s key checks, the themes) also runs
   `go test ./cmd/aim -run TestConfigExample` before its commit, since
-  `check-fast` tests only the changed packages.
+  `check-fast` tests only the changed packages. A change to the command
+  registry, the keymap or the themes (the `theme.set.*` rows) also runs
+  `go test ./internal/ui -run TestKeysPage`, since the keys page is built from
+  them.
 
 ## Testing
 
