@@ -166,7 +166,7 @@ func TestDefaultCommands(t *testing.T) {
 		want{"pr.open", "Open a pull request", iconPR},
 		want{"pr.merge", "Merge pull request", iconMerge},
 		want{"worktree.cleanup", "Clean up a merged worktree", iconCleanup},
-		want{"app.quit", "Quit MuxReveal", iconQuit},
+		want{"app.quit", "Quit AIM", iconQuit},
 	)
 	if len(cmds) != len(fixed)+len(theme.All()) {
 		t.Fatalf("defaultCommands() has %d commands, want %d", len(cmds), len(fixed)+len(theme.All()))

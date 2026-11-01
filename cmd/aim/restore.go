@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	noticeSecondInstance = "another MuxReveal is running; this one does not save its layout"
+	noticeSecondInstance = "another AIM is running; this one does not save its layout"
 	noticeBadFile        = "the saved layout could not be read; it was kept as state.json.bad"
 	noticeBadFileKept    = "the saved layout could not be read"
 )

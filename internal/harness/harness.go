@@ -1,4 +1,4 @@
-// Package harness adapts external coding-agent CLIs to MuxReveal.
+// Package harness adapts external coding-agent CLIs to AIM.
 package harness
 
 import (

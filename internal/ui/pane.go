@@ -66,7 +66,7 @@ type pane struct {
 	cwdAt     time.Time // start of the last cwd lookup
 	cwdBusy   bool      // a lookup is running
 	cwdWait   bool      // a deferred lookup is scheduled
-	launched  time.Time // when MuxReveal started the agent; zero otherwise
+	launched  time.Time // when AIM started the agent; zero otherwise
 	seen      bool      // the harness program was the foreground process
 	resuming  bool      // launched with --resume and no SessionStart yet
 	lastOut   time.Time // when output last arrived

@@ -29,7 +29,7 @@ const noticeNothingToClean = "nothing to clean up"
 
 // cleanupFound is the worktree that has a merged branch checked out and what a
 // cleanup would remove with it. managed is false for the main checkout and for a
-// worktree outside MuxReveal's roots: those are found but never removed, nor is
+// worktree outside AIM's roots: those are found but never removed, nor is
 // a locked one.
 type cleanupFound struct {
 	main, path, branch, tip string
@@ -362,7 +362,7 @@ func (a *App) onCleanupFound(msg cleanupFoundMsg) tea.Cmd { //nolint:unparam // 
 
 	switch {
 	case !f.managed:
-		a.cleanupSay(msg, fmt.Sprintf("%s is outside MuxReveal's worktrees, so it stays", path))
+		a.cleanupSay(msg, fmt.Sprintf("%s is outside AIM's worktrees, so it stays", path))
 	case f.locked:
 		a.cleanupSay(msg, fmt.Sprintf("%s is locked, so it stays", path))
 	case f.changes > 0:

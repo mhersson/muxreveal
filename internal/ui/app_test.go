@@ -96,8 +96,8 @@ func TestAppViewSizes(t *testing.T) {
 				t.Error("AltScreen = false, want true")
 			}
 
-			if got := strings.Contains(v.Content, "MuxReveal"); got != tt.wantWord {
-				t.Errorf("view contains MuxReveal = %v, want %v", got, tt.wantWord)
+			if got := strings.Contains(v.Content, "AIM"); got != tt.wantWord {
+				t.Errorf("view contains AIM = %v, want %v", got, tt.wantWord)
 			}
 
 			lines := strings.Split(v.Content, "\n")
@@ -323,7 +323,7 @@ func TestWhichKeyColours(t *testing.T) {
 
 	kx, ky := cellOf(t, rows, "\u2502 q ")
 	assertColours(t, vt, kx+2, ky, "q", ui.Key, ui.Panel, true)
-	tx, ty := cellOf(t, rows, "Quit MuxReveal")
+	tx, ty := cellOf(t, rows, "Quit AIM")
 	assertColours(t, vt, tx, ty, "Q", ui.Fg, ui.Panel, false)
 }
 
@@ -408,7 +408,7 @@ func TestHintGroups(t *testing.T) {
 
 	for title, want := range map[string]string{
 		"Focus pane": "Panes", "Zoom pane": "Panes", "New tab": "Tabs",
-		"Jump to tab": "Tabs", "Quit MuxReveal": "App", "Pick theme": "App",
+		"Jump to tab": "Tabs", "Quit AIM": "App", "Pick theme": "App",
 	} {
 		if groups[title] != want {
 			t.Errorf("group of %q = %q, want %q", title, groups[title], want)
@@ -478,7 +478,7 @@ func TestWhichKeySizes(t *testing.T) {
 				// Fits whole: the bottom border sits on the last row, one cell from the edge.
 				bottom := ansi.Strip(lines[sz[1]-1])
 				if !strings.HasSuffix(bottom, "\u256f ") || !strings.Contains(bottom, "\u2534") ||
-					!strings.Contains(plain, "Quit MuxReveal") || !strings.Contains(plain, "Jump to tab") {
+					!strings.Contains(plain, "Quit AIM") || !strings.Contains(plain, "Jump to tab") {
 					t.Errorf("popup not drawn whole:\n%s", plain)
 				}
 			case 40:

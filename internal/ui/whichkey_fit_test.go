@@ -38,7 +38,7 @@ func TestWhichKeyFitsTwentyFourRows(t *testing.T) {
 		t.Errorf("bottom border on row %d, want the last row %d", bottom, want)
 	}
 
-	for _, want := range []string{"Push and pull requests", "Quit MuxReveal", "Jump to tab"} {
+	for _, want := range []string{"Push and pull requests", "Quit AIM", "Jump to tab"} {
 		if !strings.Contains(strings.Join(lines, "\n"), want) {
 			t.Errorf("popup lacks %q", want)
 		}

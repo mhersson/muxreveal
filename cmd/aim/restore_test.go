@@ -390,7 +390,7 @@ func TestRunSecondInstanceStartsFresh(t *testing.T) {
 
 	s := startSession(t, env, cfg, false)
 
-	waitFor(t, func() bool { return s.out.contains("another MuxReveal is running; this one does not save its layout") })
+	waitFor(t, func() bool { return s.out.contains("another AIM is running; this one does not save its layout") })
 	// A split repaints the screen, so new output shows the key was handled (and would have been saved).
 	shown := s.out.len()
 	s.keys(t, "\x00v")

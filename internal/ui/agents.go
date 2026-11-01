@@ -60,7 +60,7 @@ func (a *App) onHook(ev harness.Event) tea.Cmd {
 		return nil
 	}
 
-	// A relative cwd would resolve against MuxReveal's directory, so it counts as none.
+	// A relative cwd would resolve against AIM's directory, so it counts as none.
 	// A subagent may work in a directory of its own, so its cwd says nothing of the agent's.
 	if !ev.Subagent && filepath.IsAbs(ev.Cwd) && ev.Cwd != m.AgentCwd {
 		// dispatch logs its own failures.

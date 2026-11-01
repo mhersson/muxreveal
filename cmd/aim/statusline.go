@@ -12,7 +12,7 @@ import (
 )
 
 // statuslineBudget bounds the whole statusline command: Claude runs it often
-// and shows nothing from it, so a slow MuxReveal must never hold it up.
+// and shows nothing from it, so a slow AIM must never hold it up.
 const statuslineBudget = time.Second
 
 // newStatuslineCmd is run by Claude Code as its status line. It always
@@ -20,7 +20,7 @@ const statuslineBudget = time.Second
 func newStatuslineCmd(getenv func(string) string) *cobra.Command {
 	return &cobra.Command{
 		Use:    "statusline",
-		Short:  "Report an agent's status line update to the running MuxReveal",
+		Short:  "Report an agent's status line update to the running AIM",
 		Hidden: true,
 		Args:   cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
@@ -34,7 +34,7 @@ func newStatuslineCmd(getenv func(string) string) *cobra.Command {
 	}
 }
 
-// runStatusline forwards one statusline payload to the MuxReveal socket. It
+// runStatusline forwards one statusline payload to the AIM socket. It
 // writes nothing to stdout or stderr and drops the update on any failure.
 func runStatusline(ctx context.Context, stdin io.Reader, getenv func(string) string) {
 	payload, ok := readPayload(ctx, stdin)

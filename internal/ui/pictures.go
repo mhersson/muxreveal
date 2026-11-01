@@ -171,7 +171,7 @@ func (p *pictures) on() bool {
 func (p *pictures) gen() uint64 { return p.g }
 
 // start sends the support query, except where a terminal in between cannot show
-// the pictures: tmux, or a MuxReveal pane (whose terminal answers OK but cannot).
+// the pictures: tmux, or an AIM pane (whose terminal answers OK but cannot).
 func (p *pictures) start() tea.Cmd {
 	if p.jobs == nil || p.getenv("TMUX") != "" || p.getenv("AIM_PANE") != "" {
 		return nil

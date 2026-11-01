@@ -10,7 +10,7 @@ import (
 )
 
 // The copied renderer was written against a colour toolkit; these are the
-// parts of it the renderer calls, written here for MuxReveal.
+// parts of it the renderer calls, written here for AIM.
 
 // Contrast floors in WCAG contrast ratio: text, and a mark such as a comment
 // or a line number.
@@ -51,7 +51,7 @@ func Slot(i int) color.Color {
 	return ansi.BasicColor(max(0, min(i, 15))) //nolint:gosec // clamped to 0-15
 }
 
-// Shown is c as the terminal shows it. MuxReveal draws truecolor and Bubble
+// Shown is c as the terminal shows it. AIM draws truecolor and Bubble
 // Tea downsamples, so it is c itself.
 func Shown(c color.Color) color.Color { return c }
 

@@ -624,7 +624,7 @@ func (a *App) quit() tea.Cmd {
 
 	a.openConfirm(confirm{
 		action: "Quit",
-		prompt: "Quit MuxReveal?",
+		prompt: "Quit AIM?",
 		detail: "Agent panes are running and will stop.",
 		yes:    func(a *App) tea.Cmd { return a.pictures.quit(tea.Quit) },
 	})

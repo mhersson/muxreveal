@@ -551,7 +551,7 @@ func TestCleanupGuards(t *testing.T) {
 				gitIn(t, "git", r.main, "switch", "-q", "feat/x")
 			},
 			toast: func(r *cleanupRig) string {
-				return mergedToast + "; " + r.main + " is outside MuxReveal's worktrees, so it stays"
+				return mergedToast + "; " + r.main + " is outside AIM's worktrees, so it stays"
 			},
 			branch: true,
 		},
@@ -562,7 +562,7 @@ func TestCleanupGuards(t *testing.T) {
 				gitIn(t, "git", r.main, "worktree", "add", "-q", filepath.Join(filepath.Dir(r.main), "elsewhere"), "feat/x")
 			},
 			toast: func(r *cleanupRig) string {
-				return mergedToast + "; " + filepath.Join(filepath.Dir(r.main), "elsewhere") + " is outside MuxReveal's worktrees, so it stays"
+				return mergedToast + "; " + filepath.Join(filepath.Dir(r.main), "elsewhere") + " is outside AIM's worktrees, so it stays"
 			},
 			branch: true,
 		},
@@ -1133,7 +1133,7 @@ func TestCleanupCommandNotices(t *testing.T) {
 				gitIn(t, "git", r.main, "switch", "-q", "feat/x")
 				openIn(t, r.App, core.FocusPane{ID: r.other})
 			},
-			want: func(r *cleanupRig) string { return r.main + " is outside MuxReveal's worktrees, so it stays" },
+			want: func(r *cleanupRig) string { return r.main + " is outside AIM's worktrees, so it stays" },
 		},
 		{
 			name: "pull request from another repository",

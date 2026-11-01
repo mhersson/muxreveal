@@ -23,7 +23,7 @@ const (
 func newHookCmd(getenv func(string) string) *cobra.Command {
 	return &cobra.Command{
 		Use:    "hook <harness>",
-		Short:  "Report an agent hook event to the running MuxReveal",
+		Short:  "Report an agent hook event to the running AIM",
 		Hidden: true,
 		Args:   cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -37,7 +37,7 @@ func newHookCmd(getenv func(string) string) *cobra.Command {
 	}
 }
 
-// runHook forwards one hook payload to the MuxReveal socket. It writes nothing
+// runHook forwards one hook payload to the AIM socket. It writes nothing
 // to stdout or stderr and drops the event on any failure.
 func runHook(ctx context.Context, id string, stdin io.Reader, getenv func(string) string) {
 	payload, ok := readPayload(ctx, stdin)

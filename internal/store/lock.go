@@ -10,8 +10,8 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// ErrLocked reports that another MuxReveal holds the state lock.
-var ErrLocked = errors.New("state is locked by another muxreveal")
+// ErrLocked reports that another AIM holds the state lock.
+var ErrLocked = errors.New("state is locked by another AIM")
 
 // Lock takes an exclusive, non-blocking flock on dir/state.lock. The lock lasts
 // until unlock is called or the process exits; the caller keeps unlock reachable

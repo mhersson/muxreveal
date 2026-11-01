@@ -26,7 +26,7 @@ func renderBody(width, height int, st styles, sample []string, hints []hint) str
 
 func welcomeCard(st styles, sample []string, hints []hint) string {
 	lines := []string{
-		st.cardTitle.Render("MuxReveal"),
+		st.cardTitle.Render("AIM"),
 		st.cardMuted.Render("No panes yet."),
 		"",
 	}

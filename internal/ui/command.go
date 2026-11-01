@@ -230,7 +230,7 @@ func defaultCommands() []command {
 	}, command{
 		id:    "app.quit",
 		icon:  iconQuit,
-		title: "Quit MuxReveal",
+		title: "Quit AIM",
 		run:   (*App).quit,
 	})
 	for _, th := range theme.All() {
