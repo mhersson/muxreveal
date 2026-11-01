@@ -1,22 +1,81 @@
 package ui
 
 import (
+	"time"
+
 	tea "charm.land/bubbletea/v2"
 	uv "github.com/charmbracelet/ultraviolet"
 
 	"github.com/mhersson/muxreveal/internal/core"
 )
 
-// handleKey routes a key press: an open confirm first, then an open prompt, then
-// copy mode, then the open overlay, compose box, merge box, plan overlay, conversation, checks,
-// PR list or worktree picker, then the leader state machine, then the rail while
-// it has the keyboard, then the review drawer while it has it, then the focused pane.
+// The esc guard's waits: how long esc must stay up before an esc reaches a
+// pane again. The first, after the esc that handed the pane the keyboard,
+// outlasts the common key repeat delays (500 to 660 ms), so a held esc's first
+// repeat is dropped too; after a dropped esc the wait is escQuiet.
+const (
+	escCloseWait = 750 * time.Millisecond
+	escQuiet     = 500 * time.Millisecond
+)
+
+// escGuard is the esc guard's state: the last esc it counted and how long esc
+// must stay up after it. The zero value runs no guard.
+type escGuard struct {
+	at   time.Time
+	wait time.Duration
+}
+
+// drops reports whether an esc at now comes within the wait.
+func (g escGuard) drops(now time.Time) bool { return g.wait > 0 && now.Sub(g.at) < g.wait }
+
+// handleKey routes a key press and runs the esc guard. In Claude Code one esc
+// interrupts a turn, so after an esc hands a pane the keyboard, an esc bound
+// for a pane is dropped until escCloseWait passes with no esc, or escQuiet
+// after a dropped one; each one dropped restarts the wait, and any other key
+// ends the guard. Esc is matched by its code, since a terminal can deliver two
+// presses in one read as alt+esc.
 func (a *App) handleKey(msg tea.KeyPressMsg) tea.Cmd {
-	// An esc cancels a plan read that has not answered yet.
+	// An esc cancels a plan read that has not answered yet, even a dropped one.
 	if msg.String() == "esc" {
 		a.planSeq++
 	}
 
+	if msg.Code != tea.KeyEscape {
+		a.esc = escGuard{}
+
+		return a.routeKey(msg)
+	}
+
+	now := a.clock.Now()
+
+	if !a.paneHasKeys() {
+		a.esc = escGuard{}
+		cmd := a.routeKey(msg)
+
+		if a.paneHasKeys() {
+			a.esc = escGuard{at: now, wait: escCloseWait}
+		}
+
+		return cmd
+	}
+
+	if a.esc.drops(now) {
+		a.esc = escGuard{at: now, wait: escQuiet}
+		a.notice = ""
+
+		return nil
+	}
+
+	a.esc = escGuard{}
+
+	return a.routeKey(msg)
+}
+
+// routeKey routes a key press: an open confirm first, then an open prompt, then
+// copy mode, then the open overlay, compose box, merge box, plan overlay, conversation, checks,
+// PR list or worktree picker, then the leader state machine, then the rail while
+// it has the keyboard, then the review drawer while it has it, then the focused pane.
+func (a *App) routeKey(msg tea.KeyPressMsg) tea.Cmd {
 	if a.confirm != nil {
 		return a.handleConfirmKey(msg)
 	}
@@ -30,6 +89,14 @@ func (a *App) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 	}
 
 	if a.overlay != nil {
+		// The palette answers esc with a ClosedMsg a later update applies; closing
+		// here hands the pane the keyboard within this key, where the esc guard sees it.
+		if msg.String() == "esc" {
+			a.closeOverlay()
+
+			return nil
+		}
+
 		return a.updateOverlay(msg)
 	}
 
@@ -77,6 +144,12 @@ func (a *App) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 	a.keyToFocused(msg)
 
 	return nil
+}
+
+// paneHasKeys reports whether the next key goes to the focused pane: nothing
+// before it in routeKey's order takes it. It must follow that order.
+func (a *App) paneHasKeys() bool {
+	return !a.aboveDrawerModalOpen() && !a.composeShown() && !a.pending && !a.rail.focused && !a.drawerHasKeys()
 }
 
 // handlePaste sends a paste to the topmost text input: prompt, overlay, compose box,

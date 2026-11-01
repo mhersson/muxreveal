@@ -121,6 +121,7 @@ type App struct {
 	prefix  string    // first key of a two-key sequence while pending; "" before it
 	popup   bool      // which-key popup visible; only while pending with no prefix
 	seq     int       // leader press counter; a whichKeyMsg with another seq is stale
+	esc     escGuard  // see handleKey
 	notice  string    // toast message until the next key press
 	marked  toastMark // the level the toast text was raised at
 	pushSeq int       // push request counter; an answer for another request is stale
@@ -171,7 +172,7 @@ type App struct {
 	started   bool   // the first size message was handled; it opens the first pane only once
 	restoring bool   // startRestored is running; its dispatches are not saved
 	save      func(core.State)
-	clock     clock // the sync hold's and the tray's time source
+	clock     clock // where the app reads the time; tests inject a fake one
 	tray      trayState
 	rail      railState
 	drawer    drawerState
