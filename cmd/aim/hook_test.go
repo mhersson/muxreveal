@@ -143,7 +143,7 @@ func TestRunHookDelivers(t *testing.T) {
 	})
 
 	runHook(context.Background(), "claude-code", strings.NewReader(sessionStart),
-		env(map[string]string{"MUXREVEAL_SOCK": path, "MUXREVEAL_PANE": "p7"}))
+		env(map[string]string{"AIM_SOCK": path, "AIM_PANE": "p7"}))
 
 	select {
 	case ev := <-out:
@@ -171,14 +171,14 @@ func TestRunHookIsSilentAndHonoursItsBudget(t *testing.T) {
 		// answered: only the budget ends it.
 		waitsOutBudget bool
 	}{
-		{"no socket", "claude-code", sessionStart, map[string]string{"MUXREVEAL_PANE": "p"}, false},
-		{"no pane", "claude-code", sessionStart, map[string]string{"MUXREVEAL_SOCK": missing}, false},
-		{"unknown harness", "nope", sessionStart, map[string]string{"MUXREVEAL_SOCK": missing, "MUXREVEAL_PANE": "p"}, false},
-		{"invalid json", "claude-code", "{not json", map[string]string{"MUXREVEAL_SOCK": missing, "MUXREVEAL_PANE": "p"}, false},
-		{"truncated", "claude-code", sessionStart[:30], map[string]string{"MUXREVEAL_SOCK": missing, "MUXREVEAL_PANE": "p"}, false},
-		{"10 MB payload", "claude-code", big, map[string]string{"MUXREVEAL_SOCK": silent, "MUXREVEAL_PANE": "p"}, true},
-		{"missing socket", "claude-code", sessionStart, map[string]string{"MUXREVEAL_SOCK": missing, "MUXREVEAL_PANE": "p"}, false},
-		{"never answers", "claude-code", sessionStart, map[string]string{"MUXREVEAL_SOCK": silent, "MUXREVEAL_PANE": "p"}, true},
+		{"no socket", "claude-code", sessionStart, map[string]string{"AIM_PANE": "p"}, false},
+		{"no pane", "claude-code", sessionStart, map[string]string{"AIM_SOCK": missing}, false},
+		{"unknown harness", "nope", sessionStart, map[string]string{"AIM_SOCK": missing, "AIM_PANE": "p"}, false},
+		{"invalid json", "claude-code", "{not json", map[string]string{"AIM_SOCK": missing, "AIM_PANE": "p"}, false},
+		{"truncated", "claude-code", sessionStart[:30], map[string]string{"AIM_SOCK": missing, "AIM_PANE": "p"}, false},
+		{"10 MB payload", "claude-code", big, map[string]string{"AIM_SOCK": silent, "AIM_PANE": "p"}, true},
+		{"missing socket", "claude-code", sessionStart, map[string]string{"AIM_SOCK": missing, "AIM_PANE": "p"}, false},
+		{"never answers", "claude-code", sessionStart, map[string]string{"AIM_SOCK": silent, "AIM_PANE": "p"}, true},
 	}
 
 	for _, tt := range tests {
@@ -223,7 +223,7 @@ func TestRunHookStdinNeverClosesStaysInBudget(t *testing.T) {
 	defer cancel()
 
 	returns(t, "runHook", func() {
-		runHook(ctx, "claude-code", pr, env(map[string]string{"MUXREVEAL_SOCK": "/x", "MUXREVEAL_PANE": "p"}))
+		runHook(ctx, "claude-code", pr, env(map[string]string{"AIM_SOCK": "/x", "AIM_PANE": "p"}))
 	})
 
 	// Returning is only allowed once the budget ended; wait for its own timer.
@@ -256,8 +256,8 @@ func TestHookCommandHiddenAndQuiet(t *testing.T) {
 }
 
 func TestHookCommandReturnsNilWithoutEnvironment(t *testing.T) {
-	t.Setenv("MUXREVEAL_SOCK", "")
-	t.Setenv("MUXREVEAL_PANE", "")
+	t.Setenv("AIM_SOCK", "")
+	t.Setenv("AIM_PANE", "")
 
 	cmd := newRootCmd()
 
@@ -321,7 +321,7 @@ func TestRunHookDrainsPayloadOverLimit(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), hookBudget)
 	defer cancel()
 
-	runHook(ctx, "claude-code", pr, env(map[string]string{"MUXREVEAL_SOCK": "/x", "MUXREVEAL_PANE": "p"}))
+	runHook(ctx, "claude-code", pr, env(map[string]string{"AIM_SOCK": "/x", "AIM_PANE": "p"}))
 
 	select {
 	case err := <-written:

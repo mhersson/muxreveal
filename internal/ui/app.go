@@ -43,7 +43,7 @@ type Options struct {
 	Harness harness.Harness
 	// HookSettings is the --settings file for agents; empty launches them without hooks.
 	HookSettings string
-	// HookSock is MUXREVEAL_SOCK for every pane; empty sets none.
+	// HookSock is AIM_SOCK for every pane; empty sets none.
 	HookSock string
 	// Events delivers hook events; nil means none arrive.
 	Events <-chan harness.Event

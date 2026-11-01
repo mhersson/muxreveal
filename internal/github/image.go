@@ -131,7 +131,7 @@ func (f *ImageFetcher) Fetch(ctx context.Context, rawURL, docHost string, limit 
 		return nil, fmt.Errorf("fetch image: %w", err)
 	}
 
-	req.Header.Set("User-Agent", "muxreveal")
+	req.Header.Set("User-Agent", "aim")
 
 	if onHost(req.URL, docHost) {
 		if t := f.hostToken(ctx, docHost); t != "" {

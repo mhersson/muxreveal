@@ -157,7 +157,7 @@ func TestFetchToken(t *testing.T) {
 				t.Errorf("Authorization = %q, want %q", hits[0].auth, tc.wantAuth)
 			}
 
-			if hits[0].ua != "muxreveal" {
+			if hits[0].ua != "aim" {
 				t.Errorf("User-Agent = %q", hits[0].ua)
 			}
 		})

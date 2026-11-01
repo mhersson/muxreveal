@@ -22,20 +22,20 @@ func TestOpenLog(t *testing.T) {
 	tests := []struct {
 		name     string
 		setup    func(t *testing.T, dir string)
-		wantPrev string // content of muxreveal.log.1; "" means it must not exist
+		wantPrev string // content of aim.log.1; "" means it must not exist
 		wantErr  bool
 	}{
 		{name: "missing dir"},
 		{
 			name:     "rotates the previous log",
-			setup:    func(t *testing.T, dir string) { writeFile(t, filepath.Join(dir, "muxreveal.log"), "old") },
+			setup:    func(t *testing.T, dir string) { writeFile(t, filepath.Join(dir, "aim.log"), "old") },
 			wantPrev: "old",
 		},
 		{
 			name: "replaces an older rotation",
 			setup: func(t *testing.T, dir string) {
-				writeFile(t, filepath.Join(dir, "muxreveal.log"), "old")
-				writeFile(t, filepath.Join(dir, "muxreveal.log.1"), "older")
+				writeFile(t, filepath.Join(dir, "aim.log"), "old")
+				writeFile(t, filepath.Join(dir, "aim.log.1"), "older")
 			},
 			wantPrev: "old",
 		},
@@ -47,7 +47,7 @@ func TestOpenLog(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			dir := filepath.Join(t.TempDir(), "state", "muxreveal")
+			dir := filepath.Join(t.TempDir(), "state", "aim")
 			if tt.setup != nil {
 				tt.setup(t, dir)
 			}
@@ -74,7 +74,7 @@ func TestOpenLog(t *testing.T) {
 				}
 			})
 
-			logPath := filepath.Join(dir, "muxreveal.log")
+			logPath := filepath.Join(dir, "aim.log")
 			if f.Name() != logPath {
 				t.Errorf("log file = %q, want %q", f.Name(), logPath)
 			}
@@ -89,9 +89,9 @@ func TestOpenLog(t *testing.T) {
 			prev, err := os.ReadFile(logPath + ".1")
 			switch {
 			case tt.wantPrev == "" && !os.IsNotExist(err):
-				t.Errorf("muxreveal.log.1 exists (%q, %v), want none", prev, err)
+				t.Errorf("aim.log.1 exists (%q, %v), want none", prev, err)
 			case tt.wantPrev != "" && string(prev) != tt.wantPrev:
-				t.Errorf("muxreveal.log.1 = %q, %v; want %q", prev, err, tt.wantPrev)
+				t.Errorf("aim.log.1 = %q, %v; want %q", prev, err, tt.wantPrev)
 			}
 		})
 	}

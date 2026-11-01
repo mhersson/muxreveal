@@ -77,7 +77,7 @@ func TestFetchPRWritesOnlyItsRefs(t *testing.T) {
 		}
 	}
 
-	want := []string{"refs/muxreveal/pr/7/base", "refs/muxreveal/pr/7/head"}
+	want := []string{"refs/aim/pr/7/base", "refs/aim/pr/7/head"}
 	if strings.Join(added, " ") != strings.Join(want, " ") {
 		t.Errorf("new refs = %v, want %v", added, want)
 	}
@@ -122,7 +122,7 @@ func TestFetchPRForcePushedHead(t *testing.T) {
 		t.Fatal("head did not move")
 	}
 
-	if got := gitOut(t, f.work, "rev-parse", "refs/muxreveal/pr/7/head"); got != second.Head {
+	if got := gitOut(t, f.work, "rev-parse", "refs/aim/pr/7/head"); got != second.Head {
 		t.Errorf("ref = %s, want %s", got, second.Head)
 	}
 }
@@ -266,7 +266,7 @@ func TestDeletePRRefs(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if got := gitOut(t, f.work, "for-each-ref", "refs/muxreveal/"); got != "" {
+		if got := gitOut(t, f.work, "for-each-ref", "refs/aim/"); got != "" {
 			t.Errorf("refs left: %s", got)
 		}
 	}

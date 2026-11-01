@@ -7,7 +7,7 @@ import (
 	"runtime"
 )
 
-const appName = "muxreveal"
+const appName = "aim"
 
 // Env is the part of the process environment that decides MuxReveal's paths.
 type Env struct {

@@ -918,7 +918,7 @@ func TestHookBudgetSlowSnapshot(t *testing.T) {
 		t.Fatalf("turns = %+v, want only a marker for the turn", turns)
 	}
 
-	if out := gitOut(t, repo, "for-each-ref", "refs/muxreveal/"); strings.Count(out, "\n") != 0 {
+	if out := gitOut(t, repo, "for-each-ref", "refs/aim/"); strings.Count(out, "\n") != 0 {
 		t.Errorf("refs = %q, want exactly the marker", out)
 	}
 

@@ -16,11 +16,11 @@ var ErrNoPR = errors.New("git: no such pull request on the remote")
 type PRRefs struct{ Head, Base string }
 
 func prRef(number int, name string) string {
-	return "refs/muxreveal/pr/" + strconv.Itoa(number) + "/" + name
+	return "refs/aim/pr/" + strconv.Itoa(number) + "/" + name
 }
 
 // FetchPR fetches pull request number's head and its base branch into
-// refs/muxreveal/pr/<number>/. It writes nothing else: no remote-tracking ref,
+// refs/aim/pr/<number>/. It writes nothing else: no remote-tracking ref,
 // tag, FETCH_HEAD or submodule.
 func FetchPR(ctx context.Context, r Repo, remote string, number int, base string) (PRRefs, error) {
 	switch {

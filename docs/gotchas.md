@@ -73,14 +73,14 @@ what to do about it. Skim it before your first commit each session.
 
 ## State, config and cache dirs
 
-- The state dir is `$XDG_STATE_HOME/muxreveal` on Linux but always
-  `$HOME/Library/Application Support/muxreveal` on macOS, which ignores
+- The state dir is `$XDG_STATE_HOME/aim` on Linux but always
+  `$HOME/Library/Application Support/aim` on macOS, which ignores
   `XDG_STATE_HOME`. Isolate a test or rig on macOS through `HOME`.
 - The index cache is under `os.UserCacheDir()`: `$XDG_CACHE_HOME`, else
   `~/.cache`, on Linux, but `$HOME/Library/Caches` on macOS whatever
   `XDG_CACHE_HOME` says.
 - The config file honours `XDG_CONFIG_HOME` on both platforms, else
-  `~/.config/muxreveal/config.toml`; `--config` overrides it.
+  `~/.config/aim/config.toml`; `--config` overrides it.
 
 ## File watching
 
@@ -114,7 +114,7 @@ what to do about it. Skim it before your first commit each session.
 
 - Run the app for a manual check or a screenshot only inside a private tmux
   server, `tmux -L <name> -f /dev/null`, started from an environment without
-  `CLAUDE*`, `TMUX`, `TMUX_PANE` and `MUXREVEAL_*`, so the run starts as from a
+  `CLAUDE*`, `TMUX`, `TMUX_PANE` and `AIM_*`, so the run starts as from a
   fresh terminal. `-L` keeps it off your own tmux server and `-f /dev/null`
   skips your tmux config.
 - Kill only that server (`tmux -L <name> kill-server`) and processes you

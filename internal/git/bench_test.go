@@ -123,12 +123,12 @@ func isAIMSource(top string) bool {
 }
 
 // TestBenchLargeRepo times a snapshot, a working tree and a branch diff of
-// 20 edited files in the clone MUXREVEAL_BENCH_REPO names. It edits and
+// 20 edited files in the clone AIM_BENCH_REPO names. It edits and
 // snapshots that clone: never point it at a repository you care about.
 func TestBenchLargeRepo(t *testing.T) {
-	dir := os.Getenv("MUXREVEAL_BENCH_REPO")
+	dir := os.Getenv("AIM_BENCH_REPO")
 	if dir == "" {
-		t.Skip("MUXREVEAL_BENCH_REPO is not set")
+		t.Skip("AIM_BENCH_REPO is not set")
 	}
 
 	ctx := context.Background()

@@ -419,7 +419,7 @@ func fakeClaude(t *testing.T) (logPath string) {
 		t.Fatal(err)
 	}
 
-	script := "#!/bin/sh\necho \"$MUXREVEAL_PANE $*\" >> '" + logPath + "'\nsleep 3600\n"
+	script := "#!/bin/sh\necho \"$AIM_PANE $*\" >> '" + logPath + "'\nsleep 3600\n"
 	if err := os.WriteFile(filepath.Join(bin, "claude"), []byte(script), 0o700); err != nil {
 		t.Fatal(err)
 	}

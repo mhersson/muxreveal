@@ -250,8 +250,8 @@ func TestAgentLaunch(t *testing.T) {
 		}
 
 		for i, c := range st.cmds {
-			id := "MUXREVEAL_PANE=p" + string(rune('1'+i))
-			if !slices.Contains(c.Env, id) || !slices.Contains(c.Env, "MUXREVEAL_SOCK=/run/1.sock") {
+			id := "AIM_PANE=p" + string(rune('1'+i))
+			if !slices.Contains(c.Env, id) || !slices.Contains(c.Env, "AIM_SOCK=/run/1.sock") {
 				t.Errorf("command %d env lacks %s and the socket", i, id)
 			}
 		}
@@ -275,13 +275,13 @@ func TestAgentLaunch(t *testing.T) {
 		}
 
 		for _, kv := range agent.Env {
-			if strings.HasPrefix(kv, "MUXREVEAL_SOCK=") {
+			if strings.HasPrefix(kv, "AIM_SOCK=") {
 				t.Errorf("env holds %q without a socket", kv)
 			}
 		}
 
-		if !slices.Contains(agent.Env, "MUXREVEAL_PANE=p2") {
-			t.Error("env lacks MUXREVEAL_PANE")
+		if !slices.Contains(agent.Env, "AIM_PANE=p2") {
+			t.Error("env lacks AIM_PANE")
 		}
 	})
 

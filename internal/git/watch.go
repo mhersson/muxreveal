@@ -34,7 +34,7 @@ type Batch struct {
 	// .gitignore change un-ignores are listed only in newly watched
 	// directories: treat a touched .gitignore as "everything may have changed".
 	Paths    []string
-	Git      bool // HEAD, the index, packed-refs or a ref outside refs/muxreveal changed
+	Git      bool // HEAD, the index, packed-refs or a ref outside refs/aim changed
 	Overflow bool // events were lost; treat everything as changed
 }
 
@@ -86,7 +86,7 @@ type Watcher struct {
 
 	skipWorktrees bool
 	refsDir       string
-	ownRefsDir    string // refs/muxreveal: our snapshot refs must not wake the watcher
+	ownRefsDir    string // refs/aim: our snapshot refs must not wake the watcher
 
 	// watched holds the directories with a watch. It is written by Watch, then
 	// only by the owner goroutine.
@@ -132,7 +132,7 @@ func Watch(ctx context.Context, r Repo, opts WatchOptions) (*Watcher, error) {
 		cancel:     cancel,
 		done:       make(chan struct{}),
 		refsDir:    filepath.Join(r.CommonDir, "refs"),
-		ownRefsDir: filepath.Join(r.CommonDir, "refs", "muxreveal"),
+		ownRefsDir: filepath.Join(r.CommonDir, "refs", "aim"),
 		watched:    map[string]struct{}{},
 	}
 	w.seq.Store(opts.SeqBase)
@@ -433,7 +433,7 @@ func (w *Watcher) relPath(name string) (string, bool) {
 
 // handleMeta classifies an event inside the git dirs: only a Create, Write,
 // Remove or Rename of HEAD, the index, packed-refs or a ref outside
-// refs/muxreveal counts. Chmod-only events and events on directories do not.
+// refs/aim counts. Chmod-only events and events on directories do not.
 func (w *Watcher) handleMeta(ev fsnotify.Event, p *pending) bool {
 	name, base := ev.Name, filepath.Base(ev.Name)
 
@@ -553,7 +553,7 @@ func instanceError(root string, err error) error {
 	return fmt.Errorf("watch %s: %w", root, err)
 }
 
-// addRefs watches dir and the directories below it except refs/muxreveal. It
+// addRefs watches dir and the directories below it except refs/aim. It
 // marks nothing itself: a ref that already sits in a new directory is covered by
 // the event that announced the directory.
 func (w *Watcher) addRefs(dir string) error {

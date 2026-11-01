@@ -168,7 +168,7 @@ need them without a push.
 - Never modify the user's `~/.claude` settings. Agents get hooks only through a
   generated `--settings` file (see DESIGN.md).
 - Never touch the user's git index, stash or branches as a side effect. Turn
-  snapshots use a temporary `GIT_INDEX_FILE` and `refs/muxreveal/*` only. A
+  snapshots use a temporary `GIT_INDEX_FILE` and `refs/aim/*` only. A
   local branch is deleted only from the worktree cleanup confirm, with its box
   checked, when it holds nothing the merged pull request did not.
 - Write only to the platform state and cache dirs, worktrees under MuxReveal's

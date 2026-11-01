@@ -79,7 +79,7 @@ func TestForeground(t *testing.T) {
 
 // shellTestEnv points every startup and state location of the shells at
 // t.TempDir() and puts a fake claude first on PATH. The fake records its
-// arguments and MUXREVEAL_PANE under out.
+// arguments and AIM_PANE under out.
 func shellTestEnv(t *testing.T) (out string) {
 	t.Helper()
 
@@ -94,7 +94,7 @@ func shellTestEnv(t *testing.T) (out string) {
 	}
 
 	fake := "#!/bin/sh\nprintf '%s\\0' \"$@\" > \"$OUT_DIR/args.tmp\"\n" +
-		"printf '%s' \"$MUXREVEAL_PANE\" > \"$OUT_DIR/pane\"\n" +
+		"printf '%s' \"$AIM_PANE\" > \"$OUT_DIR/pane\"\n" +
 		"mv \"$OUT_DIR/args.tmp\" \"$OUT_DIR/args\"\n"
 	if err := os.WriteFile(filepath.Join(bin, "claude"), []byte(fake), 0o755); err != nil {
 		t.Fatal(err)
@@ -108,7 +108,7 @@ func shellTestEnv(t *testing.T) (out string) {
 		"XDG_CACHE_HOME":  filepath.Join(root, "xdg-cache"),
 		"XDG_STATE_HOME":  filepath.Join(root, "xdg-state"),
 		"OUT_DIR":         out,
-		"MUXREVEAL_PANE":  "inherited",
+		"AIM_PANE":        "inherited",
 	} {
 		if strings.HasPrefix(k, "XDG_") || k == "HOME" || k == "ZDOTDIR" {
 			if err := os.MkdirAll(v, 0o755); err != nil {
@@ -151,7 +151,7 @@ func TestAgentCommandRunsArgvVerbatim(t *testing.T) {
 			// Absolute path: a login profile may reset PATH.
 			fake := filepath.Join(filepath.Dir(out), "bin", "claude")
 
-			c := AgentCommand(os.Getenv, dir, append([]string{fake}, args...), []string{"MUXREVEAL_PANE=p7"})
+			c := AgentCommand(os.Getenv, dir, append([]string{fake}, args...), []string{"AIM_PANE=p7"})
 			startCommand(t, c)
 
 			raw := waitFile(t, filepath.Join(out, "args"))
@@ -166,7 +166,7 @@ func TestAgentCommandRunsArgvVerbatim(t *testing.T) {
 			}
 
 			if pane := waitFile(t, filepath.Join(out, "pane")); string(pane) != "p7" {
-				t.Errorf("MUXREVEAL_PANE = %q, want p7", pane)
+				t.Errorf("AIM_PANE = %q, want p7", pane)
 			}
 		})
 	}

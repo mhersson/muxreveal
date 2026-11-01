@@ -416,7 +416,7 @@ func TestNetErrorHidesURLs(t *testing.T) {
 	}
 }
 
-const ttyChildEnv = "MUXREVEAL_TTY_CHILD"
+const ttyChildEnv = "AIM_TTY_CHILD"
 
 // TestNetCallCannotOpenTTY runs itself under a pty, so the child has a
 // controlling terminal: a plain call must reach /dev/tty (the control that

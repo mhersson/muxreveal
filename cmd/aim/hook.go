@@ -45,7 +45,7 @@ func runHook(ctx context.Context, id string, stdin io.Reader, getenv func(string
 		return
 	}
 
-	sock, pane := getenv("MUXREVEAL_SOCK"), getenv("MUXREVEAL_PANE")
+	sock, pane := getenv("AIM_SOCK"), getenv("AIM_PANE")
 	if sock == "" || pane == "" {
 		return
 	}

@@ -381,7 +381,7 @@ func TestParseBenchReview(t *testing.T) {
 		{in: "", want: false},
 		{in: "0", want: false},
 		{in: "1", want: true},
-		{in: "true", wantErr: "MUXREVEAL_BENCH_REVIEW"},
+		{in: "true", wantErr: "AIM_BENCH_REVIEW"},
 		{in: "on", wantErr: "0 or 1"},
 	}
 

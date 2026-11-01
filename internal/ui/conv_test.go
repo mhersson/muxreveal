@@ -1233,7 +1233,7 @@ func TestConversationPictures(t *testing.T) {
 	t.Parallel()
 
 	a, _ := convApp(t, true, 160, 48)
-	a.pictures.getenv = func(string) string { return "" } // not the process's TMUX or MUXREVEAL_PANE
+	a.pictures.getenv = func(string) string { return "" } // not the process's TMUX or AIM_PANE
 	jobs := picturesOn(t, a)
 
 	convOpen(t, a)

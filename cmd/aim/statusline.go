@@ -42,7 +42,7 @@ func runStatusline(ctx context.Context, stdin io.Reader, getenv func(string) str
 		return
 	}
 
-	sock, pane := getenv("MUXREVEAL_SOCK"), getenv("MUXREVEAL_PANE")
+	sock, pane := getenv("AIM_SOCK"), getenv("AIM_PANE")
 	if sock == "" || pane == "" {
 		return
 	}

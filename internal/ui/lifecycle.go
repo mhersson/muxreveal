@@ -179,9 +179,9 @@ func (a *App) startPane(id core.PaneID, kind core.PaneKind, cwd string, cols, ro
 // startPaneRunning is startPane for a shell pane that starts the command line
 // run, when it is set, in place of the plain shell.
 func (a *App) startPaneRunning(id core.PaneID, kind core.PaneKind, cwd string, cols, rows int, resume core.SessionID, run *paneRun) (*pane, string, error) {
-	env := []string{"MUXREVEAL_PANE=" + string(id)}
+	env := []string{"AIM_PANE=" + string(id)}
 	if a.hookSock != "" {
-		env = append(env, "MUXREVEAL_SOCK="+a.hookSock)
+		env = append(env, "AIM_SOCK="+a.hookSock)
 	}
 
 	c := term.ShellCommand(a.getenv, cwd, env)

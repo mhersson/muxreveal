@@ -40,12 +40,12 @@ func (h hookRuntime) Stop() {
 	}
 }
 
-// indexCacheDir returns <user cache dir>/muxreveal, created 0700. A failure
+// indexCacheDir returns <user cache dir>/aim, created 0700. A failure
 // is logged and returns "", which turns the index cache off.
 func indexCacheDir(logger *slog.Logger) string {
 	base, err := os.UserCacheDir()
 	if err == nil {
-		dir := filepath.Join(base, "muxreveal")
+		dir := filepath.Join(base, "aim")
 		if err = os.MkdirAll(dir, 0o700); err == nil {
 			return dir
 		}

@@ -14,7 +14,7 @@ func PaneEnv(base []string) []string {
 
 	for _, kv := range base {
 		switch k, _, _ := strings.Cut(kv, "="); k {
-		case "TERM", "COLORTERM", "TMUX", "TMUX_PANE", "MUXREVEAL_PANE", "MUXREVEAL_SOCK":
+		case "TERM", "COLORTERM", "TMUX", "TMUX_PANE", "AIM_PANE", "AIM_SOCK":
 		default:
 			out = append(out, kv)
 		}

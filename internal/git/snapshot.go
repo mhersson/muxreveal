@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	refPrefix      = "refs/muxreveal/"
+	refPrefix      = "refs/aim/"
 	turnsPrefix    = refPrefix + "turns/"
 	maxSkippedTags = 20
 
@@ -30,9 +30,9 @@ var ErrBadSession = errors.New("git: session id is not a UUID")
 
 var (
 	sessionRE = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
-	turnRefRE = regexp.MustCompile(`^refs/muxreveal/turns/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/([0-9a-f]{16})/([0-9]+)/(start|end)$`)
+	turnRefRE = regexp.MustCompile(`^refs/aim/turns/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/([0-9a-f]{16})/([0-9]+)/(start|end)$`)
 	// legacyRefRE is the earlier layout, which is pruned but no longer read.
-	legacyRefRE = regexp.MustCompile(`^refs/muxreveal/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/([0-9]+)$`)
+	legacyRefRE = regexp.MustCompile(`^refs/aim/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/([0-9]+)$`)
 )
 
 // refWriteContext returns the context for a ref write: the caller's error when
@@ -352,7 +352,7 @@ func writeTurns(ctx context.Context, r Repo, session string, writes []turnWrite,
 
 	_, err = run(wctx, call{
 		dir:   r.Root,
-		args:  []string{"update-ref", "-m", "muxreveal turn", "--stdin"},
+		args:  []string{"update-ref", "-m", "aim turn", "--stdin"},
 		env:   isolatedEnv(),
 		stdin: &stdin,
 	})
@@ -366,7 +366,7 @@ func writeTurns(ctx context.Context, r Repo, session string, writes []turnWrite,
 func commitTurn(ctx context.Context, r Repo, session string, w turnWrite, parent string, at time.Time) (string, error) {
 	var msg strings.Builder
 
-	fmt.Fprintf(&msg, "muxreveal turn %d", w.n)
+	fmt.Fprintf(&msg, "aim turn %d", w.n)
 
 	if w.end {
 		msg.WriteString(" end")
@@ -388,8 +388,8 @@ func commitTurn(ctx context.Context, r Repo, session string, w turnWrite, parent
 
 	date := strconv.FormatInt(at.Unix(), 10) + " +0000"
 	env := append(isolatedEnv(),
-		"GIT_AUTHOR_NAME=MuxReveal", "GIT_COMMITTER_NAME=MuxReveal",
-		"GIT_AUTHOR_EMAIL=muxreveal@localhost", "GIT_COMMITTER_EMAIL=muxreveal@localhost",
+		"GIT_AUTHOR_NAME=AIM", "GIT_COMMITTER_NAME=AIM",
+		"GIT_AUTHOR_EMAIL=aim@localhost", "GIT_COMMITTER_EMAIL=aim@localhost",
 		"GIT_AUTHOR_DATE="+date, "GIT_COMMITTER_DATE="+date,
 	)
 
