@@ -2,7 +2,7 @@
 
 This guide is for Claude Code users who are new to AIM. AIM runs Claude Code agents in live terminal panes and puts their diffs, pull requests, checks and merges beside them. The pages start from what you want to do and give the keys to do it.
 
-AIM's own keys sit behind a leader key, `ctrl+space` by default: press it, then the key of a command, as in `ctrl+space n`. The keys in the guide are the defaults. A changed `leader_key` or `[keys]` table changes them; see [Keys](keys.md) for the full list and for how to remap.
+AIM's own keys sit behind a leader key, `ctrl+space` by default: press it, then the key of a command, as in `ctrl+space n`. The keys in the guide are the defaults. A changed `leader_key` or `[keys]` table changes them; see [Keys](keys.md) for the full list and [Configuration](config.md#remapping-keys) for how to remap.
 
 ## Pages, in reading order
 
