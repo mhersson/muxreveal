@@ -10,15 +10,15 @@
 
 </div>
 
+AIM (Agents In-flight Multiplexer) hosts Claude Code agents in live terminal panes, with each agent's diff, its pull request and the CI checks beside it. You watch the agents work, review what they change while they change it, and push, open, check and merge their pull requests without leaving the terminal.
+
 <div align="center">
 
 <img src="https://github.com/user-attachments/assets/e601a7bf-da03-4bde-b2dd-efbc1b48a322" alt="AIM running two Claude Code agents in their own worktrees: the agents rail, the live diff in the review drawer by last turn and by whole branch, a pull request pushed, checked and merged with its README rendered from the file tree, the other agent's plan approved so it starts to code, and which-key opening" width="100%">
 
-[Watch it as a video (MP4)](https://github.com/user-attachments/assets/26f3b30c-16e2-496d-ba32-31f5e8bf964f)
+Watch it as a [video (MP4)](https://github.com/user-attachments/assets/26f3b30c-16e2-496d-ba32-31f5e8bf964f).
 
 </div>
-
-AIM (Agents In-flight Multiplexer) hosts Claude Code agents in live terminal panes, with each agent's diff, its pull request and the CI checks beside it. You watch the agents work, review what they change while they change it, and push, open, check and merge their pull requests without leaving the terminal.
 
 ## Features
 
