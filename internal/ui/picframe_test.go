@@ -183,11 +183,11 @@ func TestPlacePicturesMatchesTheCompositor(t *testing.T) {
 		{"wide character starts at the right edge", row(a(16) + "中" + a(w-18)), nil, true},
 		{"wide characters all along the row", row(strings.Repeat("中", w/2)), nil, true},
 		{"emoji inside", row("\x1b[32m" + a(12) + "😀" + a(w-14) + reset), nil, true},
-		{"combining mark inside", row(a(12) + "é" + a(w-13)), nil, true},
-		{"combining mark on the last cell", row(a(15) + "é" + a(w-16)), nil, true},
-		{"combining mark on the cell before", row(a(9) + "é" + a(w-10)), nil, true},
-		{"combining mark after an escape before the picture", row(a(10) + "\x1b[31ḿ" + a(w-10) + reset), nil, true},
-		{"combining mark after an escape inside the picture", row(a(12) + "\x1b[31ḿ" + a(w-12) + reset), nil, true},
+		{"combining mark inside", row(a(12) + "e\u0301" + a(w-13)), nil, true},
+		{"combining mark on the last cell", row(a(15) + "e\u0301" + a(w-16)), nil, true},
+		{"combining mark on the cell before", row(a(9) + "e\u0301" + a(w-10)), nil, true},
+		{"combining mark after an escape before the picture", row(a(10) + "\x1b[31m\u0301" + a(w-10) + reset), nil, true},
+		{"combining mark after an escape inside the picture", row(a(12) + "\x1b[31m\u0301" + a(w-12) + reset), nil, true},
 		{"control character inside", row(a(12) + "\x07" + a(w-12)), nil, true},
 		{"previous row closed its style", at(picY-1, sgrOpen+a(w)+reset), nil, true},
 		{"a row that ends where the picture does", row(a(16)), nil, true},
@@ -198,6 +198,12 @@ func TestPlacePicturesMatchesTheCompositor(t *testing.T) {
 		}, true},
 		{"two pictures side by side", nil, []picRow{{X: 4, Y: picY, ID: 9, Cols: 4}, {X: 8, Y: picY, ID: 10, Cols: 4}}, true},
 		{"two pictures given right to left", nil, []picRow{{X: 20, Y: picY, ID: 10, Cols: 5}, {X: 2, Y: picY, ID: 9, Cols: 4}}, true},
+		{"style and link change between two pictures", row(a(6) + "\x1b[31m" + a(10) + "\x1b[1;4:3m" + linkOn + a(w-16) + linkOff + reset), []picRow{
+			{X: 2, Y: picY, ID: 9, Cols: 4}, {X: 20, Y: picY, ID: 10, Cols: 5},
+		}, true},
+		{"style and link closed between two picture rows", map[int]string{1: sgrOpen + linkOn + a(w), 2: a(5) + linkOff + reset + a(w-5)}, []picRow{
+			{X: picX, Y: 1, ID: 9, Cols: picCols}, {X: picX, Y: 3, ID: 9, Row: 2, Cols: picCols},
+		}, true},
 		{"a picture of three rows", at(1, sgrOpen+a(w)+reset), picRows(9, picX, 1, 3, picCols), true},
 		{"at the right edge", nil, []picRow{{X: w - 6, Y: picY, ID: 9, Cols: 6}}, true},
 		{"at the left edge", row(sgrOpen + a(w) + reset), []picRow{{X: 0, Y: picY, ID: 9, Cols: 6}}, true},
@@ -214,23 +220,35 @@ func TestPlacePicturesMatchesTheCompositor(t *testing.T) {
 
 		// A mark with no cell before it folds into the last cell drawn, which
 		// the splice would make a placeholder.
-		{"combining mark after an escape right after the picture", row(a(16) + "\x1b[31ḿ" + a(w-16) + reset), nil, false},
-		{"combining mark opens the row after a picture that ends its row", map[int]string{picY: a(16), picY + 1: "́" + a(w-1)}, nil, false},
+		{"combining mark after an escape right after the picture", row(a(16) + "\x1b[31m\u0301" + a(w-16) + reset), nil, false},
+		{"combining mark opens the row after a picture that ends its row", map[int]string{picY: a(16), picY + 1: "\u0301" + a(w-1)}, nil, false},
+		{"combining mark after an escape between two pictures side by side", row(a(8) + "\x1b[31m\u0301" + a(w-8) + reset), []picRow{
+			{X: 4, Y: picY, ID: 9, Cols: 4}, {X: 8, Y: picY, ID: 10, Cols: 4},
+		}, false},
 		{"an APC with no cell after it follows a picture that ends its row", map[int]string{picHeight - 2: a(16), picHeight - 1: apc}, []picRow{{X: picX, Y: picHeight - 2, ID: 9, Cols: picCols}}, false},
 
 		// A string sequence rides on the next cell drawn, and a carriage return
 		// moves the column.
 		{"an APC before the picture", row(a(5) + apc + a(w-5)), nil, false},
+		{"an APC just before the picture", row(a(picX) + apc + a(w-picX)), nil, false},
 		{"an APC inside the picture", row(a(12) + apc + a(w-12)), nil, false},
 		{"an APC after the picture", row(a(20) + apc + a(w-20)), nil, false},
 		{"a DCS in the row", row(a(12) + dcs + a(w-12)), nil, false},
 		{"an APC at the end of the row before a picture at the left edge", at(picY-1, a(w)+apc), []picRow{{X: 0, Y: picY, ID: 9, Cols: 6}}, false},
+		{"an APC between a picture row and a later one at the left edge", at(2, a(w)+apc), []picRow{
+			{X: picX, Y: 1, ID: 9, Cols: picCols}, {X: 0, Y: 3, ID: 10, Cols: picCols},
+		}, false},
 		{"a carriage return in the row", row(a(20) + "\r" + a(5)), nil, false},
+		{"a carriage return rewinds over the picture", row(a(w) + "\r" + strings.Repeat("b", 12)), nil, false},
 
 		// A style or link left open carries into the picture's row.
 		{"previous row left a style open", at(picY-1, sgrOpen+a(w)), nil, false},
 		{"previous row left a link open", at(picY-1, linkOn+a(w)), nil, false},
 		{"a style left open two rows up", at(picY-2, sgrOpen+a(w)), nil, false},
+		{"a picture row leaves a style open before the next one", at(1, sgrOpen+a(w)), picRows(9, picX, 1, 2, picCols), false},
+		{"a style left open between two picture rows", at(2, sgrOpen+a(w)), []picRow{
+			{X: picX, Y: 1, ID: 9, Cols: picCols}, {X: picX, Y: 3, ID: 9, Row: 2, Cols: picCols},
+		}, false},
 
 		// The splice cuts only cells the row has, and one picture at a time.
 		{"a row shorter than the picture's end", row(a(12)), nil, false},
@@ -316,7 +334,7 @@ func TestDrawPicturesCountsFallbacks(t *testing.T) {
 		t.Fatalf("%d fallbacks for a frame the splice covers, want 0", a.pictures.fallbacks)
 	}
 
-	held := picFrame(map[int]string{picY: repeatA(5) + apc + repeatA(picWidth-5)})
+	held := picFrame(map[int]string{picY: repeatA(picX-1) + "中" + repeatA(picWidth-picX-1)})
 	got := a.drawPictures(held, one)
 	requireSameCells(t, got, composePictures(held, picWidth, picHeight, one), picWidth, picHeight)
 
