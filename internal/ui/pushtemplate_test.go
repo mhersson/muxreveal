@@ -33,7 +33,7 @@ func copyPushTemplate(t *testing.T, gitBin, dst string) {
 	t.Helper()
 
 	pushTemplate.once.Do(func() {
-		pushTemplate.dir, pushTemplate.err = os.MkdirTemp("", "muxreveal-push-template-")
+		pushTemplate.dir, pushTemplate.err = os.MkdirTemp("", "multiplex-push-template-")
 		if pushTemplate.err == nil {
 			pushTemplate.err = buildPushTemplate(gitBin, pushTemplate.dir)
 		}

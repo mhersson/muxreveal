@@ -44,7 +44,7 @@ func railFixtureAgents() []railAgent {
 	return []railAgent{
 		{newTab: true, project: "api", branch: "main", state: core.AgentBlocked, action: "Allow Bash rm -rf build/?", age: 8 * time.Second, stats: &git.Stats{Files: 2, Added: 12, Removed: 3}, unseen: true},
 		{project: "web", branch: "feat/login", state: core.AgentWorking, action: "Edit src/login.tsx", age: 4 * time.Minute, stats: &git.Stats{Files: 5, Added: 120, Removed: 14}},
-		{newTab: true, project: "muxreveal", branch: "feat/agents-rail", state: core.AgentWorking, action: "Bash go test ./...", age: 95 * time.Second, stats: &git.Stats{Files: 9, Added: 340, Removed: 12}},
+		{newTab: true, project: "multiplex", branch: "feat/agents-rail", state: core.AgentWorking, action: "Bash go test ./...", age: 95 * time.Second, stats: &git.Stats{Files: 9, Added: 340, Removed: 12}},
 		{project: "docs", branch: "main", state: core.AgentIdle, age: 26 * time.Hour, stats: &git.Stats{}},
 		{newTab: true, project: "infra", branch: "a1b2c3d", detached: true, state: core.AgentIdle, age: 12 * time.Minute, stats: &git.Stats{Files: 1, Added: 2, Removed: 0}},
 		{project: "scratch", noRepo: true, noHook: true},
@@ -130,7 +130,7 @@ func aheadAgents() []railAgent {
 	return []railAgent{
 		{newTab: true, project: "api", branch: "main", state: core.AgentIdle, age: 8 * time.Second, stats: &git.Stats{}},
 		{project: "web", branch: "feat/login", state: core.AgentWorking, action: "Edit src/login.tsx", age: 4 * time.Minute, stats: &git.Stats{Files: 5, Added: 120, Removed: 14}, ahead: 2},
-		{newTab: true, project: "muxreveal", branch: "feat/agents-rail-with-a-long-branch-name", state: core.AgentBlocked, action: "Allow Bash go test ./...?", age: 95 * time.Second, stats: &git.Stats{Files: 9, Added: 340, Removed: 12}, ahead: 14},
+		{newTab: true, project: "multiplex", branch: "feat/agents-rail-with-a-long-branch-name", state: core.AgentBlocked, action: "Allow Bash go test ./...?", age: 95 * time.Second, stats: &git.Stats{Files: 9, Added: 340, Removed: 12}, ahead: 14},
 		{project: "docs", branch: "main", state: core.AgentIdle, age: 2 * time.Hour, stats: &git.Stats{}, ahead: 123},
 	}
 }
@@ -140,11 +140,11 @@ func aheadAgents() []railAgent {
 // for the rail.
 func namedAgents() []railAgent {
 	return []railAgent{
-		{newTab: true, project: "muxreveal", branch: "feat/review-drawer", state: core.AgentWorking, action: "Edit internal/ui/rail.go", age: 8 * time.Second, stats: &git.Stats{Files: 4, Added: 80, Removed: 6}, unseen: true, name: "muxr-orchestrator"},
-		{project: "muxreveal", branch: "feat/review-drawer", state: core.AgentBlocked, action: "Allow Bash go test ./...?", age: 40 * time.Second, stats: &git.Stats{Files: 2, Added: 12, Removed: 3}, name: "t16-implementer"},
-		{project: "muxreveal", branch: "feat/review-drawer", state: core.AgentIdle, age: 5 * time.Minute, stats: &git.Stats{}, name: "t15-reviewer"},
-		{project: "muxreveal", branch: "main", state: core.AgentIdle, age: 2 * time.Hour, stats: &git.Stats{}},
-		{project: "muxreveal", branch: "main", state: core.AgentIdle, age: 3 * time.Hour, stats: &git.Stats{}, name: "muxreveal"},
+		{newTab: true, project: "multiplex", branch: "feat/review-drawer", state: core.AgentWorking, action: "Edit internal/ui/rail.go", age: 8 * time.Second, stats: &git.Stats{Files: 4, Added: 80, Removed: 6}, unseen: true, name: "muxr-orchestrator"},
+		{project: "multiplex", branch: "feat/review-drawer", state: core.AgentBlocked, action: "Allow Bash go test ./...?", age: 40 * time.Second, stats: &git.Stats{Files: 2, Added: 12, Removed: 3}, name: "t16-implementer"},
+		{project: "multiplex", branch: "feat/review-drawer", state: core.AgentIdle, age: 5 * time.Minute, stats: &git.Stats{}, name: "t15-reviewer"},
+		{project: "multiplex", branch: "main", state: core.AgentIdle, age: 2 * time.Hour, stats: &git.Stats{}},
+		{project: "multiplex", branch: "main", state: core.AgentIdle, age: 3 * time.Hour, stats: &git.Stats{}, name: "multiplex"},
 		{project: "docs", branch: "main", state: core.AgentWorking, action: "Read README.md", age: 3 * time.Second, name: "a-session-name-far-too-long-for-a-forty-four-column-rail"},
 	}
 }
@@ -155,7 +155,7 @@ func meteredAgents() []railAgent {
 	return []railAgent{
 		{newTab: true, project: "api", branch: "main", state: core.AgentBlocked, action: "Allow Bash rm -rf build/?", age: 8 * time.Second, stats: &git.Stats{Files: 2, Added: 12, Removed: 3}, unseen: true, model: "Opus 5.5", meter: new(62)},
 		{project: "web", branch: "feat/login", state: core.AgentWorking, action: "Edit src/login.tsx", age: 4 * time.Minute, stats: &git.Stats{Files: 5, Added: 120, Removed: 14}, model: "Sonnet 5.5", meter: new(78), name: "t16-implementer"},
-		{newTab: true, project: "muxreveal", branch: "feat/agents-rail", state: core.AgentWorking, action: "Bash go test ./...", age: 95 * time.Second, stats: &git.Stats{Files: 9, Added: 340, Removed: 12}, model: "Opus 5.5", meter: new(93)},
+		{newTab: true, project: "multiplex", branch: "feat/agents-rail", state: core.AgentWorking, action: "Bash go test ./...", age: 95 * time.Second, stats: &git.Stats{Files: 9, Added: 340, Removed: 12}, model: "Opus 5.5", meter: new(93)},
 		{project: "docs", branch: "main", state: core.AgentIdle, age: 26 * time.Hour, stats: &git.Stats{}, model: "Haiku 5.5", meter: new(0)},
 		{newTab: true, project: "infra", branch: "a1b2c3d", detached: true, state: core.AgentIdle, age: 12 * time.Minute, stats: &git.Stats{Files: 1, Added: 2, Removed: 0}, model: "Opus 5.5"},
 		{project: "scratch", noRepo: true, noHook: true},
@@ -177,7 +177,7 @@ func prAgents() []railAgent {
 	return []railAgent{
 		{newTab: true, project: "api", branch: "feat/api-keys", state: core.AgentBlocked, action: "Allow Bash rm -rf build/?", age: 8 * time.Second, stats: &git.Stats{Files: 2, Added: 12, Removed: 3}, unseen: true, model: "Opus 5.5", meter: new(62), ahead: 1, pr: new(prInfo("OPEN", checksFailing, prNumber(31)))},
 		{project: "web", branch: "feat/login", state: core.AgentWorking, action: "Edit src/login.tsx", age: 4 * time.Minute, stats: &git.Stats{Files: 5, Added: 120, Removed: 14}, model: "Sonnet 5.5", meter: new(78), ahead: 2, pr: new(prInfo("OPEN", checksRunning, prReview("APPROVED"), prNumber(8)))},
-		{newTab: true, project: "muxreveal", branch: "feat/agents-rail-with-a-long-branch-name", state: core.AgentWorking, action: "Bash go test ./...", age: 95 * time.Second, stats: &git.Stats{Files: 9, Added: 340, Removed: 12}, ahead: 14, pr: new(prInfo("OPEN", checksPassed, prReview("CHANGES_REQUESTED"), prNumber(1042)))},
+		{newTab: true, project: "multiplex", branch: "feat/agents-rail-with-a-long-branch-name", state: core.AgentWorking, action: "Bash go test ./...", age: 95 * time.Second, stats: &git.Stats{Files: 9, Added: 340, Removed: 12}, ahead: 14, pr: new(prInfo("OPEN", checksPassed, prReview("CHANGES_REQUESTED"), prNumber(1042)))},
 		{project: "docs", branch: "docs/readme", state: core.AgentIdle, age: 26 * time.Hour, stats: &git.Stats{}, pr: new(prInfo("OPEN", prDraft, checksRunning, prNumber(7)))},
 		{newTab: true, project: "infra", branch: "fix/infra", state: core.AgentIdle, age: 12 * time.Minute, stats: &git.Stats{Files: 1, Added: 2, Removed: 0}, pr: new(prInfo("MERGED", prNumber(19)))},
 		{project: "ops", branch: "fix/ops", state: core.AgentIdle, age: 3 * time.Hour, stats: &git.Stats{}, pr: new(prInfo("CLOSED", prNumber(20)))},
@@ -190,7 +190,7 @@ func prAgents() []railAgent {
 // branch of another repository, with commits ahead.
 func placeAgents() []railAgent {
 	return []railAgent{
-		{newTab: true, project: "muxreveal", branch: "feat/follow-edits", state: core.AgentWorking, action: "Edit internal/ui/rail.go", age: 8 * time.Second, stats: &git.Stats{Files: 4, Added: 80, Removed: 6}, model: "Opus 5.5", meter: new(41)},
+		{newTab: true, project: "multiplex", branch: "feat/follow-edits", state: core.AgentWorking, action: "Edit internal/ui/rail.go", age: 8 * time.Second, stats: &git.Stats{Files: 4, Added: 80, Removed: 6}, model: "Opus 5.5", meter: new(41)},
 		{project: "contextmatrix", branch: "feat/retry", place: "contextmatrix-agent", state: core.AgentWorking, action: "Write internal/claim/retry.go", age: 6 * time.Second, stats: &git.Stats{Files: 4, Added: 120, Removed: 18}, model: "Opus 5.5", meter: new(62), ahead: 2},
 	}
 }
@@ -835,13 +835,13 @@ func TestRailCardShowsTheSessionName(t *testing.T) {
 			t.Fatalf("%q is on %d lines, want 1", name, len(row))
 		}
 
-		if strings.Contains(row[0], "muxreveal") {
+		if strings.Contains(row[0], "multiplex") {
 			t.Errorf("the line of %q also shows the project: %q", name, row[0])
 		}
 	}
 
 	// The project shows on the unnamed card, and once on the card named as it.
-	if rows := linesWith(lines, "muxreveal"); len(rows) != 2 {
+	if rows := linesWith(lines, "multiplex"); len(rows) != 2 {
 		t.Errorf("the project shows on %d lines, want 2 (the unnamed agent and the one named as the project): %q", len(rows), rows)
 	}
 

@@ -57,7 +57,7 @@ func TestLiveResultKeepsSpansOfUnchangedChunks(t *testing.T) {
 	}
 
 	res := edited()
-	a.reviewApply(v, reviewLoadedMsg{tab: a.store.State().Tab().ID, res: res, live: true, info: reviewInfo{project: "muxreveal", branch: "feat/review-pane", base: "origin/main", turns: 4, hidden: hiddenFlags(res.Files)}})
+	a.reviewApply(v, reviewLoadedMsg{tab: a.store.State().Tab().ID, res: res, live: true, info: reviewInfo{project: "multiplex", branch: "feat/review-pane", base: "origin/main", turns: 4, hidden: hiddenFlags(res.Files)}})
 
 	got := settleCounting(t, a)
 
@@ -103,7 +103,7 @@ func TestNewSourceTokenisesAfresh(t *testing.T) {
 	}
 
 	res := turn4Result()
-	a.reviewApply(v, reviewLoadedMsg{tab: a.store.State().Tab().ID, res: res, src: git.BranchSource{Worktree: "/w/p1"}, info: reviewInfo{project: "muxreveal", branch: "feat/review-pane", base: "origin/main", hidden: hiddenFlags(res.Files)}})
+	a.reviewApply(v, reviewLoadedMsg{tab: a.store.State().Tab().ID, res: res, src: git.BranchSource{Worktree: "/w/p1"}, info: reviewInfo{project: "multiplex", branch: "feat/review-pane", base: "origin/main", hidden: hiddenFlags(res.Files)}})
 
 	if got := settleCounting(t, a); got != held {
 		t.Errorf("a new source tokenised %d lines, want all %d in view", got, held)
@@ -231,7 +231,7 @@ func TestSecondLiveResultKeepsLookAheadSpans(t *testing.T) {
 	edit := func(tag string) {
 		res := manyHunks(400)
 		res.Files[0].Hunks[200].Lines[0].Text += tag
-		a.reviewApply(v, reviewLoadedMsg{tab: tab, res: res, live: true, info: reviewInfo{project: "muxreveal", branch: "feat/review-pane", base: "origin/main", turns: 1, hidden: hiddenFlags(res.Files)}})
+		a.reviewApply(v, reviewLoadedMsg{tab: tab, res: res, live: true, info: reviewInfo{project: "multiplex", branch: "feat/review-pane", base: "origin/main", turns: 1, hidden: hiddenFlags(res.Files)}})
 	}
 
 	edit(" // one")

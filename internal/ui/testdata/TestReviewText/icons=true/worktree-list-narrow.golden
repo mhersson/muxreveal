@@ -1,17 +1,17 @@
  1  p1                󰛽 master-stack 
 ────────────────────────────────────────
-╭─  muxreveal … ─ ✓ 0/4 ─ 󰋚 turn 4/4 ─╮
+╭─  multiplex … ─ ✓ 0/4 ─ 󰋚 turn 4/4 ─╮
 │▎ M internal/core/state.go      +9 -1 │
 │  @@ -22,5 +22,13 @@ type Pane struct │
 │ ╭─ 󰳐 Worktrees ────────────────────╮ │
 │ │  󰆤 Follow the agent  on          │ │
-│ │ Touched by muxreveal ─────────── │ │
+│ │ Touched by multiplex ─────────── │ │
 │ │  other · feature/follow-the-age… │ │
-│ │▎ muxreveal · feature/worktree-l… │ │
-│ │  muxreveal · main  …  clean      │ │
+│ │▎ multiplex · feature/worktree-l… │ │
+│ │  multiplex · main  …  clean      │ │
 │ │                                  │ │
-│ │ Other worktrees of muxreveal ─── │ │
-│ │  muxreveal · feat/pr-sta…        │ │
+│ │ Other worktrees of multiplex ─── │ │
+│ │  multiplex · feat/pr-sta…        │ │
 │ │                                  │ │
 │ │ j/k move   enter show   esc close│ │
 │ ╰──────────────────────────────────╯ │

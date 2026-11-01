@@ -86,11 +86,11 @@ func TestRailLineOneDropOrder(t *testing.T) {
 	a.clock = &fakeClock{t: t0}
 
 	ui := a.current().theme.UI
-	head := iconIdle + " muxreveal"
+	head := iconIdle + " multiplex"
 	spaces := func(n int) string { return strings.Repeat(" ", n) }
 
 	base := railCard{
-		pane: "p1", state: core.AgentIdle, project: "muxreveal",
+		pane: "p1", state: core.AgentIdle, project: "multiplex",
 		model: "Opus 5.5", meter: 62, meterKnown: true,
 		active: t0.Add(-8 * time.Second), unseen: true,
 	}
@@ -107,7 +107,7 @@ func TestRailLineOneDropOrder(t *testing.T) {
 		{"the meter goes first, to the last cell", 26, nil, head + "  Opus 5.5" + " " + "8s ●"},
 		{"then the model", 25, nil, head + spaces(10) + "8s ●"},
 		{"then the model, to the last cell", 16, nil, head + " " + "8s ●"},
-		{"then the name is cut", 15, nil, iconIdle + " muxreve…" + " " + "8s ●"},
+		{"then the name is cut", 15, nil, iconIdle + " multipl…" + " " + "8s ●"},
 		{"the name is cut to the glyph", 8, nil, iconIdle + " …" + " " + "8s ●"},
 		{"no dot", 40, func(c *railCard) { c.unseen = false }, head + "  Opus 5.5" + spaces(12) + "62%  8s"},
 		{"no time", 40, func(c *railCard) { c.unseen, c.active = false, time.Time{} }, head + "  Opus 5.5" + spaces(16) + "62%"},

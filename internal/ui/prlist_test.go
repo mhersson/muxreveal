@@ -662,7 +662,7 @@ func prListScene(t *testing.T, icons bool, w, h int) *App {
 
 	agents := listAgents()
 	agents = append(agents, railAgent{
-		newTab: true, project: "muxreveal", branch: "feat/a-branch-with-a-rather-long-name-that-has-to-be-cut", state: core.AgentIdle,
+		newTab: true, project: "multiplex", branch: "feat/a-branch-with-a-rather-long-name-that-has-to-be-cut", state: core.AgentIdle,
 		pr: new(prInfo("OPEN", prNumber(112), prTitled("A pull request title that is far too long to fit in the list as it is drawn \x1b[31mhere\x07"), checksFailing, prReview("CHANGES_REQUESTED"), prAged(26*time.Hour))),
 	})
 

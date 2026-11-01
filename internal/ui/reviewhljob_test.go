@@ -15,7 +15,7 @@ import (
 
 // applyLive hands the view res as a live result.
 func applyLive(a *App, v *reviewView, res git.Result) {
-	a.reviewApply(v, reviewLoadedMsg{tab: a.store.State().Tab().ID, res: res, live: true, info: reviewInfo{project: "muxreveal", branch: "feat/review-pane", base: "origin/main", turns: 4, hidden: hiddenFlags(res.Files)}})
+	a.reviewApply(v, reviewLoadedMsg{tab: a.store.State().Tab().ID, res: res, live: true, info: reviewInfo{project: "multiplex", branch: "feat/review-pane", base: "origin/main", turns: 4, hidden: hiddenFlags(res.Files)}})
 }
 
 // Tokenising happens in a command: the drawer draws plain until its answer.

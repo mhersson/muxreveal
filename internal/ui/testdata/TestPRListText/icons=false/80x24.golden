@@ -1,4 +1,4 @@
- 1 api   2 api   3 web   4 zeta   5 muxreveal     layout bsp │ #112 ci 2 failed 
+ 1 api   2 api   3 web   4 zeta   5 multiplex     layout bsp │ #112 ci 2 failed 
 ────────────────────────────────────────────────────────────────────────────────
 ╭─ Agents 8 ───── blocked 1 ⠋1 idle 6 ─╮╭─ claude ────────────────────── idle ─╮
 │ Blocked ────────────────────────── 1 ││                                      │
@@ -11,7 +11,7 @@
 │ │   #8 Retry on timeout  feat/c                  ci 3/5  no review yet  4m │ │
 │ │   #5 Add the a endpoint  feat/a                     ci 5/5  approved  3h │ │
 │ │                                                                          │ │
-│ │  acme/muxreveal ───────────────────────────────────────────────────── 1  │ │
+│ │  acme/multiplex ───────────────────────────────────────────────────── 1  │ │
 │ │  ▎#112 A pull request title t…  feat/a-branch…  ci 2 failed  changes  1d │ │
 │ │                                                                          │ │
 │ │  acme/web ─────────────────────────────────────────────────────────── 1  │ │

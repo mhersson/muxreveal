@@ -123,7 +123,7 @@ func TestTopBorderTagDrops(t *testing.T) {
 		line := ansi.Strip(d.topBorder())
 		got := []bool{
 			strings.Contains(line, "split"), strings.Contains(line, "pinned"),
-			strings.Contains(line, "branch"), strings.Contains(line, "mux"),
+			strings.Contains(line, "branch"), strings.Contains(line, "mul"),
 		}
 
 		if want := []bool{tt.split, tt.pinned, tt.mode, tt.titled}; !equalBools(got, want) {
@@ -153,7 +153,7 @@ func equalBools(a, b []bool) bool {
 func TestWorktreeRemovedRow(t *testing.T) {
 	t.Parallel()
 
-	const root = "/home/me/code/muxreveal/.worktrees/b"
+	const root = "/home/me/code/multiplex/.worktrees/b"
 
 	s := reviewScene{theme: "catppuccin-mocha", icons: true, w: 200, h: 52, branch: true, focused: true, pinned: true}
 	s.tune = func(t *testing.T, a *App, v *reviewView) {
@@ -165,7 +165,7 @@ func TestWorktreeRemovedRow(t *testing.T) {
 	a := s.build(t)
 
 	lines := a.drawerLines(a.store.State(), drawerRectOf(t, a, 0))
-	want := "worktree removed: ~/code/muxreveal/.worktrees/b"
+	want := "worktree removed: ~/code/multiplex/.worktrees/b"
 
 	for _, line := range lines {
 		plain := ansi.Strip(line)
@@ -182,7 +182,7 @@ func TestWorktreeRemovedRow(t *testing.T) {
 		assertColours(t, vt, x, 0, "w", ui.Muted, ui.Bg, false)
 		assertColours(t, vt, x+len(want)-1, 0, "b", ui.Muted, ui.Bg, false)
 
-		if title := ansi.Strip(lines[0]); !strings.Contains(title, "muxreveal · feat/review-pane") {
+		if title := ansi.Strip(lines[0]); !strings.Contains(title, "multiplex · feat/review-pane") {
 			t.Errorf("title %q lost the project and branch", title)
 		}
 

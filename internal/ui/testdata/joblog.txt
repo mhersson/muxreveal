@@ -16,10 +16,10 @@
 2026-10-30T12:00:20.2000000Z shell: /usr/bin/bash -e {0}
 2026-10-30T12:00:21.0000000Z ##[endgroup]
 2026-10-30T12:00:22.0000000Z go test ./...
-2026-10-30T12:00:30.0000000Z [32mok  [0m  github.com/mhersson/muxreveal/internal/git	4.210s
+2026-10-30T12:00:30.0000000Z [32mok  [0m  github.com/mhersson/aim/internal/git	4.210s
 2026-10-30T12:00:31.0000000Z --- FAIL: TestDiffWordSpans (0.01s)
 2026-10-30T12:00:31.1000000Z     diff_test.go:88: got 3 spans, want 4
 2026-10-30T12:00:31.2000000Z FAIL
-2026-10-30T12:00:31.3000000Z [31mFAIL[0m	github.com/mhersson/muxreveal/internal/git	0.044s
+2026-10-30T12:00:31.3000000Z [31mFAIL[0m	github.com/mhersson/aim/internal/git	0.044s
 2026-10-30T12:00:31.4000000Z make: *** [Makefile:31: test] Error 1
 2026-10-30T12:00:31.5000000Z ##[error]Process completed with exit code 2.

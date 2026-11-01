@@ -319,7 +319,7 @@ func TestPRListSearchRows(t *testing.T) {
 			searched("github.com/acme/web", 305, "Older one", "kari-dev", 24*time.Hour),
 			searched("github.com/acme/infra", 88, "Bump the chart", "kari-dev", 5*time.Hour),
 		},
-		Authored: []github.SearchPR{searched("github.com/mhersson/muxreveal", 24, "Tabs", "mhersson", time.Hour)},
+		Authored: []github.SearchPR{searched("github.com/mhersson/aim", 24, "Tabs", "mhersson", time.Hour)},
 	}}
 	a, _, _ := searchApp(t, listAgents(), 140, 40, mine, "github.com/acme/web")
 	openList(a)
@@ -721,7 +721,7 @@ func tabScenes(t *testing.T, icons bool) map[string]*App {
 			searched("github.com/acme/infra", 88, "Bump the chart", "kari-dev", 5*time.Hour, func(p *github.PR) { p.ReviewDecision = "CHANGES_REQUESTED" }),
 		},
 		Authored: []github.SearchPR{
-			searched("github.com/mhersson/muxreveal", 24, "The PR list tabs", "mhersson", time.Hour, func(p *github.PR) { p.Checks = github.Checks{Total: 4, Done: 2, Failed: 1} }),
+			searched("github.com/mhersson/aim", 24, "The PR list tabs", "mhersson", time.Hour, func(p *github.PR) { p.Checks = github.Checks{Total: 4, Done: 2, Failed: 1} }),
 		},
 	}}
 	fail := map[string]error{"ghe.example.com": errors.New("HTTP 502 Bad Gateway")}

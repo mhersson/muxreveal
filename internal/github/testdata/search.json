@@ -112,7 +112,7 @@
         {
           "number": 24,
           "title": "Read the conversation",
-          "url": "https://github.com/mhersson/muxreveal/pull/24",
+          "url": "https://github.com/mhersson/aim/pull/24",
           "isDraft": false,
           "state": "OPEN",
           "isCrossRepository": false,
@@ -149,7 +149,7 @@
             ]
           },
           "repository": {
-            "name": "muxreveal",
+            "name": "aim",
             "owner": {
               "login": "mhersson"
             }

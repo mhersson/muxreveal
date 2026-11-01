@@ -1,6 +1,6 @@
  1  p1                                                        󰛽 master-stack 
 ────────────────────────────────────────────────────────────────────────────────
-╭─  shell ─────────╭─  muxreveal · feat/review-pane ──── ✓ 0/5 ─ 󰋚 turn 4/4 ─╮
+╭─  shell ─────────╭─  multiplex · feat/review-pane ──── ✓ 0/5 ─ 󰋚 turn 4/4 ─╮
 │$ claude           │  A internal/ui/wrapdemo.go                      󰀦  +9 -0 │
 │reviewing the diff │  @@ -0,0 +1,9 @@                                         │
 │                   │       1 + package ui                                     │

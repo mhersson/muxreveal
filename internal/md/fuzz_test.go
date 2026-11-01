@@ -8,7 +8,7 @@ import (
 )
 
 // fuzzBases are the bases FuzzLayout picks from: none, a URL and a local directory.
-var fuzzBases = [...]string{"", "https://example.test/docs/guide/", "/tmp/muxreveal-fuzz/docs"}
+var fuzzBases = [...]string{"", "https://example.test/docs/guide/", "/tmp/aim-fuzz/docs"}
 
 func FuzzLayout(f *testing.F) {
 	paths, _ := filepath.Glob(filepath.Join("testdata", "corpus", "*.md"))

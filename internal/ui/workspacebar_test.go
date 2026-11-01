@@ -222,7 +222,7 @@ func testModules() []trayModule {
 func planTabs() []tabInfo {
 	return []tabInfo{
 		{n: 1, name: "api", agent: false},
-		{n: 2, name: "muxreveal", agent: true},
+		{n: 2, name: "multiplex", agent: true},
 		{n: 3, name: "documentation", agent: false},
 	}
 }

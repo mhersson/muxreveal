@@ -3,7 +3,7 @@
 ╭─ Agents 4 ───────── blocked 1 ⠋1 idle 2 ─╮╭─ claude ─────── blocked ─╮╭─ claude ────────── idle ─╮
 │ Blocked ────────────────────────────── 1 ││                          ││                          │
 │                                          ││                          ││                          │
-│▎  muxreveal                           1m ││                          ││                          │
+│▎  multiplex                           1m ││                          ││                          │
 │   feat/agents-rail-with-a-long-bran… ↑14 ││                          ││                          │
 │   Allow Bash go test ./...?              ││                          ││                          │
 │   +340 -12  9 files                      ││                          ││                          │

@@ -234,19 +234,19 @@ func TestRailCardsGroupsAndOrder(t *testing.T) {
 func TestRailMatcher(t *testing.T) {
 	t.Parallel()
 
-	c := railCard{tab: 1, tabName: "Backend", project: "muxreveal", branch: "feat/Rail", action: "Edit internal/core/modes.go"}
+	c := railCard{tab: 1, tabName: "Backend", project: "multiplex", branch: "feat/Rail", action: "Edit internal/core/modes.go"}
 
 	tests := []struct {
 		q    string
 		want []railHit
 	}{
 		{"", nil},
-		{"MUX", []railHit{{railFieldProject, 0, 3}}},
+		{"MUL", []railHit{{railFieldProject, 0, 3}}},
 		{"rail", []railHit{{railFieldBranch, 5, 9}}},
 		{"modes", []railHit{{railFieldAction, 19, 24}}},
 		{"tab 2", []railHit{{railFieldTabNumber, 0, 5}}},
 		{"back", []railHit{{railFieldTabName, 0, 4}}},
-		{"e", []railHit{{railFieldProject, 4, 5}, {railFieldBranch, 1, 2}, {railFieldAction, 0, 1}, {railFieldTabName, 4, 5}}},
+		{"e", []railHit{{railFieldProject, 7, 8}, {railFieldBranch, 1, 2}, {railFieldAction, 0, 1}, {railFieldTabName, 4, 5}}},
 		{"nothing", nil},
 	}
 
@@ -261,7 +261,7 @@ func TestRailMatcher(t *testing.T) {
 func TestRailSearchMatchesTheName(t *testing.T) {
 	t.Parallel()
 
-	c := railCard{project: "muxreveal", name: "muxr-Orchestrator", branch: "feat/orch"}
+	c := railCard{project: "multiplex", name: "muxr-Orchestrator", branch: "feat/orch"}
 
 	tests := []struct {
 		q    string
@@ -269,8 +269,8 @@ func TestRailSearchMatchesTheName(t *testing.T) {
 	}{
 		{"orch", []railHit{{railFieldName, 5, 9}, {railFieldBranch, 5, 9}}},
 		{"ORCHESTRA", []railHit{{railFieldName, 5, 14}}},
-		{"muxr", []railHit{{railFieldProject, 0, 4}, {railFieldName, 0, 4}}},
-		{"reveal", []railHit{{railFieldProject, 3, 9}}},
+		{"mu", []railHit{{railFieldProject, 0, 2}, {railFieldName, 0, 2}}},
+		{"plex", []railHit{{railFieldProject, 5, 9}}},
 		{"nothing", nil},
 	}
 
@@ -281,7 +281,7 @@ func TestRailSearchMatchesTheName(t *testing.T) {
 		}
 	}
 
-	if _, ok := (railCard{project: "muxreveal"}).matches("orch"); ok {
+	if _, ok := (railCard{project: "multiplex"}).matches("orch"); ok {
 		t.Error("a card with no name matched the text of one")
 	}
 
@@ -294,7 +294,7 @@ func TestRailSearchMatchesTheName(t *testing.T) {
 		{"orch", []core.PaneID{"p1"}},
 		{"T16", []core.PaneID{"p2"}},
 		{"reviewer", []core.PaneID{"p3"}},
-		{"muxreveal", []core.PaneID{"p1", "p2", "p3", "p4", "p5"}}, // the project still matches a named card
+		{"multiplex", []core.PaneID{"p1", "p2", "p3", "p4", "p5"}}, // the project still matches a named card
 		{"zzz", nil},
 	} {
 		a.railSetSearch(false, q.query)

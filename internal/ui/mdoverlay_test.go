@@ -858,12 +858,12 @@ func mdOverlayScenes() []mdOverlayScene {
 	return []mdOverlayScene{{"md-file", 120, 40, false}, {"md-80x24", 80, 24, false}, {"md-page", 120, 40, true}}
 }
 
-// mdSceneApp opens docs/guide.md in a repository named muxreveal.
+// mdSceneApp opens docs/guide.md in a repository named multiplex.
 func mdSceneApp(t *testing.T, icons bool, sc mdOverlayScene) *App {
 	t.Helper()
 
 	dir := pageRepo(t, map[string]string{"docs/guide.md": demoPlan(t) + "\n[readme](../README.md)\n"})
-	named := filepath.Join(filepath.Dir(dir), "muxreveal")
+	named := filepath.Join(filepath.Dir(dir), "multiplex")
 
 	if err := os.Rename(dir, named); err != nil {
 		t.Fatal(err)
