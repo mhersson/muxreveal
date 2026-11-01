@@ -38,7 +38,7 @@ A `prunable` worktree has no directory any more; `enter` on it shows `that workt
 
 ### A new worktree
 
-The last row, `new worktree…` (`+ new worktree…` with `icons = false`), opens the new-worktree page. Fill in the `branch` field; the `base` field starts at the repository's default branch, and the `path` line shows where the worktree will go. `tab` or `shift+tab` switches between `branch` and `base`, `enter` creates the worktree and starts an agent in it, and `esc` goes back to the list, keeping what you typed.
+The last row, `new worktree…` (`+ new worktree…` with `icons = false`), opens the new-worktree page. Fill in the `branch` field; the `base` field starts at the repository's default branch (`origin/<name>` when `origin/HEAD` names a branch that exists, else `main`, else `master`; empty when there is none), and the `path` line shows where the worktree will go. `tab` or `shift+tab` switches between `branch` and `base`, `enter` creates the worktree and starts an agent in it, and `esc` goes back to the list, keeping what you typed.
 
 - An existing branch is checked out; a new one is created from the base.
 - A failure shows on the page: `enter a branch name`, `that path already exists`, `not a valid branch name`, `no usable base branch; name one in the base field`, `no main checkout; set root = "sibling" in [worktrees]`, or git's own reason. While git works the page reads `creating the worktree…`.
@@ -48,7 +48,7 @@ The last row, `new worktree…` (`+ new worktree…` with `icons = false`), open
 
 ### Shells beside the agent
 
-- `ctrl+space s` opens a shell below the focused pane, `ctrl+space v` one to its right. Both start in the focused pane's working directory and take focus.
+- `ctrl+space s` opens a shell below the focused pane, `ctrl+space v` one to its right. Both start in the focused pane's working directory and take focus. That is where a BSP tab puts them; the other layouts place a new pane by their own rule, see [Layouts](layouts.md).
 - Run `claude` in a shell and the pane becomes an agent pane; when Claude exits in an agent pane, it becomes a shell again. The rail lists agent panes only.
 - At most 64 panes fit: past that, the notice is `at most 64 panes`.
 
@@ -153,7 +153,7 @@ Every agent pane starts `claude --resume` with its saved session, so the convers
 
 An agent that cannot resume starts a fresh `claude` and the notice says so: `started a fresh claude in api: its session could not be resumed`, or `started 3 fresh claudes: their sessions could not be resumed`. Several start-up notices show together, joined with `; `. A pane whose directory is gone starts in the launch directory with `<dir> is not available, started in <launch dir>`.
 
-To start with one shell instead, run `aim --fresh`. The saved layout stays until your first change replaces it.
+To start with one shell instead, run `aim --fresh`. That shell is the first change, so the new layout replaces the saved one as soon as AIM starts.
 
 If the saved layout cannot be read, AIM keeps it as `state.json.bad` and starts fresh with `the saved layout could not be read; it was kept as state.json.bad`.
 
