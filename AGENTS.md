@@ -28,8 +28,7 @@ design; propose an edit to DESIGN.md instead.
 - Small changes skip the plan: a fix, or a test-only or tooling change the
   maintainer approves as a short scope, is built test-first, reviewed once and
   opened as its own PR.
-- One branch and one PR per plan. Each task is its own reviewed commit; review
-  fixes are separate commits, never squashed into it.
+- One branch and one PR per plan. Each task is its own reviewed commit.
 - Commit messages: Conventional Commits, e.g.
   `feat(git): turn snapshots via temp index`. No requirement, milestone, plan or
   task IDs in commit messages, branch names, or PR titles and descriptions: they
@@ -47,7 +46,7 @@ make test-race    # go test -race ./...
 make lint         # golangci-lint run
 make fmt          # golangci-lint fmt
 make scan         # the glyph, em-dash and wall-clock scan
-make scan-commits # IDs, trailers, em-dashes and big blobs in the branch's commits
+make scan-commits # IDs, session links, em-dashes and big blobs in the branch's commits
 make check-fast   # the per-commit check
 make check        # CI's Linux go-checks gates, for a local run
 make install      # go install into $GOBIN, else $GOPATH/bin
@@ -178,8 +177,8 @@ pull request, so CI checks it while the work finishes. Run `make scan-commits`
 before every push; `make check` runs CI's Linux go-checks gates locally when you
 need them without a push.
 
-- No session links in commits or PRs, and no trailers: no `Co-Authored-By`,
-  `Claude-Session` or "Generated with" lines.
+- No Claude session links (`Claude-Session` lines or `claude.ai/code/session_`
+  URLs) in commits or PRs.
 - **Never commit to `main`.** Work on a feature branch; tasks of a plan or scope
   the user approved commit there without asking again.
 - Push only feature branches, and only with the user's approval; a standing

@@ -15,7 +15,7 @@ help:
 	@echo "  fmt-check    fail and show the diff if formatting is needed"
 	@echo "  tidy-check   fail if go mod tidy would change go.mod or go.sum"
 	@echo "  scan         fail on private-use glyphs in Go, TOML and Markdown files (DESIGN.md aside), em-dashes in Go, Markdown and TOML files and wall-clock bounds in tests"
-	@echo "  scan-commits fail on IDs, trailers, em-dashes and big blobs in SCAN_BASE..SCAN_HEAD (origin/main..HEAD)"
+	@echo "  scan-commits fail on IDs, session links, em-dashes and big blobs in SCAN_BASE..SCAN_HEAD (origin/main..HEAD)"
 	@echo "  check-fast   the per-commit check: build, fmt-check, vet, lint, test-changed, scan; a change of non-code files only runs scan and the doc tests"
 	@echo "  check        the Linux go-checks gates of CI: build, build-darwin, fmt-check, vet, lint, test-race, tidy-check, scan"
 	@echo "  install      go install the binary into GOBIN, else GOPATH/bin"
