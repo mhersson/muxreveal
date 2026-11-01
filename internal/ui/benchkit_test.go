@@ -586,6 +586,10 @@ func TestBenchKitPlacesThePictureInEveryFrame(t *testing.T) {
 			if res.Fallbacks != 0 {
 				t.Errorf("the compositor drew the drawer in %d frames, want the splice", res.Fallbacks)
 			}
+
+			if res.PictureFallbacks != 0 {
+				t.Errorf("the compositor placed the picture in %d frames, want the splice", res.PictureFallbacks)
+			}
 		})
 	}
 }
@@ -604,7 +608,9 @@ func TestBenchPicturePlacedIn(t *testing.T) {
 			pics = append(pics, picRow{X: x, Y: 2 + k, ID: id, Row: k, Cols: 6})
 		}
 
-		return placePictures(base, w, h, pics)
+		out, _ := placePictures(base, w, h, pics)
+
+		return out
 	}
 	pic := benchPicture{id: id, at: placeholders(frame(id, 3, 4), id)}
 

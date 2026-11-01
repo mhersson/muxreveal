@@ -2,6 +2,7 @@ package ui
 
 import (
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -82,11 +83,15 @@ func TestPlacePictures(t *testing.T) {
 	const w, h = 20, 5
 
 	blank := strings.TrimSuffix(strings.Repeat(strings.Repeat(".", w)+"\n", h), "\n")
-	out := placePictures(blank, w, h, []picRow{
+
+	out, spliced := placePictures(blank, w, h, []picRow{
 		{X: 3, Y: 1, ID: 42, Row: 0, Cols: 4},
 		{X: 3, Y: 5, ID: 42, Row: 1, Cols: 4},
 		{X: 0, Y: 3, ID: 43, Row: 0, Cols: 2, Ground: "#102030"},
 	})
+	if !spliced {
+		t.Fatal("the compositor placed the pictures, want the splice")
+	}
 
 	rows := strings.Split(out, "\n")
 	if len(rows) != h {
@@ -120,6 +125,221 @@ func TestPlacePictures(t *testing.T) {
 		if got := ansi.Strip(rows[y]); got != strings.Repeat(".", w) {
 			t.Fatalf("row %d changed: %q", y, got)
 		}
+	}
+}
+
+// picWidth by picHeight is the screen the boundary cases draw on; most place
+// one picture row of picCols cells at column picX of row picY.
+const (
+	picWidth, picHeight = 30, 5
+	picX, picY, picCols = 10, 2, 6
+)
+
+// picFrame is a frame of full rows of "a", with rows replacing those it names.
+func picFrame(rows map[int]string) string {
+	out := make([]string, picHeight)
+	for y := range out {
+		r, ok := rows[y]
+		if !ok {
+			r = repeatA(picWidth)
+		}
+
+		out[y] = r
+	}
+
+	return strings.Join(out, "\n")
+}
+
+// The splice must leave the cells the compositor leaves, wherever the frame has
+// something open, wide or zero-width at a picture's edges; a frame it cannot
+// cut on cell edges goes through the compositor.
+func TestPlacePicturesMatchesTheCompositor(t *testing.T) {
+	t.Parallel()
+
+	a, w := repeatA, picWidth
+	at := func(y int, s string) map[int]string { return map[int]string{y: s} }
+	row := func(s string) map[int]string { return at(picY, s) }
+	one := []picRow{{X: picX, Y: picY, ID: 9, Row: 0, Cols: picCols, Ground: "#102030"}}
+
+	tests := []struct {
+		name    string
+		rows    map[int]string
+		pics    []picRow // nil places one
+		spliced bool     // the splice applies; else the compositor draws
+	}{
+		{"plain", nil, nil, true},
+		{"style open across the picture", row(sgrOpen + a(w) + reset), nil, true},
+		{"style opens inside the picture", row(a(12) + sgrOpen + a(w-12) + reset), nil, true},
+		{"style opens right after the picture", row(a(16) + sgrOpen + a(w-16) + reset), nil, true},
+		{"style closes inside the picture", row(sgrOpen + a(12) + reset + a(w-12)), nil, true},
+		{"styles add up across the picture", row("\x1b[31m" + a(12) + "\x1b[1;44m" + a(2) + "\x1b[22;4:3;58;5;99m" + a(w-14) + reset), nil, true},
+		{"link open across the picture", row(linkOn + a(w) + linkOff), nil, true},
+		{"link opens inside the picture", row(a(12) + linkOn + a(w-12) + linkOff), nil, true},
+		{"link closes inside the picture", row(linkOn + a(12) + linkOff + a(w-12)), nil, true},
+		{"link with an id across the picture", row("\x1b]8;id=7;https://example.com/b\x1b\\" + a(w) + linkOff), nil, true},
+		{"style and link open across the picture", row(sgrOpen + linkOn + a(w) + linkOff + reset), nil, true},
+		{"wide character inside", row(a(11) + "中" + a(w-13)), nil, true},
+		{"wide character ends at the left edge", row(a(8) + "中" + a(w-10)), nil, true},
+		{"wide character starts at the right edge", row(a(16) + "中" + a(w-18)), nil, true},
+		{"wide characters all along the row", row(strings.Repeat("中", w/2)), nil, true},
+		{"emoji inside", row("\x1b[32m" + a(12) + "😀" + a(w-14) + reset), nil, true},
+		{"combining mark inside", row(a(12) + "e\u0301" + a(w-13)), nil, true},
+		{"combining mark on the last cell", row(a(15) + "e\u0301" + a(w-16)), nil, true},
+		{"combining mark on the cell before", row(a(9) + "e\u0301" + a(w-10)), nil, true},
+		{"combining mark after an escape before the picture", row(a(10) + "\x1b[31m\u0301" + a(w-10) + reset), nil, true},
+		{"combining mark after an escape inside the picture", row(a(12) + "\x1b[31m\u0301" + a(w-12) + reset), nil, true},
+		{"control character inside", row(a(12) + "\x07" + a(w-12)), nil, true},
+		{"previous row closed its style", at(picY-1, sgrOpen+a(w)+reset), nil, true},
+		{"a row that ends where the picture does", row(a(16)), nil, true},
+		{"a styled row that ends where the picture does", row(sgrOpen + a(16) + reset), nil, true},
+		{"an APC in another row", at(0, a(5)+apc+a(w-5)), nil, true},
+		{"two pictures on one row", row(sgrOpen + a(w) + reset), []picRow{
+			{X: 2, Y: picY, ID: 9, Row: 0, Cols: 4}, {X: 20, Y: picY, ID: 10, Row: 0, Cols: 5, Ground: "#102030"},
+		}, true},
+		{"two pictures side by side", nil, []picRow{{X: 4, Y: picY, ID: 9, Cols: 4}, {X: 8, Y: picY, ID: 10, Cols: 4}}, true},
+		{"two pictures given right to left", nil, []picRow{{X: 20, Y: picY, ID: 10, Cols: 5}, {X: 2, Y: picY, ID: 9, Cols: 4}}, true},
+		{"style and link change between two pictures", row(a(6) + "\x1b[31m" + a(10) + "\x1b[1;4:3m" + linkOn + a(w-16) + linkOff + reset), []picRow{
+			{X: 2, Y: picY, ID: 9, Cols: 4}, {X: 20, Y: picY, ID: 10, Cols: 5},
+		}, true},
+		{"style and link closed between two picture rows", map[int]string{1: sgrOpen + linkOn + a(w), 2: a(5) + linkOff + reset + a(w-5)}, []picRow{
+			{X: picX, Y: 1, ID: 9, Cols: picCols}, {X: picX, Y: 3, ID: 9, Row: 2, Cols: picCols},
+		}, true},
+		{"a picture of three rows", at(1, sgrOpen+a(w)+reset), picRows(9, picX, 1, 3, picCols), true},
+		{"at the right edge", nil, []picRow{{X: w - 6, Y: picY, ID: 9, Cols: 6}}, true},
+		{"at the left edge", row(sgrOpen + a(w) + reset), []picRow{{X: 0, Y: picY, ID: 9, Cols: 6}}, true},
+		{"across the whole row", nil, []picRow{{X: 0, Y: picY, ID: 9, Cols: w}}, true},
+		{"on the first row", nil, []picRow{{X: 0, Y: 0, ID: 9, Cols: 6}}, true},
+		{"on the last row", nil, []picRow{{X: w - 6, Y: picHeight - 1, ID: 9, Cols: 6}}, true},
+		{"rows off the screen are dropped", nil, append(slices.Clone(one),
+			picRow{X: 3, Y: picHeight, ID: 9, Row: 1, Cols: 4}, picRow{X: -1, Y: 0, ID: 9, Cols: 4},
+			picRow{X: w, Y: 0, ID: 9, Cols: 4}, picRow{X: 3, Y: -1, ID: 9, Cols: 4}, picRow{X: 3, Y: 0, ID: 9}), true},
+
+		// A wide cell across an edge would be cut in two.
+		{"wide character straddles the left edge", row(a(9) + "中" + a(w-11)), nil, false},
+		{"wide character straddles the right edge", row(a(15) + "中" + a(w-17)), nil, false},
+
+		// A mark with no cell before it folds into the last cell drawn, which
+		// the splice would make a placeholder.
+		{"combining mark after an escape right after the picture", row(a(16) + "\x1b[31m\u0301" + a(w-16) + reset), nil, false},
+		{"combining mark opens the row after a picture that ends its row", map[int]string{picY: a(16), picY + 1: "\u0301" + a(w-1)}, nil, false},
+		{"combining mark after an escape between two pictures side by side", row(a(8) + "\x1b[31m\u0301" + a(w-8) + reset), []picRow{
+			{X: 4, Y: picY, ID: 9, Cols: 4}, {X: 8, Y: picY, ID: 10, Cols: 4},
+		}, false},
+		{"an APC with no cell after it follows a picture that ends its row", map[int]string{picHeight - 2: a(16), picHeight - 1: apc}, []picRow{{X: picX, Y: picHeight - 2, ID: 9, Cols: picCols}}, false},
+
+		// A string sequence rides on the next cell drawn, and a carriage return
+		// moves the column.
+		{"an APC before the picture", row(a(5) + apc + a(w-5)), nil, false},
+		{"an APC just before the picture", row(a(picX) + apc + a(w-picX)), nil, false},
+		{"an APC inside the picture", row(a(12) + apc + a(w-12)), nil, false},
+		{"an APC after the picture", row(a(20) + apc + a(w-20)), nil, false},
+		{"a DCS in the row", row(a(12) + dcs + a(w-12)), nil, false},
+		{"an APC at the end of the row before a picture at the left edge", at(picY-1, a(w)+apc), []picRow{{X: 0, Y: picY, ID: 9, Cols: 6}}, false},
+		{"an APC between a picture row and a later one at the left edge", at(2, a(w)+apc), []picRow{
+			{X: picX, Y: 1, ID: 9, Cols: picCols}, {X: 0, Y: 3, ID: 10, Cols: picCols},
+		}, false},
+		{"a carriage return in the row", row(a(20) + "\r" + a(5)), nil, false},
+		{"a carriage return rewinds over the picture", row(a(w) + "\r" + strings.Repeat("b", 12)), nil, false},
+
+		// A style or link left open carries into the picture's row.
+		{"previous row left a style open", at(picY-1, sgrOpen+a(w)), nil, false},
+		{"previous row left a link open", at(picY-1, linkOn+a(w)), nil, false},
+		{"a style left open two rows up", at(picY-2, sgrOpen+a(w)), nil, false},
+		{"a picture row leaves a style open before the next one", at(1, sgrOpen+a(w)), picRows(9, picX, 1, 2, picCols), false},
+		{"a style left open between two picture rows", at(2, sgrOpen+a(w)), []picRow{
+			{X: picX, Y: 1, ID: 9, Cols: picCols}, {X: picX, Y: 3, ID: 9, Row: 2, Cols: picCols},
+		}, false},
+
+		// The splice cuts only cells the row has, and one picture at a time.
+		{"a row shorter than the picture's end", row(a(12)), nil, false},
+		{"an empty row", row(""), nil, false},
+		{"two pictures overlap", nil, []picRow{{X: 4, Y: picY, ID: 9, Cols: 6}, {X: 8, Y: picY, ID: 10, Cols: 4}}, false},
+		{"past the right edge", nil, []picRow{{X: w - 4, Y: picY, ID: 9, Cols: 6}}, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			pics := tt.pics
+			if pics == nil {
+				pics = one
+			}
+
+			base := picFrame(tt.rows)
+			want := composePictures(base, picWidth, picHeight, pics)
+			got, spliced := placePictures(base, picWidth, picHeight, pics)
+
+			requireSameCells(t, got, want, picWidth, picHeight)
+
+			if spliced != tt.spliced {
+				t.Errorf("spliced = %v, want %v", spliced, tt.spliced)
+			}
+
+			if tt.spliced && got == base {
+				t.Fatal("the pictures were not placed")
+			}
+		})
+	}
+}
+
+// What the splice cannot cut it hands to the compositor, and the result is the
+// compositor's; a frame with no picture on the screen is left as it is.
+func TestPlacePicturesFallsBackToTheCompositor(t *testing.T) {
+	t.Parallel()
+
+	one := []picRow{{X: picX, Y: picY, ID: 9, Cols: picCols}}
+	full := strings.Repeat(repeatA(picWidth)+"\n", picHeight+2)
+
+	tests := []struct {
+		name string
+		base string
+	}{
+		{"the base has more rows than the screen", strings.TrimSuffix(full, "\n")},
+		{"the base has fewer rows than the screen", strings.TrimSuffix(strings.Repeat(repeatA(picWidth)+"\n", picHeight-1), "\n")},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			want := composePictures(tt.base, picWidth, picHeight, one)
+			if got, spliced := placePictures(tt.base, picWidth, picHeight, one); got != want || spliced {
+				t.Errorf("spliced = %v, or the compositor's result was not used", spliced)
+			}
+		})
+	}
+
+	t.Run("no picture on the screen", func(t *testing.T) {
+		t.Parallel()
+
+		base := picFrame(nil)
+		if got, spliced := placePictures(base, picWidth, picHeight, []picRow{{X: 3, Y: picHeight, ID: 9, Cols: 4}}); got != base || !spliced {
+			t.Errorf("spliced = %v, or the frame changed", spliced)
+		}
+	})
+}
+
+// drawPictures counts the frames the compositor places the pictures in, and
+// places what the compositor places.
+func TestDrawPicturesCountsFallbacks(t *testing.T) {
+	t.Parallel()
+
+	a := &App{width: picWidth, height: picHeight, pictures: newPictures(nil, nil, nil)}
+	one := []picRow{{X: picX, Y: picY, ID: 9, Cols: picCols}}
+
+	a.drawPictures(picFrame(nil), one)
+
+	if a.pictures.fallbacks != 0 {
+		t.Fatalf("%d fallbacks for a frame the splice covers, want 0", a.pictures.fallbacks)
+	}
+
+	held := picFrame(map[int]string{picY: repeatA(picX-1) + "中" + repeatA(picWidth-picX-1)})
+	got := a.drawPictures(held, one)
+	requireSameCells(t, got, composePictures(held, picWidth, picHeight, one), picWidth, picHeight)
+
+	if a.pictures.fallbacks != 1 {
+		t.Errorf("%d fallbacks after a row the splice declines, want 1", a.pictures.fallbacks)
 	}
 }
 
