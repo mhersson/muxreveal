@@ -248,6 +248,8 @@ func TestKeysPage(t *testing.T) {
 			t.Fatalf("docs/guide/keys.md is stale; run go test ./internal/ui -run TestKeysPage -update\nline %d:\n  file: %q\n  want: %q", i+1, a, b)
 		}
 	}
+
+	t.Fatal("docs/guide/keys.md is stale; run go test ./internal/ui -run TestKeysPage -update\nit differs only in its trailing newlines")
 }
 
 func TestKeysPageListsEveryCommand(t *testing.T) {
