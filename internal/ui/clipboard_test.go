@@ -329,7 +329,7 @@ func TestClipboardOtherFailuresLoggedEachTime(t *testing.T) {
 func TestRunNativeReportsAMissingTool(t *testing.T) {
 	t.Parallel()
 
-	err := runNative(context.Background(), []string{"multiplex-no-such-clipboard-tool", "-x"}, "text", nil)
+	err := runNative(context.Background(), []string{"aim-no-such-clipboard-tool", "-x"}, "text", nil)
 	if !errors.Is(err, exec.ErrNotFound) {
 		t.Errorf("runNative error = %v, want exec.ErrNotFound", err)
 	}
