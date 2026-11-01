@@ -78,4 +78,9 @@ To copy a selection in a pane or the drawer, press `ctrl+space y`. In a plan, ma
 
 ### When the mouse is ignored
 
-While one of these is open the mouse does nothing, the rail included: a confirm, a prompt, an overlay such as the command palette, the compose or merge box, the pull request list, the worktree picker, the drawer's worktree list or link chooser, copy mode, or a leader key waiting for its next key. The exceptions are the plan, markdown file and conversation boxes, where the wheel scrolls and the left button selects unless a confirm, prompt, overlay, compose or merge box, copy mode or a link chooser is open over the box (under the conversation's link chooser the wheel does not scroll), and the checks log page, where the wheel scrolls.
+While one of these is open the pointer does nothing, the rail included, apart from the exceptions below: a confirm, a prompt, an overlay such as the command palette, the compose or merge box, the pull request list, the worktree picker, the drawer's worktree list or link chooser, copy mode, or a leader key waiting for its next key.
+
+The exceptions, each with its own rule:
+
+- The wheel over the plan or markdown file box scrolls it whatever else is open. Over the conversation box it scrolls unless the conversation's own link chooser is open, which leaves it still. Over the checks log page it scrolls, except that the summary view does not scroll while its link chooser is open.
+- The left button selects in the plan, markdown file and conversation boxes unless a confirm, prompt, overlay, compose or merge box, copy mode or a link chooser is open.
