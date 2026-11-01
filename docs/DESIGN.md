@@ -1089,7 +1089,7 @@ The config file is `$XDG_CONFIG_HOME/aim/config.toml` when `XDG_CONFIG_HOME` is 
 - AIM prints a config error, naming the file, and exits with status 1 before it takes over the terminal.
 - `theme` is one of `catppuccin-latte`, `catppuccin-frappe`, `catppuccin-macchiato` or `catppuccin-mocha` (default). It sets the startup theme; a live switch lasts for the session. An unknown name is an error.
 - `icons` is `true` by default; `false` drops every Nerd Font glyph (see Visual design).
-- `[layout]` has `default_mode`, `auto_scheme`, `master_ratio`, `master_position`, `master_count`, `master_grid` and `column_width` (see the example for the values; the meanings are tuios's `tiling_scheme`, `master_*` and `scroll_column_width`). A value out of range or an unknown name is an error that names the key. `auto_scheme` applies to the auto splits of new BSP tabs; a tab does not keep its own scheme.
+- `[layout]` has `default_mode`, `auto_scheme`, `master_ratio`, `master_position`, `master_count`, `master_grid` and `column_width` (see `config.example.toml` for the values; the meanings are tuios's `tiling_scheme`, `master_*` and `scroll_column_width`). A value out of range or an unknown name is an error that names the key. `auto_scheme` applies to the auto splits of new BSP tabs; a tab does not keep its own scheme.
 - `[diff]` has `layout` (`unified` or `split`, the layout a drawer starts in), `mode` (`turn` or `branch`: what a new review drawer opens in) and the engine's limits `max_files`, `max_bytes` and `max_lines` (positive integers, defaulting to 400, 2097152 and 5000). An unknown name or a non-positive limit is an error that names the key.
 - `[worktrees]` has `root`, `inside` (default) or `sibling`: where a new worktree goes (see Worktrees). An unknown name is an error that names the key.
 - `[plans]` has `paths`: folders relative to a worktree root whose markdown files count as plans (see Plans). The default is `["docs/superpowers/plans/", "docs/superpowers/specs/"]`; an empty list keeps only plan-mode plans. An absolute path, an empty one, `.` or one that leaves the root is an error that names the key.
@@ -1111,53 +1111,7 @@ The config file is `$XDG_CONFIG_HOME/aim/config.toml` when `XDG_CONFIG_HOME` is 
 - The hidden `--record <dir>` flag (diagnostics, not shown in `--help`) writes each pane's PTY output and resizes to `<dir>/<pane id>.rec`. It creates the directory with mode 0700 and each file with mode 0600, never overwrites an existing file, writes from a goroutine per pane (a full queue drops records and a write error stops the recording, each logged once). The files hold everything the guest printed. They exist for replay bench inputs and VT fixtures.
 - The log is `aim.log` in the state dir (see Persisted state). At startup the previous run's log is kept as `aim.log.1`, replacing any older one.
 
-```toml
-theme = "catppuccin-mocha"
-icons = true
-
-[layout]
-default_mode = "bsp"        # bsp | master-stack | scrolling
-auto_scheme = "spiral"      # spiral | longest_side | alternate | smart_split
-master_ratio = 50           # 10-90: percent of the body the masters take
-master_position = "left"    # left | right | top | bottom | center
-master_count = 1            # 1-9
-master_grid = true          # one master on the left with 4 or more panes: an equal grid
-column_width = 50           # 10-100: percent of the body a new scrolling column takes
-
-[mouse]
-focus_follows_mouse = false
-copy_on_select = false
-
-[clipboard]
-osc52 = true
-native = true
-
-[diff]
-layout = "unified"   # unified | split
-mode = "branch"      # turn | branch: what a new drawer opens in
-max_files = 400      # the engine's limits; positive integers
-max_bytes = 2097152
-max_lines = 5000
-
-[worktrees]
-root = "inside"      # inside | sibling: where a new worktree goes
-
-[plans]
-paths = ["docs/superpowers/plans/", "docs/superpowers/specs/"]   # folders under a worktree root whose markdown files are plans
-
-[pull_requests]
-review_requested_days = 7   # 0-3650: review requests whose pull request was updated in that many days; 0 is no limit
-
-[keys]
-leader_key = "ctrl+space"
-which_key_delay = 300    # milliseconds, 0-5000
-
-[keys.leader]            # keys after the leader; "none" unbinds
-# "w" = "pr.list"
-
-[keys.drawer]            # also [keys.rail], [keys.pr_list], [keys.checks], [keys.reader], [keys.merge], [keys.compose]
-# "o" = "review.browser"
-```
+Every setting, with its default, meaning and allowed values, is in `config.example.toml` at the repository root.
 
 ### Persisted state
 

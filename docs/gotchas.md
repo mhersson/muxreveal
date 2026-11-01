@@ -8,9 +8,18 @@ what to do about it. Skim it before your first commit each session.
 - AI file tools drop or alter raw private-use characters, so write Nerd Font
   glyphs in Go source as `\u` or `\U` escapes.
 - `make scan` is the scan of record, and part of `make check-fast` and
-  `make check`. It fails on private-use glyphs in Go files and on em-dashes in
-  Go and Markdown files (`docs/superpowers` aside), untracked files included.
-  It first proves grep can match its patterns, so a pass means something.
+  `make check`. It fails on private-use glyphs in Go, TOML and Markdown files
+  (`docs/DESIGN.md`, which shows glyphs on purpose, and `docs/superpowers`
+  aside) and on em-dashes in Go, Markdown and TOML files (`docs/superpowers`
+  aside), untracked files included. It first proves grep can match its
+  patterns, so a pass means something.
+- `make check-fast` skips the Go gates when every changed file is non-code:
+  Markdown at the repository root, anything under `docs/` or `.github/`,
+  `config.example.toml`, `LICENSE`, `.goreleaser.yaml` and `.gitignore`. It then
+  runs only `make scan` and the doc tests. Anything else is code, a Markdown
+  file inside a package (a golden) included, and `TEST_PKGS` set forces the
+  full check. `scripts/code-changed.sh` decides, from the same file list as
+  `scripts/changed-packages.sh`.
 - The scan's `scripts/scan-wall-clock.sh` fails on `time.Since`, `time.Until`
   and `time.Now().Sub` in a `_test.go` file without the `bench` build tag. A
   test waits for the event or runs on an injected clock, as the poller and

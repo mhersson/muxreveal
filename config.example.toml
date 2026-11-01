@@ -1,0 +1,178 @@
+## AIM example config.
+##
+## Copy this file to ~/.config/aim/config.toml (or to
+## $XDG_CONFIG_HOME/aim/config.toml), or point AIM at it with
+## `aim --config <path>`.
+##
+## Every setting below is commented out at its default, so the copy changes
+## nothing until you uncomment a line by deleting its leading "# ". The table
+## headers are live, so one uncommented line lands in its table.
+##
+## The file is strict: invalid TOML, an unknown key or a value of the wrong
+## type stops AIM at start with an error that names the key.
+##
+## More: docs/guide/config.md.
+
+## The color theme at startup. Switching themes while AIM runs lasts only for
+## that session.
+## values: catppuccin-latte | catppuccin-frappe | catppuccin-macchiato | catppuccin-mocha
+# theme = "catppuccin-mocha"
+
+## Draw Nerd Font icons. Set false for a terminal font without them.
+## values: true | false
+# icons = true
+
+[layout]
+## The layout a new tab starts in. Leader space cycles it per tab.
+## values: bsp | master-stack | scrolling
+# default_mode = "bsp"
+
+## How a new pane splits in a bsp tab.
+## values: spiral | longest_side | alternate | smart_split
+# auto_scheme = "spiral"
+
+## master-stack: the share of the body the master panes take, in percent.
+## range: 10-90
+# master_ratio = 50
+
+## master-stack: the side the master panes sit on.
+## values: left | right | top | bottom | center
+# master_position = "left"
+
+## master-stack: how many panes are masters.
+## range: 1-9
+# master_count = 1
+
+## master-stack: with one master on the left and four or more panes, lay the
+## others out as an equal grid.
+## values: true | false
+# master_grid = true
+
+## scrolling: the width of a new column, in percent of the body.
+## range: 10-100
+# column_width = 50
+
+[mouse]
+## Hovering a pane focuses it, without a click. An open overlay keeps focus.
+## values: true | false
+# focus_follows_mouse = false
+
+## Copy a mouse selection to the system clipboard when the button is released.
+## values: true | false
+# copy_on_select = false
+
+[clipboard]
+## Send copies to the outer terminal as OSC 52. Programs' own OSC 52 writes
+## follow this switch too.
+## values: true | false
+# osc52 = true
+
+## Also copy through native clipboard tools (and read from them) on a local
+## session. With false, a middle-click pastes AIM's own last copy.
+## values: true | false
+# native = true
+
+[diff]
+## The layout a new review drawer starts in.
+## values: unified | split
+# layout = "unified"
+
+## What a new review drawer opens in: the agent's last turn or the whole branch.
+## values: turn | branch
+# mode = "branch"
+
+## The most files the diff engine reads for one diff.
+## range: 1 or more
+# max_files = 400
+
+## The most bytes the diff engine reads for one file.
+## range: 1 or more bytes
+# max_bytes = 2097152
+
+## The most lines the diff engine reads for one file.
+## range: 1 or more
+# max_lines = 5000
+
+[worktrees]
+## Where a new worktree goes: inside the repository's worktree folder, or
+## beside the main checkout.
+## values: inside | sibling
+# root = "inside"
+
+[plans]
+## Folders, relative to a worktree root, whose markdown files count as plans.
+## An empty list keeps only the plans from plan mode. An absolute path, an
+## empty one, "." or one that leaves the root is an error.
+# paths = ["docs/superpowers/plans/", "docs/superpowers/specs/"]
+
+[pull_requests]
+## The PR list's Review requested tab shows only pull requests updated in this
+## many days. 0 shows them all.
+## range: 0-3650 days
+# review_requested_days = 7
+
+[keys]
+## The leader key, which opens the commands behind it. It needs a modifier
+## other than shift alone, or must be a function key. Rules:
+## docs/guide/config.md#remapping-keys.
+# leader_key = "ctrl+space"
+
+## How long the leader waits before the which-key popup opens.
+## range: 0-5000 milliseconds
+# which_key_delay = 300
+
+## The keys after the leader, and the commands they run. A "none" command
+## unbinds a key; this table also takes two-key sequences such as "g l".
+## Defaults: docs/guide/keys.md#after-the-leader. Rules: docs/guide/config.md#remapping-keys.
+[keys.leader]
+## Open the PR list on w.
+# "w" = "pr.list"
+
+## Quit on Q instead of q. Use this line together with the next block.
+# "Q" = "app.quit"
+
+## Free q, so only Q quits. Use this line together with the block above.
+# "q" = "none"
+
+## The review drawer's keys, while the drawer holds the keyboard.
+## Defaults: docs/guide/keys.md#review-drawer. Rules: docs/guide/config.md#remapping-keys.
+[keys.drawer]
+## Open the file browser on o.
+# "o" = "review.browser"
+
+## The agents rail's keys, while the rail holds the keyboard.
+## Defaults: docs/guide/keys.md#agents-rail. Rules: docs/guide/config.md#remapping-keys.
+[keys.rail]
+## Jump to the highlighted agent on l.
+# "l" = "rail.jump"
+
+## The PR list's keys, while the list is open.
+## Defaults: docs/guide/keys.md#pr-list. Rules: docs/guide/config.md#remapping-keys.
+[keys.pr_list]
+## Close the PR list on q.
+# "q" = "prlist.close"
+
+## The checks overlay's keys, while it is open.
+## Defaults: docs/guide/keys.md#checks-overlay. Rules: docs/guide/config.md#remapping-keys.
+[keys.checks]
+## Close the checks overlay on q.
+# "q" = "checks.close"
+
+## The keys of the reading overlays (a plan, a markdown file, a conversation),
+## while one is open.
+## Defaults: docs/guide/keys.md#reading-overlays. Rules: docs/guide/config.md#remapping-keys.
+[keys.reader]
+## Close a reading overlay on q.
+# "q" = "reader.close"
+
+## The merge box's keys, while the box is open.
+## Defaults: docs/guide/keys.md#merge-box. Rules: docs/guide/config.md#remapping-keys.
+[keys.merge]
+## Run the merge on y.
+# "y" = "merge.run"
+
+## The compose box's keys, while the box is open.
+## Defaults: docs/guide/keys.md#compose-box. Rules: docs/guide/config.md#remapping-keys.
+[keys.compose]
+## Create the pull request on alt+s.
+# "alt+s" = "compose.create"

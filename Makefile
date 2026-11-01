@@ -1,4 +1,4 @@
-.PHONY: help build build-darwin run test test-changed test-race vet lint fmt fmt-check tidy-check scan scan-commits check-fast check install clean
+.PHONY: help build build-darwin run test test-changed test-race vet lint fmt fmt-check tidy-check scan scan-commits check-fast check-fast-full check install clean
 
 help:
 	@echo "Targets:"
@@ -14,9 +14,9 @@ help:
 	@echo "  fmt          format the code with golangci-lint fmt"
 	@echo "  fmt-check    fail and show the diff if formatting is needed"
 	@echo "  tidy-check   fail if go mod tidy would change go.mod or go.sum"
-	@echo "  scan         fail on private-use glyphs in Go source, em-dashes in Go and Markdown files and wall-clock bounds in tests"
+	@echo "  scan         fail on private-use glyphs in Go, TOML and Markdown files (DESIGN.md aside), em-dashes in Go, Markdown and TOML files and wall-clock bounds in tests"
 	@echo "  scan-commits fail on IDs, trailers, em-dashes and big blobs in SCAN_BASE..SCAN_HEAD (origin/main..HEAD)"
-	@echo "  check-fast   the per-commit check: build, fmt-check, vet, lint, test-changed, scan"
+	@echo "  check-fast   the per-commit check: build, fmt-check, vet, lint, test-changed, scan; a change of non-code files only runs scan and the doc tests"
 	@echo "  check        the Linux go-checks gates of CI: build, build-darwin, fmt-check, vet, lint, test-race, tidy-check, scan"
 	@echo "  install      go install the binary into GOBIN, else GOPATH/bin"
 	@echo "  clean        remove bin/"
@@ -78,14 +78,14 @@ scan:
 	dash=$$(printf '\342\200\224'); \
 	printf '\357\200\200\n' | grep -qE "$$glyph" || { echo "scan: grep cannot match the glyph pattern"; exit 1; }; \
 	printf '\342\200\224\n' | grep -qF "$$dash" || { echo "scan: grep cannot match an em-dash"; exit 1; }; \
-	git ls-files -z --cached --others --exclude-standard -- '*.go' > "$$list" || exit 1; \
+	git ls-files -z --cached --others --exclude-standard -- '*.go' '*.toml' '*.md' ':(exclude)docs/DESIGN.md' ':(exclude)docs/superpowers' > "$$list" || exit 1; \
 	bad=$$(xargs -0 grep -IlE "$$glyph" /dev/null < "$$list") || :; \
 	if [ -n "$$bad" ]; then \
 		echo "scan: private-use glyphs in:"; \
 		printf '%s\n' "$$bad"; \
 		fail=1; \
 	fi; \
-	git ls-files -z --cached --others --exclude-standard -- '*.go' '*.md' ':(exclude)docs/superpowers' > "$$list" || exit 1; \
+	git ls-files -z --cached --others --exclude-standard -- '*.go' '*.md' '*.toml' ':(exclude)docs/superpowers' > "$$list" || exit 1; \
 	bad=$$(xargs -0 grep -IlF "$$dash" /dev/null < "$$list") || :; \
 	if [ -n "$$bad" ]; then \
 		echo "scan: em-dashes (use hyphens) in:"; \
@@ -98,7 +98,17 @@ scan:
 scan-commits:
 	@sh scripts/scan-commits.sh "$(SCAN_BASE)" "$(SCAN_HEAD)"
 
-check-fast: build fmt-check vet lint test-changed scan
+# A commit whose every changed file is non-code (scripts/code-changed.sh) runs
+# only the scan and the doc tests. TEST_PKGS set means the full check.
+check-fast:
+	@if [ -n "$(TEST_PKGS)" ] || sh scripts/code-changed.sh; then \
+		$(MAKE) --no-print-directory check-fast-full; \
+	else \
+		echo "check-fast: no code changed; running only the scan and the doc tests"; \
+		$(MAKE) --no-print-directory scan && go test -run '^(TestKeysPage|TestGuideLinks|TestConfigExample)$$' ./internal/ui ./cmd/aim; \
+	fi
+
+check-fast-full: build fmt-check vet lint test-changed scan
 
 check: build build-darwin fmt-check vet lint test-race tidy-check scan
 

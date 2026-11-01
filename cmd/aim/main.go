@@ -22,7 +22,6 @@ import (
 	"github.com/mhersson/aim/internal/github"
 	"github.com/mhersson/aim/internal/store"
 	"github.com/mhersson/aim/internal/ui"
-	"github.com/mhersson/aim/internal/ui/theme"
 )
 
 // closeTimeout bounds how long quitting waits for pane processes to end.
@@ -92,35 +91,7 @@ func run(ctx context.Context, env core.Env, configPath, recordDir string, fresh 
 		return err
 	}
 
-	if _, err := theme.ByName(cfg.Theme); err != nil {
-		return fmt.Errorf("config %s: %w", configPath, err)
-	}
-
-	if err := cfg.Layout.Validate(); err != nil {
-		return fmt.Errorf("config %s: %w", configPath, err)
-	}
-
-	if err := cfg.Diff.Validate(); err != nil {
-		return fmt.Errorf("config %s: %w", configPath, err)
-	}
-
-	if err := cfg.Worktrees.Validate(); err != nil {
-		return fmt.Errorf("config %s: %w", configPath, err)
-	}
-
-	if err := cfg.Plans.Validate(); err != nil {
-		return fmt.Errorf("config %s: %w", configPath, err)
-	}
-
-	if err := cfg.PullRequests.Validate(); err != nil {
-		return fmt.Errorf("config %s: %w", configPath, err)
-	}
-
-	if err := cfg.Keys.Validate(); err != nil {
-		return fmt.Errorf("config %s: %w", configPath, err)
-	}
-
-	if err := ui.CheckKeys(cfg.Keys); err != nil {
+	if err := validateConfig(cfg); err != nil {
 		return fmt.Errorf("config %s: %w", configPath, err)
 	}
 
