@@ -21,8 +21,10 @@ help:
 	@echo "  install      go install the binary into GOBIN, else GOPATH/bin"
 	@echo "  clean        remove bin/"
 
+GO_LDFLAGS = -s -w
+
 build:
-	go build -trimpath -o bin/aim ./cmd/aim
+	go build -trimpath -ldflags='$(GO_LDFLAGS)' -o bin/aim ./cmd/aim
 
 build-darwin:
 	GOOS=darwin go build ./...
@@ -103,7 +105,7 @@ check-fast: build fmt-check vet lint test-changed scan
 check: build build-darwin fmt-check vet lint test-race tidy-check scan
 
 install:
-	go install -trimpath ./cmd/aim
+	go install -trimpath -ldflags='$(GO_LDFLAGS)' ./cmd/aim
 
 clean:
 	rm -rf bin
