@@ -691,3 +691,31 @@ func TestBarGroundReachesLastColumn(t *testing.T) {
 	ground(renderBar(planTabs(), 0, nil, 100, true, ui), 100)
 	ground(renderBar(planTabs(), 0, nil, 100, false, ui), 100)
 }
+
+func TestPaintRunMatchesLipgloss(t *testing.T) {
+	t.Parallel()
+
+	var colors []theme.Hex
+	for _, th := range theme.All() {
+		colors = append(colors, th.UI.Bg, th.UI.Fg, th.UI.Accent, th.UI.Match)
+	}
+
+	colors = append(colors, "", "#zz0000")
+
+	texts := []string{
+		"", " ", "abc", "\u4e16\u754c", "e\u0301", "\U0001F600", "\u00a0",
+		"\x1b[1mx\x1b[m", "\u200b", endingTag, "\t", "a\tb", "x\r", "a\rb", "a\r\nb", "a\nb",
+	}
+
+	for _, fg := range colors {
+		for _, bg := range colors {
+			for _, bold := range []bool{false, true} {
+				for _, text := range texts {
+					if got, want := paintRun(fg, bg, bold, text), paint(fg, bg, bold).Render(text); got != want {
+						t.Fatalf("paintRun(%q, %q, %v, %q) = %q, want %q", fg, bg, bold, text, got, want)
+					}
+				}
+			}
+		}
+	}
+}
