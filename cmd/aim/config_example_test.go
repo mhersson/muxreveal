@@ -116,6 +116,11 @@ func scanExample(text string) ([]exampleLine, []string) {
 		switch {
 		case raw == "":
 			l.kind = kindBlank
+
+			if len(allowed) > 0 {
+				bad("a values or range line is attached to no setting")
+			}
+
 			prose, allowed = 0, nil
 		case raw == "##" || strings.HasPrefix(raw, "## "):
 			l.kind = kindProse
@@ -128,6 +133,11 @@ func scanExample(text string) ([]exampleLine, []string) {
 			}
 		case headerRe.MatchString(raw):
 			l.kind = kindHeader
+
+			if len(allowed) > 0 {
+				bad("a values or range line is attached to no setting")
+			}
+
 			table = strings.Trim(raw, "[]")
 			l.table = table
 			prose, allowed = 0, nil
@@ -159,6 +169,10 @@ func scanExample(text string) ([]exampleLine, []string) {
 		}
 
 		lines = append(lines, l)
+	}
+
+	if len(allowed) > 0 {
+		problems = append(problems, "end of file: a values or range line is attached to no setting")
 	}
 
 	return lines, problems
@@ -508,10 +522,11 @@ func TestConfigExampleCatches(t *testing.T) {
 	}{
 		{"theme value dropped", "catppuccin-latte | ", "", "theme"},
 		{"range high bound", "## range: 10-90", "## range: 10-80", "layout.master_ratio"},
-		{"setting deleted", "# max_lines = 5000\n", "", "diff.max_lines"},
+		{"setting deleted", "## range: 1 or more\n# max_lines = 5000\n", "", "diff.max_lines"},
 		{"default changed", "# master_count = 1\n", "# master_count = 2\n", "defaults:"},
 		{"remap to a wrong command", `"o" = "review.browser"`, `"o" = "pr.list"`, "keys.drawer"},
 		{"prose with one hash", "## ", "# ", "line"},
+		{"values line attached to no setting", "# max_lines = 5000\n", "## values: a | b\n\n# max_lines = 5000\n", "attached to no setting"},
 	}
 
 	for _, tt := range tests {
