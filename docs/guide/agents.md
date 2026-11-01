@@ -16,7 +16,7 @@ AIM's own keys sit behind a leader key, `ctrl+space`, so every other key goes to
 
 ### Esc and Claude Code
 
-In Claude Code one `esc` interrupts a turn. When an `esc` closes something of AIM's (a popup, a prompt, an overlay, the rail, a confirm) and hands the pane the keyboard, a further `esc` is held back until 750 ms pass with no `esc`; after one that was held back, until 500 ms pass. A doubled or held `esc` never reaches the agent. Any other key ends the wait.
+In Claude Code one `esc` interrupts a turn. When an `esc` closes something of AIM's (a popup, a prompt, an overlay, the rail, a confirm) and hands the pane the keyboard, a further `esc` is held back until 750 ms pass with no `esc`; after one that was held back, until 500 ms pass. A doubled or held `esc` is held back too. Any other key ends the wait.
 
 ## Start an agent
 
@@ -38,13 +38,13 @@ A `prunable` worktree has no directory any more; `enter` on it shows `that workt
 
 ### A new worktree
 
-The last row, `new worktree…`, opens the new-worktree page. Fill in the `branch` field; the `base` field starts at the repository's default branch, and the `path` line shows where the worktree will go. `tab` or `shift+tab` switches between `branch` and `base`, `enter` creates the worktree and starts an agent in it, and `esc` goes back to the list, keeping what you typed.
+The last row, `new worktree…` (`+ new worktree…` with `icons = false`), opens the new-worktree page. Fill in the `branch` field; the `base` field starts at the repository's default branch, and the `path` line shows where the worktree will go. `tab` or `shift+tab` switches between `branch` and `base`, `enter` creates the worktree and starts an agent in it, and `esc` goes back to the list, keeping what you typed.
 
 - An existing branch is checked out; a new one is created from the base.
-- A failure shows on the page: `enter a branch name`, `that path already exists`, `not a valid branch name`, `no usable base branch; name one in the base field`, or git's own reason. While git works the page reads `creating the worktree…`.
+- A failure shows on the page: `enter a branch name`, `that path already exists`, `not a valid branch name`, `no usable base branch; name one in the base field`, `no main checkout; set root = "sibling" in [worktrees]`, or git's own reason. While git works the page reads `creating the worktree…`.
 - On success the notice is `created <path>`.
-- With the default root, the first worktree in a repository adds `/.worktrees/` to the repository's `.git/info/exclude`, and the page lists tools that need their own ignore entry, such as an editor's file watcher.
-- `[worktrees]` `root` in [`config.example.toml`](../../config.example.toml) puts new worktrees beside the main checkout instead.
+- For a worktree inside the repository's `.worktrees` folder, the first one in a repository adds `/.worktrees/` to the repository's `.git/info/exclude`, and the page lists tools that need their own ignore entry, such as an editor's file watcher.
+- `root` under `[worktrees]` in [`config.example.toml`](../../config.example.toml) sets where new worktrees go.
 
 ### Shells beside the agent
 
@@ -110,7 +110,7 @@ Plans: `ctrl+space p` opens the focused agent's plan from a pane. With no plan t
 
 Agents are grouped as Blocked, Working, Idle (and No hooks, for an agent that has sent no state), each with a count. A card has four lines:
 
-1. the state, the session name (or the project), the model, the context meter, a plan mark while the plan is unread, the time since the last activity, and a dot when the agent changed state or finished since you last focused its pane;
+1. the state, the session name (or the project), the model, the context meter, a plan mark while the plan is unread, the time since the last activity, and a dot when the agent changed state or went idle while its pane was not the focused one, until you focus it;
 2. the branch, the commits ahead of its upstream (`↑N`), and its pull request with checks and review;
 3. what the agent is doing now (the tool and its target, or the question a blocked agent asks); an idle agent reads `waiting for a prompt`;
 4. the diff stats against the base branch: lines added, lines removed and the file count.
