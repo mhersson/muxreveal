@@ -31,16 +31,16 @@ To copy, press `y`. The selected text is copied and copy mode ends. With no sele
 
 To leave without copying, press `q` or `esc`.
 
-These are all of copy mode's keys. Any other key does nothing. Copy mode also ends by itself when its pane closes or is resized, switches between the main and the alternate screen, moves to another place in the layout, or restarts. The pane returns to its live screen when copy mode ends.
+These are all of copy mode's keys. Any other key does nothing. Copy mode also ends by itself when its pane closes or is resized, switches between the main and the alternate screen, moves to another place in the layout, or restarts. After `y`, `q` or `esc` the pane returns to its live screen.
 
 ## Where copies go
 
-A copy from copy mode, `ctrl+space y`, `y` in the drawer and the reading boxes, a mouse selection with `copy_on_select`, or a program's own OSC 52 write, goes out by two paths:
+A copy from copy mode, `ctrl+space y` on a pane or drawer selection, `y` in the drawer and the reading boxes, a mouse selection with `copy_on_select`, or a program's own OSC 52 write, goes out by two paths:
 
-- **OSC 52 to the outer terminal**, which puts the text on the clipboard of the machine your terminal runs on, also over SSH. On Linux AIM also sends it as the primary selection. The terminal must allow it; some ask or ignore it by default.
+- **OSC 52 to the outer terminal**, which puts the text on the clipboard of the machine your terminal runs on, also over SSH. On Linux AIM also sends it as the primary selection.
 - **Native tools on a local session**: `wl-copy` when `WAYLAND_DISPLAY` is set, else `xclip` when `DISPLAY` is set (Linux), and `pbcopy` (macOS). On Linux the tools write both the clipboard and the primary selection. A session counts as local unless `SSH_CONNECTION` or `SSH_TTY` is set. On Linux with neither display set, nothing native runs.
 
-The `[clipboard]` settings `osc52` and `native` turn each path off; see [`config.example.toml`](../../config.example.toml). AIM shows no notice when it copies.
+The `[clipboard]` settings `osc52` and `native` apply to these two paths; see [`config.example.toml`](../../config.example.toml). AIM shows no notice when it copies.
 
 To paste what you selected, middle-click in a pane. AIM pastes into the pane as the terminal would, with bracketed paste when the program asked for it. A mouse selection (see below) writes the primary selection when the button is released, so on Linux a middle-click pastes it in any application. The text a middle-click pastes comes from:
 
@@ -65,17 +65,17 @@ The mouse works in panes, the agents rail, the review drawer, the tab bar and th
 
 Drag with the left button; no modifier is needed. `alt`+drag selects a rectangle. A double-click selects a word and a triple-click a line, with soft-wrapped lines counting as one (the presses must land on the same cell within 400 ms). The selection stays in the pane or box where the drag began. The same gestures select in the review drawer's diff and rendered pages, and in the plan, markdown file and conversation boxes. A drag held past the top or bottom of a drawer page or a box scrolls it a row every 50 ms.
 
-There is one selection at a time; a new click, drag or double-click anywhere clears the one before. A pane's selection also clears when the pane closes, is resized or switches screen, and when the program redraws the text under it. A plain click never selects or copies.
+There is one selection at a time; a new click, drag or double-click anywhere clears the one before. A pane's selection also clears, for example, when you type or paste into the pane, middle-click to paste, or when the pane closes, is resized, switches screen, moves or restarts, and when the program redraws the text under it. A plain click never selects or copies.
 
 When the button is released after a drag or a double or triple click:
 
-- by default the text goes to the primary selection only (see above) and the selection stays, so `ctrl+space y` still copies it to the clipboard;
-- with `copy_on_select` on, the text is copied as `ctrl+space y` does and the selection clears.
+- by default the text goes to the primary selection only (see above) and the selection stays, so `ctrl+space y` (or `y` in a drawer or box) still copies it to the clipboard;
+- with `copy_on_select` on, the text is copied as `ctrl+space y` or `y` does and the selection clears.
 
 ### Copy a selection
 
-To copy the selection, press `ctrl+space y`, whichever pane, drawer page or box holds it. In the review drawer and the reading boxes `y` does the same (see [Keys](keys.md#review-drawer) for the review drawer and [Keys](keys.md#reading-overlays) for the boxes); with no selection it copies the unit at the cursor, such as a paragraph, a list item or a diff line. See [Review](review.md) and [Reading](reading.md) for those views.
+To copy a selection in a pane or the drawer, press `ctrl+space y`. In a plan, markdown file or conversation box the leader key is not available, so press `y`; in the review drawer `y` works too (see [Keys](keys.md#review-drawer) for the review drawer and [Keys](keys.md#reading-overlays) for the boxes); with no selection it copies the unit at the cursor, such as a paragraph, a list item or a diff line. See [Review](review.md) and [Reading](reading.md) for those views.
 
 ### When the mouse is ignored
 
-While one of these is open the mouse does nothing, the rail included: a confirm, a prompt, an overlay such as the command palette, the compose or merge box, the pull request list, the worktree picker, the drawer's worktree list or link chooser, copy mode, or a leader key waiting for its next key. The exceptions are the plan, markdown file and conversation boxes, where the wheel scrolls and the left button selects, and the checks log page, where the wheel scrolls.
+While one of these is open the mouse does nothing, the rail included: a confirm, a prompt, an overlay such as the command palette, the compose or merge box, the pull request list, the worktree picker, the drawer's worktree list or link chooser, copy mode, or a leader key waiting for its next key. The exceptions are the plan, markdown file and conversation boxes, where the wheel scrolls and the left button selects unless a confirm, prompt, overlay, compose or merge box, copy mode or a link chooser is open over the box (under the conversation's link chooser the wheel does not scroll), and the checks log page, where the wheel scrolls.
