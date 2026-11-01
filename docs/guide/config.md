@@ -23,7 +23,7 @@ A theme you pick from the command palette while AIM runs lasts for that session 
 
 ## Errors at start
 
-The file is strict. Invalid TOML, an unknown key, a value of the wrong type and a value that is out of range or not one of the allowed names all stop AIM before it takes over the terminal. AIM prints one line that names the file and the first problem it found, to the terminal, and exits with status 1. The line starts with `aim: config <path>:`. For example:
+The file is strict. Invalid TOML, an unknown key, a value of the wrong type and a value that is out of range or not one of the allowed names all stop AIM before it takes over the terminal. AIM prints one line that names the file and the problem it found (the first one, except that every unknown key is listed: `unknown key a, b`), to the terminal, and exits with status 1. The line starts with `aim: config <path>:`. For example:
 
 ```text
 aim: config /home/you/.config/aim/config.toml: unknown key theem
@@ -49,7 +49,7 @@ The tables are `[keys.leader]` (the keys after the leader key), `[keys.drawer]`,
 
 - `[keys.leader]` takes the commands that are in the command palette, such as `pr.list`, `pane.zoom` or `theme.set.catppuccin-latte`.
 - `[keys.drawer]` takes commands whose id starts with `review.`.
-- The other six tables take the commands of their own view: `rail.next` and the other commands scoped to the agents rail under `[keys.rail]`, ids starting `prlist.` under `[keys.pr_list]`, `checks.` under `[keys.checks]`, `reader.` under `[keys.reader]`, `merge.` under `[keys.merge]` and `compose.` under `[keys.compose]`. A command of one view is not in the command palette, and `[keys.leader]` refuses it. A command that is both a leader command and has a view's name, such as `rail.toggle`, belongs to `[keys.leader]`.
+- The other six tables take the commands of their own view: `rail.next` and the other commands scoped to the agents rail under `[keys.rail]`, ids starting `prlist.` under `[keys.pr_list]`, `checks.` under `[keys.checks]`, `reader.` under `[keys.reader]`, `merge.` under `[keys.merge]` and `compose.` under `[keys.compose]`. A command of one view is not in the command palette, and `[keys.leader]` refuses it. `rail.toggle` is a leader command despite its prefix, so it belongs under `[keys.leader]` and `[keys.rail]` refuses it.
 
 A command from the wrong table is an error that names the table:
 
@@ -67,7 +67,7 @@ To free a key, bind it to `"none"`. This is how the example moves quit from `q` 
 "q" = "none"
 ```
 
-A key you bind that is a default of another command takes that command's place. A key you bind to a command that already has a default key goes before the default, so it is the command's first key; the default still works. A command with no default key left goes at the end of its group in the which-key popup. Hints show a command's first key. When you bind several keys to one command, they keep the order of the file.
+A key you bind that is a default of another command takes that command's place. A key you bind to a command that already has a default key goes before the default, so it is the command's first key; the default still works. A command with no default key left goes at the end of its group in the which-key popup under `[keys.leader]`, and at the end of the table in the others. Hints show a command's first key. When you bind several keys to one command, they keep the order of the file.
 
 ### Key syntax
 
@@ -94,7 +94,7 @@ aim: config <path>: keys.pr_list: "g l": only keys.leader takes two-key sequence
 aim: config <path>: keys.leader: "a b c": a sequence has at most two keys
 ```
 
-A key cannot be both a command and the start of a sequence: with `"g P"` already a binding, binding `"g"` is refused with `keys.leader: "g" is bound and starts "g P"`.
+A key cannot be both a command and the start of a sequence: the default `g` starts several sequences, so binding `"g"` to a command is refused with the first of them, `keys.leader: "g" is bound and starts "g l"`.
 
 ### The leader key
 
