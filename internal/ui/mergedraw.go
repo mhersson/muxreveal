@@ -91,9 +91,11 @@ func (a *App) mergeBox(lk look, w, room int) []string {
 	}
 
 	if warn := mergeWarning(pr, a.mergeChecks(state, v), cw-ansi.StringWidth(mark)); warn != "" {
-		lines = append(lines,
-			mergeLine{text: run(mark+printable(warn), ui.Warning, false)},
-			mergeLine{text: run(mergeReminder, ui.Warning, false)})
+		lines = append(lines, mergeLine{text: run(mark+printable(warn), ui.Warning, false)})
+
+		if reminder := mergeReminder(a.keys.merge); reminder != "" {
+			lines = append(lines, mergeLine{text: run(reminder, ui.Warning, false)})
+		}
 	}
 
 	lines = append(lines, mergeLine{blank: true}, mergeLine{text: a.mergeChips(v, lk)})
@@ -166,7 +168,11 @@ func (a *App) mergeChips(v *mergeView, lk look) string {
 
 		first = false
 
-		chip := " " + string(m[0]) + " " + string(m) + " "
+		chip := " " + string(m) + " "
+		if k := a.keys.merge.hint(mergeMethodCommands[m]); k != "" {
+			chip = " " + k + chip
+		}
+
 		if m == v.method {
 			sb.WriteString(paint(ui.OnAccent, ui.Accent, true).Render(chip))
 		} else {

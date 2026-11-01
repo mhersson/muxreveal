@@ -108,8 +108,23 @@ func (v *mergeView) deleteShown() bool {
 	return b != "" && !v.pr.CrossRepo && v.info.DefaultBranch != "" && b != v.info.DefaultBranch
 }
 
-// mergeReminder is the line under the warning: what enter does regardless.
-const mergeReminder = "enter still merges if GitHub allows it"
+// mergeReminder is the line under the warning: what merge.run's key does
+// regardless, or "" when it has no key.
+func mergeReminder(kt keyTable) string {
+	k := kt.hint("merge.run")
+	if k == "" {
+		return ""
+	}
+
+	return k + " still merges if GitHub allows it"
+}
+
+// mergeMethodCommands are the commands that choose each merge method.
+var mergeMethodCommands = map[github.MergeMethod]string{
+	github.Squash:      "merge.method.squash",
+	github.MergeCommit: "merge.method.merge",
+	github.Rebase:      "merge.method.rebase",
+}
 
 // mergeWarning is what is wrong with a merge: failed or running checks and a
 // missing approval, or "" when none applies. c are the checks of pr, when

@@ -621,8 +621,13 @@ func TestMergeRemappedKeys(t *testing.T) {
 		t.Errorf("s moved the method to %q", r.merge.method)
 	}
 
-	if got := ansi.Strip(r.View().Content); !strings.Contains(got, "1/m/r method") {
+	got := ansi.Strip(r.View().Content)
+	if !strings.Contains(got, "1/m/r method") {
 		t.Errorf("the hints do not show 1/m/r:\n%s", got)
+	}
+
+	if !strings.Contains(got, " 1 squash ") || strings.Contains(got, " s squash ") {
+		t.Errorf("the chips do not show 1 for squash:\n%s", got)
 	}
 
 	r.typed("q")
@@ -636,6 +641,60 @@ func TestMergeRemappedKeys(t *testing.T) {
 
 	if r.merge != nil {
 		t.Error("esc did not close the reopened box")
+	}
+}
+
+// The chips and the reminder name the keys as bound.
+func TestMergeBoxNamesKeysAsBound(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		pairs []string
+		has   []string
+		not   []string
+	}{
+		{
+			"merge.run moved",
+			[]string{"ctrl+m", "merge.run", "enter", "none"},
+			[]string{"ctrl+m still merges if GitHub allows it"},
+			[]string{"enter still merges"},
+		},
+		{
+			"merge.run unbound",
+			[]string{"enter", "none"},
+			nil,
+			[]string{"still merges"},
+		},
+		{
+			"method unbound",
+			[]string{"s", "none"},
+			[]string{" squash ", " m merge "},
+			[]string{" s squash "},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			r, _ := inMergeDrawer(t, everyMethod, nil)
+			r.typed("M")
+			remapTables(t, r.App, contextKeys("merge", tc.pairs...))
+
+			got := ansi.Strip(r.View().Content)
+			for _, w := range tc.has {
+				if !strings.Contains(got, w) {
+					t.Errorf("the box lacks %q:\n%s", w, got)
+				}
+			}
+
+			for _, n := range tc.not {
+				if strings.Contains(got, n) {
+					t.Errorf("the box holds %q:\n%s", n, got)
+				}
+			}
+		})
 	}
 }
 
