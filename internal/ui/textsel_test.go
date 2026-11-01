@@ -110,14 +110,8 @@ func TestMDViewSelectedText(t *testing.T) {
 			t.Parallel()
 
 			v := newTestView(tt.src, tt.width+4, 20)
-			if got := v.selectedText(); got != "" {
-				t.Fatalf("no selection copies %q", got)
-			}
 
-			s := allOf(v)
-			v.sel = &s
-
-			if got := v.selectedText(); got != tt.want {
+			if got := freshCopy(v.grid(), allOf(v)); got != tt.want {
 				t.Errorf("copies %q, want %q", got, tt.want)
 			}
 		})
@@ -167,6 +161,14 @@ func TestMDViewCopyLarge(t *testing.T) {
 	if len(calls) != n {
 		t.Errorf("lineText called for %d lines, want %d", len(calls), n)
 	}
+}
+
+// freshCopy is what s copies over g with every row read again, the reference
+// for a copy of the held text.
+func freshCopy(g textGrid, s selection) string {
+	s.anchor, s.head = clampPoint(g, s.anchor), clampPoint(g, s.head)
+
+	return textCopy(g.lines, s, g.cols)
 }
 
 func TestTextCopyReadsSelectedRowsOnly(t *testing.T) {
@@ -368,8 +370,8 @@ func TestOneSelection(t *testing.T) {
 			t.Errorf("sel = %v, text = %v, view sel = %v", a.sel, a.text, v.sel)
 		}
 
-		if a.text.shown != "one" {
-			t.Errorf("shown = %q, want one", a.text.shown)
+		if got := a.text.held.text(); got != "one" {
+			t.Errorf("held text = %q, want one", got)
 		}
 	})
 

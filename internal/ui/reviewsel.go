@@ -196,6 +196,8 @@ func shiftPieces(ps []md.Piece, n int) []md.Piece {
 // pair gives the code of side, 0 left and 1 right, and nothing where that side
 // is blank.
 func (v *reviewView) rowText(lay drawerLayout, i, side int) md.LineText {
+	v.rowTexts++
+
 	skip := md.LineText{Skip: true}
 
 	if i < 0 || i >= len(v.rows) {
@@ -308,23 +310,6 @@ func (v *reviewView) gridIn(lay drawerLayout, side int) textGrid {
 		lines: func(i int) md.LineText { return v.rowText(lay, i, side) },
 		rows:  len(v.rows), cols: lay.diffW,
 	}
-}
-
-// selectedText is the text of the selection, "" when none.
-func (v *reviewView) selectedText() string {
-	if v.sel == nil {
-		return ""
-	}
-
-	g := v.selGrid()
-	if g.rows == 0 {
-		return ""
-	}
-
-	s := *v.sel
-	s.anchor, s.head = clampPoint(g, s.anchor), clampPoint(g, s.head)
-
-	return textCopy(g.lines, s, g.cols)
 }
 
 // unitText is the text of the unit lineAt takes at row i. A side by side row

@@ -16,9 +16,8 @@ import (
 	"github.com/mhersson/muxreveal/internal/git"
 )
 
-// dragRows is how many rows each drag grows its selection to. Every motion and
-// edge-scroll tick reads the whole selection's text again, so the last ones
-// cost the most.
+// dragRows is how many rows each drag grows its selection to. A motion or an
+// edge-scroll tick reads only the rows it adds; the release copies them all.
 const dragRows = 3000
 
 // dragJitter is how many edge-scroll ticks pass between two motions of the
@@ -252,7 +251,7 @@ func benchDrag(t *testing.T, c dragCase) {
 		}
 	}
 
-	if app.text == nil || app.text.rows != v || app.text.shown == "" {
+	if app.text == nil || app.text.rows != v || len(app.text.held.lines) == 0 {
 		t.Fatal("the drag left no selection of the diff rows")
 	}
 
@@ -262,7 +261,7 @@ func benchDrag(t *testing.T, c dragCase) {
 
 	hl.settle()
 
-	rows, size := selectedRows(v), len(app.text.shown)
+	rows, size := selectedRows(v), len(app.text.held.text())
 
 	start := time.Now()
 

@@ -1653,6 +1653,165 @@ func TestDiffDragThroughReload(t *testing.T) {
 	}
 }
 
+func TestDiffDragReadsEachRowOnce(t *testing.T) {
+	t.Parallel()
+
+	d := newDiffSel(t)
+	v := d.v
+	h, _ := d.rowsHost()
+	x := h.rect.Min.X + 12
+	reads := v.rowTexts
+
+	mdown(d.App, x, h.rect.Min.Y+1, tea.MouseLeft, 0)
+
+	for y := h.rect.Min.Y + 2; y <= h.rect.Max.Y; y++ {
+		mmove(d.App, x, y, tea.MouseLeft)
+	}
+
+	for range 8 {
+		if dragTick(d.App, dragScrollMsg{seq: d.mouse.text.seq}) == nil {
+			t.Fatal("the edge scroll stopped")
+		}
+	}
+
+	release(d.App, x, h.rect.Max.Y)
+
+	if d.text == nil || v.sel == nil {
+		t.Fatal("the drag left no selection")
+	}
+
+	reads = v.rowTexts - reads
+	first, last := v.sel.rowBounds()
+
+	if rows := last - first + 1; reads > rows {
+		t.Errorf("a drag over %d rows read rows' copy text %d times, want each row once", rows, reads)
+	}
+
+	if got, want := primaryWrites(d.clip), freshCopy(v.selGrid(), *v.sel); !slices.Equal(got, []string{want}) {
+		t.Errorf("primary writes %q, want %q", got, want)
+	}
+}
+
+// rewritten is res with the text of the lines that match changed.
+func rewritten(res git.Result, match func(text string) bool) git.Result {
+	res.Files = slices.Clone(res.Files)
+
+	for i := range res.Files {
+		f := &res.Files[i]
+		f.Hunks = slices.Clone(f.Hunks)
+
+		for j := range f.Hunks {
+			h := &f.Hunks[j]
+			h.Lines = slices.Clone(h.Lines)
+
+			for k := range h.Lines {
+				if match(h.Lines[k].Text) {
+					h.Lines[k].Text = "re " + h.Lines[k].Text
+				}
+			}
+		}
+	}
+
+	return res
+}
+
+func TestDiffDragCopiesWhatItCovers(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		alt  bool
+		path []int // the rows the pointer moves to, as offsets from the press's row
+		// rebuild is how many moves pass before the rows are laid out again with
+		// new text and no reload compare in between; -1 for none.
+		rebuild int
+	}{
+		{"down", false, []int{1, 2, 3, 4, 5}, -1},
+		{"down and back", false, []int{1, 2, 3, 4, 5, 3, 1}, -1},
+		{"down then above the press", false, []int{1, 2, 3, -1, -3, -4}, -1},
+		{"up then below the press", false, []int{-1, -2, -4, 1, 2}, -1},
+		{"jumps past the held rows", false, []int{2, -5, 5}, -1},
+		{"block, down and back", true, []int{1, 3, 5, 2}, -1},
+		{"rows laid out again between two moves", false, []int{1, 2, 3, 4, 5}, 3},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			d := newDiffSel(t)
+			v := d.v
+			h, _ := d.rowsHost()
+
+			if h.rect.Dy() < 12 {
+				t.Fatalf("setup: the view has %d rows, want 12 or more", h.rect.Dy())
+			}
+
+			x, y := h.rect.Min.X+12, h.rect.Min.Y+h.rect.Dy()/2
+
+			var mod tea.KeyMod
+			if tt.alt {
+				mod = tea.ModAlt
+			}
+
+			mdown(d.App, x, y, tea.MouseLeft, mod)
+
+			for i, dy := range tt.path {
+				if i == tt.rebuild {
+					v.rebuildFor(rewritten(v.res, func(string) bool { return true }), v.rowsSplit)
+				}
+
+				mmove(d.App, x+4, y+dy, tea.MouseLeft)
+			}
+
+			release(d.App, x+4, y+tt.path[len(tt.path)-1])
+
+			if d.text == nil || v.sel == nil {
+				t.Fatal("the drag left no selection")
+			}
+
+			want := freshCopy(v.selGrid(), *v.sel)
+
+			if tt.rebuild >= 0 && !strings.Contains(want, "re line") {
+				t.Fatalf("setup: the selection %q holds no rewritten line", want)
+			}
+
+			if got := primaryWrites(d.clip); !slices.Equal(got, []string{want}) {
+				t.Errorf("primary writes %q, want %q", got, want)
+			}
+		})
+	}
+}
+
+func TestDiffCopyBeforeReloadCompare(t *testing.T) {
+	t.Parallel()
+
+	d := newDiffSel(t)
+	v := d.v
+	from, to := rowWith(t, v, "line 27"), rowWith(t, v, "line 29")
+	x0, y0 := rowCell(t, d.drawerRig, from, d.code(t, from))
+	x1, y1 := rowCell(t, d.drawerRig, to, d.code(t, to)+len("line 29")-1)
+
+	dragRun(d.App, x0, y0, x1, y1, 0)
+
+	if d.text == nil || v.sel == nil {
+		t.Fatal("setup: no selection")
+	}
+
+	// Rows laid out again after the update's compare, as drawerAfterUpdate does;
+	// the selection's ends keep their lines.
+	v.rebuildFor(rewritten(v.res, func(s string) bool { return s == "line 28" }), v.rowsSplit)
+	run(d.App, press(d.App, keyRune('y')))
+
+	if got := clipboardWrites(d.clip); !slices.Equal(got, []string{"line 27\nre line 28\nline 29"}) {
+		t.Errorf("y wrote %q, want the rows' new text", got)
+	}
+
+	if d.text != nil || v.sel != nil {
+		t.Error("the selection outlived a reload that changed its text, because the copy read it first")
+	}
+}
+
 func TestDiffSelectionUnderPage(t *testing.T) {
 	t.Parallel()
 
