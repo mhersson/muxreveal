@@ -1,4 +1,4 @@
-// Command muxreveal is the MuxReveal binary: CLI and wiring.
+// Command aim is the AIM binary: CLI and wiring.
 package main
 
 import (
