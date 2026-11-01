@@ -94,6 +94,17 @@ func (r *cleanupRig) keeper(t *testing.T, kind core.PaneKind) core.PaneID {
 	return id
 }
 
+// named gives agent id a session name, so the cards tell agents apart.
+func (r *cleanupRig) named(t *testing.T, id core.PaneID, name string) {
+	t.Helper()
+
+	transcript := filepath.Join(t.TempDir(), name+".jsonl")
+	openIn(t, r.App, core.SetAgentSession{ID: id, Session: core.SessionID(name), Transcript: transcript})
+
+	rp := r.railEntry(id)
+	rp.name.text, rp.name.transcript = name, transcript
+}
+
 // started opens a pane started in the worktree for each of kinds, in order.
 func started(kinds ...core.PaneKind) func(*testing.T, *cleanupRig) {
 	return func(t *testing.T, r *cleanupRig) {
@@ -325,6 +336,16 @@ func TestCleanupInUse(t *testing.T) {
 			name:   "a shell and an agent",
 			before: started(core.KindShell, core.KindAgent),
 			kept:   func(r *cleanupRig) string { return kept(r.nameOf(r.keepers[1]) + " and 1 shell are in it") },
+		},
+		{
+			name: "two agents and a shell",
+			before: func(t *testing.T, r *cleanupRig) {
+				t.Helper()
+				started(core.KindAgent, core.KindShell, core.KindAgent)(t, r)
+				r.named(t, r.keepers[0], "worker-a")
+				r.named(t, r.keepers[2], "worker-b")
+			},
+			kept: func(*cleanupRig) string { return kept("worker-a, worker-b and 1 shell are in it") },
 		},
 	}
 
@@ -568,6 +589,17 @@ func TestCleanupGuards(t *testing.T) {
 				r.keeper(t, core.KindShell)
 			},
 			final:  func(*cleanupRig) string { return kept("1 shell is in it") },
+			branch: true,
+		},
+		{
+			name:  "agent started in it and working after the box opened",
+			toast: func(*cleanupRig) string { return mergedToast },
+			box:   []string{"[x] remove the worktree  .worktrees/feat-x"},
+			after: func(t *testing.T, r *cleanupRig) {
+				t.Helper()
+				working(t, r, r.keeper(t, core.KindAgent))
+			},
+			final:  func(r *cleanupRig) string { return r.nameOf(r.keepers[0]) + " is still working in .worktrees/feat-x" },
 			branch: true,
 		},
 		{
@@ -839,7 +871,7 @@ func cleanupScenes() []struct {
 			t.found.headErr, t.found.tip, t.del = git.ErrNoCommit, "", false
 		}},
 		{"worktree-off", 120, 40, func(t *cleanupTarget) { t.remove = false }},
-		{"branch-off-no-panes", 120, 40, func(t *cleanupTarget) { t.del = false }},
+		{"branch-off", 120, 40, func(t *cleanupTarget) { t.del = false }},
 		{"branch-behind-head", 120, 40, func(t *cleanupTarget) { t.found.tip = "0123456789abcdef0123456789abcdef01234567" }},
 		{"kept-by-panes", 120, 40, keptScene},
 		{"kept-by-panes-branch-past-head", 120, 40, func(t *cleanupTarget) {
