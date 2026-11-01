@@ -112,7 +112,7 @@ Dependency rules:
 - Never use em-dashes; use hyphens (-).
 - Never reference plan phases, task numbers, or private card IDs in doc
   comments.
-- The user docs are `docs/guide/` and `config.example.toml`. A change to
+- The user docs are `README.md`, `docs/guide/` and `config.example.toml`. A change to
   behaviour, keys or config updates them in the same commit.
 - `docs/guide/keys.md` is generated from the keymap:
   `go test ./internal/ui -run TestKeysPage -update` rewrites it, and the test
