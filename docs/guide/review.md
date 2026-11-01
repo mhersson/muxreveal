@@ -6,7 +6,7 @@ The keys are the defaults. A changed `leader_key` or `[keys]` table changes them
 
 ## Open, use and close the drawer
 
-To open the drawer for the focused pane, press `ctrl+space d`. It slides in over the right half of the body and takes the keyboard; the panes underneath keep their sizes.
+To open the drawer for the focused pane, press `ctrl+space d`. It slides in over the right half of the body (at least 60 columns, so more than half on a narrow one) and takes the keyboard; the panes underneath keep their sizes.
 
 - Outside a git repository the notice is `not a git repository`. With no drawer open, the other drawer commands show `no review drawer is open`.
 - With the drawer open and the keyboard in a pane, `ctrl+space d` points the drawer at the focused pane, if that pane is in a repository, and gives it the keyboard. With the keyboard in the drawer, it closes the drawer.
@@ -90,7 +90,7 @@ An agent can work in more than one worktree. By default the drawer follows the a
 The list has, from the top:
 
 - the "Follow the agent" row, marked `on` while the drawer follows;
-- "Touched by <agent>": the places the agent edited this session, newest first, each as `<repo> · <branch>`, with `latest` on the newest and `agent here` on the worktree of the agent's own directory;
+- "Touched by <agent>": the places the agent edited this session, newest first, plus the agent's own directory and a pinned place even when no edit names them, each as `<repo> · <branch>`, with `latest` on the newest and `agent here` on the worktree of the agent's own directory;
 - "Other worktrees of <project>": the other checked-out worktrees of the agent's repository.
 
 A place shows its changes (`+A -R N files`, or `clean`) once they are counted, and the age of the latest edit there.
@@ -111,7 +111,7 @@ An unpinned drawer shows the worktree of the agent's latest edit. When the agent
 These edits move the drawer:
 
 - Claude Code's `Edit`, `Write`, `MultiEdit` and `NotebookEdit` tools, seen when the tool starts and when it finishes. A subagent's edit counts like the agent's own. An edit that you then refuse still moves the drawer, since AIM sees it before the permission prompt.
-- Files a shell command changed, only when Claude Code reports them. Claude Code reports the files a Bash command changed in auto and `bypassPermissions` mode, and in every mode when its own `bashEditDiffEnabled` setting is on. You set that in your own Claude Code settings; AIM never changes them. A command that moves the working tree, such as `git checkout`, reports none.
+- Files a shell command changed, only when Claude Code reports them. Claude Code reports the files a Bash command changed in auto and `bypassPermissions` mode, and in every mode when the `bashEditDiffEnabled` setting is on. You set that in your own Claude Code settings; AIM never changes them. A command that moves the working tree, such as `git checkout`, reports none.
 
 A file git ignores, or one outside every worktree, moves nothing. A new session starts with no edits.
 
