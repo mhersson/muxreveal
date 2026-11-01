@@ -267,6 +267,7 @@ Go 1.27 (`tuios.dev/vt` needs 1.26 or later). The reason for Rust was a proven V
 | Config and state | `pelletier/go-toml/v2`; `encoding/json` | TOML config, JSON layout state and reviewed-hunk files |
 | Clipboard | OSC 52 plus direct exec of `wl-copy` and `wl-paste`, `xclip`, or `pbcopy` and `pbpaste`, with explicit arguments | No cgo and no shell; `atotto/clipboard` is not used because its primary-selection switch is global state and it drops the clipboard arguments |
 | CLI | `spf13/cobra` | `aim`, `aim hook claude-code`, `aim statusline`, future subcommands |
+| Release | GoReleaser 2 in GitHub Actions | The operator's release pattern across projects: one config for the builds, archives, checksums and changelog |
 | Diagnostics | `log/slog` to a file | Structured logs, never to the screen |
 
 ## Key technical designs
@@ -1108,6 +1109,7 @@ The config file is `$XDG_CONFIG_HOME/aim/config.toml` when `XDG_CONFIG_HOME` is 
 - `[mouse]` has `focus_follows_mouse` and `copy_on_select`, both `false` by default (see Mouse and clipboard).
 - `[clipboard]` has `osc52` and `native`, both `true` by default. `osc52 = false` stops copies and selection writes from being sent to the outer terminal as OSC 52; `native = false` stops the native tool writes, a selection's primary write included, and reads on a local session, so a middle-click pastes AIM's own last copy. Programs' own OSC 52 writes follow the same switches. Unknown keys in either section are errors.
 - `--fresh` starts with one shell for this run, ignoring the saved layout; the first change replaces the saved state (see Persisted state).
+- `--version` (`-v`) prints `aim <version>` and, in parentheses when the build knows them, the commit, `modified` for a build from a changed tree, and the date (`built` from a release, `committed` from a checkout), then exits 0 before the config or the log is opened. Where the values come from: a release's `-X main.version/commit/date` from GoReleaser; the Homebrew formula's `-X main.version` alone; the module version for `go install ...@<version>`; `dev` with the build info's VCS commit and commit time for a checkout build.
 - The hidden `--record <dir>` flag (diagnostics, not shown in `--help`) writes each pane's PTY output and resizes to `<dir>/<pane id>.rec`. It creates the directory with mode 0700 and each file with mode 0600, never overwrites an existing file, writes from a goroutine per pane (a full queue drops records and a write error stops the recording, each logged once). The files hold everything the guest printed. They exist for replay bench inputs and VT fixtures.
 - The log is `aim.log` in the state dir (see Persisted state). At startup the previous run's log is kept as `aim.log.1`, replacing any older one.
 
@@ -1262,6 +1264,21 @@ State lives in the platform state dir (`$XDG_STATE_HOME/aim` on Linux, `~/Librar
 **Quit**
 
 - The saver is closed (the pending state is written, later saves are dropped) before any pane is closed, so agents that die on quit, `SIGHUP` or `SIGTERM` are not saved as shells.
+
+### Releases
+
+- Pushing a `v*` tag runs `release.yaml`. Every `ci.yaml` gate runs first: it is called as a reusable workflow, and its pull-request-only jobs (govulncheck, static-checks) run for a tag too. A failed gate publishes nothing. Then GoReleaser `release --clean` runs with the workflow's own token, and `contents: write` on that job alone.
+- What is built (`.goreleaser.yaml`): linux and darwin on amd64 and arm64, `CGO_ENABLED=0`, `-trimpath`, `-s -w`, the version values. No Windows: `creack/pty` has no Windows support. tar.gz archives with the binary, `LICENSE`, `THIRD_PARTY.md`, and `README.md` and `config.example.toml` when present, plus a sha256 checksums file. The macOS binaries are unsigned; one downloaded with a browser needs `xattr -d com.apple.quarantine aim`.
+- Stripping: the builds this repository makes or defines (`make build`, `make install`, the release, the formula) are stripped with `-s -w`. The build info stays, so `go version -m` names the commit of a build from a checkout or a release. Tests and bench builds are not stripped.
+- Notes:
+  - `.github/release-notes/<tag>.md` when it exists.
+  - Else, for a pre-release tag (a `-` suffix, which `prerelease: auto` marks a GitHub pre-release), the one-line release-candidate text.
+  - Else GoReleaser's changelog since the previous final release, the newest lower final tag reachable from the tag, so a release candidate in between does not cut it short: Features (`feat`), Fixes (`fix`) and Performance (`perf`). A breaking `!` commit goes in its type's group; all other commits, merge commits and non-conventional subjects are left out.
+  - The release step passes the pushed tag to GoReleaser (`GORELEASER_CURRENT_TAG`), because a final tag often shares its commit with its last release candidate, and GoReleaser's own pick would take the candidate.
+- Checks: `make release-dry` locally (it needs GoReleaser 2), and the `Release check` workflow on pull requests that change the release files. It is not a required check.
+- Homebrew: the formula goes into the tap `mhersson/formulas` once v1.0.0 is tagged. It builds from the tag's source tarball with Go and sets the version with `-X`, and is updated by hand after each release; the release job never touches the tap.
+- Tags: a tag is never moved, deleted or re-pushed, since the module proxy and checksum database keep the first one. A failed release is fixed forward with the next patch version. The config never replaces an asset on an existing release (`release.replace_existing_artifacts` is off).
+- `go install github.com/mhersson/aim/cmd/aim@latest` takes the newest final release. While none exists, it takes the newest pre-release.
 
 ## Keymap draft
 
