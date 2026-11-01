@@ -1,8 +1,9 @@
-# MuxReveal
+# AIM
 
-A Go TUI that hosts coding agents (Claude Code in v1) in live terminal panes,
-with live diffs, PR review, CI status, push, open PR and merge beside them.
-Terminal emulation comes from `tuios.dev/vt`; everything above it is ours.
+AIM (Agents In-flight Multiplexer) is a Go TUI that hosts coding agents (Claude
+Code in v1) in live terminal panes, with live diffs, PR review, CI status, push,
+open PR and merge beside them. Terminal emulation comes from `tuios.dev/vt`;
+everything above it is ours.
 
 ## Sources of truth
 
@@ -171,7 +172,7 @@ need them without a push.
   snapshots use a temporary `GIT_INDEX_FILE` and `refs/aim/*` only. A
   local branch is deleted only from the worktree cleanup confirm, with its box
   checked, when it holds nothing the merged pull request did not.
-- Write only to the platform state and cache dirs, worktrees under MuxReveal's
+- Write only to the platform state and cache dirs, worktrees under AIM's
   worktree root, and `.git/info/exclude`; only the cleanup confirm removes such
   a worktree.
 - Merges always pass the reviewed head `sha`, and every approve or merge needs a
