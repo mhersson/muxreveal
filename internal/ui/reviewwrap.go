@@ -96,26 +96,47 @@ func wrapLine(units []diffUnit, width int) []wrapPart {
 	return append(parts, wrapPart{u0: start.u0, u1: len(units), c0: start.c0, c1: ends[len(units)]})
 }
 
-// lineParts is wrapLine of a raw line's units. A plain ASCII line that fits
-// builds none.
+// lineParts is wrapLine of a raw line's units, built only when wholePart
+// declines the line.
 func lineParts(raw string, tagCR bool, width int) []wrapPart {
-	if !tagCR && width > 0 {
-		line := strings.TrimSuffix(raw, "\r")
-		if len(line) <= min(width, lineBudget) && printableASCII(line) {
-			return []wrapPart{{u0: 0, u1: len(line), c0: 0, c1: len(line)}}
-		}
+	if p, ok := wholePart(raw, tagCR, width); ok {
+		return []wrapPart{p}
 	}
 
 	return wrapLine(lineUnits(raw, tagCR), width)
 }
 
-// printableASCII reports whether every byte of s is in 0x20-0x7e.
-func printableASCII(s string) bool {
-	for i := 0; i < len(s); i++ {
-		if s[i] < 0x20 || s[i] > 0x7e {
-			return false
+// wholePart is the one part of an untagged line of printable ASCII and tabs
+// that fits width, as wrapLine gives it: each byte is a unit, and a tab takes
+// the cells to the next tab stop, as diffUnits counts them. ok is false for
+// any other line.
+func wholePart(raw string, tagCR bool, width int) (wrapPart, bool) {
+	if tagCR || width <= 0 {
+		return wrapPart{}, false
+	}
+
+	// Every byte takes at least one cell, so a line longer than width cannot fit.
+	line := strings.TrimSuffix(raw, "\r")
+	if len(line) > min(width, lineBudget) {
+		return wrapPart{}, false
+	}
+
+	cells := 0
+
+	for i := 0; i < len(line); i++ {
+		switch c := line[i]; {
+		case c == '\t':
+			cells += tabStop - cells%tabStop
+		case c < 0x20 || c > 0x7e:
+			return wrapPart{}, false
+		default:
+			cells++
 		}
 	}
 
-	return true
+	if cells > width {
+		return wrapPart{}, false
+	}
+
+	return wrapPart{u0: 0, u1: len(line), c0: 0, c1: cells}, true
 }
