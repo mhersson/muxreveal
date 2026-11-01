@@ -25,7 +25,7 @@ To push the branch, press `ctrl+space g P`. The branch is the one checked out in
 
 ## Open a pull request
 
-To open one for the branch, press `ctrl+space g o`. It needs a GitHub remote; a branch that already has an open pull request says `<branch> already has #<n>`, and these refusals stop the box: `open a PR: not a git repository`, `open a PR: HEAD is detached`, `open a PR: <branch> has no commits yet`, `open a PR: <branch> has no remote to push to` and `open a PR: <remote> has no branches to open against`.
+To open one for the branch, press `ctrl+space g o`. It needs a GitHub remote; a branch that already has an open pull request says `<branch> already has #<n>`, and the refusals that stop the box include `open a PR: not a git repository`, `open a PR: HEAD is detached`, `open a PR: <branch> has no commits yet`, `open a PR: <branch> has no remote to push to`, `open a PR: <remote> has no branches to open against` and `<branch>'s remote is not on GitHub`.
 
 The compose box has four fields: title, base, draft and body. `tab` and `shift+tab` move between them.
 
