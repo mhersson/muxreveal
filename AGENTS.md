@@ -124,15 +124,15 @@ Dependency rules:
   `TestReadmeKeys` (`internal/ui`) checks that the README's Keys table is built
   from the default keymap and command titles, and that every leader key the
   README names is a default binding. When only non-code files changed,
-  `make check-fast` runs these four tests; otherwise it tests only the changed
-  packages.
+  `make check-fast` runs these three and `TestKeysPage`; otherwise it tests
+  only the changed packages.
 - A change to the config's settings or checks (`internal/core`'s config and
   keys, `internal/ui`'s key checks, the themes) also runs
   `go test ./cmd/aim -run TestConfigExample` before its commit, since
   `check-fast` tests only the changed packages. A change to the command
   registry, the keymap or the themes (the `theme.set.*` rows) also runs
-  `go test ./internal/ui -run TestKeysPage`, since the keys page is built from
-  them.
+  `go test ./internal/ui -run 'TestKeysPage|TestReadmeKeys'`, since the keys
+  page and the README's Keys table and leader keys are built from them.
 
 ## Testing
 

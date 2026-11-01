@@ -23,7 +23,7 @@ AIM (Agents In-flight Multiplexer) hosts Claude Code agents in live terminal pan
 ## Features
 
 - **Agents in panes.** BSP, master-stack and scrolling layouts, tabs, and a git worktree per agent from the picker.
-- **Agents rail.** Every agent grouped as Blocked, Working or Idle, with what it does now, its branch, its pull request and its diff stats.
+- **Agents rail.** Agents grouped as Blocked, Working, Idle or No hooks, with what it does now, its branch, its pull request and its diff stats.
 - **Live review.** Turn and branch mode, unified or side by side, highlighted, with markdown rendered; the drawer follows the agent's edits from worktree to worktree.
 - **Pull requests and CI.** Push, open a pull request from the compose box, read its conversation and checks with their logs, approve, and merge the reviewed head after a confirm.
 - **Plans and markdown.** The agent's plan, any markdown file and a pull request's conversation open in a reading box, with pictures over the Kitty graphics protocol.
@@ -36,7 +36,7 @@ AIM (Agents In-flight Multiplexer) hosts Claude Code agents in live terminal pan
 <table>
   <tr>
     <td width="50%">
-      <img src="docs/images/review-checks.png" alt="AIM with the review drawer showing a rendered README.md diff, and the checks box for pull request 1 listing one passed check, vet and test">
+      <img src="docs/images/review-checks.png" alt="AIM with the review drawer showing README.md rendered, and the checks box for pull request 1 listing one passed check, vet and test">
       <br>
       The review drawer on a pull request, with the checks box open over it: one check, vet and test, passed.
     </td>
@@ -108,7 +108,7 @@ The keys here are the defaults, and every key can be remapped (see [the keys pag
 5. Press `ctrl+space d` for the review drawer: `t` shows the agent's last turn, `b` the whole branch.
 6. Press `ctrl+space g P` to push, after a confirm. `ctrl+space g o` opens the compose box and `ctrl+s` there creates the pull request. `ctrl+space g l` lists pull requests with their checks, and `M` there merges.
 
-To see every key, press `ctrl+space` and wait for which-key.
+To see every leader key, press `ctrl+space` and wait for which-key.
 
 ## Keys
 
@@ -148,7 +148,7 @@ AIM needs no config. To change the theme, layouts, keys and more, copy `config.e
 
 - Claude Code is the only agent AIM hosts in v1.
 - Linux and macOS only.
-- A pull request from a fork never matches an agent's branch, and worktree cleanup refuses one with `<n>'s branch is in another repository`.
+- A pull request from a fork never matches an agent's branch, and worktree cleanup refuses one with `#<n>'s branch is in another repository`.
 
 ## Contributing
 
@@ -156,7 +156,7 @@ AIM needs no config. To change the theme, layouts, keys and more, copy `config.e
 
 ## Acknowledgements
 
-Terminal emulation comes from TUIOS's `tuios.dev/vt`. The tiling layouts and the line diff are ported from [TUIOS](https://github.com/Gaurav-Gosain/tuios) (MIT); [THIRD_PARTY.md](THIRD_PARTY.md) lists everything copied.
+Terminal emulation comes from TUIOS's `tuios.dev/vt`. The tiling layouts, the line diff and the diff view are ported from [TUIOS](https://github.com/Gaurav-Gosain/tuios) (MIT); [THIRD_PARTY.md](THIRD_PARTY.md) lists everything copied.
 
 ## License
 
