@@ -67,11 +67,12 @@ func escSteps(steps []escStep, a *App, clk *fakeClock) {
 	}
 }
 
-// heldEsc is esc held down: n repeats 30 ms apart.
-func heldEsc(n int) []escStep {
-	steps := make([]escStep, n)
-	for i := range steps {
-		steps[i] = escStep{30 * time.Millisecond, keyEsc}
+// heldEsc is esc held down after the press that closed something: the first
+// repeat after delay, then 25 more every 40 ms.
+func heldEsc(delay time.Duration) []escStep {
+	steps := []escStep{{delay, keyEsc}}
+	for range 25 {
+		steps = append(steps, escStep{40 * time.Millisecond, keyEsc})
 	}
 
 	return steps
@@ -81,6 +82,7 @@ func TestEscGuardTiming(t *testing.T) {
 	t.Parallel()
 
 	altEsc := tea.KeyPressMsg{Code: tea.KeyEscape, Mod: tea.ModAlt}
+	dropped := escStep{30 * time.Millisecond, keyEsc}
 
 	tests := []struct {
 		name  string
@@ -88,11 +90,14 @@ func TestEscGuardTiming(t *testing.T) {
 		want  string
 	}{
 		{"a doubled esc is dropped", []escStep{{40 * time.Millisecond, keyEsc}}, ""},
-		{"a held esc never reaches the pane", heldEsc(20), ""},
-		{"an esc after 500 ms of quiet reaches the pane", []escStep{{500 * time.Millisecond, keyEsc}}, escByte},
-		{"an esc just short of 500 ms is dropped", []escStep{{499 * time.Millisecond, keyEsc}}, ""},
-		{"each dropped esc restarts the wait", []escStep{{300 * time.Millisecond, keyEsc}, {300 * time.Millisecond, keyEsc}}, ""},
-		{"a released esc reaches the pane after the wait", append(heldEsc(20), escStep{500 * time.Millisecond, keyEsc}), escByte},
+		{"a held esc with a 225 ms repeat delay never reaches the pane", heldEsc(225 * time.Millisecond), ""},
+		{"a held esc with a 600 ms repeat delay never reaches the pane", heldEsc(600 * time.Millisecond), ""},
+		{"an esc 750 ms after the close reaches the pane", []escStep{{750 * time.Millisecond, keyEsc}}, escByte},
+		{"an esc just short of 750 ms after the close is dropped", []escStep{{749 * time.Millisecond, keyEsc}}, ""},
+		{"an esc 500 ms after a dropped one reaches the pane", []escStep{dropped, {500 * time.Millisecond, keyEsc}}, escByte},
+		{"an esc just short of 500 ms after a dropped one is dropped", []escStep{dropped, {499 * time.Millisecond, keyEsc}}, ""},
+		{"each dropped esc restarts the wait", []escStep{{300 * time.Millisecond, keyEsc}, {300 * time.Millisecond, keyEsc}, {300 * time.Millisecond, keyEsc}}, ""},
+		{"a released esc reaches the pane after the wait", append(heldEsc(600*time.Millisecond), escStep{500 * time.Millisecond, keyEsc}), escByte},
 		{"another key passes at once and ends the guard", []escStep{{10 * time.Millisecond, keyRune('x')}, {10 * time.Millisecond, keyEsc}}, "x" + escByte},
 		{"a doubled esc read as alt+esc is dropped", []escStep{{0, altEsc}}, ""},
 	}

@@ -9,18 +9,34 @@ import (
 	"github.com/mhersson/muxreveal/internal/core"
 )
 
-// escQuiet is how long esc must stay up before an esc reaches a pane again
-// after an esc closed what had the keyboard and handed it to the pane.
-const escQuiet = 500 * time.Millisecond
+// The esc guard's waits: how long esc must stay up before an esc reaches a
+// pane again. The first, after the esc that handed the pane the keyboard,
+// outlasts the common key repeat delays (500 to 660 ms), so a held esc's first
+// repeat is dropped too; after a dropped esc the wait is escQuiet.
+const (
+	escCloseWait = 750 * time.Millisecond
+	escQuiet     = 500 * time.Millisecond
+)
+
+// escGuard is the esc guard's state: the last esc it counted and how long esc
+// must stay up after it. The zero value runs no guard.
+type escGuard struct {
+	at   time.Time
+	wait time.Duration
+}
+
+// drops reports whether an esc at now comes within the wait.
+func (g escGuard) drops(now time.Time) bool { return g.wait > 0 && now.Sub(g.at) < g.wait }
 
 // handleKey routes a key press and runs the esc guard. In Claude Code one esc
 // interrupts a turn, so after an esc hands a pane the keyboard, an esc bound
-// for a pane is dropped until escQuiet passes with no esc; each one dropped
-// restarts the wait, and any other key ends the guard. Esc is matched by its
-// code, since a terminal can deliver two presses in one read as alt+esc.
+// for a pane is dropped until escCloseWait passes with no esc, or escQuiet
+// after a dropped one; each one dropped restarts the wait, and any other key
+// ends the guard. Esc is matched by its code, since a terminal can deliver two
+// presses in one read as alt+esc.
 func (a *App) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 	if msg.Code != tea.KeyEscape {
-		a.escAt = time.Time{}
+		a.esc = escGuard{}
 
 		return a.routeKey(msg)
 	}
@@ -28,23 +44,23 @@ func (a *App) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 	now := a.clock.Now()
 
 	if !a.paneHasKeys() {
-		a.escAt = time.Time{}
+		a.esc = escGuard{}
 		cmd := a.routeKey(msg)
 
 		if a.paneHasKeys() {
-			a.escAt = now
+			a.esc = escGuard{at: now, wait: escCloseWait}
 		}
 
 		return cmd
 	}
 
-	if !a.escAt.IsZero() && now.Sub(a.escAt) < escQuiet {
-		a.escAt = now
+	if a.esc.drops(now) {
+		a.esc = escGuard{at: now, wait: escQuiet}
 
 		return nil
 	}
 
-	a.escAt = time.Time{}
+	a.esc = escGuard{}
 
 	return a.routeKey(msg)
 }

@@ -336,7 +336,7 @@ func TestRoutingOrder(t *testing.T) {
 	}
 
 	// The drawer's close started the esc guard.
-	r.clk.Advance(escQuiet)
+	r.clk.Advance(escCloseWait)
 	r.keys(keyEsc)
 	eventually(t, "the last esc to reach the pane", func() bool { return r.sentTo("p1") != "" })
 
