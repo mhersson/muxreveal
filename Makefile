@@ -3,7 +3,7 @@
 help:
 	@echo "Targets:"
 	@echo "  help         show this list"
-	@echo "  build        build bin/muxreveal"
+	@echo "  build        build bin/aim"
 	@echo "  build-darwin cross-compile everything for darwin"
 	@echo "  run          run the app; pass arguments with ARGS=..."
 	@echo "  test         run the tests"
@@ -22,13 +22,13 @@ help:
 	@echo "  clean        remove bin/"
 
 build:
-	go build -trimpath -o bin/muxreveal ./cmd/muxreveal
+	go build -trimpath -o bin/aim ./cmd/aim
 
 build-darwin:
 	GOOS=darwin go build ./...
 
 run:
-	go run ./cmd/muxreveal $(ARGS)
+	go run ./cmd/aim $(ARGS)
 
 test:
 	go test ./...
@@ -103,7 +103,7 @@ check-fast: build fmt-check vet lint test-changed scan
 check: build build-darwin fmt-check vet lint test-race tidy-check scan
 
 install:
-	go install -trimpath ./cmd/muxreveal
+	go install -trimpath ./cmd/aim
 
 clean:
 	rm -rf bin

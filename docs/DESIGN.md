@@ -160,7 +160,7 @@ One process owns the screen, the PTYs and every service. It talks to Claude Code
 ```mermaid
 flowchart TB
   term["Ghostty / Kitty"]
-  subgraph proc["muxreveal process (single binary, no daemon in v1)"]
+  subgraph proc["aim process (single binary, no daemon in v1)"]
     ui["UI and compositor<br/>Bubble Tea v2, input router, keymap, themes, image placement, diffview"]
     core["App core<br/>event bus, state store, actions: push, open PR, approve, merge"]
     store["Persistence<br/>state.json: layout, sessions<br/>reviews/*.json: reviewed hunks"]
@@ -182,7 +182,7 @@ flowchart TB
   core --> git
   core --> gh
   panes -- PTY --> claude
-  claude -- muxreveal hook --> hooks
+  claude -- aim hook --> hooks
   git --> wt
   gh --> api
 ```
@@ -195,7 +195,7 @@ One Go module, `github.com/mhersson/aim`.
 
 | Package | Responsibility |
 | --- | --- |
-| `cmd/muxreveal` | Binary: CLI, `hook` and `statusline` subcommands, wiring |
+| `cmd/aim` | Binary: CLI, `hook` and `statusline` subcommands, wiring |
 | `internal/core` | Event bus, state store, actions, config, tab layouts (`internal/core/tiling`) |
 | `internal/ui` | Compositor, widgets, keymap, themes, syntax highlighting, image placement |
 | `internal/term` | PTY plus the `VT` interface; `tuios.dev/vt` adapter (fallback `charmbracelet/x/vt`) |
@@ -266,7 +266,7 @@ Go 1.27 (`tuios.dev/vt` needs 1.26 or later). The reason for Rust was a proven V
 | Fuzzy finder | `sahilm/fuzzy` | Palette and pickers |
 | Config and state | `pelletier/go-toml/v2`; `encoding/json` | TOML config, JSON layout state and reviewed-hunk files |
 | Clipboard | OSC 52 plus direct exec of `wl-copy` and `wl-paste`, `xclip`, or `pbcopy` and `pbpaste`, with explicit arguments | No cgo and no shell; `atotto/clipboard` is not used because its primary-selection switch is global state and it drops the clipboard arguments |
-| CLI | `spf13/cobra` | `muxreveal`, `muxreveal hook claude-code`, `muxreveal statusline`, future subcommands |
+| CLI | `spf13/cobra` | `aim`, `aim hook claude-code`, `aim statusline`, future subcommands |
 | Diagnostics | `log/slog` to a file | Structured logs, never to the screen |
 
 ## Key technical designs
@@ -681,11 +681,11 @@ MuxReveal never edits the user's Claude settings. Every agent it launches runs `
 ```json
 {
   "hooks": {
-    "SessionStart":     [{"hooks": [{"type": "command", "command": "/opt/muxreveal/bin/muxreveal", "args": ["hook", "claude-code"], "timeout": 5}]}],
-    "UserPromptSubmit": [{"hooks": [{"type": "command", "command": "/opt/muxreveal/bin/muxreveal", "args": ["hook", "claude-code"], "timeout": 5}]}],
-    "Stop":             [{"hooks": [{"type": "command", "command": "/opt/muxreveal/bin/muxreveal", "args": ["hook", "claude-code"], "timeout": 5}]}]
+    "SessionStart":     [{"hooks": [{"type": "command", "command": "/opt/aim/bin/aim", "args": ["hook", "claude-code"], "timeout": 5}]}],
+    "UserPromptSubmit": [{"hooks": [{"type": "command", "command": "/opt/aim/bin/aim", "args": ["hook", "claude-code"], "timeout": 5}]}],
+    "Stop":             [{"hooks": [{"type": "command", "command": "/opt/aim/bin/aim", "args": ["hook", "claude-code"], "timeout": 5}]}]
   },
-  "statusLine": {"type": "command", "command": "'/opt/muxreveal/bin/muxreveal' statusline"}
+  "statusLine": {"type": "command", "command": "'/opt/aim/bin/aim' statusline"}
 }
 ```
 
@@ -733,9 +733,9 @@ An agent pane whose Claude has sent no hook has no state and shows no badge. The
 
 **Hook command and socket**
 
-- `muxreveal hook claude-code` is a subcommand of the same binary. It reads the hook JSON from stdin, parses it with the harness, adds the pane id from `MUXREVEAL_PANE` and sends one compact event (pane, event name, session id, transcript path, state, working directory, current action and the flag that says whether it is set, the file an edit tool changes, the plan file ExitPlanMode names, whether the edit's tool has run yet, the files a Bash command changed, whether a subagent sent it, whether a session start begins a new conversation, and the start, end and turn-start flags) as one JSON line over the Unix socket in `MUXREVEAL_SOCK`.
+- `aim hook claude-code` is a subcommand of the same binary. It reads the hook JSON from stdin, parses it with the harness, adds the pane id from `MUXREVEAL_PANE` and sends one compact event (pane, event name, session id, transcript path, state, working directory, current action and the flag that says whether it is set, the file an edit tool changes, the plan file ExitPlanMode names, whether the edit's tool has run yet, the files a Bash command changed, whether a subagent sent it, whether a session start begins a new conversation, and the start, end and turn-start flags) as one JSON line over the Unix socket in `MUXREVEAL_SOCK`.
 - The server listens on `<state dir>/run/<pid>.sock` (mode 0600; the `run` directory is mode 0700). Both the socket and the settings file are removed on exit. The client waits up to 2 s for the server's `ok` line, which the server writes once the event is queued, except for a turn-start event (`UserPromptSubmit`) and an edit's `PreToolUse`, which it answers after the gate calls `Done` or after 1.5 s, whichever comes first. The snapshot therefore lands before the agent edits anything, and a slow snapshot never holds the agent longer than the budget.
-- The server holds a turn-start event's or an edit's `PreToolUse` `ok` until the event's `Done` is called (`Server.Hold`). A gate in `cmd/muxreveal` sits between the server and the app's event channel: it forwards every event to the app in order, at once, numbers each turn start by its arrival (see Turn snapshots), runs the snapshot for it in its own goroutine with a 1.4 s context, then calls `Done`. The gate keeps each pane's last turn (its session, number, every worktree it started, markers included, and whether a worktree it could not find makes the turn unsure) and keeps a pane's turn starts in arrival order. A turn start ends first the worktrees among them that were started with a snapshot that is written (a marker has no end; a start still being taken when the prompt's deadline comes gets an end marker once it is written, so that turn shows no snapshot and is never live past the next prompt), whatever session that turn was in, so `/clear` and a resumed session end the old turn too: the new start's own worktree through the start itself when the session is the same, any other worktree with `git.EndTurn`, concurrently, all under the start's deadline. A pane with no remembered turn (the first prompt after a start of MuxReveal) ends instead the session's open turns at its highest number in the own directory's repository (`git.OpenTurns`, found from the refs); a `/clear` after such a restart therefore ends nothing, because `OpenTurns` is asked with the new session, and the old session's last turn stays open, shown only if that session is resumed, until its first prompt. A turn that has no snapshot, or whose end failed, ends nothing more: a failed end gets an end marker after the answer. `Stop`, `StopFailure` and `SessionEnd` end nothing and are answered at once with no `Snapped`. The forwarded event carries `Snapped`, a channel closed when the ends and that snapshot (or the marker of a failed one) are finished, for the app to wait on; an event whose `cwd` is not inside a repository, or whose session id is not a UUID, gets no snapshot, no `Snapped` and is answered at once. An edit's `PreToolUse` (`Before`, also a subagent's) is handled like this:
+- The server holds a turn-start event's or an edit's `PreToolUse` `ok` until the event's `Done` is called (`Server.Hold`). A gate in `cmd/aim` sits between the server and the app's event channel: it forwards every event to the app in order, at once, numbers each turn start by its arrival (see Turn snapshots), runs the snapshot for it in its own goroutine with a 1.4 s context, then calls `Done`. The gate keeps each pane's last turn (its session, number, every worktree it started, markers included, and whether a worktree it could not find makes the turn unsure) and keeps a pane's turn starts in arrival order. A turn start ends first the worktrees among them that were started with a snapshot that is written (a marker has no end; a start still being taken when the prompt's deadline comes gets an end marker once it is written, so that turn shows no snapshot and is never live past the next prompt), whatever session that turn was in, so `/clear` and a resumed session end the old turn too: the new start's own worktree through the start itself when the session is the same, any other worktree with `git.EndTurn`, concurrently, all under the start's deadline. A pane with no remembered turn (the first prompt after a start of MuxReveal) ends instead the session's open turns at its highest number in the own directory's repository (`git.OpenTurns`, found from the refs); a `/clear` after such a restart therefore ends nothing, because `OpenTurns` is asked with the new session, and the old session's last turn stays open, shown only if that session is resumed, until its first prompt. A turn that has no snapshot, or whose end failed, ends nothing more: a failed end gets an end marker after the answer. `Stop`, `StopFailure` and `SessionEnd` end nothing and are answered at once with no `Snapped`. The forwarded event carries `Snapped`, a channel closed when the ends and that snapshot (or the marker of a failed one) are finished, for the app to wait on; an event whose `cwd` is not inside a repository, or whose session id is not a UUID, gets no snapshot, no `Snapped` and is answered at once. An edit's `PreToolUse` (`Before`, also a subagent's) is handled like this:
   - With no turn on its pane (no turn start seen for the pane in this run, or a main-session event of another session than the pane's turn), it is answered at once with no lookup. After `Stop` the turn runs on to the next prompt, so an edit then belongs to it.
   - Otherwise the file's worktree is found through the `git.PlaceCache` the app shares, under 2 s, and the event is forwarded at once. A file that does not count (ignored, outside any worktree) is answered. A lookup error makes the turn unsure and the edit is answered.
   - A worktree the turn already started is answered once its start is written, at once when it is. At the event's deadline a start still being taken in that worktree is cancelled first and becomes a marker (a start whose tree already exists keeps its ref write and stays a snapshot, which predates the answer), so an edit is never answered while its before-picture is being read (an edit whose lookup has not answered by then cancels every start of the turn still being taken). Parallel first edits in one new worktree share one start.
@@ -743,8 +743,8 @@ An agent pane whose Claude has sent no hook has no state and shows no badge. The
   - A finished Bash command's `Changed` list (Claude Code's list, one path per directory) is looked up the same way in the pane's turn, with nothing held: a counted worktree the turn has not started gets a start marker, and an error makes the turn unsure.
 
   An edit waits for a snapshot only on the first edit in a worktree in a turn, and never longer than the turn-start budget.
-- `muxreveal hook` always exits 0 and prints nothing to stdout or stderr, also when the environment variables are missing, the socket is gone or the payload is bad. Claude adds the stdout of `SessionStart` and `UserPromptSubmit` hooks to the model's context, so any output would leak into the conversation.
-- `muxreveal statusline` is the command Claude runs as its status line. It reads the statusline JSON from stdin, parses it with `Claude.ParseStatus`, adds the pane id from `MUXREVEAL_PANE` and sends the status event over the same socket, within a 1 s budget. Whatever the environment, the socket or the payload, it exits 0 and prints nothing to stdout or stderr, so Claude's own status line stays empty in MuxReveal panes. Until the budget ends it reads stdin to the end, so Claude's write does not fail, and it drops the update on any failure. The server answers a status event as soon as it is queued.
+- `aim hook` always exits 0 and prints nothing to stdout or stderr, also when the environment variables are missing, the socket is gone or the payload is bad. Claude adds the stdout of `SessionStart` and `UserPromptSubmit` hooks to the model's context, so any output would leak into the conversation.
+- `aim statusline` is the command Claude runs as its status line. It reads the statusline JSON from stdin, parses it with `Claude.ParseStatus`, adds the pane id from `MUXREVEAL_PANE` and sends the status event over the same socket, within a 1 s budget. Whatever the environment, the socket or the payload, it exits 0 and prints nothing to stdout or stderr, so Claude's own status line stays empty in MuxReveal panes. Until the budget ends it reads stdin to the end, so Claude's write does not fail, and it drops the update on any failure. The server answers a status event as soon as it is queued.
 - If the socket or the settings file cannot be set up, MuxReveal runs agents without `--settings` and shows the notice `agent hooks are off: <error>`; a socket path over the platform limit (107 bytes on Linux, 103 on macOS) reads `socket path too long (N bytes, at most M)`.
 - Events are applied by the core. An event for a closed pane, an unknown pane id or a pane that is not an agent is ignored, as is an event after `SessionEnd` that has nothing to change.
 

@@ -747,7 +747,7 @@ type settingsFile struct {
 }
 
 func TestSettings(t *testing.T) {
-	const exe = "/opt/my tools/muxreveal"
+	const exe = "/opt/my tools/aim"
 
 	raw, err := Claude{}.Settings(exe)
 	if err != nil {
@@ -798,7 +798,7 @@ func TestSettingsStatusLine(t *testing.T) {
 		exe     string
 		command string
 	}{
-		{"plain", "/usr/local/bin/muxreveal", "'/usr/local/bin/muxreveal' statusline"},
+		{"plain", "/usr/local/bin/aim", "'/usr/local/bin/aim' statusline"},
 		{"space", "/Users/a b/bin/mr", "'/Users/a b/bin/mr' statusline"},
 		{"non-ASCII", "/Users/jørgen/漢/mr", "'/Users/jørgen/漢/mr' statusline"},
 		{"shell metacharacters", "/opt/$HOME/`x` \"q\" *?~;&|<>(){}/mr", "'/opt/$HOME/`x` \"q\" *?~;&|<>(){}/mr' statusline"},
@@ -978,7 +978,7 @@ func TestQuotePath(t *testing.T) {
 }
 
 func TestSettingsRejectsBadExe(t *testing.T) {
-	for _, exe := range []string{"", "muxreveal", "./muxreveal", "bin/muxreveal"} {
+	for _, exe := range []string{"", "aim", "./aim", "bin/aim"} {
 		if _, err := (Claude{}).Settings(exe); err == nil {
 			t.Errorf("Settings(%q): want an error", exe)
 		}

@@ -125,7 +125,7 @@ linters:
     # G302: the 0700 run dir needs the exec bit and is owner-only.
     - linters: [gosec]
       text: "G302"
-      path: "cmd/muxreveal/hooks\\.go$"
+      path: "cmd/aim/hooks\\.go$"
     # containedctx: the context is the pane-process lifetime, owned by the app
     # and cancelled in Close.
     - linters: [containedctx]

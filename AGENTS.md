@@ -38,7 +38,7 @@ design; propose an edit to DESIGN.md instead.
 ## Commands
 
 ```sh
-make build        # bin/muxreveal
+make build        # bin/aim
 make run          # run the app; make run ARGS="..." passes arguments
 make test         # go test ./...
 make test-changed # the tests of the changed packages; TEST_PKGS=... overrides
@@ -56,7 +56,7 @@ make install      # go install into $GOBIN, else $GOPATH/bin
 
 | Package            | Responsibility                                                    |
 | ------------------ | ----------------------------------------------------------------- |
-| `cmd/muxreveal`    | Binary: CLI, `hook` and `statusline` subcommands, wiring          |
+| `cmd/aim`          | Binary: CLI, `hook` and `statusline` subcommands, wiring          |
 | `internal/core`    | Event bus, state store, actions, config, tab layouts (`internal/core/tiling` holds the ported tuios layouts) |
 | `internal/ui`      | Compositor, frames and chrome, widgets, keymap, themes, syntax highlighting, image placement |
 | `internal/term`    | PTY plus the `VT` interface; `tuios.dev/vt` adapter               |
@@ -70,7 +70,7 @@ make install      # go install into $GOBIN, else $GOPATH/bin
 
 Dependency rules:
 
-- Only `internal/ui` and `cmd/muxreveal` import Bubble Tea, Lip Gloss or
+- Only `internal/ui` and `cmd/aim` import Bubble Tea, Lip Gloss or
   Bubbles.
 - `internal/git`, `internal/github`, `internal/md` and `internal/store` have no
   UI imports and are testable on their own.

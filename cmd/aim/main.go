@@ -35,7 +35,7 @@ func main() {
 	stop()
 
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "muxreveal: %v\n", err)
+		fmt.Fprintf(os.Stderr, "aim: %v\n", err)
 		os.Exit(1)
 	}
 }
@@ -49,7 +49,7 @@ func newRootCmd() *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:           "muxreveal",
+		Use:           "aim",
 		Short:         "Coding agents in terminal panes, with their diffs and pull requests beside them",
 		Args:          cobra.NoArgs,
 		SilenceUsage:  true,
