@@ -2,7 +2,7 @@
 
 AIM shows three kinds of text in one reading box: an agent's plan, a markdown file from a worktree, and a pull request's conversation. They share their keys, search and links. This page covers opening each, then the keys.
 
-The keys are the defaults. A changed `leader_key` or `[keys]` table changes them; see [Keys](keys.md#reading-overlays) for the full list and for how to remap. The search prompt and the link chooser take fixed keys, given below.
+The keys are the defaults. A changed `leader_key` or `[keys]` table changes them; see [Keys](keys.md#reading-overlays) for the full list and [Configuration](config.md#remapping-keys) for how to remap. The search prompt and the link chooser take fixed keys, given below.
 
 ## The agent's plan
 

@@ -2,7 +2,7 @@
 
 AIM pushes an agent's branch, opens its pull request, shows the pull request's diff in the review drawer, lists the checks, approves and merges, and cleans up the worktree afterwards. This page covers each step and what AIM needs from GitHub.
 
-The keys are the defaults. A changed `leader_key` or `[keys]` table changes them; see [Keys](keys.md) for the full list and for how to remap. `[pull_requests]` in [`config.example.toml`](../../config.example.toml) has `review_requested_days`, which AIM uses for the Review requested tab.
+The keys are the defaults. A changed `leader_key` or `[keys]` table changes them; see [Keys](keys.md) for the full list and [Configuration](config.md#remapping-keys) for how to remap. `[pull_requests]` in [`config.example.toml`](../../config.example.toml) has `review_requested_days`, which AIM uses for the Review requested tab.
 
 ## What AIM needs
 

@@ -2,7 +2,7 @@
 
 The review drawer shows the diff of the agent in the focused pane, live, beside the pane: what it changed in its last turn, or everything the branch changed. This page covers opening the drawer, the two modes, reading and marking the diff, and how the drawer follows the agent from worktree to worktree.
 
-The keys are the defaults. A changed `leader_key` or `[keys]` table changes them; see [Keys](keys.md#review-drawer) for the full list and for how to remap. `[diff]` in [`config.example.toml`](../../config.example.toml) sets what a new drawer starts in.
+The keys are the defaults. A changed `leader_key` or `[keys]` table changes them; see [Keys](keys.md#review-drawer) for the full list and [Configuration](config.md#remapping-keys) for how to remap. `[diff]` in [`config.example.toml`](../../config.example.toml) sets what a new drawer starts in.
 
 ## Open, use and close the drawer
 

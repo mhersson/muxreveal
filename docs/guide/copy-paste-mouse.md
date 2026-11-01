@@ -2,7 +2,7 @@
 
 AIM copies text from a pane, the review drawer and the reading boxes, either with the mouse or with copy mode, a vim-style cursor over a pane's text and scrollback. This page covers both, where a copy ends up, and what the mouse does elsewhere.
 
-The keys are the defaults. A changed `leader_key` or `[keys]` table changes them; see [Keys](keys.md) for the full list and for how to remap. The keys inside copy mode and the mouse gestures are fixed and cannot be remapped.
+The keys are the defaults. A changed `leader_key` or `[keys]` table changes them; see [Keys](keys.md) for the full list and [Configuration](config.md#remapping-keys) for how to remap. The keys inside copy mode and the mouse gestures are fixed and cannot be remapped.
 
 ## Copy mode
 

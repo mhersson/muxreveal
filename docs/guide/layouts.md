@@ -2,7 +2,7 @@
 
 Every tab has its own layout mode, and the mode decides where a new pane goes and what resize and swap do. This page covers the three modes, switching between them, the layout commands, and moving panes between tabs.
 
-The keys here are the defaults. A changed `leader_key` or `[keys]` table changes them; see [Keys](keys.md) for the full list and for how to remap. Opening panes, focus and zoom are in [Agents side by side](agents.md).
+The keys here are the defaults. A changed `leader_key` or `[keys]` table changes them; see [Keys](keys.md) for the full list and [Configuration](config.md#remapping-keys) for how to remap. Opening panes, focus and zoom are in [Agents side by side](agents.md).
 
 ## The three modes
 
@@ -67,7 +67,7 @@ A swap ends zoom, and focus stays on the moved pane. With no neighbour in that d
 
 ## Move panes between tabs
 
-A moved pane keeps its process, its terminal and its history, and only changes size. It becomes the focused pane of the tab it lands in, and lands as that tab's mode places a new pane (a preselection in a BSP tab is used and cleared).
+A moved pane keeps its process, its terminal and its history, and only changes size. It becomes the focused pane of the tab it lands in, and lands as that tab's mode places a new pane. In a BSP tab it goes to the preselection, which is then cleared, otherwise beside the focused pane, split by `auto_scheme`.
 
 | To | Press |
 | --- | --- |

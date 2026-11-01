@@ -2,7 +2,7 @@
 
 AIM runs Claude Code in panes next to each other, in tabs, with a rail that lists every agent and a layout that comes back after a restart. This page covers starting agents, moving between panes and tabs, the rail, the command palette, closing things and what a restart restores.
 
-The keys here are the defaults. A changed `leader_key` or `[keys]` table changes them; see [Keys](keys.md) for the full list and for how to remap.
+The keys here are the defaults. A changed `leader_key` or `[keys]` table changes them; see [Keys](keys.md) for the full list and [Configuration](config.md#remapping-keys) for how to remap.
 
 ## The leader key
 
@@ -139,7 +139,7 @@ A shell pane closes at once. Anything that stops an agent asks first, in a box w
 - Closing a tab with agents: `Close tab 2 "api"?` with "Its agent panes will stop running."
 - Quitting with agents open: "Quit AIM?" with "Agent panes are running and will stop."
 
-A tab with no agents closes without asking, and so does a quit with none. A pane whose process exits closes without asking. The last pane of a tab removes the tab; the only tab stays and shows a welcome card. The push, approve and cleanup confirms take `enter` and `esc` only: see [Pull requests](pull-requests.md).
+A tab with no agents closes without asking, and so does a quit with none. A pane whose process exits closes without asking. The last pane of a tab removes the tab; the only tab stays and shows a welcome card. The push and approve confirms take `enter` and `esc` only, and the cleanup confirm also `w` and `b`: see [Pull requests](pull-requests.md).
 
 ## After a restart
 
@@ -163,4 +163,4 @@ Only one AIM saves. A second one started while the first runs starts fresh, neve
 
 ### Where it lives
 
-The state is in `$XDG_STATE_HOME/aim` (`~/.local/state/aim` when unset) on Linux and `~/Library/Application Support/aim` on macOS. `state.json` is the layout and `aim.log` is the log.
+The state is in `$XDG_STATE_HOME/aim` (`~/.local/state/aim` when unset or relative) on Linux and `~/Library/Application Support/aim` on macOS. `state.json` is the layout and `aim.log` is the log.
