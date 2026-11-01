@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"reflect"
 	"slices"
 	"strings"
@@ -152,6 +153,27 @@ func TestCheckKeysErrors(t *testing.T) {
 		{"key under a bound key", leaderKeys("q x", "pr.list"), `keys.leader: "q" is bound and starts "q x"`},
 		{"prefix freed", leaderKeys(append([]string{"g", "pr.list"}, noGit...)...), ""},
 		{
+			"pr list without close", contextKeys("pr_list", "esc", "none"),
+			"keys.pr_list: nothing is bound to prlist.close, so the PR list could not close",
+		},
+		{
+			"checks without close", contextKeys("checks", "esc", "none"),
+			"keys.checks: nothing is bound to checks.close, so the checks overlay could not close",
+		},
+		{
+			"reader without close", contextKeys("reader", "esc", "none"),
+			"keys.reader: nothing is bound to reader.close, so the overlay could not close",
+		},
+		{
+			"merge without cancel", contextKeys("merge", "esc", "none"),
+			"keys.merge: nothing is bound to merge.cancel, so the merge box could not close",
+		},
+		{"merge takes the leader key", contextKeys("merge", "ctrl+space", "merge.run"), ""},
+		{"reader takes the leader key", contextKeys("reader", "ctrl+space", "reader.top"), ""},
+		{"pr list close moved", contextKeys("pr_list", "esc", "none", "q", "prlist.close"), ""},
+		{"rail needs no close", contextKeys("rail", "esc", "none"), ""},
+		{"drawer needs no close", drawerKeys("esc", "none"), ""},
+		{
 			"leader under leader",
 			func() core.KeysConfig {
 				c := leaderKeys("ctrl+a", "pr.list")
@@ -184,6 +206,67 @@ func TestCheckKeysErrors(t *testing.T) {
 				t.Errorf("CheckKeys() = %v, want %q", err, tt.want)
 			}
 		})
+	}
+}
+
+func TestComposeKeyErrors(t *testing.T) {
+	t.Parallel()
+
+	typing := func(k string) string {
+		return fmt.Sprintf("keys.compose: %q is a key the title and body take", k)
+	}
+
+	tests := []struct {
+		name string
+		cfg  core.KeysConfig
+		want string
+	}{
+		{"leader key", contextKeys("compose", "ctrl+space", "compose.create"), `keys.compose: "ctrl+space" is the leader key`},
+		{"no cancel", contextKeys("compose", "esc", "none"), "keys.compose: nothing is bound to compose.cancel, so the compose box could not close"},
+		{"typing key with another context's command", contextKeys("compose", "s", "merge.run"), `keys.compose: "s" = "merge.run": not a compose command`},
+		{"typing key none", contextKeys("compose", "s", "none", "esc", "compose.cancel"), ""},
+	}
+	for _, k := range []string{"s", "H", "space", "enter", "left", "pgdown", "home", "shift+left", "shift+enter", "backspace", "delete"} {
+		tests = append(tests, struct {
+			name string
+			cfg  core.KeysConfig
+			want string
+		}{"refuses " + k, contextKeys("compose", k, "compose.create"), typing(k)})
+	}
+
+	for _, k := range []string{"ctrl+o", "alt+s", "f5", "tab", "insert", "ctrl+left", "shift+tab"} {
+		tests = append(tests, struct {
+			name string
+			cfg  core.KeysConfig
+			want string
+		}{"accepts " + k, contextKeys("compose", k, "compose.create"), ""})
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			err := CheckKeys(tt.cfg)
+			switch {
+			case tt.want == "" && err != nil:
+				t.Errorf("CheckKeys() = %v, want nil", err)
+			case tt.want != "" && (err == nil || err.Error() != tt.want):
+				t.Errorf("CheckKeys() = %v, want %q", err, tt.want)
+			}
+		})
+	}
+}
+
+func TestComposeTypes(t *testing.T) {
+	t.Parallel()
+
+	for key, want := range map[string]bool{
+		"s": true, "H": true, "shift+h": true, "shift+left": true, "space": true, "enter": true, "pgup": true,
+		"ctrl+k": false, "alt+b": false, "tab": false, "esc": false, "f1": false, "insert": false, "ctrl+shift+left": false,
+	} {
+		if got := composeTypes(key); got != want {
+			t.Errorf("composeTypes(%q) = %v, want %v", key, got, want)
+		}
 	}
 }
 
@@ -590,7 +673,19 @@ func TestDefaultDrawerKeysUnchanged(t *testing.T) {
 func TestKeyTableHint(t *testing.T) {
 	t.Parallel()
 
-	tb := keyTable{binds: []reviewKey{{"j", "a"}, {"k", "b"}}}
+	tb := keyTable{binds: []reviewKey{
+		{"j", "a"},
+		{"k", "b"},
+		{"ctrl+d", "cd"},
+		{"ctrl+u", "cu"},
+		{"alt+j", "aj"},
+		{"alt+k", "ak"},
+		{"u", "u"},
+		{"ctrl+k", "ck"},
+		{"ctrl+alt+d", "cad"},
+		{"ctrl++", "cplus"},
+		{"ctrl+-", "cminus"},
+	}}
 
 	tests := []struct {
 		name string
@@ -600,6 +695,12 @@ func TestKeyTableHint(t *testing.T) {
 		{"two commands", []string{"a", "b"}, "j/k"},
 		{"one command", []string{"a"}, "j"},
 		{"one unbound", []string{"a", "missing"}, ""},
+		{"shared ctrl", []string{"cd", "cu"}, "ctrl+d/u"},
+		{"shared alt", []string{"aj", "ak"}, "alt+j/k"},
+		{"bare after mods", []string{"cd", "u"}, "ctrl+d, u"},
+		{"mods after bare", []string{"a", "ck"}, "j/ctrl+k"},
+		{"different mods", []string{"cad", "cu"}, "ctrl+alt+d/ctrl+u"},
+		{"plus and minus", []string{"cplus", "cminus"}, "ctrl++/-"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

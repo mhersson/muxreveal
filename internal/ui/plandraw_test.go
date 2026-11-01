@@ -51,25 +51,37 @@ func TestPlanHints(t *testing.T) {
 		closeIt = "esc close"
 	)
 
+	defaults := keyTable{binds: readerKeys}
+
+	_, tables, err := resolveKeys(contextKeys("reader", "n", "reader.line.next", "p", "reader.line.prev", "ctrl+d", "none"), testRegistry(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	remapped := tables.reader
+
 	tests := []struct {
 		width int
+		kt    keyTable
 		want  []string
 	}{
-		{100, []string{line, half, heading, search, open, closeIt}},
-		{84, []string{line, half, heading, search, open, closeIt}},
-		{83, []string{line, half, heading, open, closeIt}},
-		{72, []string{line, half, heading, open, closeIt}},
-		{71, []string{line, half, open, closeIt}},
-		{57, []string{line, half, open, closeIt}},
-		{56, []string{line, open, closeIt}},
-		{35, []string{line, open, closeIt}},
-		{34, []string{line, closeIt}},
-		{5, []string{line, closeIt}},
+		{100, remapped, []string{"n/p line", heading, search, open, closeIt}},
+		{34, remapped, []string{"n/p line", closeIt}},
+		{100, defaults, []string{line, half, heading, search, open, closeIt}},
+		{84, defaults, []string{line, half, heading, search, open, closeIt}},
+		{83, defaults, []string{line, half, heading, open, closeIt}},
+		{72, defaults, []string{line, half, heading, open, closeIt}},
+		{71, defaults, []string{line, half, open, closeIt}},
+		{57, defaults, []string{line, half, open, closeIt}},
+		{56, defaults, []string{line, open, closeIt}},
+		{35, defaults, []string{line, open, closeIt}},
+		{34, defaults, []string{line, closeIt}},
+		{5, defaults, []string{line, closeIt}},
 	}
 
 	for _, tt := range tests {
 		var got []string
-		for _, p := range planHints(tt.width) {
+		for _, p := range planHints(tt.kt, tt.width) {
 			got = append(got, p[0]+" "+p[1])
 		}
 

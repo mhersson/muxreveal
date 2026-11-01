@@ -333,7 +333,7 @@ func TestResizeKeepsTheTreeOpen(t *testing.T) {
 func TestClickWhereAHiddenTreeWouldBe(t *testing.T) {
 	t.Parallel()
 	r, v := treeRig(t, 200, 50, treeStartHidden)
-	r.keys(keyEsc)
+	r.leader('h')
 
 	// Row 8 of the drawer is where a tree lists z.txt, after the mode and totals rows and a blank.
 	x, y := r.drawerCell(t, 2, 1+3+5)

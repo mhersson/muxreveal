@@ -3,6 +3,7 @@ package ui
 import (
 	"cmp"
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"path/filepath"
@@ -34,15 +35,21 @@ type planView struct {
 	root, base string
 	view       mdView
 
+	// sum is the hash of the plan bytes view.doc was parsed from; a file
+	// overlay keeps its sum in file.
+	sum [sha256.Size]byte
+
 	// pages are the markdown files followed from the plan, the last one shown;
 	// pageSeq is the serial of the newest page ask.
 	pages   []*planPage
 	pageSeq int
 	chooser *linkChooser
 
-	// reloadSeq is the serial of the newest reload ask; rewritten is set by a
-	// reload and cleared by the next key.
+	// reloadSeq is the serial of the newest reload ask; askSeq is the serial of
+	// the newest ask the operator made of a page or file, the only one whose
+	// failure speaks. rewritten is set by a reload and cleared by the next key.
 	reloadSeq int
+	askSeq    int
 	rewritten bool
 
 	// searching is the prompt being open, typing into query; last is the query
@@ -56,6 +63,9 @@ type planView struct {
 type planReadMsg struct {
 	seq        int
 	reload     bool
+	again      bool // a read the operator asked for, not a rewrite
+	known, sum [sha256.Size]byte
+	same       bool // an asked read found the bytes of known
 	view       *planView
 	pane       core.PaneID
 	plan       core.Plan
@@ -124,6 +134,13 @@ func (a *App) readPlanCmd(msg planReadMsg) tea.Cmd {
 			return msg
 		}
 
+		msg.sum = sha256.Sum256(src)
+		if msg.again && msg.sum == msg.known {
+			msg.same = true
+
+			return msg
+		}
+
 		msg.doc = parseMarkdown(src, msg.base, tok)
 
 		return msg
@@ -157,7 +174,7 @@ func (a *App) onPlanRead(msg planReadMsg) {
 	a.endLeader()
 	a.plan = &planView{
 		pane: msg.pane, agent: printable(a.cardName(a.store.State(), msg.pane)),
-		plan: msg.plan, root: msg.root, base: msg.base, view: mdView{doc: msg.doc},
+		plan: msg.plan, root: msg.root, base: msg.base, view: mdView{doc: msg.doc}, sum: msg.sum,
 	}
 	a.sizePlan()
 
@@ -174,15 +191,15 @@ func (a *App) planShowing(id core.PaneID, path string) bool {
 	return a.plan != nil && a.plan.pane == id && a.plan.plan.Path == path
 }
 
-// reloadPlan reads the rewritten plan p again for the open overlay, off the
-// update loop.
-func (a *App) reloadPlan(p core.Plan) tea.Cmd {
+// reloadPlan reads plan p again for the open overlay, off the update loop; again
+// says the operator asked for it, so it is not marked rewritten.
+func (a *App) reloadPlan(p core.Plan, again bool) tea.Cmd {
 	pv := a.plan
 	pv.reloadSeq++
 
 	a.pictures.retry(docPictures{reg: a.pictures, root: pv.root}, pv.view.layout())
 
-	return a.readPlanCmd(planReadMsg{seq: pv.reloadSeq, reload: true, view: pv, pane: pv.pane, plan: p, root: pv.root, base: pv.base})
+	return a.readPlanCmd(planReadMsg{seq: pv.reloadSeq, reload: true, again: again, known: pv.sum, view: pv, pane: pv.pane, plan: p, root: pv.root, base: pv.base})
 }
 
 // onPlanReload swaps in a rewritten plan, keeping the view's place. An answer
@@ -202,13 +219,18 @@ func (a *App) onPlanReload(msg planReadMsg) {
 		return
 	}
 
+	if msg.same {
+		return
+	}
+
 	msg.doc.withPictures(docPictures{reg: a.pictures, root: pv.root})
 
 	v := &pv.view
 	old := v.layout() // keeps the cursor in range, so top and cursor are read after it
 	v.top, v.cursor = keepPlace(old, msg.doc.layout(v.textWidth(), v.icons), v.top, v.cursor)
 	v.doc = msg.doc
-	pv.plan, pv.rewritten = msg.plan, true
+	pv.plan, pv.sum = msg.plan, msg.sum
+	pv.rewritten = pv.rewritten || !msg.again
 
 	a.sizePlan()
 }
@@ -344,8 +366,8 @@ func (a *App) sizePlan() {
 	}
 }
 
-// handlePlanKey answers the open plan overlay; any other key is dropped. A box
-// too small to draw answers esc alone.
+// handlePlanKey answers the open plan overlay. An open chooser or prompt
+// closes on esc at any size; a box too small to draw answers reader.close alone.
 func (a *App) handlePlanKey(msg tea.KeyPressMsg) tea.Cmd {
 	a.notice = ""
 	key := bindingKey(msg)
@@ -353,28 +375,20 @@ func (a *App) handlePlanKey(msg tea.KeyPressMsg) tea.Cmd {
 	pv := a.plan
 	pv.rewritten = false
 
-	if key == "esc" {
+	if key == "esc" && (pv.chooser != nil || pv.searching) {
 		a.clearTextSel()
 
-		var cmd tea.Cmd
-
-		switch {
-		case pv.chooser != nil:
+		if pv.chooser != nil {
 			pv.chooser = nil
-		case pv.searching:
+		} else {
 			pv.searching, pv.query = false, ""
-		case len(pv.pages) > 0:
-			cmd = a.planPop()
-		default:
-			a.closePlan()
 		}
 
-		return cmd
+		return nil
 	}
 
-	_, _, _, boxH, ok := planBox(a.width, a.height)
-	if !ok {
-		return nil
+	if _, _, _, _, ok := planBox(a.width, a.height); !ok {
+		return a.readerClose(key)
 	}
 
 	if pv.chooser != nil {
@@ -396,58 +410,7 @@ func (a *App) handlePlanKey(msg tea.KeyPressMsg) tea.Cmd {
 		return nil
 	}
 
-	cmd, acted := a.planKey(pv, key, boxH)
-	if acted {
-		a.clearTextSel()
-	}
-
-	return cmd
-}
-
-// planKey runs a key of the overlay's own switch and reports whether it acted:
-// y copies and keeps a selection, and a key the switch drops keeps it too.
-func (a *App) planKey(pv *planView, key string, boxH int) (cmd tea.Cmd, acted bool) {
-	v := pv.shown()
-
-	switch key {
-	case "y":
-		return a.planCopy(), false
-	case "j", "down":
-		v.move(1)
-	case "k", "up":
-		v.move(-1)
-	case "ctrl+d":
-		v.page(1)
-	case "ctrl+u":
-		v.page(-1)
-	case "ctrl+f", "pgdown":
-		v.pageFull(1)
-	case "ctrl+b", "pgup":
-		v.pageFull(-1)
-	case "g":
-		v.end(false)
-	case "G":
-		v.end(true)
-	case "]":
-		v.heading(1)
-	case "[":
-		v.heading(-1)
-	case "enter":
-		cmd = a.planEnter()
-	case "/":
-		// The prompt draws in the hint row, so without one there is nowhere to type.
-		if _, _, hint := planRows(boxH); hint {
-			pv.searching, pv.query = true, ""
-		}
-	case "n":
-		a.planFind(pv.last, false)
-	case "N":
-		a.planFind(pv.last, true)
-	default:
-		return nil, false
-	}
-
-	return cmd, true
+	return a.readerKey(key)
 }
 
 // planCopy is y: the selection, kept, else the paragraph or item at the cursor.

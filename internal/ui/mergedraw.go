@@ -91,9 +91,11 @@ func (a *App) mergeBox(lk look, w, room int) []string {
 	}
 
 	if warn := mergeWarning(pr, a.mergeChecks(state, v), cw-ansi.StringWidth(mark)); warn != "" {
-		lines = append(lines,
-			mergeLine{text: run(mark+printable(warn), ui.Warning, false)},
-			mergeLine{text: run(mergeReminder, ui.Warning, false)})
+		lines = append(lines, mergeLine{text: run(mark+printable(warn), ui.Warning, false)})
+
+		if reminder := mergeReminder(a.keys.merge); reminder != "" {
+			lines = append(lines, mergeLine{text: run(reminder, ui.Warning, false)})
+		}
 	}
 
 	lines = append(lines, mergeLine{blank: true}, mergeLine{text: a.mergeChips(v, lk)})
@@ -102,7 +104,7 @@ func (a *App) mergeBox(lk look, w, room int) []string {
 		lines = append(lines, mergeLine{blank: true}, mergeLine{text: a.mergeDelete(v, lk, cw)})
 	}
 
-	hints := mergeHints(v, cw, lk)
+	hints := mergeHints(v, a.keys.merge, cw, lk)
 	if hints != "" {
 		lines = append(lines, mergeLine{blank: true}, mergeLine{text: hints, hint: true})
 	}
@@ -166,7 +168,11 @@ func (a *App) mergeChips(v *mergeView, lk look) string {
 
 		first = false
 
-		chip := " " + string(m[0]) + " " + string(m) + " "
+		chip := " " + string(m) + " "
+		if k := a.keys.merge.hint(mergeMethodCommands[m]); k != "" {
+			chip = " " + k + chip
+		}
+
 		if m == v.method {
 			sb.WriteString(paint(ui.OnAccent, ui.Accent, true).Render(chip))
 		} else {
@@ -200,16 +206,16 @@ func (a *App) mergeDelete(v *mergeView, lk look, cw int) string {
 
 // mergeHints are the key hints that fit cw cells; ones that do not are dropped
 // from the end, and none that fit leaves "".
-func mergeHints(v *mergeView, cw int, lk look) string {
-	pairs := [][2]string{{"s/m/r", "method"}}
+func mergeHints(v *mergeView, kt keyTable, cw int, lk look) string {
+	pairs := [][2]string{{kt.hint("merge.method.squash", "merge.method.merge", "merge.method.rebase"), "method"}}
 
 	if v.deleteShown() {
-		pairs = append(pairs, [2]string{"d", "delete branch"})
+		pairs = append(pairs, [2]string{kt.hint("merge.delete"), "delete branch"})
 	}
 
-	pairs = append(pairs, [2]string{"enter", "merge"}, [2]string{"esc", "cancel"})
+	pairs = append(pairs, [2]string{kt.hint("merge.run"), "merge"}, [2]string{kt.hint("merge.cancel"), "cancel"})
 
-	return hintLine(pairs, cw, lk.styles)
+	return hintLine(hintPairs(pairs), cw, lk.styles)
 }
 
 // hintLine draws key and label pairs four cells apart; pairs that do not fit

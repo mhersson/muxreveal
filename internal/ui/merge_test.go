@@ -366,7 +366,7 @@ func TestMergeWithoutActions(t *testing.T) {
 		t.Errorf("box %v, notice %q, want no box and %q", r.merge, r.notice, noticePRsOff)
 	}
 
-	r.keys(keyEsc)
+	r.leader('h')
 	r.leader('g')
 	r.typed("m")
 
@@ -599,6 +599,103 @@ func mergeScene(t *testing.T, icons bool, w, h int, warn bool) *App {
 	}
 
 	return s.build(t)
+}
+
+func TestMergeRemappedKeys(t *testing.T) {
+	t.Parallel()
+
+	r, f := inMergeDrawer(t, everyMethod, nil)
+	r.typed("M")
+	remapTables(t, r.App, contextKeys("merge", "1", "merge.method.squash", "s", "none", "q", "merge.cancel"))
+
+	r.typed("1")
+
+	if r.merge.method != github.Squash {
+		t.Fatalf("1 chose %q, want squash", r.merge.method)
+	}
+
+	r.typed("m")
+	r.typed("s")
+
+	if r.merge.method != github.MergeCommit {
+		t.Errorf("s moved the method to %q", r.merge.method)
+	}
+
+	got := ansi.Strip(r.View().Content)
+	if !strings.Contains(got, "1/m/r method") {
+		t.Errorf("the hints do not show 1/m/r:\n%s", got)
+	}
+
+	if !strings.Contains(got, " 1 squash ") || strings.Contains(got, " s squash ") {
+		t.Errorf("the chips do not show 1 for squash:\n%s", got)
+	}
+
+	r.typed("q")
+
+	if r.merge != nil || len(f.merged()) != 0 {
+		t.Fatalf("q left the box %+v open or merged %v", r.merge, f.merged())
+	}
+
+	r.typed("M")
+	r.keys(keyEsc)
+
+	if r.merge != nil {
+		t.Error("esc did not close the reopened box")
+	}
+}
+
+// The chips and the reminder name the keys as bound.
+func TestMergeBoxNamesKeysAsBound(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		pairs []string
+		has   []string
+		not   []string
+	}{
+		{
+			"merge.run moved",
+			[]string{"ctrl+m", "merge.run", "enter", "none"},
+			[]string{"ctrl+m still merges if GitHub allows it"},
+			[]string{"enter still merges"},
+		},
+		{
+			"merge.run unbound",
+			[]string{"enter", "none"},
+			nil,
+			[]string{"still merges"},
+		},
+		{
+			"method unbound",
+			[]string{"s", "none"},
+			[]string{" squash ", " m merge "},
+			[]string{" s squash "},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			r, _ := inMergeDrawer(t, everyMethod, nil)
+			r.typed("M")
+			remapTables(t, r.App, contextKeys("merge", tc.pairs...))
+
+			got := ansi.Strip(r.View().Content)
+			for _, w := range tc.has {
+				if !strings.Contains(got, w) {
+					t.Errorf("the box lacks %q:\n%s", w, got)
+				}
+			}
+
+			for _, n := range tc.not {
+				if strings.Contains(got, n) {
+					t.Errorf("the box holds %q:\n%s", n, got)
+				}
+			}
+		})
+	}
 }
 
 // TestMergeGolden draws the box once in colour; it compares highlighted

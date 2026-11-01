@@ -20,10 +20,10 @@ func TestAfterLoadActionNeedsTheKeyboard(t *testing.T) {
 		r.poll()
 		r.opened(t)
 		r.typed("a")
-		r.keys(keyEsc)
+		r.leader('h')
 
 		if r.drawer.focused {
-			t.Fatal("esc left the drawer focused")
+			t.Fatal("leader h left the drawer focused")
 		}
 
 		r.until(t, "the PR to load", r.inPRMode(7))
@@ -72,7 +72,7 @@ func TestAfterLoadActionNeedsTheKeyboard(t *testing.T) {
 		r.poll()
 		r.opened(t)
 		r.typed("M")
-		r.keys(keyEsc)
+		r.leader('h')
 
 		r.until(t, "the PR to load", r.inPRMode(7))
 		r.settle()
@@ -94,10 +94,10 @@ func TestAfterLoadActionNeedsTheKeyboard(t *testing.T) {
 
 		r.poll()
 		r.opened(t)
-		r.keys(keyEsc)
+		r.leader('h')
 
 		if r.drawer.focused {
-			t.Fatal("esc left the drawer focused")
+			t.Fatal("leader h left the drawer focused")
 		}
 
 		r.leader('g')

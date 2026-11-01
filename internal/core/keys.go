@@ -33,11 +33,14 @@ type KeysConfig struct {
 	LeaderKey     string `toml:"leader_key"`
 	WhichKeyDelay *int   `toml:"which_key_delay"` // milliseconds; nil means the default
 
-	Leader map[string]string `toml:"leader"`
-	Drawer map[string]string `toml:"drawer"`
-	Rail   map[string]string `toml:"rail"`
-	PRList map[string]string `toml:"pr_list"`
-	Checks map[string]string `toml:"checks"`
+	Leader  map[string]string `toml:"leader"`
+	Drawer  map[string]string `toml:"drawer"`
+	Rail    map[string]string `toml:"rail"`
+	PRList  map[string]string `toml:"pr_list"`
+	Checks  map[string]string `toml:"checks"`
+	Reader  map[string]string `toml:"reader"`
+	Merge   map[string]string `toml:"merge"`
+	Compose map[string]string `toml:"compose"`
 
 	Order map[string][]string `toml:"-"`
 }
@@ -47,7 +50,7 @@ type KeyBind struct{ Key, Command string }
 
 // KeyContexts lists the [keys.<context>] tables.
 func KeyContexts() []string {
-	return []string{"leader", "drawer", "rail", "pr_list", "checks"}
+	return []string{"leader", "drawer", "rail", "pr_list", "checks", "reader", "merge", "compose"}
 }
 
 func (c KeysConfig) table(context string) map[string]string {
@@ -62,6 +65,12 @@ func (c KeysConfig) table(context string) map[string]string {
 		return c.PRList
 	case "checks":
 		return c.Checks
+	case "reader":
+		return c.Reader
+	case "merge":
+		return c.Merge
+	case "compose":
+		return c.Compose
 	}
 
 	return nil

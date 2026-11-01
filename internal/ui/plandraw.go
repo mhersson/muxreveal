@@ -95,10 +95,27 @@ func planIndicator(lines, rows, top int) string {
 	return " " + strconv.Itoa((top*200+span)/(2*span)) + "% "
 }
 
-// planHints are the key hints that fit w cells; the least needed drop first and
-// esc always stays.
-func planHints(w int) [][2]string {
-	pairs := [][2]string{{"j/k", "line"}, {"ctrl+d/u", "half page"}, {"]/[", "heading"}, {"/", "search"}, {"enter", "open"}, {"esc", "close"}}
+// planHints are the key hints that fit w cells, with the keys as kt binds them; the
+// least needed drop first and close always stays. A pair with no key is left out.
+func planHints(kt keyTable, w int) [][2]string {
+	var pairs [][2]string
+
+	for _, d := range []struct {
+		label string
+		ids   []string
+	}{
+		{"line", []string{"reader.line.next", "reader.line.prev"}},
+		{"half page", []string{"reader.page.down", "reader.page.up"}},
+		{"heading", []string{"reader.section.next", "reader.section.prev"}},
+		{"search", []string{"reader.search"}},
+		{"open", []string{"reader.open"}},
+		{"close", []string{"reader.close"}},
+	} {
+		if k := kt.hint(d.ids...); k != "" {
+			pairs = append(pairs, [2]string{k, d.label})
+		}
+	}
+
 	width := func() int {
 		n := planHintGap * (len(pairs) - 1)
 		for _, p := range pairs {
@@ -108,9 +125,9 @@ func planHints(w int) [][2]string {
 		return n
 	}
 
-	for _, drop := range []string{"/", "]/[", "ctrl+d/u", "enter"} {
+	for _, drop := range []string{"search", "heading", "half page", "open"} {
 		if width() > w {
-			pairs = slices.DeleteFunc(pairs, func(p [2]string) bool { return p[0] == drop })
+			pairs = slices.DeleteFunc(pairs, func(p [2]string) bool { return p[1] == drop })
 		}
 	}
 
@@ -292,7 +309,7 @@ func (a *App) planHintRow(ui theme.UI, w int) string {
 
 	var b strings.Builder
 
-	for i, p := range planHints(w) {
+	for i, p := range planHints(a.keys.reader, w) {
 		if i > 0 {
 			b.WriteString(on(ui.Fg).Render(strings.Repeat(" ", planHintGap)))
 		}

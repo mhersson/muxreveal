@@ -158,7 +158,7 @@ func TestConversationFromTheDrawer(t *testing.T) {
 		r.poll()
 		r.opened(t)
 		r.typed("i")
-		r.keys(keyEsc)
+		r.leader('h')
 
 		r.until(t, "the PR to load", r.inPRMode(7))
 		r.settle()

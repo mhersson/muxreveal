@@ -128,7 +128,7 @@ func reviewCommands() []command {
 		cmd("review.worktrees", "Review: worktrees", (*App).openWorktrees),
 		cmd("review.edit", "Review: open in the editor", (*App).reviewEdit),
 		cmd("review.refresh", "Review: refresh", (*App).reviewReload),
-		cmd("review.back", "Review: back to the panes", (*App).reviewBack),
+		cmd("review.back", "Review: back, else close the drawer", (*App).reviewBack),
 	}
 
 	// A markdown page answers only its own keys; the others are dropped.
@@ -314,11 +314,12 @@ func (a *App) reviewSearch() tea.Cmd {
 	return nil
 }
 
-// reviewBack closes the search prompt, gives the diff the keyboard back from the
-// tree, or else returns the keyboard to the panes.
+// reviewBack steps back one level: it closes the search prompt, pops a page,
+// leaves the tree or un-zooms the drawer; with none of those it closes the
+// drawer as leader d does. It does nothing while the drawer slides out.
 func (a *App) reviewBack() tea.Cmd {
 	_, v, ok := a.reviewActive()
-	if !ok {
+	if !ok || a.drawer.closing {
 		return nil
 	}
 
@@ -329,8 +330,12 @@ func (a *App) reviewBack() tea.Cmd {
 		return a.popPage(a.store.State().Tab().ID, v)
 	case a.drawer.tree:
 		a.reviewLeaveTree(v, false)
+	case v.zoom:
+		return a.reviewZoom()
 	default:
-		return a.drawerLeave()
+		a.endSlide()
+
+		return a.closeDrawer(true)
 	}
 
 	return nil

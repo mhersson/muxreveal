@@ -250,7 +250,13 @@ func defaultCommands() []command {
 	cmds = append(cmds, railCommands()...)
 	cmds = append(cmds, prListCommands()...)
 
-	return append(cmds, checksCommands()...)
+	cmds = append(cmds, checksCommands()...)
+
+	cmds = append(cmds, readerCommands()...)
+
+	cmds = append(cmds, mergeCommands()...)
+
+	return append(cmds, composeCommands()...)
 }
 
 // zoomPane is pane.zoom: it zooms the focused pane, or the review drawer while

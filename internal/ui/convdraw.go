@@ -119,7 +119,7 @@ func (a *App) convLines(lk look, w, h int) (out []string, pics []picRow) {
 	}
 
 	if hint {
-		hints := convHints(lk.styles, tw)
+		hints := convHints(lk.styles, a.keys.reader, tw)
 		if v.searching {
 			hints = searchPromptRow(ui, tw, v.query)
 		}
@@ -138,15 +138,33 @@ func (a *App) convLines(lk look, w, h int) (out []string, pics []picRow) {
 	return out, pics
 }
 
-// convHints is the overlay's hint row in cw cells: the pairs that do not fit
-// drop from the end, and esc close always stays.
-func convHints(st styles, cw int) string {
-	lead := [][2]string{{"j/k", "line"}, {"]/[", "item"}, {"enter", "open"}, {"/", "search"}, {"r", "refresh"}}
-	closing := [][2]string{{"esc", "close"}}
+// convHints is the overlay's hint row in cw cells, with the keys as kt binds them: the
+// pairs that do not fit drop from the end, and close always stays. A pair with no key
+// is left out.
+func convHints(st styles, kt keyTable, cw int) string {
+	var lead [][2]string
+
+	for _, d := range []struct {
+		label string
+		ids   []string
+	}{
+		{"line", []string{"reader.line.next", "reader.line.prev"}},
+		{"item", []string{"reader.section.next", "reader.section.prev"}},
+		{"open", []string{"reader.open"}},
+		{"search", []string{"reader.search"}},
+		{"refresh", []string{"reader.refresh"}},
+	} {
+		if k := kt.hint(d.ids...); k != "" {
+			lead = append(lead, [2]string{k, d.label})
+		}
+	}
+
+	closeKey := kt.hint("reader.close")
+	closing := [][2]string{{closeKey, "close"}}
 
 	const gap = 4
 
-	room := cw - ansi.StringWidth("esc close") - gap
+	room := cw - ansi.StringWidth(closeKey+" close") - gap
 	hints := popupHints(st, lead, room)
 
 	if hints != "" {

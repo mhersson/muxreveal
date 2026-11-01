@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/mhersson/muxreveal/internal/core"
 )
@@ -75,10 +77,13 @@ type keyTable struct{ binds []reviewKey }
 
 // keyTables holds the resolved tables of the contexts other than the leader.
 type keyTables struct {
-	drawer keyTable
-	rail   keyTable
-	prList keyTable
-	checks keyTable
+	drawer  keyTable
+	rail    keyTable
+	prList  keyTable
+	checks  keyTable
+	reader  keyTable
+	merge   keyTable
+	compose keyTable
 }
 
 // lookup is the command a key runs.
@@ -90,6 +95,13 @@ func (t keyTable) lookup(key string) (string, bool) {
 	return "", false
 }
 
+// has reports whether key is bound in the table.
+func (t keyTable) has(key string) bool {
+	_, ok := t.lookup(key)
+
+	return ok
+}
+
 // first is the first key bound to a command.
 func (t keyTable) first(id string) (string, bool) {
 	if i := slices.IndexFunc(t.binds, func(b reviewKey) bool { return b.command == id }); i >= 0 {
@@ -99,7 +111,23 @@ func (t keyTable) first(id string) (string, bool) {
 	return "", false
 }
 
+// keyMods splits key into its modifier prefix ("ctrl+alt+") and the rest, leaving
+// at least one character in base.
+func keyMods(key string) (mods, base string) {
+	base = key
+
+	for _, m := range []string{"ctrl+", "alt+", "shift+", "meta+", "hyper+", "super+"} {
+		if rest, ok := strings.CutPrefix(base, m); ok && rest != "" {
+			base = rest
+		}
+	}
+
+	return key[:len(key)-len(base)], base
+}
+
 // hint joins the first keys of the commands with "/"; it is "" when one has no key.
+// Keys that all carry the same modifiers share them (ctrl+d/u), and a key without
+// modifiers after one with them follows a comma (ctrl+d, u).
 func (t keyTable) hint(ids ...string) string {
 	keys := make([]string, len(ids))
 
@@ -112,7 +140,56 @@ func (t keyTable) hint(ids ...string) string {
 		keys[i] = k
 	}
 
-	return strings.Join(keys, "/")
+	shared := true
+	firstMods, _ := keyMods(keys[0])
+
+	for _, k := range keys {
+		if m, _ := keyMods(k); m == "" || m != firstMods {
+			shared = false
+		}
+	}
+
+	var b strings.Builder
+
+	prev := ""
+
+	for i, k := range keys {
+		mods, base := keyMods(k)
+
+		if i > 0 {
+			if prev != "" && mods == "" {
+				b.WriteString(", ")
+			} else {
+				b.WriteString("/")
+			}
+
+			if shared {
+				k = base
+			}
+		}
+
+		b.WriteString(k)
+
+		prev = mods
+	}
+
+	return b.String()
+}
+
+// composeTypes reports whether the compose box's fields take key as text or
+// cursor movement: a bare or shifted printable character or editing key.
+func composeTypes(key string) bool {
+	mods, base := keyMods(key)
+	if mods != "" && mods != "shift+" {
+		return false
+	}
+
+	switch base {
+	case "space", "enter", "backspace", "delete", "up", "down", "left", "right", "home", "end", "pgup", "pgdown":
+		return true
+	}
+
+	return utf8.RuneCountInString(base) == 1 && unicode.IsPrint([]rune(base)[0])
 }
 
 // resolveKeys lays the config over the leader keymap and the context tables.
@@ -129,16 +206,21 @@ func resolveKeys(cfg core.KeysConfig, reg *registry) (keymap, keyTables, error) 
 		defaults      []reviewKey
 		accept        func(id string) bool
 		into          *keyTable
+		// close is the command that ends a view the leader does not reach; "" when the leader closes it.
+		close, closeNoun string
 	}{
-		{"drawer", "drawer", reviewKeys, func(id string) bool { return strings.HasPrefix(id, "review.") }, &tables.drawer},
-		{"rail", "rail", railKeys, scopedTo(reg, "rail"), &tables.rail},
-		{"pr_list", "PR list", prListKeys, scopedTo(reg, "pr_list"), &tables.prList},
-		{"checks", "checks", checksKeys, scopedTo(reg, "checks"), &tables.checks},
+		{"drawer", "drawer", reviewKeys, func(id string) bool { return strings.HasPrefix(id, "review.") }, &tables.drawer, "", ""},
+		{"rail", "rail", railKeys, scopedTo(reg, "rail"), &tables.rail, "", ""},
+		{"pr_list", "PR list", prListKeys, scopedTo(reg, "pr_list"), &tables.prList, "prlist.close", "PR list"},
+		{"checks", "checks", checksKeys, scopedTo(reg, "checks"), &tables.checks, "checks.close", "checks overlay"},
+		{"reader", "reader", readerKeys, scopedTo(reg, "reader"), &tables.reader, "reader.close", "overlay"},
+		{"merge", "merge", mergeKeys, scopedTo(reg, "merge"), &tables.merge, "merge.cancel", "merge box"},
+		{"compose", "compose", composeKeys, scopedTo(reg, "compose"), &tables.compose, "compose.cancel", "compose box"},
 	}
 
 	for _, c := range contexts {
-		// The leader is routed before the drawer and the rail, so a key of theirs equal to it never runs.
-		if c.context == "drawer" || c.context == "rail" {
+		// The leader is routed before the drawer and the rail, and runs in the compose box while a create is in flight.
+		if c.context == "drawer" || c.context == "rail" || c.context == "compose" {
 			for _, b := range cfg.Binds(c.context) {
 				if b.Key == km.leader {
 					return keymap{}, keyTables{}, fmt.Errorf("keys.%s: %q is the leader key", c.context, b.Key)
@@ -149,6 +231,20 @@ func resolveKeys(cfg core.KeysConfig, reg *registry) (keymap, keyTables, error) 
 		t, err := resolveTable(c.context, c.noun, c.defaults, cfg, c.accept, reg)
 		if err != nil {
 			return keymap{}, keyTables{}, err
+		}
+
+		if c.context == "compose" {
+			for _, b := range cfg.Binds(c.context) {
+				if b.Command != core.KeyNone && composeTypes(b.Key) {
+					return keymap{}, keyTables{}, fmt.Errorf("keys.compose: %q is a key the title and body take", b.Key)
+				}
+			}
+		}
+
+		if c.close != "" {
+			if _, ok := t.first(c.close); !ok {
+				return keymap{}, keyTables{}, fmt.Errorf("keys.%s: nothing is bound to %s, so the %s could not close", c.context, c.close, c.closeNoun)
+			}
 		}
 
 		*c.into = t
