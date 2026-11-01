@@ -84,15 +84,24 @@ func textCopy(lines func(row int) md.LineText, s selection, cols int) string {
 	}
 
 	texts := make([]md.LineText, 0, last-first+1)
-	picks := make([]md.CellRange, 0, last-first+1)
 
 	for row := first; row <= last; row++ {
 		texts = append(texts, lines(row))
+	}
 
-		if from, to, ok := s.rowSpan(row, cols); ok {
-			picks = append(picks, md.CellRange{From: from, To: to})
-		} else {
-			picks = append(picks, md.CellRange{From: 1, To: 0})
+	return copyRows(texts, first, s, cols)
+}
+
+// copyRows is the text s selects over texts, where texts[i] is the copy text
+// of row from+i.
+func copyRows(texts []md.LineText, from int, s selection, cols int) string {
+	picks := make([]md.CellRange, len(texts))
+
+	for i := range texts {
+		picks[i] = md.CellRange{From: 1, To: 0}
+
+		if a, b, ok := s.rowSpan(from+i, cols); ok {
+			picks[i] = md.CellRange{From: a, To: b}
 		}
 	}
 
@@ -160,13 +169,84 @@ type textRev struct {
 // holds it, in the tab whose drawer shows it, or "" for the plan or
 // conversation overlay. Exactly one of view and rows is set.
 type textSelection struct {
-	tab   core.TabID
-	view  *mdView
-	rows  *reviewView
-	lay   drawerLayout // the layout rows' columns are in
-	side  int          // the side of side by side rows the selection is on
-	shown string       // the selected text when it was made
-	rev   textRev
+	tab  core.TabID
+	view *mdView
+	rows *reviewView
+	lay  drawerLayout // the layout rows' columns are in
+	side int          // the side of side by side rows the selection is on
+	rev  textRev
+	held heldText // the selected rows' copy text; a reload's compare reads it as the text before
+}
+
+// heldText is the copy text of rows from to from+len(lines)-1, read against rev
+// on side at cols, and the clamped selection it was brought up to.
+type heldText struct {
+	rev        textRev
+	side, cols int
+	from       int
+	lines      []md.LineText
+	sel        selection
+}
+
+// text is what the held selection copies.
+func (h heldText) text() string { return copyRows(h.lines, h.from, h.sel, h.cols) }
+
+// grid is the holder's selection grid.
+func (ts *textSelection) grid() textGrid {
+	switch {
+	case ts.view != nil:
+		return ts.view.grid()
+	case ts.rows != nil:
+		return ts.rows.selGrid()
+	}
+
+	return textGrid{}
+}
+
+// tracked is ts.held brought up to the holder's selection. Rows held under the
+// same rev, side and width are kept, and only the rows the selection gained are
+// read. ts.held is left as it was: rows are appended only past its end.
+func (a *App) tracked(ts *textSelection) heldText {
+	g, sp := ts.grid(), ts.selection()
+	if sp == nil || g.rows == 0 {
+		return heldText{}
+	}
+
+	s := *sp
+	s.anchor, s.head = clampPoint(g, s.anchor), clampPoint(g, s.head)
+	first, last := s.rowBounds()
+	rev := a.revOf(ts) // after the grid, which can lay a view's document out again
+	h := ts.held
+	end := h.from + len(h.lines)
+
+	if h.rev != rev || h.side != ts.side || h.cols != g.cols || last < h.from || first >= end {
+		h.lines, h.from, end = nil, first, first
+	}
+
+	if first > h.from {
+		h.lines, h.from = h.lines[first-h.from:], first
+	}
+
+	if last < end-1 {
+		h.lines, end = h.lines[:last-h.from+1], last+1
+	}
+
+	if first < h.from {
+		above := make([]md.LineText, 0, end-first)
+		for r := first; r < h.from; r++ {
+			above = append(above, g.lines(r))
+		}
+
+		h.lines, h.from = append(above, h.lines...), first
+	}
+
+	for r := end; r <= last; r++ {
+		h.lines = append(h.lines, g.lines(r))
+	}
+
+	h.rev, h.side, h.cols, h.sel = rev, ts.side, g.cols, s
+
+	return h
 }
 
 // revOf is the state of ts's holder now.
@@ -190,18 +270,6 @@ func (a *App) revOf(ts *textSelection) textRev {
 	}
 
 	return textRev{}
-}
-
-// text is the text ts's selection covers now.
-func (ts *textSelection) text() string {
-	switch {
-	case ts.view != nil:
-		return ts.view.selectedText()
-	case ts.rows != nil:
-		return ts.rows.selectedText()
-	}
-
-	return ""
 }
 
 // setSel makes s the holder's selection; lay is the layout of rows' columns.
@@ -268,7 +336,7 @@ func (a *App) setTextSel(ts *textSelection, s selection) {
 	a.mouse.text = held
 
 	ts.setSel(s, ts.lay)
-	ts.shown = ts.text()
+	ts.held = a.tracked(ts)
 	ts.rev = a.revOf(ts)
 	a.text = ts
 }
@@ -293,13 +361,14 @@ func (a *App) clearSelections() {
 	a.clearTextSel()
 }
 
-// textSelected is the text of the text selection, "" when none.
+// textSelected is the text of the text selection, "" when none. It keeps none
+// of what it reads, so a reload's compare still sees the text held before it.
 func (a *App) textSelected() string {
 	if a.text == nil {
 		return ""
 	}
 
-	return a.text.text()
+	return a.tracked(a.text).text()
 }
 
 // textHolds reports whether ts's holder is still the view that shows.
@@ -357,13 +426,14 @@ func (a *App) textSelAfterUpdate() {
 		return
 	}
 
-	if ts.text() != ts.shown {
+	held := a.tracked(ts)
+	if held.text() != ts.held.text() {
 		a.clearTextSel()
 
 		return
 	}
 
-	ts.rev = cur
+	ts.held, ts.rev = held, cur
 
 	// A reload moves the selection's ends with their rows: the drag goes on
 	// from where its anchor is now.

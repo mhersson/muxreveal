@@ -440,23 +440,6 @@ func (v *mdView) grid() textGrid {
 	}
 }
 
-// selectedText is the text of the selection, "" when none.
-func (v *mdView) selectedText() string {
-	if v.sel == nil {
-		return ""
-	}
-
-	g := v.grid()
-	if g.rows == 0 {
-		return ""
-	}
-
-	s := *v.sel
-	s.anchor, s.head = clampPoint(g, s.anchor), clampPoint(g, s.head)
-
-	return textCopy(g.lines, s, g.cols)
-}
-
 // unitText is the text of the unit lineAt takes at line i.
 func (v *mdView) unitText(i int) string {
 	g := v.grid()

@@ -218,7 +218,7 @@ func (a *App) reviewCopy() tea.Cmd {
 	}
 
 	if ts := a.text; ts != nil && ts.tab == tab.ID {
-		return a.clip.copy(ts.text())
+		return a.clip.copy(a.textSelected())
 	}
 
 	if _, p := a.activePage(); p != nil {

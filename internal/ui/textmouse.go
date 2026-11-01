@@ -459,7 +459,7 @@ func (a *App) extendTextSel(pr *textPress, h textHost, x, y int) bool {
 	ts.side = h.side
 
 	ts.setSel(s, h.lay)
-	ts.shown = ts.text()
+	ts.held = a.tracked(ts)
 
 	return true
 }
