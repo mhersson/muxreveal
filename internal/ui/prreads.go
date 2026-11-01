@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/mhersson/muxreveal/internal/github"
+	"github.com/mhersson/aim/internal/github"
 )
 
 // prReads is every GitHub read the pull request views make beyond the poller.

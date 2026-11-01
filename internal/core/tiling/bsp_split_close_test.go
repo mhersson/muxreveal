@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/mhersson/muxreveal/internal/core/tiling"
+	"github.com/mhersson/aim/internal/core/tiling"
 )
 
 // checkTree asserts the structural invariants: every internal node has two

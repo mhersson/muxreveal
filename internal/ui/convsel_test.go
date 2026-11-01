@@ -7,8 +7,8 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/mhersson/muxreveal/internal/core"
-	"github.com/mhersson/muxreveal/internal/github"
+	"github.com/mhersson/aim/internal/core"
+	"github.com/mhersson/aim/internal/github"
 )
 
 // convSelRig is the conversation overlay at 120x40 on the fixture, with a fake

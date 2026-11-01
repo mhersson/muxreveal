@@ -1,8 +1,8 @@
 package ui
 
 import (
-	"github.com/mhersson/muxreveal/internal/ui/diffview"
-	"github.com/mhersson/muxreveal/internal/ui/theme"
+	"github.com/mhersson/aim/internal/ui/diffview"
+	"github.com/mhersson/aim/internal/ui/theme"
 )
 
 // reviewPalette is the diff view's palette in the theme's colours.

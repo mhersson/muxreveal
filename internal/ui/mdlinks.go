@@ -13,10 +13,10 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/mhersson/muxreveal/internal/core"
-	"github.com/mhersson/muxreveal/internal/md"
-	"github.com/mhersson/muxreveal/internal/ui/palette"
-	"github.com/mhersson/muxreveal/internal/ui/theme"
+	"github.com/mhersson/aim/internal/core"
+	"github.com/mhersson/aim/internal/md"
+	"github.com/mhersson/aim/internal/ui/palette"
+	"github.com/mhersson/aim/internal/ui/theme"
 )
 
 // linkChooser lists the targets of a rendered line when it has several. root is

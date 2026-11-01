@@ -16,7 +16,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/mhersson/muxreveal/internal/git/fsnotify"
+	"github.com/mhersson/aim/internal/git/fsnotify"
 )
 
 const (

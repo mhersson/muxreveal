@@ -12,8 +12,8 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	"github.com/charmbracelet/x/exp/golden"
 
-	"github.com/mhersson/muxreveal/internal/core"
-	"github.com/mhersson/muxreveal/internal/github"
+	"github.com/mhersson/aim/internal/core"
+	"github.com/mhersson/aim/internal/github"
 )
 
 // convFor is the conversation fixture as pull request number n's, its times

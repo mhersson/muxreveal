@@ -5,7 +5,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/mhersson/muxreveal/internal/core"
+	"github.com/mhersson/aim/internal/core"
 )
 
 // Harness adapts one agent CLI: how to launch it, how to hook it, and how to

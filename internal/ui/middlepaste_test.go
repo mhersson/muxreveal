@@ -6,8 +6,8 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/mhersson/muxreveal/internal/core"
-	"github.com/mhersson/muxreveal/internal/term"
+	"github.com/mhersson/aim/internal/core"
+	"github.com/mhersson/aim/internal/term"
 )
 
 // middleRun presses and releases the middle button at (x, y), running the

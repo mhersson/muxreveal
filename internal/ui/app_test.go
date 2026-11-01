@@ -16,8 +16,8 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	"github.com/charmbracelet/x/exp/golden"
 
-	"github.com/mhersson/muxreveal/internal/core"
-	"github.com/mhersson/muxreveal/internal/term"
+	"github.com/mhersson/aim/internal/core"
+	"github.com/mhersson/aim/internal/term"
 )
 
 func testLogger() *slog.Logger {

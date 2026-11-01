@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mhersson/muxreveal/internal/md"
+	"github.com/mhersson/aim/internal/md"
 )
 
 func splitLines(s string) []string {

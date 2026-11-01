@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mhersson/muxreveal/internal/core"
-	"github.com/mhersson/muxreveal/internal/harness"
+	"github.com/mhersson/aim/internal/core"
+	"github.com/mhersson/aim/internal/harness"
 )
 
 const sessionStart = `{"hook_event_name":"SessionStart","session_id":"s1","transcript_path":"/t.jsonl","source":"startup"}`

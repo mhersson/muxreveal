@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mhersson/muxreveal/internal/git"
+	"github.com/mhersson/aim/internal/git"
 )
 
 // spanTexts is the path and text of every chunk the view holds spans for.

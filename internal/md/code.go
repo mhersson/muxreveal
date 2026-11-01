@@ -8,7 +8,7 @@ import (
 
 	"github.com/yuin/goldmark/v2/ast"
 
-	"github.com/mhersson/muxreveal/internal/git/invisible"
+	"github.com/mhersson/aim/internal/git/invisible"
 )
 
 const (

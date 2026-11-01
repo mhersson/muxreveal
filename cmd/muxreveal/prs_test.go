@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mhersson/muxreveal/internal/github"
+	"github.com/mhersson/aim/internal/github"
 )
 
 var testRepo = github.Repo{Host: "github.com", Owner: "o", Name: "r"}

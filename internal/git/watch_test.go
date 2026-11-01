@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mhersson/muxreveal/internal/git/fsnotify"
+	"github.com/mhersson/aim/internal/git/fsnotify"
 )
 
 const watchWait = 5 * time.Second

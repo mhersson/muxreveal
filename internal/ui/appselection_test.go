@@ -3,7 +3,7 @@ package ui
 import (
 	"testing"
 
-	"github.com/mhersson/muxreveal/internal/core"
+	"github.com/mhersson/aim/internal/core"
 )
 
 func TestPaneSelectionResolve(t *testing.T) {

@@ -19,7 +19,7 @@ import (
 
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/mhersson/muxreveal/internal/ui/kitty"
+	"github.com/mhersson/aim/internal/ui/kitty"
 )
 
 func testPNG(t testing.TB, w, h int) []byte {

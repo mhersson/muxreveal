@@ -3,7 +3,7 @@ package ui
 import (
 	uv "github.com/charmbracelet/ultraviolet"
 
-	"github.com/mhersson/muxreveal/internal/term"
+	"github.com/mhersson/aim/internal/term"
 )
 
 // Rows are absolute: history index 0 is the oldest line and the live screen

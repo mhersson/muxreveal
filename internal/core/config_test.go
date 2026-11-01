@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mhersson/muxreveal/internal/core/tiling"
+	"github.com/mhersson/aim/internal/core/tiling"
 )
 
 func TestIconsOn(t *testing.T) {

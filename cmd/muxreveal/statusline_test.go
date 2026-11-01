@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mhersson/muxreveal/internal/core"
-	"github.com/mhersson/muxreveal/internal/harness"
+	"github.com/mhersson/aim/internal/core"
+	"github.com/mhersson/aim/internal/harness"
 )
 
 const statusPayload = `{"hook_event_name":"Status","session_id":"s1","model":{"id":"claude-opus-4-5","display_name":"Opus 4.5"},` +

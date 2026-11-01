@@ -7,7 +7,7 @@ import (
 
 	"charm.land/lipgloss/v2"
 
-	"github.com/mhersson/muxreveal/internal/md"
+	"github.com/mhersson/aim/internal/md"
 )
 
 // mdView is a cursor, scrolling, folds, heading jumps, search and link targets

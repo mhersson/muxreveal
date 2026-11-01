@@ -8,7 +8,7 @@ import (
 	"math"
 	"slices"
 
-	"github.com/mhersson/muxreveal/internal/core"
+	"github.com/mhersson/aim/internal/core"
 )
 
 // maxLayoutDepth bounds the recursion on a hostile tree; a real tab needs one

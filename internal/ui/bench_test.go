@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mhersson/muxreveal/internal/term/rec"
+	"github.com/mhersson/aim/internal/term/rec"
 )
 
 // Up to six panes on 240x64, each count run three times.

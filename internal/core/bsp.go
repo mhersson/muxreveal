@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/mhersson/muxreveal/internal/core/tiling"
+	"github.com/mhersson/aim/internal/core/tiling"
 )
 
 // paneWindow maps a pane id "p<N>" to its tiling window id N.

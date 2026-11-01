@@ -8,8 +8,8 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/mhersson/muxreveal/internal/core"
-	"github.com/mhersson/muxreveal/internal/git"
+	"github.com/mhersson/aim/internal/core"
+	"github.com/mhersson/aim/internal/git"
 )
 
 // editState is what the hooks' edit handling keeps between events.

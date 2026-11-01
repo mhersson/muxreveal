@@ -5,8 +5,8 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/mhersson/muxreveal/internal/core"
-	"github.com/mhersson/muxreveal/internal/core/tiling"
+	"github.com/mhersson/aim/internal/core"
+	"github.com/mhersson/aim/internal/core/tiling"
 )
 
 // slideFrame is the pause between two frames of the drawer's slide.

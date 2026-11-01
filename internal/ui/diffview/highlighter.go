@@ -7,7 +7,7 @@ import (
 
 	"github.com/alecthomas/chroma/v2"
 
-	"github.com/mhersson/muxreveal/internal/ui/diffview/lexers"
+	"github.com/mhersson/aim/internal/ui/diffview/lexers"
 )
 
 // noLexerT marks a file name no lexer matches in a Highlighter's cache.

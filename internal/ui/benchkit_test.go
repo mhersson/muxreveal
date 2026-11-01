@@ -12,8 +12,8 @@ import (
 
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/mhersson/muxreveal/internal/core"
-	"github.com/mhersson/muxreveal/internal/term/rec"
+	"github.com/mhersson/aim/internal/core"
+	"github.com/mhersson/aim/internal/term/rec"
 )
 
 func ms(n int) time.Duration { return time.Duration(n) * time.Millisecond }

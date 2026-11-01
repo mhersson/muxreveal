@@ -116,10 +116,10 @@ func TestBenchSaveToDiff(t *testing.T) {
 	}
 }
 
-func isMuxRevealSource(top string) bool {
+func isAIMSource(top string) bool {
 	mod, err := os.ReadFile(filepath.Join(top, "go.mod"))
 
-	return err == nil && strings.Contains(string(mod), "module github.com/mhersson/muxreveal\n")
+	return err == nil && strings.Contains(string(mod), "module github.com/mhersson/aim\n")
 }
 
 // TestBenchLargeRepo times a snapshot, a working tree and a branch diff of
@@ -133,8 +133,8 @@ func TestBenchLargeRepo(t *testing.T) {
 
 	ctx := context.Background()
 
-	if top := gitOut(t, dir, "rev-parse", "--show-toplevel"); isMuxRevealSource(top) {
-		t.Skipf("%s is the MuxReveal source tree; the bench edits files and writes snapshot refs in its target", top)
+	if top := gitOut(t, dir, "rev-parse", "--show-toplevel"); isAIMSource(top) {
+		t.Skipf("%s is the AIM source tree; the bench edits files and writes snapshot refs in its target", top)
 	}
 
 	r, err := Open(ctx, dir)

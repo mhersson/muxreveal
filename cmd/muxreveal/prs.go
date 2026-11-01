@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/mhersson/muxreveal/internal/github"
+	"github.com/mhersson/aim/internal/github"
 )
 
 // clientFactory builds the GitHub client of a host.

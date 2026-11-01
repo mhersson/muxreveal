@@ -4,8 +4,8 @@ import (
 	"image/color"
 	"testing"
 
-	"github.com/mhersson/muxreveal/internal/ui/diffview"
-	"github.com/mhersson/muxreveal/internal/ui/theme"
+	"github.com/mhersson/aim/internal/ui/diffview"
+	"github.com/mhersson/aim/internal/ui/theme"
 )
 
 func TestReviewPaletteFromTheme(t *testing.T) {

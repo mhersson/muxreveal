@@ -16,7 +16,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mhersson/muxreveal/internal/core"
+	"github.com/mhersson/aim/internal/core"
 )
 
 // shortDir returns a fresh directory under /tmp: macOS's temp dir is too deep

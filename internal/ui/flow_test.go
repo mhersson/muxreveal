@@ -12,8 +12,8 @@ import (
 
 	"github.com/charmbracelet/x/exp/teatest/v2"
 
-	"github.com/mhersson/muxreveal/internal/core"
-	"github.com/mhersson/muxreveal/internal/term"
+	"github.com/mhersson/aim/internal/core"
+	"github.com/mhersson/aim/internal/term"
 )
 
 func TestQuitFlow(t *testing.T) {

@@ -16,10 +16,10 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	"github.com/charmbracelet/x/exp/golden"
 
-	"github.com/mhersson/muxreveal/internal/core"
-	"github.com/mhersson/muxreveal/internal/github"
-	"github.com/mhersson/muxreveal/internal/harness"
-	"github.com/mhersson/muxreveal/internal/ui/palette"
+	"github.com/mhersson/aim/internal/core"
+	"github.com/mhersson/aim/internal/github"
+	"github.com/mhersson/aim/internal/harness"
+	"github.com/mhersson/aim/internal/ui/palette"
 )
 
 // pushDate fixes the commit dates of a rig, so commit ids and the goldens that

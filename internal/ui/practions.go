@@ -3,7 +3,7 @@ package ui
 import (
 	"context"
 
-	"github.com/mhersson/muxreveal/internal/github"
+	"github.com/mhersson/aim/internal/github"
 )
 
 // prActions is every GitHub write the app makes. cmd/muxreveal fills it from

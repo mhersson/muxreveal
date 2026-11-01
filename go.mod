@@ -1,4 +1,4 @@
-module github.com/mhersson/muxreveal
+module github.com/mhersson/aim
 
 go 1.27.3
 

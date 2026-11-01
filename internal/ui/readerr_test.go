@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mhersson/muxreveal/internal/github"
+	"github.com/mhersson/aim/internal/github"
 )
 
 var cutWord = regexp.MustCompile(`[A-Za-z0-9.,]…`)

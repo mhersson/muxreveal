@@ -15,8 +15,8 @@ import (
 	uv "github.com/charmbracelet/ultraviolet"
 	xkitty "github.com/charmbracelet/x/ansi/kitty"
 
-	"github.com/mhersson/muxreveal/internal/md"
-	"github.com/mhersson/muxreveal/internal/ui/kitty"
+	"github.com/mhersson/aim/internal/md"
+	"github.com/mhersson/aim/internal/ui/kitty"
 )
 
 type recJobs struct{ jobs []pictureJob }

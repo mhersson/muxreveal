@@ -7,8 +7,8 @@ import (
 
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/mhersson/muxreveal/internal/git"
-	"github.com/mhersson/muxreveal/internal/ui/theme"
+	"github.com/mhersson/aim/internal/git"
+	"github.com/mhersson/aim/internal/ui/theme"
 )
 
 // statusMark is a file's status letter and its colour.

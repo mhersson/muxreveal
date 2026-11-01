@@ -6,8 +6,8 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/mhersson/muxreveal/internal/git"
-	"github.com/mhersson/muxreveal/internal/git/linediff"
+	"github.com/mhersson/aim/internal/git"
+	"github.com/mhersson/aim/internal/git/linediff"
 )
 
 func ln(k git.LineKind, old, nw int, text string) git.Line {

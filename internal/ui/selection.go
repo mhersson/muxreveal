@@ -7,7 +7,7 @@ import (
 
 	uv "github.com/charmbracelet/ultraviolet"
 
-	"github.com/mhersson/muxreveal/internal/term"
+	"github.com/mhersson/aim/internal/term"
 )
 
 // grid is a pane's text in absolute rows: history rows first, then the live screen.

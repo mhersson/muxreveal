@@ -6,7 +6,7 @@ import (
 	"math"
 	"slices"
 
-	"github.com/mhersson/muxreveal/internal/core/tiling"
+	"github.com/mhersson/aim/internal/core/tiling"
 )
 
 // ErrUnknownMode is returned by SetLayoutMode for a mode that does not exist.

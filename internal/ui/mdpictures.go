@@ -5,7 +5,7 @@ import (
 
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/mhersson/muxreveal/internal/md"
+	"github.com/mhersson/aim/internal/md"
 )
 
 // imageRows is how many layout lines an image takes: its picture's rows, else one.

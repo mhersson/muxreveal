@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mhersson/muxreveal/internal/git"
+	"github.com/mhersson/aim/internal/git"
 )
 
 func paths(ps ...string) []git.FileDiff {

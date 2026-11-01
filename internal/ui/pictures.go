@@ -13,9 +13,9 @@ import (
 	"github.com/charmbracelet/colorprofile"
 	uv "github.com/charmbracelet/ultraviolet"
 
-	"github.com/mhersson/muxreveal/internal/github"
-	"github.com/mhersson/muxreveal/internal/md"
-	"github.com/mhersson/muxreveal/internal/ui/kitty"
+	"github.com/mhersson/aim/internal/github"
+	"github.com/mhersson/aim/internal/md"
+	"github.com/mhersson/aim/internal/ui/kitty"
 )
 
 const (

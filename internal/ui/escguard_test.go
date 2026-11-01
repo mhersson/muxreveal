@@ -8,8 +8,8 @@ import (
 	tea "charm.land/bubbletea/v2"
 	uv "github.com/charmbracelet/ultraviolet"
 
-	"github.com/mhersson/muxreveal/internal/core"
-	"github.com/mhersson/muxreveal/internal/ui/palette"
+	"github.com/mhersson/aim/internal/core"
+	"github.com/mhersson/aim/internal/ui/palette"
 )
 
 const escByte = "\x1b"

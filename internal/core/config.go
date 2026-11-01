@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mhersson/muxreveal/internal/core/tiling"
+	"github.com/mhersson/aim/internal/core/tiling"
 	"github.com/pelletier/go-toml/v2"
 )
 

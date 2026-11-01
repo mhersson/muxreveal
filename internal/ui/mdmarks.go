@@ -5,7 +5,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/mhersson/muxreveal/internal/md"
+	"github.com/mhersson/aim/internal/md"
 )
 
 // changeMark is the mark a rendered line carries in the drawer's first cell.

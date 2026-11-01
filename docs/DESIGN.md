@@ -191,7 +191,7 @@ The app core is the only thing that mutates state. Services post events to it; t
 
 **Module layout**
 
-One Go module, `github.com/mhersson/muxreveal`.
+One Go module, `github.com/mhersson/aim`.
 
 | Package | Responsibility |
 | --- | --- |

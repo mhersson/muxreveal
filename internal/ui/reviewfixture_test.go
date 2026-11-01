@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mhersson/muxreveal/internal/core"
-	"github.com/mhersson/muxreveal/internal/git"
+	"github.com/mhersson/aim/internal/core"
+	"github.com/mhersson/aim/internal/git"
 )
 
 // hunkSpec builds a hunk from lines written as a kind character and the text,
