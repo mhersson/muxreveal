@@ -8,8 +8,9 @@
 ## nothing until you uncomment a line by deleting its leading "# ". The table
 ## headers are live, so one uncommented line lands in its table.
 ##
-## The file is strict: invalid TOML, an unknown key or a value of the wrong
-## type stops AIM at start with an error that names the key.
+## The file is strict: invalid TOML, an unknown key, a value of the wrong type
+## or a bad value stops AIM at start with an error that names the key or the
+## line.
 ##
 ## More: docs/guide/config.md.
 
@@ -27,7 +28,9 @@
 ## values: bsp | master-stack | scrolling
 # default_mode = "bsp"
 
-## How a new pane splits in a bsp tab.
+## How a bsp tab splits a pane that comes without a chosen side: one moved
+## in from another tab, or every pane when a tab switches to bsp. A new pane
+## opened with a key or the picker always brings its own side.
 ## values: spiral | longest_side | alternate | smart_split
 # auto_scheme = "spiral"
 
@@ -81,15 +84,19 @@
 ## values: turn | branch
 # mode = "branch"
 
-## The most files the diff engine reads for one diff.
+## The most files that get hunks in one diff. Files past it stay listed with
+## their counts but show no hunks.
 ## range: 1 or more
 # max_files = 400
 
-## The most bytes the diff engine reads for one file.
+## The most bytes of diff text read in one pass, a single git diff over every
+## file that needs hunks. The text is cut after the last whole file; files
+## past the cut show "too large, press f for the full file".
 ## range: 1 or more bytes
 # max_bytes = 2097152
 
-## The most lines the diff engine reads for one file.
+## The most added plus removed lines a file may have and still show hunks. A
+## file over it shows no hunks at all, and is not cut at that many lines.
 ## range: 1 or more
 # max_lines = 5000
 
