@@ -11,7 +11,7 @@ To read the focused agent's plan, press `ctrl+space p`. From the agents rail, pr
 AIM records a plan from the agent's own work:
 
 - the file Claude Code writes when it leaves plan mode, if it is a markdown file (the box tag reads `plan mode`);
-- a markdown file the agent edits under one of the folders in `[plans] paths` (the tag reads `plan file`). The folders are in [`config.example.toml`](../../config.example.toml).
+- a markdown file under one of the folders in `[plans] paths` (the tag reads `plan file`) that the agent edited, or that a finished shell command of the agent changed. The folders are in [`config.example.toml`](../../config.example.toml).
 
 The latest plan wins, and only the agent's edits count, not yours. While a new plan is unread, the agent's card on the rail shows the plan mark; opening the plan clears it. A plan that the agent rewrites while you read it reloads in place and the tag reads `rewritten` until your next key. A new conversation in the pane (`/clear`, or a fresh start) drops the plan.
 
@@ -27,7 +27,7 @@ To read any markdown file of a worktree, open the command palette with `ctrl+spa
 
 ## The conversation
 
-To read a pull request's description and timeline, press `i` in the review drawer, or on a row of the PR list. The box opens at once and reads `loading the conversation…` until GitHub answers. A failed first read shows `could not read the conversation: <reason>` in the box, and a failed re-read shows the same text as a notice. Without GitHub the notice is `pull requests are off`.
+To read a pull request's description and timeline, press `i` in the review drawer (the branch needs a pull request, else the notice is `no pull request for <branch>`), or on a row of the PR list. The box opens at once and reads `loading the conversation…` until GitHub answers. A failed first read shows `could not read the conversation: <reason>` in the box, and a failed re-read shows the same text as a notice. Without GitHub the notice is `pull requests are off`.
 
 `r` reads it again, and it also reloads when the next poll shows the pull request changed. `esc` closes it and returns to the drawer or the list. See [Pull requests](pull-requests.md) for the rest of the pull request workflow.
 
@@ -75,7 +75,7 @@ Other keys, and a paste, are dropped while the chooser is open. These keys are f
 - A web link opens in the browser (`xdg-open` on Linux, `open` on macOS) and the box stays. A link that is not http or https is refused with `not opening that link: only http and https links open`.
 - A link to a markdown file inside the worktree opens as a page over the plan or file; the title shows the page's path. A page's links open further pages, and `esc` goes back one page.
 - Any other file inside the worktree opens in the editor at line 1, in a new shell pane beside the focused one, and closes the box. The editor is `$VISUAL`, else `$EDITOR`, else `vi`.
-- A path outside the worktree says `not opening <path>: outside the worktree`, and a missing one `not opening <path>: no such file`; the box stays open.
+- A path outside the worktree says `not opening <path>: outside the worktree`, a missing one `not opening <path>: no such file` and a folder `not opening <path>: it is a folder`; the box stays open.
 - In the conversation only web links are offered.
 
 `esc` steps back one level: the chooser, then the search prompt, then a page, then the box.
@@ -84,7 +84,7 @@ Other keys, and a paste, are dropped while the chooser is open. These keys are f
 
 AIM draws an image in the text as a picture only when the terminal answers AIM's Kitty graphics query with `OK` before it answers the device-attributes request, reports its cell size, and the colour profile is truecolor. AIM sends no query when `TMUX` or `AIM_PANE` is set in its environment, so inside tmux or inside another AIM pane images are lines. A terminal that supports graphics but not truecolor is asked once for `RGB` and `Tc`, and an answer to either turns pictures on.
 
-Otherwise an image is one line holding the image icon (or `image: ` when `icons = false`), its alt text and its host. While a picture's size loads the line ends in `loading…`, and a picture that fails to load stays a line.
+Otherwise an image is one line holding the image icon (or `image: ` when `icons = false`), its alt text and its host (a local image shows its file name instead). While a picture's size loads the line ends in `loading…`, and a picture that fails to load stays a line.
 
 Only some images load as pictures: an `https` image on `github.com`, a `.githubusercontent.com` host or the pull request's own GitHub host, and, in a plan or file, a local image inside the worktree (for a plan-mode plan, the agent's working directory). An `.svg` never loads. A picture is at most 100 cells wide, 20 rows tall and 5 MiB. The cursor steps through a picture a row at a time, and `enter` on it follows the image's link.
 
