@@ -2,7 +2,7 @@
 
 AIM pushes an agent's branch, opens its pull request, shows the pull request's diff in the review drawer, lists the checks, approves and merges, and cleans up the worktree afterwards. This page covers each step and what AIM needs from GitHub.
 
-The keys are the defaults. A changed `leader_key` or `[keys]` table changes them; see [Keys](keys.md) for the full list and for how to remap. `review_requested_days` under `[pull_requests]` in [`config.example.toml`](../../config.example.toml) limits the Review requested tab.
+The keys are the defaults. A changed `leader_key` or `[keys]` table changes them; see [Keys](keys.md) for the full list and for how to remap. `[pull_requests]` in [`config.example.toml`](../../config.example.toml) has `review_requested_days`, which AIM uses for the Review requested tab.
 
 ## What AIM needs
 
@@ -25,7 +25,7 @@ To push the branch, press `ctrl+space g P`. The branch is the one checked out in
 
 ## Open a pull request
 
-To open one for the branch, press `ctrl+space g o`. It needs a GitHub remote; a branch that already has an open pull request says `<branch> already has #<n>`, and the other refusals are push's, with `open a PR: ` in place of `push: `.
+To open one for the branch, press `ctrl+space g o`. It needs a GitHub remote; a branch that already has an open pull request says `<branch> already has #<n>`, and four refusals stop the box: `open a PR: not a git repository`, `open a PR: HEAD is detached`, `open a PR: <branch> has no commits yet` and `open a PR: <branch> has no remote to push to`.
 
 The compose box has four fields: title, base, draft and body. `tab` and `shift+tab` move between them.
 
@@ -47,7 +47,7 @@ The box's top row names the repository, the branch, the base and the number of c
 
 In the review drawer, press `p` to show the pull request of the drawer's branch. AIM fetches its refs into `refs/aim/pr/<n>/` (nothing else is written to your repository), and the drawer shows the pull request's diff against its base, with the same keys as other modes (see [Review](review.md)). The top of the diff holds a header with the number and title, the branch and base, the checks and the review in words. A row below it reads `↑<n> not pushed` when the worktree has commits its push remote lacks, or `the PR moved to <sha7> since this diff` when the pull request got a new head; press `r` to fetch it again.
 
-`b`, `t`, `,` and `.` leave the mode, as does picking a place in the worktree list. From the drawer, `i` opens the conversation, `c` the checks, `a` approve, `M` merge and `O` the browser; when the pull request is not shown yet, AIM shows it first and then acts.
+`b` leaves the mode, and so do `t`, `,` and `.` unless they stop with a notice (the pane has no session or no turns), and so does picking a place in the worktree list. From the drawer, `i` opens the conversation, `c` the checks, `a` approve, `M` merge and `O` the browser; when the pull request is not shown yet, AIM shows it first and then acts.
 
 The notices when there is no pull request: `no pull request for <branch>`, `pull request: HEAD is detached`, `pull request: <branch> has no remote`, `#<n> is not on <remote>`.
 
@@ -56,10 +56,10 @@ The notices when there is no pull request: `no pull request for <branch>`, `pull
 To list pull requests, press `ctrl+space g l`. It has three tabs, always opened on the first; `tab` and `shift+tab` switch (wrapping) and `1`, `2` and `3` jump:
 
 - **Agents**: the open pull requests of the branches your agents are on, one row per pull request.
-- **Review requested**: the open pull requests that ask for your review, updated in the last `review_requested_days` days.
+- **Review requested**: the open pull requests that ask for your review. `review_requested_days` ([`config.example.toml`](../../config.example.toml)) can narrow it.
 - **All open**: the open pull requests you opened.
 
-The last two search every GitHub host AIM watches when the list opens, every minute while it is open, and on `r`. Their empty texts are `loading pull requests…`, `no open pull requests ask for your review` (with the days named when a limit is set) and `you have no open pull requests`; a host whose search failed adds `pull requests on <host>: <reason>`. The Agents tab says `no open pull requests on agent branches` when it is empty.
+The last two search every GitHub host AIM watches when the list opens, every minute while it is open, and on `r`. Their empty texts are `loading pull requests…`, `no open pull requests ask for your review` and `you have no open pull requests`; a host whose search failed adds `pull requests on <host>: <reason>`. The Agents tab says `no open pull requests on agent branches` when it is empty.
 
 The keys are in [Keys](keys.md#pr-list): `j` and `k` move; `enter` shows the diff; `i`, `c`, `a`, `M` and `O` open the conversation, checks, approve, merge and the browser; `r` refreshes; `esc` closes. On the Agents tab `enter`, `a` and `M` switch to the agent's tab and show the pull request in its drawer; `a` and `M` then open the approve confirm or the merge box. On the other tabs they work through a checkout: a pane in the row's repository, whose drawer opens; with none the notice is `no checkout of <owner/name> here; O opens it in the browser`. `a` on your own pull request says `you can't approve your own pull request` and leaves the list open.
 
@@ -111,4 +111,4 @@ When the worktree can go, a confirm titled `Clean up after #<n>` offers two boxe
 - The branch is offered only when it holds nothing the merged head does not: its tip is the head or behind it. It goes only with the worktree. Nothing is forced.
 - The result is a toast such as `removed <path>; deleted <branch>`, or `kept <path>: <reason>`.
 
-The worktree stays, with a reason instead of the confirm, when it is not one of AIM's own worktrees (`<path> is outside AIM's worktrees, so it stays`, see [Agents side by side](agents.md#a-new-worktree)), is locked, has uncommitted changes, or an agent is still working in it. After a merge, the reason is added to the merge toast while it shows. From the command, the other notices are `#<n> is not merged`, `#<n>'s branch is in another repository` and `<branch> is the default branch, so it stays`.
+The worktree stays, with a reason instead of the confirm, when it is not one of AIM's own worktrees (`<path> is outside AIM's worktrees, so it stays`, see [Agents side by side](agents.md#a-new-worktree)), is locked, has uncommitted changes, or an agent is still working in it. After a merge, the reason is added to the merge toast while it shows. From the command, the other notices are `#<n> is not merged`, `#<n>: its merged head is unknown`, `#<n>'s branch is in another repository` and `<branch> is the default branch, so it stays`.
