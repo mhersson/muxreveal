@@ -35,6 +35,11 @@ func (g escGuard) drops(now time.Time) bool { return g.wait > 0 && now.Sub(g.at)
 // ends the guard. Esc is matched by its code, since a terminal can deliver two
 // presses in one read as alt+esc.
 func (a *App) handleKey(msg tea.KeyPressMsg) tea.Cmd {
+	// An esc cancels a plan read that has not answered yet, even a dropped one.
+	if msg.String() == "esc" {
+		a.planSeq++
+	}
+
 	if msg.Code != tea.KeyEscape {
 		a.esc = escGuard{}
 
@@ -56,6 +61,7 @@ func (a *App) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 
 	if a.esc.drops(now) {
 		a.esc = escGuard{at: now, wait: escQuiet}
+		a.notice = ""
 
 		return nil
 	}
@@ -70,11 +76,6 @@ func (a *App) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 // PR list or worktree picker, then the leader state machine, then the rail while
 // it has the keyboard, then the review drawer while it has it, then the focused pane.
 func (a *App) routeKey(msg tea.KeyPressMsg) tea.Cmd {
-	// An esc cancels a plan read that has not answered yet.
-	if msg.String() == "esc" {
-		a.planSeq++
-	}
-
 	if a.confirm != nil {
 		return a.handleConfirmKey(msg)
 	}

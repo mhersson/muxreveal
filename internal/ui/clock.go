@@ -6,7 +6,7 @@ import "time"
 // redraw; tuios and tmux use the same bound.
 const syncMaxHold = time.Second
 
-// clock is the only source of time for the sync hold.
+// clock is the app's source of time, so tests can inject a fake one.
 type clock interface{ Now() time.Time }
 
 type realClock struct{}

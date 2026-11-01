@@ -40,14 +40,7 @@ func sentSince(t *testing.T, a *App, id core.PaneID) string {
 
 	p.sendKey(uv.KeyPressEvent(keyRune('~')))
 
-	deadline := time.Now().Add(testDeadline)
-	for strings.Count(fp.sent(), "~") == n {
-		if time.Now().After(deadline) {
-			t.Fatalf("the marker never reached %s; sent %q", id, fp.sent())
-		}
-
-		time.Sleep(time.Millisecond)
-	}
+	eventually(t, "the marker to reach "+string(id), func() bool { return strings.Count(fp.sent(), "~") > n })
 
 	got := strings.TrimSuffix(fp.sent(), "~")
 
@@ -236,6 +229,38 @@ func TestEscGuardCloses(t *testing.T) {
 
 			return a, clk
 		}, func(a *App) bool { return a.overlay == nil }},
+		{"confirm", func(t *testing.T) (*App, *fakeClock) {
+			t.Helper()
+
+			a, clk := escApp(t)
+			a.openConfirm(confirm{action: "Test", prompt: "Sure?", yes: func(*App) tea.Cmd { return nil }})
+
+			return a, clk
+		}, func(a *App) bool { return a.confirm == nil }},
+		{"prompt", func(t *testing.T) (*App, *fakeClock) {
+			t.Helper()
+
+			a, clk := escApp(t)
+			a.openPrompt(a.store.State().Tab().ID, "x", func(*App, string) tea.Cmd { return nil })
+
+			return a, clk
+		}, func(a *App) bool { return a.prompt == nil }},
+		{"pending leader", func(t *testing.T) (*App, *fakeClock) {
+			t.Helper()
+
+			a, clk := escApp(t)
+			press(a, keyLeader)
+
+			return a, clk
+		}, func(a *App) bool { return !a.pending }},
+		{"worktree picker", func(t *testing.T) (*App, *fakeClock) {
+			t.Helper()
+
+			a, clk := escApp(t)
+			a.picker.open = &picker{query: newPickerInput()}
+
+			return a, clk
+		}, func(a *App) bool { return a.picker.open == nil }},
 		{"agents rail", func(t *testing.T) (*App, *fakeClock) {
 			t.Helper()
 
@@ -342,4 +367,39 @@ func TestEscGuardSparesUI(t *testing.T) {
 			t.Errorf("the pane was sent %q, want %q", got, escByte)
 		}
 	})
+}
+
+// TestEscGuardDroppedEscIsAKey checks that an esc the guard drops still does
+// what any esc does before routing: it ends the toast and cancels a plan read
+// that has not answered.
+func TestEscGuardDroppedEscIsAKey(t *testing.T) {
+	t.Parallel()
+
+	a, clk := escApp(t)
+	id := a.store.State().Tab().Focus
+	_ = a.openChecks("github.com/acme/api", 7)
+
+	press(a, keyEsc)
+
+	a.notice = "pushed"
+	asked := a.planSeq
+
+	escSteps([]escStep{{30 * time.Millisecond, keyEsc}}, a, clk)
+
+	if got := sentSince(t, a, id); got != "" {
+		t.Fatalf("setup: the esc was not dropped; the pane was sent %q", got)
+	}
+
+	if a.notice != "" {
+		t.Errorf("the toast reads %q after the dropped esc, want it gone", a.notice)
+	}
+
+	a.Update(planReadMsg{
+		seq: asked, pane: id, plan: core.Plan{Path: "/w/plan.md", Kind: core.PlanFile},
+		root: "/w", base: "/w", doc: parseNow("# Plan\n", nil),
+	})
+
+	if a.plan != nil {
+		t.Error("a plan read asked before the dropped esc opened the overlay")
+	}
 }
