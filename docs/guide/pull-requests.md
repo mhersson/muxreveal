@@ -20,7 +20,7 @@ To push the branch, press `ctrl+space g P`. The branch is the one checked out in
 
 - Press `enter` to push or `esc` to cancel; no other key works in this confirm.
 - The push never forces, and goes to a branch of the same name on the push remote. Before it runs, AIM checks again that the branch, its head and the push URLs are still the ones in the confirm; if not, the notice is `push: <branch> changed since you asked; nothing pushed`.
-- While it runs the notice is `pushing <branch> to <remote>…`; on success the toast is `pushed <branch> to <remote>: <n> commits`, and AIM asks GitHub about the repository again.
+- While it runs the notice is `pushing <branch> to <remote>…`; on success the toast is `pushed <branch> to <remote>: <n> commits` (`1 commit` for one), and AIM asks GitHub about the repository again.
 - Nothing to push gives a notice instead of the confirm: `<branch> is up to date on <remote>`, `<branch> has nothing to push to <remote>`, `push: <branch> has no commits yet`, `push: <branch> has no remote to push to`, `push: HEAD is detached` or `push: not a git repository`.
 
 ## Open a pull request
@@ -45,7 +45,7 @@ The box's top row names the repository, the branch, the base and the number of c
 
 ## Review the pull request in the drawer
 
-In the review drawer, press `p` to show the pull request of the drawer's branch. AIM fetches its refs into `refs/aim/pr/<n>/` (nothing else is written to your repository), and the drawer shows the pull request's diff against its base, with the same keys as other modes (see [Review](review.md)). The top of the diff holds a header with the number and title, the branch and base, the checks and the review in words. A row below it reads `↑<n> not pushed` when the worktree has commits its push remote lacks, or `the PR moved to <sha7> since this diff` when the pull request got a new head; press `r` to fetch it again.
+In the review drawer, press `p` to show the pull request of the drawer's branch. AIM fetches its refs into `refs/aim/pr/<n>/` (nothing else is written to your repository), and the drawer shows the pull request's diff against its base, with the same keys as other modes (see [Review](review.md)). The top of the diff holds a header with the number and title, the branch and base, the checks and the review in words. A row below it reads `↑<n> not pushed: the PR shows the pushed head; ctrl+space g P pushes` when the worktree has commits its push remote lacks, or `the PR moved to <sha7> since this diff; r fetches it` when the pull request got a new head; press `r` to fetch it again.
 
 `b` leaves the mode, and so do `t`, `,` and `.` unless they stop with a notice (the pane has no session or no turns), and so does picking a place in the worktree list. From the drawer, `i` opens the conversation, `c` the checks, `a` approve, `M` merge and `O` the browser; when the pull request is not shown yet, AIM shows it first and then acts.
 
@@ -61,7 +61,7 @@ To list pull requests, press `ctrl+space g l`. It has three tabs, always opened 
 
 The last two search every GitHub host AIM watches when the list opens, every minute while it is open, and on `r`. Their empty texts are `loading pull requests…`, `no open pull requests ask for your review` or, when `review_requested_days` sets a limit, `no open pull requests updated in the last <N> days ask for your review` (`1 day` for one), and `you have no open pull requests`; a host whose search failed adds `pull requests on <host>: <reason>`. The Agents tab says `no open pull requests on agent branches` when it is empty.
 
-The keys are in [Keys](keys.md#pr-list): `j` and `k` move; `enter` shows the diff; `i`, `c`, `a`, `M` and `O` open the conversation, checks, approve, merge and the browser; `r` refreshes; `esc` closes. On the Agents tab `enter`, `a` and `M` switch to the agent's tab and show the pull request in its drawer; `a` and `M` then open the approve confirm or the merge box. On the other tabs they work through a checkout: a pane in the row's repository, whose drawer opens; with none the notice is `no checkout of <owner/name> here; O opens it in the browser`. `a` on your own pull request says `you can't approve your own pull request` and leaves the list open.
+The keys are in [Keys](keys.md#pr-list): `j` and `k` move; `enter` shows the diff; `i`, `c`, `a`, `M` and `O` open the conversation, checks, approve, merge and the browser; `r` refreshes; `esc` closes. On the Agents tab `enter`, `a` and `M` switch to the agent's tab and show the pull request in its drawer; `a` and `M` then open the approve confirm or the merge box. On the other tabs they work through a checkout: a pane in the row's repository, whose drawer opens; with none the notice is `no checkout of <host>/<owner>/<name> here; O opens it in the browser`. `a` on your own pull request says `you can't approve your own pull request` and leaves the list open.
 
 ## Checks
 
