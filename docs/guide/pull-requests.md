@@ -1,0 +1,114 @@
+# Pull requests
+
+AIM pushes an agent's branch, opens its pull request, shows the pull request's diff in the review drawer, lists the checks, approves and merges, and cleans up the worktree afterwards. This page covers each step and what AIM needs from GitHub.
+
+The keys are the defaults. A changed `leader_key` or `[keys]` table changes them; see [Keys](keys.md) for the full list and for how to remap. `review_requested_days` under `[pull_requests]` in [`config.example.toml`](../../config.example.toml) limits the Review requested tab.
+
+## What AIM needs
+
+AIM talks to GitHub with a token it finds the way `gh` does, for `github.com` and for a GitHub Enterprise host that `gh` knows (signed in with `gh auth login --hostname <host>`, or named by `GH_HOST`). It takes the first of these:
+
+- `GH_TOKEN`, then `GITHUB_TOKEN` for `github.com`; `GH_ENTERPRISE_TOKEN`, then `GITHUB_ENTERPRISE_TOKEN` for a GitHub Enterprise Server host;
+- the token in `gh`'s own config;
+- the answer of `gh auth token --secure-storage --hostname <host>`, when `gh` is on your `PATH`.
+
+Without a token, everything that does not talk to GitHub keeps working: panes, diffs, review and push. The pull request data does not load, and the notice is `pull requests for <host>/<owner>/<name>: run gh auth login --hostname <host>`. A creating, approving or merging action fails with the reason. A remote that is not on a host AIM knows says `<branch>'s remote is not on GitHub`.
+
+## Push
+
+To push the branch, press `ctrl+space g P`. The branch is the one checked out in what the open review drawer shows, else in the focused pane's working place, else in the directory AIM started in. AIM first reads what a push would do, then opens a confirm named `Push <branch>`. It lists the project, branch, remote with its push URLs, how many commits the remote lacks (with `sets the upstream` or `upstream already set`) and the newest commit.
+
+- Press `enter` to push or `esc` to cancel; no other key works in this confirm.
+- The push never forces, and goes to a branch of the same name on the push remote. Before it runs, AIM checks again that the branch, its head and the push URLs are still the ones in the confirm; if not, the notice is `push: <branch> changed since you asked; nothing pushed`.
+- While it runs the notice is `pushing <branch> to <remote>…`; on success the toast is `pushed <branch> to <remote>: <n> commits`, and AIM asks GitHub about the repository again.
+- Nothing to push gives a notice instead of the confirm: `<branch> is up to date on <remote>`, `<branch> has nothing to push to <remote>`, `push: <branch> has no commits yet`, `push: <branch> has no remote to push to`, `push: HEAD is detached` or `push: not a git repository`.
+
+## Open a pull request
+
+To open one for the branch, press `ctrl+space g o`. It needs a GitHub remote; a branch that already has an open pull request says `<branch> already has #<n>`, and the other refusals are push's, with `open a PR: ` in place of `push: `.
+
+The compose box has four fields: title, base, draft and body. `tab` and `shift+tab` move between them.
+
+| Field | Starts as | Keys |
+| --- | --- | --- |
+| title | the only commit's subject, else the branch name made readable | type; a paste goes in |
+| base | the repository's default branch, from the remote's branches | `left`, `right` change it; the commit count follows |
+| draft | off, `[ ] open as a draft` | `space` switches it |
+| body | the first pull request template, else the only commit's body, else a `- subject` line per commit | type; `enter` starts a line; arrows, `home`, `end`, `pgup`, `pgdown` move; a paste keeps its newlines |
+
+The box's top row names the repository, the branch, the base and the number of commits. The body's top border says where it started: ` from <template path> ` or ` from the commits `. The templates AIM looks for are `pull_request_template.md` in the repository root, `.github` or `docs`, and the `.md` files of a `pull_request_template` directory there.
+
+- `ctrl+e` edits the body in `$VISUAL`, else `$EDITOR`, else `vi`, in a pane beside the focused one. The box hides until the editor exits; then the file replaces the body. Without agent hooks the notice is `the editor needs the run directory, which is off with agent hooks`.
+- `ctrl+p` switches the body between Write and Preview. In Preview `up`, `down`, `pgup` and `pgdown` scroll, and other body keys do nothing.
+- `ctrl+s` creates the pull request. An empty title says `enter a title`. When the remote lacks commits, the box says `↑<n> not pushed yet: creating the PR pushes <branch> to <remote> first`, and creating pushes first, without force. The status row reads `pushing <branch> to <remote>…`, then `opening the pull request…`. On success the toast is `opened #<n>`.
+- `esc` cancels. A failure stays in the box with its reason; while it runs only the leader keys work.
+
+## Review the pull request in the drawer
+
+In the review drawer, press `p` to show the pull request of the drawer's branch. AIM fetches its refs into `refs/aim/pr/<n>/` (nothing else is written to your repository), and the drawer shows the pull request's diff against its base, with the same keys as other modes (see [Review](review.md)). The top of the diff holds a header with the number and title, the branch and base, the checks and the review in words. A row below it reads `↑<n> not pushed` when the worktree has commits its push remote lacks, or `the PR moved to <sha7> since this diff` when the pull request got a new head; press `r` to fetch it again.
+
+`b`, `t`, `,` and `.` leave the mode, as does picking a place in the worktree list. From the drawer, `i` opens the conversation, `c` the checks, `a` approve, `M` merge and `O` the browser; when the pull request is not shown yet, AIM shows it first and then acts.
+
+The notices when there is no pull request: `no pull request for <branch>`, `pull request: HEAD is detached`, `pull request: <branch> has no remote`, `#<n> is not on <remote>`.
+
+## The pull request list
+
+To list pull requests, press `ctrl+space g l`. It has three tabs, always opened on the first; `tab` and `shift+tab` switch (wrapping) and `1`, `2` and `3` jump:
+
+- **Agents**: the open pull requests of the branches your agents are on, one row per pull request.
+- **Review requested**: the open pull requests that ask for your review, updated in the last `review_requested_days` days.
+- **All open**: the open pull requests you opened.
+
+The last two search every GitHub host AIM watches when the list opens, every minute while it is open, and on `r`. Their empty texts are `loading pull requests…`, `no open pull requests ask for your review` (with the days named when a limit is set) and `you have no open pull requests`; a host whose search failed adds `pull requests on <host>: <reason>`. The Agents tab says `no open pull requests on agent branches` when it is empty.
+
+The keys are in [Keys](keys.md#pr-list): `j` and `k` move; `enter` shows the diff; `i`, `c`, `a`, `M` and `O` open the conversation, checks, approve, merge and the browser; `r` refreshes; `esc` closes. On the Agents tab `enter`, `a` and `M` switch to the agent's tab and show the pull request in its drawer; `a` and `M` then open the approve confirm or the merge box. On the other tabs they work through a checkout: a pane in the row's repository, whose drawer opens; with none the notice is `no checkout of <owner/name> here; O opens it in the browser`. `a` on your own pull request says `you can't approve your own pull request` and leaves the list open.
+
+## Checks
+
+To see the checks of the drawer's pull request, press `c` in the drawer, or `c` on a list row. The overlay lists each check with how long it took, failed first, then running, passed and skipped; before they arrive it says `loading checks…`, and with none `no checks on <sha7>`.
+
+The keys are in [Keys](keys.md#checks-overlay). `j` and `k` select, `l` opens a log or summary page, `O` opens the check's page in the browser (`no page for that check` when it has none), `r` refreshes and `esc` closes.
+
+- **A GitHub Actions job** has a log page with the tail of its log. `]` and `[` jump between errors, `enter` opens or closes a group, `g` and `G` go to the ends, `r` reads it again, `esc` goes back to the list. A job that is still running says `the log is ready when the job ends`.
+- **A completed check run from another app**, such as CodeQL, opens a summary page; `enter` opens the link on the cursor's line in the browser. A run with no summary and a commit status say `no log for <name>; O opens its page`.
+
+## The conversation
+
+To read the description and the timeline, press `i` in the drawer or on a list row. Its keys are in [Reading](reading.md).
+
+## Approve
+
+To approve, press `a` in the drawer or on a list row. A confirm names the pull request and `at head <sha7>, the commit you reviewed`: the approval is sent for that commit, the head the drawer's diff loaded. Press `enter` to approve or `esc` to cancel; no other key works. The toast is `approved #<n>`.
+
+- Once the poll has the pull request, your own says `you can't approve your own pull request` and no confirm opens, and a merged or closed one says `#<n> is merged` or `#<n> is closed`. A merged or closed pull request cannot be merged either, with the same notice.
+
+## Merge
+
+To merge, press `M` in the drawer or on a list row, or `ctrl+space g m`, which opens the drawer on the focused pane first if none is open. The merge box shows the pull request, `head <sha7>, the commit you reviewed; GitHub refuses if the PR moved since`, its checks, review and merge state, and warns about failed or running checks and a missing approval. `enter` still merges after a warning, if GitHub allows it.
+
+| To | Press |
+| --- | --- |
+| Choose squash, merge commit or rebase | `s`, `m`, `r` |
+| Delete the branch after merging, or keep it | `d` |
+| Merge | `enter` |
+| Cancel | `esc` |
+
+The keys are in [Keys](keys.md#merge-box). Only the methods the repository allows are offered; the box starts on merge commit, else squash, else rebase. The delete row shows only for a branch in the same repository that is not the default branch, and starts on when the repository deletes head branches after merging.
+
+The merge always carries the reviewed head. If the pull request moved since, nothing merges and the toast is `merge #<n>: the PR moved since you reviewed it; nothing merged`. On success the toast is `merged #<n> (<method>)`, with `, branch deleted` when it was deleted.
+
+## Open in the browser
+
+`O` opens the pull request's page from the drawer or the list, and a check's page from the checks overlay. AIM runs `xdg-open` on Linux and `open` on macOS. Only `http` and `https` links open; any other says `not opening that link: only http and https links open`.
+
+## Clean up a merged worktree
+
+After a merge, AIM looks for a worktree that has the merged branch checked out. It skips a pull request from another repository and one from the default branch. To check later, run `worktree.cleanup` from the command palette (`ctrl+space :`) on the focused pane, once AIM knows its pull request is merged; the command has no default key, so bind it under `[keys.leader]` to get one.
+
+When the worktree can go, a confirm titled `Clean up after #<n>` offers two boxes. `w` switches removing the worktree, `b` deleting its local branch, `enter` cleans up and `esc` keeps everything; no other key works.
+
+- A pane that keeps the worktree, a shell there or an agent started there, stops the removal: the confirm names it, and only `esc` is offered. Cleanup closes no pane.
+- The branch is offered only when it holds nothing the merged head does not: its tip is the head or behind it. It goes only with the worktree. Nothing is forced.
+- The result is a toast such as `removed <path>; deleted <branch>`, or `kept <path>: <reason>`.
+
+The worktree stays, with a reason instead of the confirm, when it is not one of AIM's own worktrees (`<path> is outside AIM's worktrees, so it stays`, see [Agents side by side](agents.md#a-new-worktree)), is locked, has uncommitted changes, or an agent is still working in it. After a merge, the reason is added to the merge toast while it shows. From the command, the other notices are `#<n> is not merged`, `#<n>'s branch is in another repository` and `<branch> is the default branch, so it stays`.
