@@ -110,7 +110,7 @@ func keysPage() (string, error) {
 	w("A key written as two keys, such as `g l`, is two keys pressed in turn after the leader.\n\n")
 
 	w("## After the leader\n\n")
-	w("Keys pressed after the leader key. They set `[keys.leader]`.\n\n")
+	w("Keys pressed after the leader key. Remap them under `[keys.leader]`.\n\n")
 
 	groups := groupOrder()
 

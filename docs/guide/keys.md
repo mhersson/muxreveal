@@ -10,7 +10,7 @@ The leader key is `ctrl+space` (`leader_key`). Pressing it and waiting 300 ms (`
 
 ## After the leader
 
-Keys pressed after the leader key. They set `[keys.leader]`.
+Keys pressed after the leader key. Remap them under `[keys.leader]`.
 
 ### Panes
 
