@@ -121,6 +121,7 @@ type App struct {
 	prefix  string    // first key of a two-key sequence while pending; "" before it
 	popup   bool      // which-key popup visible; only while pending with no prefix
 	seq     int       // leader press counter; a whichKeyMsg with another seq is stale
+	escAt   time.Time // the esc guard's last esc; zero while no guard runs (see handleKey)
 	notice  string    // toast message until the next key press
 	marked  toastMark // the level the toast text was raised at
 	pushSeq int       // push request counter; an answer for another request is stale

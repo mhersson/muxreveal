@@ -1,17 +1,59 @@
 package ui
 
 import (
+	"time"
+
 	tea "charm.land/bubbletea/v2"
 	uv "github.com/charmbracelet/ultraviolet"
 
 	"github.com/mhersson/muxreveal/internal/core"
 )
 
-// handleKey routes a key press: an open confirm first, then an open prompt, then
+// escQuiet is how long esc must stay up before an esc reaches a pane again
+// after an esc closed what had the keyboard and handed it to the pane.
+const escQuiet = 500 * time.Millisecond
+
+// handleKey routes a key press and runs the esc guard. In Claude Code one esc
+// interrupts a turn, so after an esc hands a pane the keyboard, an esc bound
+// for a pane is dropped until escQuiet passes with no esc; each one dropped
+// restarts the wait, and any other key ends the guard. Esc is matched by its
+// code, since a terminal can deliver two presses in one read as alt+esc.
+func (a *App) handleKey(msg tea.KeyPressMsg) tea.Cmd {
+	if msg.Code != tea.KeyEscape {
+		a.escAt = time.Time{}
+
+		return a.routeKey(msg)
+	}
+
+	now := a.clock.Now()
+
+	if !a.paneHasKeys() {
+		a.escAt = time.Time{}
+		cmd := a.routeKey(msg)
+
+		if a.paneHasKeys() {
+			a.escAt = now
+		}
+
+		return cmd
+	}
+
+	if !a.escAt.IsZero() && now.Sub(a.escAt) < escQuiet {
+		a.escAt = now
+
+		return nil
+	}
+
+	a.escAt = time.Time{}
+
+	return a.routeKey(msg)
+}
+
+// routeKey routes a key press: an open confirm first, then an open prompt, then
 // copy mode, then the open overlay, compose box, merge box, plan overlay, conversation, checks,
 // PR list or worktree picker, then the leader state machine, then the rail while
 // it has the keyboard, then the review drawer while it has it, then the focused pane.
-func (a *App) handleKey(msg tea.KeyPressMsg) tea.Cmd {
+func (a *App) routeKey(msg tea.KeyPressMsg) tea.Cmd {
 	// An esc cancels a plan read that has not answered yet.
 	if msg.String() == "esc" {
 		a.planSeq++
@@ -77,6 +119,12 @@ func (a *App) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 	a.keyToFocused(msg)
 
 	return nil
+}
+
+// paneHasKeys reports whether the next key goes to the focused pane: nothing
+// before it in routeKey's order takes it. It must follow that order.
+func (a *App) paneHasKeys() bool {
+	return !a.aboveDrawerModalOpen() && !a.composeShown() && !a.pending && !a.rail.focused && !a.drawerHasKeys()
 }
 
 // handlePaste sends a paste to the topmost text input: prompt, overlay, compose box,

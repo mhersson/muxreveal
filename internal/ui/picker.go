@@ -321,7 +321,7 @@ func (p *picker) edit(msg tea.Msg) {
 	}
 }
 
-// handlePickerKey edits the open picker. handleKey clears the notice only after
+// handlePickerKey edits the open picker. routeKey clears the notice only after
 // this slot, so the picker clears it itself.
 func (a *App) handlePickerKey(msg tea.KeyPressMsg) tea.Cmd {
 	a.notice = ""
