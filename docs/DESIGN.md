@@ -267,6 +267,7 @@ Go 1.27 (`tuios.dev/vt` needs 1.26 or later). The reason for Rust was a proven V
 | Config and state | `pelletier/go-toml/v2`; `encoding/json` | TOML config, JSON layout state and reviewed-hunk files |
 | Clipboard | OSC 52 plus direct exec of `wl-copy` and `wl-paste`, `xclip`, or `pbcopy` and `pbpaste`, with explicit arguments | No cgo and no shell; `atotto/clipboard` is not used because its primary-selection switch is global state and it drops the clipboard arguments |
 | CLI | `spf13/cobra` | `aim`, `aim hook claude-code`, `aim statusline`, future subcommands |
+| Release | GoReleaser 2 in GitHub Actions | The operator's release pattern across projects: one config for the builds, archives, checksums and changelog |
 | Diagnostics | `log/slog` to a file | Structured logs, never to the screen |
 
 ## Key technical designs
@@ -1263,6 +1264,21 @@ State lives in the platform state dir (`$XDG_STATE_HOME/aim` on Linux, `~/Librar
 **Quit**
 
 - The saver is closed (the pending state is written, later saves are dropped) before any pane is closed, so agents that die on quit, `SIGHUP` or `SIGTERM` are not saved as shells.
+
+### Releases
+
+- Pushing a `v*` tag runs `release.yaml`. Every `ci.yaml` gate runs first: it is called as a reusable workflow, and its pull-request-only jobs (govulncheck, static-checks) run for a tag too. A failed gate publishes nothing. Then GoReleaser `release --clean` runs with the workflow's own token, and `contents: write` on that job alone.
+- What is built (`.goreleaser.yaml`): linux and darwin on amd64 and arm64, `CGO_ENABLED=0`, `-trimpath`, `-s -w`, the version values. No Windows: `creack/pty` has no Windows support. tar.gz archives with the binary, `LICENSE`, `THIRD_PARTY.md`, and `README.md` and `config.example.toml` when present, plus a sha256 checksums file. The macOS binaries are unsigned; one downloaded with a browser needs `xattr -d com.apple.quarantine aim`.
+- Stripping: every build for use (`make build`, `make install`, the release, the formula) is stripped with `-s -w`. The build info stays, so `go version -m` names a binary's commit. Tests and bench builds are not stripped.
+- Notes:
+  - `.github/release-notes/<tag>.md` when it exists.
+  - Else, for a pre-release tag (a `-` suffix, which `prerelease: auto` marks a GitHub pre-release), the one-line release-candidate text.
+  - Else GoReleaser's changelog since the previous final release, the newest lower final tag reachable from the tag, so a release candidate in between does not cut it short: Features (`feat`), Fixes (`fix`) and Performance (`perf`). A breaking `!` commit goes in its type's group; all other commits, merge commits and non-conventional subjects are left out.
+  - The release step passes the pushed tag to GoReleaser (`GORELEASER_CURRENT_TAG`), because a final tag often shares its commit with its last release candidate, and GoReleaser's own pick would take the candidate.
+- Checks: `make release-dry` locally (it needs GoReleaser 2), and the `Release check` workflow on pull requests that change the release files. It is not a required check.
+- Homebrew: `Formula/aim.rb` in the tap `mhersson/formulas` builds from the tag's source tarball with Go and sets the version with `-X`. It is updated by hand after each release; the release job never touches the tap.
+- Tags: a tag is never moved, deleted or re-pushed, since the module proxy and checksum database keep the first one. A failed release is fixed forward with the next patch version. The config never replaces an asset on an existing release (`release.replace_existing_artifacts` is off).
+- `go install github.com/mhersson/aim/cmd/aim@latest` takes the newest final release. While none exists, it takes the newest pre-release.
 
 ## Keymap draft
 

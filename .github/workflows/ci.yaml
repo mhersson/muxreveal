@@ -16,6 +16,8 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
+  # The release workflow runs every gate before it publishes.
+  workflow_call:
 
 permissions:
   contents: read
@@ -114,7 +116,7 @@ jobs:
     needs: [changes]
     if: |
       !cancelled() &&
-      github.event_name != 'push' &&
+      (github.event_name != 'push' || github.ref_type == 'tag') &&
       needs.changes.outputs.go != 'false'
     runs-on: ubuntu-latest
     steps:
@@ -160,7 +162,8 @@ jobs:
           echo "No callable, fixable vulnerabilities. Remaining findings are uncalled by this code or have no upstream fix."
 
   static-checks:
-    if: github.event_name != 'push'
+    # A tag push reaches this workflow only through the release workflow.
+    if: github.event_name != 'push' || github.ref_type == 'tag'
     runs-on: ubuntu-latest
     steps:
       # The full history, so the commit scan can walk the pull request's commits.
