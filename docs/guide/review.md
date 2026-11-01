@@ -11,7 +11,7 @@ To open the drawer for the focused pane, press `ctrl+space d`. It slides in over
 - Outside a git repository the notice is `not a git repository`. With no drawer open, the other drawer commands show `no review drawer is open`.
 - With the drawer open and the keyboard in a pane, `ctrl+space d` points the drawer at the focused pane, if that pane is in a repository, and gives it the keyboard. With the keyboard in the drawer, it closes the drawer.
 - To give the keyboard back to the panes and leave the drawer open, press `ctrl+space h`. With the drawer showing and no visible pane to the right, `ctrl+space l` gives the drawer the keyboard.
-- `esc` steps back one level: it closes the search prompt, then a markdown page, then the file tree, then un-zooms, and when none of those is on it closes the drawer.
+- `esc` steps back one level: it closes the search prompt, then a page opened from a link in a rendered markdown file, then takes the keyboard from the file tree (the tree stays open), then un-zooms, and when none of those is on it closes the drawer. A markdown file shown with `m` is not a page, so `esc` leaves it on.
 
 Each tab has its own drawer, and a restart restores whether it was open. The drawer's keys apply while it has the keyboard; the leader keys work as everywhere.
 
@@ -90,7 +90,7 @@ An agent can work in more than one worktree. By default the drawer follows the a
 The list has, from the top:
 
 - the "Follow the agent" row, marked `on` while the drawer follows;
-- "Touched by <agent>": the places the agent edited this session, newest first, plus the agent's own directory and a pinned place even when no edit names them, each as `<repo> · <branch>`, with `latest` on the newest and `agent here` on the worktree of the agent's own directory;
+- "Touched by <agent>" (the name on the agent's card in the rail): the places the agent edited this session, newest first, plus the agent's own directory and a pinned place even when no edit names them, each as `<repo> · <branch>`, with `latest` on the newest and `agent here` on the worktree of the agent's own directory;
 - "Other worktrees of <project>": the other checked-out worktrees of the agent's repository.
 
 A place shows its changes (`+A -R N files`, or `clean`) once they are counted, and the age of the latest edit there.
