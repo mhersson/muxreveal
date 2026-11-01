@@ -77,7 +77,7 @@ func newRootCmd() *cobra.Command {
 	}
 
 	cmd.Flags().StringVar(&configPath, "config", defaultConfig, "config file")
-	cmd.Flags().BoolVar(&fresh, "fresh", false, "start with one shell instead of the saved layout; the first change replaces the saved state")
+	cmd.Flags().BoolVar(&fresh, "fresh", false, "start with one shell instead of the saved layout; the saved layout is replaced as AIM starts")
 	cmd.Flags().StringVar(&recordDir, "record", "", "write each pane's terminal output to a recording in this directory")
 	// Diagnostics for bench inputs and VT fixtures, not a user feature.
 	_ = cmd.Flags().MarkHidden("record")
