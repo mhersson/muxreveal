@@ -49,7 +49,7 @@ In a tab that is not BSP, `ctrl+space ;` shows `preselection works in BSP layout
 - Rotate keeps the split's ratio. A lone pane has nothing to rotate: `nothing to rotate`. In another mode the notice is `rotate works in BSP layouts`.
 - Equalize does what suits the mode: in BSP the panes become equal along each axis, in master-stack the tab goes back to `master_ratio`, and in scrolling every column goes back to `column_width`. With fewer than two panes nothing changes.
 - Promote is dwm's zoom: the focused pane swaps places with the first pane, or with the second when it is the first. In another mode the notice is `promote works in master-stack layouts`.
-- Each of them ends zoom when it changes something.
+- Each of them ends zoom when the tab has two or more panes.
 
 ## Resize and swap in each mode
 
