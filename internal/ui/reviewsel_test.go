@@ -1692,8 +1692,8 @@ func TestDiffDragReadsEachRowOnce(t *testing.T) {
 	}
 }
 
-// rewritten is res with every line's text changed.
-func rewritten(res git.Result) git.Result {
+// rewritten is res with the text of the lines that match changed.
+func rewritten(res git.Result, match func(text string) bool) git.Result {
 	res.Files = slices.Clone(res.Files)
 
 	for i := range res.Files {
@@ -1705,7 +1705,9 @@ func rewritten(res git.Result) git.Result {
 			h.Lines = slices.Clone(h.Lines)
 
 			for k := range h.Lines {
-				h.Lines[k].Text = "re " + h.Lines[k].Text
+				if match(h.Lines[k].Text) {
+					h.Lines[k].Text = "re " + h.Lines[k].Text
+				}
 			}
 		}
 	}
@@ -1756,7 +1758,7 @@ func TestDiffDragCopiesWhatItCovers(t *testing.T) {
 
 			for i, dy := range tt.path {
 				if i == tt.rebuild {
-					v.rebuildFor(rewritten(v.res), v.rowsSplit)
+					v.rebuildFor(rewritten(v.res, func(string) bool { return true }), v.rowsSplit)
 				}
 
 				mmove(d.App, x+4, y+dy, tea.MouseLeft)
@@ -1778,6 +1780,35 @@ func TestDiffDragCopiesWhatItCovers(t *testing.T) {
 				t.Errorf("primary writes %q, want %q", got, want)
 			}
 		})
+	}
+}
+
+func TestDiffCopyBeforeReloadCompare(t *testing.T) {
+	t.Parallel()
+
+	d := newDiffSel(t)
+	v := d.v
+	from, to := rowWith(t, v, "line 27"), rowWith(t, v, "line 29")
+	x0, y0 := rowCell(t, d.drawerRig, from, d.code(t, from))
+	x1, y1 := rowCell(t, d.drawerRig, to, d.code(t, to)+len("line 29")-1)
+
+	dragRun(d.App, x0, y0, x1, y1, 0)
+
+	if d.text == nil || v.sel == nil {
+		t.Fatal("setup: no selection")
+	}
+
+	// Rows laid out again after the update's compare, as drawerAfterUpdate does;
+	// the selection's ends keep their lines.
+	v.rebuildFor(rewritten(v.res, func(s string) bool { return s == "line 28" }), v.rowsSplit)
+	run(d.App, press(d.App, keyRune('y')))
+
+	if got := clipboardWrites(d.clip); !slices.Equal(got, []string{"line 27\nre line 28\nline 29"}) {
+		t.Errorf("y wrote %q, want the rows' new text", got)
+	}
+
+	if d.text != nil || v.sel != nil {
+		t.Error("the selection outlived a reload that changed its text, because the copy read it first")
 	}
 }
 
