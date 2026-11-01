@@ -9,9 +9,8 @@ what to do about it. Skim it before your first commit each session.
   glyphs in Go source as `\u` or `\U` escapes.
 - `make scan` is the scan of record, and part of `make check-fast` and
   `make check`. It fails on private-use glyphs in Go, TOML and Markdown files
-  (`docs/DESIGN.md`, which shows glyphs on purpose, and `docs/superpowers`
-  aside) and on em-dashes in Go, Markdown and TOML files (`docs/superpowers`
-  aside), untracked files included. It first proves grep can match its
+  and on em-dashes in Go, Markdown and TOML files (`docs/superpowers` aside in
+  both), untracked files included. It first proves grep can match its
   patterns, so a pass means something.
 - `make check-fast` skips the Go gates when every changed file is non-code:
   Markdown at the repository root, anything under `docs/` or `.github/`,
@@ -100,8 +99,8 @@ what to do about it. Skim it before your first commit each session.
   `ulimit -n`, is the way out.
 - kqueue sends events inotify does not: a Write on a watched directory when
   its entries change, and Chmod-only events. The watcher keeps them from
-  counting as changes (see Watch set in `docs/DESIGN.md`); a change to its
-  event filter needs its tests to pass on macOS as well as Linux.
+  counting as changes; a change to its event filter needs its tests to pass on
+  macOS as well as Linux.
 - `fsnotify` is a copy in `internal/git/fsnotify` because v1.10.1's kqueue
   backend can close a watch descriptor twice while a watcher closes. The
   second close shuts whatever took the number, such as another git call's

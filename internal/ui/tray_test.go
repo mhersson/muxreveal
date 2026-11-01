@@ -454,7 +454,8 @@ func TestBarLinesStayExactWidth(t *testing.T) {
 	}
 }
 
-// The tray gives way in DESIGN's order as the bar narrows.
+// As the bar narrows the tray drops load, then PR, then the layout mode, then
+// the clock.
 func TestTrayDropOrder(t *testing.T) {
 	t.Parallel()
 

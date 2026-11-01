@@ -123,9 +123,10 @@ func pageAnchors(src string) []string {
 	return anchors
 }
 
-// brokenLinks lists the links of docs/guide/*.md and README.md (Markdown link
-// targets and HTML src and href attributes) and the guide mentions of
-// config.example.toml that do not resolve in a repository-rooted fsys.
+// brokenLinks lists the links of docs/guide/*.md, README.md and
+// docs/architecture.md (Markdown link targets and HTML src and href attributes)
+// and the guide mentions of config.example.toml that do not resolve in a
+// repository-rooted fsys.
 func brokenLinks(fsys fs.FS) ([]string, error) {
 	var problems []string
 
@@ -166,8 +167,10 @@ func brokenLinks(fsys fs.FS) ([]string, error) {
 		return nil, fmt.Errorf("glob guides: %w", err)
 	}
 
-	if _, err := fs.Stat(fsys, "README.md"); err == nil {
-		pages = append(pages, "README.md")
+	for _, page := range []string{"README.md", "docs/architecture.md"} {
+		if _, err := fs.Stat(fsys, page); err == nil {
+			pages = append(pages, page)
+		}
 	}
 
 	for _, page := range pages {
@@ -246,6 +249,7 @@ func TestBrokenLinks(t *testing.T) {
 		name   string
 		page   string
 		readme string
+		arch   string
 		files  []string
 		toml   string
 		want   []string
@@ -270,6 +274,9 @@ func TestBrokenLinks(t *testing.T) {
 		{name: "readme missing anchor", page: "x\n", readme: "[a](docs/guide/target.md#gone)\n", want: []string{"README.md", "target.md#gone"}},
 		{name: "readme image present", page: "x\n", readme: "<img src=\"docs/images/x.png\" alt=\"x\">\n", files: []string{"docs/images/x.png"}},
 		{name: "readme image missing", page: "x\n", readme: "<td><img src=\"docs/images/y.png\"></td>\n", want: []string{"README.md", "docs/images/y.png"}},
+		{name: "architecture good links and anchors", page: "x\n", arch: "[a](guide/target.md#same) [b](#own) [c](../LICENSE)\n\n## Own\n", files: []string{"LICENSE"}},
+		{name: "architecture missing file", page: "x\n", arch: "[a](nope.md)\n", want: []string{"docs/architecture.md", "docs/nope.md"}},
+		{name: "architecture missing anchor", page: "x\n", arch: "[a](guide/target.md#gone)\n", want: []string{"docs/architecture.md", "target.md#gone"}},
 		{name: "guide html href missing", page: "<a href=\"nope.md\">n</a>\n", want: []string{"a.md", "nope.md"}},
 		{name: "html scheme targets", page: "<img src=\"https://example.com/a.png\"> <a href=\"https://example.com\">e</a>\n"},
 		{name: "html in a fence or code span", page: "```\n<img src=\"nope.png\">\n```\nsee `<img src=\"nope.png\">` here\n"},
@@ -284,6 +291,10 @@ func TestBrokenLinks(t *testing.T) {
 			}
 			if tt.readme != "" {
 				fsys["README.md"] = &fstest.MapFile{Data: []byte(tt.readme)}
+			}
+
+			if tt.arch != "" {
+				fsys["docs/architecture.md"] = &fstest.MapFile{Data: []byte(tt.arch)}
 			}
 
 			for _, f := range tt.files {

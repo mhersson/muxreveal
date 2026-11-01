@@ -120,7 +120,7 @@ func trayWidth(mods []trayModule, icons bool) int {
 }
 
 // planBar decides what the bar shows in width cells. As the width shrinks it
-// gives way in DESIGN's order: load, PR and the layout mode leave the tray;
+// gives way in this order: load, PR and the layout mode leave the tray;
 // inactive tab names shrink to the icon and then the number, longest names
 // first; the clock leaves; the active name shrinks the same way; finally the
 // segments farthest from the active tab are left out.

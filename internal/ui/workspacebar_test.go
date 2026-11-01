@@ -243,7 +243,8 @@ func signature(p barPlan) string {
 	return strings.Join(ids, ",") + " | " + strings.Join(tabs, " ")
 }
 
-// The drop order of DESIGN's narrow-terminal rule, stage by stage.
+// As the bar narrows it drops load and PR, shrinks inactive names longest
+// first, drops the clock, shrinks the active name, then the farthest segments.
 func TestWorkspaceBarPlan(t *testing.T) {
 	t.Parallel()
 
