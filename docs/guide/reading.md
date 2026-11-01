@@ -62,7 +62,7 @@ A paste goes into the prompt. These keys are fixed. Pressing `enter` with nothin
 
 ## Links and pictures
 
-To follow a link, put the cursor on its line and press `enter`. A line with one link follows it; with several, a chooser titled `Links` lists them, and with none nothing happens. A `mailto:` link is not offered.
+To follow a link, put the cursor on its line and press `enter`. A line with one link follows it; with several, a chooser titled `Links` lists them, and with none nothing happens. Only web links and links to files are offered: a `mailto:` link, or a link of another scheme such as `ftp:`, is not.
 
 | In the chooser | Press |
 | --- | --- |
@@ -72,7 +72,7 @@ To follow a link, put the cursor on its line and press `enter`. A line with one 
 
 Other keys, and a paste, are dropped while the chooser is open. These keys are fixed, and the review drawer's chooser for a rendered markdown file uses them too.
 
-- A web link opens in the browser (`xdg-open` on Linux, `open` on macOS) and the box stays. A link that is not http or https is refused with `not opening that link: only http and https links open`.
+- A web link opens in the browser (`xdg-open` on Linux, `open` on macOS) and the box stays.
 - A link to a markdown file inside the worktree opens as a page over the plan or file; the title shows the page's path. A page's links open further pages, and `esc` goes back one page.
 - Any other file inside the worktree opens in the editor at line 1, in a new shell pane beside the focused one, and closes the box. The editor is `$VISUAL`, else `$EDITOR`, else `vi`.
 - A path outside the worktree says `not opening <path>: outside the worktree`, a missing one `not opening <path>: no such file` and a folder `not opening <path>: it is a folder`; the box stays open.
