@@ -134,4 +134,4 @@ The compose box's title and body fields take typing. `[keys.compose]` refuses a 
 aim: config <path>: keys.compose: "s" is a key the title and body take
 ```
 
-A key with another modifier, such as the default `alt+s`, is fine. A `"none"` entry is not checked. The rest of the compose box's typing, and typing in the other views' searches and boxes, cannot be remapped; see [Keys you cannot remap](keys.md#keys-you-cannot-remap).
+A key with another modifier, such as the default `ctrl+s`, is fine. A `"none"` entry is not checked. The rest of the compose box's typing, and typing in the other views' searches and boxes, cannot be remapped; see [Keys you cannot remap](keys.md#keys-you-cannot-remap).
