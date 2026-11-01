@@ -115,7 +115,8 @@ func wholePart(raw string, tagCR bool, width int) (wrapPart, bool) {
 		return wrapPart{}, false
 	}
 
-	// Every byte takes at least one cell, so a line longer than width cannot fit.
+	// Every byte takes a cell or more, so a longer line cannot fit, and a line
+	// over the budget is cut and gains the ellipsis unit.
 	line := strings.TrimSuffix(raw, "\r")
 	if len(line) > min(width, lineBudget) {
 		return wrapPart{}, false
