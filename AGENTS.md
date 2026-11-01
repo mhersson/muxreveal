@@ -7,14 +7,14 @@ everything above it is ours.
 
 ## Sources of truth
 
-- `docs/DESIGN.md`: requirements (IDs like AG-3, DF-2), architecture, packages,
-  key designs, keymap, milestones. Read the sections your change touches
-  before you change it.
+- `docs/architecture.md`: how the running app fits together, why the
+  non-obvious designs are so, and the invariants a change must keep. Read the
+  sections your change touches before you change it.
 - `docs/gotchas.md`: platform and tooling quirks; skim it before your first
   commit each session.
 
-If the code and DESIGN.md disagree, stop and ask. Don't silently change the
-design; propose an edit to DESIGN.md instead.
+If the code and the architecture note disagree, stop and ask. Don't silently
+change the design; propose an edit to the note instead.
 
 ## Workflow
 
@@ -58,7 +58,7 @@ make release-dry  # the GoReleaser dry run: archives, checksums, binaries, chang
 | Package            | Responsibility                                                    |
 | ------------------ | ----------------------------------------------------------------- |
 | `cmd/aim`          | Binary: CLI, `hook` and `statusline` subcommands, wiring          |
-| `internal/core`    | Event bus, state store, actions, config, tab layouts (`internal/core/tiling` holds the ported tuios layouts) |
+| `internal/core`    | State store, actions, config, tab layouts (`internal/core/tiling` holds the ported tuios layouts) |
 | `internal/ui`      | Compositor, frames and chrome, widgets, keymap, themes, syntax highlighting, image placement |
 | `internal/term`    | PTY plus the `VT` interface; `tuios.dev/vt` adapter               |
 | `internal/harness` | `Harness` interface; Claude Code adapter                          |
@@ -75,8 +75,9 @@ Dependency rules:
   Bubbles.
 - `internal/git`, `internal/github`, `internal/md` and `internal/store` have no
   UI imports and are testable on their own.
-- Only `internal/core` mutates app state. Services send events to it; the UI
-  renders from it.
+- Only `internal/core` mutates app state, through actions on its store.
+  Services report to the UI's update loop as messages, which it turns into
+  actions; the UI renders from the state.
 - Only the adapter in `internal/term` imports `tuios.dev/vt`. Everything else
   uses the `VT` interface.
 
@@ -94,7 +95,7 @@ Dependency rules:
   stderr, since the TUI owns the terminal.
 - Colors come only from the theme. No hardcoded colors in widgets.
 - Every user action is a named command, so it's reachable from the keymap and
-  the command palette (UX-1, UX-2).
+  the command palette.
 - Shell out to `git` with explicit arguments (never through `sh -c`), `-z`
   output where available, and `GIT_OPTIONAL_LOCKS=0` for reads.
 
@@ -191,7 +192,7 @@ need them without a push.
 ## Safety rules
 
 - Never modify the user's `~/.claude` settings. Agents get hooks only through a
-  generated `--settings` file (see DESIGN.md).
+  generated `--settings` file (see `docs/architecture.md`).
 - Never touch the user's git index, stash or branches as a side effect. Turn
   snapshots use a temporary `GIT_INDEX_FILE` and `refs/aim/*` only. A
   local branch is deleted only from the worktree cleanup confirm, with its box

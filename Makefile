@@ -14,7 +14,7 @@ help:
 	@echo "  fmt          format the code with golangci-lint fmt"
 	@echo "  fmt-check    fail and show the diff if formatting is needed"
 	@echo "  tidy-check   fail if go mod tidy would change go.mod or go.sum"
-	@echo "  scan         fail on private-use glyphs in Go, TOML and Markdown files (DESIGN.md aside), em-dashes in Go, Markdown and TOML files and wall-clock bounds in tests"
+	@echo "  scan         fail on private-use glyphs in Go, TOML and Markdown files, em-dashes in Go, Markdown and TOML files and wall-clock bounds in tests"
 	@echo "  scan-commits fail on IDs, session links, em-dashes and big blobs in SCAN_BASE..SCAN_HEAD (origin/main..HEAD)"
 	@echo "  check-fast   the per-commit check: build, fmt-check, vet, lint, test-changed, scan; a change of non-code files only runs scan and the doc tests"
 	@echo "  check        the Linux go-checks gates of CI: build, build-darwin, fmt-check, vet, lint, test-race, tidy-check, scan"
@@ -81,7 +81,7 @@ scan:
 	dash=$$(printf '\342\200\224'); \
 	printf '\357\200\200\n' | grep -qE "$$glyph" || { echo "scan: grep cannot match the glyph pattern"; exit 1; }; \
 	printf '\342\200\224\n' | grep -qF "$$dash" || { echo "scan: grep cannot match an em-dash"; exit 1; }; \
-	git ls-files -z --cached --others --exclude-standard -- '*.go' '*.toml' '*.md' ':(exclude)docs/DESIGN.md' ':(exclude)docs/superpowers' > "$$list" || exit 1; \
+	git ls-files -z --cached --others --exclude-standard -- '*.go' '*.toml' '*.md' ':(exclude)docs/superpowers' > "$$list" || exit 1; \
 	bad=$$(xargs -0 grep -IlE "$$glyph" /dev/null < "$$list") || :; \
 	if [ -n "$$bad" ]; then \
 		echo "scan: private-use glyphs in:"; \
