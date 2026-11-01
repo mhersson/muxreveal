@@ -19,7 +19,8 @@ help:
 	@echo "  check-fast   the per-commit check: build, fmt-check, vet, lint, test-changed, scan"
 	@echo "  check        the Linux go-checks gates of CI: build, build-darwin, fmt-check, vet, lint, test-race, tidy-check, scan"
 	@echo "  install      go install the binary into GOBIN, else GOPATH/bin"
-	@echo "  clean        remove bin/"
+	@echo "  release-dry  the GoReleaser dry run (needs GoReleaser 2): snapshot archives, checksums and binaries"
+	@echo "  clean        remove bin/ and dist/"
 
 GO_LDFLAGS = -s -w
 
@@ -107,5 +108,9 @@ check: build build-darwin fmt-check vet lint test-race tidy-check scan
 install:
 	go install -trimpath -ldflags='$(GO_LDFLAGS)' ./cmd/aim
 
+.PHONY: release-dry
+release-dry:
+	sh scripts/release-check.sh
+
 clean:
-	rm -rf bin
+	rm -rf bin dist

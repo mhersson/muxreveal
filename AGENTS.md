@@ -51,6 +51,7 @@ make scan-commits # IDs, trailers, em-dashes and big blobs in the branch's commi
 make check-fast   # the per-commit check
 make check        # CI's Linux go-checks gates, for a local run
 make install      # go install into $GOBIN, else $GOPATH/bin
+make release-dry   # the GoReleaser dry run: archives, checksums and binaries
 ```
 
 ## Layout
