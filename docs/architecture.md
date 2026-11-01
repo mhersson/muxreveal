@@ -29,8 +29,9 @@ quitting AIM ends its agents, and the next start resumes their sessions.
   `SetBranchPR`, `NoteEdit` and the like).
 - **The UI drives everything.** `ui.App` (`internal/ui/app.go`) owns the store,
   the panes and the overlays. Every service reports to its update loop as a
-  message; `App.dispatch` turns messages into actions and hands each new state
-  to the saver. `View` renders from the state and the UI's caches.
+  message; the message's handler builds a `core.Action`, and `App.dispatch`
+  applies it and hands the new state to the saver. `View` renders from the
+  state and the UI's caches.
 
 `run` in `cmd/aim/main.go` builds the services and tears them down:
 
