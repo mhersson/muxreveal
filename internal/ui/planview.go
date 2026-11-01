@@ -35,7 +35,8 @@ type planView struct {
 	root, base string
 	view       mdView
 
-	// sum is the hash of pv.plan's bytes, whichever page view.doc shows.
+	// sum is the hash of the plan bytes view.doc was parsed from; a file
+	// overlay keeps its sum in file.
 	sum [sha256.Size]byte
 
 	// pages are the markdown files followed from the plan, the last one shown;
@@ -44,9 +45,11 @@ type planView struct {
 	pageSeq int
 	chooser *linkChooser
 
-	// reloadSeq is the serial of the newest reload ask; rewritten is set by a
-	// reload and cleared by the next key.
+	// reloadSeq is the serial of the newest reload ask; askSeq is the serial of
+	// the newest ask the operator made of a page or file, the only one whose
+	// failure speaks. rewritten is set by a reload and cleared by the next key.
 	reloadSeq int
+	askSeq    int
 	rewritten bool
 
 	// searching is the prompt being open, typing into query; last is the query

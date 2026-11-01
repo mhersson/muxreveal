@@ -268,7 +268,7 @@ func (a *App) mdBatch(root string) tea.Cmd {
 
 // onMDReload swaps in a re-read doc, keeping the view's place. An answer for
 // an overlay that closed, a check a newer one superseded or a doc no longer
-// shown is dropped; a failed read keeps the old doc in silence.
+// shown is dropped; a failed read keeps the old doc, and says why only when the operator asked.
 func (a *App) onMDReload(msg mdFileMsg) {
 	pv := a.plan
 	if pv == nil || pv.file == nil && len(pv.pages) == 0 || msg.view != pv || msg.seq != pv.reloadSeq {
@@ -276,7 +276,19 @@ func (a *App) onMDReload(msg mdFileMsg) {
 	}
 
 	path, sum := pv.shownFile()
-	if msg.path != path || msg.err != nil || msg.same {
+	if msg.path != path {
+		return
+	}
+
+	if msg.err != nil {
+		if msg.seq == pv.askSeq && !errors.Is(msg.err, context.Canceled) {
+			a.notice = markdownNotice(pv.root, path, a.getenv("HOME"), msg.err)
+		}
+
+		return
+	}
+
+	if msg.same {
 		return
 	}
 

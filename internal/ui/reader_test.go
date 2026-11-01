@@ -580,6 +580,58 @@ func TestReaderRefresh(t *testing.T) {
 		}
 	})
 
+	t.Run("removed page", func(t *testing.T) {
+		t.Parallel()
+
+		r := newPlanRig(t, 120, 40)
+		r.filePlan(t, "docs/p.md", "# Plan\n\n[next](next.md)\n")
+		next := filepath.Join(r.wt, "docs", "next.md")
+		write(t, next, gammaDoc)
+		r.open(t)
+		r.onLine(t, "next")
+		r.page(r.enter())
+
+		before := r.a.plan.shown().doc
+
+		if err := os.Remove(next); err != nil {
+			t.Fatal(err)
+		}
+
+		pressRun(r.a, keyRune('r'))
+
+		if want := markdownNotice(r.wt, next, r.home, fs.ErrNotExist); r.a.notice != want {
+			t.Errorf("notice = %q, want %q", r.a.notice, want)
+		}
+
+		if r.a.plan == nil || r.a.plan.shown().doc != before {
+			t.Error("the page was not kept")
+		}
+	})
+
+	t.Run("removed file", func(t *testing.T) {
+		t.Parallel()
+
+		m := newMDOpenRig(t, map[string]string{"docs/a.md": gammaDoc})
+		m.opens(t, "docs/a.md")
+
+		before := m.plan.shown().doc
+		path := filepath.Join(m.dir, "docs", "a.md")
+
+		if err := os.Remove(path); err != nil {
+			t.Fatal(err)
+		}
+
+		pressRun(m.App, keyRune('r'))
+
+		if want := markdownNotice(m.plan.root, path, m.getenv("HOME"), fs.ErrNotExist); m.notice != want {
+			t.Errorf("notice = %q, want %q", m.notice, want)
+		}
+
+		if m.plan == nil || m.plan.shown().doc != before {
+			t.Error("the file was not kept")
+		}
+	})
+
 	t.Run("hook rewrite", func(t *testing.T) {
 		t.Parallel()
 

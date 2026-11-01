@@ -126,7 +126,10 @@ func (a *App) planEdit() tea.Cmd {
 func (a *App) planRefresh() tea.Cmd {
 	pv := a.plan
 	if len(pv.pages) > 0 || pv.file != nil {
-		return a.mdCheck(pv)
+		cmd := a.mdCheck(pv)
+		pv.askSeq = pv.reloadSeq
+
+		return cmd
 	}
 
 	return a.reloadPlan(pv.plan, true)
