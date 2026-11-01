@@ -43,8 +43,8 @@
 ## range: 1-9
 # master_count = 1
 
-## master-stack: with one master on the left and four or more panes, lay the
-## others out as an equal grid.
+## master-stack: with one master on the left and four or more panes, lay every
+## pane, the master included, out as an equal grid. Otherwise this does nothing.
 ## values: true | false
 # master_grid = true
 
@@ -137,7 +137,7 @@
 ## The review drawer's keys, while the drawer holds the keyboard.
 ## Defaults: docs/guide/keys.md#review-drawer. Rules: docs/guide/config.md#remapping-keys.
 [keys.drawer]
-## Open the file browser on o.
+## Open the pull request's page in the web browser on o.
 # "o" = "review.browser"
 
 ## The agents rail's keys, while the rail holds the keyboard.
