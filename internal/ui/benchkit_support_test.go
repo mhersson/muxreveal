@@ -1,12 +1,17 @@
 package ui
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"image"
+	"image/png"
 	"io"
 	"log/slog"
 	"math"
+	"os"
+	"path/filepath"
 	"runtime"
 	"slices"
 	"sync"
@@ -176,7 +181,12 @@ type benchConfig struct {
 	Rail bool
 	// Review opens the review drawer on the first pane over a 40-file result; a new result arrives every benchReviewEvery.
 	Review bool
-	Trace  func(at time.Duration, drew bool) // tests only; nil in production
+	// Pictures, when set, is a directory the run writes a page with one picture
+	// into; the drawer opens on the first pane, over the fake engine's first
+	// result as with Review, and shows the page with the picture placed (see
+	// showBenchPicture).
+	Pictures string
+	Trace    func(at time.Duration, drew bool) // tests only; nil in production
 }
 
 // benchScrollingColumnWidth is the column width (percent) that keeps all six
@@ -228,8 +238,10 @@ type benchResult struct {
 	Fallbacks             int // frames whose drawer the compositor drew because the splice declined
 	GCs                   uint32
 	GCPause               time.Duration
-	Batches               int // drawer highlight batches started
-	Answers               int // their answers fed to the app, the final settle's included
+	Batches               int    // drawer highlight batches started
+	Answers               int    // their answers fed to the app, the final settle's included
+	Picture               [2]int // the picture's cols and rows; zero without Pictures
+	Pictured              int    // drawn frames that placed the picture
 }
 
 // hlRunner runs the drawer's highlight batches on their own goroutine, as
@@ -495,8 +507,13 @@ func newBenchApp(cfg benchConfig, clk clock) (*App, []core.PaneID, error) {
 		}
 	}
 
-	if cfg.Review {
-		if err := openBenchDrawer(app, ids[0]); err != nil {
+	if cfg.Review || cfg.Pictures != "" {
+		root := benchReviewRoot
+		if cfg.Pictures != "" {
+			root = cfg.Pictures
+		}
+
+		if err := openBenchDrawer(app, ids[0], root); err != nil {
 			_ = app.Close(context.Background())
 
 			return nil, nil, err
@@ -566,7 +583,7 @@ const (
 	benchReviewHunks = 2
 	// benchReviewEvery is the virtual time between two results.
 	benchReviewEvery = 500 * time.Millisecond
-	// benchReviewRoot is the worktree the reviewed pane resolves to.
+	// benchReviewRoot is the worktree the reviewed pane resolves to without Pictures.
 	benchReviewRoot = "/bench/repo"
 )
 
@@ -629,12 +646,13 @@ func benchReviewMsg(app *App, res git.Result, live bool) reviewLoadedMsg {
 	}
 }
 
-// openBenchDrawer opens the drawer on pane in branch mode, with its tree open
-// and the keyboard, and answers its first load with the fake engine's first result. The app has
-// no engine: an answer is the one message a load ends in, so the sync that
-// starts the load and the apply of its answer run as in the app. The load's
-// command is not run, so its context is ended here.
-func openBenchDrawer(app *App, pane core.PaneID) error {
+// openBenchDrawer opens the drawer on pane, whose worktree is root, in branch
+// mode, with its tree open and the keyboard, and answers its first load with
+// the fake engine's first result. The app has no engine: an answer is the one
+// message a load ends in, so the sync that starts the load and the apply of its
+// answer run as in the app. The load's command is not run, so its context is
+// ended here.
+func openBenchDrawer(app *App, pane core.PaneID, root string) error {
 	if err := app.dispatch(core.OpenReview{Pane: pane, Mode: core.ReviewBranch}); err != nil {
 		return fmt.Errorf("open the drawer: %w", err)
 	}
@@ -643,7 +661,7 @@ func openBenchDrawer(app *App, pane core.PaneID) error {
 		return fmt.Errorf("open the drawer's tree: %w", err)
 	}
 
-	app.watches.panes[pane] = &paneWatch{cwd: app.store.State().Panes[pane].Cwd, want: benchReviewRoot}
+	app.watches.panes[pane] = &paneWatch{cwd: app.store.State().Panes[pane].Cwd, want: root}
 	_ = app.reviewSync()
 	app.drawerTake()
 
@@ -660,6 +678,110 @@ func openBenchDrawer(app *App, pane core.PaneID) error {
 		return fmt.Errorf("apply the first result: %w", v.err)
 	case !v.loaded:
 		return errors.New("the drawer did not apply the first result")
+	}
+
+	return nil
+}
+
+const (
+	// benchPicturePage and benchPictureFile are the page and the picture a run writes.
+	benchPicturePage = "bench.md"
+	benchPictureFile = "picture.png"
+	// At 10x20 pixel cells the picture is 80x20 cells, as tall as a picture shows.
+	benchPictureW, benchPictureH = 800, 400
+)
+
+// benchPicture is the picture a run keeps on screen, and the placeholder runs
+// setup saw it drawn as.
+type benchPicture struct {
+	id         uint32
+	cols, rows int
+	at         []phRow
+}
+
+// placedIn reports whether frame shows every row of the picture where setup saw them.
+func (p benchPicture) placedIn(frame string) bool {
+	return len(p.at) > 0 && slices.Equal(placeholders(frame, p.id), p.at)
+}
+
+// showBenchPicture puts a picture on screen as a terminal with kitty graphics
+// shows one: it turns pictures on with 10x20 pixel cells, writes a page with
+// one picture into dir, opens it in the drawer, which must be open on dir, and
+// answers the picture's jobs with the app's loader, which decodes and encodes it.
+func showBenchPicture(app *App, dir string) (benchPicture, error) {
+	if err := writeBenchPicture(dir); err != nil {
+		return benchPicture{}, err
+	}
+
+	jobs := &recJobs{}
+	app.pictures.jobs = jobs
+	app.pictures.start()
+
+	for _, m := range []tea.Msg{truecol, gfxOK, cell10x2, da1} {
+		app.Update(m)
+	}
+
+	if !app.pictures.on() {
+		return benchPicture{}, errors.New("pictures are off")
+	}
+
+	tab := app.store.State().Tab().ID
+
+	read := app.openMarkdownPage(tab, filepath.Join(dir, benchPicturePage))
+	if read == nil {
+		return benchPicture{}, errors.New("the drawer is not open on a worktree")
+	}
+
+	app.Update(read())
+
+	p := app.drawer.views[tab].page()
+	if p == nil {
+		return benchPicture{}, fmt.Errorf("the page did not open: %s", app.notice)
+	}
+
+	// A frame asks for the picture's size and the next for its render; each answer is fed before the next frame.
+	for range 2 {
+		app.View()
+
+		for _, j := range jobs.take() {
+			msg := app.loader.run(app.ctx, j)
+			if msg.err != nil {
+				return benchPicture{}, fmt.Errorf("load the picture: %w", msg.err)
+			}
+
+			app.Update(msg)
+		}
+	}
+
+	lay := p.view.layout()
+	if len(lay.Images) != 1 || lay.Images[0].ID == 0 {
+		return benchPicture{}, fmt.Errorf("the page lays out images %+v, want one picture", lay.Images)
+	}
+
+	im := lay.Images[0]
+	pic := benchPicture{id: im.ID, cols: im.Cols, rows: im.Rows, at: placeholders(app.View().Content, im.ID)}
+
+	if len(pic.at) != im.Rows || len(jobs.jobs) != 0 {
+		return benchPicture{}, fmt.Errorf("the frame places %d of the picture's %d rows, with %d jobs left", len(pic.at), im.Rows, len(jobs.jobs))
+	}
+
+	return pic, nil
+}
+
+// writeBenchPicture writes the page and its picture into dir.
+func writeBenchPicture(dir string) error {
+	var b bytes.Buffer
+	if err := png.Encode(&b, image.NewRGBA(image.Rect(0, 0, benchPictureW, benchPictureH))); err != nil {
+		return fmt.Errorf("encode the picture: %w", err)
+	}
+
+	if err := os.WriteFile(filepath.Join(dir, benchPictureFile), b.Bytes(), 0o600); err != nil {
+		return fmt.Errorf("write the picture: %w", err)
+	}
+
+	page := "# Bench\n\n![bench](" + benchPictureFile + ")\n"
+	if err := os.WriteFile(filepath.Join(dir, benchPicturePage), []byte(page), 0o600); err != nil {
+		return fmt.Errorf("write the page: %w", err)
 	}
 
 	return nil
@@ -713,11 +835,19 @@ func runBench(cfg benchConfig) (benchResult, error) {
 		_ = app.Close(ctx)
 	}()
 
+	var pic benchPicture
+
+	if cfg.Pictures != "" {
+		if pic, err = showBenchPicture(app, cfg.Pictures); err != nil {
+			return benchResult{}, fmt.Errorf("show the picture: %w", err)
+		}
+	}
+
 	hl := newHLRunner(app)
 	hl.start()
 
 	feeds := make([]*replayFeed, cfg.Panes)
-	res := benchResult{Panes: cfg.Panes, Width: cfg.Width, Height: cfg.Height}
+	res := benchResult{Panes: cfg.Panes, Width: cfg.Width, Height: cfg.Height, Picture: [2]int{pic.cols, pic.rows}}
 	tab := app.store.State().Tab().ID
 	rev := 0
 
@@ -755,6 +885,10 @@ func runBench(cfg benchConfig) (benchResult, error) {
 
 	pr := newPresenter(cfg.Width, cfg.Height)
 	last := app.View().Content
+
+	if cfg.Pictures != "" && !pic.placedIn(last) {
+		return benchResult{}, errors.New("the picture is not placed before timing")
+	}
 
 	if err := pr.present(last); err != nil {
 		return benchResult{}, fmt.Errorf("present: %w", err)
@@ -868,6 +1002,11 @@ func runBench(cfg benchConfig) (benchResult, error) {
 				feedS.add(feedD)
 				renderS.add(renderD)
 				presentS.add(presentD)
+
+				// Outside the timed sections; its garbage is a small share of a frame's.
+				if cfg.Pictures != "" && pic.placedIn(frame) {
+					res.Pictured++
+				}
 			}
 		}
 

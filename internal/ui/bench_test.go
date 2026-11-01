@@ -134,6 +134,11 @@ func envDuration(t *testing.T, name string, def time.Duration) time.Duration {
 	return d
 }
 
+// TestBench replays MUXREVEAL_BENCH_RECORDINGS in 2, 4 and 6 panes and fails
+// when the six-pane median of the runs' worst frames is over the budget. The
+// other knobs: _START, _LENGTH, _STAGGER, _MODE, _SELECTION, _RAIL, _REVIEW, and
+// _PICTURES=1, which keeps a picture placed in the drawer beside the panes, so
+// every frame pays for placing pictures, and fails a run whose frames lack it.
 func TestBench(t *testing.T) {
 	all, paths := benchRecordings(t)
 	length := envDuration(t, "MUXREVEAL_BENCH_LENGTH", 10*time.Second)
@@ -173,10 +178,20 @@ func TestBench(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	pictures, err := parseBenchSwitch("MUXREVEAL_BENCH_PICTURES", os.Getenv("MUXREVEAL_BENCH_PICTURES"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var dir string
+	if pictures {
+		dir = t.TempDir()
+	}
+
 	var sb strings.Builder
 
-	fmt.Fprintf(&sb, "recordings=%d window=%v+%v stagger=%v size=%dx%d selection=%v mode=%s rail=%v review=%v\n",
-		len(paths), start, length, stagger, benchWidth, benchHeight, selection, mode, rail, review)
+	fmt.Fprintf(&sb, "recordings=%d window=%v+%v stagger=%v size=%dx%d selection=%v mode=%s rail=%v review=%v pictures=%v\n",
+		len(paths), start, length, stagger, benchWidth, benchHeight, selection, mode, rail, review, pictures)
 	sb.WriteString("Rows are the run whose p99 is the median of the repeats.\n")
 	sb.WriteString("| panes | frames | p50 | p95 | p99 | max | CPU % | bytes fed |\n|---|---|---|---|---|---|---|---|\n")
 
@@ -189,6 +204,7 @@ func TestBench(t *testing.T) {
 			res, err := runBench(benchConfig{
 				Panes: n, Recordings: all, Width: benchWidth, Height: benchHeight,
 				Start: start, Length: length, Stagger: stagger, FPS: 60, Selection: selection, Agents: true, Mode: mode, Rail: rail, Review: review,
+				Pictures: dir,
 			})
 			if err != nil {
 				t.Fatal(err)
@@ -196,6 +212,10 @@ func TestBench(t *testing.T) {
 
 			if res.Fallbacks != 0 {
 				t.Errorf("%d panes: the compositor drew the drawer in %d frames, so the run did not measure the splice", n, res.Fallbacks)
+			}
+
+			if pictures && (res.Frames.Count == 0 || res.Pictured != res.Frames.Count) {
+				t.Errorf("%d panes: the picture was placed in %d of %d frames, so the run did not measure placing it", n, res.Pictured, res.Frames.Count)
 			}
 
 			runs = append(runs, res)
@@ -216,6 +236,10 @@ func TestBench(t *testing.T) {
 		}
 
 		fmt.Fprintf(&sb, "  max per run: %s; median %s\n", strings.Join(maxes, ", "), fmtMS(worst))
+
+		if pictures {
+			fmt.Fprintf(&sb, "  picture %dx%d cells, placed in %d of %d frames\n", r.Picture[0], r.Picture[1], r.Pictured, r.Frames.Count)
+		}
 
 		fidelity(&sb, n, all, paths, r.PaneSizes, start, length, stagger)
 
