@@ -514,3 +514,123 @@ func TestLoadConfigReviewRequestedDaysZero(t *testing.T) {
 		t.Errorf("review_requested_days = %d, want 0", d)
 	}
 }
+
+func TestAllowedValuesMatchValidate(t *testing.T) {
+	t.Parallel()
+
+	var modes, reviews []string
+	for _, m := range LayoutModes() {
+		modes = append(modes, string(m))
+	}
+
+	for _, m := range ReviewModes() {
+		reviews = append(reviews, string(m))
+		if !m.Valid() {
+			t.Errorf("ReviewMode %q is listed but not Valid", m)
+		}
+	}
+
+	nameCases := []struct {
+		key    string
+		values []string
+		set    func(c *Config, v string)
+		check  func(c Config) error
+	}{
+		{"layout.default_mode", modes, func(c *Config, v string) { c.Layout.DefaultMode = v }, func(c Config) error { return c.Layout.Validate() }},
+		{"layout.auto_scheme", AutoSchemes(), func(c *Config, v string) { c.Layout.AutoScheme = v }, func(c Config) error { return c.Layout.Validate() }},
+		{"diff.layout", DiffLayouts(), func(c *Config, v string) { c.Diff.Layout = v }, func(c Config) error { return c.Diff.Validate() }},
+		{"diff.mode", reviews, func(c *Config, v string) { c.Diff.Mode = v }, func(c Config) error { return c.Diff.Validate() }},
+		{"worktrees.root", WorktreeRoots(), func(c *Config, v string) { c.Worktrees.Root = v }, func(c Config) error { return c.Worktrees.Validate() }},
+	}
+
+	for _, tc := range nameCases {
+		if len(tc.values) == 0 {
+			t.Errorf("%s: no allowed values", tc.key)
+		}
+
+		for _, v := range tc.values {
+			c := DefaultConfig()
+			tc.set(&c, v)
+
+			if err := tc.check(c); err != nil {
+				t.Errorf("%s = %q: %v", tc.key, v, err)
+			}
+
+			c = DefaultConfig()
+			tc.set(&c, v+"x")
+
+			if err := tc.check(c); err == nil || !strings.HasPrefix(err.Error(), tc.key+":") {
+				t.Errorf("%s = %q: error %v, want prefix %q", tc.key, v+"x", err, tc.key+":")
+			}
+		}
+	}
+
+	rangeCases := []struct {
+		key    string
+		lo, hi int
+		set    func(c *Config, n int)
+		check  func(c Config) error
+	}{
+		{"layout.master_ratio", MinMasterRatio, MaxMasterRatio, func(c *Config, n int) { c.Layout.MasterRatio = n }, func(c Config) error { return c.Layout.Validate() }},
+		{"layout.master_count", MinMasterCount, MaxMasterCount, func(c *Config, n int) { c.Layout.MasterCount = n }, func(c Config) error { return c.Layout.Validate() }},
+		{"layout.column_width", MinColumnWidth, MaxColumnWidth, func(c *Config, n int) { c.Layout.ColumnWidth = n }, func(c Config) error { return c.Layout.Validate() }},
+		{"pull_requests.review_requested_days", MinReviewRequestedDays, MaxReviewRequestedDays, func(c *Config, n int) { c.PullRequests.ReviewRequestedDays = n }, func(c Config) error { return c.PullRequests.Validate() }},
+		{"keys.which_key_delay", MinWhichKeyDelay, MaxWhichKeyDelay, func(c *Config, n int) { c.Keys.WhichKeyDelay = &n }, func(c Config) error { return c.Keys.Validate() }},
+	}
+
+	for _, tc := range rangeCases {
+		for _, n := range []int{tc.lo, tc.hi} {
+			c := DefaultConfig()
+			tc.set(&c, n)
+
+			if err := tc.check(c); err != nil {
+				t.Errorf("%s = %d: %v", tc.key, n, err)
+			}
+		}
+
+		for _, n := range []int{tc.lo - 1, tc.hi + 1} {
+			c := DefaultConfig()
+			tc.set(&c, n)
+
+			if err := tc.check(c); err == nil || !strings.HasPrefix(err.Error(), tc.key+":") {
+				t.Errorf("%s = %d: error %v, want prefix %q", tc.key, n, err, tc.key+":")
+			}
+		}
+	}
+
+	limits := []struct {
+		key string
+		set func(c *Config, n int)
+	}{
+		{"diff.max_files", func(c *Config, n int) { c.Diff.MaxFiles = n }},
+		{"diff.max_bytes", func(c *Config, n int) { c.Diff.MaxBytes = n }},
+		{"diff.max_lines", func(c *Config, n int) { c.Diff.MaxLines = n }},
+	}
+
+	for _, tc := range limits {
+		c := DefaultConfig()
+		tc.set(&c, MinDiffLimit)
+
+		if err := c.Diff.Validate(); err != nil {
+			t.Errorf("%s = %d: %v", tc.key, MinDiffLimit, err)
+		}
+
+		c = DefaultConfig()
+		tc.set(&c, MinDiffLimit-1)
+
+		if err := c.Diff.Validate(); err == nil || !strings.HasPrefix(err.Error(), tc.key+":") {
+			t.Errorf("%s = %d: error %v, want prefix %q", tc.key, MinDiffLimit-1, err, tc.key+":")
+		}
+	}
+
+	want := []LayoutMode{ModeBSP, ModeMaster, ModeScrolling}
+	if got := LayoutModes(); !reflect.DeepEqual(got, want) {
+		t.Errorf("LayoutModes() = %v, want %v", got, want)
+	}
+
+	LayoutModes()[0] = "x"
+
+	if got := LayoutModes(); !reflect.DeepEqual(got, want) {
+		t.Errorf("LayoutModes() after a write = %v, want %v", got, want)
+	}
+}

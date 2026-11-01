@@ -112,6 +112,23 @@ Dependency rules:
 - Never use em-dashes; use hyphens (-).
 - Never reference plan phases, task numbers, or private card IDs in doc
   comments.
+- The user docs are `docs/guide/` and `config.example.toml`. A change to
+  behaviour, keys or config updates them in the same commit.
+- `docs/guide/keys.md` is generated from the keymap:
+  `go test ./internal/ui -run TestKeysPage -update` rewrites it, and the test
+  fails while it is stale.
+- `TestConfigExample` (`cmd/aim`) checks that `config.example.toml` loads to the
+  defaults, names every setting and lists the allowed values the code accepts.
+  `TestGuideLinks` (`internal/ui`) checks the links of the guides and the guide
+  pages the example names. When only non-code files changed, `make check-fast`
+  runs all three tests; otherwise it tests only the changed packages.
+- A change to the config's settings or checks (`internal/core`'s config and
+  keys, `internal/ui`'s key checks, the themes) also runs
+  `go test ./cmd/aim -run TestConfigExample` before its commit, since
+  `check-fast` tests only the changed packages. A change to the command
+  registry, the keymap or the themes (the `theme.set.*` rows) also runs
+  `go test ./internal/ui -run TestKeysPage`, since the keys page is built from
+  them.
 
 ## Testing
 
@@ -142,9 +159,12 @@ Run `make check-fast` before every commit; it must be clean. It runs the format
 check, lint, the glyph, em-dash and wall-clock scan and the tests of the
 packages the change touches (`make check-fast TEST_PKGS=./...` runs them all),
 and it builds and vets the whole module, so a change that stops another package
-or its tests from compiling fails it. Whether the other packages still behave
-is CI's to check. A change to goroutines, channels or locks also runs the race
-detector on the tests it adds or changes:
+or its tests from compiling fails it. A commit that changes no code (only
+Markdown at the root, `docs/`, `.github/`, `config.example.toml` and the like;
+`scripts/code-changed.sh` lists them) gets only the scan and the doc tests.
+Whether the other packages still behave is CI's to check. A change to
+goroutines, channels or locks also runs the race detector on the tests it adds
+or changes:
 `go test -race -run '<those tests>' ./<package>`.
 
 CI runs the full gates on every pull request that changes Go code (every test
