@@ -440,6 +440,10 @@ func TestPagePicture(t *testing.T) {
 			t.Errorf("row %d = %+v, want x %d, 5 cells, row %d", k, r, m.textX(), k)
 		}
 	}
+
+	if m.pictures.fallbacks != 0 {
+		t.Errorf("the compositor placed the picture in %d frames, want the splice", m.pictures.fallbacks)
+	}
 }
 
 func TestPagePictureCovered(t *testing.T) {

@@ -145,6 +145,8 @@ type pictures struct {
 	onTerm  map[uint32]struct{} // ids the terminal holds, apart from the entries so a failed source's stay
 	frame   uint64              // tick at which the latest shown call began
 	g       uint64
+
+	fallbacks int // frames whose pictures the compositor placed because the splice declined; tests and benches read it
 }
 
 // newPictures returns a registry; with no jobs sink every image stays a line.

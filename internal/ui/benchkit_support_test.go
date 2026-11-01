@@ -236,6 +236,7 @@ type benchResult struct {
 	Updates               int // pane Update calls in timed steps
 	Reviews               int // results the fake engine served in timed steps
 	Fallbacks             int // frames whose drawer the compositor drew because the splice declined
+	PictureFallbacks      int // frames whose pictures the compositor placed because the splice declined
 	GCs                   uint32
 	GCPause               time.Duration
 	Batches               int    // drawer highlight batches started
@@ -1020,7 +1021,7 @@ func runBench(cfg benchConfig) (benchResult, error) {
 
 	res.Batches, res.Answers = hl.batches, hl.answers
 	res.GCs, res.GCPause = mem1.NumGC-mem0.NumGC, time.Duration(mem1.PauseTotalNs-mem0.PauseTotalNs)
-	res.Fallbacks = app.drawer.fallbacks
+	res.Fallbacks, res.PictureFallbacks = app.drawer.fallbacks, app.pictures.fallbacks
 	res.Frames, res.Feed, res.Render, res.Present = frames.summary(), feedS.summary(), renderS.summary(), presentS.summary()
 	res.CPUPercent = float64(total) / float64(cfg.Length) * 100
 

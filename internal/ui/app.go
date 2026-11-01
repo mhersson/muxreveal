@@ -916,7 +916,7 @@ func (a *App) View() tea.View {
 	}
 
 	if rows := a.placed(f.visible()); len(rows) > 0 {
-		content = placePictures(content, a.width, a.height, rows)
+		content = a.drawPictures(content, rows)
 	}
 
 	v := tea.NewView(content)
