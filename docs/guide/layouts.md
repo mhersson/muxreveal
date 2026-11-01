@@ -9,7 +9,7 @@ The keys here are the defaults. A changed `leader_key` or `[keys]` table changes
 | Mode | What it is | A new pane |
 | --- | --- | --- |
 | `bsp` | Panes in a tree of splits; each split divides its space in two. | `ctrl+space s` splits the focused pane and puts the new one below it, `ctrl+space v` and `ctrl+space n` put it to the right. It takes half of the focused pane. |
-| `master-stack` | A master area and a stack, laid out from the order of the panes. | Added at the end of the order. The first `master_count` panes are the masters and the rest are the stack. |
+| `master-stack` | A master area and a stack, laid out from the order of the panes. | Added at the end of the order. The first `master_count` panes are the masters and the rest are the stack. With the default `master_grid`, one master on the left and four or more panes, all the panes form an equal grid instead. |
 | `scrolling` | Columns of panes; only the columns that fit whole are shown. | `ctrl+space v` and `ctrl+space n` add a column after the focused one. `ctrl+space s` adds the pane to the focused column, below the focused pane. |
 
 A new tab starts in the mode `default_mode` names. In a scrolling tab with more columns than fit, the bottom borders of the panes at the edges show how many are hidden. Moving focus left or right scrolls the focused column into view.
@@ -58,7 +58,7 @@ The keys are the same in every mode: `ctrl+space H`, `J`, `K`, `L` resize the fo
 | Mode | Resize | Swap |
 | --- | --- | --- |
 | `bsp` | Moves the nearest divider on that axis, in steps of 5 percent. With no divider on that axis nothing happens. | Exchanges two panes; the splits keep their shape and sizes, so the moved pane takes the size of the place it lands in. |
-| `master-stack` | Moves the divider between masters and stack, and only on the axis that divides them: `H` and `L` with the masters on the left, right or in the center, `K` and `J` with them on top or bottom. The other axis does nothing. | The focused pane and its neighbour exchange places in the order. |
+| `master-stack` | Moves the divider between masters and stack, and only on the axis that divides them: `H` and `L` with the masters on the left, right or in the center, `K` and `J` with them on top or bottom. The other axis does nothing. In the grid, resize shows no change. | The focused pane and its neighbour exchange places in the order. |
 | `scrolling` | `H` and `L` narrow and widen the focused column. `J` and `K` do nothing. | `ctrl+space ctrl+h` and `ctrl+l` exchange with the pane at the same position in the next column, `ctrl+j` and `ctrl+k` within the column. |
 
 In master-stack, `L` and `J` grow the left or top region, so with the masters on the right or at the bottom they shrink the masters; with `master_position = "center"` `L` grows the middle column.
