@@ -25,7 +25,7 @@ To push the branch, press `ctrl+space g P`. The branch is the one checked out in
 
 ## Open a pull request
 
-To open one for the branch, press `ctrl+space g o`. It needs a GitHub remote; a branch that already has an open pull request says `<branch> already has #<n>`, and four refusals stop the box: `open a PR: not a git repository`, `open a PR: HEAD is detached`, `open a PR: <branch> has no commits yet` and `open a PR: <branch> has no remote to push to`.
+To open one for the branch, press `ctrl+space g o`. It needs a GitHub remote; a branch that already has an open pull request says `<branch> already has #<n>`, and these refusals stop the box: `open a PR: not a git repository`, `open a PR: HEAD is detached`, `open a PR: <branch> has no commits yet`, `open a PR: <branch> has no remote to push to` and `open a PR: <remote> has no branches to open against`.
 
 The compose box has four fields: title, base, draft and body. `tab` and `shift+tab` move between them.
 
@@ -59,7 +59,7 @@ To list pull requests, press `ctrl+space g l`. It has three tabs, always opened 
 - **Review requested**: the open pull requests that ask for your review. `review_requested_days` ([`config.example.toml`](../../config.example.toml)) can narrow it.
 - **All open**: the open pull requests you opened.
 
-The last two search every GitHub host AIM watches when the list opens, every minute while it is open, and on `r`. Their empty texts are `loading pull requests…`, `no open pull requests ask for your review` and `you have no open pull requests`; a host whose search failed adds `pull requests on <host>: <reason>`. The Agents tab says `no open pull requests on agent branches` when it is empty.
+The last two search every GitHub host AIM watches when the list opens, every minute while it is open, and on `r`. Their empty texts are `loading pull requests…`, `no open pull requests ask for your review` or, when `review_requested_days` sets a limit, `no open pull requests updated in the last <N> days ask for your review` (`1 day` for one), and `you have no open pull requests`; a host whose search failed adds `pull requests on <host>: <reason>`. The Agents tab says `no open pull requests on agent branches` when it is empty.
 
 The keys are in [Keys](keys.md#pr-list): `j` and `k` move; `enter` shows the diff; `i`, `c`, `a`, `M` and `O` open the conversation, checks, approve, merge and the browser; `r` refreshes; `esc` closes. On the Agents tab `enter`, `a` and `M` switch to the agent's tab and show the pull request in its drawer; `a` and `M` then open the approve confirm or the merge box. On the other tabs they work through a checkout: a pane in the row's repository, whose drawer opens; with none the notice is `no checkout of <owner/name> here; O opens it in the browser`. `a` on your own pull request says `you can't approve your own pull request` and leaves the list open.
 
@@ -111,4 +111,4 @@ When the worktree can go, a confirm titled `Clean up after #<n>` offers two boxe
 - The branch is offered only when it holds nothing the merged head does not: its tip is the head or behind it. It goes only with the worktree. Nothing is forced.
 - The result is a toast such as `removed <path>; deleted <branch>`, or `kept <path>: <reason>`.
 
-The worktree stays, with a reason instead of the confirm, when it is not one of AIM's own worktrees (`<path> is outside AIM's worktrees, so it stays`, see [Agents side by side](agents.md#a-new-worktree)), is locked, has uncommitted changes, or an agent is still working in it. After a merge, the reason is added to the merge toast while it shows. From the command, the other notices are `#<n> is not merged`, `#<n>: its merged head is unknown`, `#<n>'s branch is in another repository` and `<branch> is the default branch, so it stays`.
+The worktree stays, with a reason instead of the confirm, when it is not one of AIM's own worktrees (`<path> is outside AIM's worktrees, so it stays`, see [Agents side by side](agents.md#a-new-worktree)), is locked, has uncommitted changes, or an agent is still working in it. After a merge, the reason is added to the merge toast while it shows. From the command, the notices include `#<n> is not merged`, `#<n>: its merged head is unknown`, `#<n>'s branch is in another repository` and `<branch> is the default branch, so it stays` and `clean up: HEAD is detached`; a pull request that cannot be found gives the drawer's notices, such as `no pull request for <branch>`.
