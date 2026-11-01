@@ -29,3 +29,26 @@ archives:
 
 snapshot:
   version_template: "{{ incpatch .Version }}-snapshot-{{ .ShortCommit }}"
+
+release:
+  github:
+    owner: mhersson
+    name: aim
+  prerelease: auto
+
+changelog:
+  use: git
+  sort: asc
+  filters:
+    include:
+      - '^(?:[0-9a-f]{7,40} )?(?:feat|fix|perf)(?:\([^)]*\))?!?: '
+  groups:
+    - title: Features
+      regexp: '^(?:[0-9a-f]{7,40} )?feat(?:\([^)]*\))?!?: '
+      order: 0
+    - title: Fixes
+      regexp: '^(?:[0-9a-f]{7,40} )?fix(?:\([^)]*\))?!?: '
+      order: 1
+    - title: Performance
+      regexp: '^(?:[0-9a-f]{7,40} )?perf(?:\([^)]*\))?!?: '
+      order: 2

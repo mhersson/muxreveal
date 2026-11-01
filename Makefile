@@ -19,7 +19,7 @@ help:
 	@echo "  check-fast   the per-commit check: build, fmt-check, vet, lint, test-changed, scan"
 	@echo "  check        the Linux go-checks gates of CI: build, build-darwin, fmt-check, vet, lint, test-race, tidy-check, scan"
 	@echo "  install      go install the binary into GOBIN, else GOPATH/bin"
-	@echo "  release-dry  the GoReleaser dry run (needs GoReleaser 2): snapshot archives, checksums and binaries"
+	@echo "  release-dry  the GoReleaser dry run (needs GoReleaser 2): snapshot archives, checksums and binaries, then the changelog and notes in a scratch clone"
 	@echo "  clean        remove bin/ and dist/"
 
 GO_LDFLAGS = -s -w
@@ -111,6 +111,7 @@ install:
 .PHONY: release-dry
 release-dry:
 	sh scripts/release-check.sh
+	sh scripts/release-notes-check.sh
 
 clean:
 	rm -rf bin dist
