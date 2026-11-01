@@ -12,13 +12,14 @@ import (
 // ErrUnknownMode is returned by SetLayoutMode for a mode that does not exist.
 var ErrUnknownMode = errors.New("core: unknown layout mode")
 
-// layoutModes is the cycle order.
-var layoutModes = [...]LayoutMode{ModeBSP, ModeMaster, ModeScrolling}
+// LayoutModes lists the layout modes in cycle order. Each call returns a
+// fresh slice.
+func LayoutModes() []LayoutMode { return []LayoutMode{ModeBSP, ModeMaster, ModeScrolling} }
 
 // widthEpsilon absorbs float error when column widths are summed against 1.
 const widthEpsilon = 1e-9
 
-func validMode(m LayoutMode) bool { return slices.Contains(layoutModes[:], m) }
+func validMode(m LayoutMode) bool { return slices.Contains(LayoutModes(), m) }
 
 // SetLayoutMode rebuilds the active tab in a mode from its pane order: BSP
 // inserts the panes one by one with the auto scheme, master-stack keeps the
@@ -47,9 +48,10 @@ type CycleLayoutMode struct {
 
 func (a CycleLayoutMode) apply(s *State) error {
 	t := s.cur()
-	i := max(slices.Index(layoutModes[:], t.Mode), 0) // "" is bsp
+	modes := LayoutModes()
+	i := max(slices.Index(modes, t.Mode), 0) // "" is bsp
 
-	return t.setMode(layoutModes[(i+1)%len(layoutModes)], a.Area, s.Layout)
+	return t.setMode(modes[(i+1)%len(modes)], a.Area, s.Layout)
 }
 
 func (t *Tab) setMode(mode LayoutMode, area Rect, lc LayoutConfig) error {

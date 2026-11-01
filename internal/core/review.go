@@ -16,7 +16,10 @@ const (
 )
 
 // Valid reports whether m is a known mode.
-func (m ReviewMode) Valid() bool { return m == ReviewTurn || m == ReviewBranch }
+func (m ReviewMode) Valid() bool { return slices.Contains(ReviewModes(), m) }
+
+// ReviewModes lists the review modes.
+func ReviewModes() []ReviewMode { return []ReviewMode{ReviewTurn, ReviewBranch} }
 
 // Review is a tab's open review drawer: the pane it reviews, its mode and
 // whether its file tree is open.

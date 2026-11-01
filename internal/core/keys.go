@@ -22,8 +22,12 @@ const (
 	DefaultLeaderKey = "ctrl+space"
 	// DefaultWhichKeyDelay is the which-key delay in milliseconds.
 	DefaultWhichKeyDelay = 300
+)
 
-	maxWhichKeyDelay = 5000
+// Bounds of keys.which_key_delay in milliseconds.
+const (
+	MinWhichKeyDelay = 0
+	MaxWhichKeyDelay = 5000
 )
 
 // KeysConfig is the [keys] section. Validate checks the syntax of the key
@@ -143,8 +147,8 @@ func (c KeysConfig) Validate() error {
 		}
 	}
 
-	if d := c.delayMS(); d < 0 || d > maxWhichKeyDelay {
-		return fmt.Errorf("keys.which_key_delay: %d is out of range 0-%d", d, maxWhichKeyDelay)
+	if d := c.delayMS(); d < MinWhichKeyDelay || d > MaxWhichKeyDelay {
+		return fmt.Errorf("keys.which_key_delay: %d is out of range 0-%d", d, MaxWhichKeyDelay)
 	}
 
 	for _, ctx := range KeyContexts() {

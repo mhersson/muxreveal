@@ -46,26 +46,43 @@ type LayoutConfig struct {
 	ColumnWidth    int    `toml:"column_width"`    // percent, 10-100
 }
 
-// Bounds of the numeric [layout] keys.
+// Bounds of the numeric config keys.
 const (
-	minMasterRatio, maxMasterRatio = 10, 90
-	minMasterCount, maxMasterCount = 1, 9
-	minColumnWidth, maxColumnWidth = 10, 100
+	MinMasterRatio = 10
+	MaxMasterRatio = 90
+	MinMasterCount = 1
+	MaxMasterCount = 9
+	MinColumnWidth = 10
+	MaxColumnWidth = 100
+	// MinDiffLimit is the lowest [diff] max_files, max_bytes and max_lines;
+	// they have no upper bound.
+	MinDiffLimit           = 1
+	MinReviewRequestedDays = 0
+	// MaxReviewRequestedDays is ten years; the bound also keeps the cutoff's
+	// duration far from overflowing.
+	MaxReviewRequestedDays = 3650
 )
 
-var layoutSchemes = []string{"spiral", "longest_side", "alternate", "smart_split"}
+// AutoSchemes lists the allowed layout.auto_scheme values.
+func AutoSchemes() []string { return []string{"spiral", "longest_side", "alternate", "smart_split"} }
+
+// DiffLayouts lists the allowed diff.layout values.
+func DiffLayouts() []string { return []string{"unified", "split"} }
+
+// WorktreeRoots lists the allowed worktrees.root values.
+func WorktreeRoots() []string { return []string{"inside", "sibling"} }
 
 // Validate names the first key that is out of range or unknown.
 func (c LayoutConfig) Validate() error {
-	if !slices.Contains([]string{string(ModeBSP), string(ModeMaster), string(ModeScrolling)}, c.DefaultMode) {
+	if !validMode(LayoutMode(c.DefaultMode)) {
 		return fmt.Errorf("layout.default_mode: %q is not bsp, master-stack or scrolling", c.DefaultMode)
 	}
 
-	if !slices.Contains(layoutSchemes, c.AutoScheme) {
-		return fmt.Errorf("layout.auto_scheme: %q is not %s", c.AutoScheme, strings.Join(layoutSchemes, ", "))
+	if !slices.Contains(AutoSchemes(), c.AutoScheme) {
+		return fmt.Errorf("layout.auto_scheme: %q is not %s", c.AutoScheme, strings.Join(AutoSchemes(), ", "))
 	}
 
-	if err := inRange("layout.master_ratio", c.MasterRatio, minMasterRatio, maxMasterRatio); err != nil {
+	if err := inRange("layout.master_ratio", c.MasterRatio, MinMasterRatio, MaxMasterRatio); err != nil {
 		return err
 	}
 
@@ -73,11 +90,11 @@ func (c LayoutConfig) Validate() error {
 		return fmt.Errorf("layout.master_position: %q is not %s", c.MasterPosition, strings.Join(tiling.MasterPositions(), ", "))
 	}
 
-	if err := inRange("layout.master_count", c.MasterCount, minMasterCount, maxMasterCount); err != nil {
+	if err := inRange("layout.master_count", c.MasterCount, MinMasterCount, MaxMasterCount); err != nil {
 		return err
 	}
 
-	return inRange("layout.column_width", c.ColumnWidth, minColumnWidth, maxColumnWidth)
+	return inRange("layout.column_width", c.ColumnWidth, MinColumnWidth, MaxColumnWidth)
 }
 
 func inRange(key string, v, lo, hi int) error {
@@ -116,7 +133,7 @@ func orDefault(v, def int) int {
 
 // ratio is the masters' share of the body, 0.1-0.9.
 func (c LayoutConfig) ratio() float64 {
-	return float64(min(max(orDefault(c.MasterRatio, 50), minMasterRatio), maxMasterRatio)) / 100
+	return float64(min(max(orDefault(c.MasterRatio, 50), MinMasterRatio), MaxMasterRatio)) / 100
 }
 
 func (c LayoutConfig) count() int { return orDefault(c.MasterCount, 1) }
@@ -133,7 +150,7 @@ func (c LayoutConfig) grid() bool { return c.MasterGrid == nil || *c.MasterGrid 
 
 // columnWidth is a new scrolling column's share of the body, 0.1-1.0.
 func (c LayoutConfig) columnWidth() float64 {
-	return float64(min(max(orDefault(c.ColumnWidth, 50), minColumnWidth), maxColumnWidth)) / 100
+	return float64(min(max(orDefault(c.ColumnWidth, 50), MinColumnWidth), MaxColumnWidth)) / 100
 }
 
 // DiffConfig is the [diff] section. Validate rejects an unknown name or a
@@ -149,11 +166,11 @@ type DiffConfig struct {
 
 // Validate names the first key that is unknown or not positive.
 func (c DiffConfig) Validate() error {
-	if c.Layout != "unified" && c.Layout != "split" {
+	if !slices.Contains(DiffLayouts(), c.Layout) {
 		return fmt.Errorf("diff.layout: %q is not unified or split", c.Layout)
 	}
 
-	if c.Mode != string(ReviewTurn) && c.Mode != string(ReviewBranch) {
+	if !ReviewMode(c.Mode).Valid() {
 		return fmt.Errorf("diff.mode: %q is not turn or branch", c.Mode)
 	}
 
@@ -161,7 +178,7 @@ func (c DiffConfig) Validate() error {
 		key string
 		n   int
 	}{{"diff.max_files", c.MaxFiles}, {"diff.max_bytes", c.MaxBytes}, {"diff.max_lines", c.MaxLines}} {
-		if l.n <= 0 {
+		if l.n < MinDiffLimit {
 			return fmt.Errorf("%s: %d is not a positive number", l.key, l.n)
 		}
 	}
@@ -185,7 +202,7 @@ type WorktreesConfig struct {
 
 // Validate names the key when the root is unknown.
 func (c WorktreesConfig) Validate() error {
-	if c.Root != "inside" && c.Root != "sibling" {
+	if !slices.Contains(WorktreeRoots(), c.Root) {
 		return fmt.Errorf("worktrees.root: %q is not inside or sibling", c.Root)
 	}
 
@@ -222,13 +239,9 @@ type PullRequestsConfig struct {
 	ReviewRequestedDays int `toml:"review_requested_days"`
 }
 
-// maxReviewRequestedDays is ten years; the bound also keeps the cutoff's
-// duration far from overflowing.
-const maxReviewRequestedDays = 3650
-
 // Validate names the key when the days are out of range.
 func (c PullRequestsConfig) Validate() error {
-	return inRange("pull_requests.review_requested_days", c.ReviewRequestedDays, 0, maxReviewRequestedDays)
+	return inRange("pull_requests.review_requested_days", c.ReviewRequestedDays, MinReviewRequestedDays, MaxReviewRequestedDays)
 }
 
 // RequestedSince is the oldest update a review request may have at now, or
