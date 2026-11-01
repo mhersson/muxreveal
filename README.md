@@ -10,6 +10,14 @@
 
 </div>
 
+<div align="center">
+
+<img src="https://github.com/user-attachments/assets/e601a7bf-da03-4bde-b2dd-efbc1b48a322" alt="AIM running two Claude Code agents in their own worktrees: the agents rail, the live diff in the review drawer by last turn and by whole branch, a pull request pushed, checked and merged with its README rendered from the file tree, the other agent's plan approved so it starts to code, and which-key opening" width="100%">
+
+[Watch it as a video (MP4)](https://github.com/user-attachments/assets/26f3b30c-16e2-496d-ba32-31f5e8bf964f)
+
+</div>
+
 AIM (Agents In-flight Multiplexer) hosts Claude Code agents in live terminal panes, with each agent's diff, its pull request and the CI checks beside it. You watch the agents work, review what they change while they change it, and push, open, check and merge their pull requests without leaving the terminal.
 
 ## Features
@@ -22,6 +30,35 @@ AIM (Agents In-flight Multiplexer) hosts Claude Code agents in live terminal pan
 - **Keyboard first.** One leader key, which-key, a command palette, every key remappable, copy mode and mouse selection.
 - **Picks up where you left off.** Tabs, layouts and each agent's Claude session come back on restart.
 - **Themes.** Catppuccin Latte, Frappé, Macchiato and Mocha, switched from the palette while AIM runs.
+
+## Screenshots
+
+<table>
+  <tr>
+    <td width="50%">
+      <img src="docs/images/review-checks.png" alt="AIM with the review drawer showing a rendered README.md diff, and the checks box for pull request 1 listing one passed check, vet and test">
+      <br>
+      The review drawer on a pull request, with the checks box open over it: one check, vet and test, passed.
+    </td>
+    <td width="50%">
+      <img src="docs/images/pr-list.png" alt="AIM with the Pull requests list open over the agents, showing pull request 1 with its checks passed, 1 of 1">
+      <br>
+      The pull request list on its Agents tab: pull request 1, Add -shout and -repeat flags, with 1/1 checks passed.
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <img src="docs/images/plan-overlay.png" alt="The plan overlay showing demo-agent-2's plan to add a -lang flag, with its context, files to change and verification steps">
+      <br>
+      The agent's plan in the plan overlay: demo-agent-2's plan to add a -lang flag.
+    </td>
+    <td width="50%">
+      <img src="docs/images/which-key.png" alt="Which-key open over the agents, listing the leader keys by group: Panes, Layout, Tabs, Git and App">
+      <br>
+      Which-key after the leader, over the agents while demo-agent-2 codes.
+    </td>
+  </tr>
+</table>
 
 ## Requirements
 
