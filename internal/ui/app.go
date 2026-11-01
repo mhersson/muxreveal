@@ -172,7 +172,7 @@ type App struct {
 	started   bool   // the first size message was handled; it opens the first pane only once
 	restoring bool   // startRestored is running; its dispatches are not saved
 	save      func(core.State)
-	clock     clock // the app's time source; tests inject a fake one
+	clock     clock // where the app reads the time; tests inject a fake one
 	tray      trayState
 	rail      railState
 	drawer    drawerState

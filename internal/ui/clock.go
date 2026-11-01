@@ -6,7 +6,8 @@ import "time"
 // redraw; tuios and tmux use the same bound.
 const syncMaxHold = time.Second
 
-// clock is the app's source of time, so tests can inject a fake one.
+// clock is where the app reads the time, so tests can inject a fake one; only
+// log timings read the wall clock.
 type clock interface{ Now() time.Time }
 
 type realClock struct{}
