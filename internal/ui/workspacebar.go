@@ -271,6 +271,22 @@ func paint(fg, bg theme.Hex, bold bool) lipgloss.Style {
 	return lipgloss.NewStyle().Foreground(fg).Background(bg).Bold(bold)
 }
 
+// paintRun is paint(fg, bg, bold).Render(text), byte for byte. Render rewrites
+// tabs and CRLFs and styles each line apart; for text without a tab, CR or LF
+// it only wraps text in bold, foreground and background SGR, built here directly.
+func paintRun(fg, bg theme.Hex, bold bool, text string) string {
+	if strings.ContainsAny(text, "\t\r\n") {
+		return paint(fg, bg, bold).Render(text)
+	}
+
+	var st ansi.Style
+	if bold {
+		st = st.Bold()
+	}
+
+	return st.ForegroundColor(fg).BackgroundColor(bg).Styled(text)
+}
+
 // renderBar plans the bar for width and draws it.
 func renderBar(tabs []tabInfo, active int, mods []trayModule, width int, icons bool, ui theme.UI) string {
 	if width <= 0 {

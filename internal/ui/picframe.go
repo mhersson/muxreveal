@@ -405,7 +405,17 @@ func recordLayer(f *frameLayers, width, height, x, y int, lines []string, pics [
 		w = max(w, ansi.StringWidth(l))
 	}
 
-	h := min(len(lines), height-y)
+	recordBox(f, width, height, x, y, w, len(lines), pics)
+}
+
+// recordBox is recordLayer for n lines whose widest is w cells, known without
+// measuring them.
+func recordBox(f *frameLayers, width, height, x, y, w, n int, pics []picRow) {
+	if f == nil {
+		return
+	}
+
+	h := min(n, height-y)
 	box := core.Rect{X: x, Y: y, W: min(w, width-x), H: h}
 
 	var kept []picRow

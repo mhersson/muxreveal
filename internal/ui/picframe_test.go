@@ -411,6 +411,53 @@ func TestDrawerRecordsPictures(t *testing.T) {
 	}
 }
 
+func TestSplicedDrawerRecordsAsRecordLayer(t *testing.T) {
+	t.Parallel()
+
+	const width, height = 20, 6
+
+	blank := strings.TrimSuffix(strings.Repeat(strings.Repeat(".", width)+"\n", height), "\n")
+	wide := string(rune(0x4e16)) // two cells
+
+	pics := []picRow{
+		{X: 0, Y: 0, ID: 3, Row: 0, Cols: 2},
+		{X: 1, Y: 2, ID: 3, Row: 1, Cols: 2},
+		{X: 0, Y: 4, ID: 5, Row: 0, Cols: 1},
+		{X: 0, Y: -1, ID: 6, Row: 0, Cols: 1},
+	}
+
+	tests := []struct {
+		name string
+		r    core.Rect
+		line string // every line, r.W cells
+		n    int
+	}{
+		{"the screen's height", core.Rect{X: 12, Y: 0, W: 8, H: height}, "yyyyyyyy", height},
+		{"below the top row", core.Rect{X: 12, Y: 1, W: 8, H: height - 1}, "yyyyyyyy", height - 1},
+		{"wide cells, fewer lines than the rect", core.Rect{X: 14, Y: 0, W: 6, H: height}, strings.Repeat(wide, 3), 3},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			lines := slices.Repeat([]string{tt.line}, tt.n)
+
+			var got, want frameLayers
+
+			if _, spliced := overlayDrawer(&got, blank, width, height, tt.r, lines, pics, true); !spliced {
+				t.Fatal("the compositor drew the drawer, want the splice")
+			}
+
+			recordLayer(&want, width, height, tt.r.X, tt.r.Y, lines, pics)
+
+			if !reflect.DeepEqual(got, want) {
+				t.Fatalf("the splice recorded %+v, recordLayer %+v", got, want)
+			}
+		})
+	}
+}
+
 func TestOverlayLinesAndDrawerRecordPictures(t *testing.T) {
 	t.Parallel()
 

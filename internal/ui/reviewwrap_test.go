@@ -122,6 +122,63 @@ func TestLinePartsFastPath(t *testing.T) {
 	}
 }
 
+func TestWholePart(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		raw   string
+		tagCR bool
+		width int
+		whole bool
+	}{
+		{"plain ASCII", "foo bar", false, 10, true},
+		{"empty", "", false, 10, true},
+		{"tab at column 0", "\tfoo", false, 20, true},
+		{"tab after one cell", "a\tb", false, 20, true},
+		{"tab after two cells", "ab\tc", false, 20, true},
+		{"tab after three cells", "abc\td", false, 20, true},
+		{"tab mid-word", "fo\too", false, 20, true},
+		{"two tabs", "\t\tx", false, 20, true},
+		{"exactly the width", "\tabcd", false, 8, true},
+		{"one cell over", "\tabcde", false, 8, false},
+		{"a tab takes it over", "ab\tc", false, 4, false},
+		{"at the budget", "\t" + strings.Repeat("a", lineBudget-1), false, 2000, true},
+		{"one over the budget", "\t" + strings.Repeat("a", lineBudget), false, 2000, false},
+		{"final CR", "\tfoo\r", false, 20, true},
+		{"final CR tagged", "\tfoo\r", true, 20, false},
+		{"CR mid-line", "\tfo\ro", false, 20, false},
+		{"non-ASCII byte", "\tfoé", false, 20, false},
+		{"wide cells", "\t世界", false, 20, false},
+		{"wide cells that wrap", "\t世界世界", false, 6, false},
+		{"control byte", "\tfo\x01o", false, 20, false},
+		{"DEL", "\tfo\x7fo", false, 20, false},
+		{"no width", "\tfoo", false, 0, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			if _, ok := wholePart(tt.raw, tt.tagCR, tt.width); ok != tt.whole {
+				t.Fatalf("wholePart at width %d: ok = %v, want %v", tt.width, ok, tt.whole)
+			}
+
+			for _, width := range append([]int{tt.width}, 1, 2, 3, 4, 5, 7, 8, 9, 12) {
+				want := wrapLine(lineUnits(tt.raw, tt.tagCR), width)
+
+				if p, ok := wholePart(tt.raw, tt.tagCR, width); ok && !reflect.DeepEqual([]wrapPart{p}, want) {
+					t.Fatalf("width %d: wholePart = %v, want %v", width, p, want)
+				}
+
+				if got := lineParts(tt.raw, tt.tagCR, width); !reflect.DeepEqual(got, want) {
+					t.Fatalf("width %d: lineParts = %v, want %v", width, got, want)
+				}
+			}
+		})
+	}
+}
+
 const wrapPath = "wrap.go"
 
 // longLine is 70 characters with no space, so a 30-cell edge breaks it at

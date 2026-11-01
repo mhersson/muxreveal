@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/mhersson/muxreveal/internal/core"
@@ -154,11 +153,11 @@ func (p railPainter) line(runs []railRun, w int) string {
 	var sb strings.Builder
 
 	for _, r := range runs {
-		sb.WriteString(paint(r.fg, p.bg, r.bold).Render(r.text))
+		sb.WriteString(paintRun(r.fg, p.bg, r.bold, r.text))
 	}
 
 	if pad := w - runsWidth(runs); pad > 0 {
-		sb.WriteString(lipgloss.NewStyle().Background(p.bg).Render(strings.Repeat(" ", pad)))
+		sb.WriteString(ansi.Style{}.BackgroundColor(p.bg).Styled(strings.Repeat(" ", pad)))
 	}
 
 	return sb.String()
