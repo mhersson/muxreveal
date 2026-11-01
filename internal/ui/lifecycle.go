@@ -255,14 +255,6 @@ func usableDir(dir string) bool {
 // closePane removes a pane from the state and the registry at once and closes
 // its process in the background. An open confirm about it closes.
 func (a *App) closePane(id core.PaneID) tea.Cmd {
-	cmd, _ := a.closePaneWait(id)
-
-	return cmd
-}
-
-// closePaneWait is closePane with a channel that closes when the pane's process
-// close ends; at once for a pane with no process.
-func (a *App) closePaneWait(id core.PaneID) (tea.Cmd, <-chan struct{}) {
 	handBack := a.composeEdited(id)
 
 	p := a.panes[id]
@@ -280,32 +272,22 @@ func (a *App) closePaneWait(id core.PaneID) (tea.Cmd, <-chan struct{}) {
 	}
 
 	if p == nil {
-		done := make(chan struct{})
-		close(done)
-
-		return handBack, done
+		return handBack
 	}
 
-	return tea.Batch(handBack, a.relayout()), a.closeDone(p)
+	a.closeAsync(p)
+
+	return tea.Batch(handBack, a.relayout())
 }
 
 // closeAsync closes a pane that has left the registry. Pane.close can take a
 // second, so it never runs on the update loop; Close waits for it.
-func (a *App) closeAsync(p *pane) { a.closeDone(p) }
-
-// closeDone is closeAsync with a channel that closes when the close ends.
-func (a *App) closeDone(p *pane) <-chan struct{} {
-	done := make(chan struct{})
-
+func (a *App) closeAsync(p *pane) {
 	a.closing.Go(func() {
-		defer close(done)
-
 		if err := p.close(); err != nil {
 			a.log.Warn("close pane", "pane", p.id, "err", err)
 		}
 	})
-
-	return done
 }
 
 // act dispatches a layout action and refits the panes to the new geometry.

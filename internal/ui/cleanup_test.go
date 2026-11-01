@@ -19,19 +19,22 @@ import (
 const mergedToast = "merged #7 (merge)"
 
 // cleanupRig is the PR drawer on .worktrees/feat-x, a linked worktree of a
-// repository whose main checkout is on main. The worktree holds a shell and an
-// idle agent; a third shell works in the main checkout.
+// repository whose main checkout is on main. The drawer's pane is an idle agent
+// started in the main checkout whose hooks report the worktree, and a shell works
+// in the main checkout; neither keeps the worktree.
 type cleanupRig struct {
 	*prDrawer
 	f       *fakeActions
 	main    string
 	wt      string
-	agentID core.PaneID
-	shellID core.PaneID
-	other   core.PaneID
+	agentID core.PaneID   // the drawer's agent
+	other   core.PaneID   // the shell in the main checkout
+	ids     []core.PaneID // every pane the rig opened, in tab order
+	keepers []core.PaneID // the panes started in the worktree, in tab order
 }
 
-func newCleanupRig(t *testing.T) *cleanupRig {
+// newCleanupRig builds the rig; before opens more panes ahead of the drawer.
+func newCleanupRig(t *testing.T, before ...func(*testing.T, *cleanupRig)) *cleanupRig {
 	t.Helper()
 
 	main := prFeatureRepo(t)
@@ -47,11 +50,19 @@ func newCleanupRig(t *testing.T) *cleanupRig {
 	// The branch sits at the pull request's head, as it does once the work is pushed and merged.
 	gitIn(t, "git", wt, "reset", "-q", "--hard", r.prHead)
 
-	r.shellID = r.store.State().Tab().Focus
-	r.agentID = r.agentIn(t, wt)
-	r.other = r.shell(t, main)
+	// The app's first pane opens in the worktree; it moves to the main checkout.
+	r.other = r.store.State().Tab().Focus
+	openIn(t, r.App, core.SetPaneCwd{ID: r.other, Cwd: main})
 
-	openIn(t, r.App, core.FocusPane{ID: r.shellID})
+	r.agentID = r.agent(t, main, "")
+	openIn(t, r.App, core.SetAgentCwd{ID: r.agentID, Cwd: wt}, core.SetAgentState{ID: r.agentID, State: core.AgentIdle})
+	r.ids = []core.PaneID{r.other, r.agentID}
+
+	for _, f := range before {
+		f(t, r)
+	}
+
+	openIn(t, r.App, core.FocusPane{ID: r.agentID})
 
 	info := github.RepoInfo{DefaultBranch: "main", Methods: allMethods, DeleteBranchOnMerge: false}
 	r.run(r.step(prSnapshotMsg{Repo: prRepo, Info: info, PRs: []github.PR{prSeven()}}))
@@ -62,14 +73,36 @@ func newCleanupRig(t *testing.T) *cleanupRig {
 	return r
 }
 
-// agentIn opens an idle agent pane in dir.
-func (r *cleanupRig) agentIn(t *testing.T, dir string) core.PaneID {
+// keeper opens a pane started in the worktree: a shell, or an idle agent whose
+// hooks report the worktree.
+func (r *cleanupRig) keeper(t *testing.T, kind core.PaneKind) core.PaneID {
 	t.Helper()
 
-	id := r.agent(t, dir, "")
-	openIn(t, r.App, core.SetAgentState{ID: id, State: core.AgentIdle})
+	var id core.PaneID
+
+	switch kind {
+	case core.KindAgent:
+		id = r.agent(t, r.wt, "")
+		openIn(t, r.App, core.SetAgentCwd{ID: id, Cwd: r.wt}, core.SetAgentState{ID: id, State: core.AgentIdle})
+	default:
+		id = r.shell(t, r.wt)
+	}
+
+	r.ids = append(r.ids, id)
+	r.keepers = append(r.keepers, id)
 
 	return id
+}
+
+// started opens a pane started in the worktree for each of kinds, in order.
+func started(kinds ...core.PaneKind) func(*testing.T, *cleanupRig) {
+	return func(t *testing.T, r *cleanupRig) {
+		t.Helper()
+
+		for _, k := range kinds {
+			r.keeper(t, k)
+		}
+	}
 }
 
 // mergeToBox presses M and enter and waits for the cleanup box.
@@ -97,7 +130,9 @@ func (r *cleanupRig) offer(head string) {
 	r.run(r.step(r.check(head)))
 }
 
-func (r *cleanupRig) name() string { return r.cardName(r.store.State(), r.agentID) }
+func (r *cleanupRig) name() string { return r.nameOf(r.agentID) }
+
+func (r *cleanupRig) nameOf(id core.PaneID) string { return r.cardName(r.store.State(), id) }
 
 func (r *cleanupRig) text() string { return ansi.Strip(r.View().Content) }
 
@@ -113,24 +148,15 @@ func (r *cleanupRig) worktreeExists() bool {
 	return err == nil
 }
 
-func (r *cleanupRig) panesLeft() int {
-	n := 0
-
-	for _, id := range []core.PaneID{r.shellID, r.agentID} {
-		if _, ok := r.store.State().Panes[id]; ok {
-			n++
-		}
-	}
-
-	return n
-}
-
 // done waits for the toast a run ends with.
 func (r *cleanupRig) done(t *testing.T) {
 	t.Helper()
 
 	r.until(t, "the answer", func() bool { return r.notice != "" })
 }
+
+// kept is the row and the notice for panes that keep the worktree.
+func kept(panes string) string { return "kept .worktrees/feat-x: " + panes }
 
 func TestCleanupOffer(t *testing.T) {
 	t.Parallel()
@@ -150,7 +176,7 @@ func TestCleanupOffer(t *testing.T) {
 		"#7 Add x",
 		"is merged at " + sha + ". Clean up its worktree?",
 		"[x] remove the worktree  .worktrees/feat-x",
-		"clean; closes " + r.name() + " (idle) and 1 shell",
+		"    clean ",
 		"[x] delete the local branch  feat/x",
 		"at " + sha + ", the merged head",
 		"enter clean up",
@@ -175,8 +201,8 @@ func TestCleanupRun(t *testing.T) {
 		removed bool
 		branch  bool
 	}{
-		{"both", nil, "removed .worktrees/feat-x and closed 2 panes; deleted feat/x", levelSuccess, true, false},
-		{"branch off", []string{"b"}, "removed .worktrees/feat-x and closed 2 panes", levelSuccess, true, true},
+		{"both", nil, "removed .worktrees/feat-x; deleted feat/x", levelSuccess, true, false},
+		{"branch off", []string{"b"}, "removed .worktrees/feat-x", levelSuccess, true, true},
 		{"worktree off", []string{"w"}, "nothing to clean up", levelNotice, false, true},
 	}
 
@@ -200,26 +226,7 @@ func TestCleanupRun(t *testing.T) {
 				t.Error("the box is still open")
 			}
 
-			if r.worktreeExists() == tc.removed {
-				t.Errorf("worktree exists = %v, want %v", r.worktreeExists(), !tc.removed)
-			}
-
-			if got := r.branchExists(t); got != tc.branch {
-				t.Errorf("branch exists = %v, want %v", got, tc.branch)
-			}
-
-			wantPanes := 2
-			if tc.removed {
-				wantPanes = 0
-			}
-
-			if got := r.panesLeft(); got != wantPanes {
-				t.Errorf("%d panes of the worktree are open, want %d", got, wantPanes)
-			}
-
-			if _, ok := r.store.State().Panes[r.other]; !ok {
-				t.Error("the pane outside the worktree was closed")
-			}
+			r.assertEnd(t, tc.removed, tc.branch)
 		})
 	}
 
@@ -230,10 +237,11 @@ func TestCleanupRun(t *testing.T) {
 		r.mergeToBox(t)
 		r.keys(keyEsc)
 
-		if r.confirm != nil || !r.worktreeExists() || !r.branchExists(t) || r.panesLeft() != 2 {
-			t.Errorf("esc: box %v, worktree %v, branch %v, panes %d; want it closed and all kept",
-				r.confirm, r.worktreeExists(), r.branchExists(t), r.panesLeft())
+		if r.confirm != nil {
+			t.Error("esc left the box open")
 		}
+
+		r.assertEnd(t, false, true)
 	})
 
 	t.Run("worktree off reads the branch as unavailable", func(t *testing.T) {
@@ -272,6 +280,129 @@ func TestCleanupRun(t *testing.T) {
 	})
 }
 
+// A shell in the worktree, or an agent started there, keeps it; an agent that
+// only cd'd in does not. No pane closes either way.
+func TestCleanupInUse(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		before func(*testing.T, *cleanupRig)
+		kept   func(r *cleanupRig) string // the row under the worktree's; nil when it can go
+	}{
+		{name: "only an agent that cd'd in"},
+		{
+			name: "an agent elsewhere",
+			before: func(t *testing.T, r *cleanupRig) {
+				t.Helper()
+				r.ids = append(r.ids, r.agent(t, r.main, ""))
+			},
+		},
+		{
+			name:   "a shell",
+			before: started(core.KindShell),
+			kept:   func(*cleanupRig) string { return kept("1 shell is in it") },
+		},
+		{
+			name:   "two shells",
+			before: started(core.KindShell, core.KindShell),
+			kept:   func(*cleanupRig) string { return kept("2 shells are in it") },
+		},
+		{
+			name:   "an agent started in it",
+			before: started(core.KindAgent),
+			kept:   func(r *cleanupRig) string { return kept(r.nameOf(r.keepers[0]) + " is in it") },
+		},
+		{
+			name: "an agent started in it that cd'd out",
+			before: func(t *testing.T, r *cleanupRig) {
+				t.Helper()
+				openIn(t, r.App, core.SetAgentCwd{ID: r.keeper(t, core.KindAgent), Cwd: r.main})
+			},
+			kept: func(r *cleanupRig) string { return kept(r.nameOf(r.keepers[0]) + " is in it") },
+		},
+		{
+			name:   "a shell and an agent",
+			before: started(core.KindShell, core.KindAgent),
+			kept:   func(r *cleanupRig) string { return kept(r.nameOf(r.keepers[1]) + " and 1 shell are in it") },
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			var before []func(*testing.T, *cleanupRig)
+			if tc.before != nil {
+				before = append(before, tc.before)
+			}
+
+			r := newCleanupRig(t, before...)
+			r.mergeToBox(t)
+
+			got := r.text()
+
+			if tc.kept == nil {
+				for _, want := range []string{"[x] remove the worktree  .worktrees/feat-x", "[x] delete the local branch  feat/x", "enter clean up"} {
+					if !strings.Contains(got, want) {
+						t.Errorf("the box lacks %q:\n%s", want, got)
+					}
+				}
+
+				r.notice = ""
+				r.keys(keyEnter)
+				r.done(t)
+
+				if want := "removed .worktrees/feat-x; deleted feat/x"; r.notice != want || r.noticeLevel() != levelSuccess {
+					t.Errorf("toast = %q at level %v, want %q as a success", r.notice, r.noticeLevel(), want)
+				}
+
+				r.assertEnd(t, true, false)
+
+				return
+			}
+
+			for _, want := range []string{
+				"[-] remove the worktree  .worktrees/feat-x",
+				tc.kept(r),
+				"[-] delete the local branch  feat/x",
+				"needs the worktree removed",
+				"esc keep",
+			} {
+				if !strings.Contains(got, want) {
+					t.Errorf("the box lacks %q:\n%s", want, got)
+				}
+			}
+
+			for _, hint := range []string{"enter clean up", "w worktree", "b branch"} {
+				if strings.Contains(got, hint) {
+					t.Errorf("a kept worktree's box offers %q:\n%s", hint, got)
+				}
+			}
+
+			r.typed("wb")
+
+			if c := r.confirm; c == nil || c.cleanup == nil || c.cleanup.remove || c.cleanup.del {
+				t.Fatalf("w or b changed a kept worktree's box: %+v", c)
+			}
+
+			r.notice = ""
+			r.keys(keyEnter)
+			r.done(t)
+
+			if want := noticeNothingToClean; r.notice != want || r.noticeLevel() != levelNotice {
+				t.Errorf("after enter: %q at level %v, want %q as a notice", r.notice, r.noticeLevel(), want)
+			}
+
+			if r.confirm != nil {
+				t.Error("enter left the box open")
+			}
+
+			r.assertEnd(t, false, true)
+		})
+	}
+}
+
 func TestCleanupGuards(t *testing.T) {
 	t.Parallel()
 
@@ -290,6 +421,11 @@ func TestCleanupGuards(t *testing.T) {
 		}
 	}
 
+	working := func(t *testing.T, r *cleanupRig, id core.PaneID) {
+		t.Helper()
+		openIn(t, r.App, core.SetAgentState{ID: id, State: core.AgentWorking})
+	}
+
 	tests := []struct {
 		name    string
 		setup   func(t *testing.T, r *cleanupRig)
@@ -301,7 +437,6 @@ func TestCleanupGuards(t *testing.T) {
 		level   toastLevel
 		removed bool // the worktree is gone at the end
 		branch  bool // the branch is left at the end
-		panes   int  // panes of the worktree left at the end
 	}{
 		{
 			name: "modified file",
@@ -311,7 +446,7 @@ func TestCleanupGuards(t *testing.T) {
 			toast: func(*cleanupRig) string {
 				return mergedToast + "; .worktrees/feat-x has 1 uncommitted change, so it stays"
 			},
-			branch: true, panes: 2,
+			branch: true,
 		},
 		{
 			name: "untracked files",
@@ -322,7 +457,7 @@ func TestCleanupGuards(t *testing.T) {
 			toast: func(*cleanupRig) string {
 				return mergedToast + "; .worktrees/feat-x has 2 uncommitted changes, so it stays"
 			},
-			branch: true, panes: 2,
+			branch: true,
 		},
 		{
 			name:  "locked worktree",
@@ -330,17 +465,27 @@ func TestCleanupGuards(t *testing.T) {
 			toast: func(*cleanupRig) string {
 				return mergedToast + "; .worktrees/feat-x is locked, so it stays"
 			},
-			branch: true, panes: 2,
+			branch: true,
 		},
 		{
-			name: "working agent",
-			setup: func(t *testing.T, r *cleanupRig) {
-				openIn(t, r.App, core.SetAgentState{ID: r.agentID, State: core.AgentWorking})
-			},
+			name:  "working agent that cd'd in",
+			setup: func(t *testing.T, r *cleanupRig) { working(t, r, r.agentID) },
 			toast: func(r *cleanupRig) string {
 				return mergedToast + "; " + r.name() + " is still working in .worktrees/feat-x"
 			},
-			branch: true, panes: 2,
+			branch: true,
+		},
+		{
+			name: "working agent started in it that cd'd out",
+			setup: func(t *testing.T, r *cleanupRig) {
+				id := r.keeper(t, core.KindAgent)
+				openIn(t, r.App, core.SetAgentCwd{ID: id, Cwd: r.main})
+				working(t, r, id)
+			},
+			toast: func(r *cleanupRig) string {
+				return mergedToast + "; " + r.nameOf(r.keepers[0]) + " is still working in .worktrees/feat-x"
+			},
+			branch: true,
 		},
 		{
 			name:  "branch two commits past the head",
@@ -348,10 +493,24 @@ func TestCleanupGuards(t *testing.T) {
 			toast: func(*cleanupRig) string { return mergedToast },
 			box:   []string{"[-] delete the local branch  feat/x", "kept feat/x: it has 2 commits the PR did not merge"},
 			final: func(*cleanupRig) string {
-				return "removed .worktrees/feat-x and closed 2 panes; kept feat/x: it has 2 commits the PR did not merge"
+				return "removed .worktrees/feat-x; kept feat/x: it has 2 commits the PR did not merge"
 			},
 			level:   levelSuccess,
 			removed: true, branch: true,
+		},
+		{
+			name: "branch past the head with a shell in the worktree",
+			setup: func(t *testing.T, r *cleanupRig) {
+				commit(t, r, 2)
+				r.keeper(t, core.KindShell)
+			},
+			toast: func(*cleanupRig) string { return mergedToast },
+			box: []string{
+				"[-] remove the worktree  .worktrees/feat-x", kept("1 shell is in it"),
+				"[-] delete the local branch  feat/x", "kept feat/x: it has 2 commits the PR did not merge",
+			},
+			final:  func(*cleanupRig) string { return noticeNothingToClean },
+			branch: true,
 		},
 		{
 			name:  "head unknown here",
@@ -359,7 +518,7 @@ func TestCleanupGuards(t *testing.T) {
 			toast: func(*cleanupRig) string { return mergedToast },
 			box:   []string{"[-] delete the local branch  feat/x", "kept feat/x: #7's head 1234567 is not in this repository"},
 			final: func(*cleanupRig) string {
-				return "removed .worktrees/feat-x and closed 2 panes; kept feat/x: #7's head 1234567 is not in this repository"
+				return "removed .worktrees/feat-x; kept feat/x: #7's head 1234567 is not in this repository"
 			},
 			level:   levelSuccess,
 			removed: true, branch: true,
@@ -373,7 +532,7 @@ func TestCleanupGuards(t *testing.T) {
 			toast: func(r *cleanupRig) string {
 				return mergedToast + "; " + r.main + " is outside MuxReveal's worktrees, so it stays"
 			},
-			branch: true, panes: 2,
+			branch: true,
 		},
 		{
 			name: "worktree outside both roots",
@@ -384,23 +543,44 @@ func TestCleanupGuards(t *testing.T) {
 			toast: func(r *cleanupRig) string {
 				return mergedToast + "; " + filepath.Join(filepath.Dir(r.main), "elsewhere") + " is outside MuxReveal's worktrees, so it stays"
 			},
-			branch: true, panes: 2,
+			branch: true,
 		},
 		{
 			name:   "no worktree on the branch",
 			setup:  moveOut,
 			toast:  func(*cleanupRig) string { return mergedToast },
-			branch: true, panes: 2,
+			branch: true,
 		},
 		{
-			name:  "agent starts working after the box opened",
+			name:   "agent starts working after the box opened",
+			toast:  func(*cleanupRig) string { return mergedToast },
+			box:    []string{"[x] remove the worktree  .worktrees/feat-x"},
+			after:  func(t *testing.T, r *cleanupRig) { working(t, r, r.agentID) },
+			final:  func(r *cleanupRig) string { return r.name() + " is still working in .worktrees/feat-x" },
+			branch: true,
+		},
+		{
+			name:  "shell opened in it after the box opened",
 			toast: func(*cleanupRig) string { return mergedToast },
 			box:   []string{"[x] remove the worktree  .worktrees/feat-x"},
 			after: func(t *testing.T, r *cleanupRig) {
-				openIn(t, r.App, core.SetAgentState{ID: r.agentID, State: core.AgentWorking})
+				t.Helper()
+				r.keeper(t, core.KindShell)
 			},
-			final:  func(r *cleanupRig) string { return r.name() + " is still working in .worktrees/feat-x" },
-			branch: true, panes: 2,
+			final:  func(*cleanupRig) string { return kept("1 shell is in it") },
+			branch: true,
+		},
+		{
+			name:  "agent left the worktree and started working after the box opened",
+			toast: func(*cleanupRig) string { return mergedToast },
+			box:   []string{"at "},
+			after: func(t *testing.T, r *cleanupRig) {
+				openIn(t, r.App, core.SetAgentCwd{ID: r.agentID, Cwd: r.main})
+				working(t, r, r.agentID)
+			},
+			final:   func(*cleanupRig) string { return "removed .worktrees/feat-x; deleted feat/x" },
+			level:   levelSuccess,
+			removed: true,
 		},
 		{
 			name:  "branch moved after the box opened",
@@ -408,7 +588,7 @@ func TestCleanupGuards(t *testing.T) {
 			box:   []string{"at "},
 			after: func(t *testing.T, r *cleanupRig) { commit(t, r, 1) },
 			final: func(*cleanupRig) string {
-				return "removed .worktrees/feat-x and closed 2 panes; kept feat/x: it moved since you asked"
+				return "removed .worktrees/feat-x; kept feat/x: it moved since you asked"
 			},
 			level:   levelSuccess,
 			removed: true, branch: true,
@@ -421,10 +601,9 @@ func TestCleanupGuards(t *testing.T) {
 				gitIn(t, "git", r.wt, "switch", "-q", "-c", "other")
 				commit(t, r, 1)
 			},
-			final: func(*cleanupRig) string { return "kept .worktrees/feat-x: it is no longer on feat/x" },
-			level: levelError,
-			// The panes were closed before the check; they stay closed.
-			branch: true, panes: 0,
+			final:  func(*cleanupRig) string { return "kept .worktrees/feat-x: it is no longer on feat/x" },
+			level:  levelError,
+			branch: true,
 		},
 		{
 			name:  "worktree detached with a new commit after the box opened",
@@ -436,30 +615,16 @@ func TestCleanupGuards(t *testing.T) {
 			},
 			final:  func(*cleanupRig) string { return "kept .worktrees/feat-x: it is no longer on feat/x" },
 			level:  levelError,
-			branch: true, panes: 0,
+			branch: true,
 		},
 		{
-			name:  "listed agent moved out and started working after the box opened",
-			toast: func(*cleanupRig) string { return mergedToast },
-			box:   []string{"at "},
-			after: func(t *testing.T, r *cleanupRig) {
-				openIn(t, r.App,
-					core.SetPaneCwd{ID: r.agentID, Cwd: r.main},
-					core.SetAgentCwd{ID: r.agentID, Cwd: r.main},
-					core.SetAgentState{ID: r.agentID, State: core.AgentWorking})
-			},
-			final:  func(r *cleanupRig) string { return r.name() + " is still working in .worktrees/feat-x" },
-			branch: true, panes: 2,
-		},
-		{
-			name:  "file modified after the box opened",
-			toast: func(*cleanupRig) string { return mergedToast },
-			box:   []string{"at "},
-			after: func(t *testing.T, r *cleanupRig) { write(t, filepath.Join(r.wt, "a.txt"), "changed\n") },
-			final: func(*cleanupRig) string { return "kept .worktrees/feat-x: it has uncommitted changes" },
-			level: levelError,
-			// The panes were closed before git refused; they stay closed.
-			branch: true, panes: 0,
+			name:   "file modified after the box opened",
+			toast:  func(*cleanupRig) string { return mergedToast },
+			box:    []string{"at "},
+			after:  func(t *testing.T, r *cleanupRig) { write(t, filepath.Join(r.wt, "a.txt"), "changed\n") },
+			final:  func(*cleanupRig) string { return "kept .worktrees/feat-x: it has uncommitted changes" },
+			level:  levelError,
+			branch: true,
 		},
 	}
 
@@ -488,7 +653,7 @@ func TestCleanupGuards(t *testing.T) {
 					t.Fatalf("a box opened:\n%s", r.text())
 				}
 
-				r.assertEnd(t, tc.removed, tc.branch, tc.panes)
+				r.assertEnd(t, tc.removed, tc.branch)
 
 				return
 			}
@@ -516,13 +681,14 @@ func TestCleanupGuards(t *testing.T) {
 				t.Errorf("after enter: toast %q at level %v, want %q at level %v", r.notice, r.noticeLevel(), want, tc.level)
 			}
 
-			r.assertEnd(t, tc.removed, tc.branch, tc.panes)
+			r.assertEnd(t, tc.removed, tc.branch)
 		})
 	}
 }
 
-// assertEnd checks what is left of the worktree, the branch and the worktree's panes.
-func (r *cleanupRig) assertEnd(t *testing.T, removed, branch bool, panes int) {
+// assertEnd checks what is left of the worktree and the branch, and that no
+// pane closed.
+func (r *cleanupRig) assertEnd(t *testing.T, removed, branch bool) {
 	t.Helper()
 
 	// A worktree outside the roots is never removed; only the rig's own is looked at.
@@ -534,8 +700,10 @@ func (r *cleanupRig) assertEnd(t *testing.T, removed, branch bool, panes int) {
 		t.Errorf("branch left = %v, want %v", got, branch)
 	}
 
-	if got := r.panesLeft(); got != panes {
-		t.Errorf("%d panes of the worktree are open, want %d", got, panes)
+	for _, id := range r.ids {
+		if _, ok := r.store.State().Panes[id]; !ok {
+			t.Errorf("pane %s was closed", id)
+		}
 	}
 }
 
@@ -627,7 +795,6 @@ func cleanupScene(t *testing.T, icons bool, w, h int, tune func(*cleanupTarget))
 		found: cleanupFound{
 			main: "/w/repo", path: "/w/repo/.worktrees/feat-review-pane", branch: "feat/review-pane", tip: prHeadOID, managed: true,
 		},
-		panes:  []cleanupPane{{id: "p1", name: "muxr-worker-2", agent: true, state: core.AgentIdle}, {id: "p2"}},
 		remove: true, del: true,
 	}
 	if tune != nil {
@@ -645,6 +812,13 @@ func cleanupScene(t *testing.T, icons bool, w, h int, tune func(*cleanupTarget))
 	}
 
 	return s.build(t)
+}
+
+// keptScene makes the scene's worktree kept by an agent and a shell, as the check
+// leaves a target with panes in it.
+func keptScene(t *cleanupTarget) {
+	t.inUse = []cleanupPane{{name: "muxr-worker-2", agent: true}, {}}
+	t.remove, t.del = false, false
 }
 
 func cleanupScenes() []struct {
@@ -665,8 +839,13 @@ func cleanupScenes() []struct {
 			t.found.headErr, t.found.tip, t.del = git.ErrNoCommit, "", false
 		}},
 		{"worktree-off", 120, 40, func(t *cleanupTarget) { t.remove = false }},
-		{"branch-off-no-panes", 120, 40, func(t *cleanupTarget) { t.del, t.panes = false, nil }},
+		{"branch-off-no-panes", 120, 40, func(t *cleanupTarget) { t.del = false }},
 		{"branch-behind-head", 120, 40, func(t *cleanupTarget) { t.found.tip = "0123456789abcdef0123456789abcdef01234567" }},
+		{"kept-by-panes", 120, 40, keptScene},
+		{"kept-by-panes-branch-past-head", 120, 40, func(t *cleanupTarget) {
+			keptScene(t)
+			t.found.ahead = 2
+		}},
 	}
 }
 
@@ -846,13 +1025,11 @@ func TestCleanupCommand(t *testing.T) {
 	r.keys(keyEnter)
 	r.done(t)
 
-	if want := "removed .worktrees/feat-x and closed 2 panes; deleted feat/x"; r.notice != want {
+	if want := "removed .worktrees/feat-x; deleted feat/x"; r.notice != want {
 		t.Errorf("toast = %q, want %q", r.notice, want)
 	}
 
-	if r.worktreeExists() || r.branchExists(t) || r.panesLeft() != 0 {
-		t.Errorf("worktree %v, branch %v, panes %d; want all gone", r.worktreeExists(), r.branchExists(t), r.panesLeft())
-	}
+	r.assertEnd(t, true, false)
 }
 
 func TestCleanupCommandNotices(t *testing.T) {
@@ -871,7 +1048,7 @@ func TestCleanupCommandNotices(t *testing.T) {
 		{
 			name: "outside a repository",
 			setup: func(t *testing.T, r *cleanupRig) {
-				openIn(t, r.App, core.SetPaneCwd{ID: r.shellID, Cwd: t.TempDir()})
+				openIn(t, r.App, core.SetAgentCwd{ID: r.agentID, Cwd: t.TempDir()})
 			},
 			want: func(*cleanupRig) string { return "not a git repository" },
 		},
@@ -961,7 +1138,7 @@ func TestCleanupCommandNotices(t *testing.T) {
 				t.Errorf("notice level = %v, want a plain notice", r.noticeLevel())
 			}
 
-			r.assertEnd(t, false, true, 2)
+			r.assertEnd(t, false, true)
 		})
 	}
 }
@@ -1053,7 +1230,7 @@ func TestCleanupCommandLate(t *testing.T) {
 				t.Errorf("notice = %q, want none", r.notice)
 			}
 
-			r.assertEnd(t, false, true, 2)
+			r.assertEnd(t, false, true)
 		})
 	}
 }

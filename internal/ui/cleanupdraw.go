@@ -1,11 +1,7 @@
 package ui
 
-import (
-	"fmt"
-	"strings"
-
-	"github.com/mhersson/muxreveal/internal/core"
-)
+// noteNeedsWorktree is under the branch row while the worktree stays.
+const noteNeedsWorktree = "needs the worktree removed"
 
 // cleanupBox draws the cleanup confirm w cells wide with room for at most
 // room lines (0 for no limit). It drops the blank rows and then the hint row
@@ -34,13 +30,30 @@ func cleanupBox(t cleanupTarget, w, room int, icons bool, st styles) []string {
 		{text: st.confirmQuestion.Render(prNumberText(t.number) + " " + printable(t.title))},
 		{text: st.popupMuted.Render("is merged at " + sha + ". Clean up its worktree?")},
 		{blank: true},
-		{text: check(t.remove) + st.popup.Render(" remove the worktree  ") + st.popupDim.Render(t.path())},
-		{text: st.popupMuted.Render("    " + cleanupPanesNote(t.panes))},
+	}
+
+	if t.removable() {
+		lines = append(lines,
+			mergeLine{text: check(t.remove) + st.popup.Render(" remove the worktree  ") + st.popupDim.Render(t.path())},
+			mergeLine{text: st.popupMuted.Render("    clean")})
+	} else {
+		lines = append(lines,
+			mergeLine{text: st.popupMuted.Render("[-] remove the worktree  " + t.path())},
+			mergeLine{text: st.popupWarn.Render("    " + keptBy(t.path(), t.inUse))})
 	}
 
 	branch := printable(t.found.branch)
 
-	if t.canDelete() {
+	switch {
+	case !t.canDelete():
+		lines = append(lines,
+			mergeLine{text: st.popupMuted.Render("[-] delete the local branch  " + branch)},
+			mergeLine{text: st.popupWarn.Render("    kept " + branch + ": " + t.keptReason())})
+	case !t.removable():
+		lines = append(lines,
+			mergeLine{text: st.popupMuted.Render("[-] delete the local branch  " + branch)},
+			mergeLine{text: st.popupMuted.Render("    " + noteNeedsWorktree)})
+	default:
 		note := "at " + sha + ", the merged head"
 		if t.found.tip != t.head {
 			note = "behind the merged head " + sha
@@ -48,21 +61,21 @@ func cleanupBox(t cleanupTarget, w, room int, icons bool, st styles) []string {
 
 		on := t.remove && t.del
 		if !t.remove {
-			note = "needs the worktree removed"
+			note = noteNeedsWorktree
 		}
 
 		lines = append(lines,
 			mergeLine{text: check(on) + st.popup.Render(" delete the local branch  ") + st.popupDim.Render(branch)},
 			mergeLine{text: st.popupMuted.Render("    " + note)})
-	} else {
-		lines = append(lines,
-			mergeLine{text: st.popupMuted.Render("[-] delete the local branch  " + branch)},
-			mergeLine{text: st.popupWarn.Render("    kept " + branch + ": " + t.keptReason())})
 	}
 
-	pairs := [][2]string{{"enter", "clean up"}, {"w", "worktree"}}
-	if t.canDelete() {
-		pairs = append(pairs, [2]string{"b", "branch"})
+	var pairs [][2]string
+
+	if t.removable() {
+		pairs = append(pairs, [2]string{"enter", "clean up"}, [2]string{"w", "worktree"})
+		if t.canDelete() {
+			pairs = append(pairs, [2]string{"b", "branch"})
+		}
 	}
 
 	pairs = append(pairs, [2]string{"esc", "keep"})
@@ -93,39 +106,4 @@ func cleanupBox(t cleanupTarget, w, room int, icons bool, st styles) []string {
 	}
 
 	return append(out, bottom)
-}
-
-// cleanupPanesNote is the line under the worktree row: what closes with it.
-func cleanupPanesNote(panes []cleanupPane) string {
-	var parts []string
-
-	shells := 0
-
-	for _, p := range panes {
-		if !p.agent {
-			shells++
-
-			continue
-		}
-
-		state := "no hooks"
-		if p.state == core.AgentIdle {
-			state = "idle"
-		}
-
-		parts = append(parts, fmt.Sprintf("%s (%s)", printable(p.name), state))
-	}
-
-	if shells > 0 {
-		parts = append(parts, plural(shells, "shell"))
-	}
-
-	switch len(parts) {
-	case 0:
-		return "clean"
-	case 1:
-		return "clean; closes " + parts[0]
-	}
-
-	return "clean; closes " + strings.Join(parts[:len(parts)-1], ", ") + " and " + parts[len(parts)-1]
 }
