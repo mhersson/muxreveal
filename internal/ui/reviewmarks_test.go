@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mhersson/muxreveal/internal/git"
+	"github.com/mhersson/aim/internal/git"
 )
 
 // fakeMarks keeps marks in memory by common dir and records the saves. Two

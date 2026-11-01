@@ -18,9 +18,9 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/mhersson/muxreveal/internal/core"
-	"github.com/mhersson/muxreveal/internal/git"
-	"github.com/mhersson/muxreveal/internal/harness"
+	"github.com/mhersson/aim/internal/core"
+	"github.com/mhersson/aim/internal/git"
+	"github.com/mhersson/aim/internal/harness"
 )
 
 func discardLogger() *slog.Logger { return slog.New(slog.NewTextHandler(io.Discard, nil)) }
@@ -150,12 +150,12 @@ func TestWarnStatusLineOff(t *testing.T) {
 		exe  string
 		want string // what the warning names; empty for no warning
 	}{
-		{"quotable path", "/opt/muxreveal/bin/muxreveal", ""},
-		{"single quote", "/opt/mux'reveal/muxreveal", "single quote"},
-		{"backslash", `/opt/mux\reveal/muxreveal`, "backslash"},
-		{"escape character", "/opt/mux\x1b[31mreveal/muxreveal", "U+001B"},
-		{"newline", "/opt/mux\nreveal/muxreveal", "U+000A"},
-		{"invalid UTF-8", "/opt/mux\xffreveal/muxreveal", "UTF-8"},
+		{"quotable path", "/opt/aim/bin/aim", ""},
+		{"single quote", "/opt/a'im/aim", "single quote"},
+		{"backslash", `/opt/a\im/aim`, "backslash"},
+		{"escape character", "/opt/a\x1b[31mim/aim", "U+001B"},
+		{"newline", "/opt/a\nim/aim", "U+000A"},
+		{"invalid UTF-8", "/opt/a\xffim/aim", "UTF-8"},
 	}
 
 	for _, tt := range tests {

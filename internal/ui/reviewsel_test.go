@@ -13,10 +13,10 @@ import (
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/mhersson/muxreveal/internal/core"
-	"github.com/mhersson/muxreveal/internal/git"
-	"github.com/mhersson/muxreveal/internal/md"
-	"github.com/mhersson/muxreveal/internal/ui/diffview"
+	"github.com/mhersson/aim/internal/core"
+	"github.com/mhersson/aim/internal/git"
+	"github.com/mhersson/aim/internal/md"
+	"github.com/mhersson/aim/internal/ui/diffview"
 )
 
 // selPage is a page rig with docs/a.md shown, a fake clipboard and the drawer

@@ -10,9 +10,9 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/mhersson/muxreveal/internal/core"
-	"github.com/mhersson/muxreveal/internal/git"
-	"github.com/mhersson/muxreveal/internal/ui/theme"
+	"github.com/mhersson/aim/internal/core"
+	"github.com/mhersson/aim/internal/git"
+	"github.com/mhersson/aim/internal/ui/theme"
 )
 
 // Frames and updates that change nothing the drawer shows must not draw it
@@ -146,7 +146,7 @@ func TestDrawerLinesFollowTheirInputs(t *testing.T) {
 		}, differs: true},
 		{name: "a live result arrives", scene: small, change: func(t *testing.T, a *App, v *reviewView) {
 			res := edited()
-			a.reviewApply(v, reviewLoadedMsg{tab: a.store.State().Tab().ID, res: res, live: true, info: reviewInfo{project: "muxreveal", branch: "feat/review-pane", base: "origin/main", turns: 4, hidden: hiddenFlags(res.Files)}})
+			a.reviewApply(v, reviewLoadedMsg{tab: a.store.State().Tab().ID, res: res, live: true, info: reviewInfo{project: "multiplex", branch: "feat/review-pane", base: "origin/main", turns: 4, hidden: hiddenFlags(res.Files)}})
 		}, differs: true},
 		{name: "a new generation", scene: small, change: func(t *testing.T, a *App, v *reviewView) {
 			v.gen++
@@ -303,7 +303,7 @@ func TestDrawerLinesStayTrueToAColdDraw(t *testing.T) {
 		}},
 		{"live result", func() {
 			res := results[rng.IntN(len(results))]
-			a.reviewApply(v, reviewLoadedMsg{tab: a.store.State().Tab().ID, res: res, live: true, info: reviewInfo{project: "muxreveal", branch: "feat/review-pane", base: "origin/main", turns: 4, hidden: hiddenFlags(res.Files)}})
+			a.reviewApply(v, reviewLoadedMsg{tab: a.store.State().Tab().ID, res: res, live: true, info: reviewInfo{project: "multiplex", branch: "feat/review-pane", base: "origin/main", turns: 4, hidden: hiddenFlags(res.Files)}})
 		}},
 		{"new result", func() {
 			v.gen++

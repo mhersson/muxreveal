@@ -4,9 +4,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/mhersson/muxreveal/internal/git"
-	"github.com/mhersson/muxreveal/internal/git/linediff"
-	"github.com/mhersson/muxreveal/internal/ui/diffview"
+	"github.com/mhersson/aim/internal/git"
+	"github.com/mhersson/aim/internal/git/linediff"
+	"github.com/mhersson/aim/internal/ui/diffview"
 )
 
 // reviewRowKind is what a row of the diff column is.

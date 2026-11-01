@@ -11,8 +11,8 @@ import (
 	"github.com/charmbracelet/x/exp/golden"
 	"github.com/charmbracelet/x/exp/teatest/v2"
 
-	"github.com/mhersson/muxreveal/internal/core"
-	"github.com/mhersson/muxreveal/internal/ui/theme"
+	"github.com/mhersson/aim/internal/core"
+	"github.com/mhersson/aim/internal/ui/theme"
 )
 
 // screenRows is the plain text of every row of the drawn frame.

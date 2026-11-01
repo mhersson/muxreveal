@@ -30,8 +30,8 @@ func TestPaneEnv(t *testing.T) {
 		},
 		{
 			"pane identity dropped",
-			[]string{"MUXREVEAL_PANE=p1", "MUXREVEAL_SOCK=/s", "MUXREVEAL_OTHER=1"},
-			[]string{"MUXREVEAL_OTHER=1", "TERM=xterm-256color", "COLORTERM=truecolor"},
+			[]string{"AIM_PANE=p1", "AIM_SOCK=/s", "AIM_OTHER=1"},
+			[]string{"AIM_OTHER=1", "TERM=xterm-256color", "COLORTERM=truecolor"},
 		},
 		{
 			"similar names kept",
@@ -114,10 +114,10 @@ func TestCommands(t *testing.T) {
 }
 
 func TestCommandsExtraEnv(t *testing.T) {
-	t.Setenv("MUXREVEAL_PANE", "inherited")
+	t.Setenv("AIM_PANE", "inherited")
 
 	env := func(string) string { return "/bin/sh" }
-	extra := []string{"MUXREVEAL_PANE=p2", "MUXREVEAL_SOCK=/run/1.sock"}
+	extra := []string{"AIM_PANE=p2", "AIM_SOCK=/run/1.sock"}
 
 	for name, c := range map[string]Command{
 		"shell": ShellCommand(env, "/work", extra),
@@ -126,16 +126,16 @@ func TestCommandsExtraEnv(t *testing.T) {
 		var panes []string
 
 		for _, kv := range c.Env {
-			if strings.HasPrefix(kv, "MUXREVEAL_PANE=") {
+			if strings.HasPrefix(kv, "AIM_PANE=") {
 				panes = append(panes, kv)
 			}
 		}
 
-		if !slices.Equal(panes, []string{"MUXREVEAL_PANE=p2"}) {
-			t.Errorf("%s: MUXREVEAL_PANE entries = %q, want only p2", name, panes)
+		if !slices.Equal(panes, []string{"AIM_PANE=p2"}) {
+			t.Errorf("%s: AIM_PANE entries = %q, want only p2", name, panes)
 		}
 
-		if !slices.Contains(c.Env, "MUXREVEAL_SOCK=/run/1.sock") {
+		if !slices.Contains(c.Env, "AIM_SOCK=/run/1.sock") {
 			t.Errorf("%s: Env lacks extra entry: %q", name, c.Env)
 		}
 	}
@@ -174,7 +174,7 @@ func TestEditorCommand(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			c := EditorCommand(tt.env, "/work", tt.editor, tt.args, []string{"MUXREVEAL_PANE=p2"})
+			c := EditorCommand(tt.env, "/work", tt.editor, tt.args, []string{"AIM_PANE=p2"})
 
 			wantSh := tt.env("SHELL")
 			if want := append([]string{wantSh, "-l", "-i", "-c"}, tt.want...); !slices.Equal(c.Argv, want) {
@@ -185,7 +185,7 @@ func TestEditorCommand(t *testing.T) {
 				t.Errorf("Dir = %q, want /work", c.Dir)
 			}
 
-			if !slices.Contains(c.Env, "SHELL="+wantSh) || !slices.Contains(c.Env, "MUXREVEAL_PANE=p2") {
+			if !slices.Contains(c.Env, "SHELL="+wantSh) || !slices.Contains(c.Env, "AIM_PANE=p2") {
 				t.Errorf("Env lacks SHELL or the extra entry: %q", c.Env)
 			}
 		})
@@ -223,8 +223,8 @@ func TestEditorOnlyCommand(t *testing.T) {
 // It runs nothing, so unlike the tests that start a shell it holds on every platform.
 func TestAgentCommandPinned(t *testing.T) {
 	t.Setenv("SHELL", "/inherited/shell")
-	t.Setenv("MUXREVEAL_PANE", "p9")
-	t.Setenv("MUXREVEAL_SOCK", "/inherited.sock")
+	t.Setenv("AIM_PANE", "p9")
+	t.Setenv("AIM_SOCK", "/inherited.sock")
 	t.Setenv("TERM", "dumb")
 	t.Setenv("COLORTERM", "16color")
 
@@ -250,7 +250,7 @@ func TestAgentCommandPinned(t *testing.T) {
 		{"one word", "/bin/zsh", []string{"claude"}, "/bin/zsh", []string{posix, "zsh", "claude"}},
 	}
 
-	extra := []string{"MUXREVEAL_PANE=p2", "MUXREVEAL_SOCK=/run/1.sock"}
+	extra := []string{"AIM_PANE=p2", "AIM_SOCK=/run/1.sock"}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -274,13 +274,13 @@ func TestAgentCommandPinned(t *testing.T) {
 
 			// The inherited identity, shell and terminal values are dropped; the pane's
 			// terminal values, the shell that runs and the extra entries end the list, in this order.
-			wantTail := []string{"TERM=xterm-256color", "COLORTERM=truecolor", "SHELL=" + tt.sh, "MUXREVEAL_PANE=p2", "MUXREVEAL_SOCK=/run/1.sock"}
+			wantTail := []string{"TERM=xterm-256color", "COLORTERM=truecolor", "SHELL=" + tt.sh, "AIM_PANE=p2", "AIM_SOCK=/run/1.sock"}
 			if len(c.Env) < len(wantTail) || !slices.Equal(c.Env[len(c.Env)-len(wantTail):], wantTail) {
 				t.Fatalf("Env ends with %q, want %q", c.Env[max(len(c.Env)-len(wantTail), 0):], wantTail)
 			}
 
 			for _, kv := range c.Env[:len(c.Env)-len(wantTail)] {
-				for _, key := range []string{"SHELL=", "MUXREVEAL_PANE=", "MUXREVEAL_SOCK=", "TERM=", "COLORTERM="} {
+				for _, key := range []string{"SHELL=", "AIM_PANE=", "AIM_SOCK=", "TERM=", "COLORTERM="} {
 					if strings.HasPrefix(kv, key) {
 						t.Errorf("Env keeps the inherited %q", kv)
 					}

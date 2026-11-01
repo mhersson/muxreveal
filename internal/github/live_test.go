@@ -64,22 +64,22 @@ func restoreLoginEnv(t *testing.T) {
 	}
 }
 
-// TestLiveReadOnly reads a real repository named by MUXREVEAL_LIVE_REPO
-// (owner/name; MUXREVEAL_LIVE_HOST defaults to github.com) and never writes.
+// TestLiveReadOnly reads a real repository named by AIM_LIVE_REPO
+// (owner/name; AIM_LIVE_HOST defaults to github.com) and never writes.
 // It must run alone (-run '^TestLiveReadOnly$'): go-gh reads its config once
 // per process.
 func TestLiveReadOnly(t *testing.T) {
-	slug := os.Getenv("MUXREVEAL_LIVE_REPO")
+	slug := os.Getenv("AIM_LIVE_REPO")
 	if slug == "" {
-		t.Skip("MUXREVEAL_LIVE_REPO is not set")
+		t.Skip("AIM_LIVE_REPO is not set")
 	}
 
 	owner, name, ok := strings.Cut(slug, "/")
 	if !ok || owner == "" || name == "" {
-		t.Fatal("MUXREVEAL_LIVE_REPO must be owner/name")
+		t.Fatal("AIM_LIVE_REPO must be owner/name")
 	}
 
-	host := os.Getenv("MUXREVEAL_LIVE_HOST")
+	host := os.Getenv("AIM_LIVE_HOST")
 	if host == "" {
 		host = "github.com"
 	}
@@ -121,10 +121,10 @@ func TestLiveReadOnly(t *testing.T) {
 		}
 	}
 
-	branch := os.Getenv("MUXREVEAL_LIVE_BRANCH")
+	branch := os.Getenv("AIM_LIVE_BRANCH")
 
 	if openPR == nil && branch == "" {
-		t.Logf("%s: no same-repository open PR and no MUXREVEAL_LIVE_BRANCH; nothing more to read", repo)
+		t.Logf("%s: no same-repository open PR and no AIM_LIVE_BRANCH; nothing more to read", repo)
 
 		return
 	}

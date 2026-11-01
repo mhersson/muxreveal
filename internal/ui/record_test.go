@@ -13,9 +13,9 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/mhersson/muxreveal/internal/core"
-	"github.com/mhersson/muxreveal/internal/term"
-	"github.com/mhersson/muxreveal/internal/term/rec"
+	"github.com/mhersson/aim/internal/core"
+	"github.com/mhersson/aim/internal/term"
+	"github.com/mhersson/aim/internal/term/rec"
 )
 
 // shCommand runs script instead of the pane's login shell.

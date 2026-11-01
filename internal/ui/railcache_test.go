@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mhersson/muxreveal/internal/core"
-	"github.com/mhersson/muxreveal/internal/ui/theme"
+	"github.com/mhersson/aim/internal/core"
+	"github.com/mhersson/aim/internal/ui/theme"
 )
 
 // railPicture is the rail's cached lines as one string.

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/mhersson/muxreveal/internal/ui/theme"
+	"github.com/mhersson/aim/internal/ui/theme"
 )
 
 func TestBorderRunCache(t *testing.T) {

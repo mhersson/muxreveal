@@ -5,7 +5,7 @@ import (
 	"testing"
 	"unicode/utf8"
 
-	"github.com/mhersson/muxreveal/internal/git"
+	"github.com/mhersson/aim/internal/git"
 )
 
 func TestCleanText(t *testing.T) {

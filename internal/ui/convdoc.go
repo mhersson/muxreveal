@@ -14,10 +14,10 @@ import (
 
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/mhersson/muxreveal/internal/git/invisible"
-	"github.com/mhersson/muxreveal/internal/github"
-	"github.com/mhersson/muxreveal/internal/md"
-	"github.com/mhersson/muxreveal/internal/ui/diffview"
+	"github.com/mhersson/aim/internal/git/invisible"
+	"github.com/mhersson/aim/internal/github"
+	"github.com/mhersson/aim/internal/md"
+	"github.com/mhersson/aim/internal/ui/diffview"
 )
 
 // The conversation's own roles, past md's. md counts them as text, so what a

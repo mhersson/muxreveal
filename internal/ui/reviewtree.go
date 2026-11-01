@@ -8,7 +8,7 @@ import (
 
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/mhersson/muxreveal/internal/git"
+	"github.com/mhersson/aim/internal/git"
 )
 
 const (

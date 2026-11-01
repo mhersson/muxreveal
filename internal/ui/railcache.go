@@ -4,8 +4,8 @@ import (
 	"slices"
 	"time"
 
-	"github.com/mhersson/muxreveal/internal/core"
-	"github.com/mhersson/muxreveal/internal/github"
+	"github.com/mhersson/aim/internal/core"
+	"github.com/mhersson/aim/internal/github"
 )
 
 // railKey is the rail picture's inputs that are plain fields. The core state

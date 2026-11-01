@@ -10,9 +10,9 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/mhersson/muxreveal/internal/core"
-	"github.com/mhersson/muxreveal/internal/harness"
-	"github.com/mhersson/muxreveal/internal/term"
+	"github.com/mhersson/aim/internal/core"
+	"github.com/mhersson/aim/internal/harness"
+	"github.com/mhersson/aim/internal/term"
 )
 
 // cwdProbeEvery bounds how often a pane's working directory is looked up.
@@ -179,9 +179,9 @@ func (a *App) startPane(id core.PaneID, kind core.PaneKind, cwd string, cols, ro
 // startPaneRunning is startPane for a shell pane that starts the command line
 // run, when it is set, in place of the plain shell.
 func (a *App) startPaneRunning(id core.PaneID, kind core.PaneKind, cwd string, cols, rows int, resume core.SessionID, run *paneRun) (*pane, string, error) {
-	env := []string{"MUXREVEAL_PANE=" + string(id)}
+	env := []string{"AIM_PANE=" + string(id)}
 	if a.hookSock != "" {
-		env = append(env, "MUXREVEAL_SOCK="+a.hookSock)
+		env = append(env, "AIM_SOCK="+a.hookSock)
 	}
 
 	c := term.ShellCommand(a.getenv, cwd, env)
@@ -624,7 +624,7 @@ func (a *App) quit() tea.Cmd {
 
 	a.openConfirm(confirm{
 		action: "Quit",
-		prompt: "Quit MuxReveal?",
+		prompt: "Quit AIM?",
 		detail: "Agent panes are running and will stop.",
 		yes:    func(a *App) tea.Cmd { return a.pictures.quit(tea.Quit) },
 	})

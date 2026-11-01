@@ -6,7 +6,7 @@ import (
 
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/mhersson/muxreveal/internal/term"
+	"github.com/mhersson/aim/internal/term"
 )
 
 type discard struct{}

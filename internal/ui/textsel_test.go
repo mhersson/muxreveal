@@ -8,7 +8,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	uv "github.com/charmbracelet/ultraviolet"
 
-	"github.com/mhersson/muxreveal/internal/md"
+	"github.com/mhersson/aim/internal/md"
 )
 
 // allOf selects every cell of every line of v.

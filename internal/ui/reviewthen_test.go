@@ -5,7 +5,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/mhersson/muxreveal/internal/core"
+	"github.com/mhersson/aim/internal/core"
 )
 
 func TestAfterLoadActionNeedsTheKeyboard(t *testing.T) {
@@ -48,7 +48,7 @@ func TestAfterLoadActionNeedsTheKeyboard(t *testing.T) {
 		r.opened(t)
 		r.typed("a")
 
-		other := &confirm{prompt: "Quit MuxReveal?", yes: func(*App) tea.Cmd { return nil }}
+		other := &confirm{prompt: "Quit AIM?", yes: func(*App) tea.Cmd { return nil }}
 		r.openConfirm(*other)
 
 		r.until(t, "the PR to load", r.inPRMode(7))

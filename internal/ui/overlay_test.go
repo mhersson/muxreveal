@@ -11,7 +11,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	"github.com/charmbracelet/x/exp/golden"
 
-	"github.com/mhersson/muxreveal/internal/ui/palette"
+	"github.com/mhersson/aim/internal/ui/palette"
 )
 
 var (

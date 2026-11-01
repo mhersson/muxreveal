@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mhersson/muxreveal/internal/core"
-	"github.com/mhersson/muxreveal/internal/harness"
+	"github.com/mhersson/aim/internal/core"
+	"github.com/mhersson/aim/internal/harness"
 )
 
 const statusPayload = `{"hook_event_name":"Status","session_id":"s1","model":{"id":"claude-opus-4-5","display_name":"Opus 4.5"},` +
@@ -48,7 +48,7 @@ func TestRunStatuslineDelivers(t *testing.T) {
 	path, out := statusServer(t)
 
 	runStatusline(context.Background(), strings.NewReader(statusPayload),
-		env(map[string]string{"MUXREVEAL_SOCK": path, "MUXREVEAL_PANE": "p7"}))
+		env(map[string]string{"AIM_SOCK": path, "AIM_PANE": "p7"}))
 
 	select {
 	case ev := <-out:
@@ -117,13 +117,13 @@ func TestRunStatuslineIsSilentAndHonoursItsBudget(t *testing.T) {
 		// answered: only the budget ends it.
 		waitsOutBudget bool
 	}{
-		{"no socket", statusPayload, map[string]string{"MUXREVEAL_PANE": "p"}, false},
-		{"no pane", statusPayload, map[string]string{"MUXREVEAL_SOCK": missing}, false},
-		{"invalid json", "{not json", map[string]string{"MUXREVEAL_SOCK": missing, "MUXREVEAL_PANE": "p"}, false},
-		{"truncated", statusPayload[:40], map[string]string{"MUXREVEAL_SOCK": silent, "MUXREVEAL_PANE": "p"}, false},
-		{"oversized", oversized, map[string]string{"MUXREVEAL_SOCK": silent, "MUXREVEAL_PANE": "p"}, false},
-		{"never answers", statusPayload, map[string]string{"MUXREVEAL_SOCK": silent, "MUXREVEAL_PANE": "p"}, true},
-		{"missing socket", statusPayload, map[string]string{"MUXREVEAL_SOCK": missing, "MUXREVEAL_PANE": "p"}, false},
+		{"no socket", statusPayload, map[string]string{"AIM_PANE": "p"}, false},
+		{"no pane", statusPayload, map[string]string{"AIM_SOCK": missing}, false},
+		{"invalid json", "{not json", map[string]string{"AIM_SOCK": missing, "AIM_PANE": "p"}, false},
+		{"truncated", statusPayload[:40], map[string]string{"AIM_SOCK": silent, "AIM_PANE": "p"}, false},
+		{"oversized", oversized, map[string]string{"AIM_SOCK": silent, "AIM_PANE": "p"}, false},
+		{"never answers", statusPayload, map[string]string{"AIM_SOCK": silent, "AIM_PANE": "p"}, true},
+		{"missing socket", statusPayload, map[string]string{"AIM_SOCK": missing, "AIM_PANE": "p"}, false},
 	}
 
 	for _, tt := range tests {
@@ -169,7 +169,7 @@ func TestRunStatuslineStdinNeverClosesStaysInBudget(t *testing.T) {
 
 	captureStdio(t, func() {
 		returns(t, "runStatusline", func() {
-			runStatusline(ctx, pr, env(map[string]string{"MUXREVEAL_SOCK": "/x", "MUXREVEAL_PANE": "p"}))
+			runStatusline(ctx, pr, env(map[string]string{"AIM_SOCK": "/x", "AIM_PANE": "p"}))
 		})
 	})
 
@@ -202,8 +202,8 @@ func TestStatuslineCommandHiddenAndQuiet(t *testing.T) {
 	}
 
 	t.Run("without the environment", func(t *testing.T) {
-		t.Setenv("MUXREVEAL_SOCK", "")
-		t.Setenv("MUXREVEAL_PANE", "")
+		t.Setenv("AIM_SOCK", "")
+		t.Setenv("AIM_PANE", "")
 
 		var buf bytes.Buffer
 
@@ -227,8 +227,8 @@ func TestStatuslineCommandHiddenAndQuiet(t *testing.T) {
 	t.Run("with the environment", func(t *testing.T) {
 		path, out := statusServer(t)
 
-		t.Setenv("MUXREVEAL_SOCK", path)
-		t.Setenv("MUXREVEAL_PANE", "p3")
+		t.Setenv("AIM_SOCK", path)
+		t.Setenv("AIM_PANE", "p3")
 
 		var buf bytes.Buffer
 
@@ -268,7 +268,7 @@ func TestRunStatuslineDrainsStdin(t *testing.T) {
 		{"without the environment", nil, bytes.NewReader(bytes.Repeat([]byte("x"), 1<<20))},
 		{
 			"with the environment",
-			map[string]string{"MUXREVEAL_SOCK": "/x", "MUXREVEAL_PANE": "p"},
+			map[string]string{"AIM_SOCK": "/x", "AIM_PANE": "p"},
 			io.LimitReader(zeroReader{}, maxHookPayload+1<<20),
 		},
 	}

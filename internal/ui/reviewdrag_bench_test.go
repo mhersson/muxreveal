@@ -13,7 +13,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/mhersson/muxreveal/internal/git"
+	"github.com/mhersson/aim/internal/git"
 )
 
 // dragRows is how many rows each drag grows its selection to. A motion or an

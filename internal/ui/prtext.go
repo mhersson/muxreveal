@@ -4,9 +4,9 @@ import (
 	"slices"
 	"strconv"
 
-	"github.com/mhersson/muxreveal/internal/core"
-	"github.com/mhersson/muxreveal/internal/github"
-	"github.com/mhersson/muxreveal/internal/ui/theme"
+	"github.com/mhersson/aim/internal/core"
+	"github.com/mhersson/aim/internal/github"
+	"github.com/mhersson/aim/internal/ui/theme"
 )
 
 // Pull request states as core holds them; prOpenState is in prs.go.

@@ -18,7 +18,7 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/mhersson/muxreveal/internal/core"
+	"github.com/mhersson/aim/internal/core"
 )
 
 // Version is the file format Encode writes and Decode reads without fallback.

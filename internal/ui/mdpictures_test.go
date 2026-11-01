@@ -11,8 +11,8 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	xkitty "github.com/charmbracelet/x/ansi/kitty"
 
-	"github.com/mhersson/muxreveal/internal/core"
-	"github.com/mhersson/muxreveal/internal/md"
+	"github.com/mhersson/aim/internal/core"
+	"github.com/mhersson/aim/internal/md"
 )
 
 var cell1x1 = uv.CellSizeEvent{Width: 1, Height: 1}

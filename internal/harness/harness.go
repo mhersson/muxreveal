@@ -1,11 +1,11 @@
-// Package harness adapts external coding-agent CLIs to MuxReveal.
+// Package harness adapts external coding-agent CLIs to AIM.
 package harness
 
 import (
 	"context"
 	"time"
 
-	"github.com/mhersson/muxreveal/internal/core"
+	"github.com/mhersson/aim/internal/core"
 )
 
 // Harness adapts one agent CLI: how to launch it, how to hook it, and how to

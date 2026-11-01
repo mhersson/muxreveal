@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"slices"
 
-	"github.com/mhersson/muxreveal/internal/md"
+	"github.com/mhersson/aim/internal/md"
 )
 
 // maxMarkdownFiles bounds the listing so a huge tree cannot stall the picker.

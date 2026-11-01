@@ -14,12 +14,12 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/mhersson/muxreveal/internal/core"
-	"github.com/mhersson/muxreveal/internal/git"
-	"github.com/mhersson/muxreveal/internal/harness"
-	"github.com/mhersson/muxreveal/internal/term"
-	"github.com/mhersson/muxreveal/internal/ui/palette"
-	"github.com/mhersson/muxreveal/internal/ui/theme"
+	"github.com/mhersson/aim/internal/core"
+	"github.com/mhersson/aim/internal/git"
+	"github.com/mhersson/aim/internal/harness"
+	"github.com/mhersson/aim/internal/term"
+	"github.com/mhersson/aim/internal/ui/palette"
+	"github.com/mhersson/aim/internal/ui/theme"
 )
 
 // Options configures the root model.
@@ -43,7 +43,7 @@ type Options struct {
 	Harness harness.Harness
 	// HookSettings is the --settings file for agents; empty launches them without hooks.
 	HookSettings string
-	// HookSock is MUXREVEAL_SOCK for every pane; empty sets none.
+	// HookSock is AIM_SOCK for every pane; empty sets none.
 	HookSock string
 	// Events delivers hook events; nil means none arrive.
 	Events <-chan harness.Event

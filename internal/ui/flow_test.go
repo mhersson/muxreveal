@@ -12,8 +12,8 @@ import (
 
 	"github.com/charmbracelet/x/exp/teatest/v2"
 
-	"github.com/mhersson/muxreveal/internal/core"
-	"github.com/mhersson/muxreveal/internal/term"
+	"github.com/mhersson/aim/internal/core"
+	"github.com/mhersson/aim/internal/term"
 )
 
 func TestQuitFlow(t *testing.T) {
@@ -141,12 +141,12 @@ func TestShellFlow(t *testing.T) {
 	}
 
 	// The quotes keep the typed line from containing the output.
-	for _, r := range "echo mux''reveal" {
+	for _, r := range "echo multi''plex" {
 		tm.Send(keyRune(r))
 	}
 
 	tm.Send(keyEnter)
-	waitFor("muxreveal")
+	waitFor("multiplex")
 
 	tm.Send(keyLeader)
 	tm.Send(keyRune('v'))

@@ -6,7 +6,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	uv "github.com/charmbracelet/ultraviolet"
 
-	"github.com/mhersson/muxreveal/internal/core"
+	"github.com/mhersson/aim/internal/core"
 )
 
 // stablePoint is a cell whose row survives scrollback trimming: the absolute

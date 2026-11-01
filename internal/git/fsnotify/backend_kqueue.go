@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/mhersson/muxreveal/internal/git/fsnotify/internal"
+	"github.com/mhersson/aim/internal/git/fsnotify/internal"
 	"golang.org/x/sys/unix"
 )
 

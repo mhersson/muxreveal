@@ -3,7 +3,7 @@ package ui
 import (
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/mhersson/muxreveal/internal/core"
+	"github.com/mhersson/aim/internal/core"
 )
 
 // copyState is copy mode on one pane. Its rows are absolute as of trimmed, the

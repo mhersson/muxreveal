@@ -9,9 +9,9 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	"github.com/charmbracelet/x/exp/golden"
 
-	"github.com/mhersson/muxreveal/internal/core"
-	"github.com/mhersson/muxreveal/internal/git"
-	"github.com/mhersson/muxreveal/internal/git/invisible"
+	"github.com/mhersson/aim/internal/core"
+	"github.com/mhersson/aim/internal/git"
+	"github.com/mhersson/aim/internal/git/invisible"
 )
 
 type reviewCase struct {
@@ -100,7 +100,7 @@ func reviewCases() []reviewCase {
 			s.pinned, s.branch, s.res = true, true, git.Result{}
 			s.tune = func(t *testing.T, a *App, v *reviewView) {
 				a.getenv = func(string) string { return "/home/me" }
-				v.err = errWorktreeRemoved{root: "/home/me/code/muxreveal/.worktrees/b"}
+				v.err = errWorktreeRemoved{root: "/home/me/code/multiplex/.worktrees/b"}
 				v.rebuild(false)
 			}
 		})},
@@ -703,8 +703,8 @@ func TestDrawerTitleAndTags(t *testing.T) {
 		want  []string
 		not   []string
 	}{
-		{"turn tag", false, func(s *reviewScene) {}, []string{"╭─ muxreveal · feat/review-pane ", " turn 4/4 ─╮"}, []string{" split ─"}},
-		{"icons", true, func(s *reviewScene) {}, []string{"\U000F02DA turn 4/4 ", "\uF4D2 muxreveal"}, nil},
+		{"turn tag", false, func(s *reviewScene) {}, []string{"╭─ multiplex · feat/review-pane ", " turn 4/4 ─╮"}, []string{" split ─"}},
+		{"icons", true, func(s *reviewScene) {}, []string{"\U000F02DA turn 4/4 ", "\uF4D2 multiplex"}, nil},
 		{"past turn", false, func(s *reviewScene) { s.turn, s.res.Live = 2, false }, []string{" turn 2/4 ─╮", "turn 2 of 4 in this worktree"}, []string{", live"}},
 		{"latest turn", false, func(s *reviewScene) {}, []string{"turn 4 of 4, live"}, []string{"in this worktree"}},
 		{"branch", false, func(s *reviewScene) { s.branch = true }, []string{" branch ─╮", "branch vs origin/main"}, []string{"turn 4/4"}},

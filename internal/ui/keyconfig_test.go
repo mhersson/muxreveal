@@ -10,8 +10,8 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/mhersson/muxreveal/internal/core"
-	"github.com/mhersson/muxreveal/internal/git"
+	"github.com/mhersson/aim/internal/core"
+	"github.com/mhersson/aim/internal/git"
 )
 
 // leaderKeys builds a [keys] config with the leader entries in the given order.

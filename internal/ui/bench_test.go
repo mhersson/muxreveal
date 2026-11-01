@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mhersson/muxreveal/internal/term/rec"
+	"github.com/mhersson/aim/internal/term/rec"
 )
 
 // Up to six panes on 240x64, each count run three times.
@@ -23,14 +23,14 @@ const (
 	defaultStagger          = 500 * time.Millisecond
 )
 
-// benchRecordings loads the recordings named by MUXREVEAL_BENCH_RECORDINGS: a
+// benchRecordings loads the recordings named by AIM_BENCH_RECORDINGS: a
 // list of files and directories (their *.rec files), separated like PATH.
 func benchRecordings(t *testing.T) ([][]rec.Record, []string) {
 	t.Helper()
 
-	env := os.Getenv("MUXREVEAL_BENCH_RECORDINGS")
+	env := os.Getenv("AIM_BENCH_RECORDINGS")
 	if env == "" {
-		t.Skip("MUXREVEAL_BENCH_RECORDINGS is not set")
+		t.Skip("AIM_BENCH_RECORDINGS is not set")
 	}
 
 	var paths []string
@@ -134,25 +134,25 @@ func envDuration(t *testing.T, name string, def time.Duration) time.Duration {
 	return d
 }
 
-// TestBench replays MUXREVEAL_BENCH_RECORDINGS in 2, 4 and 6 panes and fails
+// TestBench replays AIM_BENCH_RECORDINGS in 2, 4 and 6 panes and fails
 // when the six-pane median of the runs' worst frames is over the budget. The
 // other knobs: _START, _LENGTH, _STAGGER, _MODE, _SELECTION, _RAIL, _REVIEW, and
 // _PICTURES=1, which keeps a picture placed in the drawer beside the panes, so
 // every frame pays for placing pictures, and fails a run whose frames lack it.
 func TestBench(t *testing.T) {
 	all, paths := benchRecordings(t)
-	length := envDuration(t, "MUXREVEAL_BENCH_LENGTH", 10*time.Second)
+	length := envDuration(t, "AIM_BENCH_LENGTH", 10*time.Second)
 
-	stagger := envDuration(t, "MUXREVEAL_BENCH_STAGGER", defaultStagger)
+	stagger := envDuration(t, "AIM_BENCH_STAGGER", defaultStagger)
 
 	if length <= 0 || stagger < 0 {
-		t.Fatalf("MUXREVEAL_BENCH_LENGTH must be positive and MUXREVEAL_BENCH_STAGGER not negative (got %v, %v)", length, stagger)
+		t.Fatalf("AIM_BENCH_LENGTH must be positive and AIM_BENCH_STAGGER not negative (got %v, %v)", length, stagger)
 	}
 
 	var start time.Duration
 
-	if os.Getenv("MUXREVEAL_BENCH_START") != "" {
-		start = envDuration(t, "MUXREVEAL_BENCH_START", 0)
+	if os.Getenv("AIM_BENCH_START") != "" {
+		start = envDuration(t, "AIM_BENCH_START", 0)
 	} else {
 		var err error
 
@@ -161,24 +161,24 @@ func TestBench(t *testing.T) {
 		}
 	}
 
-	selection := os.Getenv("MUXREVEAL_BENCH_SELECTION") != ""
+	selection := os.Getenv("AIM_BENCH_SELECTION") != ""
 
-	mode, err := parseBenchMode(os.Getenv("MUXREVEAL_BENCH_MODE"))
+	mode, err := parseBenchMode(os.Getenv("AIM_BENCH_MODE"))
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	rail, err := parseBenchRail(os.Getenv("MUXREVEAL_BENCH_RAIL"))
+	rail, err := parseBenchRail(os.Getenv("AIM_BENCH_RAIL"))
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	review, err := parseBenchReview(os.Getenv("MUXREVEAL_BENCH_REVIEW"))
+	review, err := parseBenchReview(os.Getenv("AIM_BENCH_REVIEW"))
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	pictures, err := parseBenchSwitch("MUXREVEAL_BENCH_PICTURES", os.Getenv("MUXREVEAL_BENCH_PICTURES"))
+	pictures, err := parseBenchSwitch("AIM_BENCH_PICTURES", os.Getenv("AIM_BENCH_PICTURES"))
 	if err != nil {
 		t.Fatal(err)
 	}

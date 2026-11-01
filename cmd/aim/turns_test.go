@@ -18,9 +18,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mhersson/muxreveal/internal/core"
-	"github.com/mhersson/muxreveal/internal/git"
-	"github.com/mhersson/muxreveal/internal/harness"
+	"github.com/mhersson/aim/internal/core"
+	"github.com/mhersson/aim/internal/git"
+	"github.com/mhersson/aim/internal/harness"
 )
 
 const gateSession = "11111111-2222-4333-8444-555555555555"
@@ -918,7 +918,7 @@ func TestHookBudgetSlowSnapshot(t *testing.T) {
 		t.Fatalf("turns = %+v, want only a marker for the turn", turns)
 	}
 
-	if out := gitOut(t, repo, "for-each-ref", "refs/muxreveal/"); strings.Count(out, "\n") != 0 {
+	if out := gitOut(t, repo, "for-each-ref", "refs/aim/"); strings.Count(out, "\n") != 0 {
 		t.Errorf("refs = %q, want exactly the marker", out)
 	}
 

@@ -63,7 +63,7 @@ what to do about it. Skim it before your first commit each session.
 - A Unix socket path holds at most 103 bytes on macOS and 107 on Linux.
   macOS's `$TMPDIR`, and so `t.TempDir()`, is deep enough to push a socket
   path past that. Tests put sockets in a dir from `os.MkdirTemp("/tmp", ...)`
-  (the `shortDir` helpers in `cmd/muxreveal` and `internal/harness`) and
+  (the `shortDir` helpers in `cmd/aim` and `internal/harness`) and
   remove it in `t.Cleanup`.
 - The hook socket is `<state dir>/run/<pid>.sock`, and on macOS the state dir
   is under `$HOME`. A test or rig that starts the hook server on macOS sets
@@ -73,14 +73,14 @@ what to do about it. Skim it before your first commit each session.
 
 ## State, config and cache dirs
 
-- The state dir is `$XDG_STATE_HOME/muxreveal` on Linux but always
-  `$HOME/Library/Application Support/muxreveal` on macOS, which ignores
+- The state dir is `$XDG_STATE_HOME/aim` on Linux but always
+  `$HOME/Library/Application Support/aim` on macOS, which ignores
   `XDG_STATE_HOME`. Isolate a test or rig on macOS through `HOME`.
 - The index cache is under `os.UserCacheDir()`: `$XDG_CACHE_HOME`, else
   `~/.cache`, on Linux, but `$HOME/Library/Caches` on macOS whatever
   `XDG_CACHE_HOME` says.
 - The config file honours `XDG_CONFIG_HOME` on both platforms, else
-  `~/.config/muxreveal/config.toml`; `--config` overrides it.
+  `~/.config/aim/config.toml`; `--config` overrides it.
 
 ## File watching
 
@@ -114,11 +114,11 @@ what to do about it. Skim it before your first commit each session.
 
 - Run the app for a manual check or a screenshot only inside a private tmux
   server, `tmux -L <name> -f /dev/null`, started from an environment without
-  `CLAUDE*`, `TMUX`, `TMUX_PANE` and `MUXREVEAL_*`, so the run starts as from a
+  `CLAUDE*`, `TMUX`, `TMUX_PANE` and `AIM_*`, so the run starts as from a
   fresh terminal. `-L` keeps it off your own tmux server and `-f /dev/null`
   skips your tmux config.
 - Kill only that server (`tmux -L <name> kill-server`) and processes you
-  started, by PID. Never kill by name: `claude` and `muxreveal` processes may
+  started, by PID. Never kill by name: `claude` and `aim` processes may
   be someone's live sessions.
 - Give the run a short `HOME`, which on macOS holds the state dir and the hook
   socket. Put a `.zshrc` in it: zsh can start its new-user setup in a `HOME`
@@ -129,14 +129,14 @@ what to do about it. Skim it before your first commit each session.
   compiled binary named `claude`.
 - Agents start through `$SHELL -l -i -c`, and a login profile may put other
   dirs ahead of a fake's on `PATH`. Point `SHELL` at a wrapper that puts the
-  fake's dir first, as `fakeClaude` in `cmd/muxreveal/restore_test.go` does.
+  fake's dir first, as `fakeClaude` in `cmd/aim/restore_test.go` does.
 
 ## Tests
 
 - In internal/git and internal/ui, `TestMain` sets `GIT_CONFIG_NOSYSTEM`, a
   fixed identity and `GIT_CONFIG_GLOBAL` to a config file of its own once for
   the test binary, so their tests need no `t.Setenv` and can call
-  `t.Parallel()`. Packages without such a `TestMain`, like `cmd/muxreveal`,
+  `t.Parallel()`. Packages without such a `TestMain`, like `cmd/aim`,
   isolate git per test with `isolateGit`, which uses `t.Setenv`. A helper that
   builds its own `cmd.Env` keeps that `GIT_CONFIG_GLOBAL`.
 - `commit`, `merge`, `fetch` and a push's `receive-pack` start

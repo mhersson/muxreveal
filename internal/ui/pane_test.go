@@ -13,7 +13,7 @@ import (
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/mhersson/muxreveal/internal/term"
+	"github.com/mhersson/aim/internal/term"
 )
 
 var _ proc = (*term.Process)(nil)

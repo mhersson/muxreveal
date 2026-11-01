@@ -5,8 +5,8 @@ import (
 
 	uv "github.com/charmbracelet/ultraviolet"
 
-	"github.com/mhersson/muxreveal/internal/core"
-	"github.com/mhersson/muxreveal/internal/md"
+	"github.com/mhersson/aim/internal/core"
+	"github.com/mhersson/aim/internal/md"
 )
 
 // textGrid is the grid of a text view's lines, read from the copy model so

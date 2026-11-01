@@ -1,4 +1,4 @@
-// Command muxreveal is the MuxReveal binary: CLI and wiring.
+// Command aim is the AIM binary: CLI and wiring.
 package main
 
 import (
@@ -17,12 +17,12 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/spf13/cobra"
 
-	"github.com/mhersson/muxreveal/internal/core"
-	"github.com/mhersson/muxreveal/internal/git"
-	"github.com/mhersson/muxreveal/internal/github"
-	"github.com/mhersson/muxreveal/internal/store"
-	"github.com/mhersson/muxreveal/internal/ui"
-	"github.com/mhersson/muxreveal/internal/ui/theme"
+	"github.com/mhersson/aim/internal/core"
+	"github.com/mhersson/aim/internal/git"
+	"github.com/mhersson/aim/internal/github"
+	"github.com/mhersson/aim/internal/store"
+	"github.com/mhersson/aim/internal/ui"
+	"github.com/mhersson/aim/internal/ui/theme"
 )
 
 // closeTimeout bounds how long quitting waits for pane processes to end.
@@ -35,7 +35,7 @@ func main() {
 	stop()
 
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "muxreveal: %v\n", err)
+		fmt.Fprintf(os.Stderr, "aim: %v\n", err)
 		os.Exit(1)
 	}
 }
@@ -49,7 +49,7 @@ func newRootCmd() *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:           "muxreveal",
+		Use:           "aim",
 		Short:         "Coding agents in terminal panes, with their diffs and pull requests beside them",
 		Args:          cobra.NoArgs,
 		SilenceUsage:  true,

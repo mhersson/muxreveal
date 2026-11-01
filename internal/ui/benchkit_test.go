@@ -12,8 +12,8 @@ import (
 
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/mhersson/muxreveal/internal/core"
-	"github.com/mhersson/muxreveal/internal/term/rec"
+	"github.com/mhersson/aim/internal/core"
+	"github.com/mhersson/aim/internal/term/rec"
 )
 
 func ms(n int) time.Duration { return time.Duration(n) * time.Millisecond }
@@ -381,7 +381,7 @@ func TestParseBenchReview(t *testing.T) {
 		{in: "", want: false},
 		{in: "0", want: false},
 		{in: "1", want: true},
-		{in: "true", wantErr: "MUXREVEAL_BENCH_REVIEW"},
+		{in: "true", wantErr: "AIM_BENCH_REVIEW"},
 		{in: "on", wantErr: "0 or 1"},
 	}
 

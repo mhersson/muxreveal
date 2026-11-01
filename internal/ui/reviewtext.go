@@ -7,8 +7,8 @@ import (
 
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/mhersson/muxreveal/internal/git/invisible"
-	"github.com/mhersson/muxreveal/internal/ui/diffview"
+	"github.com/mhersson/aim/internal/git/invisible"
+	"github.com/mhersson/aim/internal/ui/diffview"
 )
 
 const tabStop = 4

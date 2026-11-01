@@ -6,13 +6,13 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/mhersson/muxreveal/internal/core"
-	"github.com/mhersson/muxreveal/internal/harness"
-	"github.com/mhersson/muxreveal/internal/store"
+	"github.com/mhersson/aim/internal/core"
+	"github.com/mhersson/aim/internal/harness"
+	"github.com/mhersson/aim/internal/store"
 )
 
 const (
-	noticeSecondInstance = "another MuxReveal is running; this one does not save its layout"
+	noticeSecondInstance = "another AIM is running; this one does not save its layout"
 	noticeBadFile        = "the saved layout could not be read; it was kept as state.json.bad"
 	noticeBadFileKept    = "the saved layout could not be read"
 )

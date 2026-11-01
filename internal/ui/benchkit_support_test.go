@@ -21,11 +21,11 @@ import (
 	"github.com/charmbracelet/colorprofile"
 	uv "github.com/charmbracelet/ultraviolet"
 
-	"github.com/mhersson/muxreveal/internal/core"
-	"github.com/mhersson/muxreveal/internal/git"
-	"github.com/mhersson/muxreveal/internal/github"
-	"github.com/mhersson/muxreveal/internal/term"
-	"github.com/mhersson/muxreveal/internal/term/rec"
+	"github.com/mhersson/aim/internal/core"
+	"github.com/mhersson/aim/internal/git"
+	"github.com/mhersson/aim/internal/github"
+	"github.com/mhersson/aim/internal/term"
+	"github.com/mhersson/aim/internal/term/rec"
 )
 
 // This file is the replay bench: the real App with panes fed from recordings
@@ -193,7 +193,7 @@ type benchConfig struct {
 // bench panes visible in scrolling mode.
 const benchScrollingColumnWidth = 16
 
-// parseBenchMode maps MUXREVEAL_BENCH_MODE to a layout mode; "" is bsp.
+// parseBenchMode maps AIM_BENCH_MODE to a layout mode; "" is bsp.
 func parseBenchMode(s string) (core.LayoutMode, error) {
 	switch s {
 	case "", string(core.ModeBSP):
@@ -204,14 +204,14 @@ func parseBenchMode(s string) (core.LayoutMode, error) {
 		return core.ModeScrolling, nil
 	}
 
-	return "", fmt.Errorf("MUXREVEAL_BENCH_MODE %q is not one of bsp, master-stack, scrolling", s)
+	return "", fmt.Errorf("AIM_BENCH_MODE %q is not one of bsp, master-stack, scrolling", s)
 }
 
-// parseBenchRail maps MUXREVEAL_BENCH_RAIL to whether the rail is open; "" is closed.
-func parseBenchRail(s string) (bool, error) { return parseBenchSwitch("MUXREVEAL_BENCH_RAIL", s) }
+// parseBenchRail maps AIM_BENCH_RAIL to whether the rail is open; "" is closed.
+func parseBenchRail(s string) (bool, error) { return parseBenchSwitch("AIM_BENCH_RAIL", s) }
 
-// parseBenchReview maps MUXREVEAL_BENCH_REVIEW to whether the drawer is open; "" is closed.
-func parseBenchReview(s string) (bool, error) { return parseBenchSwitch("MUXREVEAL_BENCH_REVIEW", s) }
+// parseBenchReview maps AIM_BENCH_REVIEW to whether the drawer is open; "" is closed.
+func parseBenchReview(s string) (bool, error) { return parseBenchSwitch("AIM_BENCH_REVIEW", s) }
 
 // parseBenchSwitch reads an on/off knob: "" and "0" are off, "1" is on.
 func parseBenchSwitch(name, s string) (bool, error) {

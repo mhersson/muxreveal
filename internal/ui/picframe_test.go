@@ -8,8 +8,8 @@ import (
 
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/mhersson/muxreveal/internal/core"
-	"github.com/mhersson/muxreveal/internal/ui/kitty"
+	"github.com/mhersson/aim/internal/core"
+	"github.com/mhersson/aim/internal/ui/kitty"
 )
 
 func picRows(id uint32, x, y, n, cols int) []picRow {

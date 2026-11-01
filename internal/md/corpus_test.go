@@ -11,7 +11,7 @@ import (
 
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/mhersson/muxreveal/internal/git/invisible"
+	"github.com/mhersson/aim/internal/git/invisible"
 )
 
 // corpusWidths are the widths of the goldens; 130 must lay out as 100.

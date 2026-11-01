@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mhersson/muxreveal/internal/core"
-	"github.com/mhersson/muxreveal/internal/harness"
-	"github.com/mhersson/muxreveal/internal/md"
+	"github.com/mhersson/aim/internal/core"
+	"github.com/mhersson/aim/internal/harness"
+	"github.com/mhersson/aim/internal/md"
 )
 
 func layoutOf(src string) md.Layout { return parseMarkdown([]byte(src), "", nil).layout(80, false) }

@@ -9,10 +9,10 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/mhersson/muxreveal/internal/git/invisible"
-	"github.com/mhersson/muxreveal/internal/md"
-	"github.com/mhersson/muxreveal/internal/ui/diffview"
-	"github.com/mhersson/muxreveal/internal/ui/theme"
+	"github.com/mhersson/aim/internal/git/invisible"
+	"github.com/mhersson/aim/internal/md"
+	"github.com/mhersson/aim/internal/ui/diffview"
+	"github.com/mhersson/aim/internal/ui/theme"
 )
 
 // mdPainter turns layout lines into theme-coloured cells on one ground.

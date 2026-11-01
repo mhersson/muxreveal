@@ -9,8 +9,8 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/mhersson/muxreveal/internal/core"
-	"github.com/mhersson/muxreveal/internal/harness"
+	"github.com/mhersson/aim/internal/core"
+	"github.com/mhersson/aim/internal/harness"
 )
 
 // seq presses the leader and then each key of keys, one rune per key; spaces

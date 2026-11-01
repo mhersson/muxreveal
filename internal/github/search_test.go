@@ -50,7 +50,7 @@ func TestMyPRs(t *testing.T) {
 		t.Errorf("checks of #311 = %+v, want 6 of 6", c)
 	}
 
-	wantAuth := []brief{{Repo{"github.com", "mhersson", "muxreveal"}, 24, "mhersson"}}
+	wantAuth := []brief{{Repo{"github.com", "mhersson", "aim"}, 24, "mhersson"}}
 	if g := briefs(got.Authored); !reflect.DeepEqual(g, wantAuth) {
 		t.Errorf("Authored = %v, want %v", g, wantAuth)
 	}

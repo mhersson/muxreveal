@@ -16,9 +16,9 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/mhersson/muxreveal/internal/core"
-	"github.com/mhersson/muxreveal/internal/harness"
-	"github.com/mhersson/muxreveal/internal/store"
+	"github.com/mhersson/aim/internal/core"
+	"github.com/mhersson/aim/internal/harness"
+	"github.com/mhersson/aim/internal/store"
 )
 
 const (
@@ -390,7 +390,7 @@ func TestRunSecondInstanceStartsFresh(t *testing.T) {
 
 	s := startSession(t, env, cfg, false)
 
-	waitFor(t, func() bool { return s.out.contains("another MuxReveal is running; this one does not save its layout") })
+	waitFor(t, func() bool { return s.out.contains("another AIM is running; this one does not save its layout") })
 	// A split repaints the screen, so new output shows the key was handled (and would have been saved).
 	shown := s.out.len()
 	s.keys(t, "\x00v")
@@ -419,7 +419,7 @@ func fakeClaude(t *testing.T) (logPath string) {
 		t.Fatal(err)
 	}
 
-	script := "#!/bin/sh\necho \"$MUXREVEAL_PANE $*\" >> '" + logPath + "'\nsleep 3600\n"
+	script := "#!/bin/sh\necho \"$AIM_PANE $*\" >> '" + logPath + "'\nsleep 3600\n"
 	if err := os.WriteFile(filepath.Join(bin, "claude"), []byte(script), 0o700); err != nil {
 		t.Fatal(err)
 	}

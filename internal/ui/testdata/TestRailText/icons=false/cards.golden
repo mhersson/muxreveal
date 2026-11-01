@@ -15,7 +15,7 @@
 ││  Edit src/login.tsx                    │││                          ││                          │
 ││  +120 -14  5 files                     │││                          ││                          │
 │╰────────────────────────────────────────╯││                          ││                          │
-│ ⠋ muxreveal                           1m ││                          ││                          │
+│ ⠋ multiplex                           1m ││                          ││                          │
 │   feat/agents-rail                       ││                          ││                          │
 │   Bash go test ./...                     ││                          ││                          │
 │   +340 -12  9 files                      ││                          ││                          │

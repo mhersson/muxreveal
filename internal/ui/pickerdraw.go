@@ -12,9 +12,9 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/mhersson/muxreveal/internal/git"
-	"github.com/mhersson/muxreveal/internal/ui/palette"
-	"github.com/mhersson/muxreveal/internal/ui/theme"
+	"github.com/mhersson/aim/internal/git"
+	"github.com/mhersson/aim/internal/ui/palette"
+	"github.com/mhersson/aim/internal/ui/theme"
 )
 
 // pickerBox is the box's left column, top row and width; ok is false when the

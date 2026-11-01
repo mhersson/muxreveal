@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mhersson/muxreveal/internal/core"
-	"github.com/mhersson/muxreveal/internal/harness"
+	"github.com/mhersson/aim/internal/core"
+	"github.com/mhersson/aim/internal/harness"
 )
 
 // fileRows are the paths of the file header rows the drawer lists, in order.

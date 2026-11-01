@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mhersson/muxreveal/internal/core"
+	"github.com/mhersson/aim/internal/core"
 )
 
 func modesState() core.State {

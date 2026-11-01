@@ -1,6 +1,6 @@
  1  p1    󰛽 master-stack 
 ────────────────────────────
-╭─  muxrev… ─ 󰋚 turn 4/4 ─╮
+╭─  multip… ─ 󰋚 turn 4/4 ─╮
 │▎ M …core/state.go  +9 -1 │
 │  @@ -22,5 +22,13 @@ type…│
 │  22  22       ID         │

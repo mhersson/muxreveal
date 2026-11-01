@@ -8,10 +8,10 @@ import (
 
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/mhersson/muxreveal/internal/git"
-	"github.com/mhersson/muxreveal/internal/git/invisible"
-	"github.com/mhersson/muxreveal/internal/md"
-	"github.com/mhersson/muxreveal/internal/ui/diffview"
+	"github.com/mhersson/aim/internal/git"
+	"github.com/mhersson/aim/internal/git/invisible"
+	"github.com/mhersson/aim/internal/md"
+	"github.com/mhersson/aim/internal/ui/diffview"
 )
 
 // diffUnit is one thing a diff line draws: a grapheme of text, a tab, a

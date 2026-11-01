@@ -10,8 +10,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/mhersson/muxreveal/internal/core"
-	"github.com/mhersson/muxreveal/internal/term/rec"
+	"github.com/mhersson/aim/internal/core"
+	"github.com/mhersson/aim/internal/term/rec"
 )
 
 // recordDirMode and recordFileMode keep recordings private: they hold whatever the guest printed.

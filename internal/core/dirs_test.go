@@ -16,11 +16,11 @@ func TestConfigPath(t *testing.T) {
 		env  Env
 		want string
 	}{
-		{"linux xdg", testEnv("linux", map[string]string{"XDG_CONFIG_HOME": "/x"}), "/x/muxreveal/config.toml"},
-		{"linux unset", testEnv("linux", nil), "/home/u/.config/muxreveal/config.toml"},
-		{"linux relative xdg ignored", testEnv("linux", map[string]string{"XDG_CONFIG_HOME": "rel/x"}), "/home/u/.config/muxreveal/config.toml"},
-		{"darwin unset", testEnv("darwin", nil), "/home/u/.config/muxreveal/config.toml"},
-		{"darwin xdg", testEnv("darwin", map[string]string{"XDG_CONFIG_HOME": "/x"}), "/x/muxreveal/config.toml"},
+		{"linux xdg", testEnv("linux", map[string]string{"XDG_CONFIG_HOME": "/x"}), "/x/aim/config.toml"},
+		{"linux unset", testEnv("linux", nil), "/home/u/.config/aim/config.toml"},
+		{"linux relative xdg ignored", testEnv("linux", map[string]string{"XDG_CONFIG_HOME": "rel/x"}), "/home/u/.config/aim/config.toml"},
+		{"darwin unset", testEnv("darwin", nil), "/home/u/.config/aim/config.toml"},
+		{"darwin xdg", testEnv("darwin", map[string]string{"XDG_CONFIG_HOME": "/x"}), "/x/aim/config.toml"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -37,11 +37,11 @@ func TestStateDir(t *testing.T) {
 		env  Env
 		want string
 	}{
-		{"linux xdg", testEnv("linux", map[string]string{"XDG_STATE_HOME": "/s"}), "/s/muxreveal"},
-		{"linux unset", testEnv("linux", nil), "/home/u/.local/state/muxreveal"},
-		{"linux relative xdg ignored", testEnv("linux", map[string]string{"XDG_STATE_HOME": "rel/s"}), "/home/u/.local/state/muxreveal"},
-		{"darwin unset", testEnv("darwin", nil), "/home/u/Library/Application Support/muxreveal"},
-		{"darwin xdg ignored", testEnv("darwin", map[string]string{"XDG_STATE_HOME": "/s"}), "/home/u/Library/Application Support/muxreveal"},
+		{"linux xdg", testEnv("linux", map[string]string{"XDG_STATE_HOME": "/s"}), "/s/aim"},
+		{"linux unset", testEnv("linux", nil), "/home/u/.local/state/aim"},
+		{"linux relative xdg ignored", testEnv("linux", map[string]string{"XDG_STATE_HOME": "rel/s"}), "/home/u/.local/state/aim"},
+		{"darwin unset", testEnv("darwin", nil), "/home/u/Library/Application Support/aim"},
+		{"darwin xdg ignored", testEnv("darwin", map[string]string{"XDG_STATE_HOME": "/s"}), "/home/u/Library/Application Support/aim"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

@@ -5,9 +5,9 @@ import (
 
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/mhersson/muxreveal/internal/core"
-	"github.com/mhersson/muxreveal/internal/github"
-	"github.com/mhersson/muxreveal/internal/ui/theme"
+	"github.com/mhersson/aim/internal/core"
+	"github.com/mhersson/aim/internal/github"
+	"github.com/mhersson/aim/internal/ui/theme"
 )
 
 // mergeLine is one row of the merge box; a blank one goes first when the box

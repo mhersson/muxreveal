@@ -9,7 +9,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/mhersson/muxreveal/internal/github"
+	"github.com/mhersson/aim/internal/github"
 )
 
 const (

@@ -9,7 +9,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/mhersson/muxreveal/internal/core"
+	"github.com/mhersson/aim/internal/core"
 )
 
 // Claude is the Claude Code adapter.
@@ -17,7 +17,7 @@ type Claude struct{}
 
 const hookTimeout = 5 // seconds; the hook command answers in milliseconds
 
-// claudeEvents returns the hook events MuxReveal registers.
+// claudeEvents returns the hook events AIM registers.
 func claudeEvents() []string {
 	return []string{
 		"SessionStart", "SessionEnd", "UserPromptSubmit", "PostToolUse", "PostToolUseFailure",

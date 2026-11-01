@@ -1,4 +1,4 @@
-// Package theme holds the Catppuccin flavors MuxReveal ships: each flavor's
+// Package theme holds the Catppuccin flavors AIM ships: each flavor's
 // palette, the semantic UI roles widgets colour from, and a matching Chroma
 // syntax style.
 package theme

@@ -8,7 +8,7 @@ import (
 
 	uv "github.com/charmbracelet/ultraviolet"
 
-	"github.com/mhersson/muxreveal/internal/term"
+	"github.com/mhersson/aim/internal/term"
 )
 
 // themedScreen draws one golden case; draw returns the frame and its size.

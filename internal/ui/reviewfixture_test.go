@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mhersson/muxreveal/internal/core"
-	"github.com/mhersson/muxreveal/internal/git"
+	"github.com/mhersson/aim/internal/core"
+	"github.com/mhersson/aim/internal/git"
 )
 
 // hunkSpec builds a hunk from lines written as a kind character and the text,
@@ -113,7 +113,7 @@ func turn4Result() git.Result {
 		"+import \"testing\"",
 		"+",
 		"+func TestReviewTitle(t *testing.T) {",
-		"+\twant := \"muxreveal\u200b · feat/review-pane\"",
+		"+\twant := \"multiplex\u200b · feat/review-pane\"",
 		"+\t// the title reads left to right: \u202eenap-weiver\u202c",
 		"+\tif got := reviewTitle(); got != want {",
 		"+\t\tt.Fatalf(\"title = %q, want %q\", got, want)",
@@ -327,7 +327,7 @@ func (s reviewScene) build(t *testing.T) *App {
 
 	texts := map[core.PaneID]string{
 		"p1": "$ claude\r\nreviewing the diff of the last turn\r\n",
-		"p2": "$ go test ./...\r\nok  github.com/mhersson/muxreveal/internal/ui  0.4s\r\n",
+		"p2": "$ go test ./...\r\nok  github.com/mhersson/aim/internal/ui  0.4s\r\n",
 		"p3": "$ git status\r\n",
 	}
 	attachPanes(t, a, texts)
@@ -337,7 +337,7 @@ func (s reviewScene) build(t *testing.T) *App {
 
 	v := a.reviewViewOf(a.store.State().Tab().ID)
 	v.pane, v.mode, v.loaded = "p1", mode, true
-	v.root, v.project, v.branch = "/w/p1", "muxreveal", "feat/review-pane"
+	v.root, v.project, v.branch = "/w/p1", "multiplex", "feat/review-pane"
 	v.res, v.gen, v.turns, v.noSnapshot = s.res, 1, s.turns, s.noSnap
 
 	switch {

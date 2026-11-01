@@ -7,9 +7,9 @@ import (
 	"runtime"
 )
 
-const appName = "muxreveal"
+const appName = "aim"
 
-// Env is the part of the process environment that decides MuxReveal's paths.
+// Env is the part of the process environment that decides AIM's paths.
 type Env struct {
 	GOOS   string
 	Home   string

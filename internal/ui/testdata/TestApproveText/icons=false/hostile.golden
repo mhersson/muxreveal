@@ -1,6 +1,6 @@
  1 p1                                                       layout master-stack 
 ────────────────────────────────────────────────────────────────────────────────
-╭─ shell ───────────╭─ muxreveal · feat/review-pane ────────────── ✓ 0/4 ─ #7 ─╮
+╭─ shell ───────────╭─ multiplex · feat/review-pane ────────────── ✓ 0/4 ─ #7 ─╮
 │$ claude           │ #7 Show the pull request over its diff                   │
 │reviewing the diff │ feat/review-pane → main   ci 4/4   approved   @mhersson …│
 │                   │──────────────────────────────────────────────────────────│

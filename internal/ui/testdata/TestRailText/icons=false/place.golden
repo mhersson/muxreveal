@@ -3,7 +3,7 @@
 ╭─ Agents 2 ────────────────────────── ⠋2 ─╮╭─ claude ───── ⠋ working ─╮╭─ claude ───── ⠋ working ─╮
 │ Working ────────────────────────────── 2 ││                          ││                          │
 │                                          ││                          ││                          │
-│ ⠋ muxreveal  Opus 5.5            41%  8s ││                          ││                          │
+│ ⠋ multiplex  Opus 5.5            41%  8s ││                          ││                          │
 │   feat/follow-edits                      ││                          ││                          │
 │   Edit internal/ui/rail.go               ││                          ││                          │
 │   +80 -6  4 files                        ││                          ││                          │

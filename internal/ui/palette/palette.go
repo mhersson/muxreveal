@@ -12,7 +12,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	"github.com/sahilm/fuzzy"
 
-	"github.com/mhersson/muxreveal/internal/ui/theme"
+	"github.com/mhersson/aim/internal/ui/theme"
 )
 
 // MaxRows is the most item rows shown at once; the list scrolls past it.

@@ -229,14 +229,14 @@ func TestSnapshotRoundTrip(t *testing.T) {
 	}
 
 	msg := gitOut(t, dir, "log", "-1", "--format=%B", turns[0].Commit)
-	for _, line := range []string{"muxreveal turn 1", "Session: " + sessA, "Worktree: " + dir} {
+	for _, line := range []string{"aim turn 1", "Session: " + sessA, "Worktree: " + dir} {
 		if !strings.Contains(msg, line) {
 			t.Errorf("commit message lacks %q:\n%s", line, msg)
 		}
 	}
 
 	if who := gitOut(t, dir, "log", "-1", "--format=%an <%ae> %cn <%ce>", turns[0].Commit); who !=
-		"MuxReveal <muxreveal@localhost> MuxReveal <muxreveal@localhost>" {
+		"AIM <aim@localhost> AIM <aim@localhost>" {
 		t.Errorf("identity = %q", who)
 	}
 }
@@ -706,8 +706,8 @@ func TestSnapshotLinkedWorktree(t *testing.T) {
 		t.Errorf("tree = %s, want %s", turn.Tree, want)
 	}
 
-	want := "refs/muxreveal/turns/" + sessA + "/" + turnKey(openRepo(t, wt).Root) + "/1/start"
-	if got := gitOut(t, dir, "for-each-ref", "--format=%(refname)", "refs/muxreveal"); got != want {
+	want := "refs/aim/turns/" + sessA + "/" + turnKey(openRepo(t, wt).Root) + "/1/start"
+	if got := gitOut(t, dir, "for-each-ref", "--format=%(refname)", "refs/aim"); got != want {
 		t.Errorf("refs seen from the main checkout = %q, want %q", got, want)
 	}
 
@@ -738,8 +738,8 @@ func TestSnapshotLinkedWorktreeOfBareRepo(t *testing.T) {
 		t.Errorf("tree = %s, want %s", turn.Tree, want)
 	}
 
-	want := "refs/muxreveal/turns/" + sessA + "/" + turnKey(openRepo(t, wt).Root) + "/1/start"
-	if got := gitOut(t, bare, "for-each-ref", "--format=%(refname)", "refs/muxreveal"); got != want {
+	want := "refs/aim/turns/" + sessA + "/" + turnKey(openRepo(t, wt).Root) + "/1/start"
+	if got := gitOut(t, bare, "for-each-ref", "--format=%(refname)", "refs/aim"); got != want {
 		t.Errorf("refs in the bare repository = %q, want %q", got, want)
 	}
 }
@@ -928,7 +928,7 @@ func TestMarkMissing(t *testing.T) {
 	}
 
 	msg := gitOut(t, dir, "log", "-1", "--format=%B", m.Commit)
-	for _, line := range []string{"muxreveal turn 2", "Session: " + sessA, "Worktree: " + dir, "Snapshot: none"} {
+	for _, line := range []string{"aim turn 2", "Session: " + sessA, "Worktree: " + dir, "Snapshot: none"} {
 		if !strings.Contains(msg, line) {
 			t.Errorf("marker message lacks %q:\n%s", line, msg)
 		}
@@ -974,7 +974,7 @@ func TestBadSession(t *testing.T) {
 
 	assertEmptyDir(t, tmp)
 
-	if refs := gitOut(t, dir, "for-each-ref", "refs/muxreveal"); refs != "" {
+	if refs := gitOut(t, dir, "for-each-ref", "refs/aim"); refs != "" {
 		t.Errorf("refs written: %s", refs)
 	}
 }
@@ -999,7 +999,7 @@ func TestSnapshotRetriesWhenTheRefExists(t *testing.T) {
 	}
 
 	// A racing writer takes number 1 right before our update-ref, once.
-	racing := "refs/muxreveal/turns/" + sessA + "/" + turnKey(openRepo(t, dir).Root) + "/1/start"
+	racing := "refs/aim/turns/" + sessA + "/" + turnKey(openRepo(t, dir).Root) + "/1/start"
 	ctx, _ := wrapGit(t, `case "$*" in
 *update-ref*--stdin*)
 	if [ ! -e "$LOG.raced" ]; then
@@ -1028,21 +1028,21 @@ esac`)
 func legacyTurnRef(t *testing.T, dir, root, session string, n int) string {
 	t.Helper()
 
-	msg := fmt.Sprintf("muxreveal turn %d\n\nSession: %s\nWorktree: %s\n", n, session, root)
+	msg := fmt.Sprintf("aim turn %d\n\nSession: %s\nWorktree: %s\n", n, session, root)
 	commit := gitInput(t, dir, msg, "commit-tree", gitOut(t, dir, "rev-parse", "HEAD^{tree}"))
-	ref := fmt.Sprintf("refs/muxreveal/%s/%d", session, n)
+	ref := fmt.Sprintf("refs/aim/%s/%d", session, n)
 	gitOut(t, dir, "update-ref", ref, commit)
 
 	return ref
 }
 
-// legacyRefs lists the refs under refs/muxreveal in the earlier layout.
+// legacyRefs lists the refs under refs/aim in the earlier layout.
 func legacyRefs(t *testing.T, dir string) []string {
 	t.Helper()
 
 	var out []string
 
-	for ref := range strings.FieldsSeq(gitOut(t, dir, "for-each-ref", "--format=%(refname)", "refs/muxreveal")) {
+	for ref := range strings.FieldsSeq(gitOut(t, dir, "for-each-ref", "--format=%(refname)", "refs/aim")) {
 		if legacyRefRE.MatchString(ref) {
 			out = append(out, ref)
 		}
@@ -1141,7 +1141,7 @@ func TestSnapshotCancelledLeavesNoTempFileOrRef(t *testing.T) {
 
 	assertEmptyDir(t, tmp)
 
-	if refs := gitOut(t, dir, "for-each-ref", "refs/muxreveal"); refs != "" {
+	if refs := gitOut(t, dir, "for-each-ref", "refs/aim"); refs != "" {
 		t.Errorf("refs written: %s", refs)
 	}
 }
@@ -1195,7 +1195,7 @@ esac`)
 		t.Errorf("the ref write never ran through the wrapper:\n%s", calls)
 	}
 
-	locks, err := filepath.Glob(filepath.Join(r.CommonDir, "refs", "muxreveal", "*", "*.lock"))
+	locks, err := filepath.Glob(filepath.Join(r.CommonDir, "refs", "aim", "*", "*.lock"))
 	if err != nil || len(locks) > 0 {
 		t.Errorf("lock files %v (%v)", locks, err)
 	}
@@ -1223,7 +1223,7 @@ func TestWriteStartWithDoneContextWritesNothing(t *testing.T) {
 		t.Error("MarkMissing with a done context succeeded")
 	}
 
-	if refs := gitOut(t, dir, "for-each-ref", "refs/muxreveal"); refs != "" {
+	if refs := gitOut(t, dir, "for-each-ref", "refs/aim"); refs != "" {
 		t.Errorf("refs written: %s", refs)
 	}
 }
@@ -1295,7 +1295,7 @@ func TestTurnRefsLayout(t *testing.T) {
 			snap(t, tt.dir, sessA, SnapshotOptions{Turn: 1})
 			snap(t, tt.dir, sessA, SnapshotOptions{Turn: 2})
 
-			base := "refs/muxreveal/turns/" + sessA + "/" + key + "/"
+			base := "refs/aim/turns/" + sessA + "/" + key + "/"
 			want := []string{base + "1/end", base + "1/start", base + "2/start"}
 
 			got := strings.Fields(gitOut(t, tt.dir, "for-each-ref", "--format=%(refname)", base))
@@ -1354,14 +1354,14 @@ func TestSnapshotEndsTheOpenTurn(t *testing.T) {
 		}
 
 		for i, ends := range []int{2, 1, 4, 99} {
-			before := gitOut(t, dir, "for-each-ref", "--format=%(refname) %(objectname)", "refs/muxreveal")
+			before := gitOut(t, dir, "for-each-ref", "--format=%(refname) %(objectname)", "refs/aim")
 
 			next := 10 + i
 			if _, err := Snapshot(ctx, dir, sessA, SnapshotOptions{TempDir: t.TempDir(), Turn: next, Ends: ends}); err != nil {
 				t.Fatalf("Ends %d: %v", ends, err)
 			}
 
-			after := gitOut(t, dir, "for-each-ref", "--format=%(refname) %(objectname)", "refs/muxreveal")
+			after := gitOut(t, dir, "for-each-ref", "--format=%(refname) %(objectname)", "refs/aim")
 			if strings.Count(after, "\n") != strings.Count(before, "\n")+1 {
 				t.Errorf("Ends %d changed more than the new start:\n%s\n--\n%s", ends, before, after)
 			}

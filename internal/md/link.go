@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/mhersson/muxreveal/internal/git/invisible"
+	"github.com/mhersson/aim/internal/git/invisible"
 )
 
 // resolved is a link or image target after the scheme and base rules: url for

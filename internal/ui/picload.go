@@ -18,7 +18,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/mhersson/muxreveal/internal/ui/kitty"
+	"github.com/mhersson/aim/internal/ui/kitty"
 )
 
 const (

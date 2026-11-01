@@ -6,7 +6,7 @@
 │                                          │                                                        
 │                                          │                                                        
 │                                          │╭──────────────────────────────────────────────────────╮
-│                                          ││ MuxReveal                                            │
+│                                          ││ AIM                                                  │
 │                                          ││ No panes yet.                                        │
 │                                          ││                                                      │
 │                                          ││ ctrl+space :  Open command palette                   │
@@ -14,7 +14,7 @@
 │                                          ││ ctrl+space s  Split: shell below                     │
 │                                          ││ ctrl+space v  Split: shell right                     │
 │                                          ││ ctrl+space t  Pick theme                             │
-│                                          ││ ctrl+space q  Quit MuxReveal                         │
+│                                          ││ ctrl+space q  Quit AIM                               │
 │                                          ││                                                      │
 │                                          ││ package main                                         │
 │                                          ││                                                      │

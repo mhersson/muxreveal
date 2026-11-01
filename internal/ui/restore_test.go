@@ -11,9 +11,9 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/mhersson/muxreveal/internal/core"
-	"github.com/mhersson/muxreveal/internal/harness"
-	"github.com/mhersson/muxreveal/internal/term"
+	"github.com/mhersson/aim/internal/core"
+	"github.com/mhersson/aim/internal/harness"
+	"github.com/mhersson/aim/internal/term"
 )
 
 const (
@@ -158,7 +158,7 @@ func TestRestoreStartsEveryPane(t *testing.T) {
 
 	for i, c := range r.st.cmds {
 		for _, kv := range c.Env {
-			if id, ok := strings.CutPrefix(kv, "MUXREVEAL_PANE="); ok {
+			if id, ok := strings.CutPrefix(kv, "AIM_PANE="); ok {
 				byPane[id] = i
 			}
 		}
@@ -279,7 +279,7 @@ func paneSizeOf(a *App, id core.PaneID) (cols, rows int) { return a.panes[id].si
 func failingStart(s *starts, panes ...string) func(context.Context, term.Command, int, int) (proc, error) {
 	return func(ctx context.Context, c term.Command, cols, rows int) (proc, error) {
 		for _, kv := range c.Env {
-			if id, ok := strings.CutPrefix(kv, "MUXREVEAL_PANE="); ok && slices.Contains(panes, id) {
+			if id, ok := strings.CutPrefix(kv, "AIM_PANE="); ok && slices.Contains(panes, id) {
 				return nil, errors.New("boom")
 			}
 		}
@@ -405,7 +405,7 @@ func TestRestoreEmptyCwdStartsInLaunchDir(t *testing.T) {
 	found := false
 
 	for _, c := range r.st.cmds {
-		if slices.Contains(c.Env, "MUXREVEAL_PANE=p2") {
+		if slices.Contains(c.Env, "AIM_PANE=p2") {
 			found = true
 
 			if c.Dir != testCwd {
@@ -464,7 +464,7 @@ func TestResumeRestartsAgentWhoseClaudeNeverAppeared(t *testing.T) {
 		t.Errorf("restart argv = %q, want a fresh claude", got)
 	}
 
-	if c.Dir != "/srv/api" || !slices.Contains(c.Env, "MUXREVEAL_PANE=p1") {
+	if c.Dir != "/srv/api" || !slices.Contains(c.Env, "AIM_PANE=p1") {
 		t.Errorf("restart = %+v, want the same pane and cwd", c)
 	}
 

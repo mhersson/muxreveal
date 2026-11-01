@@ -11,9 +11,9 @@ import (
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/mhersson/muxreveal/internal/core"
-	"github.com/mhersson/muxreveal/internal/term"
-	"github.com/mhersson/muxreveal/internal/ui/theme"
+	"github.com/mhersson/aim/internal/core"
+	"github.com/mhersson/aim/internal/term"
+	"github.com/mhersson/aim/internal/ui/theme"
 )
 
 // tabsApp has one tab per spec, in order, with the first tab's initial pane
@@ -222,7 +222,7 @@ func testModules() []trayModule {
 func planTabs() []tabInfo {
 	return []tabInfo{
 		{n: 1, name: "api", agent: false},
-		{n: 2, name: "muxreveal", agent: true},
+		{n: 2, name: "multiplex", agent: true},
 		{n: 3, name: "documentation", agent: false},
 	}
 }

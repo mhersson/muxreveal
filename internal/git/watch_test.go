@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mhersson/muxreveal/internal/git/fsnotify"
+	"github.com/mhersson/aim/internal/git/fsnotify"
 )
 
 const watchWait = 5 * time.Second
@@ -377,10 +377,10 @@ func TestWatchSnapshotRefsDoNotWake(t *testing.T) {
 		dir := baseRepo(t)
 		w := startWatch(t, dir, fastWatch)
 
-		gitOut(t, dir, "update-ref", "refs/muxreveal/x/1", "HEAD")
+		gitOut(t, dir, "update-ref", "refs/aim/x/1", "HEAD")
 		quiet(t, w, 500*time.Millisecond, func(Batch) bool { return true })
 
-		gitOut(t, dir, "update-ref", "refs/muxreveal/x/2", "HEAD")
+		gitOut(t, dir, "update-ref", "refs/aim/x/2", "HEAD")
 		quiet(t, w, 500*time.Millisecond, func(Batch) bool { return true })
 
 		// A turn's refs sit three directories deep.
@@ -391,18 +391,18 @@ func TestWatchSnapshotRefsDoNotWake(t *testing.T) {
 
 	t.Run("directory exists at start", func(t *testing.T) {
 		dir := baseRepo(t)
-		gitOut(t, dir, "update-ref", "refs/muxreveal/x/1", "HEAD")
+		gitOut(t, dir, "update-ref", "refs/aim/x/1", "HEAD")
 		gitOut(t, dir, "update-ref", turnRef(sessA, "0123456789abcdef", 1, false), "HEAD")
 
 		w := startWatch(t, dir, fastWatch)
 
 		for _, d := range watchedDirs(t, w) {
-			if strings.Contains(d, "muxreveal") {
+			if strings.Contains(d, filepath.Join("refs", "aim")) {
 				t.Fatalf("watch on snapshot refs: %s", d)
 			}
 		}
 
-		gitOut(t, dir, "update-ref", "refs/muxreveal/x/2", "HEAD")
+		gitOut(t, dir, "update-ref", "refs/aim/x/2", "HEAD")
 		quiet(t, w, 500*time.Millisecond, func(Batch) bool { return true })
 
 		gitOut(t, dir, "update-ref", turnRef(sessA, "0123456789abcdef", 2, false), "HEAD")
@@ -920,7 +920,7 @@ func eventWatcher(t *testing.T) *Watcher {
 		repo:       r,
 		fs:         fsw,
 		refsDir:    filepath.Join(r.CommonDir, "refs"),
-		ownRefsDir: filepath.Join(r.CommonDir, "refs", "muxreveal"),
+		ownRefsDir: filepath.Join(r.CommonDir, "refs", "aim"),
 		watched:    map[string]struct{}{},
 	}
 
@@ -1089,7 +1089,7 @@ func TestKqueueNewDirectoryUnderRefs(t *testing.T) {
 		{name: "holding a ref below", ev: fsnotify.Event{Name: mk(t, filepath.Join(heads, "a", "b"), "x"), Op: fsnotify.Create}, wantGit: true},
 		{name: "empty", ev: fsnotify.Event{Name: mk(t, filepath.Join(heads, "empty")), Op: fsnotify.Create}},
 		{name: "only a lock", ev: fsnotify.Event{Name: mk(t, filepath.Join(heads, "locked"), "x.lock"), Op: fsnotify.Create}},
-		{name: "under refs/muxreveal", ev: fsnotify.Event{Name: mk(t, filepath.Join(w.ownRefsDir, "sub"), "x"), Op: fsnotify.Create}},
+		{name: "under refs/aim", ev: fsnotify.Event{Name: mk(t, filepath.Join(w.ownRefsDir, "sub"), "x"), Op: fsnotify.Create}},
 	}
 
 	runMetaRows(t, w, rows)

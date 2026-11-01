@@ -11,8 +11,8 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	"github.com/charmbracelet/x/exp/teatest/v2"
 
-	"github.com/mhersson/muxreveal/internal/core"
-	"github.com/mhersson/muxreveal/internal/git"
+	"github.com/mhersson/aim/internal/core"
+	"github.com/mhersson/aim/internal/git"
 )
 
 // openDrawerMsg opens the drawer on a pane: the keys that do it come later.

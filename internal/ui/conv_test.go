@@ -12,8 +12,8 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	"github.com/charmbracelet/x/exp/golden"
 
-	"github.com/mhersson/muxreveal/internal/core"
-	"github.com/mhersson/muxreveal/internal/github"
+	"github.com/mhersson/aim/internal/core"
+	"github.com/mhersson/aim/internal/github"
 )
 
 // convFor is the conversation fixture as pull request number n's, its times
@@ -1233,7 +1233,7 @@ func TestConversationPictures(t *testing.T) {
 	t.Parallel()
 
 	a, _ := convApp(t, true, 160, 48)
-	a.pictures.getenv = func(string) string { return "" } // not the process's TMUX or MUXREVEAL_PANE
+	a.pictures.getenv = func(string) string { return "" } // not the process's TMUX or AIM_PANE
 	jobs := picturesOn(t, a)
 
 	convOpen(t, a)

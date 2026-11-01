@@ -15,8 +15,8 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/mhersson/muxreveal/internal/git"
-	"github.com/mhersson/muxreveal/internal/term"
+	"github.com/mhersson/aim/internal/git"
+	"github.com/mhersson/aim/internal/term"
 )
 
 // scrollHunks is how many hunks the long diff has; each is 40 lines of which 20

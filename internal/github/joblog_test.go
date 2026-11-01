@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mhersson/muxreveal/internal/git/invisible"
+	"github.com/mhersson/aim/internal/git/invisible"
 )
 
 func lineText(l LogLine) string {

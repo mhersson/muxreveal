@@ -11,7 +11,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	"github.com/charmbracelet/x/exp/golden"
 
-	"github.com/mhersson/muxreveal/internal/ui/theme"
+	"github.com/mhersson/aim/internal/ui/theme"
 )
 
 func mustTheme(t *testing.T, name string) theme.Theme {
@@ -29,7 +29,7 @@ func testItems() []Item {
 	return []Item{
 		{ID: "a", Title: "Theme: Catppuccin Latte", Hint: "ctrl+t"},
 		{ID: "b", Title: "Theme: Catppuccin Mocha"},
-		{ID: "c", Title: "Quit MuxReveal", Hint: "ctrl+q"},
+		{ID: "c", Title: "Quit AIM", Hint: "ctrl+q"},
 		{ID: "d", Title: "Pick theme"},
 	}
 }

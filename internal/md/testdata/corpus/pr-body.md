@@ -2,7 +2,7 @@
 
 # Review drawer
 
-`leader d` slides a **review drawer** in from the right over half the body and shows the focused pane's diff: an agent's *last turn*, or its branch against the base. See the [design notes](https://github.com/mhersson/muxreveal/blob/main/docs/DESIGN.md) for the keys; it replaces ~~the old layout pane~~. Press <kbd>esc</kbd> to hand the keyboard back.
+`leader d` slides a **review drawer** in from the right over half the body and shows the focused pane's diff: an agent's *last turn*, or its branch against the base. See the [design notes](https://github.com/mhersson/aim/blob/main/docs/DESIGN.md) for the keys; it replaces ~~the old layout pane~~. Press <kbd>esc</kbd> to hand the keyboard back.
 
 > [!NOTE]
 > The panes under the drawer keep their size, so no agent redraws when it opens or closes.
@@ -92,6 +92,6 @@ run b: p99 7.19 ms; run c: p99 6.12 ms
 
 ---
 
-Closes [#18](https://github.com/mhersson/muxreveal/issues/18). Thanks to the tuios project for diffview[^1].
+Closes [#18](https://github.com/mhersson/aim/issues/18). Thanks to the tuios project for diffview[^1].
 
 [^1]: Ported at commit `aaaa128`, MIT.

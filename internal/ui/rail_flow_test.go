@@ -16,9 +16,9 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	"github.com/charmbracelet/x/exp/teatest/v2"
 
-	"github.com/mhersson/muxreveal/internal/core"
-	"github.com/mhersson/muxreveal/internal/ui/palette"
-	"github.com/mhersson/muxreveal/internal/ui/theme"
+	"github.com/mhersson/aim/internal/core"
+	"github.com/mhersson/aim/internal/ui/palette"
+	"github.com/mhersson/aim/internal/ui/theme"
 )
 
 var keyUp = tea.KeyPressMsg{Code: tea.KeyUp}

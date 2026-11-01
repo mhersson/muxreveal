@@ -14,8 +14,8 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/mhersson/muxreveal/internal/core"
-	"github.com/mhersson/muxreveal/internal/git"
+	"github.com/mhersson/aim/internal/core"
+	"github.com/mhersson/aim/internal/git"
 )
 
 // wtRepo is a repository called name under parent, on main with one commit.
@@ -976,19 +976,19 @@ func TestWorktreeKeyIsNotATreeKey(t *testing.T) {
 func wtDemoRows() []wtRow {
 	return []wtRow{
 		{kind: wtFollow},
-		{kind: wtHead, text: "Touched by muxreveal"},
+		{kind: wtHead, text: "Touched by multiplex"},
 		{
 			kind: wtPlace, root: "/w/other", repo: "other", branch: "main", latest: true, at: t0.Add(-8 * time.Second),
 			stats: git.Stats{Files: 3, Added: 41, Removed: 7}, statsKnown: true,
 		},
 		{
-			kind: wtPlace, root: "/w/p1/.worktrees/feat-a", repo: "muxreveal", branch: "feat/follow-edits", at: t0.Add(-4 * time.Minute),
+			kind: wtPlace, root: "/w/p1/.worktrees/feat-a", repo: "multiplex", branch: "feat/follow-edits", at: t0.Add(-4 * time.Minute),
 			stats: git.Stats{Files: 1, Added: 12}, statsKnown: true,
 		},
-		{kind: wtPlace, root: "/w/p1", repo: "muxreveal", branch: "main", here: true, stats: git.Stats{}, statsKnown: true},
+		{kind: wtPlace, root: "/w/p1", repo: "multiplex", branch: "main", here: true, stats: git.Stats{}, statsKnown: true},
 		{kind: wtGap},
-		{kind: wtHead, text: "Other worktrees of muxreveal"},
-		{kind: wtPlace, root: "/w/p1/.worktrees/feat-b", repo: "muxreveal", branch: "feat/pr-status"},
+		{kind: wtHead, text: "Other worktrees of multiplex"},
+		{kind: wtPlace, root: "/w/p1/.worktrees/feat-b", repo: "multiplex", branch: "feat/pr-status"},
 	}
 }
 
@@ -1059,7 +1059,7 @@ func TestWorktreeListCountsArrive(t *testing.T) {
 		t.Errorf("the row of another generation's answer reads %q", after[j])
 	}
 
-	j := lineHolding(after, "muxreveal · main  agent here")
+	j := lineHolding(after, "multiplex · main  agent here")
 	if j < 0 || !strings.Contains(after[j], "clean") {
 		t.Fatalf("the clean row reads %q", after[j])
 	}
@@ -1131,10 +1131,10 @@ func TestWorktreeListCleansNames(t *testing.T) {
 
 // wtManyRows is a Follow row, a header and n places.
 func wtManyRows(n int) []wtRow {
-	rows := []wtRow{{kind: wtFollow}, {kind: wtHead, text: "Touched by muxreveal"}}
+	rows := []wtRow{{kind: wtFollow}, {kind: wtHead, text: "Touched by multiplex"}}
 
 	for i := range n {
-		rows = append(rows, wtRow{kind: wtPlace, root: fmt.Sprintf("/w/wt%02d", i), repo: "muxreveal", branch: fmt.Sprintf("branch-%02d", i)})
+		rows = append(rows, wtRow{kind: wtPlace, root: fmt.Sprintf("/w/wt%02d", i), repo: "multiplex", branch: fmt.Sprintf("branch-%02d", i)})
 	}
 
 	return rows
@@ -1148,7 +1148,7 @@ func TestWorktreeListScrolls(t *testing.T) {
 	a := s.build(t)
 
 	rows := wtManyRows(40)
-	l := showList(a, rows, "muxreveal · main", 0)
+	l := showList(a, rows, "multiplex · main", 0)
 
 	rect := drawerRectOf(t, a, 0)
 	if rect.H != 30 {

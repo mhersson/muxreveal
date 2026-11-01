@@ -12,7 +12,7 @@ import (
 	"github.com/yuin/goldmark/v2/ast"
 	east "github.com/yuin/goldmark/v2/extension/ast"
 
-	"github.com/mhersson/muxreveal/internal/git/invisible"
+	"github.com/mhersson/aim/internal/git/invisible"
 )
 
 // maxInlineDepth bounds the recursion into nested emphasis and links; deeper

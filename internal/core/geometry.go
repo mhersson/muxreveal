@@ -1,6 +1,6 @@
 package core
 
-import "github.com/mhersson/muxreveal/internal/core/tiling"
+import "github.com/mhersson/aim/internal/core/tiling"
 
 // Rect is a cell rectangle.
 type Rect struct {

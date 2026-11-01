@@ -3,7 +3,7 @@ package ui
 import (
 	"bytes"
 
-	"github.com/mhersson/muxreveal/internal/term"
+	"github.com/mhersson/aim/internal/term"
 )
 
 // copyAction tells the caller what a copy-mode key asks of the app.

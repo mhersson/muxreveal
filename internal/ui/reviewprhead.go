@@ -5,8 +5,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mhersson/muxreveal/internal/core"
-	"github.com/mhersson/muxreveal/internal/ui/theme"
+	"github.com/mhersson/aim/internal/core"
+	"github.com/mhersson/aim/internal/ui/theme"
 )
 
 // prHeaderMinDiff is the rows of diff the header leaves; a column too short for

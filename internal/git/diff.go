@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/mhersson/muxreveal/internal/git/linediff"
+	"github.com/mhersson/aim/internal/git/linediff"
 )
 
 // maxFileText bounds one side of Engine.FileText.
