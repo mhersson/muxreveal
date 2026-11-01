@@ -120,7 +120,8 @@ Dependency rules:
 - `TestConfigExample` (`cmd/aim`) checks that `config.example.toml` loads to the
   defaults, names every setting and lists the allowed values the code accepts.
   `TestGuideLinks` (`internal/ui`) checks the links and image paths of the
-  guides and `README.md`, and the guide pages the example names.
+  guides, `README.md` and `docs/architecture.md`, and the guide pages the
+  example names.
   `TestReadmeKeys` (`internal/ui`) checks that the README's Keys table is built
   from the default keymap and command titles, and that every leader key the
   README names is a default binding. When only non-code files changed,
