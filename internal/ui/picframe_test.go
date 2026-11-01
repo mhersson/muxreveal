@@ -411,10 +411,13 @@ func TestDrawerRecordsPictures(t *testing.T) {
 	}
 }
 
-func TestRecordBoxMatchesRecordLayer(t *testing.T) {
+func TestSplicedDrawerRecordsAsRecordLayer(t *testing.T) {
 	t.Parallel()
 
 	const width, height = 20, 6
+
+	blank := strings.TrimSuffix(strings.Repeat(strings.Repeat(".", width)+"\n", height), "\n")
+	wide := string(rune(0x4e16)) // two cells
 
 	pics := []picRow{
 		{X: 0, Y: 0, ID: 3, Row: 0, Cols: 2},
@@ -425,16 +428,13 @@ func TestRecordBoxMatchesRecordLayer(t *testing.T) {
 
 	tests := []struct {
 		name string
-		x, y int
-		line string // every line; w is its width
-		w, n int
+		r    core.Rect
+		line string // every line, r.W cells
+		n    int
 	}{
-		{"inside", 2, 1, "yyyyyy", 6, 3},
-		{"at the right edge", 12, 0, "yyyyyyyy", 8, height},
-		{"clipped by the right edge", 16, 0, "yyyyyyyy", 8, 2},
-		{"clipped by the bottom", 2, 4, "yyyyyy", 6, 4},
-		{"wide cells", 4, 0, "世世世", 6, 2},
-		{"no lines", 2, 1, "", 0, 0},
+		{"the screen's height", core.Rect{X: 12, Y: 0, W: 8, H: height}, "yyyyyyyy", height},
+		{"below the top row", core.Rect{X: 12, Y: 1, W: 8, H: height - 1}, "yyyyyyyy", height - 1},
+		{"wide cells, fewer lines than the rect", core.Rect{X: 14, Y: 0, W: 6, H: height}, strings.Repeat(wide, 3), 3},
 	}
 
 	for _, tt := range tests {
@@ -443,18 +443,19 @@ func TestRecordBoxMatchesRecordLayer(t *testing.T) {
 
 			lines := slices.Repeat([]string{tt.line}, tt.n)
 
-			var want, got frameLayers
+			var got, want frameLayers
 
-			recordLayer(&want, width, height, tt.x, tt.y, lines, pics)
-			recordBox(&got, width, height, tt.x, tt.y, tt.w, tt.n, pics)
+			if _, spliced := overlayDrawer(&got, blank, width, height, tt.r, lines, pics, true); !spliced {
+				t.Fatal("the compositor drew the drawer, want the splice")
+			}
+
+			recordLayer(&want, width, height, tt.r.X, tt.r.Y, lines, pics)
 
 			if !reflect.DeepEqual(got, want) {
-				t.Fatalf("recordBox = %+v, recordLayer = %+v", got, want)
+				t.Fatalf("the splice recorded %+v, recordLayer %+v", got, want)
 			}
 		})
 	}
-
-	recordBox(nil, width, height, 0, 0, 4, 2, pics)
 }
 
 func TestOverlayLinesAndDrawerRecordPictures(t *testing.T) {
