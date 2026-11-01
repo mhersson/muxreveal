@@ -19,10 +19,8 @@ import (
 const (
 	// cleanupCheckTimeout bounds finding what a cleanup would remove.
 	cleanupCheckTimeout = 10 * time.Second
-	// cleanupRunTimeout bounds a cleanup, the wait for the panes included.
+	// cleanupRunTimeout bounds a cleanup.
 	cleanupRunTimeout = 30 * time.Second
-	// paneCloseWait is how long a cleanup waits for the processes of the panes it closed.
-	paneCloseWait = 5 * time.Second
 	// maxCleanupWidth caps the cleanup box.
 	maxCleanupWidth = 78
 )
@@ -40,26 +38,31 @@ type cleanupFound struct {
 	headErr                 error // git.ErrNoCommit: the merged head is not in this repository
 }
 
-// cleanupPane is a pane that works in the worktree.
+// cleanupPane is a pane that works in the worktree. keeps is set when its cwd is
+// inside: a shell there, or an agent started there. An agent that only cd'd in
+// does not keep the worktree.
 type cleanupPane struct {
-	id    core.PaneID
 	name  string // the agent's card name; "" for a shell
 	agent bool
 	state core.AgentState
+	keeps bool
 }
 
 // cleanupTarget is what the cleanup confirm names and enter acts on. The
-// worktree, its panes and the branch tip are fixed when the box opens; remove
-// and del are the two boxes, which w and b toggle.
+// worktree, the panes that keep it and the branch tip are fixed when the box
+// opens; remove and del are the two boxes, which w and b toggle.
 type cleanupTarget struct {
 	repo        github.Repo
 	number      int
 	title, head string
 	home        string
 	found       cleanupFound
-	panes       []cleanupPane
+	inUse       []cleanupPane // the panes that keep the worktree; with any, nothing can go
 	remove, del bool
 }
+
+// removable reports whether no pane keeps the worktree.
+func (t cleanupTarget) removable() bool { return len(t.inUse) == 0 }
 
 // canDelete reports whether the branch holds nothing the merged head does not:
 // its tip is the head or behind it.
@@ -67,12 +70,15 @@ func (t cleanupTarget) canDelete() bool {
 	return t.found.headErr == nil && t.found.ahead == 0 && t.found.tip != ""
 }
 
-// toggle handles w and b, and reports whether key was one. The branch box only
-// changes while the branch can go and the worktree box is on.
+// toggle handles w and b, and reports whether key was one. The worktree box
+// only changes while no pane keeps the worktree, and the branch box only while
+// the branch can go and the worktree box is on.
 func (t *cleanupTarget) toggle(key string) bool {
 	switch key {
 	case "w":
-		t.remove = !t.remove
+		if t.removable() {
+			t.remove = !t.remove
+		}
 	case "b":
 		if t.remove && t.canDelete() {
 			t.del = !t.del
@@ -94,6 +100,50 @@ func (t cleanupTarget) keptReason() string {
 	}
 
 	return fmt.Sprintf("it has %s the PR did not merge", plural(t.found.ahead, "commit"))
+}
+
+// keptBy says that panes keep the worktree at path.
+func keptBy(path string, panes []cleanupPane) string { return "kept " + path + ": " + inIt(panes) }
+
+// inIt says that panes are in the worktree; the box's row under the worktree's
+// leaves out the path that row already shows.
+func inIt(panes []cleanupPane) string {
+	verb := "are"
+	if len(panes) == 1 {
+		verb = "is"
+	}
+
+	return paneList(panes) + " " + verb + " in it"
+}
+
+// paneList names panes: agents by card name in tab order, then the shells counted.
+func paneList(panes []cleanupPane) string {
+	var parts []string
+
+	shells := 0
+
+	for _, p := range panes {
+		if !p.agent {
+			shells++
+
+			continue
+		}
+
+		parts = append(parts, printable(p.name))
+	}
+
+	if shells > 0 {
+		parts = append(parts, plural(shells, "shell"))
+	}
+
+	switch len(parts) {
+	case 0:
+		return ""
+	case 1:
+		return parts[0]
+	}
+
+	return strings.Join(parts[:len(parts)-1], ", ") + " and " + parts[len(parts)-1]
 }
 
 // shortOID abbreviates a commit id.
@@ -133,7 +183,6 @@ type cleanupFoundMsg struct {
 // (the branch moved); the reasons the box already showed come from keptReason.
 type cleanedMsg struct {
 	target           cleanupTarget
-	closed           int
 	removed, deleted bool
 	kept             string
 	err, delErr      error
@@ -217,7 +266,7 @@ func (a *App) cleanupCheck(from cleanupFrom, repo github.Repo, pr core.PRInfo, r
 }
 
 // panesIn lists the panes that work in path or below it, in tab order: those
-// opened there and those whose agent reported it.
+// whose cwd is there and those whose agent reported it.
 func (a *App) panesIn(st core.State, path string) []cleanupPane {
 	var out []cleanupPane
 
@@ -228,12 +277,26 @@ func (a *App) panesIn(st core.State, path string) []cleanupPane {
 				continue
 			}
 
-			cp := cleanupPane{id: id, agent: p.Kind == core.KindAgent, state: p.State}
+			// The cwd is where an agent was started: the hooks' directory never changes it.
+			cp := cleanupPane{agent: p.Kind == core.KindAgent, state: p.State, keeps: inDir(path, p.Cwd)}
 			if cp.agent {
 				cp.name = a.cardName(st, id)
 			}
 
 			out = append(out, cp)
+		}
+	}
+
+	return out
+}
+
+// keeping is the panes among panes that keep the worktree.
+func keeping(panes []cleanupPane) []cleanupPane {
+	var out []cleanupPane
+
+	for _, p := range panes {
+		if p.keeps {
+			out = append(out, p)
 		}
 	}
 
@@ -309,9 +372,10 @@ func (a *App) onCleanupFound(msg cleanupFoundMsg) tea.Cmd { //nolint:unparam // 
 	default:
 		t := cleanupTarget{
 			repo: msg.repo, number: msg.pr.Number, title: msg.pr.Title, head: msg.head, home: home,
-			found: f, panes: panes, remove: true,
+			found: f, inUse: keeping(panes),
 		}
-		t.del = t.canDelete()
+		t.remove = t.removable()
+		t.del = t.remove && t.canDelete()
 
 		a.openConfirm(confirm{tab: st.Tab().ID, cleanup: &t, yes: func(a *App) tea.Cmd { return a.cleanupRun(t) }})
 	}
@@ -333,9 +397,10 @@ func (a *App) cleanupSay(msg cleanupFoundMsg, why string) {
 	}
 }
 
-// cleanupRun cleans up exactly what t named. On the loop it reads the panes
-// again and closes the listed ones that are still open; off the loop it waits
-// for their processes, removes the worktree and, when asked, deletes the branch.
+// cleanupRun cleans up exactly what t named and closes no pane. On the loop it
+// reads the panes again, since an agent may have started working or a pane
+// that keeps the worktree may have opened; off the loop it removes the worktree
+// and, when asked, deletes the branch.
 func (a *App) cleanupRun(t cleanupTarget) tea.Cmd {
 	if !t.remove {
 		a.notice = noticeNothingToClean
@@ -343,67 +408,28 @@ func (a *App) cleanupRun(t cleanupTarget) tea.Cmd {
 		return nil
 	}
 
-	st := a.store.State()
+	panes := a.panesIn(a.store.State(), t.found.path)
 
-	// The listed panes are what gets closed, so an agent among them that has since
-	// left the worktree and started working stops the run as well.
-	busy, ok := workingAgent(a.panesIn(st, t.found.path))
-	if !ok {
-		busy, ok = workingAgent(a.listedPanes(st, t))
-	}
-
-	if ok {
+	if busy, ok := workingAgent(panes); ok {
 		a.notice = fmt.Sprintf("%s is still working in %s", busy.name, t.path())
 
 		return nil
 	}
 
-	var (
-		cmds  []tea.Cmd
-		waits []<-chan struct{}
-	)
+	if in := keeping(panes); len(in) > 0 {
+		a.notice = keptBy(t.path(), in)
 
-	for _, p := range t.panes {
-		if _, ok := st.Panes[p.id]; !ok {
-			continue
-		}
-
-		cmd, done := a.closePaneWait(p.id)
-		cmds = append(cmds, cmd)
-		waits = append(waits, done)
+		return nil
 	}
 
 	appCtx := a.ctx
 
-	cmds = append(cmds, func() tea.Msg {
+	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(appCtx, cleanupRunTimeout)
 		defer cancel()
 
-		return cleanupExec(ctx, t, waits)
-	})
-
-	return tea.Batch(cmds...)
-}
-
-// listedPanes is the box's panes that are still open, as the state has them now.
-func (a *App) listedPanes(st core.State, t cleanupTarget) []cleanupPane {
-	var out []cleanupPane
-
-	for _, p := range t.panes {
-		cur, ok := st.Panes[p.id]
-		if !ok {
-			continue
-		}
-
-		p.agent, p.state = cur.Kind == core.KindAgent, cur.State
-		if p.agent {
-			p.name = a.cardName(st, p.id)
-		}
-
-		out = append(out, p)
+		return cleanupExec(ctx, t)
 	}
-
-	return out
 }
 
 // errLeftBranch means the worktree is no longer on the branch the box named.
@@ -428,18 +454,8 @@ func stillOnBranch(ctx context.Context, repo git.Repo, f cleanupFound) error {
 // cleanupExec removes the worktree and deletes the branch, never forced. The
 // branch goes only when its tip is still the one the box showed and is not past
 // the merged head.
-func cleanupExec(ctx context.Context, t cleanupTarget, waits []<-chan struct{}) cleanedMsg {
-	msg := cleanedMsg{target: t, closed: len(waits)}
-
-	waitCtx, cancel := context.WithTimeout(ctx, paneCloseWait)
-	defer cancel()
-
-	for _, done := range waits {
-		select {
-		case <-done:
-		case <-waitCtx.Done():
-		}
-	}
+func cleanupExec(ctx context.Context, t cleanupTarget) cleanedMsg {
+	msg := cleanedMsg{target: t}
 
 	repo, err := openMain(ctx, t.found.main)
 	if err == nil {
@@ -535,9 +551,6 @@ func (a *App) onCleaned(msg cleanedMsg) {
 	}
 
 	text := "removed " + path
-	if msg.closed > 0 {
-		text += " and closed " + plural(msg.closed, "pane")
-	}
 
 	switch {
 	case msg.deleted:
