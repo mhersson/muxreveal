@@ -158,6 +158,10 @@ func splicePictures(base string, width, height int, rows []picRow) (string, bool
 
 	done, y, start := 0, 0, 0 // done is the bytes of base written; row y starts at start
 
+	// The frame before the rows already passed ends clean and holds nothing
+	// waiting for a cell, so each check reads only the bytes since the last.
+	opened, carried := 0, 0
+
 	for i := 0; i < len(on); {
 		j := i + 1
 		for ; j < len(on) && on[j].Y == on[i].Y; j++ {
@@ -177,10 +181,20 @@ func splicePictures(base string, width, height int, rows []picRow) (string, bool
 
 		row := base[start:end]
 
+		if carriesAcrossCells(row) || !endsClean(base[opened:start]) {
+			return "", false
+		}
+
+		opened = start
+
 		// A string sequence before the row rides on its first cell, which a
 		// picture at the left edge would take.
-		if carriesAcrossCells(row) || !endsClean(base[:start]) || (on[i].X == 0 && carriesAcrossCells(base[:start])) {
-			return "", false
+		if on[i].X == 0 {
+			if carriesAcrossCells(base[carried:start]) {
+				return "", false
+			}
+
+			carried = start
 		}
 
 		var last, ok bool
