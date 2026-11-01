@@ -111,6 +111,20 @@ Dependency rules:
 - Never use em-dashes; use hyphens (-).
 - Never reference plan phases, task numbers, or private card IDs in doc
   comments.
+- The user docs are `docs/guide/` and `config.example.toml`. A change to
+  behaviour, keys or config updates them in the same commit.
+- `docs/guide/keys.md` is generated from the keymap:
+  `go test ./internal/ui -run TestKeysPage -update` rewrites it, and the test
+  fails while it is stale.
+- `TestConfigExample` (`cmd/aim`) checks that `config.example.toml` loads to the
+  defaults, names every setting and lists the allowed values the code accepts.
+  `TestGuideLinks` (`internal/ui`) checks the links of the guides and the guide
+  pages the example names. When only non-code files changed, `make check-fast`
+  runs all three tests; otherwise it tests only the changed packages.
+- A change to the config's settings or checks (`internal/core`'s config and
+  keys, `internal/ui`'s key checks, the themes) also runs
+  `go test ./cmd/aim -run TestConfigExample` before its commit, since
+  `check-fast` tests only the changed packages.
 
 ## Testing
 
