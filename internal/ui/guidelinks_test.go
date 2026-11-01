@@ -15,6 +15,7 @@ import (
 
 var (
 	guideLinkRE    = regexp.MustCompile(`\[[^\]]*\]\(([^)\s]+)\)`)
+	guideAttrRE    = regexp.MustCompile(`\b(?:src|href)="([^"]+)"`)
 	guideMentionRE = regexp.MustCompile(`docs/guide/([\p{L}\p{N}_-]+\.md)(?:#([\p{L}\p{N}_-]+))?`)
 	guideLabelRE   = regexp.MustCompile(`\[([^\]]*)\]\([^)]*\)`)
 	guideSchemeRE  = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9+.-]*:`)
@@ -122,7 +123,8 @@ func pageAnchors(src string) []string {
 	return anchors
 }
 
-// brokenLinks lists the links of docs/guide/*.md and the guide mentions of
+// brokenLinks lists the links of docs/guide/*.md and README.md (Markdown link
+// targets and HTML src and href attributes) and the guide mentions of
 // config.example.toml that do not resolve in a repository-rooted fsys.
 func brokenLinks(fsys fs.FS) ([]string, error) {
 	var problems []string
@@ -164,6 +166,10 @@ func brokenLinks(fsys fs.FS) ([]string, error) {
 		return nil, fmt.Errorf("glob guides: %w", err)
 	}
 
+	if _, err := fs.Stat(fsys, "README.md"); err == nil {
+		pages = append(pages, "README.md")
+	}
+
 	for _, page := range pages {
 		src, err := fs.ReadFile(fsys, page)
 		if err != nil {
@@ -171,7 +177,10 @@ func brokenLinks(fsys fs.FS) ([]string, error) {
 		}
 
 		for _, line := range guideLines(string(src)) {
-			for _, m := range guideLinkRE.FindAllStringSubmatch(stripCodeSpans(line), -1) {
+			line = stripCodeSpans(line)
+			matches := append(guideLinkRE.FindAllStringSubmatch(line, -1), guideAttrRE.FindAllStringSubmatch(line, -1)...)
+
+			for _, m := range matches {
 				target := m[1]
 				if guideSchemeRE.MatchString(target) {
 					continue
@@ -234,10 +243,12 @@ func TestBrokenLinks(t *testing.T) {
 	const target = "# Target\n\n## Follow the agent's edits\n\n## Same\n\n## Same\n\n```\n## Hidden\n```\n"
 
 	tests := []struct {
-		name string
-		page string
-		toml string
-		want []string
+		name   string
+		page   string
+		readme string
+		files  []string
+		toml   string
+		want   []string
 	}{
 		{name: "good link and anchor", page: "[a](target.md) [b](target.md#follow-the-agents-edits) [c](#own)\n\n## Own\n"},
 		{name: "missing file", page: "[a](nope.md)\n", want: []string{"a.md", "nope.md"}},
@@ -254,6 +265,14 @@ func TestBrokenLinks(t *testing.T) {
 		{name: "repeated heading past the last", page: "[a](target.md#same-2)\n", want: []string{"target.md#same-2"}},
 		{name: "heading in a fence", page: "[a](target.md#hidden)\n", want: []string{"target.md#hidden"}},
 		{name: "non-markdown target", page: "[a](../../config.example.toml#x)\n", toml: "x\n"},
+		{name: "readme good link and anchors", page: "x\n", readme: "[a](docs/guide/target.md#same) [b](#own) <a href=\"LICENSE\">l</a>\n\n## Own\n", files: []string{"LICENSE"}},
+		{name: "readme missing file", page: "x\n", readme: "[a](docs/nope.md)\n", want: []string{"README.md", "docs/nope.md"}},
+		{name: "readme missing anchor", page: "x\n", readme: "[a](docs/guide/target.md#gone)\n", want: []string{"README.md", "target.md#gone"}},
+		{name: "readme image present", page: "x\n", readme: "<img src=\"docs/images/x.png\" alt=\"x\">\n", files: []string{"docs/images/x.png"}},
+		{name: "readme image missing", page: "x\n", readme: "<td><img src=\"docs/images/y.png\"></td>\n", want: []string{"README.md", "docs/images/y.png"}},
+		{name: "guide html href missing", page: "<a href=\"nope.md\">n</a>\n", want: []string{"a.md", "nope.md"}},
+		{name: "html scheme targets", page: "<img src=\"https://example.com/a.png\"> <a href=\"https://example.com\">e</a>\n"},
+		{name: "html in a fence or code span", page: "```\n<img src=\"nope.png\">\n```\nsee `<img src=\"nope.png\">` here\n"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -263,6 +282,14 @@ func TestBrokenLinks(t *testing.T) {
 				"docs/guide/a.md":      {Data: []byte(tt.page)},
 				"docs/guide/target.md": {Data: []byte(target)},
 			}
+			if tt.readme != "" {
+				fsys["README.md"] = &fstest.MapFile{Data: []byte(tt.readme)}
+			}
+
+			for _, f := range tt.files {
+				fsys[f] = &fstest.MapFile{}
+			}
+
 			if tt.toml != "" {
 				fsys["config.example.toml"] = &fstest.MapFile{Data: []byte(tt.toml)}
 			}

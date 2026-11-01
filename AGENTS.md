@@ -119,8 +119,8 @@ Dependency rules:
   fails while it is stale.
 - `TestConfigExample` (`cmd/aim`) checks that `config.example.toml` loads to the
   defaults, names every setting and lists the allowed values the code accepts.
-  `TestGuideLinks` (`internal/ui`) checks the links of the guides and the guide
-  pages the example names. When only non-code files changed, `make check-fast`
+  `TestGuideLinks` (`internal/ui`) checks the links and image paths of the
+  guides and `README.md`, and the guide pages the example names. When only non-code files changed, `make check-fast`
   runs all three tests; otherwise it tests only the changed packages.
 - A change to the config's settings or checks (`internal/core`'s config and
   keys, `internal/ui`'s key checks, the themes) also runs
