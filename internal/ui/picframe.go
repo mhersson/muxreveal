@@ -104,8 +104,8 @@ func picRect(rows []picRow) image.Rectangle {
 }
 
 // placePictures draws each row as placeholder cells over base, spliced into
-// the rows they cover, or in one compositor pass when the splice cannot cut
-// them on cell edges; spliced says which drew them.
+// the rows they cover, or in one compositor pass when the splice cannot place
+// them without changing another cell; spliced says which drew them.
 func placePictures(base string, width, height int, rows []picRow) (out string, spliced bool) {
 	if out, ok := splicePictures(base, width, height, rows); ok {
 		return out, true
@@ -339,7 +339,7 @@ func decodeCell(s string, state byte, p *ansi.Parser) (seq string, width, n int,
 }
 
 // writePlaceholders writes r's placeholder cells in the id's colour over its
-// ground, from nothing open to no style open.
+// ground. It closes every style and link first and leaves no style open.
 func writePlaceholders(b *strings.Builder, r picRow) {
 	st := ansi.Style{}.ForegroundColor(lipgloss.Color(kitty.IDColor(r.ID)))
 	if r.Ground != "" {
