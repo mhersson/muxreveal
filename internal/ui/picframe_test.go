@@ -411,6 +411,52 @@ func TestDrawerRecordsPictures(t *testing.T) {
 	}
 }
 
+func TestRecordBoxMatchesRecordLayer(t *testing.T) {
+	t.Parallel()
+
+	const width, height = 20, 6
+
+	pics := []picRow{
+		{X: 0, Y: 0, ID: 3, Row: 0, Cols: 2},
+		{X: 1, Y: 2, ID: 3, Row: 1, Cols: 2},
+		{X: 0, Y: 4, ID: 5, Row: 0, Cols: 1},
+		{X: 0, Y: -1, ID: 6, Row: 0, Cols: 1},
+	}
+
+	tests := []struct {
+		name string
+		x, y int
+		line string // every line; w is its width
+		w, n int
+	}{
+		{"inside", 2, 1, "yyyyyy", 6, 3},
+		{"at the right edge", 12, 0, "yyyyyyyy", 8, height},
+		{"clipped by the right edge", 16, 0, "yyyyyyyy", 8, 2},
+		{"clipped by the bottom", 2, 4, "yyyyyy", 6, 4},
+		{"wide cells", 4, 0, "世世世", 6, 2},
+		{"no lines", 2, 1, "", 0, 0},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			lines := slices.Repeat([]string{tt.line}, tt.n)
+
+			var want, got frameLayers
+
+			recordLayer(&want, width, height, tt.x, tt.y, lines, pics)
+			recordBox(&got, width, height, tt.x, tt.y, tt.w, tt.n, pics)
+
+			if !reflect.DeepEqual(got, want) {
+				t.Fatalf("recordBox = %+v, recordLayer = %+v", got, want)
+			}
+		})
+	}
+
+	recordBox(nil, width, height, 0, 0, 4, 2, pics)
+}
+
 func TestOverlayLinesAndDrawerRecordPictures(t *testing.T) {
 	t.Parallel()
 

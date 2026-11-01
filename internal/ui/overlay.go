@@ -236,7 +236,8 @@ const drawerReset = "\x1b[m\x1b]8;;\x1b\\"
 // which drew it.
 func overlayDrawer(f *frameLayers, base string, width, height int, r core.Rect, lines []string, pics []picRow, fits bool) (out string, spliced bool) {
 	if out, ok := spliceDrawer(base, width, height, r, lines, fits); ok {
-		recordLayer(f, width, height, r.X, r.Y, lines, pics)
+		// The splice needs fits, so every line is r.W cells.
+		recordBox(f, width, height, r.X, r.Y, r.W, len(lines), pics)
 
 		return out, true
 	}
