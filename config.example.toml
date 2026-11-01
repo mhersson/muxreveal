@@ -29,8 +29,8 @@
 # default_mode = "bsp"
 
 ## How a bsp tab splits a pane that comes without a chosen side: one moved
-## in from another tab, or every pane when a tab switches to bsp. A new pane
-## opened with a key or the picker always brings its own side.
+## in from another tab, or every pane when a tab switches to bsp.
+## auto_scheme never applies to a pane opened with a key or the picker.
 ## values: spiral | longest_side | alternate | smart_split
 # auto_scheme = "spiral"
 
@@ -84,13 +84,13 @@
 ## values: turn | branch
 # mode = "branch"
 
-## The most files that get hunks in one diff. Files past it stay listed with
-## their counts but show no hunks.
+## The most files, counted from the top of the diff's file list, that get
+## hunks. Files past the first max_files show no hunks, only their counts.
 ## range: 1 or more
 # max_files = 400
 
 ## The most bytes of diff text read in one pass, a single git diff over every
-## file that needs hunks. The text is cut after the last whole file; files
+## file whose hunks are not already cached. The text is cut after the last whole file; files
 ## past the cut show "too large, press f for the full file".
 ## range: 1 or more bytes
 # max_bytes = 2097152
