@@ -879,6 +879,10 @@ func (a *App) View() tea.View {
 	}
 
 	content = overlayToast(f, content, a.width, a.height, a.notice, a.noticeLevel(), a.icons, lk.styles)
+	if lines, r, ok := a.usagePopover(lk); ok {
+		content = overlayAt(f, content, a.width, a.height, r.X, r.Y, lines, nil)
+	}
+
 	if a.sequenceOpen() {
 		content = overlayCorner(f, content, a.width, a.height, sequencePopup(a.keymap.leader, a.prefix, a.sequenceRows(a.prefix), a.icons, lk.styles))
 	}

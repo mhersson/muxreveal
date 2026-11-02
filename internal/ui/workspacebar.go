@@ -316,6 +316,32 @@ func renderBar(tabs []tabInfo, active int, mods []trayModule, width int, icons b
 	return left + ground.Render(strings.Repeat(" ", gap)) + right
 }
 
+// trayModuleAt is the first cell and the width of module id on a bar width
+// cells wide, as renderBar draws it. It is false when the bar does not draw the
+// tray or the module. With icons one edge cell precedes every module, without
+// them one divider cell precedes every module but the first.
+func trayModuleAt(p barPlan, width int, icons bool, id string) (x, w int, ok bool) {
+	if p.trayW == 0 || p.tabsW+trayGap+p.trayW > width {
+		return 0, 0, false
+	}
+
+	x = width - p.trayW
+
+	for i, m := range p.tray {
+		if icons || i > 0 {
+			x++
+		}
+
+		if m.id == id {
+			return x, m.width, true
+		}
+
+		x += m.width
+	}
+
+	return 0, 0, false
+}
+
 func renderTabs(p barPlan, tabs []tabInfo, active int, icons bool, ui theme.UI) string {
 	ground := lipgloss.NewStyle().Background(ui.Bar)
 	active = min(max(active, 0), len(tabs)-1)

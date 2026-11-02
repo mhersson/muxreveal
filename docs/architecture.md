@@ -365,7 +365,9 @@ the followed place back, and one after a session change records nothing.
 - AIM has no fixed tick. A tick runs only while something animates: the agent
   tick (125 ms) while an agent works, the rail's pulse while one is blocked and
   the rail shows, the 16 ms slide tick while the drawer slides. A new animation
-  follows the same rule, so an idle AIM costs next to no CPU.
+  follows the same rule, so an idle AIM costs next to no CPU. The usage module
+  and popover have no tick of their own; the clock's minute wake redraws their
+  relative times and drops a window once its reset passes.
 
 ## Why the safety rules
 

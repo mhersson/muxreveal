@@ -45,6 +45,8 @@ type trayState struct {
 	on    bool // sampling is armed; set by Init
 	clock string
 	load  *loadInfo
+
+	usageOpen bool // the usage popover is open; it shows only while a window does
 }
 
 type (
@@ -126,6 +128,10 @@ func (a *App) clockCmd(wait bool) tea.Cmd {
 
 func (a *App) onClock(msg clockMsg) tea.Cmd {
 	a.tray.clock = msg.text
+
+	if a.tray.usageOpen && !a.usageShows() {
+		a.tray.usageOpen = false
+	}
 
 	return a.clockCmd(true)
 }

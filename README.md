@@ -126,6 +126,7 @@ Everything starts with the leader, `ctrl+space`; every key can be remapped. [The
 | `ctrl+space g o` | Open a pull request |
 | `ctrl+space g l` | Pull requests |
 | `ctrl+space g m` | Merge pull request |
+| `ctrl+space u` | Claude usage |
 | `ctrl+space :` | Open command palette |
 | `ctrl+space q` | Quit AIM |
 

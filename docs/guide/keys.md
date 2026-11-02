@@ -108,6 +108,7 @@ Keys pressed after the leader key. Remap them under `[keys.leader]`.
 | --- | --- | --- |
 | `:` | `palette.open` | Open command palette |
 | `t` | `theme.pick` | Pick theme |
+| `u` | `usage.toggle` | Claude usage |
 | `q` | `app.quit` | Quit AIM |
 
 ## Review drawer
