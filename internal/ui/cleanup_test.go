@@ -1,6 +1,9 @@
 package ui
 
 import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -24,13 +27,14 @@ const mergedToast = "merged #7 (merge)"
 // in the main checkout; neither keeps the worktree.
 type cleanupRig struct {
 	*prDrawer
-	f       *fakeActions
-	main    string
-	wt      string
-	agentID core.PaneID   // the drawer's agent
-	other   core.PaneID   // the shell in the main checkout
-	ids     []core.PaneID // every pane the rig opened, in tab order
-	keepers []core.PaneID // the panes started in the worktree, in tab order
+	f        *fakeActions
+	main     string
+	wt       string
+	agentID  core.PaneID       // the drawer's agent
+	other    core.PaneID       // the shell in the main checkout
+	ids      []core.PaneID     // every pane the rig opened, in tab order
+	keepers  []core.PaneID     // the panes started in the worktree, in tab order
+	turnKeys map[string]string // seedTurns: the turn key of each root
 }
 
 // newCleanupRig builds the rig; before opens more panes ahead of the drawer.
@@ -736,6 +740,161 @@ func (r *cleanupRig) assertEnd(t *testing.T, removed, branch bool) {
 		if _, ok := r.store.State().Panes[id]; !ok {
 			t.Errorf("pane %s was closed", id)
 		}
+	}
+}
+
+const cleanupSession = "11111111-2222-4333-8444-555555555555"
+
+// seedTurns writes one turn ref pair in the worktree and one in the main
+// checkout, and keeps their roots' keys: the worktree's root cannot be read once removed.
+func (r *cleanupRig) seedTurns(t *testing.T) {
+	t.Helper()
+
+	r.turnKeys = map[string]string{}
+
+	for _, dir := range []string{r.wt, r.main} {
+		sum := sha256.Sum256([]byte(rootOf(t, dir)))
+		r.turnKeys[dir] = hex.EncodeToString(sum[:])[:16]
+	}
+
+	for _, dir := range []string{r.wt, r.main} {
+		if _, err := git.Snapshot(context.Background(), dir, cleanupSession, git.SnapshotOptions{TempDir: t.TempDir()}); err != nil {
+			t.Fatalf("snapshot in %s: %v", dir, err)
+		}
+	}
+}
+
+// prRefs counts the refs fetched for pull request 7.
+func (r *cleanupRig) prRefs(t *testing.T) int {
+	t.Helper()
+
+	return len(strings.Fields(gitRead(t, "git", r.main, "for-each-ref", "--format=%(refname)", "refs/aim/pr/7/")))
+}
+
+// turnRefs counts the turn refs recorded for the worktree root.
+func (r *cleanupRig) turnRefs(t *testing.T, root string) int {
+	t.Helper()
+
+	key := r.turnKeys[root]
+	n := 0
+
+	for ref := range strings.FieldsSeq(gitRead(t, "git", r.main, "for-each-ref", "--format=%(refname)", "refs/aim/turns/"+cleanupSession+"/")) {
+		if strings.Contains(ref, "/"+key+"/") {
+			n++
+		}
+	}
+
+	return n
+}
+
+func openShellThere(t *testing.T, r *cleanupRig) { t.Helper(); r.keeper(t, core.KindShell) }
+
+func dirtyWorktree(t *testing.T, r *cleanupRig) {
+	t.Helper()
+	write(t, filepath.Join(r.wt, "late.txt"), "late\n")
+}
+
+// enter drops #7's refs whatever happens to the worktree; its turn refs go only
+// with it; the main checkout's always stay.
+func TestCleanupPrunesRefs(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name                string
+		toggles             string
+		before              func(*testing.T, *cleanupRig)
+		key                 tea.KeyPressMsg
+		toast               string
+		prGone, wtTurnsGone bool
+		early               func(*testing.T, *cleanupRig) // runs before the box opens
+	}{
+		{"both", "", nil, keyEnter, "removed .worktrees/feat-x; deleted feat/x", true, true, nil},
+		{"branch off", "b", nil, keyEnter, "removed .worktrees/feat-x", true, true, nil},
+		{"worktree off", "w", nil, keyEnter, "nothing to clean up", true, false, nil},
+		{"refused: a shell opened in the worktree", "", openShellThere, keyEnter, kept("1 shell is in it"), true, false, nil},
+		{"removal failed: a change after the box", "", dirtyWorktree, keyEnter, "kept .worktrees/feat-x: it has uncommitted changes", true, false, nil},
+		{"esc", "", nil, keyEsc, "", false, false, nil},
+		{"in-use box: enter says nothing to clean up", "", nil, keyEnter, noticeNothingToClean, true, false, openShellThere},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			var early []func(*testing.T, *cleanupRig)
+			if tc.early != nil {
+				early = append(early, tc.early)
+			}
+
+			r := newCleanupRig(t, early...)
+			r.seedTurns(t)
+			r.mergeToBox(t)
+
+			if tc.before != nil {
+				tc.before(t, r)
+			}
+
+			if tc.toggles != "" {
+				r.typed(tc.toggles)
+			}
+
+			if got := r.prRefs(t); got != 2 {
+				t.Fatalf("PR refs before = %d, want 2", got)
+			}
+
+			r.notice = ""
+			r.keys(tc.key)
+
+			if tc.key == keyEnter {
+				r.done(t)
+			}
+
+			if tc.prGone {
+				r.until(t, "the PR refs", func() bool { return r.prRefs(t) == 0 })
+			} else if got := r.prRefs(t); got != 2 {
+				t.Errorf("PR refs = %d, want 2", got)
+			}
+
+			if tc.toast != "" && r.notice != tc.toast {
+				t.Errorf("toast = %q, want %q", r.notice, tc.toast)
+			}
+
+			if got := r.turnRefs(t, r.wt) == 0; got != tc.wtTurnsGone {
+				t.Errorf("worktree turn refs gone = %v, want %v", got, tc.wtTurnsGone)
+			}
+
+			if got := r.turnRefs(t, r.main); got != 1 {
+				t.Errorf("main checkout turn refs = %d, want 1", got)
+			}
+		})
+	}
+}
+
+// A refs/aim/pr/7/head.lock file makes the delete fail; the clean-up still reports success.
+func TestCleanupSucceedsWhenThePruneFails(t *testing.T) {
+	t.Parallel()
+
+	r := newCleanupRig(t)
+	r.seedTurns(t)
+	r.mergeToBox(t)
+
+	common := gitRead(t, "git", r.main, "rev-parse", "--path-format=absolute", "--git-common-dir")
+	write(t, filepath.Join(strings.TrimSpace(common), "refs", "aim", "pr", "7", "head.lock"), "")
+
+	r.notice = ""
+	r.keys(keyEnter)
+	r.done(t)
+
+	if want := "removed .worktrees/feat-x; deleted feat/x"; r.notice != want || r.noticeLevel() != levelSuccess {
+		t.Errorf("toast = %q at level %v, want %q as a success", r.notice, r.noticeLevel(), want)
+	}
+
+	if got := r.turnRefs(t, r.wt); got != 0 {
+		t.Errorf("worktree turn refs = %d, want 0", got)
+	}
+
+	if got := r.prRefs(t); got != 2 {
+		t.Errorf("PR refs = %d, want 2", got)
 	}
 }
 

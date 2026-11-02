@@ -3,12 +3,20 @@ package git
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
 	"syscall"
+	"time"
 )
+
+// staleTempAge is how old a .tmp-* file must be to go. store sets a temp file's
+// mtime to the index's before the rename, so a live one can be swept: that
+// rename fails and the store skips one cache update.
+const staleTempAge = time.Hour
 
 // indexCache keeps the refreshed temporary index of one worktree in the cache
 // dir, named after the stat of the user's index it was copied from. It is
@@ -94,4 +102,63 @@ func (c *indexCache) store(src string) {
 			_ = os.Remove(filepath.Join(c.dir, n))
 		}
 	}
+}
+
+// SweepIndexCache removes the regular files of root/index that are over their
+// age before now: .idx copies over staleAge, .tmp-* files over staleTempAge. A
+// copy carries the mtime of the index it was stored from, so its age is the time
+// since its last refresh. It returns how many it removed; a missing dir is not an error.
+func SweepIndexCache(root string, now time.Time) (int, error) {
+	if root == "" {
+		return 0, nil
+	}
+
+	dir := filepath.Join(root, "index")
+
+	entries, err := os.ReadDir(dir)
+	if errors.Is(err, fs.ErrNotExist) {
+		return 0, nil
+	}
+
+	if err != nil {
+		return 0, fmt.Errorf("sweep index cache: %w", err)
+	}
+
+	var (
+		removed int
+		errs    []error
+	)
+
+	for _, e := range entries {
+		name := e.Name()
+
+		var limit time.Duration
+
+		switch {
+		case strings.HasSuffix(name, ".idx"):
+			limit = staleAge
+		case strings.HasPrefix(name, ".tmp-"):
+			limit = staleTempAge
+		default:
+			continue
+		}
+
+		info, err := e.Info()
+		if err != nil || !info.Mode().IsRegular() || now.Sub(info.ModTime()) <= limit {
+			continue
+		}
+
+		switch err := os.Remove(filepath.Join(dir, name)); {
+		case err == nil:
+			removed++
+		case !errors.Is(err, fs.ErrNotExist):
+			errs = append(errs, err)
+		}
+	}
+
+	if err := errors.Join(errs...); err != nil {
+		return removed, fmt.Errorf("sweep index cache: %w", err)
+	}
+
+	return removed, nil
 }

@@ -45,7 +45,7 @@ The box's top row names the repository, the branch, the base and the number of c
 
 ## Review the pull request in the drawer
 
-In the review drawer, press `p` to show the pull request of the drawer's branch. AIM fetches its refs into `refs/aim/pr/<n>/` (nothing else is written to your repository), and the drawer shows the pull request's diff against its base, with the same keys as other modes (see [Review](review.md)). The top of the diff holds a header with the number and title, the branch and base, the checks and the review in words. A row below it reads `↑<n> not pushed: the PR shows the pushed head; ctrl+space g P pushes` when the worktree has commits its push remote lacks, or `the PR moved to <sha7> since this diff; r fetches it` when the pull request got a new head; press `r` to fetch it again.
+In the review drawer, press `p` to show the pull request of the drawer's branch. AIM fetches its refs into `refs/aim/pr/<n>/` (nothing else is written to your repository), deletes them at the clean-up confirm and once per run when no drawer shows the pull request, and fetches them again when the drawer opens it, and the drawer shows the pull request's diff against its base, with the same keys as other modes (see [Review](review.md)). The top of the diff holds a header with the number and title, the branch and base, the checks and the review in words. A row below it reads `↑<n> not pushed: the PR shows the pushed head; ctrl+space g P pushes` when the worktree has commits its push remote lacks, or `the PR moved to <sha7> since this diff; r fetches it` when the pull request got a new head; press `r` to fetch it again.
 
 `b` leaves the mode, and so do `t`, `,` and `.` unless they stop with a notice (the pane has no session or no turns), and so does picking a place in the worktree list. From the drawer, `i` opens the conversation, `c` the checks, `a` approve, `M` merge and `O` the browser; when the pull request is not shown yet, AIM shows it first and then acts.
 
@@ -110,5 +110,7 @@ When the worktree can go, a confirm titled `Clean up after #<n>` offers two boxe
 - A pane that keeps the worktree, a shell there or an agent started there, stops the removal: the confirm names it, and only `esc` is offered. Cleanup closes no pane.
 - The branch is offered only when it holds nothing the merged head does not: its tip is the head or behind it. It goes only with the worktree. Nothing is forced.
 - The result is a toast such as `removed <path>; deleted <branch>`, or `kept <path>: <reason>`.
+
+`enter` also deletes the pull request's refs under `refs/aim/pr/<n>/`, and the turn snapshots of a worktree it removed; `esc` keeps them.
 
 The worktree stays, with a reason instead of the confirm, when it is not one of AIM's own worktrees (`<path> is outside AIM's worktrees, so it stays`, see [Agents side by side](agents.md#a-new-worktree)), is locked, has uncommitted changes, or an agent is still working in it. After a merge, the reason is added to the merge toast while it shows. From the command, the notices include `#<n> is not merged`, `#<n>: its merged head is unknown`, `#<n>'s branch is in another repository` and `<branch> is the default branch, so it stays` and `clean up: HEAD is detached`; a pull request that cannot be found gives the drawer's notices, such as `no pull request for <branch>`.

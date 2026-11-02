@@ -52,6 +52,10 @@ type Options struct {
 	// GitTempDir is where the diff engine puts its temporary index for the
 	// rail's diff stats; empty turns the stats off.
 	GitTempDir string
+	// SweepRefs lets the app delete stale refs/aim refs once per run. Only the
+	// instance that holds the state lock sets it: another starts with a fresh
+	// state and would read every session of the first as unheld.
+	SweepRefs bool
 	// IndexCache is the directory where git keeps a refreshed index copy per
 	// worktree; empty disables the cache.
 	IndexCache string
@@ -172,7 +176,9 @@ type App struct {
 	started   bool   // the first size message was handled; it opens the first pane only once
 	restoring bool   // startRestored is running; its dispatches are not saved
 	save      func(core.State)
-	clock     clock // where the app reads the time; tests inject a fake one
+	clock     clock           // where the app reads the time; tests inject a fake one
+	sweepRefs bool            // sweep stale refs/aim once per repository; see Options.SweepRefs
+	swept     map[string]bool // repositories whose sweep started, by common dir
 	tray      trayState
 	rail      railState
 	drawer    drawerState
@@ -276,7 +282,7 @@ func New(opts Options) (*App, error) {
 		panes: map[core.PaneID]*pane{}, outerFocused: true,
 		watches:  watchState{set: opts.Watches, open: git.Open, panes: map[core.PaneID]*paneWatch{}, pins: map[core.TabID]*pinWatch{}, failed: map[string]bool{}},
 		pictures: newPictures(nil, getenv, opts.Logger),
-		getenv:   getenv, cwd: cwd, recordDir: opts.RecordDir, icons: opts.Icons, clock: realClock{}, start: termStart,
+		getenv:   getenv, cwd: cwd, recordDir: opts.RecordDir, icons: opts.Icons, clock: realClock{}, start: termStart, sweepRefs: opts.SweepRefs,
 		load:         newSysLoad(opts.Logger),
 		probeSem:     make(chan struct{}, railProbeMax),
 		edits:        editState{resolve: places.Place},
@@ -633,6 +639,8 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, tea.Batch(a.onWatch(msg), a.waitWatch())
 	case paneRepoMsg:
 		return a, a.onPaneRepo(msg)
+	case refsListedMsg:
+		return a, a.onRefsListed(msg)
 	case prSnapshotMsg:
 		return a, tea.Batch(a.onPRSnapshot(msg.Snapshot), a.waitPRs())
 	case prResolvedMsg:

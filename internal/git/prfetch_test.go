@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // prFixture is a bare "github" repository whose pull request 7 head holds one
@@ -269,6 +270,66 @@ func TestDeletePRRefs(t *testing.T) {
 		if got := gitOut(t, f.work, "for-each-ref", "refs/aim/"); got != "" {
 			t.Errorf("refs left: %s", got)
 		}
+	}
+}
+
+func TestDeletePRRefsSurvivesTheContextEnding(t *testing.T) {
+	t.Parallel()
+	f := newPRFixture(t)
+
+	if _, err := FetchPR(context.Background(), f.repo, "origin", 7, "main"); err != nil {
+		t.Fatal(err)
+	}
+
+	// update-ref outlasts the deadline; the ref write must not be killed.
+	ctx, logPath := wrapGit(t, `case "$*" in
+*update-ref*) sleep 1.5;;
+esac`)
+
+	ctx, cancel := context.WithTimeout(ctx, time.Second)
+	defer cancel()
+
+	if err := DeletePRRefs(ctx, f.repo, 7); err != nil {
+		t.Fatalf("DeletePRRefs: %v", err)
+	}
+
+	if calls := wrappedCalls(t, logPath); !strings.Contains(calls, "update-ref") {
+		t.Errorf("the ref write never ran through the wrapper:\n%s", calls)
+	}
+
+	if got := gitOut(t, f.work, "for-each-ref", "refs/aim/"); got != "" {
+		t.Errorf("refs left: %s", got)
+	}
+
+	locks, err := filepath.Glob(filepath.Join(f.repo.CommonDir, "refs", "aim", "pr", "7", "*.lock"))
+	if err != nil || len(locks) > 0 {
+		t.Errorf("lock files %v (%v)", locks, err)
+	}
+}
+
+func TestDeletePRRefsWithDoneContextWritesNothing(t *testing.T) {
+	t.Parallel()
+	f := newPRFixture(t)
+
+	if _, err := FetchPR(context.Background(), f.repo, "origin", 7, "main"); err != nil {
+		t.Fatal(err)
+	}
+
+	ctx, logPath := wrapGit(t, "")
+
+	ctx, cancel := context.WithCancel(ctx)
+	cancel()
+
+	if err := DeletePRRefs(ctx, f.repo, 7); !errors.Is(err, context.Canceled) {
+		t.Errorf("DeletePRRefs error = %v, want context.Canceled", err)
+	}
+
+	if data, err := os.ReadFile(logPath); err == nil && strings.Contains(string(data), "update-ref") {
+		t.Errorf("update-ref ran:\n%s", data)
+	}
+
+	if got := gitOut(t, f.work, "for-each-ref", "refs/aim/"); got == "" {
+		t.Error("the refs are gone")
 	}
 }
 

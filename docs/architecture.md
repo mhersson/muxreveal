@@ -135,7 +135,10 @@ on it, stage what `ls-files` lists as changed (untracked files over 50 MiB left
 out) and `write-tree`; `commit-tree --no-gpg-sign` as `AIM <aim@localhost>`, so
 no user identity or signing setup is needed; then one `update-ref --stdin`
 transaction of `create` lines. Refreshed index copies are cached under
-`<user cache dir>/aim/index`.
+`<user cache dir>/aim/index`. Each start removes a copy not refreshed for 14
+days (its mtime is that of the temporary index it was stored from, which staging
+rewrites) and a temporary file over an hour old
+(`git.SweepIndexCache`).
 
 **Refs.** `refs/aim/turns/<session>/<key>/<n>/start` and `.../end`, `<key>`
 being the first 16 hex digits of the SHA-256 of the worktree root. They live
@@ -172,9 +175,35 @@ during the kill can miss it (`internal/git/proc_unix.go`). Every call drops
 inherited repository-local `GIT_*` variables (`cleanEnv`, `run.go`), so it
 reads only the repository it was pointed at.
 
-**Pruning.** `git.PruneWorktree`, `git.PruneSession` and `git.DeletePRRefs`
-exist, but the app calls none of them: worktree cleanup removes the worktree
-and branch only, so `refs/aim/*` grows until removed by hand.
+**Pruning.** The clean-up confirm's `enter` deletes the merged pull request's
+refs (`git.DeletePRRefs`, under the ref-write budget) whatever happens to the
+worktree, plus a removed worktree's turn refs (`git.PruneWorktree`, by the root
+`git.Open` reported before removal). A failed prune is logged and never fails
+the clean-up.
+
+A sweep covers the rest (`internal/ui/refsweep.go`). It runs once per run per
+repository, keyed by the common dir, and starts when the first pane resolves
+there. Only the instance that holds `state.lock` sweeps, since another starts
+with a fresh state and would read every restored session of the first as unheld.
+It has two phases: the listing reads ref names and values only, off the loop; the
+update loop then filters it against the state as it is at the answer, and a
+delete off the loop removes what is left. It leaves out the sessions any pane
+holds and the pull requests any drawer shows or is fetching
+(`drawerState.fetching`). It deletes a session's turn refs, in both layouts, when
+its newest `<n>` in the repository is over 14 days old (`staleAge`), and every
+other pull request's refs. Each delete carries the listed value. The turn refs and the pull
+request refs are deleted separately, and each in chunks of 500 (`deleteChunk`),
+one `update-ref` transaction per chunk, since a call killed by the ref-write
+budget leaves lock files in the user's repository, `packed-refs.lock` among them.
+A pull request's head and base share a chunk. A ref that moved fails only its own
+chunk, so it cannot hold back the turn refs or the other chunks. There is no lock
+shared with a fetch: one that starts after the filter and writes an unchanged
+head before the delete runs loses its refs, which costs one drawer load error
+that `r` fixes. The converse holds for a second instance: the lock holder cannot
+see its panes or drawers, so it deletes the refs of a pull request that
+instance's drawer shows (the drawer keeps its loaded diff, `r` fetches again,
+and the automatic refresh skips pull request drawers) and the turn refs of its
+sessions idle over 14 days.
 
 **Invariants.** A snapshot writes only its temporary files and create-only refs
 under `refs/aim/`, and never holds an agent past the hold. A session id that is
@@ -301,7 +330,7 @@ the followed place back, and one after a session change records nothing.
 | `<state dir>/state.lock` | the `flock` that makes one instance the saver | held, not written |
 | `<state dir>/reviews/*.json` | reviewed-hunk marks, per repository | atomic, not fsynced |
 | `<state dir>/run/` | socket, settings, temporary indexes | per run; swept |
-| `<user cache dir>/aim/` | index copies, fetched images | as used |
+| `<user cache dir>/aim/` | index copies, fetched images | as used; swept at start: index copies not refreshed for 14 days, images untouched 30 |
 
 - **Only what cannot come back is saved.** Agent states, actions, reported
   directories, edits, models, pull request data and a drawer's pin come back

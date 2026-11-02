@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -186,6 +187,7 @@ type cleanedMsg struct {
 	removed, deleted bool
 	kept             string
 	err, delErr      error
+	pruneErr         error // refs that could not be deleted; logged, never shown
 }
 
 // findCleanup finds the worktree of root's repository that has branch checked
@@ -400,12 +402,13 @@ func (a *App) cleanupSay(msg cleanupFoundMsg, why string) {
 // cleanupRun cleans up exactly what t named and closes no pane. On the loop it
 // reads the panes again, since an agent may have started working or a pane
 // that keeps the worktree may have opened; off the loop it removes the worktree
-// and, when asked, deletes the branch.
+// and, when asked, deletes the branch. Every outcome deletes the pull request's
+// refs.
 func (a *App) cleanupRun(t cleanupTarget) tea.Cmd {
 	if !t.remove {
 		a.notice = noticeNothingToClean
 
-		return nil
+		return a.prunePRRefs(t)
 	}
 
 	panes := a.panesIn(a.store.State(), t.found.path)
@@ -413,13 +416,13 @@ func (a *App) cleanupRun(t cleanupTarget) tea.Cmd {
 	if busy, ok := workingAgent(panes); ok {
 		a.notice = fmt.Sprintf("%s is still working in %s", busy.name, t.path())
 
-		return nil
+		return a.prunePRRefs(t)
 	}
 
 	if in := keeping(panes); len(in) > 0 {
 		a.notice = keptBy(t.path(), in)
 
-		return nil
+		return a.prunePRRefs(t)
 	}
 
 	appCtx := a.ctx
@@ -429,6 +432,28 @@ func (a *App) cleanupRun(t cleanupTarget) tea.Cmd {
 		defer cancel()
 
 		return cleanupExec(ctx, t)
+	}
+}
+
+// prunePRRefs deletes t's pull request refs off the loop when the clean-up
+// itself does nothing. A failure is logged and says nothing to the user.
+func (a *App) prunePRRefs(t cleanupTarget) tea.Cmd {
+	appCtx, log := a.ctx, a.log
+
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(appCtx, cleanupRunTimeout)
+		defer cancel()
+
+		repo, err := openMain(ctx, t.found.main)
+		if err == nil {
+			err = git.DeletePRRefs(ctx, repo, t.number)
+		}
+
+		if err != nil {
+			warnPrune(log, t.number, err)
+		}
+
+		return nil
 	}
 }
 
@@ -453,15 +478,47 @@ func stillOnBranch(ctx context.Context, repo git.Repo, f cleanupFound) error {
 
 // cleanupExec removes the worktree and deletes the branch, never forced. The
 // branch goes only when its tip is still the one the box showed and is not past
-// the merged head.
+// the merged head. The pull request's refs go on every path, and the
+// worktree's turn refs after a removal; neither changes what is reported.
 func cleanupExec(ctx context.Context, t cleanupTarget) cleanedMsg {
 	msg := cleanedMsg{target: t}
 
 	repo, err := openMain(ctx, t.found.main)
-	if err == nil {
-		err = stillOnBranch(ctx, repo, t.found)
+	if err != nil {
+		msg.err = withContext(ctx, err)
+
+		return msg
 	}
 
+	// Turn refs record the root git reports, which the listed path may not spell.
+	root := t.found.path
+	if wt, werr := git.Open(ctx, t.found.path); werr == nil {
+		root = wt.Root
+	}
+
+	removed := cleanupRemove(ctx, repo, t, &msg)
+	msg.pruneErr = pruneRefs(ctx, repo, t.number, root, removed)
+
+	return msg
+}
+
+// pruneRefs deletes pull request number's refs and, when removed, the turn
+// refs of the worktree at root.
+func pruneRefs(ctx context.Context, repo git.Repo, number int, root string, removed bool) error {
+	err := git.DeletePRRefs(ctx, repo, number)
+
+	if removed {
+		_, perr := git.PruneWorktree(ctx, repo, root)
+		err = errors.Join(err, perr)
+	}
+
+	return err
+}
+
+// cleanupRemove removes the worktree and deletes the branch, and fills msg. It
+// reports whether the worktree went.
+func cleanupRemove(ctx context.Context, repo git.Repo, t cleanupTarget, msg *cleanedMsg) bool {
+	err := stillOnBranch(ctx, repo, t.found)
 	if err == nil {
 		err = git.RemoveWorktree(ctx, repo, t.found.path)
 	}
@@ -469,13 +526,13 @@ func cleanupExec(ctx context.Context, t cleanupTarget) cleanedMsg {
 	if err != nil {
 		msg.err = withContext(ctx, err)
 
-		return msg
+		return false
 	}
 
 	msg.removed = true
 
 	if !t.del || !t.canDelete() {
-		return msg
+		return true
 	}
 
 	branch := t.found.branch
@@ -498,7 +555,7 @@ func cleanupExec(ctx context.Context, t cleanupTarget) cleanedMsg {
 		}
 	}
 
-	return msg
+	return true
 }
 
 const movedReason = "it moved since you asked"
@@ -524,10 +581,18 @@ func withContext(ctx context.Context, err error) error {
 	return err
 }
 
+func warnPrune(log *slog.Logger, pr int, err error) {
+	log.Warn("prune refs after clean up", "pr", pr, "err", err)
+}
+
 // onCleaned says what a cleanup did. A cleanup cut short by the app closing says nothing.
 func (a *App) onCleaned(msg cleanedMsg) {
 	t := msg.target
 	path, branch := t.path(), printable(t.found.branch)
+
+	if msg.pruneErr != nil {
+		warnPrune(a.log, t.number, msg.pruneErr)
+	}
 
 	switch {
 	case errors.Is(msg.err, context.Canceled):

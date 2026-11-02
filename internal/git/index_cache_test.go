@@ -307,3 +307,87 @@ func TestWorkingTreeKeepsUntrackedOutOfTheCache(t *testing.T) {
 		}
 	}
 }
+
+func TestSweepIndexCache(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 11, 2, 12, 0, 0, 0, time.UTC)
+
+	const day = 24 * time.Hour
+
+	files := []struct {
+		name string
+		at   time.Time
+		gone bool
+	}{
+		{"aaaa-1-2-3.idx", now.Add(-15 * day), true},
+		{"bbbb-1-2-3.idx", now.Add(-13 * day), false},
+		{"cccc-1-2-3.idx", now.Add(-14 * day), false},
+		{".tmp-old", now.Add(-2 * time.Hour), true},
+		{".tmp-new", now.Add(-30 * time.Minute), false},
+		{"notes.txt", now.Add(-30 * day), false},
+	}
+
+	root := t.TempDir()
+	dir := filepath.Join(root, "index")
+
+	if err := os.MkdirAll(filepath.Join(dir, "old.idx"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.Chtimes(filepath.Join(dir, "old.idx"), now.Add(-30*day), now.Add(-30*day)); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, f := range files {
+		p := filepath.Join(dir, f.name)
+		if err := os.WriteFile(p, []byte("x"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := os.Chtimes(p, f.at, f.at); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// A symlink named *.idx is not a regular file, whatever its target's age.
+	if err := os.WriteFile(filepath.Join(dir, "target.dat"), []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.Chtimes(filepath.Join(dir, "target.dat"), now.Add(-30*day), now.Add(-30*day)); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.Symlink("target.dat", filepath.Join(dir, "link.idx")); err != nil {
+		t.Fatal(err)
+	}
+
+	n, err := SweepIndexCache(root, now)
+	if err != nil || n != 2 {
+		t.Fatalf("SweepIndexCache = %d, %v; want 2, nil", n, err)
+	}
+
+	for _, f := range files {
+		_, err := os.Stat(filepath.Join(dir, f.name))
+		if gone := os.IsNotExist(err); gone != f.gone {
+			t.Errorf("%s: gone = %v, want %v", f.name, gone, f.gone)
+		}
+	}
+
+	if _, err := os.Stat(filepath.Join(dir, "old.idx")); err != nil {
+		t.Errorf("directory old.idx: %v", err)
+	}
+
+	if _, err := os.Lstat(filepath.Join(dir, "link.idx")); err != nil {
+		t.Errorf("symlink link.idx: %v", err)
+	}
+
+	if n, err := SweepIndexCache("", now); n != 0 || err != nil {
+		t.Errorf("empty root = %d, %v; want 0, nil", n, err)
+	}
+
+	if n, err := SweepIndexCache(t.TempDir(), now); n != 0 || err != nil {
+		t.Errorf("root without index = %d, %v; want 0, nil", n, err)
+	}
+}

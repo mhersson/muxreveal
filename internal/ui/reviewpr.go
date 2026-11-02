@@ -463,6 +463,12 @@ func (a *App) onPRPlace(msg prPlaceMsg) tea.Cmd {
 
 	ask.base = base
 
+	if a.drawer.fetching == nil {
+		a.drawer.fetching = map[int]int{}
+	}
+
+	a.drawer.fetching[number]++
+
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(appCtx, prFetchTimeout)
 		defer cancel()
@@ -492,6 +498,12 @@ func (a *App) onPRPlace(msg prPlaceMsg) tea.Cmd {
 // onPRFetched puts the drawer in PR mode on the fetched pull request, or says
 // why it cannot.
 func (a *App) onPRFetched(msg prFetchedMsg) tea.Cmd {
+	if n := a.drawer.fetching[msg.number]; n > 1 {
+		a.drawer.fetching[msg.number] = n - 1
+	} else {
+		delete(a.drawer.fetching, msg.number)
+	}
+
 	if !a.prLive(msg.prAsk) {
 		return nil
 	}
