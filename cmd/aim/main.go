@@ -113,6 +113,12 @@ func run(ctx context.Context, env core.Env, configPath, recordDir string, fresh 
 
 	indexCache := indexCacheDir(logger)
 
+	if n, err := git.SweepIndexCache(indexCache, time.Now()); err != nil {
+		logger.Warn("sweep index cache", "err", err)
+	} else if n > 0 {
+		logger.Info("swept index cache", "removed", n)
+	}
+
 	watches := git.NewWatchSet(context.Background(), git.WatchOptions{})
 	defer func() {
 		if cerr := watches.Close(); cerr != nil {

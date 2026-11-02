@@ -132,7 +132,9 @@ on it, stage what `ls-files` lists as changed (untracked files over 50 MiB left
 out) and `write-tree`; `commit-tree --no-gpg-sign` as `AIM <aim@localhost>`, so
 no user identity or signing setup is needed; then one `update-ref --stdin`
 transaction of `create` lines. Refreshed index copies are cached under
-`<user cache dir>/aim/index`.
+`<user cache dir>/aim/index`. Each start removes a copy whose index has not
+changed for 14 days and a temporary file over an hour old
+(`git.SweepIndexCache`).
 
 **Refs.** `refs/aim/turns/<session>/<key>/<n>/start` and `.../end`, `<key>`
 being the first 16 hex digits of the SHA-256 of the worktree root. They live
@@ -298,7 +300,7 @@ the followed place back, and one after a session change records nothing.
 | `<state dir>/state.lock` | the `flock` that makes one instance the saver | held, not written |
 | `<state dir>/reviews/*.json` | reviewed-hunk marks, per repository | atomic, not fsynced |
 | `<state dir>/run/` | socket, settings, temporary indexes | per run; swept |
-| `<user cache dir>/aim/` | index copies, fetched images | as used |
+| `<user cache dir>/aim/` | index copies, fetched images | as used; swept at start: index copies unchanged 14 days, images untouched 30 |
 
 - **Only what cannot come back is saved.** Agent states, actions, reported
   directories, edits, models, pull request data and a drawer's pin come back
