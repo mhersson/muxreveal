@@ -10,7 +10,8 @@ import (
 	"github.com/mhersson/aim/internal/git"
 )
 
-// refSweepTimeout bounds the listing of refs/aim and each of the two deletes.
+// refSweepTimeout bounds the listing of refs/aim, and the two deletes together;
+// each delete is also bounded by the ref-write budget.
 const refSweepTimeout = 10 * time.Second
 
 // refsListedMsg is the answer of listing a repository's refs/aim.

@@ -135,8 +135,9 @@ on it, stage what `ls-files` lists as changed (untracked files over 50 MiB left
 out) and `write-tree`; `commit-tree --no-gpg-sign` as `AIM <aim@localhost>`, so
 no user identity or signing setup is needed; then one `update-ref --stdin`
 transaction of `create` lines. Refreshed index copies are cached under
-`<user cache dir>/aim/index`. Each start removes a copy whose index has not
-changed for 14 days and a temporary file over an hour old
+`<user cache dir>/aim/index`. Each start removes a copy not refreshed for 14
+days (its mtime is that of the temporary index it was stored from, which staging
+rewrites) and a temporary file over an hour old
 (`git.SweepIndexCache`).
 
 **Refs.** `refs/aim/turns/<session>/<key>/<n>/start` and `.../end`, `<key>`
@@ -198,7 +199,11 @@ A pull request's head and base share a chunk. A ref that moved fails only its ow
 chunk, so it cannot hold back the turn refs or the other chunks. There is no lock
 shared with a fetch: one that starts after the filter and writes an unchanged
 head before the delete runs loses its refs, which costs one drawer load error
-that `r` fixes.
+that `r` fixes. The converse holds for a second instance: the lock holder cannot
+see its panes or drawers, so it deletes the refs of a pull request that
+instance's drawer shows (the drawer keeps its loaded diff, `r` fetches again,
+and the automatic refresh skips pull request drawers) and the turn refs of its
+sessions idle over 14 days.
 
 **Invariants.** A snapshot writes only its temporary files and create-only refs
 under `refs/aim/`, and never holds an agent past the hold. A session id that is
@@ -325,7 +330,7 @@ the followed place back, and one after a session change records nothing.
 | `<state dir>/state.lock` | the `flock` that makes one instance the saver | held, not written |
 | `<state dir>/reviews/*.json` | reviewed-hunk marks, per repository | atomic, not fsynced |
 | `<state dir>/run/` | socket, settings, temporary indexes | per run; swept |
-| `<user cache dir>/aim/` | index copies, fetched images | as used; swept at start: index copies unchanged 14 days, images untouched 30 |
+| `<user cache dir>/aim/` | index copies, fetched images | as used; swept at start: index copies not refreshed for 14 days, images untouched 30 |
 
 - **Only what cannot come back is saved.** Agent states, actions, reported
   directories, edits, models, pull request data and a drawer's pin come back
