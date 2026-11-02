@@ -350,6 +350,19 @@ func TestSweepIndexCache(t *testing.T) {
 		}
 	}
 
+	// A symlink named *.idx is not a regular file, whatever its target's age.
+	if err := os.WriteFile(filepath.Join(dir, "target.dat"), []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.Chtimes(filepath.Join(dir, "target.dat"), now.Add(-30*day), now.Add(-30*day)); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.Symlink("target.dat", filepath.Join(dir, "link.idx")); err != nil {
+		t.Fatal(err)
+	}
+
 	n, err := SweepIndexCache(root, now)
 	if err != nil || n != 2 {
 		t.Fatalf("SweepIndexCache = %d, %v; want 2, nil", n, err)
@@ -364,6 +377,10 @@ func TestSweepIndexCache(t *testing.T) {
 
 	if _, err := os.Stat(filepath.Join(dir, "old.idx")); err != nil {
 		t.Errorf("directory old.idx: %v", err)
+	}
+
+	if _, err := os.Lstat(filepath.Join(dir, "link.idx")); err != nil {
+		t.Errorf("symlink link.idx: %v", err)
 	}
 
 	if n, err := SweepIndexCache("", now); n != 0 || err != nil {

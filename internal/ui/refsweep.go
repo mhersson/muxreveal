@@ -93,17 +93,17 @@ func (a *App) onRefsListed(msg refsListedMsg) tea.Cmd {
 		ctx, cancel := context.WithTimeout(appCtx, refSweepTimeout)
 		defer cancel()
 
-		turns, err := git.DeleteRefs(ctx, repo, sweep.Turns)
+		turnCount, err := git.DeleteRefs(ctx, repo, sweep.Turns)
 		if err != nil {
 			log.Warn("sweep turn refs", "repo", repo.CommonDir, "err", err)
 		}
 
-		prs, err := git.DeleteRefs(ctx, repo, sweep.PRs)
+		prCount, err := git.DeleteRefs(ctx, repo, sweep.PRs)
 		if err != nil {
 			log.Warn("sweep pull request refs", "repo", repo.CommonDir, "err", err)
 		}
 
-		log.Info("swept refs", "repo", repo.CommonDir, "turns", turns, "prs", prs)
+		log.Info("swept refs", "repo", repo.CommonDir, "turns", turnCount, "prs", prCount)
 
 		return nil
 	}

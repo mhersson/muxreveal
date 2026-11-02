@@ -10,14 +10,15 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 )
 
 // staleAge is how long a session's newest turn must be past for its refs to go.
 const staleAge = 14 * 24 * time.Hour
 
-// ErrNotAimRef is returned by DeleteRefs for a name outside refs/aim/ or a ref
-// listed without its value.
-var ErrNotAimRef = errors.New("git: ref is not under refs/aim/ or has no old value")
+// ErrNotAimRef is returned by DeleteRefs for a name outside refs/aim/, a ref
+// listed without its value, or a name or value with whitespace.
+var ErrNotAimRef = errors.New("git: ref is not under refs/aim/, has no old value or holds whitespace")
 
 var prRefRE = regexp.MustCompile(`^refs/aim/pr/([1-9][0-9]*)/(head|base)$`)
 
@@ -89,6 +90,7 @@ func ListAimRefs(ctx context.Context, r Repo) (AimRefs, error) {
 func (l AimRefs) Stale(now time.Time, held func(session string) bool, shown func(number int) bool) Sweep {
 	newest := make(map[string]time.Time)
 
+	// The earlier layout's <n> is a turn counter, not milliseconds, so such a session reads as old.
 	for _, t := range l.turns {
 		at := time.UnixMilli(int64(t.n))
 		if at.After(newest[t.session]) {
@@ -117,9 +119,15 @@ func (l AimRefs) Stale(now time.Time, held func(session string) bool, shown func
 	return s
 }
 
+// hasSpace reports whitespace or NUL, which would split a line of the
+// update-ref script.
+func hasSpace(s string) bool {
+	return strings.ContainsFunc(s, func(r rune) bool { return unicode.IsSpace(r) || r == 0 })
+}
+
 // DeleteRefs removes refs in one transaction, each only while it still holds
 // the listed value. It refuses, and deletes nothing, when a name is outside
-// refs/aim/ or a value is empty.
+// refs/aim/, a value is empty, or either holds whitespace or NUL.
 func DeleteRefs(ctx context.Context, r Repo, refs []Ref) (int, error) {
 	if len(refs) == 0 {
 		return 0, nil
@@ -128,7 +136,7 @@ func DeleteRefs(ctx context.Context, r Repo, refs []Ref) (int, error) {
 	var stdin bytes.Buffer
 
 	for _, ref := range refs {
-		if !strings.HasPrefix(ref.Name, refPrefix) || ref.OID == "" {
+		if !strings.HasPrefix(ref.Name, refPrefix) || ref.OID == "" || hasSpace(ref.Name) || hasSpace(ref.OID) {
 			return 0, fmt.Errorf("delete %q: %w", ref.Name, ErrNotAimRef)
 		}
 

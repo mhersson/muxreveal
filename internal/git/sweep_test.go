@@ -147,19 +147,30 @@ func TestDeleteRefsRefusesRefsOutsideAim(t *testing.T) {
 	head := gitOut(t, dir, "rev-parse", "HEAD")
 	before := names(t, dir, "refs/")
 
-	cases := map[string][]Ref{
-		"outside": {{Name: "refs/heads/main", OID: head}, {Name: "refs/aim/pr/8/head", OID: head}},
-		"no oid":  {{Name: "refs/aim/pr/8/head"}},
+	cases := []struct {
+		name string
+		refs []Ref
+	}{
+		{"outside", []Ref{{Name: "refs/heads/main", OID: head}, {Name: "refs/aim/pr/8/head", OID: head}}},
+		{"no oid", []Ref{{Name: "refs/aim/pr/8/head"}}},
+		{"newline in name", []Ref{
+			{Name: "refs/aim/pr/8/head", OID: head},
+			{Name: "refs/aim/x\ndelete refs/heads/main " + head, OID: head},
+		}},
+		{"space in name", []Ref{{Name: "refs/aim/x y", OID: head}}},
+		{"nul in name", []Ref{{Name: "refs/aim/x\x00y", OID: head}}},
+		{"whitespace in oid", []Ref{{Name: "refs/aim/pr/8/head", OID: head + "\ndelete refs/heads/main " + head}}},
+		{"tab in oid", []Ref{{Name: "refs/aim/pr/8/head", OID: head + "\t"}}},
 	}
 
-	for name, refs := range cases {
-		n, err := DeleteRefs(context.Background(), r, refs)
+	for _, tc := range cases {
+		n, err := DeleteRefs(context.Background(), r, tc.refs)
 		if n != 0 || !errors.Is(err, ErrNotAimRef) {
-			t.Errorf("%s: DeleteRefs = %d, %v; want 0, ErrNotAimRef", name, n, err)
+			t.Errorf("%s: DeleteRefs = %d, %v; want 0, ErrNotAimRef", tc.name, n, err)
 		}
 
 		if got := names(t, dir, "refs/"); !slices.Equal(got, before) {
-			t.Errorf("%s: refs = %q, want %q", name, got, before)
+			t.Errorf("%s: refs = %q, want %q", tc.name, got, before)
 		}
 	}
 

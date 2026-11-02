@@ -27,14 +27,14 @@ const mergedToast = "merged #7 (merge)"
 // in the main checkout; neither keeps the worktree.
 type cleanupRig struct {
 	*prDrawer
-	f       *fakeActions
-	main    string
-	wt      string
-	agentID core.PaneID       // the drawer's agent
-	other   core.PaneID       // the shell in the main checkout
-	ids     []core.PaneID     // every pane the rig opened, in tab order
-	keepers []core.PaneID     // the panes started in the worktree, in tab order
-	keys16  map[string]string // seedTurns: the turn key of each root
+	f        *fakeActions
+	main     string
+	wt       string
+	agentID  core.PaneID       // the drawer's agent
+	other    core.PaneID       // the shell in the main checkout
+	ids      []core.PaneID     // every pane the rig opened, in tab order
+	keepers  []core.PaneID     // the panes started in the worktree, in tab order
+	turnKeys map[string]string // seedTurns: the turn key of each root
 }
 
 // newCleanupRig builds the rig; before opens more panes ahead of the drawer.
@@ -750,11 +750,11 @@ const cleanupSession = "11111111-2222-4333-8444-555555555555"
 func (r *cleanupRig) seedTurns(t *testing.T) {
 	t.Helper()
 
-	r.keys16 = map[string]string{}
+	r.turnKeys = map[string]string{}
 
 	for _, dir := range []string{r.wt, r.main} {
 		sum := sha256.Sum256([]byte(rootOf(t, dir)))
-		r.keys16[dir] = hex.EncodeToString(sum[:])[:16]
+		r.turnKeys[dir] = hex.EncodeToString(sum[:])[:16]
 	}
 
 	for _, dir := range []string{r.wt, r.main} {
@@ -775,7 +775,7 @@ func (r *cleanupRig) prRefs(t *testing.T) int {
 func (r *cleanupRig) turnRefs(t *testing.T, root string) int {
 	t.Helper()
 
-	key := r.keys16[root]
+	key := r.turnKeys[root]
 	n := 0
 
 	for ref := range strings.FieldsSeq(gitRead(t, "git", r.main, "for-each-ref", "--format=%(refname)", "refs/aim/turns/"+cleanupSession+"/")) {
@@ -806,20 +806,27 @@ func TestCleanupPrunesRefs(t *testing.T) {
 		key                 tea.KeyPressMsg
 		toast               string
 		prGone, wtTurnsGone bool
+		early               func(*testing.T, *cleanupRig) // runs before the box opens
 	}{
-		{"both", "", nil, keyEnter, "removed .worktrees/feat-x; deleted feat/x", true, true},
-		{"branch off", "b", nil, keyEnter, "removed .worktrees/feat-x", true, true},
-		{"worktree off", "w", nil, keyEnter, "nothing to clean up", true, false},
-		{"refused: a shell opened in the worktree", "", openShellThere, keyEnter, kept("1 shell is in it"), true, false},
-		{"removal failed: a change after the box", "", dirtyWorktree, keyEnter, "kept .worktrees/feat-x: it has uncommitted changes", true, false},
-		{"esc", "", nil, keyEsc, "", false, false},
+		{"both", "", nil, keyEnter, "removed .worktrees/feat-x; deleted feat/x", true, true, nil},
+		{"branch off", "b", nil, keyEnter, "removed .worktrees/feat-x", true, true, nil},
+		{"worktree off", "w", nil, keyEnter, "nothing to clean up", true, false, nil},
+		{"refused: a shell opened in the worktree", "", openShellThere, keyEnter, kept("1 shell is in it"), true, false, nil},
+		{"removal failed: a change after the box", "", dirtyWorktree, keyEnter, "kept .worktrees/feat-x: it has uncommitted changes", true, false, nil},
+		{"esc", "", nil, keyEsc, "", false, false, nil},
+		{"in-use box: enter says nothing to clean up", "", nil, keyEnter, noticeNothingToClean, true, false, openShellThere},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			r := newCleanupRig(t)
+			var early []func(*testing.T, *cleanupRig)
+			if tc.early != nil {
+				early = append(early, tc.early)
+			}
+
+			r := newCleanupRig(t, early...)
 			r.seedTurns(t)
 			r.mergeToBox(t)
 

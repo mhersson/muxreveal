@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -449,7 +450,7 @@ func (a *App) prunePRRefs(t cleanupTarget) tea.Cmd {
 		}
 
 		if err != nil {
-			log.Warn("prune refs after clean up", "pr", t.number, "err", err)
+			warnPrune(log, t.number, err)
 		}
 
 		return nil
@@ -580,13 +581,17 @@ func withContext(ctx context.Context, err error) error {
 	return err
 }
 
+func warnPrune(log *slog.Logger, pr int, err error) {
+	log.Warn("prune refs after clean up", "pr", pr, "err", err)
+}
+
 // onCleaned says what a cleanup did. A cleanup cut short by the app closing says nothing.
 func (a *App) onCleaned(msg cleanedMsg) {
 	t := msg.target
 	path, branch := t.path(), printable(t.found.branch)
 
 	if msg.pruneErr != nil {
-		a.log.Warn("prune refs after clean up", "pr", t.number, "err", msg.pruneErr)
+		warnPrune(a.log, t.number, msg.pruneErr)
 	}
 
 	switch {

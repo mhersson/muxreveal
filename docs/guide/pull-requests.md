@@ -110,6 +110,7 @@ When the worktree can go, a confirm titled `Clean up after #<n>` offers two boxe
 - A pane that keeps the worktree, a shell there or an agent started there, stops the removal: the confirm names it, and only `esc` is offered. Cleanup closes no pane.
 - The branch is offered only when it holds nothing the merged head does not: its tip is the head or behind it. It goes only with the worktree. Nothing is forced.
 - The result is a toast such as `removed <path>; deleted <branch>`, or `kept <path>: <reason>`.
-- `enter` also deletes the pull request's refs under `refs/aim/pr/<n>/`, and the turn snapshots of a worktree it removed; `esc` keeps them.
+
+`enter` also deletes the pull request's refs under `refs/aim/pr/<n>/`, and the turn snapshots of a worktree it removed; `esc` keeps them.
 
 The worktree stays, with a reason instead of the confirm, when it is not one of AIM's own worktrees (`<path> is outside AIM's worktrees, so it stays`, see [Agents side by side](agents.md#a-new-worktree)), is locked, has uncommitted changes, or an agent is still working in it. After a merge, the reason is added to the merge toast while it shows. From the command, the notices include `#<n> is not merged`, `#<n>: its merged head is unknown`, `#<n>'s branch is in another repository` and `<branch> is the default branch, so it stays` and `clean up: HEAD is detached`; a pull request that cannot be found gives the drawer's notices, such as `no pull request for <branch>`.

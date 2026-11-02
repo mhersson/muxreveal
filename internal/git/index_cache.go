@@ -105,8 +105,9 @@ func (c *indexCache) store(src string) {
 }
 
 // SweepIndexCache removes the regular files of root/index that are over their
-// age before now: .idx copies over staleAge, .tmp-* files over staleTempAge.
-// It returns how many it removed; a missing dir is not an error.
+// age before now: .idx copies over staleAge, .tmp-* files over staleTempAge. A
+// copy carries its index's mtime, so its age is how long that index has been
+// unchanged. It returns how many it removed; a missing dir is not an error.
 func SweepIndexCache(root string, now time.Time) (int, error) {
 	if root == "" {
 		return 0, nil
@@ -147,15 +148,12 @@ func SweepIndexCache(root string, now time.Time) (int, error) {
 			continue
 		}
 
-		if err := os.Remove(filepath.Join(dir, name)); err != nil {
-			if !errors.Is(err, fs.ErrNotExist) {
-				errs = append(errs, err)
-			}
-
-			continue
+		switch err := os.Remove(filepath.Join(dir, name)); {
+		case err == nil:
+			removed++
+		case !errors.Is(err, fs.ErrNotExist):
+			errs = append(errs, err)
 		}
-
-		removed++
 	}
 
 	if err := errors.Join(errs...); err != nil {

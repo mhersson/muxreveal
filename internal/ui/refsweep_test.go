@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -216,12 +217,12 @@ func TestRefSweepTurnsGoWhenAPRRefMoved(t *testing.T) {
 func TestRefSweepOncePerRepository(t *testing.T) {
 	t.Parallel()
 
-	main := newRepoDir(t)
-	write(t, filepath.Join(main, "a.txt"), "a\n")
-	commitEverything(t, main, "one")
+	mainDir := newRepoDir(t)
+	write(t, filepath.Join(mainDir, "a.txt"), "a\n")
+	commitEverything(t, mainDir, "one")
 
 	linked := filepath.Join(t.TempDir(), "wt")
-	gitIn(t, "git", main, "worktree", "add", "-q", "-b", "side", linked)
+	gitIn(t, "git", mainDir, "worktree", "add", "-q", "-b", "side", linked)
 
 	linked, err := filepath.EvalSymlinks(linked)
 	if err != nil {
@@ -244,10 +245,10 @@ func TestRefSweepOncePerRepository(t *testing.T) {
 	t.Run("refSweep", func(t *testing.T) {
 		t.Parallel()
 
-		r := newKeysRig(t, main)
+		r := newKeysRig(t, mainDir)
 		r.sweepRefs = true
 
-		if r.refSweep(open(main)) == nil {
+		if r.refSweep(open(mainDir)) == nil {
 			t.Error("the first resolution of a repository started no sweep")
 		}
 
@@ -259,8 +260,8 @@ func TestRefSweepOncePerRepository(t *testing.T) {
 			t.Error("another repository started no sweep")
 		}
 
-		off := newKeysRig(t, main)
-		if off.refSweep(open(main)) != nil {
+		off := newKeysRig(t, mainDir)
+		if off.refSweep(open(mainDir)) != nil {
 			t.Error("a sweep started with SweepRefs off")
 		}
 	})
@@ -268,14 +269,14 @@ func TestRefSweepOncePerRepository(t *testing.T) {
 	t.Run("onPaneRepo", func(t *testing.T) {
 		t.Parallel()
 
-		r := newKeysRig(t, main)
-		first := r.agent(t, main, "")
+		r := newKeysRig(t, mainDir)
+		first := r.agent(t, mainDir, "")
 		second := r.agent(t, linked, "")
-		r.watches.panes[first] = &paneWatch{cwd: main}
+		r.watches.panes[first] = &paneWatch{cwd: mainDir}
 		r.watches.panes[second] = &paneWatch{cwd: linked}
 		r.sweepRefs = true
 
-		cmd := r.onPaneRepo(paneRepoMsg{id: first, cwd: main, repo: open(main)})
+		cmd := r.onPaneRepo(paneRepoMsg{id: first, cwd: mainDir, repo: open(mainDir)})
 		if n := countOf[refsListedMsg](flatten(cmd)); n != 1 {
 			t.Errorf("first agent started %d listings, want 1", n)
 		}
@@ -285,4 +286,61 @@ func TestRefSweepOncePerRepository(t *testing.T) {
 			t.Errorf("second agent in a linked worktree started %d listings, want 0", n)
 		}
 	})
+}
+
+func TestRefSweepAnswersThatDeleteNothing(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		msg  func(*testing.T, *sweepRepo) refsListedMsg
+		kept string
+	}{
+		{
+			name: "a listing error",
+			msg: func(t *testing.T, s *sweepRepo) refsListedMsg {
+				t.Helper()
+				s.seed(t)
+
+				msg := s.list(t)
+				msg.err = errors.New("listing failed")
+
+				return msg
+			},
+			kept: "refs/aim/pr/8/",
+		},
+		{
+			name: "nothing stale",
+			msg: func(t *testing.T, s *sweepRepo) refsListedMsg {
+				t.Helper()
+				s.ref(t, turnRefName(sessR, sweepKeyA, sweepNow.Add(-24*time.Hour)), s.first)
+
+				return s.list(t)
+			},
+			kept: "refs/aim/turns/" + sessR + "/",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			s := newSweepRig(t)
+			msg := tc.msg(t, s)
+
+			before := gitRead(t, "git", s.dir, "for-each-ref", "--format=%(refname)", "refs/aim/")
+
+			if cmd := s.onRefsListed(msg); cmd != nil {
+				t.Error("onRefsListed returned a Cmd, want nil")
+			}
+
+			if after := gitRead(t, "git", s.dir, "for-each-ref", "--format=%(refname)", "refs/aim/"); after != before {
+				t.Errorf("refs changed:\n%s\nwant\n%s", after, before)
+			}
+
+			if !s.has(t, tc.kept) {
+				t.Errorf("%s is gone", tc.kept)
+			}
+		})
+	}
 }
