@@ -187,7 +187,7 @@ func TestSweepLeavesOtherRefs(t *testing.T) {
 
 	for _, ref := range []string{
 		"refs/heads/side", "refs/tags/v1", "refs/keep/x", "refs/aim/other/x", "refs/aim/pr/7/other",
-		"refs/aim/turns/" + sessB + "/zzzz/1/start",
+		"refs/aim/turns/" + sessD + "/zzzz/1/start",
 	} {
 		gitOut(t, dir, "update-ref", ref, head)
 	}
@@ -222,5 +222,100 @@ func TestSweepLeavesOtherRefs(t *testing.T) {
 
 	if got := names(t, dir, "refs/"); !slices.Equal(got, want) {
 		t.Errorf("refs = %q, want %q", got, want)
+	}
+}
+
+// bulkRefs creates n refs refs/aim/bulk/<i>/r, each in its own directory, at
+// HEAD, and returns them in creation order.
+func bulkRefs(t *testing.T, dir string, n int) []Ref {
+	t.Helper()
+
+	head := gitOut(t, dir, "rev-parse", "HEAD")
+	refs := make([]Ref, 0, n)
+
+	var script strings.Builder
+
+	for i := range n {
+		name := "refs/aim/bulk/" + strconv.Itoa(i) + "/r"
+		refs = append(refs, Ref{Name: name, OID: head})
+		script.WriteString("create " + name + " " + head + "\n")
+	}
+
+	gitInput(t, dir, script.String(), "update-ref", "--stdin")
+
+	return refs
+}
+
+func TestDeleteRefsRunsOneUpdateRefPerChunk(t *testing.T) {
+	t.Parallel()
+	dir := seedRepo(t)
+	r := openRepo(t, dir)
+	refs := bulkRefs(t, dir, 2*deleteChunk+10)
+	ctx, logPath := wrapGit(t, "")
+
+	n, err := DeleteRefs(ctx, r, refs)
+	if err != nil || n != len(refs) {
+		t.Fatalf("DeleteRefs = %d, %v; want %d", n, err, len(refs))
+	}
+
+	if got := strings.Count(wrappedCalls(t, logPath), "update-ref --stdin"); got != 3 {
+		t.Errorf("update-ref calls = %d, want 3", got)
+	}
+
+	if left := names(t, dir, "refs/aim/"); len(left) != 0 {
+		t.Errorf("refs left: %d", len(left))
+	}
+}
+
+func TestDeleteRefsKeepsAParentDirectoryInOneChunk(t *testing.T) {
+	t.Parallel()
+	dir := seedRepo(t)
+	r := openRepo(t, dir)
+	head := gitOut(t, dir, "rev-parse", "HEAD")
+
+	// pr/8/base is the last ref of the first chunk and pr/8/head the first of the second.
+	refs := bulkRefs(t, dir, deleteChunk-1)
+	refs = append(refs, Ref{Name: "refs/aim/pr/8/base", OID: head}, Ref{Name: "refs/aim/pr/8/head", OID: head})
+	gitOut(t, dir, "update-ref", "refs/aim/pr/8/base", head)
+	gitOut(t, dir, "update-ref", "refs/aim/pr/8/head", head)
+
+	writeFile(t, dir, "a.txt", "moved\n")
+	commitAll(t, dir, "next")
+	gitOut(t, dir, "update-ref", "refs/aim/pr/8/head", gitOut(t, dir, "rev-parse", "HEAD"))
+
+	if _, err := DeleteRefs(context.Background(), r, refs); err == nil {
+		t.Fatal("DeleteRefs: err = nil, want the moved head to fail its chunk")
+	}
+
+	want := []string{"refs/aim/pr/8/base", "refs/aim/pr/8/head"}
+	if got := names(t, dir, "refs/aim/pr/"); !slices.Equal(got, want) {
+		t.Errorf("pr refs = %q, want both kept together", got)
+	}
+}
+
+func TestDeleteRefsFailsOnlyTheChunkWithAMovedRef(t *testing.T) {
+	t.Parallel()
+	dir := seedRepo(t)
+	r := openRepo(t, dir)
+	refs := bulkRefs(t, dir, 3*deleteChunk)
+
+	writeFile(t, dir, "a.txt", "moved\n")
+	commitAll(t, dir, "next")
+	gitOut(t, dir, "update-ref", refs[deleteChunk+3].Name, gitOut(t, dir, "rev-parse", "HEAD"))
+
+	n, err := DeleteRefs(context.Background(), r, refs)
+	if err == nil || n != 2*deleteChunk {
+		t.Fatalf("DeleteRefs = %d, %v; want %d and an error", n, err, 2*deleteChunk)
+	}
+
+	var want []string
+	for _, ref := range refs[deleteChunk : 2*deleteChunk] {
+		want = append(want, ref.Name)
+	}
+
+	slices.Sort(want)
+
+	if got := names(t, dir, "refs/aim/"); !slices.Equal(got, want) {
+		t.Errorf("refs left = %d, want the %d of the failed chunk", len(got), len(want))
 	}
 }

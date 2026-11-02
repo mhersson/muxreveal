@@ -649,7 +649,7 @@ func PruneSession(ctx context.Context, r Repo, session string) (int, error) {
 	return deleteRefs(ctx, r, recs, func(turnRecord) bool { return true })
 }
 
-// deleteRefs removes the matching refs in one transaction, each only if it
+// deleteRefs removes the matching refs through DeleteRefs, each only if it
 // still points at the commit that was read.
 func deleteRefs(ctx context.Context, r Repo, recs []turnRecord, match func(turnRecord) bool) (int, error) {
 	var refs []Ref
@@ -662,7 +662,7 @@ func deleteRefs(ctx context.Context, r Repo, recs []turnRecord, match func(turnR
 
 	n, err := DeleteRefs(ctx, r, refs)
 	if err != nil {
-		return 0, fmt.Errorf("prune turns: %w", err)
+		return n, fmt.Errorf("prune turns: %w", err)
 	}
 
 	return n, nil

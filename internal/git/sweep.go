@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"path"
 	"regexp"
 	"slices"
 	"strconv"
@@ -15,6 +16,10 @@ import (
 
 // staleAge is how long a session's newest turn must be past for its refs to go.
 const staleAge = 14 * 24 * time.Hour
+
+// deleteChunk caps the refs of one update-ref: a killed call leaves lock files
+// (packed-refs.lock among them), so each call stays well inside refWriteBudget.
+const deleteChunk = 500
 
 // ErrNotAimRef is returned by DeleteRefs for a name outside refs/aim/, a ref
 // listed without its value, or a name or value with whitespace.
@@ -125,33 +130,59 @@ func hasSpace(s string) bool {
 	return strings.ContainsFunc(s, func(r rune) bool { return unicode.IsSpace(r) || r == 0 })
 }
 
-// DeleteRefs removes refs in one transaction, each only while it still holds
-// the listed value. It refuses, and deletes nothing, when a name is outside
-// refs/aim/, a value is empty, or either holds whitespace or NUL.
+// DeleteRefs removes refs in chunks of about deleteChunk, one update-ref
+// transaction each and in input order, every ref only while it still holds the
+// listed value. Refs of one parent directory (a PR's head and base) share a
+// chunk. It refuses, and deletes nothing, when a name is outside refs/aim/, a
+// value is empty, or either holds whitespace or NUL. A failed chunk does not
+// stop the next; it returns the refs deleted and the chunks' errors joined.
 func DeleteRefs(ctx context.Context, r Repo, refs []Ref) (int, error) {
-	if len(refs) == 0 {
-		return 0, nil
-	}
-
-	var stdin bytes.Buffer
-
 	for _, ref := range refs {
 		if !strings.HasPrefix(ref.Name, refPrefix) || ref.OID == "" || hasSpace(ref.Name) || hasSpace(ref.OID) {
 			return 0, fmt.Errorf("delete %q: %w", ref.Name, ErrNotAimRef)
 		}
+	}
 
+	var (
+		deleted int
+		errs    []error
+	)
+
+	for len(refs) > 0 {
+		end := min(deleteChunk, len(refs))
+		for end < len(refs) && path.Dir(refs[end].Name) == path.Dir(refs[end-1].Name) {
+			end++
+		}
+
+		if err := deleteChunkOf(ctx, r, refs[:end]); err != nil {
+			errs = append(errs, err)
+		} else {
+			deleted += end
+		}
+
+		refs = refs[end:]
+	}
+
+	return deleted, errors.Join(errs...)
+}
+
+// deleteChunkOf runs one update-ref over validated refs, under its own write budget.
+func deleteChunkOf(ctx context.Context, r Repo, refs []Ref) error {
+	var stdin bytes.Buffer
+
+	for _, ref := range refs {
 		fmt.Fprintf(&stdin, "delete %s %s\n", ref.Name, ref.OID)
 	}
 
 	wctx, cancel, err := refWriteContext(ctx)
 	if err != nil {
-		return 0, err
+		return err
 	}
 	defer cancel()
 
 	if _, err := run(wctx, call{dir: r.CommonDir, args: []string{"update-ref", "--stdin"}, env: isolatedEnv(), stdin: &stdin}); err != nil {
-		return 0, fmt.Errorf("delete aim refs: %w", err)
+		return fmt.Errorf("delete aim refs: %w", err)
 	}
 
-	return len(refs), nil
+	return nil
 }

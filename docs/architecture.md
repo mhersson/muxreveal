@@ -190,11 +190,15 @@ delete off the loop removes what is left. It leaves out the sessions any pane
 holds and the pull requests any drawer shows or is fetching
 (`drawerState.fetching`). It deletes a session's turn refs, in both layouts, when
 its newest `<n>` in the repository is over 14 days old (`staleAge`), and every
-other pull request's refs. Each delete carries the listed value and runs as one
-transaction for the turn refs and one for the pull request refs, so a ref that
-moved holds back only its own half. There is no lock shared with a fetch: one
-that starts after the filter and writes an unchanged head before the delete runs
-loses its refs, which costs one drawer load error that `r` fixes.
+other pull request's refs. Each delete carries the listed value. The turn refs and the pull
+request refs are deleted separately, and each in chunks of 500 (`deleteChunk`),
+one `update-ref` transaction per chunk, since a call killed by the ref-write
+budget leaves lock files in the user's repository, `packed-refs.lock` among them.
+A pull request's head and base share a chunk. A ref that moved fails only its own
+chunk, so it cannot hold back the turn refs or the other chunks. There is no lock
+shared with a fetch: one that starts after the filter and writes an unchanged
+head before the delete runs loses its refs, which costs one drawer load error
+that `r` fixes.
 
 **Invariants.** A snapshot writes only its temporary files and create-only refs
 under `refs/aim/`, and never holds an agent past the hold. A session id that is
