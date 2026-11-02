@@ -8,6 +8,8 @@ These are the defaults. `[keys]` in the config changes them (see [Remapping keys
 
 The leader key is `ctrl+space` (`leader_key`). Pressing it and waiting 300 ms (`which_key_delay`) opens the which-key popup. A key written as two keys, such as `g l`, is two keys pressed in turn after the leader.
 
+On macOS, once a second input source is on, the system takes `ctrl+space` for "Select the previous input source", so AIM never sees it. Turn that shortcut off in System Settings, Keyboard, Keyboard Shortcuts, Input Sources, or set another leader, such as `leader_key = "ctrl+a"` under `[keys]` (see [The leader key](config.md#the-leader-key)).
+
 ## After the leader
 
 Keys pressed after the leader key. Remap them under `[keys.leader]`.
