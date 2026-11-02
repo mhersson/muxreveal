@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"time"
 
+	tea "charm.land/bubbletea/v2"
+
 	"github.com/mhersson/aim/internal/core"
 	"github.com/mhersson/aim/internal/ui/theme"
 )
@@ -65,4 +67,15 @@ func usageModule(u core.Usage, now time.Time, icons bool, ui theme.UI) (trayModu
 	}
 
 	return surfaceModule(modUsage, ui, append(runs, trayRun{text: " ", fg: ui.Fg})...), true
+}
+
+// usageClick takes a press while the popover shows: inside its box nothing
+// happens, anywhere else it closes the popover and goes no further.
+func (a *App) usageClick(m tea.Mouse) {
+	_, r, ok := a.usagePopover(a.current())
+	if ok && m.X >= r.X && m.X < r.X+r.W && m.Y >= r.Y && m.Y < r.Y+r.H {
+		return
+	}
+
+	a.tray.usageOpen = false
 }

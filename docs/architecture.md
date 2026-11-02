@@ -62,6 +62,12 @@ narrows the body, so it is part of the layout. The review drawer is an overlay
 held in `core.Tab.Review`, outside `Arrange`, so opening it never resizes a PTY
 or makes an agent redraw.
 
+**The tray's click.** Row 0 holds the tabs and the tray. `hitTab` places the
+usage module from the same `planBar` plan the bar draws with (`trayModuleAt`),
+so a click lands where the module is drawn. While the usage popover shows with
+no modal above it, it takes every press first: inside its box a press does
+nothing, and anywhere else it closes the popover and goes no further.
+
 ## Claude Code: launch, hooks and the socket
 
 **Launch.** An agent pane runs

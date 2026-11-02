@@ -489,3 +489,211 @@ func TestUsagePopoverClosesWhenSpent(t *testing.T) {
 		t.Error("new data reopened the popover")
 	}
 }
+
+// usageClickRig is a two-pane tab and a second tab, with the usage module on
+// the bar. text goes to the first pane.
+func usageClickRig(t *testing.T, width int, text string) *App {
+	t.Helper()
+
+	a, _ := framedApp(t, width, 30, shellSpec("/w/a", text), shellSpec("/w/b", ""))
+	a.clock = &fakeClock{t: t0}
+
+	openIn(t, a, core.NewTab{Kind: core.KindShell, Cwd: "/w/c"}, core.SelectTab{Index: 0})
+	fixtureTray(a)
+	seedUsage(t, a, usageFive, usageWeek)
+
+	return a
+}
+
+func usageModuleCells(t *testing.T, a *App) (x, w int) {
+	t.Helper()
+
+	p := planBar(a.tabInfos(), a.store.State().Active, a.trayModules(), a.width, a.icons)
+
+	x, w, ok := trayModuleAt(p, a.width, a.icons, modUsage)
+	if !ok {
+		t.Fatal("the bar does not draw the usage module")
+	}
+
+	return x, w
+}
+
+func TestUsageModuleHit(t *testing.T) {
+	t.Parallel()
+
+	a := usageClickRig(t, 120, "")
+	ux, uw := usageModuleCells(t, a)
+
+	for x := ux; x < ux+uw; x++ {
+		if got := a.hit(x, 0).area; got != hitUsage {
+			t.Errorf("hit(%d, 0) = %v, want hitUsage", x, got)
+		}
+	}
+
+	for _, x := range []int{ux - 1, ux + uw} {
+		if got := a.hit(x, 0).area; got == hitUsage {
+			t.Errorf("hit(%d, 0) is hitUsage outside the module", x)
+		}
+	}
+
+	t.Run("off the bar", func(t *testing.T) {
+		sized(t, a, 20, 30)
+
+		for x := range 20 {
+			if got := a.hit(x, 0).area; got == hitUsage {
+				t.Errorf("width 20: hit(%d, 0) is hitUsage", x)
+			}
+		}
+	})
+
+	t.Run("no usage", func(t *testing.T) {
+		b, _ := framedApp(t, 120, 30, shellSpec("/w/a", ""))
+		b.clock = &fakeClock{t: t0}
+		fixtureTray(b)
+
+		for x := range 120 {
+			if got := b.hit(x, 0).area; got == hitUsage {
+				t.Errorf("hit(%d, 0) is hitUsage with no usage", x)
+			}
+		}
+	})
+}
+
+func TestUsageClick(t *testing.T) {
+	t.Parallel()
+
+	a := usageClickRig(t, 120, "")
+	ux, _ := usageModuleCells(t, a)
+	focus := focusOf(a)
+	tab := a.store.State().Active
+
+	state := func(t *testing.T, step string, open bool) {
+		t.Helper()
+
+		if got := a.usageShows(); got != open {
+			t.Fatalf("%s: shows = %v, want %v", step, got, open)
+		}
+
+		if got := focusOf(a); got != focus {
+			t.Fatalf("%s: focus = %q, want %q", step, got, focus)
+		}
+
+		if got := a.store.State().Active; got != tab {
+			t.Fatalf("%s: active tab = %d, want %d", step, got, tab)
+		}
+	}
+
+	leftClick(a, ux, 0)
+	state(t, "module opens", true)
+
+	_, r := usageBox(t, a)
+	leftClick(a, r.X+r.W/2, r.Y+r.H/2)
+	state(t, "inside the box", true)
+
+	leftClick(a, ux, 0)
+	state(t, "module closes", false)
+
+	other := core.PaneID("p1")
+	if focus == other {
+		other = "p2"
+	}
+
+	c := contentRectOf(a, other)
+
+	leftClick(a, ux, 0)
+	leftClick(a, c.X+1, c.Y+1)
+	state(t, "pane content", false)
+
+	segX := -1
+
+	for x := range a.width {
+		if h := a.hit(x, 0); h.area == hitTab && h.tab != tab {
+			segX = x
+
+			break
+		}
+	}
+
+	if segX < 0 {
+		t.Fatal("no other tab segment on the bar")
+	}
+
+	leftClick(a, ux, 0)
+	leftClick(a, segX, 0)
+	state(t, "other tab", false)
+
+	leftClick(a, ux, 0)
+	a.Update(tea.MouseClickMsg{X: c.X + 1, Y: c.Y + 1, Button: tea.MouseRight})
+	state(t, "right click", false)
+}
+
+func TestUsagePopoverBlocksTheMouse(t *testing.T) {
+	t.Parallel()
+
+	a := usageClickRig(t, 120, manyLines(60))
+	a.focusFollows = true
+
+	ux, _ := usageModuleCells(t, a)
+	leftClick(a, ux, 0)
+
+	if !a.usageShows() {
+		t.Fatal("the popover is not open")
+	}
+
+	focus := focusOf(a)
+
+	other := core.PaneID("p1")
+	if focus == other {
+		other = "p2"
+	}
+
+	x, y := centre(a, other)
+	wheelAt(a, x, y, tea.MouseWheelUp)
+
+	if got := a.panes[other].linesAbove(); got != 0 {
+		t.Errorf("wheel scrolled the pane by %d", got)
+	}
+
+	hover(a, x, y)
+
+	if got := focusOf(a); got != focus {
+		t.Errorf("focus = %q after motion, want %q", got, focus)
+	}
+}
+
+func TestUsageClickUnderAModal(t *testing.T) {
+	t.Parallel()
+
+	t.Run("palette over the popover", func(t *testing.T) {
+		t.Parallel()
+
+		a := usageClickRig(t, 120, "")
+		ux, _ := usageModuleCells(t, a)
+		leftClick(a, ux, 0)
+		chord(a, ':')
+
+		if !a.modalOpen() {
+			t.Fatal("the palette did not open")
+		}
+
+		x, y := centre(a, "p1")
+		leftClick(a, x, y)
+
+		if !a.modalOpen() || !a.tray.usageOpen {
+			t.Errorf("modal = %v, usageOpen = %v, want both still open", a.modalOpen(), a.tray.usageOpen)
+		}
+	})
+
+	t.Run("confirm without the popover", func(t *testing.T) {
+		t.Parallel()
+
+		a := usageClickRig(t, 120, "")
+		ux, _ := usageModuleCells(t, a)
+		a.openConfirm(confirm{tab: a.store.State().Tab().ID, yes: func(*App) tea.Cmd { return nil }})
+		leftClick(a, ux, 0)
+
+		if a.tray.usageOpen {
+			t.Error("a click on the module opened the popover under a confirm")
+		}
+	})
+}
