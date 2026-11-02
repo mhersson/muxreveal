@@ -121,6 +121,14 @@ payloads in `internal/harness/testdata`. Two rules cover what hooks miss:
   keyboard, further ones are held back briefly (`handleKey`,
   `internal/ui/input.go`; [Esc and Claude Code](guide/agents.md#esc-and-claude-code)).
 
+The status line also carries the account's usage. `rate_limits` becomes
+`Event.FiveHour` and `SevenDay` (a window counts only with a percent and a reset
+time, `rateWindow`), and `onStatus` dispatches `core.NoteUsage` only when it
+changes `State.Usage`. Claude Code reruns the status line with a session's
+last-known limits, which can be hours old, so per window a reading with the same
+reset only raises the figure, a later reset replaces it, and an earlier or
+already-past one is ignored.
+
 ## Turn snapshots
 
 At each prompt AIM records the agent's worktree as a commit, so turn mode can
@@ -333,8 +341,8 @@ the followed place back, and one after a session change records nothing.
 | `<user cache dir>/aim/` | index copies, fetched images | as used; swept at start: index copies not refreshed for 14 days, images untouched 30 |
 
 - **Only what cannot come back is saved.** Agent states, actions, reported
-  directories, edits, models, pull request data and a drawer's pin come back
-  from hooks, polls and probes; saving them would restore stale facts.
+  directories, edits, models, Claude usage, pull request data and a drawer's pin
+  come back from hooks, polls and probes; saving them would restore stale facts.
 - **Format.** Version 2, encoded only in `internal/store` (`state.go`,
   `layout.go`); core has no JSON tags. New fields are optional, so the version
   stays 2. A file that does not decode is kept as `state.json.bad`.

@@ -125,6 +125,10 @@ func (a *App) onStatus(m core.Pane, ev harness.Event) {
 		return
 	}
 
+	if note := (core.NoteUsage{FiveHour: usageReading(ev.FiveHour), SevenDay: usageReading(ev.SevenDay), At: a.clock.Now()}); note.Changes(a.store.State().Usage) {
+		_ = a.dispatch(note)
+	}
+
 	act := core.SetAgentStatus{ID: ev.Pane, Session: ev.Session, Model: ev.Model, Context: ev.Context, ContextKnown: ev.ContextKnown}
 	if act.Matches(m) {
 		return
@@ -132,6 +136,15 @@ func (a *App) onStatus(m core.Pane, ev harness.Event) {
 
 	// dispatch logs its own failures.
 	_ = a.dispatch(act)
+}
+
+// usageReading converts a status line's window; nil is no reading.
+func usageReading(w *harness.RateWindow) core.UsageWindow {
+	if w == nil {
+		return core.UsageWindow{}
+	}
+
+	return core.UsageWindow{Used: core.FloorPercent(w.Used), ResetsAt: time.Unix(w.ResetsAt, 0)}
 }
 
 // setAgentState records a state. Entering or staying in working restarts the

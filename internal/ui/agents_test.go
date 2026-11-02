@@ -650,3 +650,96 @@ func TestStatusFollowsTheSession(t *testing.T) {
 		}
 	}
 }
+
+func usageStatus(pane core.PaneID, session core.SessionID, five, week *harness.RateWindow) harness.Event {
+	ev := statusEvent(pane, session, "Opus 4.8", 10, true)
+	ev.FiveHour, ev.SevenDay = five, week
+
+	return ev
+}
+
+func TestStatusNotesUsage(t *testing.T) {
+	t.Parallel()
+	a, _, clk := agentApp(t)
+	hook(a, harness.Event{Pane: "p2", Name: "SessionStart", Session: "s1", Start: true})
+	hook(a, statusEvent("p2", "s1", "Opus 4.8", 10, true))
+
+	saves := 0
+	a.save = func(core.State) { saves++ }
+
+	r1, r2 := t0.Add(2*time.Hour), t0.Add(50*time.Hour)
+	win := func(p float64, r time.Time) *harness.RateWindow {
+		return &harness.RateWindow{Used: p, ResetsAt: r.Unix()}
+	}
+
+	steps := []struct {
+		name    string
+		advance time.Duration
+		ev      harness.Event
+		moves   bool
+	}{
+		{"first limits", 0, usageStatus("p2", "s1", win(23.4, r1), win(41.2, r2)), true},
+		{"repeated", 0, usageStatus("p2", "s1", win(23.4, r1), win(41.2, r2)), false},
+		{"idle rerun, same reset, lower", 0, usageStatus("p2", "s1", win(12, r1), nil), false},
+		{"no rate limits", 0, statusEvent("p2", "s1", "Opus 4.8", 10, true), false},
+		{"same reset, higher", time.Minute, usageStatus("p2", "s1", win(30, r1), nil), true},
+		{"later reset", 0, usageStatus("p2", "s1", win(2, r1.Add(5*time.Hour)), nil), true},
+	}
+
+	for _, s := range steps {
+		clk.Advance(s.advance)
+
+		ver, was := a.storeVer, saves
+
+		hook(a, s.ev)
+
+		if moved := a.storeVer != ver; moved != s.moves {
+			t.Errorf("%s: store version moved = %v, want %v", s.name, moved, s.moves)
+		}
+
+		if saved := saves != was; saved != s.moves {
+			t.Errorf("%s: saved = %v, want %v", s.name, saved, s.moves)
+		}
+
+		switch s.name {
+		case "first limits":
+			want := core.Usage{
+				FiveHour: core.UsageWindow{Used: 23, ResetsAt: r1},
+				SevenDay: core.UsageWindow{Used: 41, ResetsAt: r2},
+				Changed:  clk.Now(),
+			}
+			if got := a.store.State().Usage; !got.FiveHour.ResetsAt.Equal(r1) || got.FiveHour.Used != 23 ||
+				!got.SevenDay.ResetsAt.Equal(r2) || got.SevenDay.Used != 41 || !got.Changed.Equal(want.Changed) {
+				t.Errorf("%s: Usage = %+v, want %+v", s.name, got, want)
+			}
+		case "idle rerun, same reset, lower", "no rate limits":
+			if got := a.store.State().Usage.FiveHour.Used; got != 23 {
+				t.Errorf("%s: 5h = %d, want 23", s.name, got)
+			}
+		case "same reset, higher":
+			if got := a.store.State().Usage; got.FiveHour.Used != 30 || !got.Changed.Equal(clk.Now()) {
+				t.Errorf("%s: Usage = %+v, want 5h 30 changed %v", s.name, got, clk.Now())
+			}
+		}
+	}
+}
+
+func TestStatusUsageNeedsTheSession(t *testing.T) {
+	t.Parallel()
+	a, _, _ := agentApp(t)
+	hook(a, harness.Event{Pane: "p2", Name: "SessionStart", Session: "s1", Start: true})
+
+	win := &harness.RateWindow{Used: 23, ResetsAt: t0.Add(2 * time.Hour).Unix()}
+	ver := a.storeVer
+
+	hook(a, usageStatus("p2", "s0", win, win))
+	hook(a, usageStatus("p1", "s1", win, win))
+
+	if got := a.store.State().Usage; got != (core.Usage{}) {
+		t.Errorf("Usage = %+v, want zero", got)
+	}
+
+	if a.storeVer != ver {
+		t.Error("store version moved")
+	}
+}
