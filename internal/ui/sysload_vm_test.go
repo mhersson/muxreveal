@@ -1,6 +1,9 @@
 package ui
 
-import "testing"
+import (
+	"encoding/binary"
+	"testing"
+)
 
 func TestVMPagesUsed(t *testing.T) {
 	t.Parallel()
@@ -29,6 +32,34 @@ func TestVMPagesUsed(t *testing.T) {
 	for _, tt := range tests {
 		if got := tt.pages.used(tt.total, tt.page); got != tt.want {
 			t.Errorf("%s: used = %d, want %d", tt.name, got, tt.want)
+		}
+	}
+}
+
+func TestVMCount(t *testing.T) {
+	t.Parallel()
+
+	u32 := func(v uint32) []byte { return binary.NativeEndian.AppendUint32(nil, v) }
+	u64 := func(v uint64) []byte { return binary.NativeEndian.AppendUint64(nil, v) }
+
+	tests := []struct {
+		name string
+		raw  []byte
+		want uint64
+		fail bool
+	}{
+		{"4 bytes", u32(74010), 74010, false},
+		{"8 bytes", u64(37197), 37197, false},
+		{"8 bytes above 2^32", u64(1<<32 + 37197), 1<<32 + 37197, false},
+		{"0 bytes", nil, 0, true},
+		{"3 bytes", make([]byte, 3), 0, true},
+		{"16 bytes", make([]byte, 16), 0, true},
+	}
+
+	for _, tt := range tests {
+		got, err := vmCount("vm.page_purgeable_count", tt.raw)
+		if (err != nil) != tt.fail || got != tt.want {
+			t.Errorf("%s: vmCount = %d, %v, want %d (fail %v)", tt.name, got, err, tt.want, tt.fail)
 		}
 	}
 }

@@ -60,12 +60,14 @@ func readVMPages() (vmPages, error) {
 		{"vm.page_pageable_external_count", &p.external},
 		{"vm.page_purgeable_count", &p.purgeable},
 	} {
-		n, err := unix.SysctlUint32(c.name)
+		raw, err := unix.SysctlRaw(c.name)
 		if err != nil {
 			return vmPages{}, fmt.Errorf("sysctl %s: %w", c.name, err)
 		}
 
-		*c.dst = uint64(n)
+		if *c.dst, err = vmCount(c.name, raw); err != nil {
+			return vmPages{}, err
+		}
 	}
 
 	return p, nil
