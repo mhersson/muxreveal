@@ -72,9 +72,10 @@ func (a *App) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 }
 
 // routeKey routes a key press: an open confirm first, then an open prompt, then
-// copy mode, then the open overlay, compose box, merge box, plan overlay, conversation, checks,
-// PR list or worktree picker, then the leader state machine, then the usage
-// popover while it shows, then the rail while it has the keyboard, then the review drawer while it has it, then the focused pane.
+// copy mode, then the open overlay, compose box, merge box, plan overlay,
+// conversation, checks, PR list or worktree picker, then the leader state
+// machine, then the usage popover while it shows, then the rail while it has
+// the keyboard, then the review drawer while it has it, then the focused pane.
 func (a *App) routeKey(msg tea.KeyPressMsg) tea.Cmd {
 	if a.confirm != nil {
 		return a.handleConfirmKey(msg)
@@ -158,9 +159,8 @@ func (a *App) paneHasKeys() bool {
 
 // handlePaste sends a paste to the topmost text input: prompt, overlay, compose box,
 // plan search, picker, then the rail's or drawer's search, else the focused pane.
-// The usage popover, when it shows, drops it before the rail.
-// Confirm, copy mode, checks, merge, the PR list and the usage popover drop it; the conversation
-// takes it only into its search prompt.
+// Confirm, copy mode, checks, merge, the PR list and the usage popover drop it;
+// the conversation takes it only into its search prompt.
 func (a *App) handlePaste(msg tea.PasteMsg) tea.Cmd {
 	if a.confirm != nil {
 		return nil

@@ -340,6 +340,10 @@ func TestUsagePopoverPlacement(t *testing.T) {
 		p := planBar(a.tabInfos(), a.store.State().Active, a.trayModules(), 100, a.icons)
 
 		x, w, ok := trayModuleAt(p, 100, a.icons, modUsage)
+		if cx, cw, cok := trayModuleAt(p, 100, a.icons, modClock); !cok || cx+cw != 100 {
+			t.Errorf("clock at %d, %d wide (%v), want it to end the bar", cx, cw, cok)
+		}
+
 		if !ok || r.Y != 1 || r.X != x || w != trayModuleByID(a, modUsage).width {
 			t.Errorf("rect %+v, module at %d, %d wide (%v), want y 1 and x %d", r, x, w, ok, x)
 		}
@@ -355,6 +359,11 @@ func TestUsagePopoverPlacement(t *testing.T) {
 			if _, _, ok := trayModuleAt(p, width, a.icons, modUsage); !ok {
 				break
 			}
+		}
+
+		p := planBar(a.tabInfos(), a.store.State().Active, a.trayModules(), width, a.icons)
+		if _, _, ok := trayModuleAt(p, width, a.icons, modUsage); ok {
+			t.Fatalf("the module is still on the bar at width %d", width)
 		}
 
 		r := check(t, width)

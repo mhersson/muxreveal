@@ -11,15 +11,15 @@ import (
 func TestUsageBar(t *testing.T) {
 	t.Parallel()
 
-	full := "█"
+	full := "\u2588"
 	tests := []struct {
 		used int
 		want string
 	}{
 		{0, strings.Repeat(" ", 20)},
-		{1, "▎" + strings.Repeat(" ", 19)},
-		{23, strings.Repeat(full, 4) + "▋" + strings.Repeat(" ", 15)},
-		{41, strings.Repeat(full, 8) + "▎" + strings.Repeat(" ", 11)},
+		{1, "\u258E" + strings.Repeat(" ", 19)},
+		{23, strings.Repeat(full, 4) + "\u258B" + strings.Repeat(" ", 15)},
+		{41, strings.Repeat(full, 8) + "\u258E" + strings.Repeat(" ", 11)},
 		{50, strings.Repeat(full, 10) + strings.Repeat(" ", 10)},
 		{100, strings.Repeat(full, 20)},
 	}

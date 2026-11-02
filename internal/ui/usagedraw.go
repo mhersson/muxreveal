@@ -20,7 +20,7 @@ const (
 	usageBarCells = 20
 
 	// usageEighths are the left-eighth blocks, one to eight eighths of a cell.
-	usageEighths = "▏▎▍▌▋▊▉█"
+	usageEighths = "\u258F\u258E\u258D\u258C\u258B\u258A\u2589\u2588"
 )
 
 // usageBar draws used percent over cells cells: a track on Border, filled from
