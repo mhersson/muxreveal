@@ -154,6 +154,13 @@ func TestUsageModuleColours(t *testing.T) {
 			text(x+6, fmt.Sprintf("%2d%%", tt.five), tt.fiveFg, tt.fiveBold)
 			text(x+11, "7d", ui.Muted, false)
 			text(x+14, fmt.Sprintf("%2d%%", tt.week), tt.weekFg, tt.weekBold)
+
+			for _, at := range []int{x, x + 2, x + 5, x + 9, x + 10, x + 13, x + 17} {
+				c := vt.CellAt(at, 0)
+				if c == nil || c.Style.Bg == nil || hexOf(c.Style.Bg) != string(ui.Surface) {
+					t.Errorf("separator cell %d: %+v, want a space on Surface", at, c)
+				}
+			}
 		})
 	}
 }
@@ -360,6 +367,8 @@ func TestUsagePopoverPlacement(t *testing.T) {
 				break
 			}
 		}
+
+		sized(t, a, width, 30)
 
 		p := planBar(a.tabInfos(), a.store.State().Active, a.trayModules(), width, a.icons)
 		if _, _, ok := trayModuleAt(p, width, a.icons, modUsage); ok {

@@ -740,6 +740,7 @@ func TestParseStatusRateLimits(t *testing.T) {
 			`{"five_hour":{"used_percentage":23.5,"resets_at":1738425600.0}}`,
 			&RateWindow{23.5, 1738425600}, nil,
 		},
+		{"huge reset", `{"five_hour":{"used_percentage":23.5,"resets_at":1e30}}`, nil, nil},
 		{"empty", `{}`, nil, nil},
 		{"not an object", `"soon"`, nil, nil},
 		{"string percent", `{"five_hour":{"used_percentage":"23%","resets_at":1738425600}}`, nil, nil},

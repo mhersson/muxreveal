@@ -720,6 +720,15 @@ func TestStatusNotesUsage(t *testing.T) {
 			if got := a.store.State().Usage; got.FiveHour.Used != 30 || !got.Changed.Equal(clk.Now()) {
 				t.Errorf("%s: Usage = %+v, want 5h 30 changed %v", s.name, got, clk.Now())
 			}
+		case "later reset":
+			got := a.store.State().Usage
+			if got.FiveHour.Used != 2 || !got.FiveHour.ResetsAt.Equal(r1.Add(5*time.Hour)) {
+				t.Errorf("%s: 5h = %+v, want 2 resetting %v", s.name, got.FiveHour, r1.Add(5*time.Hour))
+			}
+
+			if got.SevenDay.Used != 41 || !got.SevenDay.ResetsAt.Equal(r2) {
+				t.Errorf("%s: 7d = %+v, want 41 resetting %v", s.name, got.SevenDay, r2)
+			}
 		}
 	}
 }

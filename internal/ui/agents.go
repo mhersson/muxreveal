@@ -125,7 +125,8 @@ func (a *App) onStatus(m core.Pane, ev harness.Event) {
 		return
 	}
 
-	if note := (core.NoteUsage{FiveHour: usageReading(ev.FiveHour), SevenDay: usageReading(ev.SevenDay), At: a.clock.Now()}); note.Changes(a.store.State().Usage) {
+	note := core.NoteUsage{FiveHour: usageReading(ev.FiveHour), SevenDay: usageReading(ev.SevenDay), At: a.clock.Now()}
+	if note.Changes(a.store.State().Usage) {
 		_ = a.dispatch(note)
 	}
 

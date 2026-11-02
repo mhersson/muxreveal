@@ -68,9 +68,9 @@ type mouseState struct {
 }
 
 // hit finds what lies under the screen cell (x, y): a pane's content or top
-// border, a tab segment or the usage module of the workspace bar, or nothing. A pane's side and
-// bottom borders, the rule under the workspace bar and whatever the review
-// drawer covers are nothing.
+// border, a tab segment or the usage module of the workspace bar, or nothing.
+// A pane's side and bottom borders, the rule under the workspace bar and
+// whatever the review drawer covers are nothing.
 func (a *App) hit(x, y int) hitResult {
 	if y == 0 {
 		return a.hitTab(x)
@@ -130,8 +130,9 @@ func (a *App) hitTab(x int) hitResult {
 }
 
 // mouseBlocked reports whether modal UI owns the pointer: any modal, a pending
-// leader (with or without its popup), or the shown usage popover. It also drops any held button, releasing a
-// forwarded one in its guest, since the modal would swallow the release.
+// leader (with or without its popup), or the shown usage popover. It also drops
+// any held button, releasing a forwarded one in its guest, since the modal
+// would swallow the release.
 func (a *App) mouseBlocked() bool {
 	if !a.modalOpen() && !a.pending && !a.usageShows() {
 		return false
