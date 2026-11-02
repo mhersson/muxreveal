@@ -271,6 +271,10 @@ func (a *App) trayModules() []trayModule {
 		mods = append(mods, prModule(pr, icons, ui))
 	}
 
+	if m, ok := usageModule(st.Usage, a.clock.Now(), icons, ui); ok {
+		mods = append(mods, m)
+	}
+
 	if l := a.tray.load; l != nil && len(l.CPU) > 0 {
 		mods = append(mods, loadModule(*l, icons, ui))
 	}
