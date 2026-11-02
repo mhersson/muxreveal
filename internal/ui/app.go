@@ -851,7 +851,7 @@ func (a *App) runLeader(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 	case "esc":
 		return nil, true
 	case a.keymap.leader:
-		if !a.rail.focused && !a.drawerHasKeys() {
+		if !a.rail.focused && !a.drawerHasKeys() && !a.usageShows() {
 			a.keyToFocused(msg)
 		}
 

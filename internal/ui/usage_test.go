@@ -456,6 +456,12 @@ func TestUsagePopoverHoldsKeys(t *testing.T) {
 		t.Fatal("a key or paste closed it")
 	}
 
+	press(a, keyLeader, keyLeader)
+
+	if got := sentSince(t, a, id); got != "" || !a.usageShows() {
+		t.Fatalf("double leader: the pane was sent %q, popover shows = %v", got, a.usageShows())
+	}
+
 	chord(a, ':')
 
 	if a.overlay == nil || !a.usageShows() {
@@ -705,4 +711,28 @@ func TestUsageClickUnderAModal(t *testing.T) {
 			t.Error("a click on the module opened the popover under a confirm")
 		}
 	})
+}
+
+func TestUsagePopoverHidesTheCursor(t *testing.T) {
+	t.Parallel()
+
+	a, _ := framedApp(t, 100, 30, shellSpec("/w/a", "ab"))
+	a.clock = &fakeClock{t: t0}
+	seedUsage(t, a, usageFive, usageWeek)
+
+	if a.View().Cursor == nil {
+		t.Fatal("the pane has no cursor to hide")
+	}
+
+	chord(a, 'u')
+
+	if cur := a.View().Cursor; cur != nil {
+		t.Errorf("cursor = %+v under the popover, want nil", cur)
+	}
+
+	press(a, keyEsc)
+
+	if a.View().Cursor == nil {
+		t.Error("the cursor did not return after esc")
+	}
 }

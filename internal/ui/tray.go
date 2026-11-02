@@ -39,8 +39,9 @@ type loadSampler interface {
 	Sample(ctx context.Context) (loadSample, error)
 }
 
-// trayState is the sampled data behind the tray. Only Update changes it; the
-// samplers run in commands and report back by message.
+// trayState is the sampled data behind the tray and the usage popover's open
+// flag. Only Update changes it; the samplers run in commands and report back by
+// message.
 type trayState struct {
 	on    bool // sampling is armed; set by Init
 	clock string

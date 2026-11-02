@@ -455,9 +455,8 @@ type rateLimitPayload struct {
 	ResetsAt       *float64 `json:"resets_at"`
 }
 
-// rateWindow is the one place that decides whether a window counts: both its
-// percent and a reset above zero and below 2^63 must be present. A recorded Ultra payload is
-// what would change this rule.
+// rateWindow is the one place that decides whether a window counts: it needs a
+// percent and a reset above zero and below 2^63. A recorded Ultra payload would change it.
 func rateWindow(w *rateLimitPayload) *RateWindow {
 	if w == nil || w.UsedPercentage == nil || w.ResetsAt == nil || *w.ResetsAt <= 0 || *w.ResetsAt >= math.MaxInt64 {
 		return nil

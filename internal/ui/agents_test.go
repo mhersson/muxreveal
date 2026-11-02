@@ -2,6 +2,7 @@ package ui
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -750,5 +751,43 @@ func TestStatusUsageNeedsTheSession(t *testing.T) {
 
 	if a.storeVer != ver {
 		t.Error("store version moved")
+	}
+}
+
+func TestStatusUsageDoesNotReopenThePopover(t *testing.T) {
+	t.Parallel()
+	a, _, clk := agentApp(t)
+	hook(a, harness.Event{Pane: "p2", Name: "SessionStart", Session: "s1", Start: true})
+	seedUsage(t, a, usageFive, usageWeek)
+	chord(a, 'u')
+
+	if !a.usageShows() {
+		t.Fatal("the popover did not open")
+	}
+
+	clk.Set(t0.Add(60 * time.Hour))
+
+	fresh := func(r time.Time) *harness.RateWindow {
+		return &harness.RateWindow{Used: 5, ResetsAt: r.Unix()}
+	}
+	hook(a, usageStatus("p2", "s1", fresh(t0.Add(63*time.Hour)), fresh(t0.Add(220*time.Hour))))
+
+	if a.tray.usageOpen || a.usageShows() {
+		t.Errorf("open = %v, shows = %v after fresh data, want both false", a.tray.usageOpen, a.usageShows())
+	}
+}
+
+func TestStatusUsageChangedIsWallClock(t *testing.T) {
+	t.Parallel()
+	a, _, _ := agentApp(t)
+	hook(a, harness.Event{Pane: "p2", Name: "SessionStart", Session: "s1", Start: true})
+
+	a.clock = realClock{}
+	win := &harness.RateWindow{Used: 23, ResetsAt: time.Now().Add(time.Hour).Unix()}
+	hook(a, usageStatus("p2", "s1", win, nil))
+
+	got := a.store.State().Usage.Changed
+	if got.IsZero() || strings.Contains(got.String(), "m=") {
+		t.Errorf("Changed = %q, want set and without a monotonic reading", got.String())
 	}
 }
