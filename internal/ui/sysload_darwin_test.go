@@ -3,7 +3,36 @@ package ui
 import (
 	"encoding/binary"
 	"testing"
+
+	"golang.org/x/sys/unix"
 )
+
+func TestSysLoadMemory(t *testing.T) {
+	t.Parallel()
+
+	total, err := unix.SysctlUint64("hw.memsize")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	pages, err := readVMPages()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if pages.free == 0 || pages.external == 0 {
+		t.Errorf("readVMPages = %+v, want free and file-backed pages", pages)
+	}
+
+	got, err := newSysLoad().Sample(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if got.Mem == 0 || got.Mem >= total {
+		t.Errorf("Sample memory = %d, want between 0 and %d", got.Mem, total)
+	}
+}
 
 func TestLoadShare(t *testing.T) {
 	t.Parallel()

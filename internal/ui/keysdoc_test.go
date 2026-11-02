@@ -108,6 +108,8 @@ func keysPage() (string, error) {
 	w("## The leader\n\n")
 	w("The leader key is %s (`leader_key`). Pressing it and waiting %d ms (`which_key_delay`) opens the which-key popup. ", mdCell(km.leader), km.delay.Milliseconds())
 	w("A key written as two keys, such as `g l`, is two keys pressed in turn after the leader.\n\n")
+	w("On macOS, once a second input source is on, the system takes `ctrl+space` for \"Select the previous input source\", so AIM never sees it. ")
+	w("Turn that shortcut off in System Settings, Keyboard, Keyboard Shortcuts, Input Sources, or set another leader, such as `leader_key = \"ctrl+a\"` under `[keys]` (see [The leader key](config.md#the-leader-key)).\n\n")
 
 	w("## After the leader\n\n")
 	w("Keys pressed after the leader key. Remap them under `[keys.leader]`.\n\n")

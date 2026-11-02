@@ -36,9 +36,9 @@ func (sysLoad) Sample(context.Context) (loadSample, error) {
 		return loadSample{}, fmt.Errorf("sysctl hw.memsize: %w", err)
 	}
 
-	free, err := unix.SysctlUint32("vm.page_free_count")
+	pages, err := readVMPages()
 	if err != nil {
-		return loadSample{}, fmt.Errorf("sysctl vm.page_free_count: %w", err)
+		return loadSample{}, err
 	}
 
 	page, err := unix.SysctlUint32("hw.pagesize")
@@ -46,9 +46,31 @@ func (sysLoad) Sample(context.Context) (loadSample, error) {
 		return loadSample{}, fmt.Errorf("sysctl hw.pagesize: %w", err)
 	}
 
-	freeBytes := min(uint64(free)*uint64(page), total)
+	return loadSample{CPU: cpu, Mem: pages.used(total, uint64(page))}, nil
+}
 
-	return loadSample{CPU: cpu, Mem: total - freeBytes}, nil
+func readVMPages() (vmPages, error) {
+	var p vmPages
+
+	for _, c := range []struct {
+		name string
+		dst  *uint64
+	}{
+		{"vm.page_free_count", &p.free},
+		{"vm.page_pageable_external_count", &p.external},
+		{"vm.page_purgeable_count", &p.purgeable},
+	} {
+		raw, err := unix.SysctlRaw(c.name)
+		if err != nil {
+			return vmPages{}, fmt.Errorf("sysctl %s: %w", c.name, err)
+		}
+
+		if *c.dst, err = vmCount(c.name, raw); err != nil {
+			return vmPages{}, err
+		}
+	}
+
+	return p, nil
 }
 
 // loadShare turns a struct loadavg into a percentage of cores, at most 100.
