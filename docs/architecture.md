@@ -171,9 +171,13 @@ during the kill can miss it (`internal/git/proc_unix.go`). Every call drops
 inherited repository-local `GIT_*` variables (`cleanEnv`, `run.go`), so it
 reads only the repository it was pointed at.
 
-**Pruning.** `git.PruneWorktree`, `git.PruneSession` and `git.DeletePRRefs`
-exist, but the app calls none of them: worktree cleanup removes the worktree
-and branch only, so `refs/aim/*` grows until removed by hand.
+**Pruning.** The clean-up confirm's `enter` deletes the merged pull request's
+refs (`git.DeletePRRefs`, under the ref-write budget) whatever happens to the
+worktree, plus a removed worktree's turn refs (`git.PruneWorktree`, by the root
+`git.Open` reported before removal). A failed prune is logged and never fails
+the clean-up. Nothing else prunes yet, so the turn refs of sessions in a main
+checkout, and the refs of pull requests that never reach the confirm, stay until
+removed by hand.
 
 **Invariants.** A snapshot writes only its temporary files and create-only refs
 under `refs/aim/`, and never holds an agent past the hold. A session id that is
