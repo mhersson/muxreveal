@@ -131,8 +131,9 @@ what to do about it. Skim it before your first commit each session.
 - Give the run a short `HOME`, which on macOS holds the state dir and the hook
   socket. Put a `.zshrc` in it: zsh can start its new-user setup in a `HOME`
   without one.
-- A pane's kind follows its foreground process's name: its comm on Linux, its
-  `argv[0]` on macOS. On macOS a shebang script's `argv[0]` is its interpreter
+- A pane's kind follows its foreground process's name: its comm on Linux, and
+  on macOS its `argv[0]`, or the script in `argv[1]` when `argv[0]` is `node`
+  or `bun`. On macOS a shebang script's `argv[0]` is its interpreter
   (`/bin/sh`), so a fake `claude` that must make its pane an agent is a
   compiled binary named `claude`.
 - Agents start through `$SHELL -l -i -c`, and a login profile may put other

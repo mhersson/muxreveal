@@ -82,6 +82,9 @@ group leader is `claude` (`internal/term/fg_linux.go`, `fg_darwin.go`), probed
 with the cwd at most every 500 ms, so a hand-typed `claude` makes an agent and
 an exited one a shell. Hooks never change the kind; events for a shell are
 dropped. A launched agent has 10 s (`agentGrace`) to show `claude` first.
+The leader's name is its comm on Linux. On macOS it is argv[0]'s base name, or
+argv[1]'s when argv[0] is `node` or `bun` and argv[1] is not an option, since an
+npm install's `claude` runs as `node <path>/claude` (`internal/term/procargs.go`).
 
 **The settings file.** AIM never edits `~/.claude`. Each instance writes
 `<state dir>/run/<pid>-claude.json` (`setupHooks`, `cmd/aim/hooks.go`) with one
