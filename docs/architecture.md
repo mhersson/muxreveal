@@ -175,9 +175,23 @@ reads only the repository it was pointed at.
 refs (`git.DeletePRRefs`, under the ref-write budget) whatever happens to the
 worktree, plus a removed worktree's turn refs (`git.PruneWorktree`, by the root
 `git.Open` reported before removal). A failed prune is logged and never fails
-the clean-up. Nothing else prunes yet, so the turn refs of sessions in a main
-checkout, and the refs of pull requests that never reach the confirm, stay until
-removed by hand.
+the clean-up.
+
+A sweep covers the rest (`internal/ui/refsweep.go`). It runs once per run per
+repository, keyed by the common dir, and starts when the first pane resolves
+there. Only the instance that holds `state.lock` sweeps, since another starts
+with a fresh state and would read every restored session of the first as unheld.
+It has two phases: the listing reads ref names and values only, off the loop; the
+update loop then filters it against the state as it is at the answer, and a
+delete off the loop removes what is left. It leaves out the sessions any pane
+holds and the pull requests any drawer shows or is fetching
+(`drawerState.fetching`). It deletes a session's turn refs, in both layouts, when
+its newest `<n>` in the repository is over 14 days old (`staleAge`), and every
+other pull request's refs. Each delete carries the listed value and runs as one
+transaction for the turn refs and one for the pull request refs, so a ref that
+moved holds back only its own half. There is no lock shared with a fetch: one
+that starts after the filter and writes an unchanged head before the delete runs
+loses its refs, which costs one drawer load error that `r` fixes.
 
 **Invariants.** A snapshot writes only its temporary files and create-only refs
 under `refs/aim/`, and never holds an agent past the hold. A session id that is

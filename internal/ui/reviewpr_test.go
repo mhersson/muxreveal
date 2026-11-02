@@ -875,3 +875,43 @@ func TestPRHeaderNarrow(t *testing.T) {
 		}
 	}
 }
+
+func TestPRFetchCounter(t *testing.T) {
+	t.Parallel()
+
+	for _, overtaken := range []bool{false, true} {
+		t.Run(fmt.Sprintf("overtaken=%v", overtaken), func(t *testing.T) {
+			t.Parallel()
+
+			r := newPRDrawer(t)
+			r.poll()
+			r.opened(t)
+
+			msgs := flatten(r.pressP())
+			if len(msgs) != 1 {
+				t.Fatalf("p raised %d messages, want the place's answer", len(msgs))
+			}
+
+			fetch := r.step(msgs[0])
+
+			if got := r.drawer.fetching[7]; got != 1 {
+				t.Fatalf("fetching[7] = %d once the fetch started, want 1", got)
+			}
+
+			fm := flatten(fetch)
+			if len(fm) != 1 {
+				t.Fatalf("the fetch raised %d messages, want its answer", len(fm))
+			}
+
+			if overtaken {
+				r.drawer.prSeq++
+			}
+
+			r.step(fm[0])
+
+			if n, ok := r.drawer.fetching[7]; ok {
+				t.Errorf("fetching[7] = %d after the answer, want no entry", n)
+			}
+		})
+	}
+}

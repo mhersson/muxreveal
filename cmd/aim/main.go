@@ -208,6 +208,7 @@ func run(ctx context.Context, env core.Env, configPath, recordDir string, fresh 
 		Events:       hooks.Events,
 		GitTempDir:   hooks.RunDir,
 		IndexCache:   indexCache,
+		SweepRefs:    saver != nil,
 		Pictures:     github.NewImageFetcher(github.ImageOptions{}),
 		ImageCache:   imageCacheDir(indexCache),
 		Watches:      watches,
