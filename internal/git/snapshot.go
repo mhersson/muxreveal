@@ -649,35 +649,21 @@ func PruneSession(ctx context.Context, r Repo, session string) (int, error) {
 	return deleteRefs(ctx, r, recs, func(turnRecord) bool { return true })
 }
 
-// deleteRefs removes the matching refs in one transaction, each only if it
+// deleteRefs removes the matching refs through DeleteRefs, each only if it
 // still points at the commit that was read.
 func deleteRefs(ctx context.Context, r Repo, recs []turnRecord, match func(turnRecord) bool) (int, error) {
-	var stdin bytes.Buffer
-
-	count := 0
+	var refs []Ref
 
 	for _, rec := range recs {
 		if match(rec) {
-			fmt.Fprintf(&stdin, "delete %s %s\n", rec.ref, rec.Commit)
-
-			count++
+			refs = append(refs, Ref{Name: rec.ref, OID: rec.Commit})
 		}
 	}
 
-	if count == 0 {
-		return 0, nil
-	}
-
-	wctx, cancel, err := refWriteContext(ctx)
+	n, err := DeleteRefs(ctx, r, refs)
 	if err != nil {
-		return 0, err
-	}
-	defer cancel()
-
-	_, err = run(wctx, call{dir: r.CommonDir, args: []string{"update-ref", "--stdin"}, env: isolatedEnv(), stdin: &stdin})
-	if err != nil {
-		return 0, fmt.Errorf("prune turns: %w", err)
+		return n, fmt.Errorf("prune turns: %w", err)
 	}
 
-	return count, nil
+	return n, nil
 }

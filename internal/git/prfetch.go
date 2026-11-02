@@ -68,11 +68,18 @@ func FetchPR(ctx context.Context, r Repo, remote string, number int, base string
 }
 
 // DeletePRRefs removes the refs FetchPR wrote in one transaction. Missing refs
-// are not an error.
+// are not an error. It runs under the ref-write budget, so a deadline cannot
+// kill update-ref and leave a lock file.
 func DeletePRRefs(ctx context.Context, r Repo, number int) error {
+	wctx, cancel, err := refWriteContext(ctx)
+	if err != nil {
+		return err
+	}
+	defer cancel()
+
 	cmds := "delete " + prRef(number, "head") + "\ndelete " + prRef(number, "base") + "\n"
 
-	_, err := run(ctx, call{dir: r.Root, args: []string{"update-ref", "--stdin"}, stdin: strings.NewReader(cmds)})
+	_, err = run(wctx, call{dir: r.Root, args: []string{"update-ref", "--stdin"}, stdin: strings.NewReader(cmds)})
 	if err != nil {
 		return fmt.Errorf("delete pull request %d refs: %w", number, err)
 	}

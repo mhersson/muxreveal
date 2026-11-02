@@ -285,20 +285,22 @@ func (a *App) onPaneRepo(msg paneRepoMsg) tea.Cmd {
 	delete(a.watches.failed, "project "+filepath.Base(msg.cwd))
 
 	w.want = msg.repo.Root
+	sweep := a.refSweep(msg.repo)
+
 	if w.root == msg.repo.Root || a.watches.set == nil {
-		return nil
+		return sweep
 	}
 
 	set, r, id := a.watches.set, msg.repo, msg.id
 
-	return func() tea.Msg {
+	return tea.Batch(sweep, func() tea.Msg {
 		rel, err := set.Acquire(a.ctx, r)
 		if err != nil {
 			return watchAcquiredMsg{id: id, repo: r, err: err}
 		}
 
 		return watchAcquiredMsg{id: id, repo: r, release: a.watches.holds.add(rel)}
-	}
+	})
 }
 
 // onWatchAcquired keeps the new reference for its pane. The Acquire error is

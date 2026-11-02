@@ -18,7 +18,7 @@ Each tab has its own drawer, and a restart restores whether it was open. The dra
 ## Turn and branch mode
 
 - **Branch mode** (`b`) shows everything the branch changed against its base branch, untracked files included.
-- **Turn mode** (`t`) shows what the agent changed in one turn. A turn runs from one prompt you send to the next, so a turn that is still going shows live.
+- **Turn mode** (`t`) shows what the agent changed in one turn. A turn runs from one prompt you send to the next, so a turn that is still going shows live. Turns of a session that no pane has held for 14 days are removed, so resuming an old session in a new pane shows no earlier turns.
 
 A new drawer opens in turn mode when the agent has turns in that worktree and `mode` under `[diff]` asks for it; otherwise it opens in branch mode.
 

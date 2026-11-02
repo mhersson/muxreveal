@@ -170,6 +170,7 @@ type drawerState struct {
 	epochs        int             // the last epoch handed out; unique across views
 	reads         int             // the last full-file read serial handed out
 	prSeq         int             // the last pull request request; its answers carry it
+	fetching      map[int]int     // pull request fetches in flight, by number; an entry goes at 0
 	prNext        *prNext         // a drawer being opened for a pull request
 	hlJob         *hlJob          // the batch being tokenised; at most one runs
 	tokenised     int             // lines handed to the batch the last settle started; 0 for none
